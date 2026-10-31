@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CREW_DAEMON_ID, crewDisplayName, crewHolderName } from './crewName';
+import { CREW_DAEMON_ID, crewDisplayName } from './crewName';
 
 describe('crewDisplayName', () => {
   it('writes a member id as a name', () => {
@@ -25,19 +25,5 @@ describe('crewDisplayName', () => {
 
   it('leaves attn itself lowercase — it moves seeds under its own name', () => {
     expect(crewDisplayName(CREW_DAEMON_ID)).toBe('attn');
-    expect(crewHolderName('attn', '')).toBe('attn');
-  });
-});
-
-describe('crewHolderName', () => {
-  it('writes a member as a name and leaves a session id alone', () => {
-    expect(crewHolderName('trellis', 'sess-a')).toBe('Trellis');
-    expect(crewHolderName('', 'sess-a')).toBe('sess-a');
-    expect(crewHolderName(undefined, 'sess-a')).toBe('sess-a');
-  });
-
-  it('has nothing to say when nobody holds it', () => {
-    expect(crewHolderName(undefined, undefined)).toBe('');
-    expect(crewHolderName('  ', '  ')).toBe('');
   });
 });

@@ -1,11 +1,12 @@
 package daemon_test
 
 import (
+	"os"
+	"testing"
+
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
-	"os"
-	"testing"
 )
 
 func TestPriorityIsBroadcastStickyAndInheritedByClear(t *testing.T) {

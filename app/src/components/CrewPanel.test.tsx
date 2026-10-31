@@ -8,6 +8,9 @@ import {
   daemonSeed,
   daemonSession,
   daemonDesktop,
+  memberActor,
+  memberClaim,
+  sessionClaim,
   type DaemonSeed,
   type DaemonSession,
   DEFAULT_DESKTOP_ID,
@@ -136,7 +139,7 @@ describe('CrewPanel', () => {
   });
 
   it('keeps member, tab, seed filter and search when a desktop seed returns to Crew', async () => {
-    const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter_member: 'keel' });
+    const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter: memberActor('keel') });
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
     const { daemon } = await renderPanel({ members, seeds: [planted], sessions: [daemonSession('session-keel')] });
     daemon.on('open_seed', ({ seed_id }) => ({
@@ -672,7 +675,7 @@ describe('CrewPanel seeds', () => {
     const child = daemonSeed('s-g9yxwv', {
       title: 'Artifact presence comes from the daemon',
       status: 'planted',
-      planter_member: 'trellis',
+      planter: memberActor('trellis'),
       edges: [{ kind: 'part-of', to: plot.id }],
     });
     const { daemon } = await showSeeds([member('trellis', 4)], [child, plot], /Trellis/, /Planted/);
@@ -686,19 +689,19 @@ describe('CrewPanel seeds', () => {
   });
 
   it('follows what a member tends as Garden broadcasts replace the seeds, its day’s claims and its own alike', async () => {
-    const claimed = daemonSeed('s-live', { title: 'Live claim', tender_session: 'day-current' });
-    const memberClaim = daemonSeed('s-member', { title: 'Member claim', tender_member: 'alder' });
+    const claimed = daemonSeed('s-live', { title: 'Live claim', ...sessionClaim('day-current') });
+    const ownClaim = daemonSeed('s-member', { title: 'Member claim', ...memberClaim('alder', 'day-current') });
     const alder = member('alder', 1, { binding_session: 'day-current' });
-    const { daemon } = await showSeeds([alder], [claimed, memberClaim], /Alder/, /Tending/);
+    const { daemon } = await showSeeds([alder], [claimed, ownClaim], /Alder/, /Tending/);
 
     expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
     expect(panel().getByRole('button', { name: /Member claim/ })).toBeInTheDocument();
 
-    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender_session: '' }, { ...memberClaim, status: 'harvested', tender_member: '' }]);
+    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender: undefined, claimed: false }, { ...ownClaim, status: 'harvested', tender: undefined, claimed: false }]);
     expect(panel().getByText("Alder isn't tending a seed.")).toBeInTheDocument();
 
     fireEvent.click(panel().getByRole('button', { name: /Planted/ }));
-    await pushSeeds(daemon, [{ ...claimed, status: 'planted', planter_member: 'alder' }]);
+    await pushSeeds(daemon, [{ ...claimed, status: 'planted', planter: memberActor('alder') }]);
     expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
   });
 
@@ -706,7 +709,7 @@ describe('CrewPanel seeds', () => {
     const { daemon } = await showSeeds([member('keel', 1)], [], /Keel/, /Planted/);
     expect(panel().getByText('No seeds were explicitly planted by Keel.')).toBeInTheDocument();
 
-    await pushSeeds(daemon, ['a', 'b', 'c', 'd'].map((id) => daemonSeed(`s-${id}`, { planter_member: 'alder' })), 481);
+    await pushSeeds(daemon, ['a', 'b', 'c', 'd'].map((id) => daemonSeed(`s-${id}`, { planter: memberActor('alder') })), 481);
 
     expect(panel().getByText('Showing matches in the newest 4 of 481 seeds.')).toBeInTheDocument();
     expect(panel().getByText('No seeds in this Garden snapshot are explicitly planted by Keel.')).toBeInTheDocument();

@@ -107,8 +107,8 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 			lifecycle[producer.Name] = producer.Events
 		}
 		if lifecycle["garden.seed.planted"] != 1 || lifecycle["garden.seed.tended"] != 1 ||
-			shown.Seed.TenderSession != protocol.SessionID(result.SessionID) || protocol.Deref(shown.Seed.LastExecutionID) != protocol.SessionID(result.SessionID) {
-			t.Fatalf("%s: planted=%d tended=%d tender=%s last execution=%s", step, lifecycle["garden.seed.planted"], lifecycle["garden.seed.tended"], shown.Seed.TenderSession, protocol.Deref(shown.Seed.LastExecutionID))
+			stackTenderSession(shown.Seed) != protocol.SessionID(result.SessionID) || protocol.Deref(shown.Seed.LastExecutionID) != protocol.SessionID(result.SessionID) {
+			t.Fatalf("%s: planted=%d tended=%d tender=%s last execution=%s", step, lifecycle["garden.seed.planted"], lifecycle["garden.seed.tended"], stackTenderSession(shown.Seed), protocol.Deref(shown.Seed.LastExecutionID))
 		}
 		if registered != 1 || shown.NotesTotal != initial.NotesTotal || pair.App.Terminal(result.SessionID) != delegateTerminal {
 			t.Fatalf("%s: registrations=%d notes=%d (initial %d) terminal=%s (initial %s)", step, registered, shown.NotesTotal, initial.NotesTotal, pair.App.Terminal(result.SessionID), delegateTerminal)

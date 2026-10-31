@@ -1,14 +1,16 @@
 import {
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useDaemonStore } from '../store/daemonSessions';
 import type { Seed } from '../types/generated';
-import { crewHolderName } from '../utils/crewName';
+import { sessionDisplayName } from '../utils/sessionDisplayName';
 import {
   TERMINAL_SEED_PREVIEW_FALLBACK_SIZE,
   terminalSeedPreviewPlacement,
@@ -16,6 +18,7 @@ import {
   type TerminalSeedPreviewPlacement,
 } from '../utils/terminalSeedPreviewPlacement';
 import { terminalSeedBodyExcerpt } from '../utils/terminalSeedPreviewText';
+import { tenderOf } from './gardenBoardModel';
 import './TerminalSeedPreview.css';
 
 export type { TerminalSeedAnchor } from '../utils/terminalSeedPreviewPlacement';
@@ -55,7 +58,12 @@ export function TerminalSeedPreview({
   const [placement, setPlacement] = useState<TerminalSeedPreviewPlacement | null>(null);
   const titleId = useId();
   const excerpt = terminalSeedBodyExcerpt(seed.body);
-  const tender = crewHolderName(seed.tender_member, seed.tender_session);
+  const daemonSessions = useDaemonStore((state) => state.daemonSessions);
+  const sessionLabels = useMemo(
+    () => new Map(daemonSessions.map((session) => [session.id, sessionDisplayName(session)])),
+    [daemonSessions],
+  );
+  const tender = tenderOf(seed, sessionLabels);
   const updated = formatAge(seed.updated_at);
 
   useLayoutEffect(() => {

@@ -166,7 +166,6 @@ export function AppLibrarySurfaces() {
         onClose={closeGarden}
         seeds={seeds}
         seedsTotal={seedsTotal}
-        liveSessions={liveGardenSessions}
         tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}

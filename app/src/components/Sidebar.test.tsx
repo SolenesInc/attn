@@ -17,7 +17,6 @@ interface TestSession {
   chiefOfStaff?: boolean;
   delegatedFromChief?: boolean;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
   delegation_role?: SessionDelegationRole;
   automation?: import('../types/generated').AutomationProvenance;
   turnOwed?: boolean;

@@ -147,8 +147,8 @@ Preconditions:
 
 ## Gotchas
 
-- `tend`, `watch` and arming with `harvest --when-merged` need a session. From a plain shell they exit 1 ("this call named nobody; run it from an attn session, or pass --member <name>", "watching is for a live attn session", "needs a session to track the pull request"). Drive them through the mock agent; `--member` acts as a crew member, which is another door.
-- A live claim yields to its tender, sessions above it in the delegation chain, or the profile chief. Named crew claims yield only to that member or the chief. Other actors need `--force`; a shell with no live source session has no standing. Standing and forced moves print their move entry, which names who forced and who held the seed, and the recipients.
+- `tend`, `watch` and arming with `harvest --when-merged` need a session. From a plain shell they exit 1 ("the user never claims a seed; run it from an attn session, or assign it to a crew member: attn seed tend <id> --for <name>", "watching is for a live attn session", "needs a session to track the pull request"). Drive them through the mock agent; `tend --for <name>` assigns the seed to a crew member, which is another door.
+- A claim yields to its tender, sessions above it in the delegation chain, or the profile chief. A member's claim lasts across its sessions; a session's claim lapses when it ends and returns on resume. Other actors need `--force`; a shell with no live source session has no standing. Standing and forced moves print their move entry, which names who forced and who held the seed, and the recipients.
 - On a fresh instance, `attn seed attach` fails with `notebook root ... no such file or directory` until something creates the notebook folder; the journal append in the preconditions does.
 - A new check report clears the verdict. Report first, then confirm.
 - Typing through `wsctl input` delays rings by 30 seconds. A `rang <session>` reply only says who will get the update; the proof is the 📬 line in that agent's terminal.

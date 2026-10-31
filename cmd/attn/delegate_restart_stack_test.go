@@ -99,8 +99,8 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 			handoffs++
 		}
 	}
-	if shown.Seed.TenderSession != accepted.SessionID || handoffs != 1 {
-		t.Errorf("after the restart the seed is tended by %q with %d handoff notes, want %s with one", shown.Seed.TenderSession, handoffs, accepted.SessionID)
+	if stackTenderSession(shown.Seed) != accepted.SessionID || handoffs != 1 {
+		t.Errorf("after the restart the seed is tended by %q with %d handoff notes, want %s with one", stackTenderSession(shown.Seed), handoffs, accepted.SessionID)
 	}
 	if sessions := s.App().Initial.Sessions; len(sessions) != 2 {
 		t.Errorf("after the restart there are %d sessions, want the predecessor and its one successor", len(sessions))

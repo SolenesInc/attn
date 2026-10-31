@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/who"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
@@ -211,7 +212,7 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 			if !continuation {
 				causedBySessionID = run.SessionID
 			}
-			if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
+			if _, err := d.appendSeedNote(run.SeedID, body, d.actorOfSession(run.SessionID), garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
 				return fmt.Errorf("record automation outcome: append note: %w", err)
 			}
 		}
@@ -219,7 +220,7 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 	if !withers {
 		return nil
 	}
-	_, _, err = d.applySeedTransition(run.SeedID, garden.VerbWither, garden.Ask{Actor: garden.Tender{Session: run.SessionID}, Reason: garden.TrimReason(body)})
+	_, _, err = d.applySeedTransition(run.SeedID, garden.VerbWither, garden.Ask{Actor: who.Session(run.SessionID).Actor(), Reason: garden.TrimReason(body)})
 	return err
 }
 func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.AutomationRun) error {
@@ -489,7 +490,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 				return false, nil, fmt.Errorf("watch automation continuation seed %s: %w", seed.ID, watchErr)
 			}
 		}
-		if seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
+		if seed.Tender != who.Session(req.IDs.SessionID) || seed.Status != garden.StatusGrowing {
 			if restore, err = d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
 				return false, nil, err
 			}
@@ -508,9 +509,10 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 		}
 		seed := d.initializeSeedLifecycle(garden.Seed{
 			ProfileID: req.IDs.ProfileID, ID: req.IDs.SeedID, Title: title, Body: body,
-			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
+			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: who.Attn(), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		})
-		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: req.IDs.SessionID}}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
+		automation := who.Session(req.IDs.SessionID)
+		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: automation.Actor(), Claimant: automation}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
 		if err != nil {
 			return false, nil, err
 		}
@@ -531,9 +533,9 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID string, sessionID pro
 	if err != nil {
 		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
 	}
-	actor := garden.Tender{Session: sessionID}
+	actor := who.Session(sessionID)
 	quietAsk := func(reason string) garden.Ask {
-		return garden.Ask{Actor: actor, Reason: reason, SuppressNotification: true}
+		return garden.Ask{Actor: actor.Actor(), Claimant: actor, Reason: reason, SuppressNotification: true}
 	}
 	var restore func() error
 	if garden.Closed(seed.Status) {
@@ -550,7 +552,7 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID string, sessionID pro
 		}
 		seed.Status = garden.StatusPlanted
 	}
-	if seed.Status == garden.StatusGrowing && seed.TenderSession == sessionID {
+	if seed.Status == garden.StatusGrowing && seed.Tender == actor {
 		return restore, nil
 	}
 	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, quietAsk("")); err != nil {
@@ -574,7 +576,7 @@ func (d *Daemon) ensureAutomationOccurrenceNote(req automation.WorkRequest) erro
 			return nil
 		}
 	}
-	if _, err := d.appendSeedNote(req.IDs.SeedID, body, req.IDs.SessionID, "", garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
+	if _, err := d.appendSeedNote(req.IDs.SeedID, body, d.actorOfSession(req.IDs.SessionID), garden.NoteKindNote, nil, false, req.IDs.SessionID); err != nil {
 		return err
 	}
 	return nil
@@ -1051,7 +1053,7 @@ func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.Work
 	if err != nil {
 		return err
 	}
-	if seed.ID != req.IDs.SeedID || seed.TenderSession != req.IDs.SessionID || seed.Status != garden.StatusGrowing {
+	if seed.ID != req.IDs.SeedID || seed.Tender != who.Session(req.IDs.SessionID) || seed.Status != garden.StatusGrowing {
 		return fmt.Errorf("seed links disagree")
 	}
 	if crown, ok := d.gardenDispatchCrown(req.IDs.SessionID); !ok || crown != req.IDs.SeedID {

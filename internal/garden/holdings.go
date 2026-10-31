@@ -2,12 +2,12 @@ package garden
 
 import (
 	"sort"
-	"strings"
+
+	"github.com/victorarias/attn/internal/who"
 )
 
-func Held(seeds []Seed, member string) []Seed {
-	member = strings.TrimSpace(member)
-	if member == "" {
+func Held(seeds []Seed, member who.MemberKey) []Seed {
+	if member.IsZero() {
 		return nil
 	}
 	out := []Seed{}
@@ -15,7 +15,7 @@ func Held(seeds []Seed, member string) []Seed {
 		if Closed(seed.Status) {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(seed.TenderMember), member) {
+		if seed.Tender == who.Member(member) {
 			out = append(out, seed)
 		}
 	}

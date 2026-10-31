@@ -138,7 +138,7 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 				return nil, fmt.Errorf("seed %s is %s; replant it before delegating", seedID, seed.Status)
 			}
 			handoverSnapshot = store.DelegationHandoverSnapshot{
-				SeedRev: int(doc.Rev), TenderSession: seed.TenderSession, TenderMember: seed.TenderMember,
+				SeedRev: int(doc.Rev), Tender: seed.Tender,
 			}
 		}
 	}
@@ -316,7 +316,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID,
 		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath),
-		record.HandoverSeedRev, record.HandoverTenderSession, record.HandoverTenderMember, id, record.ParentSeedID,
+		record.HandoverSeedRev, record.HandoverTender, id, record.ParentSeedID,
 	)
 	if err != nil {
 		d.finishDelegationFailure(id, err)
@@ -422,9 +422,9 @@ func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, 
 	}
 	if seedID := strings.TrimSpace(protocol.Deref(operation.SeedID)); seedID != "" {
 		if seed, _, seedErr := d.readSeed(seedID); seedErr == nil {
-			holder := seed.Tender().DisplayName()
-			if holder == "" {
-				holder = "nobody"
+			holder := "nobody"
+			if !seed.Tender.IsZero() {
+				holder = d.partyName(seed.Tender)
 			}
 			facts = append(facts, fmt.Sprintf("seed %s is held by %s", seedID, holder))
 		} else {

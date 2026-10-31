@@ -79,9 +79,8 @@ func (d *Daemon) inboxRecipient(a who.Address) (*protocol.Session, string, error
 		if err != nil {
 			return nil, "", err
 		}
-		tender := seed.Tender()
-		id = tender.Session
-		if tender.Member != "" {
+		id, _ = seed.Tender.Session()
+		if _, member := seed.Tender.Member(); member {
 			member, found, err := d.seedTenderMember(seed)
 			if err != nil {
 				return nil, "", err

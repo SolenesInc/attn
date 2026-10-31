@@ -1,9 +1,10 @@
 package daemon_test
 
 import (
-	"github.com/victorarias/attn/internal/protocol"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestAutoSettleDropsItsCountdownAcrossARestartAndTheNextUserInputCanArmIt(t *testing.T) {

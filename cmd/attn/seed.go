@@ -17,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/prompts"
@@ -88,10 +87,11 @@ type seedVerb struct {
 }
 
 const seedMoveAuthority = `
-A live claim yields to its tender, sessions above it in the delegation chain,
-or the profile's chief. A crew member's named claim yields only to that member
-or the chief. The log records standing and forced moves and whose claim ended.
-Everyone else needs --force. A call without a live session has no standing.`
+A claim yields to its tender, sessions above it in the delegation chain, or
+the profile's chief. A crew member's claim lasts across the member's sessions;
+a session's claim holds while the session is live and returns when it resumes.
+The log records standing and forced moves and whose claim ended. Everyone else
+needs --force. A call without a live session has no standing.`
 
 var seedVerbs = []seedVerb{
 	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "[C#=]<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
@@ -100,7 +100,7 @@ plants it under a plot. --check defines what the seed must prove;
 attn numbers it unless C#= names the id, and prints each id.
 Lists up to 3 similar open seeds in your profile, leaving out that plot.
 Planting always proceeds. If one is the same work, wither the new seed.
---json prints the new seed alone.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
+--json prints the new seed alone.`, []string{"m", "part-of", "discovered-from", "check", "json"}, false},
 	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):
 {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
 "part_of": "<plot>", "discovered_from": "<seed>",
@@ -113,7 +113,7 @@ together. Prints the plot's id and each child's id and step slug, then
 up to 3 similar open seeds across all planted titles, each naming the
 new seed it resembles. Planting always proceeds; wither a new seed if a
 suggestion is the same work.
---json prints the whole result, including similar seeds.`, []string{"f", "member", "json"}, false},
+--json prints the whole result, including similar seeds.`, []string{"f", "json"}, false},
 	{`ls`, `ls [--plot <plot> | --stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
 --flat prints one list. --plot lists every child of one plot, oldest
 first, harvested and withered included. --stale narrows to open seeds
@@ -172,14 +172,16 @@ Edit entries in notes show the versions and size changes.`, []string{"json"}, fa
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
-	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. The freshest handoff prints on
+	{`tend`, `tend <id> [-m "<why>"] [--for <name>] [--force] [--json]`, `claim the seed and start growing it. The freshest handoff prints on
 the claim, so picking a seed up primes you. Tending your own claim again
-changes nothing and rings nobody.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
-	{`park`, `park <id> [-m "<where you left it>"] [--member <name>] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
+changes nothing and rings nobody. --for <name> assigns the seed to a crew
+member instead; the user never claims a seed, so a tend from outside an attn
+session needs it.` + seedMoveAuthority, []string{"m", "for", "force", "json"}, false},
+	{`park`, `park <id> [-m "<where you left it>"] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
 it again picks it back up. Parking it again keeps the state and adds
-only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
-	{`harvest`, `harvest <id> [-m "<what got done>"] [--when-merged [<pr-url>] [--clear]] [--member <name>] [--force] [--json]`, `close the seed as done, with a required -m reason. Repeating a harvest
+only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
+	{`harvest`, `harvest <id> [-m "<what got done>"] [--when-merged [<pr-url>] [--clear]] [--force] [--json]`, `close the seed as done, with a required -m reason. Repeating a harvest
 succeeds with the earlier reason; a different reason goes on its log.
 A withered seed must be replanted first. A plot refuses while any direct
 child is open, including with --force or --when-merged; replant hands it
@@ -189,33 +191,33 @@ on the plot, names it here and keeps the plot's state. Moves print who they rang
 reason when the pull request merges. Without -m it uses "PR #N merged:
 <title>". This command merges nothing. Use it only when the merge is
 the last step. With no url it takes this session's single open pull
-request; --when-merged --clear takes the arming back.` + seedMoveAuthority, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
-	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up. Repeating it
+request; --when-merged --clear takes the arming back.` + seedMoveAuthority, []string{"m", "force", "json", "when-merged", "clear"}, false},
+	{`wither`, `wither <id> [-m "<why>"] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up. Repeating it
 keeps the earlier reason and adds a different reason to the log. A
 harvested seed must be replanted first. A plot refuses while any direct
 child is open, even with --force; replant hands it back if your part is done.
 Closing its last child leaves a ringing note on the plot and names it here.
-Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
-	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
+Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
+	{`replant`, `replant <id> [-m "<why>"] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
 is free. Reopens a closed seed, un-parks a dormant one, and hands back
 one being grown. Replanting an already planted seed changes nothing
-and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
+and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
 whoever tends it next. - reads stdin. --handoff addresses it to your
 successor on this seed: tend prints the freshest one on the claim, so
 it is read before any work, and show points at it once newer entries
 bury it.
 --ring tells current and covering plot tenders and watchers to look;
-ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
+ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "json"}, false},
 	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
 Checks never block a move. harvest lists the checks still open or rejected.`, []string{}, false},
 	{`check add`, `check add <id> [<C#>] -m "<statement>" [--shared]`, `Define a statement the seed must prove and print its id, which the body
 cites. attn picks the next free id in the plot tree; <C#> names one
 instead. On a plot, --shared makes every seed below it prove the check
-with its own report. Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}, false},
-	{`check edit`, `check edit <id> <C#> -m "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}, false},
-	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}, false},
-	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}, false},
+with its own report. Removed ids are never reused.`, []string{"m", "ring", "json", "shared"}, false},
+	{`check edit`, `check edit <id> <C#> -m "<statement>"`, `Replace the check's statement.`, []string{"m", "ring", "json"}, false},
+	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "ring", "json"}, false},
+	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "ring", "json"}, false},
 	{`check report`, `check report <id> <C#> -m "<summary line>[\n\n<detail>]" [--evidence <file|artifact|url>]... [--commit <rev>]`, `Record the proof for a check in one call. The first line of -m is the
 summary line, at most 400 characters, which show prints. The lines after
 it are detail, kept in the report's check note; the whole -m fits in
@@ -226,19 +228,19 @@ of the same name, unless it already sits in the seed's artifact folder.
 A refused report lists every problem it found; nothing is recorded.
 A new report clears the verdict. show marks cited evidence replaced
 after the report. If a check doesn't apply, report that too: say why
-and cite what shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}, false},
-	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}, false},
-	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "member", "ring", "json"}, false},
-	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "member", "ring", "json"}, false},
-	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "member", "ring", "json"}, false},
+and cite what shows it. The verdict decides.`, []string{"m", "ring", "json", "evidence", "commit"}, false},
+	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "ring", "json"}, false},
+	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "ring", "json"}, false},
+	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "ring", "json"}, false},
+	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "ring", "json"}, false},
 	{`attach`, `attach <id> (--path <file> (--move | --copy | --repo <repository>) | --notebook <id> | --url <url>)`, `put a local regular file in durable seed-owned storage. Move is the
 recommended choice and leaves one editable canonical file; Copy keeps
 an independent source snapshot. Git-tracked files must use Copy. A
 file the seed already has by that name is replaced; re-attaching an
 unchanged file changes nothing. Notebook, URL and repository
-references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}, false},
+references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "json", "move", "copy"}, false},
 	{`detach`, `detach <id> (--path <filename> (--to <destination> | --reference | --repo <repository>) | --notebook <id> | --url <url>)`, `move a managed artifact back out without overwriting. An old linked
-path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}, false},
+path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "json", "to", "reference"}, false},
 	{`notes`, `notes <id> [--since <bookmark>] [--kind <kind>] [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
 how many more are here. The last line is a bookmark. --since <bookmark>
 lists every entry saved after it, on this seed and every seed below it,
@@ -288,7 +290,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`to`, `<path>`, `destination that receives a managed artifact`, func(f *seedFlags) { f.fs.StringVar(&f.to, "to", "", "") }},
 	{`reference`, ``, `remove an old linked path association`, func(f *seedFlags) { f.fs.BoolVar(&f.reference, "reference", false, "") }},
 	{`force`, ``, `act even though somebody else holds the seed; the log records it`, func(f *seedFlags) { f.fs.BoolVar(&f.force, "force", false, "") }},
-	{`member`, `<name>`, `the crew member asking, recorded as planter, tender or note author`, func(f *seedFlags) { f.fs.StringVar(&f.member, "member", "", "") }},
+	{`for`, `<name>`, `the crew member to assign the seed to`, func(f *seedFlags) { f.fs.StringVar(&f.assignee, "for", "", "") }},
 	{`profile`, `<name|id>`, `required outside attn when several profiles exist`, func(f *seedFlags) { f.fs.StringVar(&f.profile, "profile", "", "") }},
 	{`session`, `<id>`, `the session asking (defaults to the current session)`, func(f *seedFlags) { f.fs.StringVar(&f.session, "session", "", "") }},
 	{`out`, `<path>`, `file to write; - writes to stdout`, func(f *seedFlags) { f.fs.StringVar(&f.out, "out", "", "") }},
@@ -403,7 +405,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	handoffs := freshestHandoffs(ready.Handoffs)
 	for _, seed := range ready.Seeds {
 		handoff := handoffs[seed.ID]
-		rows.WriteString(prompts.RenderText("session", "garden-row", prompts.Values{"seed_id": seed.ID, "slug": seed.StepSlug, "title": seed.Title, "handoff": handoff.Body, "author": crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)}))
+		rows.WriteString(prompts.RenderText("session", "garden-row", prompts.Values{"seed_id": seed.ID, "slug": seed.StepSlug, "title": seed.Title, "handoff": handoff.Body, "author": actorLabel(handoff.Author)}))
 	}
 
 	values["rows"] = rows.String()
@@ -436,7 +438,7 @@ type seedFlags struct {
 	fs             *flag.FlagSet
 	profile        string
 	session        string
-	member         string
+	assignee       string
 	json           bool
 	all            bool
 	flat           bool
@@ -600,7 +602,6 @@ func runSeedPlant(args []string) {
 	msg.Body = nonEmpty(f.text("plant"))
 	msg.PartOf = nonEmpty(strings.TrimSpace(f.partOf))
 	msg.DiscoveredFrom = nonEmpty(strings.TrimSpace(f.discoveredFrom))
-	msg.Member = nonEmpty(strings.TrimSpace(f.member))
 	result, err := f.client().SeedPlantMessage(msg)
 	if err != nil {
 		seedFail("plant", err)
@@ -730,7 +731,7 @@ func runSeedList(args []string) {
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
-			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
+			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(partyLabel(row.seed.Tender)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
 	}
 	w.Flush()
@@ -934,7 +935,7 @@ func runSeedPlot(args []string) {
 		}
 		msg.Children = append(msg.Children, wire)
 	}
-	result, err := f.client().SeedPlot(f.sessionID(), strings.TrimSpace(f.member), msg)
+	result, err := f.client().SeedPlot(f.sessionID(), msg)
 	if err != nil {
 		seedFail("plot", err)
 	}
@@ -1108,7 +1109,7 @@ func fprintSince(w io.Writer, after int, entries []protocol.SeedNote) {
 	for _, entry := range entries {
 		lines := strings.Split(strings.TrimRight(entry.Body, "\n"), "\n")
 		fmt.Fprintf(w, "  %s  %s  %s  %s  %s\n", shortStamp(entry.CreatedAt),
-			orDash(crew.HolderName(entry.AuthorMember, entry.AuthorSession)), entry.SeedID, entry.Kind, lines[0])
+			orDash(actorLabel(entry.Author)), entry.SeedID, entry.Kind, lines[0])
 		for _, line := range lines[1:] {
 			fmt.Fprintf(w, "    %s\n", line)
 		}
@@ -1331,10 +1332,10 @@ func fprintBoard(out io.Writer, plotID string, board []protocol.SeedBoardRow, cl
 		newest := "no entries"
 		if note := row.Newest; note != nil {
 			newest = fmt.Sprintf("%s  %s%s  %s", shortStamp(note.CreatedAt),
-				orDash(boardHolder(note.AuthorMember, note.AuthorSession)), noteKindSuffix(note.Kind), clipLine(firstLine(note.Body), 80))
+				orDash(boardHolder(string(note.Author.Ref), note.Author.Name)), noteKindSuffix(note.Kind), clipLine(firstLine(note.Body), 80))
 		}
 		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\n", child.ID, child.StepSlug, status,
-			orDash(boardHolder(child.TenderMember, child.TenderSession)), waits,
+			orDash(boardHolder(partyRefName(child.Tender))), waits,
 			orDash(strings.Trim(strings.TrimSpace(checkTallySuffix(child)), "[]")), newest)
 	}
 	w.Flush()
@@ -1350,12 +1351,11 @@ func fprintBoard(out io.Writer, plotID string, board []protocol.SeedBoardRow, cl
 	}
 }
 
-func boardHolder(member string, session protocol.SessionID) string {
-	holder := crew.HolderName(member, session)
-	if member == "" && len(holder) > 8 {
-		return holder[:8]
+func boardHolder(ref, name string) string {
+	if id, session := strings.CutPrefix(ref, "session:"); session {
+		return id[:min(len(id), 8)]
 	}
-	return holder
+	return name
 }
 
 func clipLine(line string, limit int) string {
@@ -1400,7 +1400,7 @@ func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 		return
 	}
 	fmt.Fprintf(w, "handoff — %s, %s\n",
-		orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), shortStamp(handoff.CreatedAt))
+		orDash(actorLabel(handoff.Author)), shortStamp(handoff.CreatedAt))
 	for _, line := range strings.Split(strings.TrimRight(handoff.Body, "\n"), "\n") {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
@@ -1496,7 +1496,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+checkTallySuffix(seed)+harvestWhenSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
-				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
+				orDash(actorLabel(handoff.Author)), firstLine(handoff.Body))
 		}
 	}
 	w.Flush()
@@ -1530,8 +1530,8 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
 	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "status\t%s\n", seed.Status)
-	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(crew.HolderName(seed.PlanterMember, seed.PlanterSession)))
-	fmt.Fprintf(w, "tender\t%s\n", orDash(crew.HolderName(seed.TenderMember, seed.TenderSession)))
+	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(actorLabel(seed.Planter)))
+	fmt.Fprintf(w, "tender\t%s\n", orDash(partyLabel(seed.Tender)))
 	if p := seed.PlotProgress; p != nil {
 		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d dormant, %d withered\n",
 			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Dormant, p.Withered)
@@ -1583,7 +1583,8 @@ func runSeedTransition(verb string, args []string) {
 	if err != nil {
 		seedUsageError(verb, err)
 	}
-	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(f.member), f.force, opts)
+	opts.Assignee = strings.TrimSpace(f.assignee)
+	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1682,7 +1683,7 @@ func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
 	free := false
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, seed := range seeds {
-		tender := crew.HolderName(seed.TenderMember, seed.TenderSession)
+		tender := partyLabel(seed.Tender)
 		held := ""
 		if tender == "" {
 			free = true
@@ -1703,7 +1704,7 @@ func closedSeedStatus(status string) bool {
 
 func transitionLine(seed protocol.Seed) string {
 	line := fmt.Sprintf("%s is %s", seedHandle(seed), seed.Status)
-	if tender := crew.HolderName(seed.TenderMember, seed.TenderSession); tender != "" {
+	if tender := partyLabel(seed.Tender); tender != "" {
 		line += fmt.Sprintf(", tended by %s", tender)
 	}
 	if seed.Reason != nil && *seed.Reason != "" {
@@ -1718,7 +1719,7 @@ func runSeedNote(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
 	}
-	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(f.member), f.noteKind(), f.ring, nil)
+	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), f.noteKind(), f.ring, nil)
 	if err != nil {
 		seedFail("note", err)
 	}
@@ -1826,7 +1827,7 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), strings.TrimSpace(f.member), kind, false, artifact)
+	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
 	}
@@ -1864,8 +1865,8 @@ func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan
 	if !managedAttach && !managedDetach && !localFlags {
 		return nil, false, nil
 	}
-	if f.wasSet("m") || strings.TrimSpace(f.member) != "" {
-		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m and --member apply to log associations")
+	if f.wasSet("m") {
+		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m applies to log associations")
 	}
 	plan := &seedArtifactTransferPlan{}
 	switch verb {
@@ -1987,7 +1988,7 @@ func fprintNotes(w io.Writer, notes []protocol.SeedNote, seedID string, withheld
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintf(w, "%s  %s%s\n", shortStamp(note.CreatedAt),
-			orDash(crew.HolderName(note.AuthorMember, note.AuthorSession)), noteKindSuffix(note.Kind))
+			orDash(actorLabel(note.Author)), noteKindSuffix(note.Kind))
 		fmt.Fprintf(w, "%s\n", strings.TrimRight(note.Body, "\n"))
 	}
 	if withheld > 0 {
@@ -2056,4 +2057,25 @@ func conversationDate(stamp string) string {
 		return at.Format("2006-01-02")
 	}
 	return stamp
+}
+
+func whoLabel(ref, name string) string {
+	if id, session := strings.CutPrefix(ref, "session:"); session {
+		return id
+	}
+	return name
+}
+
+func actorLabel(a protocol.ActorView) string { return whoLabel(string(a.Ref), a.Name) }
+
+func partyLabel(p *protocol.PartyView) string {
+	ref, name := partyRefName(p)
+	return whoLabel(ref, name)
+}
+
+func partyRefName(p *protocol.PartyView) (string, string) {
+	if p == nil {
+		return "", ""
+	}
+	return string(p.Ref), p.Name
 }

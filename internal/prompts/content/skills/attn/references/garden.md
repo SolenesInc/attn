@@ -98,13 +98,14 @@ included.
 
 ## Moving a seed another agent tends
 
-A live claim yields to its tender, sessions above it in the delegation chain,
-or the profile's chief, for tend, park, harvest, wither and replant. A crew
-member's named claim yields only to that member or the chief. The move records
-who acted and whose claim ended, and prints the audit note and who it rang.
-A delegate hears it through its delegation watch. Everyone else needs
+A claim yields to its tender, sessions above it in the delegation chain, or
+the profile's chief, for tend, park, harvest, wither and replant. The move
+records who acted and whose claim ended, and prints the audit note and who it
+rang. A delegate hears it through its delegation watch. Everyone else needs
 `--force`, which the log also records. A call without a live session has no
-standing. Claims whose sessions ended no longer need an override.
+standing. A crew member's claim lasts across the member's sessions; a
+session's claim lapses when the session ends, needs no override then, and
+holds again if the session resumes.
 
 ## Closing a plot
 

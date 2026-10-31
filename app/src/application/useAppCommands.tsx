@@ -550,7 +550,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       : [];
     const sessionSeedItems: PaletteCommand[] =
       activeSession &&
-      (activeSession.seedId || seeds.some((seed) => seed.tender_session === activeSession.id))
+      (activeSession.seedId || seeds.some((seed) => seed.tender?.session_id === activeSession.id))
         ? [
             {
               id: 'show-tended-seeds',

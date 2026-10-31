@@ -142,8 +142,7 @@ Launch failures leave transferred ownership and created worktrees/branches in pl
 When the delegate's work is complete, you can harvest its seed without
 `--force`, even while its session is live. Tend, park, wither and replant use
 the same delegation-chain rule. The profile's chief can also act on another
-session's seed; a crew member's named claim yields only to that member or
-the chief. The log records the move and whose claim ended, and the delegate's
+session's seed. The log records the move and whose claim ended, and the delegate's
 watch delivers its seed update. Everyone else still needs `--force`.
 
 When you no longer need the delegate's session, read the seed and use the

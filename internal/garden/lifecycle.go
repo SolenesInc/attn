@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/shortid"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Verb string
@@ -24,42 +24,9 @@ const (
 
 var Verbs = []Verb{VerbTend, VerbPark, VerbHarvest, VerbWither, VerbReplant}
 
-type Tender struct {
-	Session protocol.SessionID
-	Member  string
-}
-
-func (t Tender) Name() string {
-	if member := strings.TrimSpace(t.Member); member != "" {
-		return member
-	}
-	return string(protocol.TrimID(t.Session))
-}
-
-func (t Tender) DisplayName() string { return crew.HolderName(t.Member, t.Session) }
-
-func (t Tender) Named() bool { return t.Name() != "" }
-
-func (t Tender) Is(other Tender) bool {
-	mine, theirs := protocol.TrimID(t.Session), protocol.TrimID(other.Session)
-	if mine != "" && theirs != "" {
-		return mine == theirs
-	}
-	return mine == theirs && strings.TrimSpace(t.Member) == strings.TrimSpace(other.Member)
-}
-
-func (t Tender) Holds(sessionLive func(sessionID protocol.SessionID) bool) bool {
-	if !t.Named() {
-		return false
-	}
-	if session := protocol.TrimID(t.Session); session != "" {
-		return sessionLive(session)
-	}
-	return true
-}
-
 type Ask struct {
-	Actor                   Tender
+	Actor                   who.Actor
+	Claimant                who.Party
 	Reason                  string
 	Force                   bool
 	CauseSession            protocol.SessionID
@@ -119,8 +86,9 @@ func ParseVerb(raw string) (Verb, error) {
 }
 
 type Standing interface {
-	Live(protocol.SessionID) bool
-	Oversees(actor, held Tender) bool
+	Holds(who.Party) bool
+	Oversees(actor who.Actor, held who.Party) bool
+	Name(who.Party) string
 }
 
 type Means string
@@ -132,7 +100,7 @@ const (
 )
 
 type Outcome struct {
-	Displaced *Tender
+	Displaced *who.Party
 	By        Means
 	Seed      Seed
 	Moved     bool
@@ -153,20 +121,20 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 			return Outcome{}, err
 		}
 	}
-	if rule.claims && !ask.Actor.Named() {
+	if rule.claims && ask.Claimant.IsZero() {
 		return Outcome{}, fmt.Errorf(
-			"tending %s records who holds it and this call named nobody; run it from an attn session, or pass --member <name>", seed.ID)
+			"tending %s records who claims it, and the user never claims a seed; run it from an attn session, or assign it to a crew member: attn seed tend %s --for <name>", seed.ID, seed.ID)
 	}
 	by := MeansTender
-	var displaced *Tender
-	if held := seed.Tender(); held.Holds(standing.Live) && !held.Is(ask.Actor) {
+	var displaced *who.Party
+	if held := seed.Tender; seed.ClaimHolds(standing.Holds) && held != ask.Claimant && held.Actor() != ask.Actor {
 		switch {
 		case ask.Force:
 			by = MeansForce
 		case standing.Oversees(ask.Actor, held):
 			by = MeansStanding
 		default:
-			return Outcome{}, refuseTakeover(seed, held)
+			return Outcome{}, refuseTakeover(seed, standing.Name(held))
 		}
 		displaced = &held
 	}
@@ -175,7 +143,7 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 		return Outcome{}, err
 	}
 
-	if seed.Status == rule.to && (!rule.claims || seed.Tender() == ask.Actor) {
+	if seed.Status == rule.to && (!rule.claims || seed.Tender == ask.Claimant) {
 		return Outcome{Seed: seed}, nil
 	}
 	if rule.needsReason && reason == "" {
@@ -189,11 +157,9 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	next.Status = rule.to
 	switch {
 	case rule.claims:
-		next.TenderSession = protocol.TrimID(ask.Actor.Session)
-		next.TenderMember = strings.TrimSpace(ask.Actor.Member)
+		next.Tender = ask.Claimant
 	default:
-		next.TenderSession = ""
-		next.TenderMember = ""
+		next.Tender = who.Party{}
 	}
 	switch {
 	case rule.keepsReason:
@@ -207,16 +173,12 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	return Outcome{Seed: next, Moved: true, Displaced: displaced, By: by}, nil
 }
 
-func (s Seed) Tender() Tender {
-	return Tender{Session: s.TenderSession, Member: s.TenderMember}
+func (s Seed) ClaimHolds(holds func(who.Party) bool) bool {
+	return !s.Tender.IsZero() && holds(s.Tender)
 }
 
-func (d Dispatch) Dispatcher() Tender {
-	return Tender{Session: d.DispatcherSession, Member: d.DispatcherMember}
-}
-
-func refuseTakeover(seed Seed, held Tender) error {
-	return fmt.Errorf("%s is being tended by %s (live); only it, sessions above it in its delegation chain, or the profile's chief move it; --force acts anyway and the log records it", seed.ID, held.DisplayName())
+func refuseTakeover(seed Seed, tender string) error {
+	return fmt.Errorf("%s is being tended by %s; only its tender, sessions above it in its delegation chain, or the profile's chief move it; --force acts anyway and the log records it", seed.ID, tender)
 }
 
 func refuseState(seed Seed, verb Verb) error {
@@ -231,13 +193,12 @@ func refuseState(seed Seed, verb Verb) error {
 }
 
 type Note struct {
-	ID            string             `json:"id"`
-	Seed          string             `json:"seed"`
-	Kind          string             `json:"kind"`
-	Body          string             `json:"body"`
-	AuthorSession protocol.SessionID `json:"author_session"`
-	AuthorMember  string             `json:"author_member"`
-	Artifact      *ArtifactReference `json:"artifact,omitempty"`
+	ID       string             `json:"id"`
+	Seed     string             `json:"seed"`
+	Kind     string             `json:"kind"`
+	Body     string             `json:"body"`
+	Author   who.Actor          `json:"author,omitzero"`
+	Artifact *ArtifactReference `json:"artifact,omitempty"`
 }
 
 const (
@@ -320,10 +281,6 @@ func ValidateNote(body string) error {
 		return fmt.Errorf("that note is %d bytes and the limit is %d; a note is what happened and what you learned, not an archive", n, MaxNoteBytes)
 	}
 	return nil
-}
-
-func (n Note) Author() Tender {
-	return Tender{Session: n.AuthorSession, Member: n.AuthorMember}
 }
 
 func NewNoteID() (string, error) { return shortid.New(noteIDPrefix) }

@@ -5,13 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAPlotsShowIsABoardOfItsOpenChildren(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "alder")
 	s.Start()
 	plot := plantPlot(t, s, `{"title": "Fence the garden", "children": [
 		{"title": "Dig the postholes"},
@@ -22,8 +24,8 @@ func TestAPlotsShowIsABoardOfItsOpenChildren(t *testing.T) {
 	dig, set, buy, mural, gate := plot.Children[0], plot.Children[1], plot.Children[2], plot.Children[3], plot.Children[4]
 	hinge := plant(t, s, "Fit the hinges", "--part-of", gate.ID)
 	seedAs(t, s, "", "link", dig.ID, "blocks", set.ID)
-	seedAs(t, s, "", "tend", dig.ID, "--member", "alder")
-	seedAs(t, s, "", "note", dig.ID, "-m", "four holes dug\nthe rest tomorrow", "--member", "alder")
+	seedAs(t, s, "", "tend", dig.ID, "--for", "alder")
+	seedAs(t, s, "", "note", dig.ID, "-m", "four holes dug\nthe rest tomorrow")
 	seedAs(t, s, "", "harvest", buy.ID, "-m", "timber delivered")
 	seedAs(t, s, "", "wither", mural.ID, "-m", "no mural this year")
 
@@ -32,7 +34,7 @@ func TestAPlotsShowIsABoardOfItsOpenChildren(t *testing.T) {
 	requireLines(t, "the board", board, "\nboard  3 open\n",
 		"\n  and 1 harvested, 1 withered — attn seed ls --plot "+plot.Crown.ID+"\n")
 	rows := map[string]*regexp.Regexp{
-		dig.ID:  regexp.MustCompile(`(?m)^  ` + dig.ID + `  +` + dig.StepSlug + `  +growing  +Alder  +-  +-  +\S+ \S+  Alder  four holes dug$`),
+		dig.ID:  regexp.MustCompile(`(?m)^  ` + dig.ID + `  +` + dig.StepSlug + `  +growing  +Alder  +-  +-  +\S+ \S+  the user  four holes dug$`),
 		set.ID:  regexp.MustCompile(`(?m)^  ` + set.ID + `  +` + set.StepSlug + `  +planted  +-  +waits for ` + dig.ID + `  +checks ✓0/1  +`),
 		gate.ID: regexp.MustCompile(`(?m)^  ` + gate.ID + `  +` + gate.StepSlug + ` +planted · 0/1 done  +-  +-  +-  +`),
 	}

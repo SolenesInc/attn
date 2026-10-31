@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, soloDesktop, crewMember, daemonDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
+import { agentPane, soloDesktop, crewMember, daemonDesktop, daemonSeed, daemonSession, dockTiles, memberActor, sessionClaim } from './test/daemonFixtures';
 import { openRow, renderGarden } from './test/garden';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -9,7 +9,7 @@ import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 const PARSER = daemonSeed('s-1', {
   title: 'fix the parser',
   status: 'tending',
-  tender_session: 'tender',
+  ...sessionClaim('tender'),
   continuation: {
     agent: 'claude',
     cwd: '/tmp/repo',
@@ -209,7 +209,7 @@ describe('App garden continuation', () => {
         crew: [KEEL],
         sessions: [daemonSession('s1')],
         desktops: [soloDesktop('s1')],
-        seeds: [daemonSeed('s-7k3f9m', { title: 'crew seed', status: 'planted', planter_member: 'keel' })],
+        seeds: [daemonSeed('s-7k3f9m', { title: 'crew seed', status: 'planted', planter: memberActor('keel') })],
       },
     });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
@@ -286,8 +286,6 @@ describe('App garden continuation', () => {
     expect(daemon.sentOf('seed_send_to_chief')).toEqual([expect.objectContaining({
       seed_id: 's-1',
       expected_rev: 1,
-      expected_tender_session: 'tender',
-      expected_tender_member: '',
       guidance: 'Use feature/special in /tmp/new-home.',
     })]);
   });

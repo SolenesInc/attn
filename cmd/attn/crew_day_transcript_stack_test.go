@@ -68,7 +68,7 @@ func TestForgetCrewLetterTranscriptRequiresConsent(t *testing.T) {
 				t.Fatalf("consent must not bypass open seeds: %+v", blocked)
 			}
 			unchanged()
-			requireStdout(t, s.Attn("seed", "wither", seed.ID, "-m", "finished"), seed.ID)
+			requireStdout(t, s.Attn("seed", "wither", seed.ID, "-m", "finished", "--force"), seed.ID)
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			refused := s.Attn("conversation", "forget", run.ConversationID)
 			if refused.Code == 0 || !strings.Contains(refused.Stderr, "trellis "+filepath.Base(handoff.Path)) || !strings.Contains(refused.Stderr, "--unlink-crew-letters") || !strings.Contains(refused.Stderr, "keel "+filepath.Base(otherLetter)) {

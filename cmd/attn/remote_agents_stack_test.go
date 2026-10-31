@@ -705,11 +705,11 @@ func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
 	id := outpost.Spawn(app, fakeagent.Claude, outpost.Path("abandoned"))
 	outpost.Launched(id)
 	cli := outpost.Client()
-	planted, err := cli.SeedPlant(protocol.SessionID(id), "Interrupted local work", "Finish the interrupted work.", "", "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(id), "Interrupted local work", "Finish the interrupted work.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := cli.Unregister(protocol.SessionID(id)); err != nil {

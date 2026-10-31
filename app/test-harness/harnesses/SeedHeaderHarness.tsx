@@ -8,18 +8,19 @@ import '../../src/App.css';
 
 const states = ['planted', 'growing', 'dormant', 'harvested', 'withered'];
 const now = new Date().toISOString();
+const gardenAgentClaim = { tender: { ref: 'session:garden-agent', name: 'garden-agent', session_id: 'garden-agent' }, claimed: true };
 const base: Seed = {
   id: 's-garden', title: 'Give the garden a little life', body: 'Make every lifecycle state recognizable at header size.',
-  status: 'growing', state_changed_at: now, state_changed_at_exact: true, step_slug: 'garden-life',
-  planter_session: '', planter_member: '', tender_session: 'garden-agent', tender_member: '',
+  status: 'growing', state_changed_at: now, state_changed_at_exact: true, step_slug: 'garden-life', profile_id: 'profile-default',
+  planter: { ref: 'user', name: 'the user' }, ...gardenAgentClaim,
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
 const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
 const seedDocuments: Partial<DaemonApi> = {
   sendSeedDocumentGet: async (id: string) => ({
     seed: { ...base, id, status: id.startsWith('s-') && states.includes(id.slice(2)) ? id.slice(2) : 'growing' },
-    children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
-    notes: [{ id: 'n-1', seed_id: id, kind: 'note', body: 'The silhouettes work at 24px. Next, check the hover at the edge of a narrow pane.', created_at: now, author_session: '', author_member: '' }],
+    children: [], artifacts: [], references: [], notes_total: 1,
+    notes: [{ id: 'n-1', seed_id: id, kind: 'note', body: 'The silhouettes work at 24px. Next, check the hover at the edge of a narrow pane.', created_at: now, author: { ref: 'user', name: 'the user' } }],
   }),
 };
 
@@ -28,7 +29,7 @@ export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
   const [opened, setOpened] = useState('');
   const [terminalEscapes, setTerminalEscapes] = useState(0);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
-  const seed = { ...base, id: `s-${status}`, status, tender_session: status === 'growing' ? 'garden-agent' : '' };
+  const seed = { ...base, id: `s-${status}`, status, ...(status === 'growing' ? gardenAgentClaim : { tender: undefined, claimed: false }) };
   return (
     <DaemonApiProvider api={seedDocuments as DaemonApi}>
       <div style={{ padding: 28, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>

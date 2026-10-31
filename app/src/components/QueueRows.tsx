@@ -9,6 +9,7 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
 import type { QueueRow } from '../utils/queueBands';
 import type {
+  ActorView,
   AutomationProvenance as AutomationProvenanceValue,
   SessionDelegationRole,
 } from '../types/generated';
@@ -34,7 +35,7 @@ export interface QueueBandSessionView {
   autoSettleHeld?: boolean;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
 }

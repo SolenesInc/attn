@@ -329,7 +329,7 @@ describe('SessionTerminalDesktop pane header', () => {
     expect(screen.queryByTestId('seed-chip-sess-1')).not.toBeInTheDocument();
   });
 
-  it('shows and opens the current crew member-only claim', () => {
+  it('shows and opens the claim of the crew member awake in this pane', () => {
     const onOpenSeed = vi.fn();
     renderLonePane({
       desktopSessions: [{
@@ -338,7 +338,8 @@ describe('SessionTerminalDesktop pane header', () => {
       gardenSeeds: [{
         id: 's-crew11', title: 'Member work', body: '', status: 'growing', step_slug: 'member-work',
         profile_id: 'profile-default',
-    planter_session: '', planter_member: '', tender_session: '', tender_member: 'fern',
+        planter: { ref: 'user', name: 'the user' },
+        tender: { ref: 'member:fern', name: 'Fern', session_id: 'sess-1' }, claimed: true,
         edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
         created_at: '2026-09-04T12:00:00Z', updated_at: '2026-09-04T12:00:00Z',
         state_changed_at: '2026-09-04T12:00:00Z', state_changed_at_exact: true,

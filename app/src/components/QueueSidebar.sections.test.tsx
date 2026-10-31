@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { useAgentList } from './useAgentList';
 import { focusedQueueRow } from './focusedQueueRow';
-import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
+import { BuiltinDelegationRole, type ActorView, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';
 import { desktopGroups } from '../test/desktops';
@@ -21,7 +21,7 @@ interface TestSession {
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
 }
 
@@ -226,7 +226,7 @@ describe('the queue sidebar', () => {
         state: 'working',
         desktopId: 'ws-b',
         dispatcher_session_id: 'root',
-        dispatcher_member: 'alder',
+        dispatcher: { ref: 'member:alder', name: 'Alder' },
       },
     ];
     renderSidebar(linked, true, { onSelectSession, agentListOpen: true });
@@ -247,7 +247,7 @@ describe('the queue sidebar', () => {
       state: 'working',
       desktopId: 'ws-a',
       dispatcher_session_id: 'ended',
-      dispatcher_member: 'alder',
+      dispatcher: { ref: 'member:alder', name: 'Alder' },
     }];
     renderSidebar(linked, true, { agentListOpen: true });
 

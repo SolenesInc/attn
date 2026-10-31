@@ -234,13 +234,13 @@ export function SeedChecks({
                   </span>
                 ))}
                 {report.commit && <span className="seed-check__meta" title={report.commit}> · @{shortCommit(report.commit)}</span>}
-                <span className="seed-check__meta"> · {checkAuthor(report, sessionLabels)}</span>
+                <span className="seed-check__meta"> · {checkAuthor(report.by, sessionLabels)}</span>
               </span>
             </div>
           )}
           {verdict && (
             <div className={`seed-check__verdict is-${verdict.confirmed ? 'confirmed' : 'rejected'}`}>
-              {verdict.confirmed ? 'confirmed' : 'rejected'} by {checkAuthor(verdict, sessionLabels)}
+              {verdict.confirmed ? 'confirmed' : 'rejected'} by {checkAuthor(verdict.by, sessionLabels)}
               {verdict.reason && <>: {verdict.reason}</>}
               {!report && <span className="seed-check__meta"> · no report</span>}
             </div>

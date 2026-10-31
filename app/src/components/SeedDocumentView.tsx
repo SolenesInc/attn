@@ -3,6 +3,7 @@ import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
 } from '../types/generated';
+import { tenderOf, whoName, type SessionLabels } from './gardenBoardModel';
 import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
@@ -38,10 +39,6 @@ function formatTimestamp(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-function holder(seed: Seed): string {
-  return seed.tender_member || seed.tender_session || '';
-}
-
 function progressWords(seed: Seed): string {
   const progress = seed.plot_progress;
   if (!progress) return '';
@@ -65,11 +62,13 @@ function SeedLogLedger({
   seedId,
   notes,
   notesTotal,
+  sessionLabels,
   initiallyOpen = false,
 }: {
   seedId: string;
   notes: SeedDocumentNote[];
   notesTotal: number;
+  sessionLabels?: SessionLabels;
   initiallyOpen?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
@@ -93,7 +92,7 @@ function SeedLogLedger({
             {notes.map((note) => (
               <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
                 <div className="seed-document__note-head">
-                  <span>{note.author_member || note.author_session || '—'}</span>
+                  <span>{whoName(note.author, sessionLabels)}</span>
                   {note.kind !== 'note' && <span>{note.kind}</span>}
                   <time dateTime={note.created_at}>{formatTimestamp(note.created_at)}</time>
                 </div>
@@ -131,7 +130,7 @@ export function SeedDocumentView({
 }: SeedDocumentViewProps) {
   const { seed, children, notes, notes_total: notesTotal, artifacts, references } = document;
   const isPlot = Boolean(seed.plot_progress);
-  const tender = holder(seed);
+  const tender = tenderOf(seed, sessionLabels);
   const progress = progressWords(seed);
   const plotHeadingId = useId();
   const artifactsHeadingId = useId();
@@ -248,6 +247,7 @@ export function SeedDocumentView({
         seedId={seed.id}
         notes={notes}
         notesTotal={notesTotal}
+        sessionLabels={sessionLabels}
         initiallyOpen={ledgerInitiallyOpen}
       />
     </div>

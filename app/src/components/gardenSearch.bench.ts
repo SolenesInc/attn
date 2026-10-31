@@ -1,6 +1,7 @@
 // Every steady-state figure is the minimum of three rounds after a long warmup.
 import type { Seed } from '../hooks/useDaemonSocket';
 import { buildIndex, parseQuery, searchGarden, type SearchEntry } from './gardenSearch.js';
+import { tenderOf } from './gardenBoardModel.js';
 
 const WORDS = (
   'reconnect socket daemon garden seed panel tender crown plot harvest wither ' +
@@ -29,6 +30,11 @@ function lcg(seed: number): () => number {
   };
 }
 
+function tendedBy(member: string): Pick<Seed, 'tender' | 'claimed'> {
+  if (!member) return { claimed: false };
+  return { tender: { ref: `member:${member}`, name: member }, claimed: true };
+}
+
 function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[] {
   const rand = lcg(42);
   const members = ['hazel', 'juniper', 'sorrel', ''];
@@ -50,11 +56,9 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       gate: false,
       template: false,
       step_slug: '',
-      planter_member: '',
       profile_id: 'profile-default',
-    planter_session: '',
-      tender_member: members[Math.floor(rand() * members.length)],
-      tender_session: '',
+      planter: { ref: 'user', name: 'the user' },
+      ...tendedBy(members[Math.floor(rand() * members.length)]),
       vars: [],
     });
   }
@@ -62,7 +66,7 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
 }
 
 const ctx = {
-  tenderOf: (seed: Seed) => seed.tender_member ?? '',
+  tenderOf,
   blockersOf: () => 0,
 };
 

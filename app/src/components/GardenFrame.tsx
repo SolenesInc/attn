@@ -74,9 +74,8 @@ export interface GardenFrameProps {
   onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
   chiefAvailable?: boolean;
-  liveSessions?: Set<string>;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
   loaded?: boolean;
+  tenderSessionLabels?: ReadonlyMap<string, string>;
   moveSeed?: (
     seedId: string,
     verb: string,
@@ -110,9 +109,8 @@ export function GardenFrame({
   onHandoverSeed,
   onSendSeedToChief,
   chiefAvailable = false,
-  liveSessions,
-  tenderSessionLabels,
   loaded = true,
+  tenderSessionLabels,
   moveSeed,
   noteSeed,
   reviewOverview,
@@ -266,7 +264,7 @@ export function GardenFrame({
               <GardenBoard
                 seeds={seeds}
                 seedsTotal={seedsTotal}
-                liveSessions={liveSessions ?? new Set()}
+                sessionLabels={tenderSessionLabels}
                 loaded={loaded}
                 onTransition={(seedId, verb, reason, force, comment) => (
                   moveSeed!(seedId, verb, reason, force, comment)

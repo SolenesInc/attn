@@ -32,8 +32,8 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	shows := func(when, delegate, session, member string) {
 		t.Helper()
 		shown := sessionOfDelegate(t, w, delegate)
-		if string(protocol.Deref(shown.DispatcherSessionID)) != session || protocol.Deref(shown.DispatcherMember) != member {
-			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), protocol.Deref(shown.DispatcherMember), session, member)
+		if string(protocol.Deref(shown.DispatcherSessionID)) != session || dispatcherMemberOf(&shown) != member {
+			t.Errorf("%s the delegate %s shows dispatcher session %q and member %q, want %q and %q", when, delegate, protocol.Deref(shown.DispatcherSessionID), dispatcherMemberOf(&shown), session, member)
 		}
 	}
 	shows("while its dispatchers live", fromAlder, string(firstDay), "alder")
@@ -78,8 +78,8 @@ func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *tes
 	w.restart()
 
 	shown := sessionOfDelegate(t, w, delegate)
-	if protocol.Deref(shown.DispatcherMember) != "alder" || protocol.Deref(shown.SeedID) == "" {
-		t.Errorf("after a restart the delegate shows dispatcher member %q and seed %q, want alder and its seed", protocol.Deref(shown.DispatcherMember), protocol.Deref(shown.SeedID))
+	if dispatcherMemberOf(&shown) != "alder" || protocol.Deref(shown.SeedID) == "" {
+		t.Errorf("after a restart the delegate shows dispatcher member %q and seed %q, want alder and its seed", dispatcherMemberOf(&shown), protocol.Deref(shown.SeedID))
 	}
 }
 

@@ -735,7 +735,7 @@ func TestSeedNotesLeaveConversationKeepIdleAndHarvestStillReleasesTheCopy(t *tes
 		t.Fatalf("open seed's kept conversation: %+v", kept)
 	}
 	before := producedBy(busStatus(t, app), "task.changed")
-	if _, err := cli.SeedNote("", delegated.SeedID, "Record progress", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("", delegated.SeedID, "Record progress", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if after := producedBy(busStatus(t, app), "task.changed"); after != before {

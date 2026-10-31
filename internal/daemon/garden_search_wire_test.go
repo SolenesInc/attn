@@ -24,7 +24,7 @@ func TestSeedSearchMatchesWordsAndIdentifiers(t *testing.T) {
 			{"identifier", "Regression test", "TestARefusedDashboardRefreshKeepsThePreviousList"},
 			{"prose", "A refused dashboard refresh keeps the previous list", ""},
 		} {
-			seed, err := cli.SeedPlant("", row.title, row.body, "", "", "")
+			seed, err := cli.SeedPlant("", row.title, row.body, "", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestSeedSearchMatchesUnicodeWords(t *testing.T) {
 			{"ÉlanÜber café 東京42", "élan über"},
 			{"İstanbul visible", "istanbul"},
 		} {
-			seed, err := cli.SeedPlant("", "Unicode regression", tc.text, "", "", "")
+			seed, err := cli.SeedPlant("", "Unicode regression", tc.text, "", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -127,7 +127,7 @@ func TestSeedSearchRanksCoverageAndKeepsClosedSeeds(t *testing.T) {
 		app := w.App()
 		cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
 		plant := func(title, body string) string {
-			seed, err := cli.SeedPlant("", title, body, "", "", "")
+			seed, err := cli.SeedPlant("", title, body, "", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,7 +177,7 @@ func TestSeedSearchRanksCoverageAndKeepsClosedSeeds(t *testing.T) {
 		open := plant("Paired ranking", "")
 		w.advance(time.Hour)
 		closed := plant("Paired ranking", "")
-		if _, err := cli.SeedTransition("", closed, "harvest", "finished", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", closed, "harvest", "finished", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		paired := gardenSearch(t, cli, "", "paired ranking", 0)
@@ -192,7 +192,7 @@ func TestSeedSearchFollowsWritesAndRestart(t *testing.T) {
 		app := w.App()
 		profile := app.SelectedProfile()
 		cli := w.Client().WithGardenProfile(profile, "")
-		seed, err := cli.SeedPlant("", "Durable word search", "Obsidian preserves the original body", "", "", "")
+		seed, err := cli.SeedPlant("", "Durable word search", "Obsidian preserves the original body", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +216,7 @@ func TestSeedSearchFollowsWritesAndRestart(t *testing.T) {
 		}
 		assertHit("obsidian", true)
 		assertHit("malachite", false)
-		if _, err := cli.SeedTransition("", id, "harvest", "finished", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", id, "harvest", "finished", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		before := gardenSearch(t, cli, "", "obsidian chrysoprase", 0)
@@ -234,7 +234,7 @@ func TestSeedSearchFollowsWritesAndRestart(t *testing.T) {
 
 func gardenSearchNote(t *testing.T, cli *client.Client, session, seedID, body string) {
 	t.Helper()
-	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", false, nil); err != nil {
 		t.Fatalf("note %q on %s: %v", body, seedID, err)
 	}
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -284,16 +283,15 @@ func (d *Daemon) crewBindingLive(member crew.Member) bool {
 	return member.BindingSession != "" && d.sessionExists(member.BindingSession)
 }
 
-func (d *Daemon) liveSessionForTender(tender garden.Tender) (protocol.SessionID, bool) {
-	memberID := strings.TrimSpace(tender.Member)
-	if memberID != "" {
-		member, _, err := d.crewMember(memberID)
+func (d *Daemon) liveSessionOf(p who.Party) (protocol.SessionID, bool) {
+	if key, ok := p.Member(); ok {
+		member, _, err := d.crewMember(key.String())
 		if err != nil || !d.crewBindingLive(member) {
 			return "", false
 		}
 		return member.BindingSession, true
 	}
-	if sessionID := protocol.TrimID(tender.Session); sessionID != "" && d.store.Get(sessionID) != nil {
+	if sessionID, ok := p.Session(); ok && d.store.Get(sessionID) != nil {
 		return sessionID, true
 	}
 	return "", false
@@ -505,13 +503,6 @@ func (d *Daemon) decorateCrewMember(session *protocol.Session, membersBySession 
 		return
 	}
 	session.CrewMember, session.CrewMemberName = nil, nil
-}
-
-func (d *Daemon) resolveTenderMember(member string, sessionID protocol.SessionID) string {
-	if member = strings.TrimSpace(member); member == "" {
-		return d.crewMemberBoundTo(sessionID)
-	}
-	return member
 }
 
 func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {

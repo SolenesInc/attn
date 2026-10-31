@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedResumeOutcome struct {
@@ -57,8 +58,8 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
-		if tender := protocol.TrimID(seed.TenderSession); tender != "" {
-			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
+		if !seed.Tender.IsZero() {
+			return nil, fmt.Errorf("%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender))
 		}
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
@@ -67,7 +68,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if sessionID == "" {
 		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
 	}
-	actor := garden.Tender{Session: sessionID}
+	actor := who.Session(sessionID)
 	if existing := d.store.Get(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
@@ -75,7 +76,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionActive, expectedRev); err != nil {
+			seedID, garden.VerbTend, garden.Ask{Actor: actor.Actor(), Claimant: actor}, "", d.sessionActive, expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -104,7 +105,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
 	}
 	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-		seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionActive, expectedRev); err != nil {
+		seedID, garden.VerbTend, garden.Ask{Actor: actor.Actor(), Claimant: actor}, "", d.sessionActive, expectedRev); err != nil {
 		return nil, err
 	}
 	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {

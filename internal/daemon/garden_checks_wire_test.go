@@ -130,7 +130,7 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 		if progress == nil || progress.Checks == nil || *progress.Checks != want {
 			t.Errorf("plot progress = %+v, want checks %+v", progress, want)
 		}
-		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), "", protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
+		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,7 +238,7 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		const rounds = 20
-		plot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{
+		plot, err := cli.SeedPlot("", protocol.SeedPlotMessage{
 			Title:    "racing plot",
 			Children: []protocol.SeedPlotChild{{Title: "left"}, {Title: "right"}},
 		})
@@ -343,7 +343,7 @@ func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		sessions := spawnCheckSessions(w, app, "planner")
 		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
-		if _, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "", "", "attach", false, &protocol.SeedArtifactReference{
+		if _, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "", "attach", false, &protocol.SeedArtifactReference{
 			Kind: "markdown_file", Path: protocol.Ptr("docs/proof.md"),
 		}); err != nil {
 			t.Fatal(err)
@@ -544,14 +544,13 @@ func TestARungCheckMoveNamesItsAudienceAndTheMoveInTheInbox(t *testing.T) {
 
 		gardenNudgeWatch(t, cli, sessions["reviewer"], seed, false)
 		reject.Ring = protocol.Ptr(true)
-		reject.Member = protocol.Ptr("keel")
 		rung := checkMoveOK(t, cli, reject)
 		w.advance(0)
 		if !slices.Equal(rung.RingRecipients, []string{sessions["watcher"]}) {
 			t.Errorf("the rung move's recipients = %v, want the watcher and not the reviewer who made it", rung.RingRecipients)
 		}
-		gardenNudgeOneBell(t, cli, sessions["watcher"], seed, "check C1 rejected by keel")
-		gardenNudgeInboxIsEmpty(t, cli, sessions["reviewer"], "after its own rung move as a member")
+		gardenNudgeOneBell(t, cli, sessions["watcher"], seed, "check C1 rejected by "+sessions["reviewer"][:8])
+		gardenNudgeInboxIsEmpty(t, cli, sessions["reviewer"], "after its own rung move")
 
 		lonely := plot.Children[1].ID
 		gardenNudgeMove(t, cli, sessions["builder"], lonely, "harvest")
@@ -562,7 +561,7 @@ func TestARungCheckMoveNamesItsAudienceAndTheMoveInTheInbox(t *testing.T) {
 			t.Errorf("a rung move on a harvested seed with no watcher names %v, want nobody", got)
 		}
 
-		noted, err := cli.SeedNote(protocol.SessionID(sessions["reviewer"]), seed, "please look", "", "", true, nil)
+		noted, err := cli.SeedNote(protocol.SessionID(sessions["reviewer"]), seed, "please look", "", true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -577,7 +576,7 @@ func TestOnlyACheckMoveWritesACheckNote(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		sessions := spawnCheckSessions(w, app, "planner")
 		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
-		_, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 confirmed", "", "check", false, nil)
+		_, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 confirmed", "check", false, nil)
 		lifeRefusal(t, "seed_note with the check kind", err, "attn seed check")
 	})
 }
@@ -650,7 +649,7 @@ func spawnCheckSessions(w *world, app *testworld.Peer, names ...string) map[stri
 
 func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.SeedPlotResult {
 	t.Helper()
-	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), protocol.SeedPlotMessage{
 		Title: "search moves to the daemon",
 		Checks: []protocol.SeedCheckDefinition{
 			{ID: protocol.Ptr("C5"), Text: "The pull request is green on CI.", Shared: protocol.Ptr(true)},

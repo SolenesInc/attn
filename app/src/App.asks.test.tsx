@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { DEFAULT_PROFILE_ID, daemonSeed, daemonSession, seedDocument, soloDesktop, type DaemonSeed, type DaemonSession } from './test/daemonFixtures';
+import { DEFAULT_PROFILE_ID, daemonSeed, daemonSession, seedDocument, sessionClaim, soloDesktop, type DaemonSeed, type DaemonSession } from './test/daemonFixtures';
 import { seedHeading } from './test/garden';
 import type { EventMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -49,7 +49,7 @@ const cacheStoreReplied: Ask = {
   },
 };
 
-const migration = daemonSeed('s-cache1', { title: 'Cache store migration', tender_session: 'successor' });
+const migration = daemonSeed('s-cache1', { title: 'Cache store migration', ...sessionClaim('successor') });
 
 const landingWeek: Ask = {
   id: 'a-landing',
@@ -235,7 +235,7 @@ describe('App asks', () => {
   });
 
   it('waits for the next tender when no live agent tends the seed', async () => {
-    const daemon = await renderAsks([landingWeek], [apiWorking], [{ ...migration, tender_session: 'delegate' }]);
+    const daemon = await renderAsks([landingWeek], [apiWorking], [{ ...migration, ...sessionClaim('delegate', { live: false }) }]);
 
     expect(screen.queryByTestId('ask-marker-api')).toBeNull();
     await openDrawer(daemon);

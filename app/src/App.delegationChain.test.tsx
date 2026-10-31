@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, soloDesktop, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop, memberActor, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -71,8 +71,8 @@ describe('App delegation chain', () => {
 
   it('names a dispatcher that has ended as unavailable text rather than a session to open', async () => {
     await renderTeam([
-      daemonSession('child', { label: 'child', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
-      daemonSession('peer', { label: 'peer', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
+      daemonSession('child', { label: 'child', dispatcher_session_id: 'ended', dispatcher: memberActor('alder') }),
+      daemonSession('peer', { label: 'peer', dispatcher_session_id: 'ended', dispatcher: memberActor('alder') }),
     ]);
 
     fireEvent.click(trigger('child'));
@@ -96,7 +96,7 @@ describe('App delegation chain', () => {
     const { daemon } = await renderTeam([
       daemonSession('root', { label: 'root session' }),
       daemonSession('child', { label: 'child', dispatcher_session_id: 'root' }),
-      daemonSession('orphan', { label: 'orphan', dispatcher_session_id: 'ended', dispatcher_member: 'alder' }),
+      daemonSession('orphan', { label: 'orphan', dispatcher_session_id: 'ended', dispatcher: memberActor('alder') }),
     ]);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Open child/ })));
 

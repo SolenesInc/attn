@@ -121,8 +121,8 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Addres
 	if holder := d.inboxHolder(to); holder != nil && holder.ID == session.ID {
 		return to, nil
 	}
-	if tender := seed.Tender(); tender.Named() {
-		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, tender.DisplayName())
+	if !seed.Tender.IsZero() {
+		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, d.partyName(seed.Tender))
 	}
 	return who.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
 }

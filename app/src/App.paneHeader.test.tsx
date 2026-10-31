@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentPane, soloDesktop, daemonSeed, daemonSession, daemonDesktop, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSeed, daemonSession, daemonDesktop, memberClaim, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { gesture, renderApp } from './test/renderApp';
@@ -251,7 +251,7 @@ describe('App pane header', () => {
   it('shows and opens the seed a crew member tends', async () => {
     const { daemon } = await openPane(
       { label: 'Fern', crew_member: 'fern' },
-      { seeds: [daemonSeed('s-crew11', { title: 'Member work', tender_member: 'fern' })] },
+      { seeds: [daemonSeed('s-crew11', { title: 'Member work', ...memberClaim('fern', 's1') })] },
     );
 
     expect(inHeader().getByTestId('seed-chip-s1')).toHaveTextContent('Member work');

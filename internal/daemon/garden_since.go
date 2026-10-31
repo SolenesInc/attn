@@ -76,7 +76,7 @@ func (d *Daemon) readEntriesSince(read gardenRead, crownID string, after int64, 
 		if err != nil {
 			return nil, fmt.Errorf("entry %s has an unreadable body: %w", payload.NoteID, err)
 		}
-		entry := noteToProtocol(note, *doc)
+		entry := d.noteToProtocol(note, *doc)
 		entry.Seq = protocol.Ptr(int(event.Seq))
 		entries = append(entries, entry)
 	}

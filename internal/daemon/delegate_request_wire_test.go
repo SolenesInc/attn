@@ -90,7 +90,7 @@ func TestRetryingADelegationConvergesOnOneOperation(t *testing.T) {
 		t.Fatalf("a sequential retry = %+v, %v; want the accepted operation's session %s", result, err, operations[0].SessionID)
 	}
 	w.Launched(string(result.SessionID))
-	if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.TenderSession != result.SessionID {
+	if shown, err := cli.SeedShow("", result.SeedID); err != nil || tenderSessionOf(shown.Seed) != result.SessionID {
 		t.Errorf("the converged delegation's seed is %+v, %v; want it tended by %s", shown, err, result.SessionID)
 	}
 

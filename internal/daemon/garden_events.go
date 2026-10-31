@@ -271,7 +271,7 @@ func (d *Daemon) gardenSeedEventText(event bus.Event) (string, error) {
 	if err != nil || note.Kind != garden.NoteKindCheck {
 		return "", err
 	}
-	return checkNoteInboxText(note), nil
+	return d.checkNoteInboxText(note), nil
 }
 
 type gardenEventRoles struct {
@@ -314,7 +314,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 				return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
 			}
 			seen[at] = true
-			if !r.subscriptions.seeds[at].Tender().Holds(r.daemon.sessionActive) {
+			if !r.subscriptions.seeds[at].ClaimHolds(r.daemon.partyHolds) {
 				continue
 			}
 			tenders, err := r.ResolveSeedRole(at, events.CurrentTender)
@@ -329,7 +329,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		if !exists {
 			return nil, nil
 		}
-		if seed.Tender().Member != "" {
+		if _, member := seed.Tender.Member(); member {
 			member, found, err := r.daemon.seedTenderMember(seed)
 			if err != nil {
 				return nil, err

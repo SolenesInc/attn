@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openMarkdownTiles, openTiles } from './test/appFixtures';
-import { daemonSeed, seedDocument } from './test/daemonFixtures';
+import { daemonSeed, seedDocument, sessionClaim } from './test/daemonFixtures';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { gesture } from './test/renderApp';
@@ -166,7 +166,7 @@ describe('App markdown annotations', () => {
     await addOverallNote(daemon, 'Check the plan.');
     await gesture(daemon, () => answerSave(daemon, daemon.sentOf('markdown_annotations_save')[0], { success: true }));
     daemon.on('seed_document_get', () => undefined);
-    const listed = { ...PLAN, rev: 2, body: '# Listed body', tender_session: 's1' };
+    const listed = { ...PLAN, rev: 2, body: '# Listed body', ...sessionClaim('s1') };
     await gesture(daemon, () => daemon.emit({
       event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [listed], total: 1,
     }));
@@ -184,7 +184,7 @@ describe('App markdown annotations', () => {
     expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeEnabled();
     daemon.on('seed_document_get', () => ({
       event: 'seed_document_get_result', success: true,
-      document: seedDocument({ ...listed, body: '# Complete body', tender_session: 'stopped-agent' }, { tender_holds: false }),
+      document: seedDocument({ ...listed, body: '# Complete body', ...sessionClaim('stopped-agent', { live: false }) }),
     }));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reload' })));
     expect(screen.queryByRole('alert')).toBeNull();

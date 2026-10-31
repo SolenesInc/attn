@@ -21,7 +21,7 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 		w.advance(0)
 		pushesBefore := gardenPlotPushes(app)
 
-		planted, err := cli.SeedPlot("sess-a", "trellis", protocol.SeedPlotMessage{
+		planted, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
 			Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 			Children: []protocol.SeedPlotChild{
 				{Title: "first step"},
@@ -58,8 +58,8 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			if slug == "third-step" {
 				wantBlocks = []string{bySlug["second-step"].ID}
 			}
-			if !slices.Equal(partOf, []string{planted.Crown.ID}) || !slices.Equal(blocks, wantBlocks) || child.PlanterMember != "trellis" {
-				t.Errorf("%s is part of %v, blocks %v, planted by %q; want the crown, %v and trellis", slug, partOf, blocks, child.PlanterMember, wantBlocks)
+			if !slices.Equal(partOf, []string{planted.Crown.ID}) || !slices.Equal(blocks, wantBlocks) || planterSessionOf(child) != "sess-a" {
+				t.Errorf("%s is part of %v, blocks %v, planted by %q; want the crown, %v and sess-a", slug, partOf, blocks, planterSessionOf(child), wantBlocks)
 			}
 		}
 		ready := gardenPlotReadyIDs(t, cli, "", planted.Crown.ID, false)
@@ -70,7 +70,7 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Errorf("ready in the fresh plot = %v, want the two unblocked children", ready)
 		}
 
-		joined, err := cli.SeedPlant("sess-a", "inside", "", planted.Crown.ID, "", "")
+		joined, err := cli.SeedPlant("sess-a", "inside", "", planted.Crown.ID, "")
 		if err != nil {
 			t.Fatalf("plant into the plot: %v", err)
 		}
@@ -78,10 +78,10 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Errorf("--part-of planted with edges %+v, want it in the plot", edges)
 		}
 		total := gardenPlotList(t, cli, false, 0).Total
-		if _, err := cli.SeedPlant("sess-a", "orphan", "", "s-zzzzzz", "", ""); err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
+		if _, err := cli.SeedPlant("sess-a", "orphan", "", "s-zzzzzz", ""); err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
 			t.Errorf("planting under a crown that is not here = %v, want a refusal naming it", err)
 		}
-		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
+		if _, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
 			Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"nobody"}}},
 		}); err == nil || !strings.Contains(err.Error(), "nobody") {
 			t.Errorf("a plot waiting for no sibling = %v, want a refusal naming it", err)
@@ -93,7 +93,7 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Fatal(err)
 		}
 		total++
-		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
+		if _, err := cli.SeedPlot("sess-a", protocol.SeedPlotMessage{
 			Title: "a plot inside", PartOf: protocol.Ptr(planted.Crown.ID),
 			Children: []protocol.SeedPlotChild{{Title: "a", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "Smooth."}}}},
 		}); err == nil || !strings.Contains(err.Error(), "C7 is already used") || !strings.Contains(err.Error(), "number the payload's checks from C8 up") {
@@ -109,7 +109,7 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
-	planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{
 		Title: "ship it", Children: []protocol.SeedPlotChild{
 			{Title: "a", After: []string{"b"}}, {Title: "b"},
 			{Title: "c", After: []string{"d"}}, {Title: "d"}, {Title: "e"}, {Title: "f"},
@@ -122,11 +122,11 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 		child        int
 		verb, reason string
 	}{{1, "tend", ""}, {1, "harvest", "done"}, {3, "tend", ""}, {4, "park", ""}, {5, "wither", ""}} {
-		if _, err := cli.SeedTransition(protocol.SessionID(planter), planted.Children[move.child].ID, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(planter), planted.Children[move.child].ID, move.verb, move.reason, false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s child %d: %v", move.verb, move.child, err)
 		}
 	}
-	if _, err := cli.SeedPlant(protocol.SessionID(planter), "g", "", planted.Children[4].ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(planter), "g", "", planted.Children[4].ID, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -154,7 +154,7 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
-	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(planter, protocol.SeedPlotMessage{
 		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"b"}}, {Title: "b"}},
 	})
 	if err != nil {
@@ -208,13 +208,13 @@ func TestStaleListsOnlyTheQuietOpenSeeds(t *testing.T) {
 		noted := plantSeedAs(t, cli, "sess-a", "old document, live log")
 		closed := plantSeedAs(t, cli, "sess-a", "quiet but harvested")
 		for _, move := range []struct{ verb, reason string }{{"tend", ""}, {"harvest", "done"}} {
-			if _, err := cli.SeedTransition("sess-a", closed, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
+			if _, err := cli.SeedTransition("sess-a", closed, move.verb, move.reason, false, client.SeedTransitionOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		w.advance(2 * time.Minute)
 		plantSeedAs(t, cli, "sess-a", "just planted")
-		if _, err := cli.SeedNote("sess-a", noted, "still on this", "", "", false, nil); err != nil {
+		if _, err := cli.SeedNote("sess-a", noted, "still on this", "", false, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -240,7 +240,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{
 			{Title: "first step"},
@@ -254,7 +254,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	first, second := planted.Children[0].ID, planted.Children[1].ID
 	outside := plantSeedAs(t, cli, planner, "somewhere else")
 	for _, body := range []string{"old direction", "the fixture is seeded"} {
-		if _, err := cli.SeedNote(protocol.SessionID(planner), first, body, "trellis", garden.NoteKindHandoff, false, nil); err != nil {
+		if _, err := cli.SeedNote(protocol.SessionID(planner), first, body, garden.NoteKindHandoff, false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -284,7 +284,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if got := gardenPlotSeedIDs(primed.Seeds); !slices.Equal(got, []string{first, second}) {
 		t.Errorf("the delegate is offered %v, want the plot's unblocked children %v", got, []string{first, second})
 	}
-	if len(primed.Handoffs) != 1 || primed.Handoffs[0].Body != "the fixture is seeded" || primed.Handoffs[0].AuthorMember != "trellis" {
+	if len(primed.Handoffs) != 1 || primed.Handoffs[0].Body != "the fixture is seeded" || authorSessionOf(primed.Handoffs[0]) != protocol.SessionID(planner) {
 		t.Errorf("the delegate is handed %+v, want only the freshest handoff", primed.Handoffs)
 	}
 	if everywhere := gardenPlotReadyIDs(t, cli, string(delegate), "", true); !slices.Contains(everywhere, outside) {
@@ -355,7 +355,7 @@ func TestTheLastChildCloseCapturesAndRingsItsPlotOnce(t *testing.T) {
 			t.Fatalf("first close wrote plot notes: %q", notes)
 		}
 		restore := w.RefuseDatabaseCommits()
-		_, err := cli.SeedTransition("closer", last, "wither", "done", "", false, client.SeedTransitionOptions{})
+		_, err := cli.SeedTransition("closer", last, "wither", "done", false, client.SeedTransitionOptions{})
 		restore()
 		if err == nil || lifeShow(t, cli, last).Seed.Status != "planted" || len(lifeEntryBodies(t, cli, plot, garden.NoteKindNote)) != 0 {
 			t.Fatalf("failed close changed the child or captured completion: %v", err)
@@ -371,7 +371,7 @@ func TestTheLastChildCloseCapturesAndRingsItsPlotOnce(t *testing.T) {
 			}
 		}
 		after := lifeShow(t, cli, plot).Seed
-		if after.Rev != before.Rev || after.Status != "growing" || after.TenderSession != "tender" {
+		if after.Rev != before.Rev || after.Status != "growing" || tenderSessionOf(after) != "tender" {
 			t.Fatalf("last child changed the plot's state or claim: %+v", after)
 		}
 		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); len(notes) != 1 || !strings.Contains(notes[0], "All child seeds") {
@@ -407,7 +407,7 @@ func TestConcurrentChildClosesCaptureOneEmptyPlot(t *testing.T) {
 		for i, seed := range []string{first, last} {
 			connection := []*client.Client{cli, other}[i]
 			go func() {
-				result, err := connection.SeedTransition("closer", seed, "harvest", "done", "", false, client.SeedTransitionOptions{})
+				result, err := connection.SeedTransition("closer", seed, "harvest", "done", false, client.SeedTransitionOptions{})
 				answers <- response{result, err}
 			}()
 		}

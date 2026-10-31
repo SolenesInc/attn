@@ -14,7 +14,7 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
 	const original = "# Work\n\nKeep trailing whitespace.  \n\n"
-	planted, err := cli.SeedPlant("", "Body history", original, "", "", "")
+	planted, err := cli.SeedPlant("", "Body history", original, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 		t.Fatal("a seed with no edits offered a rollback")
 	}
 	base := garden.BodySHA256(original)
-	if _, err := cli.SeedNote("", id, "A note changes the revision, not the body.", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("", id, "A note changes the revision, not the body.", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	other := original + "## Coordination\n\nAnother writer's change.\n"
@@ -110,7 +110,7 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 func TestASeedCanStartEmptyButEditsAndRollbackCannotClearIt(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	planted, err := cli.SeedPlant("", "Start with a title", "", "", "", "")
+	planted, err := cli.SeedPlant("", "Start with a title", "", "", "")
 	if err != nil || planted.Seed.Body != "" {
 		t.Fatalf("bodyless planting: %+v, %v", planted, err)
 	}
@@ -137,7 +137,7 @@ func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	cli := w.Client().WithGardenProfile("", "editor")
-	planted, err := cli.SeedPlant("editor", "Member edits", "First body.", "", "", "")
+	planted, err := cli.SeedPlant("editor", "Member edits", "First body.", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
 		t.Fatalf("edit log: %+v, %v", notes, err)
 	}
 	for _, note := range notes.Notes {
-		if note.Kind != garden.NoteKindEdit || note.AuthorMember != "keel" || note.AuthorSession != "editor" {
+		if note.Kind != garden.NoteKindEdit || authorMemberOf(note) != "keel" {
 			t.Fatalf("member edit attribution: %+v", note)
 		}
 	}

@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { daemonSeed, daemonSession, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, daemonSession, memberActor, sessionClaim, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
 import { renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage, EventMessage } from './test/protocol';
@@ -25,7 +25,7 @@ const savedContext: Continuation = {
 const reviewedSeed = daemonSeed('s-review1', {
   title: 'Review this seed',
   body: 'The implementation is complete. Verify the packaged app.',
-  tender_session: 'sess-old',
+  ...sessionClaim('sess-old', { live: false }),
   rev: 4,
 });
 
@@ -307,8 +307,7 @@ describe('App garden review', () => {
             seed_id: 's-review1',
             kind: 'note',
             body: 'Reviewed the **live instance**.',
-            author_session: '',
-            author_member: 'alder',
+            author: memberActor('alder'),
             created_at: '2026-08-30T09:01:00Z',
           }],
           notes_total: 1,
@@ -452,8 +451,6 @@ describe('App garden review', () => {
       source_session_id: 's1',
       seed_id: 's-review1',
       expected_rev: 4,
-      expected_tender_session: 'sess-old',
-      expected_tender_member: '',
       guidance: 'Use branch feature/special under /tmp/special.',
       review: receipt,
     })]);

@@ -12,7 +12,7 @@ import (
 func newMachineReopenVerdict(target protocol.ReopenTarget) sessionReopenVerdict {
 	return sessionReopenVerdict{
 		SessionID:      target.SessionID,
-		Execution:      garden.Dispatch{Cwd: target.Cwd, Agent: target.Agent, Branch: target.Branch, RepositoryRoot: target.Repository, RepositorySubdir: target.RepositorySubdir},
+		Execution:      garden.Execution{Cwd: target.Cwd, Agent: target.Agent, Branch: target.Branch, RepositoryRoot: target.Repository, RepositorySubdir: target.RepositorySubdir},
 		Resume:         target.Conversation,
 		DirectoryState: directoryUnknown,
 	}

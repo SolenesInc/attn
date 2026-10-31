@@ -33,7 +33,6 @@ import (
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
@@ -280,7 +279,7 @@ type Daemon struct {
 	gardenReviewMu             sync.Mutex
 	dispatchSeedsMu            sync.Mutex
 	dispatchSeeds              map[protocol.SessionID]string
-	dispatchersBySession       map[protocol.SessionID]garden.Tender
+	dispatchersBySession       map[protocol.SessionID]who.Actor
 	dispatchFromChief          map[protocol.SessionID]bool
 	dispatchProjectionRevs     map[protocol.SessionID]int64
 	dispatchSeedsLoaded        bool
@@ -3305,7 +3304,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	delegatedFromChief map[protocol.SessionID]bool,
 	crewBySession map[protocol.SessionID]crew.Member,
 	seedBySession map[protocol.SessionID]string,
-	dispatcherBySession map[protocol.SessionID]garden.Tender,
+	dispatcherBySession map[protocol.SessionID]who.Actor,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3324,7 +3323,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
-		clone.DispatcherMember, clone.DispatcherSessionID = nil, nil
+		clone.Dispatcher, clone.DispatcherSessionID = nil, nil
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)

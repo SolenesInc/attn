@@ -139,13 +139,6 @@ func DisplayName(id string) string {
 	return string(unicode.ToUpper(first)) + id[size:]
 }
 
-func HolderName(member string, session protocol.SessionID) string {
-	if strings.TrimSpace(member) != "" {
-		return DisplayName(member)
-	}
-	return string(protocol.TrimID(session))
-}
-
 const MaxNameChars = 40
 
 const KeyRefPrefix = "member:"

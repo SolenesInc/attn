@@ -30,7 +30,7 @@ func TestGardenPushSendsOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("the change after a wither carries %+v, want only the withered seed", changed.Seeds)
 	}
 
-	if _, err := cli.SeedNote("", newer, "a note changes no seed", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote("", newer, "a note changes no seed", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if changed = nextGardenChange(app); len(changed.Seeds) != 0 || !slices.Equal(changed.Order, []string{newer, older}) {
@@ -93,7 +93,7 @@ func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
 	seed := plantSeedAs(t, cli, shipper, "ship the push")
 	lifeMove(t, cli, shipper, seed, "tend", "", "")
 
-	harvestArmAs(t, cli, shipper, "", seed, url)
+	harvestArm(t, cli, shipper, seed, url)
 	changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 		return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Status == "dormant"
 	})

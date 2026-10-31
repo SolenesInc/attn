@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )

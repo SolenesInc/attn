@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { daemonSession, type DaemonSeed } from './test/daemonFixtures';
+import { daemonSession, memberActor, sessionActor, USER_ACTOR, type DaemonSeed } from './test/daemonFixtures';
 import { gardenRegion, openGarden, openRow, partOf, planted, plot, row, seedHeading, type Garden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 
@@ -10,6 +10,7 @@ type Check = NonNullable<DaemonSeed['checks']>[number];
 
 const AT = '2026-10-19T21:10:00Z';
 const BUILDER = 'sess-builder';
+const BY_BUILDER = sessionActor(BUILDER, 'Builder');
 const PR_736 = 'https://github.com/victorarias/attn/pull/736';
 
 const C8: Check = {
@@ -17,23 +18,23 @@ const C8: Check = {
   report: {
     summary: 'Migration test opens a previous-build database intact', detail: true,
     evidence: [{ artifact: 'verify-migration.tar.gz' }, { url: PR_736 }],
-    commit: 'da2b3b9c0ffee0000000000000000000000000000', by_session: BUILDER, at: AT,
+    commit: 'da2b3b9c0ffee0000000000000000000000000000', by: BY_BUILDER, at: AT,
   },
-  verdict: { confirmed: true, by_member: 'trellis', at: AT },
+  verdict: { confirmed: true, by: memberActor('trellis'), at: AT },
 };
 const C4: Check = {
   id: 'C4', text: 'Packaged-app CI is green on the pull request head.', removed: false, state: 'rejected', from: 's-plot11',
-  report: { summary: 'Acceptance shards 1-4 green', evidence: [], by_session: BUILDER, at: AT },
-  verdict: { confirmed: false, reason: 'That run is on 869dc03, before the review fixes.', by_member: 'trellis', at: AT },
+  report: { summary: 'Acceptance shards 1-4 green', evidence: [], by: BY_BUILDER, at: AT },
+  verdict: { confirmed: false, reason: 'That run is on 869dc03, before the review fixes.', by: memberActor('trellis'), at: AT },
 };
 const C1: Check = {
   id: 'C1', text: 'Any promise the child touches is guarded by a wire test.', removed: false, state: 'reported',
-  report: { summary: 'Wire tests cover the reactions', evidence: [], by_session: BUILDER, at: AT },
+  report: { summary: 'Wire tests cover the reactions', evidence: [], by: BY_BUILDER, at: AT },
 };
 const C5: Check = { id: 'C5', text: 'A manual run on a non-production instance.', removed: false, state: 'open', from: 's-plot11' };
 const C2: Check = {
   id: 'C2', text: 'The glossary defines session monitor.', removed: false, state: 'confirmed',
-  verdict: { confirmed: true, by_session: 'c9b177e1-4b6f-4c0e-9d1e-1b2c3d4e5f60', at: AT },
+  verdict: { confirmed: true, by: sessionActor('c9b177e1-4b6f-4c0e-9d1e-1b2c3d4e5f60', 'c9b177e1'), at: AT },
 };
 const C9: Check = { id: 'C9', text: 'An old statement nobody needs.', removed: true, state: 'open' };
 
@@ -169,8 +170,8 @@ describe('App garden seed checks', () => {
     ]);
     expect(screen.getByRole('button', { name: 'Confirm C5' })).toBeInTheDocument();
 
-    let next = withCheck(leaf(), { ...C5, state: 'confirmed', verdict: { confirmed: true, at: AT } });
-    next = withCheck(next, { ...C1, state: 'confirmed', verdict: { confirmed: true, at: AT } });
+    let next = withCheck(leaf(), { ...C5, state: 'confirmed', verdict: { confirmed: true, by: USER_ACTOR, at: AT } });
+    next = withCheck(next, { ...C1, state: 'confirmed', verdict: { confirmed: true, by: USER_ACTOR, at: AT } });
     next = withCheck(next, { ...C8, state: 'reported', verdict: undefined });
     await gesture(garden.daemon, () => garden.push([next, monitorPlot(), done, table]));
 
@@ -199,7 +200,7 @@ describe('App garden seed checks', () => {
     expect(within(checkRow('C1')).queryByRole('textbox')).toBeNull();
     expect(within(checkRow('C1')).getByRole('button', { name: 'Confirm C1' })).toHaveFocus();
     await gesture(garden.daemon, () => garden.push([withCheck(leaf(), {
-      ...C1, state: 'rejected', verdict: { confirmed: false, reason: 'Cite the run on da2b3b9.', at: AT },
+      ...C1, state: 'rejected', verdict: { confirmed: false, reason: 'Cite the run on da2b3b9.', by: USER_ACTOR, at: AT },
     }), monitorPlot(), done, table]));
     expect(checkRow('C1')).toHaveTextContent('rejected by you: Cite the run on da2b3b9.');
 
@@ -298,8 +299,8 @@ describe('App garden seed checks', () => {
     const garden = await openGarden([leaf(), monitorPlot(), done, table]);
     garden.documents['s-leaf11'] = {
       notes: [
-        { id: 'n-check', seed_id: 's-leaf11', kind: 'check', body: 'C4 rejected: That run is on 869dc03.', author_session: '', author_member: 'trellis', created_at: AT },
-        { id: 'n-attach', seed_id: 's-leaf11', kind: 'attach', body: 'attached run.log', author_session: '', author_member: '', created_at: AT },
+        { id: 'n-check', seed_id: 's-leaf11', kind: 'check', body: 'C4 rejected: That run is on 869dc03.', author: memberActor('trellis'), created_at: AT },
+        { id: 'n-attach', seed_id: 's-leaf11', kind: 'attach', body: 'attached run.log', author: USER_ACTOR, created_at: AT },
       ],
       notes_total: 2,
     };
@@ -307,7 +308,7 @@ describe('App garden seed checks', () => {
     await openRow(garden.daemon, 'View and home reactions');
 
     const entry = log().getByText('C4 rejected: That run is on 869dc03.').closest('li')!;
-    expect(entry).toHaveTextContent('trellischeck');
+    expect(entry).toHaveTextContent('Trellischeck');
     expect(log().queryByText('attached run.log')).toBeNull();
   });
 

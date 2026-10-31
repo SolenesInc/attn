@@ -385,7 +385,7 @@ export function useAppController({
 
   const seedForSession = useCallback(
     (sessionId: string) => {
-      const seed = seeds.find((candidate) => candidate.tender_session === sessionId);
+      const seed = seeds.find((candidate) => candidate.tender?.session_id === sessionId);
       return seed ? { id: seed.id, title: seed.title } : null;
     },
     [seeds],

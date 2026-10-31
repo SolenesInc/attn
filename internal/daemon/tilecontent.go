@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const markdownTileIDPrefix = "tile-markdown-"
@@ -163,7 +164,7 @@ func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID,
 		tileID:    seedTileIDForID(seed.ID),
 		tileKind:  string(layouttree.TileKindSeed),
 		params:    seed.ID,
-		sessionID: d.seedTileSession(seed.TenderSession, location),
+		sessionID: d.seedTileSession(seed.Tender, location),
 	})
 	if err != nil {
 		return "", "", err
@@ -171,9 +172,9 @@ func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID,
 	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) seedTileSession(tenderSessionID protocol.SessionID, location agentLocation) protocol.SessionID {
-	tenderSessionID = protocol.TrimID(tenderSessionID)
-	if tenderSessionID == "" {
+func (d *Daemon) seedTileSession(tenderParty who.Party, location agentLocation) protocol.SessionID {
+	tenderSessionID, ok := d.liveSessionOf(tenderParty)
+	if !ok {
 		return location.sessionID
 	}
 	if tender := d.store.Get(tenderSessionID); tender != nil && tender.ProfileID == location.profileID {

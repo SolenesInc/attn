@@ -1,9 +1,10 @@
 package daemon_test
 
 import (
-	"github.com/victorarias/attn/internal/protocol"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestRecoveryUsesTheDriversSavedHandleRatherThanItsResumeCapability(t *testing.T) {

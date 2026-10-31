@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
@@ -126,10 +127,10 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 func fprintSessionTreeNode(w io.Writer, node *sessionTreeNode, prefix, branch string) {
 	session := node.session
 	label := session.Label
-	if branch == "" && (protocol.Deref(session.SeedID) != "" || protocol.Deref(session.DispatcherSessionID) != "" || protocol.Deref(session.DispatcherMember) != "") {
+	if branch == "" && (protocol.Deref(session.SeedID) != "" || protocol.Deref(session.DispatcherSessionID) != "" || session.Dispatcher != nil) {
 		dispatcher := "dispatcher"
-		if member := protocol.Deref(session.DispatcherMember); member != "" {
-			dispatcher += " " + member
+		if session.Dispatcher != nil && !strings.HasPrefix(string(session.Dispatcher.Ref), "session:") {
+			dispatcher += " " + session.Dispatcher.Name
 		}
 		label += " (" + dispatcher + " closed or absent)"
 	}

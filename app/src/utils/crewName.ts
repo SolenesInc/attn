@@ -11,12 +11,6 @@ export function crewDisplayName(id: string): string {
   return first.toUpperCase() + trimmed.slice(first.length);
 }
 
-/** A holder is a member's display name, or a bare session id left as it is.
- * Mirrors `internal/crew.HolderName`. */
-export function crewHolderName(member: string | undefined, session: string | undefined): string {
-  return member?.trim() ? crewDisplayName(member) : session?.trim() ?? '';
-}
-
 /** Addresses a member by its permanent key; a bare word would be read as a name. */
 export function crewRef(key: string): string {
   return `member:${key}`;

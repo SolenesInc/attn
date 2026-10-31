@@ -19,16 +19,16 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 	t.Run("the next tender is handed the handoff its predecessor left", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, predecessor.session, "carry this across sessions")
 		gardenHandoffMove(t, cli, predecessor.session, seed, "tend", "")
-		gardenHandoffNote(t, cli, predecessor.session, seed, "read the docstore compiler first", "trellis", "")
-		left := gardenHandoffNote(t, cli, predecessor.session, seed, "the join test is the gate; run it before touching wireProjections", "trellis", garden.NoteKindHandoff)
+		gardenHandoffNote(t, cli, predecessor.session, seed, "read the docstore compiler first", "")
+		left := gardenHandoffNote(t, cli, predecessor.session, seed, "the join test is the gate; run it before touching wireProjections", garden.NoteKindHandoff)
 		if left.Kind != garden.NoteKindHandoff {
 			t.Fatalf("the note was stored as %q, want a handoff", left.Kind)
 		}
 		closePane(app, predecessor)
 
 		got := gardenHandoffMove(t, cli, successor, seed, "tend", "").Handoff
-		if got == nil || got.ID != left.ID || got.Body != left.Body || got.AuthorMember != "trellis" {
-			t.Fatalf("the successor's tend carried %+v, want the handoff trellis left", got)
+		if got == nil || got.ID != left.ID || got.Body != left.Body || authorSessionOf(*got) != protocol.SessionID(predecessor.session) {
+			t.Fatalf("the successor's tend carried %+v, want the handoff its predecessor left", got)
 		}
 		if shown := gardenHandoffShow(t, cli, seed); shown.Handoff == nil || shown.Handoff.ID != left.ID {
 			t.Errorf("show surfaced %+v, want the handoff", shown.Handoff)
@@ -37,10 +37,10 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 	t.Run("the freshest handoff survives a busy log", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, successor, "busy")
-		gardenHandoffNote(t, cli, successor, seed, "the first word", "keel", garden.NoteKindHandoff)
-		newest := gardenHandoffNote(t, cli, successor, seed, "the last word", "keel", garden.NoteKindHandoff)
+		gardenHandoffNote(t, cli, successor, seed, "the first word", garden.NoteKindHandoff)
+		newest := gardenHandoffNote(t, cli, successor, seed, "the last word", garden.NoteKindHandoff)
 		for range garden.ShowNotes + 2 {
-			gardenHandoffNote(t, cli, successor, seed, "ordinary progress", "keel", "")
+			gardenHandoffNote(t, cli, successor, seed, "ordinary progress", "")
 		}
 
 		shown := gardenHandoffShow(t, cli, seed)
@@ -54,7 +54,7 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 	t.Run("only tend carries the handoff", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, successor, "settled")
-		gardenHandoffNote(t, cli, successor, seed, "what I learned", "keel", garden.NoteKindHandoff)
+		gardenHandoffNote(t, cli, successor, seed, "what I learned", garden.NoteKindHandoff)
 		if tended := gardenHandoffMove(t, cli, successor, seed, "tend", ""); tended.Handoff == nil {
 			t.Fatal("tend carried no handoff")
 		}
@@ -67,7 +67,7 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 	t.Run("plain notes are never a handoff", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, successor, "quiet")
-		if plain := gardenHandoffNote(t, cli, successor, seed, "what happened", "keel", ""); plain.Kind != garden.NoteKindNote {
+		if plain := gardenHandoffNote(t, cli, successor, seed, "what happened", ""); plain.Kind != garden.NoteKindNote {
 			t.Fatalf("an unkinded note was stored as %q", plain.Kind)
 		}
 		if shown := gardenHandoffShow(t, cli, seed); shown.Handoff != nil {
@@ -80,7 +80,7 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 
 	t.Run("an unknown note kind is refused listing every kind", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, successor, "kinds")
-		_, err := cli.SeedNote(protocol.SessionID(successor), seed, "words", "", "farewell", false, nil)
+		_, err := cli.SeedNote(protocol.SessionID(successor), seed, "words", "farewell", false, nil)
 		if err == nil {
 			t.Fatal("a note kind nothing knows about was written")
 		}
@@ -92,9 +92,9 @@ func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 	})
 }
 
-func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, member, kind string) protocol.SeedNote {
+func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, kind string) protocol.SeedNote {
 	t.Helper()
-	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, member, kind, false, nil)
+	result, err := cli.SeedNote(protocol.SessionID(session), seedID, body, kind, false, nil)
 	if err != nil {
 		t.Fatalf("%s notes %q on %s: %v", session, body, seedID, err)
 	}
@@ -103,7 +103,7 @@ func gardenHandoffNote(t *testing.T, cli *client.Client, session, seedID, body, 
 
 func gardenHandoffMove(t *testing.T, cli *client.Client, session, seedID, verb, reason string) *protocol.SeedTransitionResult {
 	t.Helper()
-	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, "", false, client.SeedTransitionOptions{})
+	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, false, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %ss %s: %v", session, verb, seedID, err)
 	}

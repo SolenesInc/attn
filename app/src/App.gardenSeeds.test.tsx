@@ -10,7 +10,10 @@ import {
   daemonSession,
   daemonDesktop,
   dockTiles,
+  memberActor,
+  memberClaim,
   seedDocument,
+  USER_ACTOR,
   type DaemonSeed,
   type DaemonSeedDocument,
 } from './test/daemonFixtures';
@@ -20,7 +23,7 @@ import { initialState } from './test/scriptedDaemon';
 
 const layout = { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] };
 
-const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.', tender_member: 'trellis' });
+const PLAN = daemonSeed('s-plan11', { title: 'The plan', body: '## Rendered plan\n\nRead **this**.', ...memberClaim('trellis') });
 
 function tiledDesktop(tiles: Parameters<typeof dockTiles>[1]) {
   return daemonDesktop('ws', { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', 'ws')] }, { name: 'ws' });
@@ -42,7 +45,7 @@ const seedDetails = () => screen.getByLabelText('Seed details');
 const artifacts = () => screen.queryByRole('region', { name: 'Artifacts' });
 
 function note(id: string, overrides: Partial<DaemonSeedDocument['notes'][number]> = {}): DaemonSeedDocument['notes'][number] {
-  return { id, seed_id: PLAN.id, kind: 'note', body: '', author_session: '', author_member: '', created_at: '2026-08-15T09:00:00Z', ...overrides };
+  return { id, seed_id: PLAN.id, kind: 'note', body: '', author: USER_ACTOR, created_at: '2026-08-15T09:00:00Z', ...overrides };
 }
 
 describe('App garden seeds', () => {
@@ -150,7 +153,7 @@ describe('App garden seeds', () => {
   it('lists a seed tile’s checks under its plan, with the header tally, and moves one from the tile', async () => {
     const checked = { ...PLAN, checks: [
       { id: 'C1', text: 'Wire tests cover the reader.', removed: false, state: 'reported',
-        report: { summary: 'Reader wire tests pass', evidence: [], by_member: 'trellis', at: '2026-08-15T09:00:00Z' } },
+        report: { summary: 'Reader wire tests pass', evidence: [], by: memberActor('trellis'), at: '2026-08-15T09:00:00Z' } },
       { id: 'C2', text: 'The reader is recorded.', removed: false, state: 'open' },
     ] };
     const daemon = await openSeedTile(checked);
@@ -252,7 +255,7 @@ describe('App garden seeds', () => {
 
   it('says the harvest condition beside the state and opens the pull request', async () => {
     const url = 'https://github.com/victorarias/attn/pull/42';
-    await openSeedTile({ ...PLAN, status: 'dormant', tender_member: '', harvest_when: { pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z' } });
+    await openSeedTile({ ...PLAN, status: 'dormant', tender: undefined, claimed: false, harvest_when: { pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z', set_by: USER_ACTOR } });
 
     const link = within(seedDetails()).getByRole('link', { name: /harvests when victorarias\/attn#42 merges/ });
     expect(link).toHaveAttribute('href', url);

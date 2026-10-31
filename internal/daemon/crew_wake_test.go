@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -132,7 +133,7 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	oldest := garden.Seed{
 		ProfileID: defaultProfileID(t, d.store),
 		ID:        "s-000000", Title: "The claim nobody released", Status: garden.StatusGrowing,
-		StepSlug: "claim-nobody-released", TenderMember: "trellis",
+		StepSlug: "claim-nobody-released", Tender: who.Member(crewKey(t, "trellis")),
 		StateChangedAt: planted.Format(time.RFC3339Nano), Edges: []garden.Edge{}, Vars: []garden.Var{},
 	}
 	body, err := oldest.Encode()
@@ -241,4 +242,13 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
 		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
 	}
+}
+
+func crewKey(t *testing.T, key string) who.MemberKey {
+	t.Helper()
+	k, err := who.ParseMemberKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
 }

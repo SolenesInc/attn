@@ -101,14 +101,14 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		retired.Unread != 1 || retired.Sleep == nil || protocol.Deref(retired.Sleep.SessionID) != wake.SessionID {
 		t.Fatalf("retirement = %+v", retired)
 	}
-	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || shown.TenderMember != "" || shown.TenderSession != "" {
+	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || tenderMemberOf(shown) != "" || tenderSessionOf(shown) != "" {
 		t.Fatalf("released seed = %+v", shown)
 	}
 	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasSeedNote(notes.Notes, crew.DaemonID, "Keel was retired, so attn released their claim.") {
+	if !hasSeedNote(notes.Notes, "attn", "Keel was retired, so attn released their claim.") {
 		t.Fatalf("notes = %+v", notes.Notes)
 	}
 	refused, err := cli.AgentMsg("Keel", protocol.SessionID(sender), "new mail")
@@ -119,9 +119,9 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || refused.Detail != "Keel is retired" {
 		t.Fatalf("mail to a retired member's session = %+v %v", refused, err)
 	}
-	_, err = cli.SeedTransition(wake.SessionID, seed, "tend", "", "", false, client.SeedTransitionOptions{})
+	_, err = cli.SeedTransition(wake.SessionID, seed, "tend", "", false, client.SeedTransitionOptions{})
 	crewErrorContains(t, err, "Keel is retired")
-	_, err = cli.SeedTransition("", seed, "tend", "", "Keel", false, client.SeedTransitionOptions{})
+	_, err = cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"})
 	crewErrorContains(t, err, "Keel is retired")
 	if roster := crewRoster(t, cli); len(roster) != 0 {
 		t.Fatalf("active roster = %+v", roster)
@@ -168,7 +168,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if len(mail.Items) != 1 || mail.Items[0].Content != "keep this mail" {
 		t.Fatalf("kept mail = %+v", mail)
 	}
-	if member := crewRosterMember(t, cli, keel.ID); member.Name != "Keel" || lifeShow(t, cli, seed).Seed.TenderMember != "" {
+	if member := crewRosterMember(t, cli, keel.ID); member.Name != "Keel" || tenderMemberOf(lifeShow(t, cli, seed).Seed) != "" {
 		t.Fatal("restore changed the name or reclaimed the seed")
 	}
 	if again, err := cli.CrewRestore("Keel"); err != nil || !again.AlreadyActive {
@@ -176,9 +176,9 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	}
 }
 
-func hasSeedNote(notes []protocol.SeedNote, author, body string) bool {
+func hasSeedNote(notes []protocol.SeedNote, author protocol.ActorRef, body string) bool {
 	for _, note := range notes {
-		if note.AuthorMember == author && note.Body == body {
+		if note.Author.Ref == author && note.Body == body {
 			return true
 		}
 	}

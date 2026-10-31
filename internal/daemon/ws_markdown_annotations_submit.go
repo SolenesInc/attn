@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
@@ -97,7 +98,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		}
 		result.Status = annotationSubmitStatusDelivered
 	} else {
-		if _, err := d.appendSeedNote(targetSeed, payload, "", "", "", nil, false, ""); err != nil {
+		if _, err := d.appendSeedNote(targetSeed, payload, who.User(), "", nil, false, ""); err != nil {
 			d.logf("markdown_annotations_submit: %s -> seed %s: note failed: %v", source.draftKey, targetSeed, err)
 			fail(err.Error())
 			return

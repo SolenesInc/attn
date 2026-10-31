@@ -43,7 +43,7 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open remote ask: %v", err)
 	}
-	planted, err := home.Client().SeedPlant(session, "Review remote work", "Review the change before merging.", "", "", "")
+	planted, err := home.Client().SeedPlant(session, "Review remote work", "Review the change before merging.", "", "")
 	if err != nil {
 		t.Fatalf("plant remote work: %v", err)
 	}

@@ -30,7 +30,7 @@ const (
 )
 
 type seedContinuation struct {
-	Execution         garden.Dispatch
+	Execution         garden.Execution
 	Resume            string
 	Source            string
 	LedgerAvailable   bool
@@ -61,11 +61,11 @@ func (d *Daemon) initializeSeedLifecycle(seed garden.Seed) garden.Seed {
 	return seed
 }
 
-func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Dispatch {
+func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
 	if session == nil {
-		return garden.Dispatch{}
+		return garden.Execution{}
 	}
-	execution := garden.Dispatch{
+	execution := garden.Execution{
 		SessionID:      protocol.TrimID(session.ID),
 		Cwd:            strings.TrimSpace(session.Directory),
 		Agent:          strings.TrimSpace(session.Agent),
@@ -76,7 +76,7 @@ func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Di
 	return execution
 }
 
-func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Dispatch {
+func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
 	execution := snapshotGardenExecution(session, now)
 	if execution.Cwd == "" {
 		return execution
@@ -113,7 +113,7 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 	return execution
 }
 
-func mergeGardenExecution(current, observed garden.Dispatch) garden.Dispatch {
+func mergeGardenExecution(current, observed garden.Execution) garden.Execution {
 	next := current
 	if observed.SessionID != "" {
 		next.SessionID = observed.SessionID
@@ -141,29 +141,29 @@ func mergeGardenExecution(current, observed garden.Dispatch) garden.Dispatch {
 
 func (d *Daemon) updateGardenDispatch(
 	sessionID protocol.SessionID,
-	update func(garden.Dispatch) (garden.Dispatch, bool, error),
-) (garden.Dispatch, error) {
+	update func(garden.Execution) (garden.Execution, bool, error),
+) (garden.Execution, error) {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
-		return garden.Dispatch{}, errors.New("garden execution needs a session id")
+		return garden.Execution{}, errors.New("garden execution needs a session id")
 	}
 	schema, err := d.dispatchesCollection()
 	if err != nil {
-		return garden.Dispatch{}, err
+		return garden.Execution{}, err
 	}
 	const attempts = 3
 	var lastErr error
 	for range attempts {
 		current, doc, found, readErr := d.gardenDispatchDocument(sessionID)
 		if readErr != nil {
-			return garden.Dispatch{}, readErr
+			return garden.Execution{}, readErr
 		}
 		if !found {
 			current.SessionID = sessionID
 		}
 		next, changed, updateErr := update(current)
 		if updateErr != nil {
-			return garden.Dispatch{}, updateErr
+			return garden.Execution{}, updateErr
 		}
 		next.SessionID = sessionID
 		if !changed {
@@ -171,7 +171,7 @@ func (d *Daemon) updateGardenDispatch(
 		}
 		body, encodeErr := next.Encode()
 		if encodeErr != nil {
-			return garden.Dispatch{}, encodeErr
+			return garden.Execution{}, encodeErr
 		}
 		expected := docstore.ExpectAbsent
 		if found {
@@ -185,9 +185,10 @@ func (d *Daemon) updateGardenDispatch(
 		var writeErr error
 		if current.Crown == "" && next.Crown != "" {
 			var results []store.DocumentWriteResult
+			watcher, _ := d.sessionOfActor(next.Dispatcher)
 			d.lockGardenRoles()
 			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.GardenSeedWatch{
-				WatcherSessionID: next.DispatcherSession, SeedID: next.Crown,
+				WatcherSessionID: watcher, SeedID: next.Crown,
 			}, d.gardenTime())
 			d.unlockGardenRoles()
 			if writeErr == nil {
@@ -201,30 +202,30 @@ func (d *Daemon) updateGardenDispatch(
 				lastErr = writeErr
 				continue
 			}
-			return garden.Dispatch{}, writeErr
+			return garden.Execution{}, writeErr
 		}
 		d.announceCommittedWrite(fact, written.Seq)
 		d.rememberDispatchProjection(sessionID, next, written.Rev)
 		return next, nil
 	}
-	return garden.Dispatch{}, fmt.Errorf(
+	return garden.Execution{}, fmt.Errorf(
 		"dispatch %s changed under all %d metadata refresh attempts: %w", sessionID, attempts, lastErr)
 }
 
-func activeDispatchCrown(dispatch garden.Dispatch) string {
+func activeDispatchCrown(dispatch garden.Execution) string {
 	if protocol.TrimID(dispatch.SupersededBy) != "" {
 		return ""
 	}
 	return strings.TrimSpace(dispatch.Crown)
 }
 
-func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garden.Dispatch, error) {
+func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garden.Execution, error) {
 	if session == nil || protocol.TrimID(session.ID) == "" {
-		return garden.Dispatch{}, errors.New("garden execution needs a tracked session")
+		return garden.Execution{}, errors.New("garden execution needs a tracked session")
 	}
 	startedAt := d.gardenTime()
 	observed := d.observedGardenExecution(session, startedAt)
-	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
 			seed, _, err := d.readSeed(crown)
 			if err != nil {
@@ -245,8 +246,8 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	})
 }
 
-func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Dispatch, error) {
-	return d.updateGardenDispatch(session.ID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
+func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden.Execution, error) {
+	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
 			seed, _, err := d.readSeed(crown)
 			if err != nil {
@@ -265,13 +266,13 @@ func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden
 	})
 }
 
-func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Dispatch, error) {
+func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Execution, error) {
 	session := d.store.Get(protocol.TrimID(sessionID))
 	if session == nil {
 		if execution, ok := d.gardenDispatch(sessionID); ok && strings.TrimSpace(execution.Cwd) != "" && strings.TrimSpace(execution.Agent) != "" {
 			return execution, nil
 		}
-		return garden.Dispatch{}, fmt.Errorf("session %s is not tracked, so its execution context cannot be saved", protocol.TrimID(sessionID))
+		return garden.Execution{}, fmt.Errorf("session %s is not tracked, so its execution context cannot be saved", protocol.TrimID(sessionID))
 	}
 	return d.captureGardenSessionExecution(session)
 }
@@ -332,7 +333,7 @@ func (d *Daemon) gardenKeepsBranch(repository, branch string) bool {
 	}
 }
 
-func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, string, bool) {
+func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution, string, bool) {
 	if executionID := protocol.TrimID(seed.LastExecutionID); executionID != "" {
 		if execution, ok := d.gardenDispatch(executionID); ok {
 			entry := d.store.SessionLedgerEntry(executionID)
@@ -343,7 +344,7 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 				}
 			}
 			if foreign {
-				return garden.Dispatch{SessionID: executionID}, continuationSourceExecution, true
+				return garden.Execution{SessionID: executionID}, continuationSourceExecution, true
 			}
 			if entry != nil && entry.ProfileID == seed.ProfileID {
 				execution.SessionID = entry.ID
@@ -353,10 +354,10 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Dispatch, 
 			return execution, continuationSourceExecution, true
 		}
 	}
-	return garden.Dispatch{}, "", false
+	return garden.Execution{}, "", false
 }
 
-func inspectContinuationDirectory(execution garden.Dispatch) string {
+func inspectContinuationDirectory(execution garden.Execution) string {
 	if strings.TrimSpace(execution.Cwd) == "" {
 		return directoryUnknown
 	}
@@ -373,7 +374,7 @@ func inspectContinuationDirectory(execution garden.Dispatch) string {
 	}
 }
 
-func savedWorktreeRoot(execution garden.Dispatch) (string, bool) {
+func savedWorktreeRoot(execution garden.Execution) (string, bool) {
 	cwd := attngit.CanonicalizePath(strings.TrimSpace(execution.Cwd))
 	if cwd == "" {
 		return "", false
@@ -396,7 +397,7 @@ func savedWorktreeRoot(execution garden.Dispatch) (string, bool) {
 	return root, true
 }
 
-func (d *Daemon) branchCanBeRecreated(execution garden.Dispatch) (string, bool, string) {
+func (d *Daemon) branchCanBeRecreated(execution garden.Execution) (string, bool, string) {
 	repo := strings.TrimSpace(execution.RepositoryRoot)
 	branch := strings.TrimSpace(execution.Branch)
 	if repo == "" || branch == "" {

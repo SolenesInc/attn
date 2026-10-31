@@ -222,7 +222,7 @@ func gardenNudgePlot(t *testing.T, cli *client.Client, planter string) (crown, c
 
 func gardenNudgePlant(t *testing.T, cli *client.Client, planter, title, partOf string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(planter), title, "Work through "+title+".", partOf, "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(planter), title, "Work through "+title+".", partOf, "")
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, partOf, err)
 	}
@@ -244,7 +244,7 @@ func gardenNudgeMove(t *testing.T, cli *client.Client, session, seedID, verb str
 	if verb == "harvest" || verb == "wither" {
 		reason = "done"
 	}
-	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, "", false, client.SeedTransitionOptions{})
+	result, err := cli.SeedTransition(protocol.SessionID(session), seedID, verb, reason, false, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %s %s: %v", session, verb, seedID, err)
 	}
@@ -253,7 +253,7 @@ func gardenNudgeMove(t *testing.T, cli *client.Client, session, seedID, verb str
 
 func gardenNudgeNote(t *testing.T, cli *client.Client, session, seedID, body string, ring bool) {
 	t.Helper()
-	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", "", ring, nil); err != nil {
+	if _, err := cli.SeedNote(protocol.SessionID(session), seedID, body, "", ring, nil); err != nil {
 		t.Fatalf("%s notes %q on %s: %v", session, body, seedID, err)
 	}
 }
@@ -280,7 +280,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender", "watcher")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition("", seed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)
@@ -319,7 +319,7 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeWatch(t, cli, day.id, seed, false)
@@ -334,7 +334,7 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
 		}
 		gardenNudgeNote(t, cli, "sender", seed, "keep the watcher informed", true)
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		watcherMail := readInbox(t, cli, day.id, 0).Items
@@ -350,7 +350,7 @@ func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
@@ -359,7 +359,7 @@ func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 			t.Fatalf("seed rings=%d", got)
 		}
 		day.reply("Later. <!-- attn:state=idle -->")
-		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		if got := readInbox(t, cli, day.id, 0).Items; len(got) != 0 {
@@ -443,7 +443,7 @@ func TestAPlotDelegateGetsOneUpdateForItsWatchAndClaim(t *testing.T) {
 			t.Fatal(err)
 		}
 		shown, err := cli.SeedShow(accepted.SessionID, plot)
-		if err != nil || !shown.Watching || shown.Seed.TenderSession != accepted.SessionID {
+		if err != nil || !shown.Watching || tenderSessionOf(shown.Seed) != accepted.SessionID {
 			t.Fatalf("delegation has no overlapping watch and claim: %+v, %v", shown, err)
 		}
 		gardenNudgeMove(t, cli, parent, first, "harvest")

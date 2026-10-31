@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -95,9 +94,6 @@ func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string)
 		if err := addReportEvidence(&msg, f.evidence, f.commit); err != nil {
 			return protocol.SeedCheckMessage{}, err
 		}
-	}
-	if member := strings.TrimSpace(f.member); member != "" {
-		msg.Member = protocol.Ptr(member)
 	}
 	if f.ring {
 		msg.Ring = protocol.Ptr(true)
@@ -328,7 +324,7 @@ func fprintSeedChecks(w io.Writer, seed protocol.Seed) {
 func fprintCheck(w io.Writer, check protocol.SeedCheck) {
 	status := check.State
 	if check.Verdict != nil {
-		status += " by " + orDash(crew.HolderName(protocol.Deref(check.Verdict.ByMember), protocol.Deref(check.Verdict.BySession)))
+		status += " by " + orDash(actorLabel(check.Verdict.By))
 		if check.Report == nil {
 			status += ", no report"
 		}
@@ -344,7 +340,7 @@ func fprintCheck(w io.Writer, check protocol.SeedCheck) {
 		fprintLabeled(w, indent, "        ", reportProvenance(*report))
 	}
 	if verdict := check.Verdict; verdict != nil && protocol.Deref(verdict.Reason) != "" {
-		by := orDash(crew.HolderName(protocol.Deref(verdict.ByMember), protocol.Deref(verdict.BySession)))
+		by := orDash(actorLabel(verdict.By))
 		fprintLabeled(w, indent, fmt.Sprintf("%-8s", check.State), fmt.Sprintf("%s · %s, %s", protocol.Deref(verdict.Reason), by, checkStamp(verdict.At)))
 	}
 }
@@ -363,7 +359,7 @@ func reportProvenance(report protocol.SeedCheckReport) string {
 		}
 		parts = append(parts, "@"+commit)
 	}
-	by := orDash(crew.HolderName(protocol.Deref(report.ByMember), protocol.Deref(report.BySession)))
+	by := orDash(actorLabel(report.By))
 	parts = append(parts, by+", "+checkStamp(report.At))
 	return strings.Join(parts, " · ")
 }

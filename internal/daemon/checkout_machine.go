@@ -130,7 +130,7 @@ func checkoutCommit(inspection protocol.CheckoutInspection, ref string) string {
 	return ""
 }
 
-func (d *Daemon) delegationExecution(session protocol.SessionID, agent string, inspection protocol.CheckoutInspection) garden.Dispatch {
-	return garden.Dispatch{SessionID: session, Agent: agent, Cwd: inspection.Cwd, Branch: inspection.Branch,
+func (d *Daemon) delegationExecution(session protocol.SessionID, agent string, inspection protocol.CheckoutInspection) garden.Execution {
+	return garden.Execution{SessionID: session, Agent: agent, Cwd: inspection.Cwd, Branch: inspection.Branch,
 		RepositoryRoot: inspection.MainRepo, RepositorySubdir: inspection.RepositorySubdir, CapturedAt: formatGardenTime(d.gardenTime())}
 }

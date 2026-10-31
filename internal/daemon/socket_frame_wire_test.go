@@ -44,7 +44,7 @@ func TestTheSynchronousClientNamesOversizeFramesBeforeSending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = cli.SeedPlot("", "", msg)
+	_, err = cli.SeedPlot("", msg)
 	want := fmt.Sprintf("seed_plot request: max_socket_frame_bytes=%d, asked for %d bytes", protocol.MaxSocketFrameBytes, len(frame))
 	if err == nil || err.Error() != want {
 		t.Fatalf("oversize request: %v, want %q", err, want)
@@ -72,7 +72,7 @@ func TestTheSynchronousClientReadsTheReplyAfterAWriteFailure(t *testing.T) {
 			conn, err := w.DialUnix()
 			return socketWriteFailure{conn}, err
 		})
-		planted, err := cli.SeedPlant("", "reply survives write failure", "", "", "", "")
+		planted, err := cli.SeedPlant("", "reply survives write failure", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestTheWebSocketAcceptsTheSocketFrameBudget(t *testing.T) {
 func TestTheSynchronousClientPlantsPlotsWithinTheFrameLimit(t *testing.T) {
 	w := newWorld(t)
 	body := strings.Repeat("plan\n", 64*1024)
-	plot, err := w.Client().SeedPlot("", "", protocol.SeedPlotMessage{
+	plot, err := w.Client().SeedPlot("", protocol.SeedPlotMessage{
 		Title: "large plot", Body: &body,
 		Children: []protocol.SeedPlotChild{{Title: "large child", Body: &body}},
 	})

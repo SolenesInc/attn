@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,6 +68,9 @@ func (d *Daemon) partyOfSession(id protocol.SessionID) who.Party {
 
 func (d *Daemon) partyView(p who.Party) protocol.PartyView {
 	view := protocol.PartyView{Ref: protocol.PartyRef(p.String())}
+	if live, ok := d.liveSessionOf(p); ok && d.sessionActive(live) {
+		view.SessionID = protocol.Ptr(live)
+	}
 	if key, member := p.Member(); member {
 		view.Name = d.crewMemberName(key.String())
 		return view
@@ -138,10 +140,10 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]who.Address, 
 	if err != nil {
 		return nil, err
 	}
-	member := ""
+	var member who.Party
 	for _, candidate := range members {
 		if candidate.BindingSession == sessionID && d.crewBindingLive(candidate) {
-			member = candidate.ID
+			member = who.Member(candidate.Key)
 			addresses = append(addresses, who.Member(candidate.Key).Address())
 			break
 		}
@@ -156,8 +158,7 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]who.Address, 
 		if err != nil {
 			return nil, err
 		}
-		tender := seed.Tender()
-		if tender.Session == sessionID || (member != "" && strings.EqualFold(tender.Member, member) && d.crewProfileID(member) == seed.ProfileID) {
+		if key, ok := member.Member(); seed.Tender == who.Session(sessionID) || (ok && seed.Tender == member && d.crewProfileID(key.String()) == seed.ProfileID) {
 			addresses = append(addresses, address)
 		}
 	}

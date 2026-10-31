@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { daemonSession, type DaemonSeed } from './test/daemonFixtures';
+import { daemonSession, memberClaim, sessionClaim, USER_ACTOR, type DaemonSeed } from './test/daemonFixtures';
 import { openGarden, planted, plot } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -10,6 +10,7 @@ function armedOn(number: number) {
     pull_request: `github.com:victorarias/attn#${number}`,
     url: `https://github.com/victorarias/attn/pull/${number}`,
     set_at: '2026-08-27T09:00:00Z',
+    set_by: USER_ACTOR,
   };
 }
 
@@ -17,7 +18,7 @@ const garden = [
   planted('s-ready1', 'pick this up', { ready: true }),
   planted('s-wait11', 'waiting on work'),
   plot('s-plot11', 'a plot in motion', '', { total: 3, done: 1, growing: 1, ready: 1 }, { ready: true }),
-  planted('s-work11', 'owned work', { status: 'growing', tender_member: 'trellis' }),
+  planted('s-work11', 'owned work', { status: 'growing', ...memberClaim('trellis') }),
   planted('s-park11', 'paused on purpose', { status: 'dormant' }),
   planted('s-armed1', 'waiting on the merge', { status: 'dormant', harvest_when: armedOn(42) }),
   planted('s-armrdy', 'armed but still pickable', { ready: true, harvest_when: armedOn(43) }),
@@ -78,7 +79,7 @@ describe('App garden board', () => {
   });
 
   it('takes a seed over from its live tender when harvesting it', async () => {
-    const held = planted('s-held11', 'held work', { status: 'growing', tender_session: 'live-tender' });
+    const held = planted('s-held11', 'held work', { status: 'growing', ...sessionClaim('live-tender') });
     const daemon = await openBoard([held], [daemonSession('s1'), daemonSession('live-tender')]);
 
     await move(daemon, 'held work', /Harvest/, 'Harvest s-held11: what got done', 'the work is complete');

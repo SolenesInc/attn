@@ -86,8 +86,8 @@ func TestASharedCodexSubagentCanReadAndWriteSeedsBeforeAndAfterADaemonRestart(t 
 	}
 	for i, body := range []string{"after restart", "before restart"} {
 		note := notes.Notes[i]
-		if note.Body != body || string(note.AuthorSession) != parent {
-			t.Errorf("subagent note = %q by session %s, want %q by %s", note.Body, note.AuthorSession, body, parent)
+		if note.Body != body || string(stackAuthorSession(note)) != parent {
+			t.Errorf("subagent note = %q by session %s, want %q by %s", note.Body, stackAuthorSession(note), body, parent)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func seedWith(id string, edges ...Edge) Seed {
@@ -35,12 +36,27 @@ func equal(got, want []string) bool {
 
 func noSession(protocol.SessionID) bool { return false }
 
+func memberKey(key string) who.MemberKey {
+	k, err := who.ParseMemberKey(key)
+	if err != nil {
+		panic(err)
+	}
+	return k
+}
+
+func holdsWhile(live func(protocol.SessionID) bool) func(who.Party) bool {
+	return testStanding{live}.Holds
+}
+
 func TestUnblocks(t *testing.T) {
 	closed := func(seed Seed) Seed { seed.Status = StatusHarvested; return seed }
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = protocol.SessionID(session)
-		seed.TenderMember = member
+		if member != "" {
+			seed.Tender = who.Member(memberKey(member))
+		} else {
+			seed.Tender = who.Session(protocol.SessionID(session))
+		}
 		return seed
 	}
 
@@ -145,8 +161,11 @@ func TestUnblocks(t *testing.T) {
 func TestReady(t *testing.T) {
 	held := func(seed Seed, session, member string) Seed {
 		seed.Status = StatusGrowing
-		seed.TenderSession = protocol.SessionID(session)
-		seed.TenderMember = member
+		if member != "" {
+			seed.Tender = who.Member(memberKey(member))
+		} else {
+			seed.Tender = who.Session(protocol.SessionID(session))
+		}
 		return seed
 	}
 
@@ -254,13 +273,13 @@ func TestReady(t *testing.T) {
 			want:  []string{"s-a"},
 		},
 		{
-			name:  "a member-only tender always holds: attn cannot tell that a person walked away",
+			name:  "a member claim holds without a live session",
 			seeds: []Seed{held(seedWith("s-a"), "", "victor")},
 			live:  func(protocol.SessionID) bool { return false },
 			want:  []string{},
 		},
 		{
-			name:  "a stale tender name on an untended seed does not hold it",
+			name:  "an untended seed is ready",
 			seeds: []Seed{seedWith("s-a")},
 			want:  []string{"s-a"},
 		},
@@ -272,7 +291,7 @@ func TestReady(t *testing.T) {
 			if live == nil {
 				live = noSession
 			}
-			got := ids(Ready(test.seeds, live))
+			got := ids(Ready(test.seeds, holdsWhile(live)))
 			if !equal(got, test.want) {
 				t.Fatalf("Ready = %v, want %v", got, test.want)
 			}

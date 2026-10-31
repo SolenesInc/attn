@@ -60,10 +60,10 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		}
 	}
 	for _, member := range []string{"Keel", "keel", "member:keel"} {
-		_, err := scoped.SeedTransition(protocol.SessionID(plain), sideSeed, "tend", "", member, false, client.SeedTransitionOptions{})
-		crewErrorContains(t, err, "crew member keel belongs to profile", `profile "Side"`)
+		_, err := scoped.SeedTransition(protocol.SessionID(plain), sideSeed, "tend", "", false, client.SeedTransitionOptions{Assignee: member})
+		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
 	}
-	if tended, err := scoped.SeedTransition(protocol.SessionID(plain), sideSeed, "tend", "", "bob", false, client.SeedTransitionOptions{}); err != nil || tended.Seed.TenderMember != "bob" {
+	if tended, err := scoped.SeedTransition(protocol.SessionID(plain), sideSeed, "tend", "", false, client.SeedTransitionOptions{Assignee: "bob"}); err != nil || tenderMemberOf(tended.Seed) != "bob" {
 		t.Fatalf("tend for Bob: %+v %v", tended, err)
 	}
 	if _, err := scoped.CrewRename("Bob", "Robert"); err != nil {
@@ -288,7 +288,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	}
 	day := wakeCrew(t, cli, "Alfred", "").SessionID
 	w.Launched(string(day))
-	plot, err := cli.SeedPlot(day, "", protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
+	plot, err := cli.SeedPlot(day, protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	cli = w.Client()
 	for _, planted := range append([]protocol.Seed{plot.Crown}, plot.Children...) {
 		shown, err := cli.SeedShow("", planted.ID)
-		if err != nil || shown.Seed.PlanterMember != "keel" {
+		if err != nil || planterMemberOf(shown.Seed) != "keel" {
 			t.Fatalf("plot seed after another rename and restart: %+v %v", shown, err)
 		}
 	}
@@ -314,7 +314,7 @@ func TestATenderNamedByTheUserIsStoredByKey(t *testing.T) {
 	app := w.App()
 	planter := w.Spawn(app, fakeagent.Claude, w.Path("planter"))
 	seed := plantSeedAs(t, cli, planter, "Alfred takes this")
-	if tended := lifeMove(t, cli, planter, seed, "tend", "", "alfred"); tended.TenderMember != "keel" {
+	if tended := lifeMove(t, cli, planter, seed, "tend", "", "alfred"); tenderMemberOf(tended) != "keel" {
 		t.Fatalf("tender: %+v", tended)
 	}
 }

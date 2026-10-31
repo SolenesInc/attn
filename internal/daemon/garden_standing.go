@@ -5,6 +5,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type gardenStanding struct {
@@ -13,30 +14,42 @@ type gardenStanding struct {
 	live      func(protocol.SessionID) bool
 }
 
-func (s gardenStanding) Live(id protocol.SessionID) bool { return s.live(id) }
+func (s gardenStanding) Holds(p who.Party) bool {
+	if id, ok := p.Session(); ok {
+		return s.live(id)
+	}
+	return s.daemon.partyHolds(p)
+}
 
-func (s gardenStanding) Oversees(actor, held garden.Tender) bool {
-	if actor.Session == "" || !s.daemon.sessionActive(actor.Session) {
+func (s gardenStanding) Name(p who.Party) string { return s.daemon.partyName(p) }
+
+func (s gardenStanding) Oversees(actor who.Actor, held who.Party) bool {
+	asking, ok := s.daemon.sessionOfActor(actor)
+	if !ok || !s.daemon.sessionActive(asking) {
 		return false
 	}
-	caller := s.daemon.store.Get(actor.Session)
+	caller := s.daemon.store.Get(asking)
 	if caller == nil || caller.ProfileID != s.profileID {
 		return false
 	}
-	if held.Session == "" {
-		return s.daemon.chiefOfProfile(s.profileID) == actor.Session
+	if s.daemon.chiefOfProfile(s.profileID) == asking {
+		return true
 	}
-	target := s.daemon.store.Get(held.Session)
-	return target != nil && s.daemon.mayActOnSession(actor.Session, target, "move a seed tended by") == nil
+	tender, ok := s.daemon.liveSessionOf(held)
+	if !ok {
+		return false
+	}
+	target := s.daemon.store.Get(tender)
+	return target != nil && s.daemon.mayActOnSession(asking, target, "move a seed tended by") == nil
 }
 
-func (d *Daemon) seedMoveAuditBody(seed garden.Seed, verb garden.Verb, actor, displaced garden.Tender, by garden.Means) string {
+func (d *Daemon) seedMoveAuditBody(seed garden.Seed, verb garden.Verb, actor who.Actor, displaced who.Party, by garden.Means) string {
 	if by == garden.MeansForce {
-		return forcedSeedMoveBody(seed.ID, verb, actor, displaced)
+		return d.forcedSeedMoveBody(seed.ID, verb, actor, displaced)
 	}
 	standing := "delegation-chain standing"
-	if d.chiefOfProfile(seed.ProfileID) == actor.Session {
+	if asking, ok := d.sessionOfActor(actor); ok && d.chiefOfProfile(seed.ProfileID) == asking {
 		standing = "chief standing"
 	}
-	return fmt.Sprintf("%s used %s for `attn seed %s %s`; %s's claim ended.", actor.DisplayName(), standing, verb, seed.ID, displaced.DisplayName())
+	return fmt.Sprintf("%s used %s for `attn seed %s %s`; %s's claim ended.", d.actorName(actor), standing, verb, seed.ID, d.partyName(displaced))
 }

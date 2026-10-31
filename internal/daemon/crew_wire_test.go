@@ -596,31 +596,21 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 		}
 	}
 	tend := func(session, seed, member string) (*protocol.SeedTransitionResult, error) {
-		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", member, false, client.SeedTransitionOptions{})
+		return cli.SeedTransition(protocol.SessionID(session), seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member})
 	}
 
 	byName := plantSeedAs(t, cli, "sess-a", "Named after a member")
-	if moved, err := tend("sess-a", byName, "Keel"); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-a", byName, "Keel"); err != nil || tenderMemberOf(moved.Seed) != "keel" {
 		t.Fatalf("tending as Keel = %+v, %v; want the member keel", moved, err)
 	}
 	bySession := plantSeedAs(t, cli, "sess-a", "Tended from a member's day")
-	if moved, err := tend("sess-keel", bySession, ""); err != nil || moved.Seed.TenderMember != "keel" {
+	if moved, err := tend("sess-keel", bySession, ""); err != nil || tenderMemberOf(moved.Seed) != "keel" {
 		t.Fatalf("tending from keel's day = %+v, %v; want the member keel", moved, err)
 	}
 
 	unbound := plantSeedAs(t, cli, "sess-a", "Picked up by a worker")
-	moved, err := tend("sess-a", unbound, "some-worker")
-	if err != nil || moved.Seed.TenderMember != "some-worker" || moved.Seed.TenderSession != "" {
-		t.Fatalf("tending as some-worker = %+v, %v; want the named worker holding it", moved, err)
-	}
-	_, err = tend("sess-b", unbound, "")
-	crewErrorContains(t, err, "Some-worker")
-	if _, err := cli.SeedTransition("sess-a", unbound, "harvest", "done", "some-worker", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatalf("the named worker could not harvest its seed: %v", err)
-	}
-	if peek, err := cli.AgentPeek("sess-a"); err != nil || peek.CrewMember != nil {
-		t.Fatalf("the worker's session peeks as crew member %v (%v), want none", peek, err)
-	}
+	_, err := tend("sess-a", unbound, "some-worker")
+	crewErrorContains(t, err, `no crew member named "some-worker"`)
 
 	held := plantSeedAs(t, cli, "sess-a", "A member's work")
 	if _, err := tend("", held, "trellis"); err != nil {
@@ -641,7 +631,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	plant := func(title, partOf string) string {
 		t.Helper()
-		planted, err := cli.SeedPlant("planter", title, "", partOf, "", "")
+		planted, err := cli.SeedPlant("planter", title, "", partOf, "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", title, err)
 		}
@@ -649,7 +639,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	tendAs := func(seed, member string) {
 		t.Helper()
-		if _, err := cli.SeedTransition("", seed, "tend", "", member, false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: member}); err != nil {
 			t.Fatalf("%s tends %s: %v", member, seed, err)
 		}
 	}
@@ -662,7 +652,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	tendAs(withNote, "trellis")
 	tendAs(quiet, "trellis")
 	tendAs(alders, "alder")
-	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "trellis", "handoff", false, nil); err != nil {
+	if _, err := cli.SeedNote("", withNote, "The tripwires are measured; the daemon adapter is next.", "handoff", false, nil); err != nil {
 		t.Fatal(err)
 	}
 

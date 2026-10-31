@@ -26,7 +26,7 @@ func TestASeedContinuationFollowsItsTendersConversationMovePastClose(t *testing.
 			tender := string(spawned.ID)
 			agent := w.Launched(tender)
 			seed := plantSeedAs(t, cli, tender, "price the cart")
-			if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
+			if _, err := cli.SeedTransition(spawned.ID, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			if got := continuationConversation(t, cli, seed); got != agent.ConversationID {

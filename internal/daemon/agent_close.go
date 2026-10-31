@@ -98,7 +98,7 @@ func (d *Daemon) resolveAgentCloseTarget(msg *protocol.AgentCloseMessage, caller
 		if err != nil {
 			return nil, &agentCloseRefusal{"cross_profile", err.Error()}
 		}
-		if seed.TenderSession != caller.ID {
+		if seed.Tender != d.partyOfSession(caller.ID) {
 			if err := d.requireSeedInProfile(seedID, caller.ProfileID, false); err != nil {
 				return nil, &agentCloseRefusal{"cross_profile", err.Error()}
 			}
@@ -157,7 +157,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionSeeds,
-		Filters:    []docstore.Filter{{Field: "tender_session", Op: docstore.OpEq, Value: string(target.ID)}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
+		Filters:    []docstore.Filter{{Field: "tender", Op: docstore.OpEq, Value: who.Session(target.ID).String()}, {Field: "profile_id", Op: docstore.OpEq, Value: caller.ProfileID}},
 		Limit:      agentCloseTendedSeedLimit,
 	})
 	if err != nil {
@@ -166,7 +166,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	}
 	body := agentCloseSeedNote(target, caller, rule, reason)
 	for _, doc := range read.Documents {
-		if _, err := d.appendSeedNote(doc.ID, body, caller.ID, "", garden.NoteKindNote, nil, false, caller.ID); err != nil {
+		if _, err := d.appendSeedNote(doc.ID, body, d.actorOfSession(caller.ID), garden.NoteKindNote, nil, false, caller.ID); err != nil {
 			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
 			continue
 		}
@@ -204,14 +204,17 @@ func (d *Daemon) seedTenderSession(seedID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tender := seed.Tender()
-	if session := protocol.TrimID(tender.Session); session != "" {
+	if session, ok := seed.Tender.Session(); ok {
 		return string(session), nil
 	}
-	if tender.Named() {
+	if session, ok := d.liveSessionOf(seed.Tender); ok {
+		return string(session), nil
+	}
+	if !seed.Tender.IsZero() {
+		name := d.partyName(seed.Tender)
 		return "", fmt.Errorf(
 			"%s is tended by %s, who is not in an attn session; message them by name: attn agent msg %s \"…\"",
-			seed.ID, tender.DisplayName(), tender.Name())
+			seed.ID, name, name)
 	}
 	return "", fmt.Errorf(
 		"nobody is tending %s, so there is nobody to reach; leave it on the log instead: attn seed note %s -m \"…\"",

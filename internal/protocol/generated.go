@@ -40,6 +40,16 @@ type ActivityStatusSession struct {
 	Label string `json:"label"`
 }
 
+type ActorRef string
+
+type ActorView struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref ActorRef `json:"ref"`
+}
+
 type AddOutpostMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7890,6 +7900,9 @@ type PartyView struct {
 
 	// Ref corresponds to the JSON schema field "ref".
 	Ref PartyRef `json:"ref"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type PathInspection struct {
@@ -9454,6 +9467,9 @@ type Seed struct {
 	// Checks corresponds to the JSON schema field "checks".
 	Checks []SeedCheck `json:"checks,omitempty,omitzero"`
 
+	// Claimed corresponds to the JSON schema field "claimed".
+	Claimed bool `json:"claimed"`
+
 	// Continuation corresponds to the JSON schema field "continuation".
 	Continuation *SeedContinuation `json:"continuation,omitempty,omitzero"`
 
@@ -9475,11 +9491,8 @@ type Seed struct {
 	// LastExecutionID corresponds to the JSON schema field "last_execution_id".
 	LastExecutionID *SessionID `json:"last_execution_id,omitempty,omitzero"`
 
-	// PlanterMember corresponds to the JSON schema field "planter_member".
-	PlanterMember string `json:"planter_member"`
-
-	// PlanterSession corresponds to the JSON schema field "planter_session".
-	PlanterSession SessionID `json:"planter_session"`
+	// Planter corresponds to the JSON schema field "planter".
+	Planter ActorView `json:"planter"`
 
 	// PlotProgress corresponds to the JSON schema field "plot_progress".
 	PlotProgress *SeedPlotProgress `json:"plot_progress,omitempty,omitzero"`
@@ -9515,11 +9528,8 @@ type Seed struct {
 	// Template corresponds to the JSON schema field "template".
 	Template bool `json:"template"`
 
-	// TenderMember corresponds to the JSON schema field "tender_member".
-	TenderMember string `json:"tender_member"`
-
-	// TenderSession corresponds to the JSON schema field "tender_session".
-	TenderSession SessionID `json:"tender_session"`
+	// Tender corresponds to the JSON schema field "tender".
+	Tender *PartyView `json:"tender,omitempty,omitzero"`
 
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
@@ -9791,9 +9801,6 @@ type SeedCheckMessage struct {
 	// EvidenceFiles corresponds to the JSON schema field "evidence_files".
 	EvidenceFiles []string `json:"evidence_files,omitempty,omitzero"`
 
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
-
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -9826,11 +9833,8 @@ type SeedCheckReport struct {
 	// At corresponds to the JSON schema field "at".
 	At string `json:"at"`
 
-	// ByMember corresponds to the JSON schema field "by_member".
-	ByMember *string `json:"by_member,omitempty,omitzero"`
-
-	// BySession corresponds to the JSON schema field "by_session".
-	BySession *SessionID `json:"by_session,omitempty,omitzero"`
+	// By corresponds to the JSON schema field "by".
+	By ActorView `json:"by"`
 
 	// Commit corresponds to the JSON schema field "commit".
 	Commit *string `json:"commit,omitempty,omitzero"`
@@ -9911,11 +9915,8 @@ type SeedCheckVerdict struct {
 	// At corresponds to the JSON schema field "at".
 	At string `json:"at"`
 
-	// ByMember corresponds to the JSON schema field "by_member".
-	ByMember *string `json:"by_member,omitempty,omitzero"`
-
-	// BySession corresponds to the JSON schema field "by_session".
-	BySession *SessionID `json:"by_session,omitempty,omitzero"`
+	// By corresponds to the JSON schema field "by".
+	By ActorView `json:"by"`
 
 	// Confirmed corresponds to the JSON schema field "confirmed".
 	Confirmed bool `json:"confirmed"`
@@ -9998,9 +9999,6 @@ type SeedDocument struct {
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
-
-	// TenderHolds corresponds to the JSON schema field "tender_holds".
-	TenderHolds bool `json:"tender_holds"`
 }
 
 type SeedDocumentGetMessage struct {
@@ -10086,14 +10084,6 @@ type SeedHandoverRequest struct {
 	// ExpectedRev corresponds to the JSON schema field "expected_rev".
 	ExpectedRev int `json:"expected_rev"`
 
-	// ExpectedTenderMember corresponds to the JSON schema field
-	// "expected_tender_member".
-	ExpectedTenderMember string `json:"expected_tender_member"`
-
-	// ExpectedTenderSession corresponds to the JSON schema field
-	// "expected_tender_session".
-	ExpectedTenderSession SessionID `json:"expected_tender_session"`
-
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *string `json:"handoff,omitempty,omitzero"`
 
@@ -10120,11 +10110,8 @@ type SeedHarvestCondition struct {
 	// SetAt corresponds to the JSON schema field "set_at".
 	SetAt string `json:"set_at"`
 
-	// SetByMember corresponds to the JSON schema field "set_by_member".
-	SetByMember *string `json:"set_by_member,omitempty,omitzero"`
-
-	// SetBySession corresponds to the JSON schema field "set_by_session".
-	SetBySession *SessionID `json:"set_by_session,omitempty,omitzero"`
+	// SetBy corresponds to the JSON schema field "set_by".
+	SetBy ActorView `json:"set_by"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -10201,11 +10188,8 @@ type SeedNote struct {
 	// Artifact corresponds to the JSON schema field "artifact".
 	Artifact *SeedArtifactReference `json:"artifact,omitempty,omitzero"`
 
-	// AuthorMember corresponds to the JSON schema field "author_member".
-	AuthorMember string `json:"author_member"`
-
-	// AuthorSession corresponds to the JSON schema field "author_session".
-	AuthorSession SessionID `json:"author_session"`
+	// Author corresponds to the JSON schema field "author".
+	Author ActorView `json:"author"`
 
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
@@ -10238,9 +10222,6 @@ type SeedNoteMessage struct {
 
 	// Kind corresponds to the JSON schema field "kind".
 	Kind *string `json:"kind,omitempty,omitzero"`
-
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -10344,9 +10325,6 @@ type SeedPlantMessage struct {
 	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
 	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
 
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
-
 	// PartOf corresponds to the JSON schema field "part_of".
 	PartOf *string `json:"part_of,omitempty,omitzero"`
 
@@ -10397,9 +10375,6 @@ type SeedPlotMessage struct {
 
 	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
 	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
-
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
 
 	// PartOf corresponds to the JSON schema field "part_of".
 	PartOf *string `json:"part_of,omitempty,omitzero"`
@@ -10801,14 +10776,6 @@ type SeedSendToChiefMessage struct {
 	// ExpectedRev corresponds to the JSON schema field "expected_rev".
 	ExpectedRev int `json:"expected_rev"`
 
-	// ExpectedTenderMember corresponds to the JSON schema field
-	// "expected_tender_member".
-	ExpectedTenderMember string `json:"expected_tender_member"`
-
-	// ExpectedTenderSession corresponds to the JSON schema field
-	// "expected_tender_session".
-	ExpectedTenderSession SessionID `json:"expected_tender_session"`
-
 	// Guidance corresponds to the JSON schema field "guidance".
 	Guidance *string `json:"guidance,omitempty,omitzero"`
 
@@ -10971,6 +10938,9 @@ type SeedSinceExpired struct {
 }
 
 type SeedTransitionMessage struct {
+	// Assignee corresponds to the JSON schema field "assignee".
+	Assignee *string `json:"assignee,omitempty,omitzero"`
+
 	// ClearHarvestWhen corresponds to the JSON schema field "clear_harvest_when".
 	ClearHarvestWhen *bool `json:"clear_harvest_when,omitempty,omitzero"`
 
@@ -10982,9 +10952,6 @@ type SeedTransitionMessage struct {
 
 	// Force corresponds to the JSON schema field "force".
 	Force *bool `json:"force,omitempty,omitzero"`
-
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -11159,8 +11126,8 @@ type Session struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
-	// DispatcherMember corresponds to the JSON schema field "dispatcher_member".
-	DispatcherMember *string `json:"dispatcher_member,omitempty,omitzero"`
+	// Dispatcher corresponds to the JSON schema field "dispatcher".
+	Dispatcher *ActorView `json:"dispatcher,omitempty,omitzero"`
 
 	// DispatcherSessionID corresponds to the JSON schema field
 	// "dispatcher_session_id".

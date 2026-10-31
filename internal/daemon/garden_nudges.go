@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -29,24 +28,20 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 
 // seedTenderMember resolves a seed's tender name to a crew member of the seed's own profile.
 func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
-	key := strings.TrimSpace(seed.Tender().Member)
-	if key == "" {
+	key, ok := seed.Tender.Member()
+	if !ok {
 		return crew.Member{}, false, nil
 	}
-	member, found, err := d.crewMemberIn(seed.ProfileID, crew.KeyRefPrefix+key)
-	return member, found, err
+	return d.crewMemberIn(seed.ProfileID, crew.KeyRefPrefix+key.String())
 }
 
 func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {
-	tender := seed.Tender()
-	sessionID := protocol.TrimID(tender.Session)
-	if sessionID == "" {
-		if member := strings.TrimSpace(tender.Member); member != "" {
-			var err error
-			sessionID, err = d.crewSessionBoundTo(member)
-			if err != nil {
-				return "", err
-			}
+	sessionID, _ := seed.Tender.Session()
+	if key, member := seed.Tender.Member(); member {
+		var err error
+		sessionID, err = d.crewSessionBoundTo(key.String())
+		if err != nil {
+			return "", err
 		}
 	}
 	if sessionID == "" {

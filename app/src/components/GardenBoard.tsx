@@ -21,6 +21,7 @@ import {
   VERBS,
   verbsFor,
   type ColumnKey,
+  type SessionLabels,
   type Verb,
 } from './gardenBoardModel';
 import { GardenCompose } from './GardenCompose';
@@ -30,7 +31,7 @@ import './GardenBoard.css';
 export interface GardenBoardProps {
   seeds: Seed[];
   seedsTotal: number;
-  liveSessions: Set<string>;
+  sessionLabels?: SessionLabels;
   loaded: boolean;
   onTransition: (seedId: string, verb: Verb, reason?: string, force?: boolean, comment?: string) => Promise<unknown>;
   onNote: (seedId: string, body: string) => Promise<unknown>;
@@ -91,7 +92,7 @@ function plotCounts(seed: Seed): string {
 export function GardenBoard({
   seeds,
   seedsTotal,
-  liveSessions,
+  sessionLabels,
   loaded,
   onTransition,
   onNote,
@@ -286,7 +287,7 @@ export function GardenBoard({
         compose.seed.id,
         compose.verb,
         spec.reasonOnSeed ? text : undefined,
-        heldByOther(compose.seed, liveSessions) !== '',
+        heldByOther(compose.seed, sessionLabels) !== '',
         compose.verb === 'park' ? text : undefined,
       );
       setCompose(null);
@@ -297,7 +298,7 @@ export function GardenBoard({
     } finally {
       setBusy(false);
     }
-  }, [compose, busy, liveSessions, onNote, onTransition]);
+  }, [compose, busy, sessionLabels, onNote, onTransition]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (compose) return;
@@ -458,7 +459,7 @@ export function GardenBoard({
                   {composing && (
                     <Composer
                       compose={composing}
-                      takenFrom={heldByOther(composing.seed, liveSessions)}
+                      takenFrom={heldByOther(composing.seed, sessionLabels)}
                       busy={busy}
                       inputRef={composeInput}
                       onCommit={commit}
@@ -491,9 +492,8 @@ export function GardenBoard({
                             selected={selected === seed.id}
                             menuOpen={menuFor === seed.id}
                             blockers={blockers.get(seed.id) ?? 0}
-                            tenderLive={
-                              !seed.tender_session || liveSessions.has(seed.tender_session)
-                            }
+                            tender={tenderOf(seed, sessionLabels)}
+                            tenderLive={!seed.tender || seed.claimed}
                             onSelect={() => setSelected(seed.id)}
                             onPrimary={() => {
                               setSelected(seed.id);
@@ -605,6 +605,7 @@ interface CardProps {
   selected: boolean;
   menuOpen: boolean;
   blockers: number;
+  tender: string;
   tenderLive: boolean;
   onSelect: () => void;
   onPrimary: () => void;
@@ -616,7 +617,7 @@ interface CardProps {
 }
 
 function Card({
-  seed, column, selected, menuOpen, blockers, tenderLive,
+  seed, column, selected, menuOpen, blockers, tender, tenderLive,
   onSelect, onPrimary, onDrill, onMenu, onVerb, onDragPointerDown, wasDragged,
 }: CardProps) {
   const verbs = verbsFor(seed);
@@ -651,7 +652,7 @@ function Card({
       >
         <span className="garden-card__title">{seed.title}</span>
         <span className="garden-card__meta">
-          <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          <CardMeta seed={seed} column={column} blockers={blockers} tender={tender} tenderLive={tenderLive} plot={plot} armed={armed} />
           <CheckTally seed={seed} />
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
@@ -702,9 +703,9 @@ function Card({
 }
 
 function CardMeta({
-  seed, column, blockers, tenderLive, plot, armed,
+  seed, column, blockers, tender, tenderLive, plot, armed,
 }: {
-  seed: Seed; column: ColumnKey; blockers: number; tenderLive: boolean; plot: string;
+  seed: Seed; column: ColumnKey; blockers: number; tender: string; tenderLive: boolean; plot: string;
   armed: HarvestWhenDisplay | null;
 }) {
   if (plot) return <span className="garden-card__plot">{plot}</span>;
@@ -725,7 +726,7 @@ function CardMeta({
     case 'growing':
       return (
         <span className={`garden-card__tender${tenderLive ? '' : ' is-gone'}`}>
-          {tenderOf(seed) || 'held'}
+          {tender || 'held'}
           {!tenderLive && <span className="garden-card__gone"> · session gone</span>}
         </span>
       );

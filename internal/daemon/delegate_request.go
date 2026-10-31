@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var errLegacyDelegationRequest = errors.New("this pending delegation used the retired implicit launch contract")
@@ -120,7 +121,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	msg *protocol.DelegateMessage,
 	reservedSeedID string, reservedBaseCommit string, reservedNoteID string, sessionID protocol.SessionID, ownedWorktreePath string,
 	handoverSeedRev int,
-	handoverTenderSession, handoverTenderMember string,
+	handoverTender who.Party,
 	operationID string,
 	parentSeedID string,
 ) (*resolvedDelegationLaunch, error) {
@@ -162,22 +163,19 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		runtime.SeedTitle = seed.Title
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {
-			previousTenderSession := seed.TenderSession
+			previousTender := seed.Tender
 			if handoverSeedRev > 0 {
-				previousTenderSession = protocol.SessionID(strings.TrimSpace(handoverTenderSession))
+				previousTender = handoverTender
 			}
-			runtime.PreviousTenderSession = previousTenderSession
+			runtime.PreviousTenderSession, _ = d.liveSessionOf(previousTender)
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
-				if int(doc.Rev) < handoverSeedRev ||
-					seed.TenderSession != protocol.SessionID(strings.TrimSpace(handoverTenderSession)) ||
-					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {
+				if int(doc.Rev) < handoverSeedRev || seed.Tender != handoverTender {
 					return nil, fmt.Errorf("seed %s ownership changed after the delegation request was accepted", seedID)
 				}
 			}
 			runtime.Handover = &protocol.SeedHandoverRequest{
-				SeedID: seedID, ExpectedRev: int(doc.Rev), ExpectedTenderSession: seed.TenderSession,
-				ExpectedTenderMember: seed.TenderMember, Review: msg.Review,
+				SeedID: seedID, ExpectedRev: int(doc.Rev), Review: msg.Review,
 			}
 			if note := strings.TrimSpace(protocol.Deref(msg.Assignment.Handover.Note)); note != "" {
 				runtime.Handover.Handoff = protocol.Ptr(note)

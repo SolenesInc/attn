@@ -3,8 +3,9 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/pausepoint"
 	"time"
+
+	"github.com/victorarias/attn/internal/pausepoint"
 
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"

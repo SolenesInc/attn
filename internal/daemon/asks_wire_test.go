@@ -565,7 +565,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	successor.Prompted()
 	successor.Reply("Picked up the migration. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-	if _, err := cli.SeedNote("caller", seed, "the schema froze yesterday", "", "", true, nil); err != nil {
+	if _, err := cli.SeedNote("caller", seed, "the schema froze yesterday", "", true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) {
@@ -593,7 +593,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	}
 	successor.Reply("Going with Postgres. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-	if _, err := cli.SeedNote("caller", seed, "the index rebuild is scheduled", "", "", true, nil); err != nil {
+	if _, err := cli.SeedNote("caller", seed, "the index rebuild is scheduled", "", true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) || strings.Contains(got, "Answer: Postgres") {
@@ -610,8 +610,8 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 			t.Errorf("the seed's newest note reads %q, missing %q", answer.Body, want)
 		}
 	}
-	if answer.AuthorSession != "" || answer.AuthorMember != "" {
-		t.Errorf("the answer is noted by %q/%q, want the user", answer.AuthorSession, answer.AuthorMember)
+	if authorSessionOf(answer) != "" || authorMemberOf(answer) != "" {
+		t.Errorf("the answer is noted by %q/%q, want the user", authorSessionOf(answer), authorMemberOf(answer))
 	}
 }
 

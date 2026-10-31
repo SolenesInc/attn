@@ -9,7 +9,10 @@ scalar SessionID extends string;
 scalar TerminalID extends string;
 // session:<id> or member:<key>.
 scalar PartyRef extends string;
-model PartyView { ref: PartyRef; name: string; }
+model PartyView { ref: PartyRef; name: string; session_id?: SessionID; }
+// Actor: Party text, user or attn.
+scalar ActorRef extends string;
+model ActorView { ref: ActorRef; name: string; }
 
 // ============================================================================
 // Enums
@@ -189,7 +192,7 @@ model Session {
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
-  dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
+  dispatcher?: ActorView;       // Who dispatched this session, read from the dispatch record; present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
@@ -1243,8 +1246,6 @@ model SeedHandoverRequest {
   seed_id: string;
   handoff?: string;
   expected_rev: safeint;
-  expected_tender_session: SessionID;
-  expected_tender_member: string;
   review?: SeedReviewActionContext;
   note_id?: string; // Reserved recovery identity for a new handoff note.
 }
@@ -5316,12 +5317,14 @@ model Seed {
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
-  "planter_session": SessionID;
-  "planter_member": string;
-  "tender_session": SessionID;
-  "tender_member": string;
+  "planter": ActorView;
+  // The party the seed's claim names. session_id is its live session.
+  "tender"?: PartyView;
+  // Whether the tender's claim holds now: a member's always does, a session's
+  // only while the session is live.
+  "claimed": boolean;
   // The most recent attn session that worked this seed. It survives Park and
-  // session removal; current ownership remains tender_session/tender_member.
+  // session removal; the current claim is tender.
   "last_execution_id"?: SessionID;
   // The latest lifecycle state transition. Legacy seeds use updated_at as a
   // conservative fallback and say so through state_changed_at_exact.
@@ -5371,8 +5374,7 @@ model SeedHarvestCondition {
   "pull_request": string;
   "url": string;
   "set_at": string;
-  "set_by_session"?: SessionID;
-  "set_by_member"?: string;
+  "set_by": ActorView;
   "checked_at"?: string;
 }
 
@@ -5563,8 +5565,7 @@ model SeedCheckReport {
   // The report's text had lines after its summary line; they are in the
   // report's check note.
   "detail"?: boolean;
-  "by_session"?: SessionID;
-  "by_member"?: string;
+  "by": ActorView;
   "at": string;
 }
 
@@ -5584,8 +5585,7 @@ model SeedCheckEvidence {
 model SeedCheckVerdict {
   "confirmed": boolean;
   "reason"?: string;
-  "by_session"?: SessionID;
-  "by_member"?: string;
+  "by": ActorView;
   "at": string;
 }
 
@@ -5629,7 +5629,6 @@ model SeedCheckMessage {
   "evidence_files"?: string[];
   // On report: the full commit hash the evidence came from.
   "commit"?: string;
-  "member"?: string;
   // Ring the seed's tender and covering watchers, as seed_note's ring does.
   "ring"?: boolean;
 }
@@ -5678,8 +5677,6 @@ model SeedPlantMessage {
   // A seed this work was discovered while tending. Refused before planting
   // when no such seed is planted.
   "discovered_from"?: string;
-  // The crew member planting, free-string until the crew primitive lands.
-  "member"?: string;
   // What the seed must prove, cited by id in its body.
   "checks"?: SeedCheckDefinition[];
 }
@@ -5704,7 +5701,6 @@ model SeedPlotMessage {
 
   "cmd": "seed_plot";
   "source_session_id"?: SessionID;
-  "member"?: string;
   "title": string;
   "body"?: string;
   // The crown's checks; shared ones are proven by every child below it.
@@ -5938,10 +5934,6 @@ model SeedDocumentGetMessage {
 
 model SeedDocument {
   "seed": Seed;
-  // Whether the stored tender currently holds this seed. A tender session may
-  // remain in the document after that session exits, so the ids alone cannot
-  // answer where feedback can be delivered.
-  "tender_holds": boolean;
   "children": Seed[];
   "notes": SeedNote[];
   "notes_total": int32;
@@ -6150,8 +6142,8 @@ model SeedTransitionMessage {
   // A log note committed with Park. It is separate from a closing reason and
   // absent for every other lifecycle move.
   "comment"?: string;
-  // The crew member asking, recorded as the tender on a claim.
-  "member"?: string;
+  // The crew member to claim the seed for, by name; accepted only with tend.
+  "assignee"?: string;
   // Yes, act even though somebody else holds it. Ignored when nobody else
   // holds the seed.
   "force"?: boolean;
@@ -6225,8 +6217,7 @@ model SeedNote {
   // Only seed_check writes check.
   "kind": string;
   "body": string;
-  "author_session": SessionID;
-  "author_member": string;
+  "author": ActorView;
   "created_at": string;
   "artifact"?: SeedArtifactReference;
   // The save number that recorded the entry; set on entries a since-read returns.
@@ -6243,7 +6234,6 @@ model SeedNoteMessage {
   "request_id"?: string;
   "seed_id": string;
   "body": string;
-  "member"?: string;
   // Omitted is a plain log entry, so a caller that never heard of kinds
   // writes a note. An unknown kind is refused, naming the whole set.
   "kind"?: string;
@@ -6364,8 +6354,6 @@ model SeedSendToChiefMessage {
   "source_session_id"?: SessionID;
   "seed_id": string;
   "expected_rev": safeint;
-  "expected_tender_session": SessionID;
-  "expected_tender_member": string;
   "guidance"?: string;
   // Present only when this resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;

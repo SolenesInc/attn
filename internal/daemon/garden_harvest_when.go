@@ -6,15 +6,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
-
-const harvestWhenActor = crew.DaemonID
 
 const harvestWhenClearedNote = "harvest-on-merge cleared"
 
@@ -95,12 +93,11 @@ func (d *Daemon) armHarvestWhenMerged(
 			"%s closed without merging, so it never will; %s has nothing to wait for", harvestWhenLabel(rec), seed.ID)
 	}
 	condition := garden.HarvestCondition{
-		Reason:       strings.TrimSpace(ask.Reason),
-		PullRequest:  rec.PRID,
-		URL:          rec.URL,
-		SetAt:        formatGardenTime(d.gardenTime()),
-		SetBySession: protocol.TrimID(ask.Actor.Session),
-		SetByMember:  strings.TrimSpace(ask.Actor.Member),
+		Reason:      strings.TrimSpace(ask.Reason),
+		PullRequest: rec.PRID,
+		URL:         rec.URL,
+		SetAt:       formatGardenTime(d.gardenTime()),
+		SetBy:       ask.Actor,
 	}
 	if err := garden.ValidateHarvestCondition(condition); err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
@@ -212,7 +209,7 @@ func (d *Daemon) settleFreshlyArmed(
 		return d.fulfilHarvestWhen(seed, rec, seed.HarvestWhen, string(sessionID))
 	case sessionPullRequestClosed:
 		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen,
-			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor}, string(sessionID))
+			harvestWhenClosedNote(rec), who.Attn(), string(sessionID))
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
@@ -245,7 +242,7 @@ func (d *Daemon) fulfilHarvestWhen(
 	seed garden.Seed, rec store.SessionPullRequestRecord, observed *garden.HarvestCondition, excludedSessions ...string,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	ask := garden.Ask{
-		Actor: garden.Tender{Member: harvestWhenActor}, Force: true,
+		Actor: who.Attn(), Force: true,
 		CauseSession: protocol.SessionID(firstString(excludedSessions)),
 	}
 	var harvested garden.Seed
@@ -285,7 +282,7 @@ func (d *Daemon) fulfilHarvestWhen(
 }
 
 func (d *Daemon) clearHarvestWhen(
-	seedID string, observed *garden.HarvestCondition, noteBody string, actor garden.Tender, causedBy ...string,
+	seedID string, observed *garden.HarvestCondition, noteBody string, actor who.Actor, causedBy ...string,
 ) (garden.Seed, docstore.Document, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -301,7 +298,7 @@ func (d *Daemon) clearHarvestWhen(
 		next.HarvestWhen = nil
 		cause := protocol.SessionID(firstString(causedBy))
 		if cause == "" {
-			cause = protocol.TrimID(actor.Session)
+			cause, _ = d.sessionOfActor(actor)
 		}
 		cleared, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, seed.ID,
@@ -344,15 +341,12 @@ func (d *Daemon) clearHarvestWhenRequested(
 	return seed, doc, nil
 }
 
-func (d *Daemon) harvestWhenNote(seedID, body string, actor garden.Tender) garden.Note {
-	return garden.Note{
-		Seed: seedID, Kind: garden.NoteKindNote, Body: body,
-		AuthorSession: protocol.TrimID(actor.Session), AuthorMember: strings.TrimSpace(actor.Member),
-	}
+func (d *Daemon) harvestWhenNote(seedID, body string, actor who.Actor) garden.Note {
+	return garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: body, Author: actor}
 }
 
 func (d *Daemon) harvestWhenAttachment(
-	seedID string, rec store.SessionPullRequestRecord, actor garden.Tender,
+	seedID string, rec store.SessionPullRequestRecord, actor who.Actor,
 ) (garden.Note, bool) {
 	artifact := garden.ArtifactReference{Kind: garden.ArtifactURL, URL: rec.URL}
 	validated, err := garden.ValidateArtifact(artifact)

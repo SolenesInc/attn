@@ -683,7 +683,7 @@ func seedsOfSession(c *client.Client, sessionID protocol.SessionID) ([]string, e
 		return nil, err
 	}
 	for _, seed := range seeds.Seeds {
-		if seed.TenderSession == sessionID && seed.Status == garden.StatusGrowing && !slices.Contains(seedIDs, seed.ID) {
+		if seed.Tender != nil && protocol.Deref(seed.Tender.SessionID) == sessionID && seed.Status == garden.StatusGrowing && !slices.Contains(seedIDs, seed.ID) {
 			seedIDs = append(seedIDs, seed.ID)
 		}
 	}

@@ -366,7 +366,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		if msg.Assignment.Kind == protocol.DelegateAssignmentKindSeed {
 			if seed, _, readErr := d.readSeed(seedID); readErr != nil {
 				return nil, readErr
-			} else if sourceSessionID != "" && protocol.TrimID(seed.TenderSession) == sourceSessionID && d.sessionActive(sourceSessionID) {
+			} else if sourceSessionID != "" && seed.Tender == d.partyOfSession(sourceSessionID) && d.sessionActive(sourceSessionID) {
 				return nil, fmt.Errorf("seed %s is tended by the source session; use --handover to transfer it to another worker", seedID)
 			}
 		}

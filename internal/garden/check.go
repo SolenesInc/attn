@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type Check struct {
@@ -25,13 +25,12 @@ type CheckResult struct {
 }
 
 type CheckReport struct {
-	Summary   string             `json:"summary"`
-	Evidence  []CheckEvidence    `json:"evidence"`
-	Commit    string             `json:"commit,omitempty"`
-	Detail    bool               `json:"detail,omitempty"`
-	BySession protocol.SessionID `json:"by_session,omitempty"`
-	ByMember  string             `json:"by_member,omitempty"`
-	At        string             `json:"at"`
+	Summary  string          `json:"summary"`
+	Evidence []CheckEvidence `json:"evidence"`
+	Commit   string          `json:"commit,omitempty"`
+	Detail   bool            `json:"detail,omitempty"`
+	By       who.Actor       `json:"by,omitzero"`
+	At       string          `json:"at"`
 }
 
 type CheckEvidence struct {
@@ -42,11 +41,10 @@ type CheckEvidence struct {
 }
 
 type CheckVerdict struct {
-	Confirmed bool               `json:"confirmed"`
-	Reason    string             `json:"reason,omitempty"`
-	BySession protocol.SessionID `json:"by_session,omitempty"`
-	ByMember  string             `json:"by_member,omitempty"`
-	At        string             `json:"at"`
+	Confirmed bool      `json:"confirmed"`
+	Reason    string    `json:"reason,omitempty"`
+	By        who.Actor `json:"by,omitzero"`
+	At        string    `json:"at"`
 }
 
 type CheckVerb string
@@ -88,7 +86,7 @@ type CheckMove struct {
 	Summary  string
 	Evidence []string
 	Commit   string
-	Actor    Tender
+	Actor    who.Actor
 }
 
 type CheckState string
@@ -475,7 +473,7 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 	}
 	note := Note{
 		Seed: seed.ID, Kind: NoteKindCheck, Body: body,
-		AuthorSession: protocol.TrimID(move.Actor.Session), AuthorMember: strings.TrimSpace(move.Actor.Member),
+		Author: move.Actor,
 	}
 	return next, note, nil
 }
@@ -546,8 +544,6 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 
 func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove, artifacts []CheckEvidence, at string) (string, string, CheckResult, error) {
 	summary := strings.TrimSpace(move.Summary)
-	actorSession := protocol.TrimID(move.Actor.Session)
-	actorMember := strings.TrimSpace(move.Actor.Member)
 	state := result.State()
 	switch move.Verb {
 	case CheckVerbReport:
@@ -564,7 +560,7 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		if err := validateCheckLine(checkID, "reason", summary); err != nil {
 			return "", "", result, err
 		}
-		result.Verdict = &CheckVerdict{Confirmed: confirmed, Reason: summary, BySession: actorSession, ByMember: actorMember, At: at}
+		result.Verdict = &CheckVerdict{Confirmed: confirmed, Reason: summary, By: move.Actor, At: at}
 		headline := checkID + " " + string(result.State())
 		if result.Report == nil {
 			headline += ", no report"
@@ -612,7 +608,7 @@ func buildCheckReport(seedID, checkID string, move CheckMove, artifacts []CheckE
 	}
 	report := &CheckReport{
 		Summary: text.Summary, Evidence: evidence, Commit: strings.TrimSpace(move.Commit), Detail: text.Detail != "",
-		BySession: protocol.TrimID(move.Actor.Session), ByMember: strings.TrimSpace(move.Actor.Member), At: at,
+		By: move.Actor, At: at,
 	}
 	note := text.Summary
 	if cited := evidenceLabels(evidence); cited != "" {

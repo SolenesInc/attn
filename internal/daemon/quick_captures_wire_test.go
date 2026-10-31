@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/victorarias/attn/internal/config"
 	"image"
 	"image/color"
 	"image/png"
@@ -14,6 +13,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/victorarias/attn/internal/config"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"

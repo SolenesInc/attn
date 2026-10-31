@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedHandoverPlan struct {
@@ -24,7 +25,7 @@ func (d *Daemon) handoverAlreadyBound(operationID string, sessionID protocol.Ses
 		return false
 	}
 	seed, _, err := d.readSeed(seedID)
-	return err == nil && seed.TenderSession == sessionID && seed.LastExecutionID == sessionID
+	return err == nil && seed.Tender == who.Session(sessionID) && seed.LastExecutionID == sessionID
 }
 
 func (d *Daemon) prepareSeedHandover(
@@ -59,24 +60,22 @@ func (d *Daemon) prepareSeedHandover(
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before handing it over", seed.ID, seed.Status)
 	}
-	if int(doc.Rev) != request.ExpectedRev ||
-		seed.TenderSession != protocol.TrimID(request.ExpectedTenderSession) ||
-		seed.TenderMember != strings.TrimSpace(request.ExpectedTenderMember) {
+	if int(doc.Rev) != request.ExpectedRev {
 		return nil, fmt.Errorf("%s changed since you opened it; refresh it before handing it over", seed.ID)
 	}
 	return plan, nil
 }
 
-func (d *Daemon) gardenDispatchDocument(sessionID protocol.SessionID) (garden.Dispatch, docstore.Document, bool, error) {
+func (d *Daemon) gardenDispatchDocument(sessionID protocol.SessionID) (garden.Execution, docstore.Document, bool, error) {
 	schema, err := d.dispatchesCollection()
 	if err != nil {
-		return garden.Dispatch{}, docstore.Document{}, false, err
+		return garden.Execution{}, docstore.Document{}, false, err
 	}
 	doc, found, err := d.store.GetDocument(*schema, string(protocol.TrimID(sessionID)))
 	if err != nil || !found {
-		return garden.Dispatch{}, docstore.Document{}, found, err
+		return garden.Execution{}, docstore.Document{}, found, err
 	}
-	dispatch, err := garden.DecodeDispatch(doc.Body)
+	dispatch, err := garden.DecodeExecution(doc.Body)
 	return dispatch, *doc, true, err
 }
 
@@ -84,7 +83,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 	_ foregroundCleanupProtection,
 	msg *resolvedDelegationLaunch,
 	operationID string, sessionID protocol.SessionID, directory string, agent string,
-	observed garden.Dispatch,
+	observed garden.Execution,
 	fromChief bool,
 ) (*protocol.SeedNote, error) {
 	request := msg.Handover
@@ -104,9 +103,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 	if err != nil {
 		return nil, err
 	}
-	if int(doc.Rev) != request.ExpectedRev ||
-		seed.TenderSession != protocol.TrimID(request.ExpectedTenderSession) ||
-		seed.TenderMember != strings.TrimSpace(request.ExpectedTenderMember) {
+	if int(doc.Rev) != request.ExpectedRev {
 		return nil, fmt.Errorf("%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
 	}
 	if garden.Closed(seed.Status) {
@@ -114,9 +111,10 @@ func (d *Daemon) bindSeedHandoverProtected(
 	}
 
 	unclaimed := seed
-	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
+	unclaimed.Tender = who.Party{}
+	delegate := who.Session(sessionID)
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: sessionID},
+		Actor: delegate.Actor(), Claimant: delegate,
 	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
 	if err != nil {
 		return nil, err
@@ -150,7 +148,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 	change := seedChange{
-		author: garden.Tender{Session: cause, Member: d.resolveTenderMember("", cause)}, cause: cause,
+		author: d.actorOfSession(cause), cause: cause,
 		events: []seedEvent{{occurrence: tended, detail: "handed over to " + string(sessionID)}},
 	}
 	if handoff != nil {
@@ -198,19 +196,19 @@ func (d *Daemon) bindSeedHandoverProtected(
 	if handoff == nil {
 		return nil, nil
 	}
-	wire := log.wireEntries(now)[0]
+	wire := d.seedChangeLogWire(log, now)[0]
 	return &wire, nil
 }
 
 type handoverDispatchCommits struct {
 	commits        []store.DocumentCommit
-	newDispatch    garden.Dispatch
+	newDispatch    garden.Execution
 	oldExecutionID protocol.SessionID
-	oldDispatch    garden.Dispatch
+	oldDispatch    garden.Execution
 }
 
 func (d *Daemon) handoverDispatchCommits(
-	msg *resolvedDelegationLaunch, operationID string, sessionID protocol.SessionID, directory string, agent string, observed garden.Dispatch, fromChief bool,
+	msg *resolvedDelegationLaunch, operationID string, sessionID protocol.SessionID, directory string, agent string, observed garden.Execution, fromChief bool,
 	seed garden.Seed,
 ) (handoverDispatchCommits, error) {
 	var out handoverDispatchCommits
@@ -233,8 +231,7 @@ func (d *Daemon) handoverDispatchCommits(
 	newDispatch = mergeGardenExecution(newDispatch, observed)
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
-	newDispatch.DispatcherSession = protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID))))
-	newDispatch.DispatcherMember = d.crewMembersBySession()[newDispatch.DispatcherSession].ID
+	newDispatch.Dispatcher = d.actorOfSession(protocol.Deref(msg.SourceSessionID))
 	newDispatch.FromChief = fromChief
 	newDispatch.OperationID = operationID
 	if newDispatch.Cwd == "" {
@@ -289,6 +286,6 @@ func (d *Daemon) handoffNote(seedID string, msg *resolvedDelegationLaunch) (*gar
 	}
 	return &garden.Note{
 		ID: strings.TrimSpace(protocol.Deref(msg.Handover.NoteID)), Seed: seedID, Kind: garden.NoteKindHandoff, Body: handoff,
-		AuthorSession: protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID)))),
+		Author: d.actorOfSession(protocol.Deref(msg.SourceSessionID)),
 	}, nil
 }

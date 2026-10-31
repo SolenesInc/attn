@@ -154,7 +154,7 @@ func TestASinceReadOlderThanTheEventLogIsAFullRead(t *testing.T) {
 
 func plantPartAs(t *testing.T, cli *client.Client, sessionID, title, plot string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "", plot, "", "")
+	planted, err := cli.SeedPlant(protocol.SessionID(sessionID), title, "", plot, "")
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, plot, err)
 	}
@@ -163,7 +163,7 @@ func plantPartAs(t *testing.T, cli *client.Client, sessionID, title, plot string
 
 func sinceNote(t *testing.T, cli *client.Client, seedID, body string, ring bool) protocol.SeedNote {
 	t.Helper()
-	result, err := cli.SeedNote("worker", seedID, body, "", "", ring, nil)
+	result, err := cli.SeedNote("worker", seedID, body, "", ring, nil)
 	if err != nil {
 		t.Errorf("note %q on %s: %v", body, seedID, err)
 		return protocol.SeedNote{}

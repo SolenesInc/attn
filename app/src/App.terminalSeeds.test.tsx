@@ -1,12 +1,12 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { soloDesktop, daemonSeed, daemonSession, dockTiles } from './test/daemonFixtures';
+import { soloDesktop, daemonSeed, daemonSession, dockTiles, memberClaim } from './test/daemonFixtures';
 
 const SEED = daemonSeed('s-7k3f9m', {
   title: 'Make seed IDs navigable',
   body: 'Recognize **valid** ids and [preview](https://example.test) them.',
-  tender_member: 'trellis',
+  ...memberClaim('trellis'),
 });
 
 async function openTerminalShowing(output: string) {

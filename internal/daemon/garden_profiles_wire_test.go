@@ -3,11 +3,9 @@ package daemon_test
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
@@ -43,67 +41,19 @@ func TestProfileDeletionRefusesARunningGardenReview(t *testing.T) {
 	task.Fail("done checking deletion")
 }
 
-func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		home := app.SelectedProfile()
-		registerSessions(t, w, cli, "default-worker")
-		original := plantSeedAs(t, cli, "default-worker", "free worker in Default")
-		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
-		if _, err := editSeedBody(t, cli.WithGardenProfile("", "default-worker"), original, "legacy alias remains editable"); err != nil {
-			t.Fatal(err)
-		}
-		side := createProfile(app, "Side")
-		w.advance(time.Second)
-		selectProfile(app, side.ID)
-		registerSessions(t, w, cli, "side-worker")
-		other := plantSeedAs(t, cli, "side-worker", "free worker in Side")
-		lifeMove(t, cli, "side-worker", other, "tend", "", "keel")
-		lifeMove(t, cli, "side-worker", other, "harvest", "finished", "keel")
-
-		writeCrewHomeFile(t, w, "keel", crew.CharterFileName, "# Keel\n\nNow a registered member.\n")
-		w.restart()
-		cli = w.Client()
-		if err := w.InjectCrewSession("registered-keel", "Keel", w.Path("keel"), "keel"); err != nil {
-			t.Fatal(err)
-		}
-		homeApp := w.App()
-		w.advance(time.Second)
-		selectProfile(homeApp, home)
-		registerSessions(t, w, cli, "default-worker")
-		if _, err := editSeedBody(t, cli.WithGardenProfile("", "default-worker"), original, "the existing free claim stays editable after registration"); err != nil {
-			t.Fatal(err)
-		}
-		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
-		if _, err := cli.SeedNote("default-worker", original, "this belongs in Default", "", "", true, nil); err != nil {
-			t.Fatal(err)
-		}
-		w.advance(0)
-		if items := readInbox(t, cli, "registered-keel", 0).Items; len(items) != 0 {
-			t.Fatalf("a later foreign registration received the old alias's seed bell: %+v", items)
-		}
-		fresh := plantSeedAs(t, cli, "default-worker", "registered crew fence")
-		_, err := cli.SeedTransition("default-worker", fresh, "tend", "", "keel", false, client.SeedTransitionOptions{})
-		if err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
-			t.Fatalf("registered foreign member claim must name both profiles: %v", err)
-		}
-
-	})
-}
-
 func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		original := app.SelectedProfile()
 		registerSessions(t, w, cli, "default-worker")
-		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "", "", "", "")
+		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "side-worker")
-		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "", "", "", "")
+		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,7 +89,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 			{"watch", func() error { _, err := cross.SeedWatch("default-worker", b.Seed.ID, false); return err }},
 			{"show", func() error { _, err := cross.SeedShow("default-worker", b.Seed.ID); return err }},
 			{"tend", func() error {
-				_, err := cross.SeedTransition("default-worker", b.Seed.ID, "tend", "", "", true, client.SeedTransitionOptions{})
+				_, err := cross.SeedTransition("default-worker", b.Seed.ID, "tend", "", true, client.SeedTransitionOptions{})
 				return err
 			}},
 			{"edit", func() error {
@@ -149,11 +99,11 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 			{"rollback", func() error { _, err := cross.SeedRollback(b.Seed.ID, nil); return err }},
 			{"link", func() error { _, err := cross.SeedLink(a.Seed.ID, "blocks", b.Seed.ID, false); return err }},
 			{"note", func() error {
-				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", "", false, nil)
+				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", false, nil)
 				return err
 			}},
 			{"child", func() error {
-				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.Seed.ID, "", "")
+				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.Seed.ID, "")
 				return err
 			}},
 			{"delegate", func() error {
@@ -166,7 +116,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				name string
 				run  func() error
 			}{verb, func() error {
-				_, err := cross.SeedTransition("default-worker", b.Seed.ID, verb, "cross-profile transition", "", true, client.SeedTransitionOptions{})
+				_, err := cross.SeedTransition("default-worker", b.Seed.ID, verb, "cross-profile transition", true, client.SeedTransitionOptions{})
 				return err
 			}})
 		}
@@ -232,7 +182,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "1 open seeds") || !strings.Contains(protocol.Deref(refused.Error), "clean up") {
 			t.Fatalf("delete with open seed: %+v", refused)
 		}
-		child, err := cli.SeedPlant("side-worker", "completed archived child", "", seed, "", "")
+		child, err := cli.SeedPlant("side-worker", "completed archived child", "", seed, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +211,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if err != nil || len(listed.Seeds) != 0 {
 			t.Fatalf("closed archive leaked into live garden: %+v %v", listed, err)
 		}
-		if _, err := cli.SeedTransition("", seed, "replant", "", "", false, client.SeedTransitionOptions{}); err == nil {
+		if _, err := cli.SeedTransition("", seed, "replant", "", false, client.SeedTransitionOptions{}); err == nil {
 			t.Fatal("replanted work of a deleted profile")
 		}
 		if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Side") || !strings.Contains(protocol.Deref(resumed.Error), "Default") {

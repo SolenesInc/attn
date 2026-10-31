@@ -333,7 +333,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	t.Run("show leads with news and points at an older handoff; tend primes with it", func(t *testing.T) {
 		carried := plant(t, s, "Carry this", "-m", "the plan")
 		requireLines(t, "note", seedAs(t, s, "", "note", carried.ID, "-m", "ordinary progress"), "noted on "+carried.ID)
-		requireLines(t, "handoff", seedAs(t, s, "", "note", carried.ID, "-m", "first line\nsecond line\n", "--handoff", "--member", "keel"),
+		requireLines(t, "handoff", seedAs(t, s, "", "note", carried.ID, "-m", "first line\nsecond line\n", "--handoff"),
 			"handoff left on "+carried.ID+" — whoever tends it next reads this first")
 
 		exported := seedAs(t, s, "", "export", carried.ID, "--out", "-")
@@ -343,12 +343,12 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 
 		shown := seedAs(t, s, "", "show", carried.ID)
 		requireOrder(t, "show", shown, carried.ID+"  Carry this\n", "\nbookmark  attn seed show "+carried.ID+" --since ",
-			"  Keel  handoff\nfirst line\nsecond line\n", "ordinary progress", "\nthe plan\n")
+			"  the user  handoff\nfirst line\nsecond line\n", "ordinary progress", "\nthe plan\n")
 		if strings.Count(shown, "first line") != 1 || strings.Contains(shown, "--kind handoff") {
 			t.Errorf("show repeats a handoff that is among the newest entries:\n%s", shown)
 		}
 		notes := seedAs(t, s, "", "notes", carried.ID)
-		if !regexp.MustCompile(`(?m)^\S+ \S+  Keel  handoff$`).MatchString(notes) || !regexp.MustCompile(`(?m)^\S+ \S+  -$`).MatchString(notes) {
+		if !regexp.MustCompile(`(?m)^\S+ \S+  the user  handoff$`).MatchString(notes) || !regexp.MustCompile(`(?m)^\S+ \S+  the user$`).MatchString(notes) {
 			t.Errorf("notes must label the handoff and nothing else:\n%s", notes)
 		}
 
@@ -362,14 +362,14 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			t.Errorf("show prints a handoff older than its newest entries instead of pointing at it:\n%s", shown)
 		}
 
-		tended := seedAs(t, s, "", "tend", carried.ID, "--member", "alder")
-		if !strings.HasPrefix(tended, carried.ID+" ("+carried.StepSlug+") is growing, tended by Alder\n") || !strings.Contains(tended, "handoff — Keel, ") ||
+		tended := seedAs(t, s, "", "tend", carried.ID, "--for", "alder")
+		if !strings.HasPrefix(tended, carried.ID+" ("+carried.StepSlug+") is growing, tended by Alder\n") || !strings.Contains(tended, "handoff — the user, ") ||
 			!strings.Contains(tended, "  first line\n  second line\n") {
 			t.Errorf("tend does not confirm the claim and then print the handoff:\n%s", tended)
 		}
 
 		quiet := plant(t, s, "Quiet seed")
-		if out := seedAs(t, s, "", "show", quiet.ID) + seedAs(t, s, "", "tend", quiet.ID, "--member", "alder"); strings.Contains(out, "handoff") {
+		if out := seedAs(t, s, "", "show", quiet.ID) + seedAs(t, s, "", "tend", quiet.ID, "--for", "alder"); strings.Contains(out, "handoff") {
 			t.Errorf("a seed without a handoff mentions one:\n%s", out)
 		}
 	})
@@ -434,16 +434,16 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		scraped := seedAs(t, s, "", "harvest", scrape.ID, "-m", "scraped")
 		requireLines(t, "harvest", scraped, scrape.ID+" ("+scrape.StepSlug+") is harvested — scraped\n")
 		seedAs(t, s, "", "wither", prime.ID, "-m", "the paint primes itself")
-		seedAs(t, s, "", "tend", paint.ID, "--member", "alder")
-		tendedPlot := seedAs(t, s, "", "tend", house.Crown.ID, "--member", "alder")
+		seedAs(t, s, "", "tend", paint.ID, "--for", "alder")
+		tendedPlot := seedAs(t, s, "", "tend", house.Crown.ID, "--for", "alder")
 		for _, verb := range []string{"harvest", "wither"} {
-			refused := s.Attn("seed", verb, house.Crown.ID, "-m", "my part is done", "--member", "alder", "--force")
+			refused := s.Attn("seed", verb, house.Crown.ID, "-m", "my part is done", "--force")
 			if refused.Code != 1 || strings.Count(refused.Stderr, "\n") != 1 || !strings.Contains(refused.Stderr, paint.ID+" growing") || !strings.Contains(refused.Stderr, "attn seed replant "+house.Crown.ID) {
 				t.Fatalf("%s plot refusal = %+v", verb, refused)
 			}
 		}
-		seedAs(t, s, "", "replant", house.Crown.ID, "--member", "alder")
-		finished := seedAs(t, s, "", "harvest", paint.ID, "-m", "painted", "--member", "alder")
+		seedAs(t, s, "", "replant", house.Crown.ID, "--force")
+		finished := seedAs(t, s, "", "harvest", paint.ID, "-m", "painted", "--force")
 		requireLines(t, "last child", finished, house.Crown.ID+" ("+house.Crown.StepSlug+") has no open child seeds left and stays open: close it or plan its next step\n")
 		requireLines(t, "plot note", seedAs(t, s, "", "notes", house.Crown.ID), "All child seeds under "+house.Crown.ID+" are closed; the last, "+paint.ID)
 		closed := seedAs(t, s, "", "harvest", house.Crown.ID, "-m", "finished")
@@ -462,7 +462,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		pipe, water, wall := plant(t, s, "Lay the pipe"), plant(t, s, "Run water through it"), plant(t, s, "Paint the wall")
 		seedAs(t, s, "", "link", pipe.ID, "blocks", water.ID)
 		seedAs(t, s, "", "link", pipe.ID, "blocks", wall.ID)
-		seedAs(t, s, "", "tend", wall.ID, "--member", "trellis")
+		seedAs(t, s, "", "tend", wall.ID, "--for", "trellis")
 		laid := seedAs(t, s, "", "harvest", pipe.ID, "-m", "laid")
 		requireLines(t, "harvest", laid, "this unblocked 2 seed(s):\n", "`attn seed tend <id>` claims one\n", "rang trellis\n")
 		_, freed := lineOf(t, laid, "  "+water.ID)
@@ -472,7 +472,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 
 		fence, gate := plant(t, s, "Mend the fence"), plant(t, s, "Hang the gate")
 		seedAs(t, s, "", "link", fence.ID, "blocks", gate.ID)
-		seedAs(t, s, "", "tend", gate.ID, "--member", "trellis")
+		seedAs(t, s, "", "tend", gate.ID, "--for", "trellis")
 		withered := seedAs(t, s, "", "wither", fence.ID, "-m", "no fence after all")
 		requireLines(t, "wither", withered, "this unblocked 1 seed(s):\n", gate.ID)
 		if strings.Contains(withered, "claims one") {

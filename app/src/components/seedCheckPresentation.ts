@@ -1,5 +1,5 @@
-import type { Seed } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
+import type { ActorView, Seed } from '../types/generated';
+import { whoName, type SessionLabels } from './gardenBoardModel';
 
 export type SeedCheck = NonNullable<Seed['checks']>[number];
 export type SeedSharedCheck = NonNullable<Seed['shared_checks']>[number];
@@ -46,14 +46,9 @@ export function tallySentence(tally: SeedCheckTally): string {
   return parts.join(' · ');
 }
 
-export function checkAuthor(
-  by: { by_session?: string; by_member?: string },
-  sessionLabels?: ReadonlyMap<string, string>,
-): string {
-  if (by.by_member?.trim()) return crewDisplayName(by.by_member);
-  const session = by.by_session?.trim();
-  if (!session) return 'you';
-  return sessionLabels?.get(session)?.trim() || session.slice(0, 8);
+export function checkAuthor(by: ActorView, sessionLabels?: SessionLabels): string {
+  if (by.ref === 'user') return 'you';
+  return whoName(by, sessionLabels);
 }
 
 const PULL_REQUEST_URL = /^https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/;

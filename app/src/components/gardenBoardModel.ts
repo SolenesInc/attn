@@ -1,5 +1,4 @@
 import type { Seed } from '../hooks/useDaemonSocket';
-import { crewHolderName } from '../utils/crewName';
 
 export type ColumnKey = 'ready' | 'growing' | 'parked' | 'closed';
 
@@ -7,14 +6,21 @@ export type Verb = 'park' | 'harvest' | 'wither' | 'replant';
 
 const CLOSED = new Set(['harvested', 'withered']);
 
-export function tenderOf(seed: Seed): string {
-  return crewHolderName(seed.tender_member, seed.tender_session);
+export type SessionLabels = ReadonlyMap<string, string>;
+
+const SESSION_REF = 'session:';
+
+export function whoName(who: { ref: string; name: string }, sessionLabels?: SessionLabels): string {
+  const live = who.ref.startsWith(SESSION_REF) ? sessionLabels?.get(who.ref.slice(SESSION_REF.length))?.trim() : '';
+  return live || who.name.trim() || who.ref;
 }
 
-export function heldByOther(seed: Seed, liveSessions: Set<string>): string {
-  if (!seed.tender_session && !seed.tender_member) return '';
-  if (seed.tender_session && !liveSessions.has(seed.tender_session)) return '';
-  return tenderOf(seed);
+export function tenderOf(seed: Seed, sessionLabels?: SessionLabels): string {
+  return seed.tender ? whoName(seed.tender, sessionLabels) : '';
+}
+
+export function heldByOther(seed: Seed, sessionLabels?: SessionLabels): string {
+  return seed.claimed ? tenderOf(seed, sessionLabels) : '';
 }
 
 export function columnOf(seed: Seed): ColumnKey {

@@ -169,7 +169,7 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 			return nil, err
 		}
 		log, err := d.seedChangeLog(seedChange{
-			author: garden.Tender{Session: author, Member: d.resolveTenderMember("", author)}, cause: author,
+			author: d.actorOfSession(author), cause: author,
 			events: []seedEvent{{occurrence: edited, detail: detail}},
 		})
 		if err != nil {

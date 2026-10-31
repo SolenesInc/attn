@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
@@ -13,6 +12,7 @@ import (
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedEvent struct {
@@ -29,7 +29,7 @@ func plainSeedEvents(occurrences ...seedEvents.Occurrence) []seedEvent {
 }
 
 type seedChange struct {
-	author  garden.Tender
+	author  who.Actor
 	cause   protocol.SessionID
 	born    []string
 	events  []seedEvent
@@ -68,7 +68,7 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 			entries = append(entries, seedMoveNote{
 				Note: garden.Note{
 					Seed: entry.Seed, Kind: entry.Kind, Body: entry.Body,
-					AuthorSession: protocol.TrimID(change.author.Session), AuthorMember: strings.TrimSpace(change.author.Member),
+					Author: change.author,
 				},
 				CausedBySessionID: change.cause,
 			})
@@ -126,10 +126,10 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 	return log, nil
 }
 
-func (l seedChangeLog) wireEntries(now time.Time) []protocol.SeedNote {
+func (d *Daemon) seedChangeLogWire(l seedChangeLog, now time.Time) []protocol.SeedNote {
 	wire := make([]protocol.SeedNote, len(l.entries))
 	for i, entry := range l.entries {
-		wire[i] = noteToProtocol(entry, docstore.Document{CreatedAt: now})
+		wire[i] = d.noteToProtocol(entry, docstore.Document{CreatedAt: now})
 	}
 	return wire
 }
@@ -189,7 +189,7 @@ func (d *Daemon) writeSeedChangeProtected(
 		if readErr != nil || !found {
 			seedDoc = &docstore.Document{ID: seed.ID, Body: seedBody, Rev: written[0].Rev, CreatedAt: now, UpdatedAt: now}
 		}
-		return *seedDoc, log.wireEntries(now), nil
+		return *seedDoc, d.seedChangeLogWire(log, now), nil
 	}
 	return docstore.Document{}, nil, fmt.Errorf(
 		"minted %d note ids and every one was taken, which a working random source does not do: %v", mintAttempts, lastErr)

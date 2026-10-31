@@ -1,5 +1,6 @@
 import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
+import type { ActorView } from '../types/generated';
 
 /** Daemon-owned setting selecting the sidebar arrangement. Always read through
  * isQueueModeEnabled so no surface disagrees. */
@@ -61,7 +62,7 @@ export interface QueueBandSession extends DesktopViewSession {
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   automation?: { definition_id: number };
 }
 

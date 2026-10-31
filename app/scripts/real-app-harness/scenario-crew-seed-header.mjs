@@ -45,7 +45,7 @@ async function main() {
   };
   const settleSeeds = () => {
     for (const id of unsettledSeeds) {
-      run(['seed', 'wither', id, '--member', member, '-m', 'Harness fixture cleanup']);
+      run(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
       unsettledSeeds.delete(id);
     }
   };
@@ -111,11 +111,11 @@ async function main() {
     unsettledSeeds.add(second);
     await runner.step('show_member_claims_in_the_existing_header_and_popover', async () => {
       await header(sessionId, null);
-      run(['seed', 'tend', first, '--member', member]);
+      run(['seed', 'tend', first, '--session', sessionId]);
       const single = await header(sessionId, 'Review release notes');
       runner.assert(single.id === first && single.status === 'growing', 'member claim uses the seed-state header', single);
       await capture('one-member-claim', sessionId);
-      run(['seed', 'tend', second, '--member', member]);
+      run(['seed', 'tend', second, '--session', sessionId]);
       await header(sessionId, 'tending 2');
       await client.request('dom_click', { selector: `[data-testid="seed-chip-${sessionId}"]` });
       const popover = await client.request('dom_text', { selector: '.tended-seeds-popover' });
@@ -123,7 +123,7 @@ async function main() {
         'both member claims appear in the existing popover', popover);
       if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1800);
       await client.request('dom_key', { selector: '.tended-seeds-popover', key: 'Escape' });
-      run(['seed', 'park', second, '--member', member]);
+      run(['seed', 'park', second, '--session', sessionId]);
       await header(sessionId, 'Review release notes');
     });
     await runner.step('retain_the_member_claim_across_sessions_and_open_it', async () => {
@@ -142,10 +142,10 @@ async function main() {
       const before = metrics();
       await delay(3000);
       runner.writeText('idle-app.txt', `CPU% RSS(KiB)\nbefore ${before}\nafter ${metrics()}\n`);
-      run(['seed', 'harvest', first, '--member', member, '-m', 'Header behavior verified']);
+      run(['seed', 'harvest', first, '--session', next, '-m', 'Header behavior verified']);
       unsettledSeeds.delete(first);
       await header(next, null);
-      run(['seed', 'tend', second, '--member', member]);
+      run(['seed', 'tend', second, '--session', next]);
       await header(next, 'Verify upload completion');
       await client.request('dom_focus', { selector: `[data-testid="seed-chip-${next}"]` });
       await driver.pressEnter();

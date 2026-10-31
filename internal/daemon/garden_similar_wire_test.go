@@ -16,7 +16,7 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 		planter := w.Spawn(app, fakeagent.Claude, w.Path("planter"))
 		defer closeSessions(t, app, planter)
 		parent := plantSeedAs(t, cli, planter, "Callout wire test races app disconnect")
-		original, err := cli.SeedPlant(protocol.SessionID(planter), "Callout wire test races app disconnect", "", parent, "", "")
+		original, err := cli.SeedPlant(protocol.SessionID(planter), "Callout wire test races app disconnect", "", parent, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +34,7 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 		defer closeSessions(t, sideApp, other)
 		foreign := plantSeedAs(t, cli, other, "Callout wire test races app disconnect")
 		selectProfile(app, home)
-		planted, err := cli.SeedPlant(protocol.SessionID(planter), "Callouts wire test races the app disconnect", "", parent, "", "")
+		planted, err := cli.SeedPlant(protocol.SessionID(planter), "Callouts wire test races the app disconnect", "", parent, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +50,7 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 			}
 		}
 		for _, title := range []string{"zygomorphicquasar", "!!!"} {
-			unrelated, err := cli.SeedPlant(protocol.SessionID(planter), title, "", "", "", "")
+			unrelated, err := cli.SeedPlant(protocol.SessionID(planter), title, "", "", "")
 			if err != nil || len(unrelated.Similar) != 0 {
 				t.Fatalf("no matches: %+v, %v", unrelated, err)
 			}
@@ -67,7 +67,7 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 		second := plantSeedAs(t, cli, planter, "cobalt worker")
 		third := plantSeedAs(t, cli, planter, "zephyr browser")
 		fourth := plantSeedAs(t, cli, planter, "quartz")
-		planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
+		planted, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{
 			Title: "quartz archive", Children: []protocol.SeedPlotChild{
 				{Title: "cobalt worker"}, {Title: "zephyr browser"}, {Title: "quartz archive followup"},
 			},
@@ -97,7 +97,7 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 				t.Errorf("plot suggests its own seed %s", id)
 			}
 		}
-		dedup, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{Title: "cobalt worker", Children: []protocol.SeedPlotChild{{Title: "cobalt worker followup"}}})
+		dedup, err := cli.SeedPlot(protocol.SessionID(planter), protocol.SeedPlotMessage{Title: "cobalt worker", Children: []protocol.SeedPlotChild{{Title: "cobalt worker followup"}}})
 		if err != nil {
 			t.Fatal(err)
 		}

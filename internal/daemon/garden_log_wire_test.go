@@ -92,9 +92,9 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 	log.expect("attach the pull request", wantEntry{blocked, "attach", "attached " + url, worker})
 	move(blocked, "tend", "")
 	log.expect("tend the blocked seed", wantEntry{blocked, "move", "tended", worker})
-	harvestArmAs(t, cli, worker, "", blocked, url)
+	harvestArm(t, cli, worker, blocked, url)
 	log.expect("harvest --when-merged arming", wantEntry{blocked, "move", "parked; harvests when acme/shop#71 merges", worker})
-	if _, err := cli.SeedTransition(protocol.SessionID(worker), blocked, "harvest", "", "", false, client.SeedTransitionOptions{ClearHarvestWhen: true}); err != nil {
+	if _, err := cli.SeedTransition(protocol.SessionID(worker), blocked, "harvest", "", false, client.SeedTransitionOptions{ClearHarvestWhen: true}); err != nil {
 		t.Fatal(err)
 	}
 	log.expect("harvest --when-merged clearing", wantEntry{blocked, "move", "harvest-on-merge cleared", worker})
@@ -114,11 +114,11 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 	}
 	answerCacheAsk(t, app, asked.ID)
 	answer := log.expectOne("an ask answer", blocked)
-	if answer.Kind != "answer" || answer.AuthorSession != "" || !strings.HasPrefix(answer.Body, "🙋 The user answered") {
+	if answer.Kind != "answer" || authorSessionOf(answer) != "" || !strings.HasPrefix(answer.Body, "🙋 The user answered") {
 		t.Errorf("the answer entry = %+v, want an authorless answer", answer)
 	}
 
-	child, err := cli.SeedPlant(protocol.SessionID(worker), "a new part", "", plot, "", "")
+	child, err := cli.SeedPlant(protocol.SessionID(worker), "a new part", "", plot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 		t.Errorf("the planted child's log = %q, want it empty", notes)
 	}
 
-	fresh, err := cli.SeedPlot(protocol.SessionID(worker), "", protocol.SeedPlotMessage{
+	fresh, err := cli.SeedPlot(protocol.SessionID(worker), protocol.SeedPlotMessage{
 		Title: "a fresh plot", PartOf: protocol.Ptr(plot), DiscoveredFrom: protocol.Ptr(origin),
 		Children: []protocol.SeedPlotChild{{Title: "first step"}, {Title: "second step", After: []string{"first step"}}},
 	})
@@ -198,7 +198,7 @@ func (p *seedLogProbe) expect(change string, want ...wantEntry) {
 	added := p.fresh()
 	got := make([]wantEntry, len(added))
 	for i, note := range added {
-		got[i] = wantEntry{note.SeedID, note.Kind, note.Body, string(note.AuthorSession)}
+		got[i] = wantEntry{note.SeedID, note.Kind, note.Body, string(authorSessionOf(note))}
 		if n := p.noteAddedEvents(note.ID); n != 1 {
 			p.t.Errorf("%s: entry %s (%q) has %d NoteAdded events, want one", change, note.ID, note.Body, n)
 		}

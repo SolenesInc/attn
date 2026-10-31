@@ -113,37 +113,17 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	if err != nil {
 		return err
 	}
-	var previous, previousMember string
-	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id'), coalesce(json_extract(body, '$.tender_member'), '') FROM `+table+` WHERE id = ?`, id).Scan(&previous, &previousMember)
+	var previous, previousTender string
+	err = q.QueryRow(`SELECT json_extract(body, '$.profile_id'), coalesce(json_extract(body, '$.tender'), '') FROM `+table+` WHERE id = ?`, id).Scan(&previous, &previousTender)
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
 	if err == nil && previous != seed.ProfileID {
 		return fmt.Errorf("seed %s belongs to profile %s for life; cannot move it to profile %q", id, previous, owner.Name)
 	}
-	for _, sessionID := range []protocol.SessionID{seed.TenderSession} {
-		if sessionID == "" {
-			continue
-		}
+	if sessionID, ok := seed.Tender.Session(); ok {
 		var profileID string
 		err := q.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, sessionID).Scan(&profileID)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if profileID != seed.ProfileID {
-			caller, err := loadProfile(q, profileID)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %q", id, owner.Name, sessionID, caller.Name)
-		}
-	}
-	if seed.TenderMember != "" && seed.TenderMember != previousMember {
-		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key = ?`, seed.TenderMember).Scan(&profileID)
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}
@@ -152,7 +132,21 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("seed %s belongs to profile %q; crew member %s belongs to profile %q", id, owner.Name, seed.TenderMember, caller.Name)
+			return fmt.Errorf("seed %s belongs to profile %q; tender %s belongs to profile %q", id, owner.Name, sessionID, caller.Name)
+		}
+	}
+	if key, ok := seed.Tender.Member(); ok && seed.Tender.String() != previousTender {
+		var profileID string
+		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key = ?`, key.String()).Scan(&profileID)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if err == nil && profileID != seed.ProfileID {
+			caller, err := loadProfile(q, profileID)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("seed %s belongs to profile %q; crew member %s belongs to profile %q", id, owner.Name, key, caller.Name)
 		}
 	}
 	for _, edge := range seed.Edges {

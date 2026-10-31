@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -24,12 +25,16 @@ func TestAnswerUpgradeGivesAskAnswersTheirOwnKind(t *testing.T) {
 	schema := *declared
 	notes := map[string]garden.Note{
 		"n-answer": {ID: "n-answer", Seed: "s-aaaaaa", Kind: garden.NoteKindNote, Body: "🙋 The user answered the ask \"Cache\" (a-111111).\n\nAnswer: Postgres"},
-		"n-quoted": {ID: "n-quoted", Seed: "s-aaaaaa", Kind: garden.NoteKindNote, Body: "🙋 The user answered the ask \"Cache\" (a-111111).", AuthorSession: "agent"},
+		"n-quoted": {ID: "n-quoted", Seed: "s-aaaaaa", Kind: garden.NoteKindNote, Body: "🙋 The user answered the ask \"Cache\" (a-111111)."},
 		"n-system": {ID: "n-system", Seed: "s-aaaaaa", Kind: garden.NoteKindNote, Body: "The worktree was swept."},
 	}
 	revs := map[string]int64{}
 	for id, note := range notes {
-		body, err := note.Encode()
+		legacy := map[string]any{"id": note.ID, "seed": note.Seed, "kind": note.Kind, "body": note.Body}
+		if id == "n-quoted" {
+			legacy["author_session"] = "agent"
+		}
+		body, err := json.Marshal(legacy)
 		if err != nil {
 			t.Fatal(err)
 		}

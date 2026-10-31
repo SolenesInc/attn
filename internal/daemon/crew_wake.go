@@ -109,7 +109,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		AwarenessDirs: member.AwarenessDirs,
 		V2Enabled:     d.crewV2Enabled(),
 	}
-	d.primeCrewGarden(&priming, member.ID)
+	d.primeCrewGarden(&priming, member)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
@@ -154,14 +154,14 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	return priming, nil
 }
 
-func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
-	read, err := d.readGarden(d.crewProfileID(memberID))
+func (d *Daemon) primeCrewGarden(priming *crew.Priming, member crew.Member) {
+	read, err := d.readGarden(member.ProfileID)
 	if err != nil {
-		d.logf("crew: reading the garden to prime %s: %v", memberID, err)
+		d.logf("crew: reading the garden to prime %s: %v", member.ID, err)
 		return
 	}
 	priming.GardenRead = true
-	held := garden.Held(read.seeds, memberID)
+	held := garden.Held(read.seeds, member.Key)
 	priming.HeldTotal = len(held)
 	if len(held) > crew.MaxHeldSeeds {
 		held = held[:crew.MaxHeldSeeds]

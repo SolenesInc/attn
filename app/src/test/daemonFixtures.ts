@@ -121,10 +121,8 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
     body: '',
     status: 'growing',
     step_slug: id,
-    planter_session: '',
-    planter_member: '',
-    tender_session: '',
-    tender_member: '',
+    planter: USER_ACTOR,
+    claimed: false,
     edges: [],
     template: false,
     gate: false,
@@ -140,13 +138,44 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
 }
 
 export function seedDocument(seed: DaemonSeed, overrides: Partial<DaemonSeedDocument> = {}): DaemonSeedDocument {
-  return { seed, artifacts: [], references: [], children: [], notes: [], notes_total: 0, tender_holds: false, ...overrides };
+  return { seed, artifacts: [], references: [], children: [], notes: [], notes_total: 0, ...overrides };
+}
+
+export type DaemonActor = DaemonSeed['planter'];
+type DaemonClaim = Pick<DaemonSeed, 'tender' | 'claimed'>;
+
+export const USER_ACTOR: DaemonActor = { ref: 'user', name: 'the user' };
+
+function memberName(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+export function memberActor(key: string): DaemonActor {
+  return { ref: `member:${key}`, name: memberName(key) };
+}
+
+export function sessionActor(sessionId: string, name = sessionId): DaemonActor {
+  return { ref: `session:${sessionId}`, name };
+}
+
+export function memberClaim(key: string, awakeSessionId?: string): DaemonClaim {
+  return {
+    tender: { ref: `member:${key}`, name: memberName(key), ...(awakeSessionId ? { session_id: awakeSessionId } : {}) },
+    claimed: true,
+  };
+}
+
+export function sessionClaim(sessionId: string, { live = true, name = sessionId }: { live?: boolean; name?: string } = {}): DaemonClaim {
+  return {
+    tender: { ref: `session:${sessionId}`, name, ...(live ? { session_id: sessionId } : {}) },
+    claimed: live,
+  };
 }
 
 export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}): DaemonCrewMember {
   return {
     id,
-    name: id.charAt(0).toUpperCase() + id.slice(1),
+    name: memberName(id),
     revision: 1,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,

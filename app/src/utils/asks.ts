@@ -1,6 +1,6 @@
 import type { Ask, AskAnswer, AskQuestion, Seed } from '../types/generated';
 import type { AskDraft } from '../store/asks';
-import { crewDisplayName } from './crewName';
+import { crewDisplayName, crewRef } from './crewName';
 
 export const ASKS_SETTING = 'asks_enabled';
 
@@ -20,8 +20,10 @@ export interface AskHolderSession {
 function tendsSeed(session: AskHolderSession, seedId: string, seeds: readonly Seed[]): boolean {
   const seed = seeds.find((candidate) => candidate.id === seedId);
   if (!seed) return session.seedId === seedId;
-  if (seed.tender_member) return session.crewMember === seed.tender_member;
-  return seed.tender_session !== '' && session.id === seed.tender_session;
+  const tender = seed.tender;
+  if (!tender) return false;
+  if (session.crewMember && tender.ref === crewRef(session.crewMember)) return true;
+  return Boolean(session.id) && tender.session_id === session.id;
 }
 
 export function askBelongsTo(ask: Ask, session: AskHolderSession, seeds: readonly Seed[]): boolean {

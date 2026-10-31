@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { gardenRegion, openGarden, openRow, partOf, planted, plot } from './test/garden';
+import { memberClaim } from './test/daemonFixtures';
 import { gesture } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -8,7 +9,7 @@ const shipIt = plot('s-crown1', 'ship the search', '', { total: 3, done: 1, read
 const wiring = partOf('s-crown1', 's-wire01', 'wire the field', { body: 'the input is a line of type, not a box' });
 const ranking = partOf('s-crown1', 's-rank01', 'rank the answers', { ready: true });
 const shipped = partOf('s-crown1', 's-done01', 'draw the field', { status: 'harvested' });
-const elsewhere = planted('s-else01', 'unrelated field work', { tender_member: 'hazel' });
+const elsewhere = planted('s-else01', 'unrelated field work', { ...memberClaim('hazel') });
 const dropped = planted('s-drop01', 'a dropped idea', { status: 'withered' });
 const garden = [shipIt, wiring, ranking, shipped, elsewhere, dropped];
 

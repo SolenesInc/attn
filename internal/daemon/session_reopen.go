@@ -32,7 +32,7 @@ type branchInspection struct {
 type sessionReopenVerdict struct {
 	SessionID      protocol.SessionID
 	Entry          *protocol.SessionLedgerEntry
-	Execution      garden.Dispatch
+	Execution      garden.Execution
 	Resume         string
 	Live           bool
 	Reopenable     bool
@@ -98,7 +98,7 @@ func (v *sessionReopenVerdict) machineTarget() protocol.ReopenTarget {
 	}
 }
 
-func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
+func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Execution {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
 	if execution.Cwd == "" {
@@ -245,7 +245,7 @@ func (d *Daemon) branchMerged(sessionID protocol.SessionID, branch string) bool 
 	return false
 }
 
-func (d *Daemon) reopenConversation(execution garden.Dispatch, resumeID string, directoryMissing bool) (bool, string) {
+func (d *Daemon) reopenConversation(execution garden.Execution, resumeID string, directoryMissing bool) (bool, string) {
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
 	}
@@ -420,7 +420,7 @@ func (d *Daemon) performReopenLocked(
 	}, nil
 }
 
-func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) string {
+func reopenDirectoryInsideWorktree(worktree string, execution garden.Execution) string {
 	subdir := strings.TrimSpace(execution.RepositorySubdir)
 	if subdir == "" || subdir == "." {
 		return worktree

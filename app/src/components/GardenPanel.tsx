@@ -4,7 +4,6 @@ import { gardenPathToSeed, gardenScrollMemory, seedParentID, useGardenWalk } fro
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
-import { crewDisplayName } from '../utils/crewName';
 import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   IS_VALUES,
@@ -18,6 +17,7 @@ import {
   type SearchEntry,
   type SeedMatch,
 } from './gardenSearch';
+import { tenderOf, whoName } from './gardenBoardModel';
 import { HarvestWhenLine } from './HarvestWhenLine';
 import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
@@ -127,8 +127,6 @@ async function runContinuation(
   await onSendSeedToChief({
     seedId: document.seed.id,
     expectedRev: document.seed.rev,
-    expectedTenderSession: document.seed.tender_session,
-    expectedTenderMember: document.seed.tender_member,
     guidance: draft.text,
   });
 }
@@ -231,12 +229,6 @@ function crownOf(seed: Seed): string {
 
 function isPlot(seed: Seed): boolean {
   return Boolean(seed.plot_progress);
-}
-
-function tenderOf(seed: Seed, sessionLabels?: ReadonlyMap<string, string>): string {
-  if (seed.tender_member.trim()) return crewDisplayName(seed.tender_member);
-  if (!seed.tender_session.trim()) return '';
-  return sessionLabels?.get(seed.tender_session)?.trim() || 'session';
 }
 
 interface Relation {
@@ -401,7 +393,7 @@ function SeedRow({
           <span className="garden-row__meta">
             <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
             {tender && (
-              <span className="garden-row__tender" title={seed.tender_session || undefined}>
+              <span className="garden-row__tender" title={seed.tender?.ref}>
                 tended by {tender}
               </span>
             )}
@@ -1234,11 +1226,11 @@ export function GardenPanel({
           </span>
           <HarvestWhenLine condition={here.harvest_when} />
           {tenderOf(here, tenderSessionLabels) && (
-            <span title={here.tender_session || undefined}>
+            <span title={here.tender?.ref}>
               tended by {tenderOf(here, tenderSessionLabels)}
             </span>
           )}
-          {here.planter_member && <span>by {crewDisplayName(here.planter_member)}</span>}
+          {here.planter.ref.startsWith('member:') && <span>by {here.planter.name}</span>}
           {!isPlot(here) && hereTally && <CheckTallyLink tally={hereTally} target={checksRef} />}
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
@@ -1348,7 +1340,7 @@ export function GardenPanel({
               {spoken.map((note) => (
                 <li key={note.id} data-kind={note.kind} className={note.kind === 'handoff' ? 'is-handoff' : ''}>
                   <div className="garden-log__head">
-                    <span className="garden-log__who">{note.author_member || note.author_session || '—'}</span>
+                    <span className="garden-log__who">{whoName(note.author, tenderSessionLabels)}</span>
                     {note.kind !== 'note' && <span className="garden-log__kind">{note.kind}</span>}
                     <time dateTime={note.created_at} title={formatTimestamp(note.created_at)}>
                       {formatPlantedAt(note.created_at)}

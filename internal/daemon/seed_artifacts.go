@@ -1038,7 +1038,7 @@ func (d *Daemon) detachLegacyArtifactReference(seedID string, authorSession prot
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {
-			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy, false, authorSession)
+			_, err := d.appendSeedNote(seedID, "", d.actorOfSession(authorSession), garden.NoteKindDetach, &legacy, false, authorSession)
 			return err
 		}
 	}

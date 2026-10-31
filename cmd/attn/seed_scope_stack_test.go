@@ -97,7 +97,7 @@ func TestAnExplicitProfileSelectsUnresolvedCodexReadsAndASessionRecoversWrites(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Recovered writer" || string(notes.Notes[0].AuthorSession) != parent {
+	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Recovered writer" || string(stackAuthorSession(notes.Notes[0])) != parent {
 		t.Errorf("recovered write: %+v", notes.Notes)
 	}
 }

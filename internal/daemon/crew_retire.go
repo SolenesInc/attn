@@ -90,15 +90,14 @@ func (d *Daemon) releaseRetiredClaims(member crew.Member) ([]string, error) {
 		return nil, err
 	}
 	released := []string{}
-	attn := garden.Tender{Member: crew.DaemonID}
-	for _, seed := range garden.Held(read.seeds, member.ID) {
+	for _, seed := range garden.Held(read.seeds, member.Key) {
 		if seed.Status != garden.StatusGrowing {
 			continue
 		}
-		if _, _, err := d.applySeedTransition(seed.ID, garden.VerbReplant, garden.Ask{Actor: attn, Force: true}); err != nil {
+		if _, _, err := d.applySeedTransition(seed.ID, garden.VerbReplant, garden.Ask{Actor: who.Attn(), Force: true}); err != nil {
 			return released, fmt.Errorf("release %s: %w", seed.ID, err)
 		}
-		if _, err := d.appendSeedNote(seed.ID, fmt.Sprintf("%s was retired, so attn released their claim.", member.Name), "", crew.DaemonID, "", nil, false, ""); err != nil {
+		if _, err := d.appendSeedNote(seed.ID, fmt.Sprintf("%s was retired, so attn released their claim.", member.Name), who.Attn(), "", nil, false, ""); err != nil {
 			return released, fmt.Errorf("note the release of %s: %w", seed.ID, err)
 		}
 		released = append(released, seed.ID)

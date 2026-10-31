@@ -103,15 +103,14 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
 	}
-	if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev ||
-		seed.TenderSession != protocol.TrimID(msg.ExpectedTenderSession) ||
-		seed.TenderMember != strings.TrimSpace(msg.ExpectedTenderMember) {
+	if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev {
 		return nil, fmt.Errorf("%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
 	}
 	unclaimed := seed
-	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
+	unclaimed.Tender = who.Party{}
+	chief := d.partyOfSession(chiefSessionID)
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: chiefSessionID},
+		Actor: chief.Actor(), Claimant: chief,
 	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
 	if err != nil {
 		return nil, err
@@ -136,11 +135,11 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	}
 	d.lockGardenRoles()
 	written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{
-		author: garden.Tender{Session: cause, Member: d.resolveTenderMember("", cause)}, cause: cause,
+		author: d.actorOfSession(cause), cause: cause,
 		events: []seedEvent{{occurrence: tended, detail: "sent to the chief"}},
 		entries: []seedMoveNote{{Note: garden.Note{
 			Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
-			AuthorSession: cause,
+			Author: d.actorOfSession(cause),
 		}}},
 	})
 	if err == nil {

@@ -56,16 +56,16 @@ func addGardenSession(t *testing.T, d *Daemon, id string) {
 	})
 }
 
-func move(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, member string) protocol.Seed {
+func move(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, assignee string) protocol.Seed {
 	t.Helper()
-	resp := transition(t, d, session, seedID, verb, reason, member)
+	resp := transition(t, d, session, seedID, verb, reason, assignee)
 	if !resp.Ok {
 		t.Fatalf("%s %s: %v", verb, seedID, protocol.Deref(resp.Error))
 	}
 	return resp.SeedTransitionResult.Seed
 }
 
-func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, member string) protocol.Response {
+func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Verb, reason, assignee string) protocol.Response {
 	t.Helper()
 	msg := protocol.SeedTransitionMessage{
 		Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: string(verb),
@@ -76,8 +76,8 @@ func transition(t *testing.T, d *Daemon, session, seedID string, verb garden.Ver
 	if reason != "" {
 		msg.Reason = protocol.Ptr(reason)
 	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
+	if assignee != "" {
+		msg.Assignee = protocol.Ptr(assignee)
 	}
 	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
 }

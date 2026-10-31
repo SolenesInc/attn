@@ -209,9 +209,12 @@ func (d *Daemon) seedBirthProfile(seed garden.Seed) (string, error) {
 	if seed.ProfileID != "" {
 		return seed.ProfileID, nil
 	}
-	sessionID := seed.PlanterSession
+	var sessionID protocol.SessionID
+	if planter, ok := seed.Planter.Party(); ok {
+		sessionID, _ = planter.Session()
+	}
 	if sessionID == "" {
-		sessionID = seed.TenderSession
+		sessionID, _ = seed.Tender.Session()
 	}
 	profile, err := d.resolveGardenProfile(sessionID, "", "")
 	if err != nil {

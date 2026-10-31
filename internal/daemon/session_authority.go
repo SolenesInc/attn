@@ -21,7 +21,7 @@ func (d *Daemon) mayActOnSession(callerID protocol.SessionID, target *protocol.S
 	seen := map[protocol.SessionID]bool{}
 	for id := target.ID; !seen[id]; {
 		seen[id] = true
-		dispatcher, ok := d.liveSessionForTender(dispatchers[id])
+		dispatcher, ok := d.sessionOfActor(dispatchers[id])
 		if !ok {
 			break
 		}

@@ -70,7 +70,7 @@ func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMess
 		return seedCheckOutcome{}, err
 	}
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember(protocol.Deref(msg.Member), sessionID)}
+	actor := d.actorOfSession(sessionID)
 	move := garden.CheckMove{
 		Verb: verb, CheckID: strings.TrimSpace(protocol.Deref(msg.CheckID)), Text: protocol.Deref(msg.Text), Shared: protocol.Deref(msg.Shared),
 		Summary: protocol.Deref(msg.Summary), Evidence: msg.Evidence, Commit: protocol.Deref(msg.Commit),
@@ -313,13 +313,12 @@ func (d *Daemon) seedOccurrenceRecipients(occurrences ...seedEvents.Occurrence) 
 	return out, nil
 }
 
-func checkNoteInboxText(note garden.Note) string {
-	by := note.AuthorMember
-	if by == "" {
-		by = shortSessionID(note.AuthorSession)
-	}
-	if by == "" {
-		by = "the attn app"
+func (d *Daemon) checkNoteInboxText(note garden.Note) string {
+	by := d.actorName(note.Author)
+	if p, ok := note.Author.Party(); ok {
+		if id, session := p.Session(); session {
+			by = shortSessionID(id)
+		}
 	}
 	return fmt.Sprintf("check %s by %s", garden.CheckNoteHeadline(note.Body), by)
 }
@@ -333,7 +332,7 @@ func (g gardenRead) checks(id string) []protocol.SeedCheck {
 	for _, check := range effective {
 		wire := protocol.SeedCheck{
 			ID: check.ID, Text: check.Text, Removed: check.Removed, State: string(check.Result.State()),
-			Report: checkReportToProtocol(check.Result.Report), Verdict: checkVerdictToProtocol(check.Result.Verdict),
+			Report: g.daemon.checkReportToProtocol(check.Result.Report), Verdict: g.daemon.checkVerdictToProtocol(check.Result.Verdict),
 		}
 		if check.From != "" {
 			wire.From = protocol.Ptr(check.From)
@@ -375,7 +374,7 @@ func (g gardenRead) sharedChecks(id string) []protocol.SeedSharedCheck {
 	return out
 }
 
-func checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport {
+func (d *Daemon) checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport {
 	if report == nil {
 		return nil
 	}
@@ -403,16 +402,11 @@ func checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport
 	if report.Detail {
 		wire.Detail = protocol.Ptr(true)
 	}
-	if report.BySession != "" {
-		wire.BySession = protocol.Ptr(report.BySession)
-	}
-	if report.ByMember != "" {
-		wire.ByMember = protocol.Ptr(report.ByMember)
-	}
+	wire.By = d.actorView(report.By)
 	return wire
 }
 
-func checkVerdictToProtocol(verdict *garden.CheckVerdict) *protocol.SeedCheckVerdict {
+func (d *Daemon) checkVerdictToProtocol(verdict *garden.CheckVerdict) *protocol.SeedCheckVerdict {
 	if verdict == nil {
 		return nil
 	}
@@ -420,12 +414,7 @@ func checkVerdictToProtocol(verdict *garden.CheckVerdict) *protocol.SeedCheckVer
 	if verdict.Reason != "" {
 		wire.Reason = protocol.Ptr(verdict.Reason)
 	}
-	if verdict.BySession != "" {
-		wire.BySession = protocol.Ptr(verdict.BySession)
-	}
-	if verdict.ByMember != "" {
-		wire.ByMember = protocol.Ptr(verdict.ByMember)
-	}
+	wire.By = d.actorView(verdict.By)
 	return wire
 }
 

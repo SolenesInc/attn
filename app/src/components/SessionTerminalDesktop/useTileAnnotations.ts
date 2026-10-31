@@ -39,8 +39,8 @@ export function useTileAnnotations({
   boundSessionIdInput,
   onRetargetTile,
 }: Options) {
-  const seedTenderSessionId = seedDocument?.tender_holds
-    ? seedDocument.seed.tender_session.trim()
+  const seedTenderSessionId = seedDocument?.seed.claimed
+    ? seedDocument.seed.tender?.session_id ?? ''
     : '';
   const annotationsSendRef = useRef<MarkdownAnnotationsSendHandle | null>(null);
   const [annotationCount, setAnnotationCount] = useState(0);

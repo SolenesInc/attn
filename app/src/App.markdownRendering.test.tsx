@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { invoke } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
 import { openMarkdownTiles, openTiles } from './test/appFixtures';
-import { daemonSeed, seedDocument, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, memberActor, seedDocument, type DaemonSeedDocument } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture } from './test/renderApp';
 
@@ -69,7 +69,7 @@ describe('App markdown rendering', () => {
   it('keeps a single newline as a line break in a seed’s log note', async () => {
     const { reader } = await openSeed('', {
       document: () => ({
-        notes: [{ id: 'n1', seed_id: SEED_ID, kind: 'note', author_member: 'ana', author_session: '', body: 'first line\nsecond line', created_at: '2026-01-01T00:00:00Z' }],
+        notes: [{ id: 'n1', seed_id: SEED_ID, kind: 'note', author: memberActor('ana'), body: 'first line\nsecond line', created_at: '2026-01-01T00:00:00Z' }],
         notes_total: 1,
       }),
     });
