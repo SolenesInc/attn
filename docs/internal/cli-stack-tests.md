@@ -24,7 +24,12 @@ returns `testworld.Main(m)`.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
-  `Start` recovers from the state the real daemon left behind.
+  `Start` recovers from the state the real daemon left behind. The crash is
+  immediate unless the test also arms `s.PauseAt(point)` with the same name
+  before starting: then the daemon holds at the crash point and dies only once
+  the test releases it, so the test can first let a request still in flight,
+  such as a hook waiting for its reply, get its answer. `AwaitCrash` never
+  releases that hold. A later `Start` without the crash does not stop there.
 - The world helpers from daemon wire tests work here too.
 - `s.Attn(args...)` runs a CLI command to completion. `s.Run` takes an
   `Invocation` when the command needs stdin, a session, extra env, or another

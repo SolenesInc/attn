@@ -13,10 +13,16 @@ import (
 
 const codexStuckOnAModal = "A new version of Codex is available. Press enter to continue"
 
-func codexAutomationStack(t *testing.T, vars ...string) *testworld.Stack {
+func codexAutomationStack(t *testing.T) *testworld.Stack {
 	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	s.StartWith(vars...)
+	s.Start()
+	applyCodexAutomation(t, s)
+	return s
+}
+
+func applyCodexAutomation(t *testing.T, s *testworld.Stack) {
+	t.Helper()
 	if err := os.MkdirAll(s.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +33,6 @@ prompt: Check the code.
 launch: {driver: codex}
 location: {type: directory, path: %q}
 `, s.Path("check")))
-	return s
 }
 
 func awaitStackRun(t *testing.T, s *testworld.Stack, app *testworld.Peer, runID string, done func(protocol.AutomationRunSummary) bool) protocol.AutomationRunSummary {
@@ -96,7 +101,10 @@ func TestACodexAutomationStoppedBeforeItsFirstTurnAcrossARestartFailsWithItsScre
 }
 
 func TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunching(t *testing.T) {
-	s := codexAutomationStack(t, "ATTN_CRASH_AT=automation-launch-confirmed")
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	confirmed := s.PauseAt("automation-launch-confirmed")
+	s.StartCrashingAt("automation-launch-confirmed")
+	applyCodexAutomation(t, s)
 	app := s.App()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "crash"})
 	runs := automationRuns(t, s.Client(), 1)
@@ -106,9 +114,11 @@ func TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunch
 	}
 	session := string(protocol.Deref(runs[0].SessionID))
 	agent := s.Launched(session)
+	confirmed.Await()
 	if opening := agent.Prompted(); !strings.Contains(opening, "Check the code.") {
 		t.Fatalf("the agent was prompted %q, want its opening prompt", opening)
 	}
+	confirmed.Release()
 	s.AwaitCrash()
 
 	s.Start()
