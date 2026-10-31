@@ -44,12 +44,13 @@ returns `testworld.Main(m)`.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
   it started: the bridge's stall, loss, retry and dial-answer timers, a
   terminal's kill escalation, a folder watch's window, the background job
-  runner's schedule and the transcript watchers' discovery grace and quiet
-  window. Each transcript write a fake agent makes fires the transcript poll
-  without moving the clock, so the daemon reads it with no advance. Every
-  stack uses this stepped clock; the shared PTY host,
-  which is not Go, keeps real time. A test waiting for one of those timers
-  without advancing fails at the hang guard.
+  runner's schedule, the transcript watchers' discovery grace and quiet
+  window, and the daemon's periodic loops: database backup, GitHub hosts
+  refresh, PR poll and branch monitor. Each transcript write a fake agent
+  makes fires the transcript poll without moving the clock, so the daemon
+  reads it with no advance. Every stack uses this stepped clock; the shared
+  PTY host, which is not Go, keeps real time. A test waiting for one of those
+  timers without advancing fails at the hang guard.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.

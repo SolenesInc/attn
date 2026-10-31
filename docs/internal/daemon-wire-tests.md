@@ -96,8 +96,9 @@ On a `fakeagent.Run`:
 - A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
-  it, such as a terminal's kill escalation, a folder watch's window and the
-  background job runner's schedule, fire only when the test calls
+  it, such as a terminal's kill escalation, a folder watch's window, the
+  background job runner's schedule and the daemon's database backup, fire
+  only when the test calls
   `w.advance(d)`; `w.awaitTimer(name)` first waits until the timer with that
   `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
   stepped timer is named by the package that arms it, so a wait never matches

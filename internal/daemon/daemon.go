@@ -2408,21 +2408,15 @@ func shouldRunWorkerStartupProbe() bool {
 	}
 }
 
-func (d *Daemon) refreshGitHubHostsLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+const gitHubHostsTimer stepclock.Name = "daemon-github-hosts"
 
-	for {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-			if err := d.refreshGitHubHosts(); err != nil {
-				d.logf("GitHub host refresh failed: %v", err)
-			}
-			d.recoverAutomations()
+func (d *Daemon) refreshGitHubHostsLoop() {
+	d.every(gitHubHostsTimer, 5*time.Minute, func() {
+		if err := d.refreshGitHubHosts(); err != nil {
+			d.logf("GitHub host refresh failed: %v", err)
 		}
-	}
+		d.recoverAutomations()
+	})
 }
 
 func ghVersionWarning(err error) (string, string) {
@@ -3553,19 +3547,10 @@ func (d *Daemon) pollPRs() {
 	d.log("PR polling loop started (90s interval)")
 
 	d.doPRPoll()
-
-	ticker := time.NewTicker(90 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-			d.doPRPoll()
-		}
-	}
+	d.every(prPollTimer, 90*time.Second, d.doPRPoll)
 }
+
+const prPollTimer stepclock.Name = "daemon-pr-poll"
 
 func (d *Daemon) doPRPoll() {
 	if !d.githubAvailable() {
@@ -4076,17 +4061,12 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 func (d *Daemon) monitorBranches() {
 	d.logf("Branch monitoring started (%s interval)", branchMonitorInterval)
 
-	ticker := time.NewTicker(branchMonitorInterval)
-	defer ticker.Stop()
-
-	for d.life.Do("monitorBranches", d.checkAllBranches) {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+	check := func() { d.life.Do("monitorBranches", d.checkAllBranches) }
+	check()
+	d.every(branchMonitorTimer, branchMonitorInterval, check)
 }
+
+const branchMonitorTimer stepclock.Name = "daemon-branch-monitor"
 
 func (d *Daemon) checkAllBranches() {
 	d.coalesceSnapshots(func() {
