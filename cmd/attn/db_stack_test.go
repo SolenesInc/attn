@@ -98,9 +98,10 @@ func TestDBRestoreSwapsInTheNewestBackupAndKeepsEveryDatabaseItReplaces(t *testi
 		})
 	}
 
-	newest := filepath.Join(backups, "attn-20990601-000000.db")
+	newest := filepath.Join(backups, "attn-20990601-000000-2.db")
 	older := filepath.Join(backups, "attn-20990101-000000.db")
 	writeRestoreFile(t, older, "older snapshot")
+	writeRestoreFile(t, filepath.Join(backups, "attn-20990601-000000.db"), "earlier snapshot in the same second")
 	writeRestoreFile(t, newest, "newest snapshot")
 	writeRestoreFile(t, filepath.Join(backups, "attn-premigration-99-21000101-000000.db"), "premigration snapshot")
 	writeRestoreFile(t, db+"-wal", "live wal")
