@@ -99,17 +99,20 @@ the prefix points `attn` at the instance, where the stake does not exist.
 The automation's folder is the control checkout. It holds no work.
 
 1. Run `git pull --ff-only`. If this file changed, read it again.
-2. When `$PWD.runs` holds a pass folder, that pass is unfinished:
-   [Recover](#recover) it. A run that starts while a pass is unfinished
-   answers by finishing that pass.
-3. Otherwise start a pass. This writes the pass's env file, which later
-   commands source:
+2. When `$PWD.runs` holds a pass folder, that pass is unfinished. While
+   `attn agent list` still lists the `session` its `pass.env` names, that
+   session owns the pass, perhaps waiting on the user: touch nothing of it.
+   Ask the user with `attn ask` to answer or close that session, naming it
+   and the pass's stake, then wither your stake with that reason and stop.
+   Otherwise [Recover](#recover) the pass.
+3. With no pass folder, start a pass. This writes the pass's env file, which
+   later commands source:
 
 ```bash
 pass=$(date +%Y%m%d-%H%M) runs=$PWD.runs/$pass rev=$(git rev-parse origin/main) &&
 mkdir -p $runs/evidence && git worktree add --detach $runs/work $rev &&
 git worktree add -b map-audit-$pass $runs/repair $rev && cat > $runs/pass.env <<EOF
-control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair stake=<stake>
+control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair stake=<stake> session=<session>
 S=$PWD/.agents/skills/audit-feature-map/scripts/audit.py
 cd $runs/work
 EOF
@@ -127,7 +130,8 @@ Each command after this starts in a fresh shell, so it begins with
 `. <runs>/pass.env &&`, `<runs>` written out; an instance command adds
 drive-attn's prefix after it. `previous` is the revision in
 `$PWD.runs/previous`, which Finish writes, or `none`. Usage is the `usage` line of `attn session show <session>`,
-where `attn presence --session-id` prints your session. Write the start note
+where `attn presence --session-id` prints your session, the `<session>` in
+`pass.env`. Write the start note
 before anything else.
 
 ## Prepare
@@ -309,9 +313,10 @@ Write the `done` note, then `attn seed harvest $stake -m "pass <pass> at
 ## Recover
 
 The pass's `pass.env` names its stake, whose notes name its instances and
-finished features. Write the pass's notes on that stake and harvest it in
-Finish. When your own stake is another seed, harvest it too, naming the pass
-you finished.
+finished features. Its session has ended, so take the pass over: set
+`session=` in `pass.env` to yours and `attn seed tend <stake>`. Write the
+pass's notes on that stake and harvest it in Finish. When your own stake is
+another seed, harvest it too, naming the pass you finished.
 
 1. When the work or repair checkout is gone, add it again at the recorded
    revision, and the repair checkout on its branch when the branch survives.
