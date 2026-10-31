@@ -68,10 +68,11 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 }
 
 func (d *Daemon) sessionLaunch(id protocol.SessionID, intent store.LaunchIntent) analytics.Launch {
+	member, crewBound := d.crewMemberBoundToSession(id)
 	switch {
-	case intent.ChiefOfStaff:
+	case intent.ChiefOfStaff || member.Chief:
 		return analytics.LaunchChief
-	case d.crewMemberBoundTo(id) != "":
+	case crewBound:
 		return analytics.LaunchCrew
 	case d.automationProvenanceForSession(id) != nil:
 		return analytics.LaunchAutomation
