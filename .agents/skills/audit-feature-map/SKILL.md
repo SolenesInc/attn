@@ -177,8 +177,10 @@ Edit and commit map fixes in `$repair`, on its branch `map-audit-$pass`, as
 you prove them. Land them before you write the report:
 
 1. `. <runs>/pass.env && cd $repair && $S scope origin/main` must print
-   `map-only`. When it refuses, find the change that is not map prose and
-   remove it, keeping edits that are not yours.
+   `map-only` and name the repair checkout. `nothing to land` means the
+   pass made no fixes: skip the rest. When it refuses other paths, find the
+   change that is not map prose and remove it, keeping edits that are not
+   yours.
 2. Run the `verify-docs` skill on the diff and fix its findings.
 3. Land with the `land-on-main` skill. When the rebase conflicts with someone
    else's edit to the same file, keep their edit and reapply yours.
@@ -242,7 +244,8 @@ workers run detached and are not counted.
 
 ## Finish
 
-Attach the report and the evidence, then remove the checkouts:
+Attach the report and the evidence, then remove the checkouts and the pass's
+folder; the seed keeps the evidence:
 
 ```bash
 . <runs>/pass.env &&
@@ -251,7 +254,8 @@ attn seed attach <stake> --path $runs/evidence/report.md --copy &&
 attn seed attach <stake> --path $runs/evidence-$pass.tar.gz --move &&
 git -C $control worktree remove --force $runs/work &&
 git -C $control worktree remove --force $repair &&
-git -C $control branch -D map-audit-$pass
+git -C $control branch -D map-audit-$pass &&
+rm -r $runs
 ```
 
 Write the `done` note, then `attn seed harvest <stake> -m "pass <pass> at

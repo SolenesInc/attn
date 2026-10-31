@@ -114,12 +114,15 @@ def cmd_scope(args):
     changed = set(git("diff", "--name-only", f"{args.base}...HEAD").splitlines())
     changed |= set(git("diff", "--name-only", "HEAD").splitlines())
     changed |= set(git("ls-files", "--others", "--exclude-standard").splitlines())
-    outside = sorted(p for p in changed if p and not MAP_PROSE.match(p))
+    changed.discard("")
+    if not changed:
+        sys.exit(f"nothing to land: no paths changed in {ROOT} since {args.base}")
+    outside = sorted(p for p in changed if not MAP_PROSE.match(p))
     if outside:
         print(f"refusing: map repairs change only .agents/skills/drive-attn/features/*.md and .agents/skills/drive-attn/SKILL.md; {len(outside)} other paths changed since {args.base}:", file=sys.stderr)
         print("\n".join(f"  {p}" for p in outside), file=sys.stderr)
         sys.exit(1)
-    print(f"map-only: {len(changed)} paths changed since {args.base}, all map prose")
+    print(f"map-only: {len(changed)} paths changed in {ROOT} since {args.base}, all map prose")
 
 
 parser = argparse.ArgumentParser(description="Helpers for the feature-map audit.")
