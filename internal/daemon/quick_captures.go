@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -103,7 +102,6 @@ func (d *Daemon) quickCaptureRequest(profileID string, msg any, downloadChunkByt
 			if err != nil {
 				return nil, err
 			}
-			crashpoint.At("quick-capture-saved")
 			d.kickInboxAfterCommit(to)
 		}
 		r, err := d.store.QuickCapture(profileID, m.CaptureID)

@@ -34,12 +34,6 @@ const (
 	defaultThemeCursor     = "#d4d4d4"
 )
 
-var readLoopAdmissionGapHook atomic.Pointer[func()]
-
-var resizeAdmissionHook atomic.Pointer[func()]
-
-var readLoopAppliedHook func([]byte)
-
 type sessionSubscriber struct {
 	id           string
 	send         func(data []byte, seq uint32) bool
@@ -321,9 +315,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			n, err := s.ptmx.Read(buf)
 			admitted := make(chan struct{})
 			s.deliveryAdmissionMu.Lock()
-			if hook := readLoopAdmissionGapHook.Load(); hook != nil {
-				(*hook)()
-			}
 			reads <- ptyRead{data: buf[:n], err: err, admitted: admitted}
 			<-admitted
 			s.deliveryAdmissionMu.Unlock()
@@ -383,9 +374,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				s.lastReplaySeq = seq
 				s.textChangedLocked()
 				s.replayMu.Unlock()
-				if readLoopAppliedHook != nil {
-					readLoopAppliedHook(data)
-				}
 				s.drainGhosttyResponses(logf)
 				programReports := s.drainProgramStatus()
 				if queries.da1BeforeCPR {
@@ -864,9 +852,6 @@ func (s *Session) input(ctx context.Context, data []byte) error {
 func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	s.resizeMu.Lock()
 	defer s.resizeMu.Unlock()
-	if hook := resizeAdmissionHook.Load(); hook != nil {
-		(*hook)()
-	}
 	s.deliveryAdmissionMu.Lock()
 	defer s.deliveryAdmissionMu.Unlock()
 	s.deliveryMu.Lock()

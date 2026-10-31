@@ -124,8 +124,6 @@ type Manager struct {
 	onExit        func(ExitInfo)
 	onState       func(sessionID string, obs Observation)
 	onTitle       func(sessionID, title string)
-
-	testHookAfterSpawnReserve func()
 }
 
 func NewManager(logf LogFunc) *Manager {
@@ -215,9 +213,6 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		delete(m.pendingSpawns, opts.ID)
 		m.mu.Unlock()
 	}()
-	if m.testHookAfterSpawnReserve != nil {
-		m.testHookAfterSpawnReserve()
-	}
 
 	prepared, err := PrepareLaunch(opts, m.logf)
 	if err != nil {
