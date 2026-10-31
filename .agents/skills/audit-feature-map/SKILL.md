@@ -330,6 +330,10 @@ location:
   path: <control checkout>
 ```
 
+The harness must already trust the control checkout: an unattended Claude
+Code run stops at its folder trust prompt, while attn still reads it as
+working. Start the harness once in that folder, accept the prompt and quit.
+
 Stage it with `attn automation apply --file <file> --launch-desktop own
 --desktop-name "Feature map audit"`, run it with `attn automation run <id>`,
 and read the report. Then `attn automation disable <id>`, and apply it again
