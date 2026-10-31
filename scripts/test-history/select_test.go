@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -95,13 +96,20 @@ func (r *checkoutRepo) receive(receipt testhistory.Receipt) {
 	}
 }
 
-func linuxFailure(id, commit, unit string, finished time.Time) testhistory.Receipt {
+func otherLane() testhistory.Lane {
+	if runtime.GOOS == "linux" {
+		return testhistory.Lane{OS: "darwin", Arch: "arm64"}
+	}
+	return testhistory.Lane{OS: "linux", Arch: "amd64"}
+}
+
+func otherLaneFailure(id, commit, unit string, finished time.Time) testhistory.Receipt {
 	exit := testhistory.Exit{Code: 1}
 	return testhistory.Receipt{
 		Schema: testhistory.Schema, InvocationID: id, Runner: testhistory.RunnerGo,
 		Source:      testhistory.Source{Kind: "ci", RunID: "1", Attempt: "1", Job: "daemon"},
 		Revision:    testhistory.Revision{Commit: commit},
-		Lane:        testhistory.Lane{OS: "linux", Arch: "amd64"},
+		Lane:        otherLane(),
 		Diagnostics: testhistory.Diagnostics{MachineClass: "github-hosted 4cpu/16GB"},
 		Command:     testhistory.Command{StartedAt: finished.Add(-time.Minute), FinishedAt: &finished, Exit: &exit},
 		Results:     []testhistory.Result{{Unit: unit, Attempt: 1, Outcome: testhistory.Fail}},
@@ -148,21 +156,21 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "first", "D"))
 	admitted := repo.commit("admit the baseline", start)
 	repo.runTests("./p", "./q")
-	repo.receive(linuxFailure("ci-c-fails", admitted, "go ./q TestC", start.Add(time.Minute)))
-	repo.receive(linuxFailure("ci-native-fails", admitted, "native agent-reload", start.Add(time.Minute)))
+	repo.receive(otherLaneFailure("ci-c-fails", admitted, "go ./q TestC", start.Add(time.Minute)))
+	repo.receive(otherLaneFailure("ci-native-fails", admitted, "native agent-reload", start.Add(time.Minute)))
 
 	repo.git("checkout", "-q", "-b", "side")
 	repo.write("side/side.go", "package side\n")
 	sideCommit := repo.commit("work merged into main", start.Add(2*time.Minute))
-	repo.receive(linuxFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
+	repo.receive(otherLaneFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
 	repo.git("checkout", "-q", "main")
 	repo.gitAt(start.Add(4*time.Minute), "merge", "-q", "--no-ff", "-m", "merge side", "side")
 
 	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "second", "D"))
 	landed := repo.commit("land on main", time.Now().Add(time.Hour))
 	repo.runTests("./p", "./q")
-	repo.receive(linuxFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
-	recovered := linuxFailure("recovered-without-finish", admitted, "go ./p TestA", start)
+	repo.receive(otherLaneFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
+	recovered := otherLaneFailure("recovered-without-finish", admitted, "go ./p TestA", start)
 	recovered.Command.FinishedAt, recovered.Command.Exit, recovered.Complete = nil, nil, false
 	repo.receive(recovered)
 	if out, code := repo.history("capture", "go", "--unit", "go ./p TestA", "--", "-count=1", "-run", "^TestA$", "./p"); code != 0 {
@@ -198,13 +206,13 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 			}
 		}
 		baseline := choiceOf(t, selection, "go ./p TestA")
-		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Kind != testhistory.AnchorFailure || baseline.Standing.Lane != "linux/amd64" {
+		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Kind != testhistory.AnchorFailure || baseline.Standing.Lane != otherLane().String() {
 			t.Fatalf("baseline TestA: %+v %+v", baseline, baseline.Standing)
 		}
 		nominated := choiceOf(t, selection, "go ./q TestC")
 		standing := nominated.Standing
-		if nominated.Status != testhistory.Selected || standing.Lane != "linux/amd64" || standing.PassesSince != 0 || standing.Anchor.Commit != admitted {
-			t.Fatalf("a Linux failure cleared only by Mac passes must stand uncleared: %+v %+v", nominated, standing)
+		if nominated.Status != testhistory.Selected || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != admitted {
+			t.Fatalf("a failure in another lane, cleared only by passes in this one, must stand uncleared: %+v %+v", nominated, standing)
 		}
 		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Unavailable || gone.Note == "" {
 			t.Fatalf("missing baseline test: %+v", gone)
@@ -300,7 +308,7 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 		if strings.Join(point.Changed, " ") != "go ./q TestC" {
 			t.Fatalf("changed tests at the landed commit = %v, want its own change, not the checkout's", point.Changed)
 		}
-		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != "linux/amd64" {
+		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != otherLane().String() {
 			t.Fatalf("failures at the landed commit = %v", point.Failures)
 		}
 		shared, _ := filepath.Glob(filepath.Join(repo.spool, "shared", "*.json"))
