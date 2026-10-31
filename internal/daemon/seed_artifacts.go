@@ -26,6 +26,7 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 	"golang.org/x/sys/unix"
 )
 
@@ -313,7 +314,7 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 	}
 	occurrence, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
-		seedEvents.CausePayload{},
+		seedEvents.CausePayload{CausedBy: who.Attn().String()},
 	)
 	if err != nil {
 		return err
@@ -580,7 +581,7 @@ func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferM
 	}
 	changedEvent, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
-		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID)},
+		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID), CausedBy: d.actorOfSession(protocol.Deref(msg.SourceSessionID)).String()},
 	)
 	if err != nil {
 		return nil, err

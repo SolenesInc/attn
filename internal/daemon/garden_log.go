@@ -106,7 +106,7 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 		}
 		log.entries[i] = entry.Note
 		added, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, entry.Seed, seedEvents.NoteAddedPayload{
-			NoteID: entry.ID, AttentionRequested: entry.AttentionRequested, CausedBySessionID: protocol.TrimID(entry.CausedBySessionID),
+			NoteID: entry.ID, AttentionRequested: entry.AttentionRequested, CausedBySessionID: protocol.TrimID(entry.CausedBySessionID), CausedBy: entry.Author.String(),
 		})
 		if err != nil {
 			return seedChangeLog{}, err

@@ -23,39 +23,47 @@ const (
 
 type CausePayload struct {
 	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy          string             `json:"caused_by,omitempty"`
 }
 
 type LifecyclePayload struct {
 	AttentionRequested        bool               `json:"attention_requested" required:"true"`
 	CausedBySessionID         protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy                  string             `json:"caused_by,omitempty"`
 	DirectlyNotifiedSessionID protocol.SessionID `json:"directly_notified_session_id,omitempty"`
+	DirectlyNotified          string             `json:"directly_notified,omitempty"`
 }
 
 type NoteAddedPayload struct {
 	NoteID             string             `json:"note_id" required:"true"`
 	AttentionRequested bool               `json:"attention_requested" required:"true"`
 	CausedBySessionID  protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy           string             `json:"caused_by,omitempty"`
 }
 
 type EdgePayload struct {
 	EdgeKind          string             `json:"edge_kind" required:"true"`
 	TargetSeedID      string             `json:"target_seed_id" required:"true"`
 	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy          string             `json:"caused_by,omitempty"`
 }
 
 type HarvestWhenPayload struct {
 	PullRequestID     string             `json:"pull_request_id" required:"true"`
 	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy          string             `json:"caused_by,omitempty"`
 }
 
 type UnblockedPayload struct {
 	BlockerSeedID     string             `json:"blocker_seed_id" required:"true"`
 	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy          string             `json:"caused_by,omitempty"`
 }
 
 type WorkReadyPayload struct {
 	AutomationRunID   string             `json:"automation_run_id" required:"true"`
 	CausedBySessionID protocol.SessionID `json:"caused_by_session_id,omitempty"`
+	CausedBy          string             `json:"caused_by,omitempty"`
 }
 
 type Vocabulary struct {

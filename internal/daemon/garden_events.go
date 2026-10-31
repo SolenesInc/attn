@@ -124,19 +124,28 @@ func firstString(values []string) string {
 	return strings.TrimSpace(values[0])
 }
 
-func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	return gardenSeedLifecycleOccurrenceWithAttention(true, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
+func gardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, cause seedCause) (events.Occurrence, error) {
+	return gardenSeedLifecycleOccurrenceWithAttention(true, verb, seedID, cause)
 }
 
-func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
-	return gardenSeedLifecycleOccurrenceWithAttention(false, verb, seedID, causedBySessionID, directlyNotifiedSessionID...)
+func quietGardenSeedLifecycleOccurrence(verb garden.Verb, seedID string, cause seedCause) (events.Occurrence, error) {
+	return gardenSeedLifecycleOccurrenceWithAttention(false, verb, seedID, cause)
 }
 
-func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID string, causedBySessionID protocol.SessionID, directlyNotifiedSessionID ...string) (events.Occurrence, error) {
+type seedCause struct {
+	session          protocol.SessionID
+	by               who.Actor
+	notifiedSession  protocol.SessionID
+	directlyNotified who.Party
+}
+
+func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb garden.Verb, seedID string, cause seedCause) (events.Occurrence, error) {
 	payload := events.LifecyclePayload{
 		AttentionRequested:        attentionRequested,
-		CausedBySessionID:         protocol.TrimID(causedBySessionID),
-		DirectlyNotifiedSessionID: protocol.SessionID(firstString(directlyNotifiedSessionID)),
+		CausedBySessionID:         protocol.TrimID(cause.session),
+		CausedBy:                  cause.by.String(),
+		DirectlyNotifiedSessionID: protocol.TrimID(cause.notifiedSession),
+		DirectlyNotified:          cause.directlyNotified.String(),
 	}
 	switch verb {
 	case garden.VerbTend:

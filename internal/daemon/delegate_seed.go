@@ -104,7 +104,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if createSeed {
 		planted, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID,
-			seedEvents.CausePayload{CausedBySessionID: plannerSessionID},
+			seedEvents.CausePayload{CausedBySessionID: plannerSessionID, CausedBy: dispatch.Dispatcher.String()},
 		)
 		if eventErr != nil {
 			return "", eventErr
@@ -115,7 +115,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 				gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID,
 				seedEvents.EdgePayload{
 					EdgeKind: edge.Kind, TargetSeedID: edge.To,
-					CausedBySessionID: plannerSessionID,
+					CausedBySessionID: plannerSessionID, CausedBy: dispatch.Dispatcher.String(),
 				},
 			)
 			if eventErr != nil {
@@ -124,7 +124,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 			occurrences = append(occurrences, linked)
 		}
 	}
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, plannerSessionID, string(sessionID))
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seedCause{session: plannerSessionID, by: dispatch.Dispatcher, notifiedSession: sessionID, directlyNotified: who.Session(sessionID)})
 	if err != nil {
 		return "", err
 	}

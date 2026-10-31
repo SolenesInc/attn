@@ -1,6 +1,9 @@
 package daemon_test
 
 import (
+	"database/sql"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -230,5 +233,49 @@ func TestRetiredMembersCannotReclaimWorkThroughResume(t *testing.T) {
 	}
 	if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
 		t.Fatalf("the refused resume changed the seed: %+v", shown)
+	}
+}
+
+func TestGardenEventsNameWhoCausedThemAndWhoWasTold(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	day := wakeCrew(t, cli, "keel", "").SessionID
+	w.Launched(string(day))
+	plain := spawnPanes(w, app, w.Path("plain"))[0].session
+	seed := plantSeedAs(t, cli, plain, "Name the cause")
+	lifeMove(t, cli, string(day), seed, "tend", "", "")
+	gardenNudgeNote(t, cli, plain, seed, "from the plain session", true)
+	if _, err := cli.SeedTransition("", seed, "park", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite3", "file:"+filepath.Join(w.Dir, "attn.db")+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT name, coalesce(json_extract(payload, '$.caused_by'), ''), coalesce(json_extract(payload, '$.caused_by_session_id'), '') FROM bus_events WHERE subject = ? ORDER BY seq`, seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var name, by, session string
+		if err := rows.Scan(&name, &by, &session); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, name+" by "+by+" from "+session)
+	}
+	want := []string{
+		"garden.seed.planted by session:" + plain + " from " + plain,
+		"garden.seed.tended by member:keel from " + string(day),
+		"garden.seed.note.added by member:keel from " + string(day),
+		"garden.seed.note.added by session:" + plain + " from " + plain,
+		"garden.seed.parked by user from ",
+		"garden.seed.note.added by user from ",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("garden events for %s =\n%s\nwant\n%s", seed, strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

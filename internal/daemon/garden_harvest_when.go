@@ -132,7 +132,7 @@ func (d *Daemon) armHarvestWhenMerged(
 			}
 			next = outcome.Seed
 			next.StateChangedAt = formatGardenTime(d.gardenTime())
-			parked, eventErr := gardenSeedLifecycleOccurrence(garden.VerbPark, seed.ID, sessionID)
+			parked, eventErr := gardenSeedLifecycleOccurrence(garden.VerbPark, seed.ID, seedCause{session: sessionID, by: ask.Actor})
 			if eventErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
 			}
@@ -140,7 +140,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		configured, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
-			seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest, CausedBySessionID: sessionID},
+			seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest, CausedBySessionID: sessionID, CausedBy: ask.Actor.String()},
 		)
 		if eventErr != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
@@ -303,7 +303,7 @@ func (d *Daemon) clearHarvestWhen(
 		cleared, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, seed.ID,
 			seedEvents.HarvestWhenPayload{
-				PullRequestID: seed.HarvestWhen.PullRequest, CausedBySessionID: cause,
+				PullRequestID: seed.HarvestWhen.PullRequest, CausedBySessionID: cause, CausedBy: actor.String(),
 			},
 		)
 		if eventErr != nil {

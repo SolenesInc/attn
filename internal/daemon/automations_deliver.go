@@ -168,9 +168,13 @@ func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEv
 	if !continuation {
 		causedBySessionID = run.SessionID
 	}
+	causedBy := who.Attn()
+	if causedBySessionID != "" {
+		causedBy = d.actorOfSession(causedBySessionID)
+	}
 	return seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.WorkReady, run.SeedID,
-		seedEvents.WorkReadyPayload{AutomationRunID: run.ID, CausedBySessionID: causedBySessionID},
+		seedEvents.WorkReadyPayload{AutomationRunID: run.ID, CausedBySessionID: causedBySessionID, CausedBy: causedBy.String()},
 	)
 }
 

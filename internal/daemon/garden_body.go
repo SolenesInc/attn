@@ -164,7 +164,7 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 		if text := strings.Join(strings.Fields(protocol.Deref(msg.Note)), " "); text != "" {
 			detail += " — " + text
 		}
-		edited, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: author})
+		edited, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: author, CausedBy: d.actorOfSession(author).String()})
 		if err != nil {
 			return nil, err
 		}

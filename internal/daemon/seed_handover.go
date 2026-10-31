@@ -143,7 +143,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 	cause := protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID))))
-	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, cause, string(sessionID))
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seedCause{session: cause, by: d.actorOfSession(cause), notifiedSession: sessionID, directlyNotified: who.Session(sessionID)})
 	if err != nil {
 		return nil, err
 	}
