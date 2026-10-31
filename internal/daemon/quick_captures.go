@@ -28,7 +28,7 @@ func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.
 		if err != nil {
 			return inbox.Address{}, err
 		}
-		if d.crewProfileID(member.ID) != profileID {
+		if member.ProfileID != profileID {
 			return inbox.Address{}, fmt.Errorf("crew member %q not found in this profile", *mailbox.MemberID)
 		}
 		if member.ID != *mailbox.MemberID {

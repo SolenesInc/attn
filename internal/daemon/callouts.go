@@ -65,7 +65,7 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 		step := protocol.CalloutStep{Anchor: protocol.CalloutAnchor(anchor), Text: input.Text}
 		switch {
 		case strings.HasPrefix(anchor, "agent:"):
-			target, _ := d.resolveAgentPeekTarget(strings.TrimPrefix(anchor, "agent:"))
+			target, _ := d.resolveAgentPeekTarget(crewAsker{profileID: session.ProfileID}, strings.TrimPrefix(anchor, "agent:"))
 			if target == nil || target.ProfileID != session.ProfileID {
 				return nil, fmt.Errorf("%s is not an agent in your profile", anchor)
 			}

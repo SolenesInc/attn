@@ -73,6 +73,7 @@ var Placements = map[string][]Placement{
 	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
 	"crew_list":                        {Placement{LocatorHome, ""}},
 	"crew_prime":                       {Placement{LocatorHome, ""}},
+	"crew_rename":                      {Placement{LocatorHome, ""}},
 	"crew_set":                         {Placement{LocatorHome, ""}},
 	"crew_sleep":                       {Placement{LocatorHome, ""}},
 	"crew_wake":                        {Placement{LocatorHome, ""}},
@@ -795,6 +796,18 @@ func (m CrewPrimeMessage) Placement() Placement {
 }
 
 func (m CrewPrimeMessage) Locate() string {
+	return ""
+}
+
+func (CrewRenameMessage) CommandName() string {
+	return "crew_rename"
+}
+
+func (m CrewRenameMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewRenameMessage) Locate() string {
 	return ""
 }
 

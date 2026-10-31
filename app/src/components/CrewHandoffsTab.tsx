@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import type { CrewHandoffHistory, CrewHandoffLetter, CrewHandoffLoad } from '../hooks/useCrewHandoffs';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 
@@ -45,7 +44,7 @@ function HandoffHistory({ member, load, history, onOpenSeed }: {
   const handoff = load.handoffs.find((candidate) => candidate.filename === load.selected) ?? load.handoffs[0];
   return (
     <div className="crew-handoff-layout">
-      <nav className="crew-handoff-index" aria-label={`${crewDisplayName(member.id)} handoffs`}>
+      <nav className="crew-handoff-index" aria-label={`${member.name} handoffs`}>
         <span>{load.handoffs.length} {load.handoffs.length === 1 ? 'letter' : 'letters'}</span>
         {load.handoffs.map((candidate, index) => (
           <button

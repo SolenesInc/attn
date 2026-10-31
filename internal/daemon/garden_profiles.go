@@ -131,25 +131,15 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		resolved[ref.field] = id
 	}
 	if scope.Member != "" {
-		member := d.resolveTenderMember(scope.Member, scope.SourceSessionID)
-		memberProfile, err := d.store.CrewProfile(member)
+		member, found, err := d.crewMemberIn(profile.ID, scope.Member)
 		if err != nil {
 			return err
 		}
-		existingClaim := false
-		if cmd == protocol.CmdSeedTransition && scope.SeedID != "" {
-			seed, _, err := d.readSeed(scope.SeedID)
-			if err != nil {
-				return err
-			}
-			existingClaim = seed.TenderMember == member
+		if !found {
+			member, found = d.crewMemberKeyed(scope.Member)
 		}
-		if memberProfile != "" && memberProfile != profile.ID && !existingClaim {
-			owner, err := d.store.GetProfile(memberProfile)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("crew member %s belongs to profile %q; caller belongs to profile %q", scope.Member, owner.Name, profile.Name)
+		if found {
+			resolved["member"] = member.ID
 		}
 	}
 	reviewID := scope.ReviewID

@@ -1,5 +1,5 @@
 import FocusTrap from './AppFocusTrap';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
 import { useCrewHandoffs, type CrewHandoffHistory } from '../hooks/useCrewHandoffs';
@@ -9,7 +9,6 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
 import { useHarnesses } from '../hooks/useHarnesses';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { CrewCharterTab } from './CrewCharterTab';
 import { CrewHandoffsTab } from './CrewHandoffsTab';
 import { CrewLaunchTab, type CrewLaunchTabProps } from './CrewLaunchTab';
@@ -23,6 +22,7 @@ type CrewLaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
 
 interface CrewPanelProps {
   isOpen: boolean;
+  canRename: boolean;
   visit: number;
   initialMember?: string;
   members: CrewMember[];
@@ -43,17 +43,66 @@ const tabs: { id: CrewTab; label: string }[] = [
 ];
 
 
-function MemberHeading({ member }: { member: CrewMember }) {
-  const name = crewDisplayName(member.id);
+function MemberHeading({ member, canRename }: { member: CrewMember; canRename: boolean }) {
+  const [renaming, setRenaming] = useState(false);
   const awake = Boolean(member.binding_session);
   return (
     <div className="crew-member-heading">
       <div className="crew-member-identity">
-        <span className="crew-avatar is-large" aria-hidden="true">{name.slice(0, 1)}</span>
-        <div><h2>{name}</h2><span>{awake ? 'Awake' : 'Asleep'}</span></div>
+        <span className="crew-avatar is-large" aria-hidden="true">{member.name.slice(0, 1)}</span>
+        <div>
+          {renaming ? (
+            <MemberRename key={member.id} member={member} onDone={() => setRenaming(false)} />
+          ) : (
+            <h2>
+              {member.name}
+              {canRename && (
+                <button type="button" className="crew-rename" data-testid="crew-rename" onClick={() => setRenaming(true)}>Rename</button>
+              )}
+            </h2>
+          )}
+          <span>{awake ? 'Awake' : 'Asleep'}</span>
+        </div>
       </div>
       <span className={`crew-presence ${awake ? 'is-awake' : ''}`}>{awake ? 'Current day active' : 'Between days'}</span>
     </div>
+  );
+}
+
+function MemberRename({ member, onDone }: { member: CrewMember; onDone: () => void }) {
+  const { sendCrewRename } = useDaemonApi();
+  const [draft, setDraft] = useState(member.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+  useEscapeStack(onDone, !saving);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const name = draft.trim();
+    if (name === member.name) {
+      onDone();
+      return;
+    }
+    setSaving(true);
+    try {
+      await sendCrewRename(member.id, name);
+      onDone();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+      setSaving(false);
+    }
+  };
+  return (
+    <form className="crew-rename-form" onSubmit={(event) => void submit(event)}>
+      <input
+        autoFocus
+        aria-label={`New name for ${member.name}`}
+        data-testid="crew-rename-input"
+        value={draft}
+        disabled={saving}
+        onChange={(event) => { setDraft(event.target.value); setError(undefined); }}
+      />
+      {error && <span role="alert" className="crew-rename-error">{error}</span>}
+    </form>
   );
 }
 
@@ -133,6 +182,7 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
 
 function CrewPanelSurface({
   isOpen,
+  canRename,
   initialMember,
   members,
   sessions,
@@ -173,7 +223,7 @@ function CrewPanelSurface({
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();
     if (!query) return members;
-    return members.filter((member) => crewDisplayName(member.id).toLowerCase().includes(query));
+    return members.filter((member) => member.name.toLowerCase().includes(query));
   }, [filter, members]);
 
   const edit = selectedMemberId ? autosave.read(selectedMemberId) : undefined;
@@ -213,7 +263,7 @@ function CrewPanelSurface({
                 <div className="crew-empty">No crew members.</div>
               ) : (
                 <>
-                  <MemberHeading member={member} />
+                  <MemberHeading key={member.id} member={member} canRename={canRename} />
                   <MemberTabs tab={tab} onSelect={(next) => navigate({ kind: 'tab', tab: next })} />
 
                   <MemberTabPanel

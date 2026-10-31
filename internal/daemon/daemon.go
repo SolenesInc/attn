@@ -29,6 +29,7 @@ import (
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crashpoint"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
@@ -2973,6 +2974,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep:
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
+	case protocol.CmdCrewRename:
+		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
 	case protocol.CmdCrewPrime:
@@ -3292,7 +3295,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
 	chiefs map[string]protocol.SessionID,
 	delegatedFromChief map[protocol.SessionID]bool,
-	crewBySession map[protocol.SessionID]string,
+	crewBySession map[protocol.SessionID]crew.Member,
 	seedBySession map[protocol.SessionID]string,
 	dispatcherBySession map[protocol.SessionID]garden.Tender,
 ) *protocol.Session {
@@ -3345,8 +3348,8 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 			decorated.Automation = bySession[decorated.ID]
 			decorated.ConversationSharedWith = sharedConversations[decorated.ID]
 			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
-			if member := crewBySession[decorated.ID]; member != "" {
-				addresses = append(addresses, inbox.ToMember(member))
+			if member, bound := crewBySession[decorated.ID]; bound {
+				addresses = append(addresses, inbox.ToMember(member.ID))
 			}
 			if chiefs[decorated.ProfileID] == decorated.ID {
 				addresses = append(addresses, inbox.ToChief(decorated.ProfileID))
@@ -3913,6 +3916,9 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.releaseCrewBindingIfSession(msg.Session.ID)
 		d.sendError(conn, err.Error())
 		return
+	}
+	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
+		d.recordMemberSession(member, msg.Session.ID)
 	}
 	if !protocol.Deref(msg.Unplaced) {
 		d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})

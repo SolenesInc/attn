@@ -27,6 +27,8 @@ func runCrew() {
 		runCrewSleep(os.Args[3:])
 	case "set":
 		runCrewSet(os.Args[3:])
+	case "rename":
+		runCrewRename(os.Args[3:])
 	default:
 		recordUsageError("crew", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "crew: unknown command %q\n", os.Args[2])
@@ -42,9 +44,13 @@ Manage the Crew. Members' charters and handoffs persist across sessions
 in the active instance's crew directory. Every member belongs to a profile
 and wakes only there.
 
+A <member> is a name in your profile, or member:<key> for the permanent key
+that never changes. Inside attn, your session's profile applies; outside,
+pass --profile <name|id> when several profiles exist.
+
 commands:
   list [--json]
-        Show all members and their active sessions, if any.
+        Show your profile's members and their active sessions, if any.
 
   wake <member> [--agent <name>] [--json]
         Start a session using the member's saved launch settings, on its chosen
@@ -70,24 +76,30 @@ commands:
         --effort "" restores the harness default.
         --awareness-dir sets context dirs. Repeat to replace the saved list.
         Use --awareness-dir "" to clear it.
+
+  rename <member> <name> [--json]
+        Give the member a new name, unique in its profile. Its key, home,
+        letters, mail and seeds stay. Needs crew_v2_enabled.
 `)
 }
 
 type crewListArgs struct {
-	json bool
+	profile string
+	json    bool
 }
 
 func parseCrewListArgs(args []string) (crewListArgs, error) {
 	fs := flag.NewFlagSet("crew list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return crewListArgs{}, err
 	}
 	if fs.NArg() != 0 {
 		return crewListArgs{}, errors.New("crew list takes no arguments")
 	}
-	return crewListArgs{json: *jsonOut}, nil
+	return crewListArgs{profile: *profile, json: *jsonOut}, nil
 }
 
 func runCrewList(args []string) {
@@ -97,7 +109,7 @@ func runCrewList(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewList()
+	result, err := crewClient(parsed.profile).CrewList()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew list: %v\n", err)
 		os.Exit(1)
@@ -110,9 +122,10 @@ func runCrewList(args []string) {
 }
 
 type crewWakeArgs struct {
-	member string
-	agent  string
-	json   bool
+	member  string
+	agent   string
+	profile string
+	json    bool
 }
 
 func parseCrewWakeArgs(args []string) (crewWakeArgs, error) {
@@ -120,11 +133,12 @@ func parseCrewWakeArgs(args []string) (crewWakeArgs, error) {
 	fs.SetOutput(io.Discard)
 	agent := fs.String("agent", "", "the harness to launch (default claude)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
 	member, err := parseMemberAndFlags(fs, args, "crew wake")
 	if err != nil {
 		return crewWakeArgs{}, err
 	}
-	return crewWakeArgs{member: member, agent: strings.TrimSpace(*agent), json: *jsonOut}, nil
+	return crewWakeArgs{member: member, agent: strings.TrimSpace(*agent), profile: *profile, json: *jsonOut}, nil
 }
 
 func parseMemberAndFlags(fs *flag.FlagSet, args []string, verb string) (string, error) {
@@ -153,7 +167,7 @@ func runCrewWake(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewWake(parsed.member, parsed.agent, currentSessionOrExit())
+	result, err := crewClient(parsed.profile).CrewWake(parsed.member, parsed.agent, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
 		os.Exit(1)
@@ -163,14 +177,14 @@ func runCrewWake(args []string) {
 		return
 	}
 	if result.AlreadyAwake {
-		fmt.Printf("%s is already awake in session %s — nothing was launched.\n", crew.DisplayName(result.Member), agentShortID(string(result.SessionID)))
+		fmt.Printf("%s is already awake in session %s — nothing was launched.\n", result.Name, agentShortID(string(result.SessionID)))
 		return
 	}
 	if repair := crewWakeRepairLine(result); repair != "" {
 		fmt.Fprintln(os.Stdout, repair)
 	}
 	fmt.Printf("%s is awake in session %s. `attn agent peek %s` watches the day; the priming size is in the daemon log (grep `crew: priming`).\n",
-		crew.DisplayName(result.Member), agentShortID(string(result.SessionID)), result.Member)
+		result.Name, agentShortID(string(result.SessionID)), result.Name)
 }
 
 func crewWakeRepairLine(result *protocol.CrewWakeResult) string {
@@ -182,19 +196,21 @@ func crewWakeRepairLine(result *protocol.CrewWakeResult) string {
 }
 
 type crewSleepArgs struct {
-	member string
-	json   bool
+	member  string
+	profile string
+	json    bool
 }
 
 func parseCrewSleepArgs(args []string) (crewSleepArgs, error) {
 	fs := flag.NewFlagSet("crew sleep", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
 	member, err := parseMemberAndFlags(fs, args, "crew sleep")
 	if err != nil {
 		return crewSleepArgs{}, err
 	}
-	return crewSleepArgs{member: member, json: *jsonOut}, nil
+	return crewSleepArgs{member: member, profile: *profile, json: *jsonOut}, nil
 }
 
 func runCrewSleep(args []string) {
@@ -204,7 +220,7 @@ func runCrewSleep(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewSleep(parsed.member)
+	result, err := crewClient(parsed.profile).CrewSleep(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew sleep: %v\n", err)
 		os.Exit(1)
@@ -217,7 +233,7 @@ func runCrewSleep(args []string) {
 }
 
 func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
-	name := crew.DisplayName(result.Member)
+	name := result.Name
 	if result.AlreadyAsleep {
 		if detail := strings.TrimSpace(result.Detail); detail != "" {
 			return detail + "."
@@ -258,6 +274,7 @@ type crewSetArgs struct {
 	desktop     *string
 	desktopName *string
 	awareness   []string
+	profile     string
 	json        bool
 }
 
@@ -273,11 +290,12 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
 	member, err := parseMemberAndFlags(fs, args, "crew set")
 	if err != nil {
 		return crewSetArgs{}, err
 	}
-	parsed := crewSetArgs{member: member, json: *jsonOut}
+	parsed := crewSetArgs{member: member, profile: *profile, json: *jsonOut}
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "cwd":
@@ -316,7 +334,7 @@ func runCrewSet(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewSetWithNamedDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop, parsed.desktopName)
+	result, err := crewClient(parsed.profile).CrewSetWithNamedDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop, parsed.desktopName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
@@ -326,7 +344,7 @@ func runCrewSet(args []string) {
 		return
 	}
 	record := result.Member
-	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", crew.DisplayName(record.ID), valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
+	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", record.Name, valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
 	fmt.Printf("profile: %s\nlaunch desktop: %s\n", protocol.Deref(record.ProfileName), launchDesktopText(record.LaunchDesktop))
 	fmt.Printf("awareness dirs: %s\n", valueOrDash(strings.Join(record.AwarenessDirs, ", ")))
 }
@@ -349,7 +367,7 @@ func printCrewList(w io.Writer, members []protocol.CrewMember) {
 		if id := protocol.TrimID(protocol.Deref(member.BindingSession)); id != "" {
 			state, session = "awake", agentShortID(string(id))
 		}
-		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", crew.DisplayName(member.ID), state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
+		fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %-22s  %s\n", member.Name, state, valueOrDash(member.ResolvedAgent), valueOrDash(protocol.Deref(member.ResolvedModel)), valueOrDash(protocol.Deref(member.ResolvedEffort)), session, protocol.Deref(member.ProfileName)+" › "+launchDesktopText(member.LaunchDesktop), member.HomeDir)
 	}
 	fmt.Fprintf(w, "\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n")
 }
@@ -359,4 +377,60 @@ func launchDesktopText(setting *protocol.LaunchDesktopSetting) string {
 		return "-"
 	}
 	return protocol.Deref(setting.Label)
+}
+
+func crewProfileFlag(fs *flag.FlagSet) *string {
+	return fs.String("profile", "", "the profile whose crew to address, by name or id; inside attn, your session's profile")
+}
+
+func crewClient(profile string) *client.Client {
+	return client.New("").WithGardenProfile(strings.TrimSpace(profile), currentSessionOrExit())
+}
+
+type crewRenameArgs struct {
+	member  string
+	name    string
+	profile string
+	json    bool
+}
+
+func parseCrewRenameArgs(args []string) (crewRenameArgs, error) {
+	fs := flag.NewFlagSet("crew rename", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
+	var positionals []string
+	for {
+		if err := parseFlags(fs, args); err != nil {
+			return crewRenameArgs{}, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		positionals = append(positionals, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
+	if len(positionals) != 2 {
+		return crewRenameArgs{}, fmt.Errorf("crew rename takes a member and its new name, not %q", strings.Join(positionals, " "))
+	}
+	return crewRenameArgs{member: positionals[0], name: positionals[1], profile: *profile, json: *jsonOut}, nil
+}
+
+func runCrewRename(args []string) {
+	parsed, err := parseCrewRenameArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew rename: %v\n", err)
+		writeCrewHelp(os.Stderr)
+		os.Exit(2)
+	}
+	result, err := crewClient(parsed.profile).CrewRename(parsed.member, parsed.name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew rename: %v\n", err)
+		os.Exit(1)
+	}
+	if parsed.json {
+		printJSON(result)
+		return
+	}
+	fmt.Printf("%s is now %s; its key %s, home, letters and mail stay.\n", result.PreviousName, result.Name, crew.KeyRefPrefix+result.Member)
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/crew"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
@@ -211,7 +210,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 				if member, _, err := d.crewMember(memberID); err == nil {
 					ledger := d.crewWakeLedger()
 					ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-					if _, refusal := ledger.Allows(memberID, now); refusal != nil {
+					if _, refusal := ledger.Allows(member.Name, now); refusal != nil {
 						receipt.Detail = refusal.Error()
 					}
 				}
@@ -249,7 +248,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 					return receipt, nil
 				}
 				state.wakeSession = result.SessionID
-				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", crew.DisplayName(member), shortSessionID(result.SessionID))
+				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", d.crewMemberName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
 			if a.SeedID() != "" {

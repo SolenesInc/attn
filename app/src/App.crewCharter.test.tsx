@@ -96,7 +96,7 @@ describe('App crew charter', () => {
 
     await wait(daemon, 10_000);
     expect(status()).toHaveTextContent('Not saved');
-    expect(panel().getByRole('alert')).toHaveTextContent('Saving Trellis\'s charter timed out');
+    expect(panel().getByRole('alert')).toHaveTextContent('Saving the charter timed out');
 
     await type(daemon, 'A');
     await leaveField(daemon);

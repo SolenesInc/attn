@@ -4,7 +4,6 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { RenamePopover } from './RenamePopover';
 import { SessionActionsPopover } from './SessionActionsPopover';
 import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
-import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
@@ -187,6 +186,7 @@ export function SidebarSleepingCrew() {
         <CrewRowView
           key={member.id}
           member={member.id}
+          name={member.name}
           agent={member.resolved_agent}
           selected={false}
           delegates={[]}
@@ -275,7 +275,7 @@ export function SidebarPopovers() {
       )}
       {crewActionsTarget && (
         <CrewMemberActionsPopover
-          memberName={crewDisplayName(crewActionsTarget.member)}
+          memberName={crew?.find((member) => member.id === crewActionsTarget.member)?.name ?? crewActionsTarget.member}
           desktopLabel={crew?.find((member) => member.id === crewActionsTarget.member)?.launch_desktop?.label}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {

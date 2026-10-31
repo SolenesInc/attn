@@ -78,11 +78,11 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 	}
 	if match == nil {
-		member, found, err := d.resolveCrewMember(ref)
+		member, found, err := d.crewMemberIn(caller.ProfileID, ref)
 		if err != nil {
 			return nil, err
 		}
-		if found && d.crewProfileID(member.ID) == caller.ProfileID {
+		if found {
 			if session := d.store.Get(member.BindingSession); session != nil && session.ProfileID == caller.ProfileID {
 				match = session
 			}

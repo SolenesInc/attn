@@ -2,7 +2,6 @@ import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import type { TileLeaf } from '../../types/desktop';
 import type { UISessionState } from '../../types/sessionState';
 import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils/queueBands';
-import { crewDisplayName } from '../../utils/crewName';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { tileKindLabel } from '../../utils/tilePresentation';
@@ -20,7 +19,7 @@ export type AgentPaletteRow<S extends PaletteSession> =
 
 export interface AgentPaletteInput<S extends PaletteSession> {
   bands: QueueBands<S>;
-  crewRoster: readonly string[];
+  crewRoster: readonly { id: string; name: string }[];
   desktops: readonly DesktopWithSessions<S>[];
   tileTitle: (desktopId: string, tile: TileLeaf) => string;
   now: number;
@@ -77,12 +76,13 @@ export function agentPaletteRows<S extends PaletteSession>(
     const member = row.session.crewMember ?? '';
     awakeByMember.set(member, [...(awakeByMember.get(member) ?? []), row]);
   }
-  const members = [...new Set([...crewRoster, ...awakeByMember.keys()])].sort();
+  const names = new Map(crewRoster.map((member) => [member.id, member.name]));
+  const members = [...new Set([...names.keys(), ...awakeByMember.keys()])].sort();
   for (const member of members) {
     const awake = awakeByMember.get(member);
     if (awake) {
       for (const row of awake) anchored.push(...bandRow(row.session, true));
-    } else if (matches(terms, member, crewDisplayName(member))) {
+    } else if (matches(terms, member, names.get(member) ?? member)) {
       anchored.push({ kind: 'member', key: `member:${member}`, member });
     }
   }

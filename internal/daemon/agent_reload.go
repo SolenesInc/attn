@@ -6,7 +6,6 @@ import (
 	"net"
 	"slices"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -70,15 +69,15 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 }
 
 func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Session, error) {
-	member, found, err := d.resolveCrewMember(ref)
+	member, found, err := d.crewMemberIn(profileID, ref)
 	if err != nil {
 		return nil, err
 	}
-	if found && d.crewProfileID(member.ID) == profileID {
+	if found {
 		if session := d.store.Get(member.BindingSession); session != nil && d.crewBindingLive(member) {
 			return session, nil
 		}
-		return nil, fmt.Errorf("crew member %s is asleep; reload does not wake members", crew.DisplayName(member.ID))
+		return nil, fmt.Errorf("crew member %s is asleep; reload does not wake members", member.Name)
 	}
 	target, code := d.resolveSessionReference(ref, profileID)
 	switch {

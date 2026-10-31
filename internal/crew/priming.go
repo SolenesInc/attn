@@ -34,6 +34,7 @@ type PlotReady struct {
 
 type Priming struct {
 	Member        string
+	Name          string
 	HomeDir       string
 	CharterPath   string
 	CWD           string
@@ -62,7 +63,7 @@ func (p Priming) Block() string {
 	handoffsDir := filepath.Join(p.HomeDir, HandoffsDirName)
 	return prompts.RenderText("crew", "priming", prompts.Values{
 		"crew_v2_enabled":  fmt.Sprint(p.V2Enabled),
-		"display_name":     DisplayName(p.Member),
+		"display_name":     p.Name,
 		"home_dir":         p.HomeDir,
 		"has_charter":      fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
 		"charter_file":     CharterFileName,

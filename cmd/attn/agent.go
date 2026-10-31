@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -104,6 +103,7 @@ type agentListRow struct {
 	State     string `json:"state"`
 	TurnOwed  bool   `json:"turn_owed"`
 	Member    string `json:"member"`
+	MemberKey string `json:"member_key,omitempty"`
 }
 
 func runAgentList(args []string) {
@@ -141,7 +141,8 @@ func agentListRows(result *client.ListResult) []agentListRow {
 			Directory: session.Directory,
 			State:     string(session.State),
 			TurnOwed:  protocol.Deref(session.TurnOwed),
-			Member:    protocol.Deref(session.CrewMember),
+			Member:    protocol.Deref(session.CrewMemberName),
+			MemberKey: protocol.Deref(session.CrewMember),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -170,7 +171,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			agentShortIDLength, agentShortID(row.ID),
 			agentListCell(row.Label, 18),
 			agentListCell(row.Agent, 8),
-			agentListCell(crew.DisplayName(row.Member), 10),
+			agentListCell(row.Member, 10),
 			agentListCell(row.Profile, 20),
 			agentListCell(row.State, 16),
 			turn,
@@ -199,8 +200,9 @@ func agentListCell(value string, width int) string {
 }
 
 type agentPeekArgs struct {
-	target string
-	json   bool
+	target  string
+	profile string
+	json    bool
 }
 
 func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
@@ -211,13 +213,14 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
+	profile := crewProfileFlag(fs)
 	if err := parseFlags(fs, args[1:]); err != nil {
 		return agentPeekArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {
 		return agentPeekArgs{}, errors.New("exactly one target session or crew member is required")
 	}
-	return agentPeekArgs{target: target, json: *jsonOut}, nil
+	return agentPeekArgs{target: target, profile: *profile, json: *jsonOut}, nil
 }
 
 func runAgentPeek(args []string) {
@@ -227,7 +230,7 @@ func runAgentPeek(args []string) {
 		writeAgentHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").AgentPeek(parsed.target)
+	result, err := crewClient(parsed.profile).AgentPeek(parsed.target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent peek: %s\n", agentPeekErrorMessage(parsed.target, err))
 		os.Exit(1)
@@ -247,16 +250,16 @@ func agentPeekErrorMessage(target string, err error) string {
 	case "ambiguous_session":
 		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
 	case "crew_member_asleep":
-		member := strings.ToLower(strings.TrimSpace(target))
-		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", crew.DisplayName(member), member)
+		member := strings.TrimSpace(target)
+		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", member, member)
 	}
 	return message
 }
 
 func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 	fmt.Fprintf(w, "session %s (%s) — %s\n", result.SessionID, result.Agent, result.Label)
-	if member := strings.TrimSpace(protocol.Deref(result.CrewMember)); member != "" {
-		fmt.Fprintf(w, "crew member: this session is %s today\n", crew.DisplayName(member))
+	if member := strings.TrimSpace(protocol.Deref(result.CrewMemberName)); member != "" {
+		fmt.Fprintf(w, "crew member: this session is %s today\n", member)
 	}
 	if profile := strings.TrimSpace(protocol.Deref(result.ProfileName)); profile != "" {
 		fmt.Fprintf(w, "profile: %s\n", profile)

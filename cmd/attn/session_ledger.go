@@ -212,6 +212,9 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 			fmt.Fprintf(table, "%s\t", sessionReopenColumn(verdicts[entry.ID]))
 		}
 		label := entry.Label
+		if member := protocol.Deref(entry.MemberName); member != "" {
+			label = member
+		}
 		if protocol.Deref(entry.Priority) {
 			label = "⚑ " + label
 		}

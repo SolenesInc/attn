@@ -283,7 +283,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, user_label, harness_title, agent, directory, profile_id, priority,
+const ledgerSelect = `SELECT member_key, COALESCE((SELECT name FROM crew_members WHERE crew_members.member_key = sessions.member_key), ''), id, user_label, harness_title, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until, host,
@@ -293,8 +293,10 @@ const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
 const ledgerVisible = "command_terminal = 0"
 
+const ledgerOneRowPerMember = `(sessions.member_key = '' OR sessions.closed_at = '' OR sessions.id = (SELECT latest_session FROM crew_members WHERE crew_members.member_key = sessions.member_key))`
+
 func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
-	where := []string{ledgerVisible}
+	where := []string{ledgerVisible, ledgerOneRowPerMember}
 	var args []any
 	switch q.Scope {
 	case SessionLedgerClosed:
@@ -353,7 +355,7 @@ func (s *Store) sessionLedgerDB(query SessionLedgerQuery, limit int) (SessionLed
 	clause := whereClause(where)
 
 	var matching int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions_with_runtime"+clause, args...).Scan(&matching); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions_with_runtime AS sessions"+clause, args...).Scan(&matching); err != nil {
 		return SessionLedgerPage{}, fmt.Errorf("count ledger rows: %w", err)
 	}
 
@@ -392,7 +394,7 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 	clause := whereClause(where)
 
 	count := func(column string) ([]protocol.SessionLedgerFacet, error) {
-		rows, err := s.db.Query("SELECT "+column+", COUNT(*) FROM sessions_with_runtime"+clause+
+		rows, err := s.db.Query("SELECT "+column+", COUNT(*) FROM sessions_with_runtime AS sessions"+clause+
 			" GROUP BY "+column+" ORDER BY "+column, args...)
 		if err != nil {
 			return nil, fmt.Errorf("count ledger %s: %w", column, err)
@@ -426,7 +428,7 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 
 func (s *Store) ledgerProfileFacetsDB(clause string, args []any) ([]protocol.SessionLedgerProfileFacet, error) {
 	rows, err := s.db.Query(`SELECT counted.profile_id, COALESCE(p.name, ''), COALESCE(p.deleted_at, ''), counted.total
-		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions_with_runtime`+clause+` GROUP BY profile_id) counted
+		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions_with_runtime AS sessions`+clause+` GROUP BY profile_id) counted
 		LEFT JOIN profiles p ON p.id = counted.profile_id
 		WHERE counted.profile_id <> ''
 		ORDER BY COALESCE(p.name, ''), counted.profile_id`, args...)
@@ -648,7 +650,10 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		host             string
 	)
 
+	var memberKey, memberName string
 	err := row.Scan(
+		&memberKey,
+		&memberName,
 		&entry.ID,
 		&labels.UserLabel,
 		&labels.HarnessTitle,
@@ -678,6 +683,10 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		entry.Host = protocol.Ptr(host)
 	}
 	entry.Label = labels.shown(entry.ID, entry.Directory, entry.Agent)
+	if memberKey != "" {
+		entry.MemberKey = protocol.Ptr(memberKey)
+		entry.MemberName = protocol.Ptr(memberName)
+	}
 	if until, err := time.Parse(time.RFC3339Nano, snoozedUntil); err == nil && until.After(time.Now()) && closedAt == "" {
 		entry.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
 	}

@@ -294,7 +294,7 @@ func TestCrewWakeAndSetRefusalsNameWhatToDo(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = cli.CrewWake("alder", "", "")
-	crewErrorContains(t, err, "Alder launches in", moved, "attn crew set alder --cwd")
+	crewErrorContains(t, err, "Alder launches in", moved, "attn crew set Alder --cwd")
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Errorf("a refused wake left alder bound to %s", *binding)
 	}
@@ -444,7 +444,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatal(err)
 	}
-	crewErrorContains(t, register("sess-second", "Keel"), "Keel", "sess-fir")
+	crewErrorContains(t, register("sess-second", "keel"), "Keel", "sess-fir")
 	if err := register("sess-first", "keel"); err != nil {
 		t.Fatalf("a member's own session re-announcing itself was refused: %v", err)
 	}

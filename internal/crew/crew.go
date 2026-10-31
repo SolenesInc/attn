@@ -2,11 +2,13 @@ package crew
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -28,6 +30,8 @@ const DefaultAgent = "claude"
 
 type Member struct {
 	ID             string             `json:"id"`
+	Name           string             `json:"-"`
+	ProfileID      string             `json:"-"`
 	CWD            string             `json:"cwd"`
 	Agent          string             `json:"agent"`
 	Model          string             `json:"model"`
@@ -131,13 +135,71 @@ func HolderName(member string, session protocol.SessionID) string {
 	return string(protocol.TrimID(session))
 }
 
-func Resolve(name string, members []Member) (Member, bool) {
-	name = strings.TrimSpace(name)
+const MaxNameChars = 40
+
+const KeyRefPrefix = "member:"
+
+var namePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
+
+var idShapedName = regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
+
+func ValidateName(name string) error {
 	if name == "" {
-		return Member{}, false
+		return errors.New("a crew member name is required")
 	}
+	if len(name) > MaxNameChars {
+		return fmt.Errorf("%q is too long: a crew member name's limit is %d characters, asked for %d", name, MaxNameChars, len(name))
+	}
+	if !namePattern.MatchString(name) {
+		return fmt.Errorf("%q is not a crew member name: letters, digits and - only, starting with a letter", name)
+	}
+	switch strings.ToLower(name) {
+	case "chief", DaemonID, "user", "you":
+		return fmt.Errorf("%q is reserved; attn uses it to address someone else", name)
+	}
+	if idShapedName.MatchString(name) {
+		return fmt.Errorf("%q looks like an ID; choose a name that does not", name)
+	}
+	return nil
+}
+
+func NameFromKey(key string) string {
+	if name := DisplayName(key); ValidateName(name) == nil {
+		return name
+	}
+	return key + "-crew"
+}
+
+func UnusedName(name string, taken func(string) bool) string {
+	if !taken(name) {
+		return name
+	}
+	for number := 2; ; number++ {
+		suffix := "-" + strconv.Itoa(number)
+		stem := name
+		if len(stem)+len(suffix) > MaxNameChars {
+			stem = stem[:MaxNameChars-len(suffix)]
+		}
+		if candidate := stem + suffix; !taken(candidate) {
+			return candidate
+		}
+	}
+}
+
+func Resolve(ref string, members []Member) (Member, bool) {
+	ref = strings.TrimSpace(ref)
+	key, byKey := strings.CutPrefix(ref, KeyRefPrefix)
 	for _, m := range members {
-		if strings.EqualFold(m.ID, name) {
+		if (byKey && strings.EqualFold(m.ID, key)) || (!byKey && ref != "" && strings.EqualFold(m.Name, ref)) {
+			return m, true
+		}
+	}
+	return Member{}, false
+}
+
+func Keyed(key string, members []Member) (Member, bool) {
+	for _, m := range members {
+		if strings.EqualFold(m.ID, key) {
 			return m, true
 		}
 	}

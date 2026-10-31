@@ -17,7 +17,7 @@ const agentShortIDLength = 8
 const agentPeekSnapshotTimeout = 3 * time.Second
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
-	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
+	session, errCode := d.resolveAgentPeekTarget(askerOf(msg.SourceSessionID, msg.ProfileID), msg.TargetSessionID)
 	if session == nil {
 		d.sendError(conn, errCode)
 		return
@@ -32,7 +32,7 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 	})
 }
 
-func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, string) {
+func (d *Daemon) resolveAgentPeekTarget(asker crewAsker, target string) (*protocol.Session, string) {
 	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
@@ -40,7 +40,14 @@ func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, strin
 	if session := d.store.Get(protocol.SessionID(target)); session != nil {
 		return session, ""
 	}
-	member, found, err := d.resolveCrewMember(target)
+	profileID, err := d.crewAskerProfile(asker)
+	if err != nil {
+		if session, code := d.resolveSessionByIDOrPrefix(target); session != nil || code != "session_not_found" {
+			return session, code
+		}
+		return nil, "crew names resolve in a profile: " + err.Error()
+	}
+	member, found, err := d.crewMemberIn(profileID, target)
 	if err != nil {
 		d.logf("agent peek crew resolution: target=%q err=%v", target, err)
 		return nil, "internal_error"
@@ -91,15 +98,16 @@ func (d *Daemon) resolveSessionReference(target, profileID string) (*protocol.Se
 func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekResult {
 	decorated := d.sessionForBroadcast(session)
 	result := &protocol.AgentPeekResult{
-		SessionID:   decorated.ID,
-		Label:       decorated.Label,
-		Agent:       decorated.Agent,
-		State:       string(decorated.State),
-		StateSince:  decorated.StateSince,
-		LastSeen:    decorated.LastSeen,
-		StateReason: decorated.StateReason,
-		TurnOwed:    decorated.TurnOwed,
-		CrewMember:  decorated.CrewMember,
+		SessionID:      decorated.ID,
+		Label:          decorated.Label,
+		Agent:          decorated.Agent,
+		State:          string(decorated.State),
+		StateSince:     decorated.StateSince,
+		LastSeen:       decorated.LastSeen,
+		StateReason:    decorated.StateReason,
+		TurnOwed:       decorated.TurnOwed,
+		CrewMember:     decorated.CrewMember,
+		CrewMemberName: decorated.CrewMemberName,
 	}
 	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
 		result.ProfileName = protocol.Ptr(profile.Name)

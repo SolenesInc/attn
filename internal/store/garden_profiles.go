@@ -143,7 +143,7 @@ func checkSeedProfileWrite(q rowQuerier, schema docstore.CollectionSchema, table
 	}
 	if seed.TenderMember != "" && seed.TenderMember != previousMember {
 		var profileID string
-		err := q.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, seed.TenderMember).Scan(&profileID)
+		err := q.QueryRow(`SELECT profile_id FROM crew_members WHERE member_key = ?`, seed.TenderMember).Scan(&profileID)
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}

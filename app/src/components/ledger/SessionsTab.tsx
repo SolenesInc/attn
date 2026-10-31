@@ -1,3 +1,4 @@
+import { useDaemonStore } from '../../store/daemonSessions';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -97,10 +98,12 @@ export function SessionsTab({
     onFiltersChange: rememberFilters,
   });
   const { filters, setFilters, entries: storedEntries, reload } = ledger;
+  const crew = useDaemonStore((state) => state.crew);
   const entries = useMemo(() => storedEntries.map((entry) => {
-    const name = entry.agent === 'shell' && !isClosed(entry) ? liveSessionNames?.get(entry.id) : undefined;
+    const member = entry.member_key ? crew.find((candidate) => candidate.id === entry.member_key)?.name ?? entry.member_name : undefined;
+    const name = member ?? (entry.agent === 'shell' && !isClosed(entry) ? liveSessionNames?.get(entry.id) : undefined);
     return name !== undefined && name !== entry.label ? { ...entry, label: name } : entry;
-  }), [storedEntries, liveSessionNames]);
+  }), [storedEntries, liveSessionNames, crew]);
   const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const { text, setText, parsed } = useLedgerQueryText({

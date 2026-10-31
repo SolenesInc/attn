@@ -12,7 +12,7 @@ import (
 func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{"unbound": (Priming{}).Block()}
 	for mask := 0; mask < 32; mask++ {
-		p := Priming{Member: "keeper", HomeDir: "/tmp/home", HandoffName: "letter.md"}
+		p := Priming{Member: "keeper", Name: "Keeper", HomeDir: "/tmp/home", HandoffName: "letter.md"}
 		if mask&1 != 0 {
 			p.Charter = "Charter."
 		}
@@ -38,7 +38,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 }
 
 func TestCrewV2PromptCompatibility(t *testing.T) {
-	firstDay := Priming{Member: "keeper", HomeDir: "/tmp/home", V2Enabled: true, GardenRead: true}
+	firstDay := Priming{Member: "keeper", Name: "Keeper", HomeDir: "/tmp/home", V2Enabled: true, GardenRead: true}
 	existing := firstDay
 	existing.Charter = "Charter."
 	existing.CWD = "/tmp/work {{literal}}"

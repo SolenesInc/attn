@@ -25,6 +25,7 @@ type Terminals struct {
 	onExit      func(ptybackend.ExitInfo)
 	onState     func(harness.TerminalID, pty.Observation)
 	onNextSpawn func(*Terminal)
+	refuseNext  error
 }
 
 type TerminalInput struct {
@@ -75,8 +76,19 @@ func (b *Terminals) OnNextSpawn(fn func(*Terminal)) {
 	b.onNextSpawn = fn
 }
 
+func (b *Terminals) RefuseNextSpawn(err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.refuseNext = err
+}
+
 func (b *Terminals) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
 	b.mu.Lock()
+	if refused := b.refuseNext; refused != nil {
+		b.refuseNext = nil
+		b.mu.Unlock()
+		return refused
+	}
 	if existing := b.terminals[opts.ID]; existing != nil && existing.running {
 		b.mu.Unlock()
 		return fmt.Errorf("session %s already running", opts.ID)

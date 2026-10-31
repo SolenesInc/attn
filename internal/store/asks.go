@@ -195,7 +195,7 @@ func closeAsksTo(db rowsQuerier, to inbox.Address) ([]string, error) {
 }
 
 func closeProfileMailboxAsks(db rowsQuerier, profileID string) ([]string, error) {
-	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT ? || member_id FROM crew_profiles WHERE profile_id = ?) RETURNING id",
+	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT ? || member_key FROM crew_members WHERE profile_id = ?) RETURNING id",
 		inbox.ToChief(profileID).String(), inbox.ToMember("").String(), profileID)
 }
 

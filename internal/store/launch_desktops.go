@@ -85,8 +85,7 @@ func loadLaunchItem(tx *sql.Tx, kind, id string) (LaunchDesktopItem, error) {
 	case "automation":
 		err = tx.QueryRow(`SELECT name,profile_id FROM automation_definitions WHERE id = ? AND deleted_at = ''`, id).Scan(&item.Name, &item.ProfileID)
 	case "crew":
-		item.Name = id
-		err = tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, id).Scan(&item.ProfileID)
+		err = tx.QueryRow(`SELECT name,profile_id FROM crew_members WHERE member_key = ?`, id).Scan(&item.Name, &item.ProfileID)
 	default:
 		return item, profiles.Errorf(profiles.CodeInvalid, "unknown launch desktop kind %q", kind)
 	}
@@ -225,7 +224,7 @@ func (s *Store) SetLaunchDesktop(kind, id string, setting LaunchDesktopSetting) 
 
 var launchItemQueries = [][2]string{
 	{"automation", `SELECT id FROM automation_definitions WHERE deleted_at = '' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY id`},
-	{"crew", `SELECT member_id FROM crew_profiles WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_id`},
+	{"crew", `SELECT member_key FROM crew_members WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '') ORDER BY member_key`},
 }
 
 func launchItems(tx *sql.Tx) ([]LaunchDesktopItem, error) {

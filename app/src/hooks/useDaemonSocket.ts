@@ -100,7 +100,8 @@ import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
 import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
-import { crewDisplayName } from '../utils/crewName';
+import { crewRef } from '../utils/crewName';
+import type { CrewRenameResult } from '../types/generated';
 import { recordDiag } from '../utils/terminalDiagnosticsLog';
 import { recordPtyCommand, recordWsBinaryPtyOutput, recordWsJsonParse } from '../utils/ptyPerf';
 import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../utils/terminalInputLatency';
@@ -3505,7 +3506,7 @@ export function useDaemonSocket({
 
   const sendCrewWake = useCallback(
     (member: string): Promise<{ sessionId: string }> => {
-      return sendRequest('crew_wake', { member }, `Waking ${crewDisplayName(member)} timed out`);
+      return sendRequest('crew_wake', { member: crewRef(member) }, 'Waking the crew member timed out');
     },
     [sendRequest],
   );
@@ -3513,8 +3514,8 @@ export function useDaemonSocket({
   const sendCrewSleep = useCallback(
     (member: string): Promise<CrewSleepResult> => sendRequest(
       'crew_sleep',
-      { member },
-      `Asking ${crewDisplayName(member)} to sleep timed out`,
+      { member: crewRef(member) },
+      'Asking the crew member to sleep timed out',
     ),
     [sendRequest],
   );
@@ -3523,14 +3524,14 @@ export function useDaemonSocket({
     sendRequest(
       'crew_set',
       {
-        member: options.member,
+        member: crewRef(options.member),
         expected_revision: options.expectedRevision,
         agent: options.agent,
         model: options.model,
         effort: options.effort,
         ...(options.launchDesktop ? { launch_desktop_setting: options.launchDesktop } : {}),
       },
-      `Saving ${crewDisplayName(options.member)}'s launch settings timed out`,
+      'Saving the crew member\'s launch settings timed out',
       MODEL_DISCOVERY_TIMEOUT_MS,
     )
   ), [sendRequest]);
@@ -3538,8 +3539,8 @@ export function useDaemonSocket({
   const sendCrewCharterGet = useCallback((member: string): Promise<CrewCharterGetOutcome> => (
     sendRequest(
       'crew_charter_get',
-      { member },
-      `Reading ${crewDisplayName(member)}'s charter timed out`,
+      { member: crewRef(member) },
+      'Reading the charter timed out',
     )
   ), [sendRequest]);
 
@@ -3550,24 +3551,32 @@ export function useDaemonSocket({
   ): Promise<CrewCharterSetOutcome> => (
     sendRequest(
       'crew_charter_set',
-      { member, content, expected_token: expectedToken },
-      `Saving ${crewDisplayName(member)}'s charter timed out`,
+      { member: crewRef(member), content, expected_token: expectedToken },
+      'Saving the charter timed out',
     )
   ), [sendRequest]);
 
   const sendCrewHandoffsGet = useCallback((member: string): Promise<CrewHandoffsGetOutcome> => (
     sendRequest(
       'crew_handoffs_get',
-      { member },
-      `Reading ${crewDisplayName(member)}'s handoffs timed out`,
+      { member: crewRef(member) },
+      'Reading the handoffs timed out',
     )
   ), [sendRequest]);
 
   const sendCrewHandoffGet = useCallback((member: string, filename: string): Promise<CrewHandoffGetOutcome> => (
     sendRequest(
       'crew_handoff_get',
-      { member, filename },
-      `Reading ${crewDisplayName(member)}'s handoff ${filename} timed out`,
+      { member: crewRef(member), filename },
+      `Reading the handoff ${filename} timed out`,
+    )
+  ), [sendRequest]);
+
+  const sendCrewRename = useCallback((member: string, name: string): Promise<CrewRenameResult> => (
+    sendRequest(
+      'crew_rename',
+      { member: crewRef(member), name },
+      'Renaming the crew member timed out',
     )
   ), [sendRequest]);
 
@@ -4366,6 +4375,7 @@ export function useDaemonSocket({
     sendSeedReviewDraft,
     sendCrewWake,
     sendCrewSleep,
+    sendCrewRename,
     sendCrewSet,
     sendCrewCharterGet,
     sendCrewCharterSet,

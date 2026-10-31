@@ -1,6 +1,5 @@
 import type { CrewCharterAutosave, CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 
 function charterStatus(edit: CrewCharterEdit): string {
   if (edit.state === 'dirty') return 'Waiting to save';
@@ -33,7 +32,7 @@ export function CrewCharterTab({ member, edit, autosave }: {
         <span data-testid="crew-charter-status" className={`crew-document-save is-${edit.state}`} role="status" aria-live="polite">{charterStatus(edit)}</span>
       </div>
       <div className="crew-charter-meta"><span>CHARTER.md</span><span>Markdown</span></div>
-      <label className="crew-visually-hidden" htmlFor={`crew-charter-${member.id}`}>Charter for {crewDisplayName(member.id)}</label>
+      <label className="crew-visually-hidden" htmlFor={`crew-charter-${member.id}`}>Charter for {member.name}</label>
       <textarea
         id={`crew-charter-${member.id}`}
         data-testid="crew-charter-editor"

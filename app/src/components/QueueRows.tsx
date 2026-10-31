@@ -8,7 +8,6 @@ import { CrewWakeSun, useWakeConfirm } from './CrewWake';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
 import type { QueueRow } from '../utils/queueBands';
-import { crewDisplayName } from '../utils/crewName';
 import type {
   AutomationProvenance as AutomationProvenanceValue,
   SessionDelegationRole,
@@ -43,6 +42,7 @@ export interface QueueBandSessionView {
 export interface CrewMemberView {
   launch_desktop?: { label?: string };
   id: string;
+  name: string;
   resolved_agent?: string;
   binding_session?: string;
 }
@@ -216,6 +216,7 @@ export interface RowWhere {
 interface CrewRowProps {
   agent?: string;
   member: string;
+  name: string;
   row?: QueueRow<QueueBandSessionView>;
   where?: RowWhere;
   selected: boolean;
@@ -233,6 +234,7 @@ export function CrewRowView(props: CrewRowProps) {
   ) : (
     <SleepingCrewRow
       member={props.member}
+      name={props.name}
       agent={props.agent}
       selected={props.selected}
       onWake={props.onWake}
@@ -243,14 +245,14 @@ export function CrewRowView(props: CrewRowProps) {
 
 function SleepingCrewRow({
   member,
+  name,
   agent,
   selected,
   onWake,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'member' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
+}: Pick<CrewRowProps, 'member' | 'name' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
   const { phase, trigger, rowRef } = useWakeConfirm(onWake);
   const armed = phase === 'armed';
-  const name = crewDisplayName(member);
   const wakeLabel = armed ? `Wake ${name} — click again to confirm` : `Wake ${name}`;
   return (
     <div
@@ -311,6 +313,7 @@ function SleepingCrewRow({
 
 function AwakeCrewRow({
   member,
+  name,
   row,
   where,
   selected,
@@ -321,7 +324,6 @@ function AwakeCrewRow({
 }: CrewRowProps & {
   row: QueueRow<QueueBandSessionView>;
 }) {
-  const name = crewDisplayName(member);
   const { session } = row;
   const label = sessionDisplayName(session) || name;
   return (

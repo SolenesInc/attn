@@ -29,11 +29,12 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 
 // seedTenderMember resolves a seed's tender name to a crew member of the seed's own profile.
 func (d *Daemon) seedTenderMember(seed garden.Seed) (crew.Member, bool, error) {
-	member, found, err := d.resolveCrewMember(seed.Tender().Member)
-	if err != nil || !found || d.crewProfileID(member.ID) != seed.ProfileID {
-		return crew.Member{}, false, err
+	key := strings.TrimSpace(seed.Tender().Member)
+	if key == "" {
+		return crew.Member{}, false, nil
 	}
-	return member, true, nil
+	member, found, err := d.crewMemberIn(seed.ProfileID, crew.KeyRefPrefix+key)
+	return member, found, err
 }
 
 func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {

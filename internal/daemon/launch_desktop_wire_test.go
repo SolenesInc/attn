@@ -84,7 +84,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 	if shared := writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(slot5)}); protocol.Deref(shared.Setting.Label) != "5 · Review" {
 		t.Fatalf("shared choice: %+v", shared)
 	}
-	for _, member := range []string{"trellis", "alder"} {
+	for member, name := range map[string]string{"trellis": "Trellis", "alder": "Alder"} {
 		day, err := cli.CrewWake(member, "", protocol.SessionID(caller))
 		if err != nil {
 			t.Fatal(err)
@@ -92,7 +92,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 		w.Launched(string(day.SessionID))
 		assertBackgroundPlacement(t, w, profile, string(day.SessionID), slot5, current, active)
 		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool { return r.SessionID == day.SessionID })
-		if arrival.Name != member || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
+		if arrival.Name != name || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
 			t.Fatalf("arrival: %+v", arrival)
 		}
 	}
@@ -210,10 +210,10 @@ func TestTheLaunchReviewCreatesSuggestedDesktopsOnFinishAndKeepsChoicesAcrossRes
 		t.Fatalf("finish = %+v", done)
 	}
 	view := viewProfile(t, w, profile)
-	for _, member := range []string{"alder", "keel", "trellis"} {
+	for member, name := range map[string]string{"alder": "Alder", "keel": "Keel", "trellis": "Trellis"} {
 		item := readLaunchSetting(app, "crew", member)
 		desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]
-		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != member) {
+		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != name) {
 			t.Fatalf("%s after finish: %+v on %+v", member, item, desktop)
 		}
 	}

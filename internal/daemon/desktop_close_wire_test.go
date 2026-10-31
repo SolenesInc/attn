@@ -170,7 +170,7 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			if numbered && desktop.ID != old {
 				t.Fatalf("numbered launch on %s, want %s", desktop.ID, old)
 			}
-			if !numbered && (desktop.ID == old || desktop.Name != "alder") {
+			if !numbered && (desktop.ID == old || desktop.Name != "Alder") {
 				t.Fatalf("named launch: %+v", desktop)
 			}
 			rebound := readLaunchSetting(app, "crew", "alder")

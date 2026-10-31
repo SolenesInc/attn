@@ -182,6 +182,7 @@ model Session {
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
   chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
+  crew_member_name?: string;    // That member's name, present with crew_member.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: SessionID; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
@@ -714,6 +715,9 @@ model StateExplainMessage {
 model AgentPeekMessage {
   cmd: "agent_peek";
   target_session_id: string;    // crew name, full session id, or unique session prefix
+  // The caller; crew names resolve only inside its profile.
+  source_session_id?: SessionID;
+  profile_id?: string;
 }
 
 // One agent sends another a message. The daemon persists the body and types a
@@ -6991,6 +6995,7 @@ model Response {
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
+  crew_rename_result?: CrewRenameResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -7094,6 +7099,7 @@ model AgentPeekResult {
   exit?: AgentPeekExit;
   // The crew member whose active binding this session is; absent when unbound.
   crew_member?: string;
+  crew_member_name?: string;
 }
 
 // ============================================================================
@@ -7106,13 +7112,21 @@ model AgentPeekResult {
 @extension("x-on", #{ home: true })
 model CrewListMessage {
   cmd: "crew_list";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
 }
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
   profile_name?: string;
   launch_desktop?: LaunchDesktopSetting;
+  // The member's permanent key. Address a member by key as member:<key>.
   id: string;
+  // Unique in the member's profile, ignoring case; the user can change it.
+  name: string;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
@@ -7149,6 +7163,11 @@ model CrewCharterDocument {
 @extension("x-on", #{ home: true })
 model CrewCharterGetMessage {
   cmd: "crew_charter_get";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   request_id?: string;
 }
@@ -7170,6 +7189,11 @@ model CrewCharterGetResultMessage {
 @extension("x-on", #{ home: true })
 model CrewCharterSetMessage {
   cmd: "crew_charter_set";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   content: string;
   expected_token: string;
@@ -7207,6 +7231,11 @@ model CrewHandoffDocument {
 @extension("x-on", #{ home: true })
 model CrewHandoffsGetMessage {
   cmd: "crew_handoffs_get";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   request_id?: string;
 }
@@ -7228,6 +7257,11 @@ model CrewHandoffsGetResultMessage {
 @extension("x-on", #{ home: true })
 model CrewHandoffGetMessage {
   cmd: "crew_handoff_get";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   filename: string;
   request_id?: string;
@@ -7289,6 +7323,7 @@ model CrewWakeResultMessage {
 
 model CrewWakeResult {
   member: string;
+  name: string;
   session_id: SessionID;
   profile_id: string;
   // True when the member was already awake and session_id is the day that was
@@ -7299,6 +7334,34 @@ model CrewWakeResult {
   released_session_id?: SessionID;
 }
 
+// Rename a crew member. Its key, home, letters and mail stay; the bound
+// session's label follows the new name.
+@extension("x-on", #{ home: true })
+model CrewRenameMessage {
+  cmd: "crew_rename";
+  member: string;
+  name: string;
+  request_id?: string;
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model CrewRenameResult {
+  member: string;
+  name: string;
+  previous_name: string;
+  // The session whose label changed, when the member is awake.
+  session_id?: SessionID;
+}
+
+model CrewRenameResultMessage {
+  event: "crew_rename_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  result?: CrewRenameResult;
+}
+
 // Ask an awake member to close its day and sleep. This is consented closure:
 // the daemon delivers a user-originated request telling the member to write its
 // handoff and file it with `attn handoff`; it does not kill the member.
@@ -7306,6 +7369,11 @@ model CrewWakeResult {
 @extension("x-on", #{ home: true })
 model CrewSleepMessage {
   cmd: "crew_sleep";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   request_id?: string; // set by the WS frontend to correlate the result event
 }
@@ -7327,6 +7395,7 @@ model CrewSleepResultMessage {
 
 model CrewSleepResult {
   member: string;
+  name: string;
   // Absent when the member was already asleep and no request was sent.
   session_id?: SessionID;
   already_asleep: boolean;
@@ -7342,6 +7411,11 @@ model CrewSleepResult {
 model CrewSetMessage {
   launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "crew_set";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
   member: string;
   cwd?: string;
   // The harness the member's days run on. An empty string clears it back to
@@ -7424,6 +7498,7 @@ enum CrewDayClose {
 // and `nap_error` says why the successor was not woken.
 model CrewHandoffResult {
   member: string;
+  name: string;
   path: string;
   // The session living the member's new day. Absent when no nap ran.
   session_id?: SessionID;
@@ -7545,6 +7620,10 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  // Set on a crew member's sessions. The ledger shows a member as one row:
+  // its latest session, plus any of its sessions still running.
+  member_key?: string;
+  member_name?: string;
   host?: string;
   priority?: boolean;
   turn_snoozed_until?: string;
@@ -8292,6 +8371,7 @@ alias DaemonEvent =
   | CrewWakeResultMessage
   | CrewSleepResultMessage
   | CrewSetResultMessage
+  | CrewRenameResultMessage
   | OpenSeedResultMessage
   | PRsUpdatedMessage
   | ReposUpdatedMessage

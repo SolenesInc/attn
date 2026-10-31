@@ -16,3 +16,8 @@ export function crewDisplayName(id: string): string {
 export function crewHolderName(member: string | undefined, session: string | undefined): string {
   return member?.trim() ? crewDisplayName(member) : session?.trim() ?? '';
 }
+
+/** Addresses a member by its permanent key; a bare word would be read as a name. */
+export function crewRef(key: string): string {
+  return `member:${key}`;
+}

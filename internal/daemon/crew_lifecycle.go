@@ -259,12 +259,12 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 			if after, retry := sessionmonitor.RetryDelay(attempt.Err); retry {
 				d.life.AfterFunc("crewHeartbeatRetry", after, func() { d.actOnCrewMember(member, sessionID, action, cache, time.Now()) })
 			}
-			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.Err)
+			d.logf("crew: %s's heartbeat did not reach session %s: %v", member.Name, sessionID, attempt.Err)
 			return
 		}
 		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.At)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
-			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
+			member.Name, sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
 		session := d.store.Get(sessionID)
 		if session == nil {
@@ -274,7 +274,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		prompt := prompts.RenderText("crew", "sleep-away", prompts.Values{})
 		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: prompt})
 		if err != nil {
-			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
+			d.logf("crew: %s's sleep request could not be recorded: %v", member.Name, err)
 			return
 		}
 		if !receipt.Rang {
@@ -282,7 +282,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		}
 
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
-			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
+			member.Name, cache.Remaining().Round(time.Second))
 	}
 }
 
@@ -296,7 +296,7 @@ func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
 	var refusal error
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-		kept, err := ledger.Allows(member.ID, now)
+		kept, err := ledger.Allows(member.Name, now)
 		if err != nil {
 			refusal = err
 			return false, nil

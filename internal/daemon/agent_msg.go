@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -84,12 +83,8 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		notFound := func() {
 			d.replyAgentMsgError(conn, "session_or_crew_member_not_found", fmt.Sprintf("no session or crew member matches %q; `attn agent list` names sessions and `attn crew list` names members", protocol.TrimID(targetRef)))
 		}
-		member, found, memberErr := d.resolveCrewMember(string(targetRef))
+		member, found, memberErr := d.crewMemberIn(sender.ProfileID, string(targetRef))
 		if found {
-			if d.crewProfileID(member.ID) != sender.ProfileID {
-				notFound()
-				return
-			}
 			address = inbox.ToMember(member.ID)
 		} else {
 			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
@@ -149,7 +144,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		result.TargetSessionID = holder.ID
 	}
 	if receipt.Rang && address.MemberID() != "" {
-		result.Detail = "notified " + crew.DisplayName(address.MemberID())
+		result.Detail = "notified " + d.crewMemberName(address.MemberID())
 	}
 
 	d.replyAgentMsg(conn, result)

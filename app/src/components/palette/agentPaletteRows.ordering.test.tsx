@@ -43,7 +43,7 @@ function rows(
   return agentPaletteRows(
     {
       bands: buildQueueBands(desktops, { crewInQueue, now: NOW }),
-      crewRoster,
+      crewRoster: crewRoster.map((id) => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1) })),
       desktops,
       tileTitle: (_desktopId, leaf) => leaf.tileParams ?? '',
       now: NOW,

@@ -165,11 +165,14 @@ function CrewBlock() {
           testIdPrefix="queue-chief"
         />
       )}
-      {members.map(({ member, row }) => (
+      {members.map(({ member, row }) => {
+        const roster = crew?.find((candidate) => candidate.id === member);
+        return (
         <CrewRowView
           key={member}
           member={member}
-          agent={crew?.find((candidate) => candidate.id === member)?.resolved_agent}
+          name={roster?.name ?? member}
+          agent={roster?.resolved_agent}
           row={row}
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}
@@ -180,7 +183,8 @@ function CrewBlock() {
           delegates={row ? (delegates.get(row.session.id) ?? []) : []}
           onOpenMemberActions={(event) => openCrewMemberActions(member, event)}
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

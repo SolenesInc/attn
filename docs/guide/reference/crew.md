@@ -15,8 +15,10 @@ to by name.
 A member is a folder in Attn's data folder: `~/.attn/crew/<name>/` (for a named
 instance, `~/.attn-<instance>/crew/<name>/`), with a `CHARTER.md` inside.
 
-1. Pick a name: lowercase letters, digits and `-`, starting with a letter, at
-   most 40 characters. `attn` is taken.
+1. Pick a folder name: lowercase letters, digits and `-`, starting with a
+   letter, at most 40 characters. `attn` is taken. The folder name is the
+   member's permanent key; its name starts as the key with a capital letter,
+   so `fern` is Fern.
 2. Create `crew/<name>/CHARTER.md`. Leave it empty if you want the member to
    write it: its first session agrees a name and charter with you, then
    writes the file in its own words.
@@ -24,8 +26,14 @@ instance, `~/.attn-<instance>/crew/<name>/`), with a `CHARTER.md` inside.
    adds new homes to the roster when the daemon starts.
 
 The member joins the profile you used most recently, and wakes only there.
-`attn crew list` shows every member, its state, harness, model, launch
-desktop and home folder.
+`attn crew list` shows the members of your profile, with their state,
+harness, model, launch desktop and home folder.
+
+A member's name is unique in its profile, ignoring case. Commands find a
+member by name in your profile: inside Attn, the profile of the session you
+run them from; outside, pass `--profile <name|id>` when you have several.
+`member:<key>`, such as `member:fern`, reaches the member by its key, which
+never changes.
 
 ## The Crew section
 
@@ -132,7 +140,11 @@ The member is asleep. Its next session starts from the last letter it filed, so 
 <details>
 <summary>Can I rename or remove a member?</summary>
 
-Attn has no command for either yet. A member's name is its folder's name, and the roster keeps every member it has imported.
+With Crew v2 on, rename a member with `attn crew rename <member> <name>` or
+**Rename** next to its name in Manage crew. Its key, home folder, letters,
+mail and seeds stay, and an awake member's agent takes the new name. Attn has
+no command to remove a member yet; the roster keeps every member it has
+imported.
 </details>
 
 <details>
@@ -154,3 +166,4 @@ next session. With it on:
   and seeds.
 - Each letter records the session that wrote it, so Attn can keep that
   session's transcript for the member to read later.
+- You can rename members.

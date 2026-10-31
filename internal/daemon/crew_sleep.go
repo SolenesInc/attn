@@ -3,17 +3,15 @@ package daemon
 import (
 	"fmt"
 	"net"
-	"strings"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
-	result, err := d.crewSleep(strings.TrimSpace(msg.Member))
+	result, err := d.crewSleep(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		d.sendCrewError(conn, "sleep", err)
 		return
@@ -22,7 +20,7 @@ func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) 
 }
 
 func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMessage) {
-	result, err := d.crewSleep(strings.TrimSpace(msg.Member))
+	result, err := d.crewSleep(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	response := protocol.CrewSleepResultMessage{
 		Event:     protocol.EventCrewSleepResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -40,11 +38,11 @@ func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMess
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
+func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepResult, error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 
-	member, _, err := d.crewMember(name)
+	member, err := d.crewAskedMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
@@ -52,40 +50,43 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	if sessionID == "" {
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,
+			Name:          member.Name,
 			AlreadyAsleep: true,
-			Detail:        fmt.Sprintf("%s is already asleep; no sleep request was sent", crew.DisplayName(member.ID)),
+			Detail:        fmt.Sprintf("%s is already asleep; no sleep request was sent", member.Name),
 		}, nil
 	}
 	live, err := d.crewSessionActuallyLive(sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("check %s's bound session %s: %w", crew.DisplayName(member.ID), shortSessionID(sessionID), err)
+		return nil, fmt.Errorf("check %s's bound session %s: %w", member.Name, shortSessionID(sessionID), err)
 	}
 	if !live {
 		if _, err := d.releaseCrewBinding(member.ID, sessionID); err != nil {
-			return nil, fmt.Errorf("release %s's exited session %s: %w", crew.DisplayName(member.ID), shortSessionID(sessionID), err)
+			return nil, fmt.Errorf("release %s's exited session %s: %w", member.Name, shortSessionID(sessionID), err)
 		}
 		d.noteCrewExitedSession(member.ID, sessionID)
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,
+			Name:          member.Name,
 			AlreadyAsleep: true,
 			Detail: fmt.Sprintf("%s is already asleep; previous session %s had exited and its binding was released; no sleep request was sent",
-				crew.DisplayName(member.ID), shortSessionID(sessionID)),
+				member.Name, shortSessionID(sessionID)),
 		}, nil
 	}
 
 	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
-		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("record %s's sleep request: %w", member.Name, err)
 	}
 	status := protocol.AgentMsgStatusNotified
-	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff`", crew.DisplayName(member.ID), shortSessionID(sessionID))
+	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff`", member.Name, shortSessionID(sessionID))
 	if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
 		detail = receipt.Detail
 	}
 	return &protocol.CrewSleepResult{
 		Member:         member.ID,
+		Name:           member.Name,
 		SessionID:      protocol.Ptr(sessionID),
 		DeliveryStatus: protocol.Ptr(status),
 		Detail:         detail,

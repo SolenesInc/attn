@@ -545,7 +545,8 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		d.sendGardenError(conn, "plot", err)
 		return
 	}
-	seeds, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), protocol.TrimID(protocol.Deref(msg.SourceSessionID)), strings.TrimSpace(protocol.Deref(msg.Member)))
+	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	seeds, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), source, d.resolveTenderMember(protocol.Deref(msg.Member), source))
 	if err != nil {
 		d.sendGardenError(conn, "plot", err)
 		return
@@ -1211,7 +1212,7 @@ func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtec
 		}
 		if dispatcher := protocol.SessionID(strings.TrimSpace(string(dispatcherSession))); dispatcher != "" {
 			next.DispatcherSession = dispatcher
-			next.DispatcherMember = d.crewMembersBySession()[dispatcher]
+			next.DispatcherMember = d.crewMembersBySession()[dispatcher].ID
 		}
 		next.FromChief = fromChief
 		return next, true, nil

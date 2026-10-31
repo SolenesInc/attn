@@ -14,13 +14,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) crewDocumentMember(name string) (crew.Member, error) {
-	member, ok, err := d.resolveCrewMember(strings.TrimSpace(name))
+func (d *Daemon) crewDocumentMember(asker crewAsker, name string) (crew.Member, error) {
+	member, err := d.crewAskedMember(asker, name)
 	if err != nil {
 		return crew.Member{}, err
-	}
-	if !ok {
-		return crew.Member{}, fmt.Errorf("no crew member %q is registered", name)
 	}
 	if err := d.requireCrewFiles(member); err != nil {
 		return crew.Member{}, err
@@ -31,13 +28,13 @@ func (d *Daemon) crewDocumentMember(name string) (crew.Member, error) {
 func (d *Daemon) crewCharterRead(member crew.Member) (protocol.CrewCharterDocument, error) {
 	content, hash, err := fsdoc.NewStore(member.HomeDir(d.dataRoot)).Read(crew.CharterFileName)
 	if err != nil {
-		return protocol.CrewCharterDocument{}, fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
+		return protocol.CrewCharterDocument{}, fmt.Errorf("reading %s's charter: %w", member.Name, err)
 	}
 	return protocol.CrewCharterDocument{Content: string(content), Token: hash}, nil
 }
 
-func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, error) {
-	member, err := d.crewDocumentMember(name)
+func (d *Daemon) crewCharterGet(asker crewAsker, name string) (*protocol.CrewCharterGetResult, error) {
+	member, err := d.crewDocumentMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
@@ -48,21 +45,21 @@ func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, er
 	return &protocol.CrewCharterGetResult{Member: member.ID, Charter: charter}, nil
 }
 
-func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.CrewCharterSetResult, error) {
+func (d *Daemon) crewCharterSet(asker crewAsker, name, content, expectedToken string) (*protocol.CrewCharterSetResult, error) {
 	d.crewCharterMu.Lock()
 	defer d.crewCharterMu.Unlock()
 
-	member, err := d.crewDocumentMember(name)
+	member, err := d.crewDocumentMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
 	expectedToken = strings.TrimSpace(expectedToken)
 	if expectedToken == "" {
-		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
+		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", member.Name)
 	}
 	hash, conflict, err := fsdoc.NewStore(member.HomeDir(d.dataRoot)).Write(crew.CharterFileName, []byte(content), expectedToken)
 	if err != nil {
-		return nil, fmt.Errorf("saving %s's charter: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("saving %s's charter: %w", member.Name, err)
 	}
 	if conflict != nil {
 		current, err := d.crewCharterRead(member)
@@ -89,8 +86,8 @@ func crewHandoffTime(filename string) (time.Time, error) {
 	return when, nil
 }
 
-func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, error) {
-	member, err := d.crewDocumentMember(name)
+func (d *Daemon) crewHandoffsGet(asker crewAsker, name string) (*protocol.CrewHandoffsGetResult, error) {
+	member, err := d.crewDocumentMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +100,7 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 		return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: []protocol.CrewHandoffSummary{}}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading %s's handoff history: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("reading %s's handoff history: %w", member.Name, err)
 	}
 
 	handoffs := make([]protocol.CrewHandoffSummary, 0, len(entries))
@@ -113,11 +110,11 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 		}
 		occurredAt, err := crewHandoffTime(entry.Name())
 		if err != nil {
-			d.logf("crew: %s's handoffs dir holds %q, which is not a filed letter; skipping it", crew.DisplayName(member.ID), entry.Name())
+			d.logf("crew: %s's handoffs dir holds %q, which is not a filed letter; skipping it", member.Name, entry.Name())
 			continue
 		}
 		if err := d.validateCrewLetterPath(member, filepath.Join(dir, entry.Name())); err != nil {
-			d.logf("crew: skipping %s's handoff %q: %v", crew.DisplayName(member.ID), entry.Name(), err)
+			d.logf("crew: skipping %s's handoff %q: %v", member.Name, entry.Name(), err)
 			continue
 		}
 		handoffs = append(handoffs, protocol.CrewHandoffSummary{Filename: entry.Name(), OccurredAt: occurredAt})
@@ -126,8 +123,8 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 	return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: handoffs}, nil
 }
 
-func (d *Daemon) crewHandoffGet(name, filename string) (*protocol.CrewHandoffGetResult, error) {
-	member, err := d.crewDocumentMember(name)
+func (d *Daemon) crewHandoffGet(asker crewAsker, name, filename string) (*protocol.CrewHandoffGetResult, error) {
+	member, err := d.crewDocumentMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
@@ -137,18 +134,18 @@ func (d *Daemon) crewHandoffGet(name, filename string) (*protocol.CrewHandoffGet
 	}
 	filename = strings.TrimSpace(filename)
 	if filename == "" || filename != filepath.Base(filename) {
-		return nil, fmt.Errorf("handoff %q is not a filename in %s's handoff history", filename, crew.DisplayName(member.ID))
+		return nil, fmt.Errorf("handoff %q is not a filename in %s's handoff history", filename, member.Name)
 	}
 	occurredAt, err := crewHandoffTime(filename)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s's handoff %s: %w", crew.DisplayName(member.ID), filename, err)
+		return nil, fmt.Errorf("reading %s's handoff %s: %w", member.Name, filename, err)
 	}
 	if err := d.validateCrewLetterPath(member, filepath.Join(dir, filename)); err != nil {
 		return nil, err
 	}
 	content, token, err := fsdoc.NewStore(dir).ReadWithLimit(filename, crew.MaxHandoffFileBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s's handoff %s: %w", crew.DisplayName(member.ID), filename, err)
+		return nil, fmt.Errorf("reading %s's handoff %s: %w", member.Name, filename, err)
 	}
 	return &protocol.CrewHandoffGetResult{Member: member.ID, Handoff: protocol.CrewHandoffDocument{
 		Filename: filename, OccurredAt: occurredAt, Content: string(content), Token: token,
@@ -156,7 +153,7 @@ func (d *Daemon) crewHandoffGet(name, filename string) (*protocol.CrewHandoffGet
 }
 
 func (d *Daemon) handleCrewCharterGet(conn net.Conn, msg *protocol.CrewCharterGetMessage) {
-	result, err := d.crewCharterGet(msg.Member)
+	result, err := d.crewCharterGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		d.sendCrewError(conn, "read charter", err)
 		return
@@ -165,7 +162,7 @@ func (d *Daemon) handleCrewCharterGet(conn net.Conn, msg *protocol.CrewCharterGe
 }
 
 func (d *Daemon) handleCrewCharterSet(conn net.Conn, msg *protocol.CrewCharterSetMessage) {
-	result, err := d.crewCharterSet(msg.Member, msg.Content, msg.ExpectedToken)
+	result, err := d.crewCharterSet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member, msg.Content, msg.ExpectedToken)
 	if err != nil {
 		d.sendCrewError(conn, "save charter", err)
 		return
@@ -174,7 +171,7 @@ func (d *Daemon) handleCrewCharterSet(conn net.Conn, msg *protocol.CrewCharterSe
 }
 
 func (d *Daemon) handleCrewHandoffsGet(conn net.Conn, msg *protocol.CrewHandoffsGetMessage) {
-	result, err := d.crewHandoffsGet(msg.Member)
+	result, err := d.crewHandoffsGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		d.sendCrewError(conn, "read handoffs", err)
 		return
@@ -183,7 +180,7 @@ func (d *Daemon) handleCrewHandoffsGet(conn net.Conn, msg *protocol.CrewHandoffs
 }
 
 func (d *Daemon) handleCrewHandoffGet(conn net.Conn, msg *protocol.CrewHandoffGetMessage) {
-	result, err := d.crewHandoffGet(msg.Member, msg.Filename)
+	result, err := d.crewHandoffGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member, msg.Filename)
 	if err != nil {
 		d.sendCrewError(conn, "read handoff", err)
 		return
@@ -203,7 +200,7 @@ func (d *Daemon) handleCrewCharterGetWS(client *wsClient, msg *protocol.CrewChar
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewCharterGetResult
 	if err == nil {
-		result, err = d.crewCharterGet(msg.Member)
+		result, err = d.crewCharterGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	}
 	response := protocol.CrewCharterGetResultMessage{
 		Event: protocol.EventCrewCharterGetResult, RequestID: requestID, Success: err == nil,
@@ -220,7 +217,7 @@ func (d *Daemon) handleCrewCharterSetWS(client *wsClient, msg *protocol.CrewChar
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewCharterSetResult
 	if err == nil {
-		result, err = d.crewCharterSet(msg.Member, msg.Content, msg.ExpectedToken)
+		result, err = d.crewCharterSet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member, msg.Content, msg.ExpectedToken)
 	}
 	response := protocol.CrewCharterSetResultMessage{
 		Event: protocol.EventCrewCharterSetResult, RequestID: requestID, Success: err == nil,
@@ -237,7 +234,7 @@ func (d *Daemon) handleCrewHandoffsGetWS(client *wsClient, msg *protocol.CrewHan
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewHandoffsGetResult
 	if err == nil {
-		result, err = d.crewHandoffsGet(msg.Member)
+		result, err = d.crewHandoffsGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	}
 	response := protocol.CrewHandoffsGetResultMessage{
 		Event: protocol.EventCrewHandoffsGetResult, RequestID: requestID, Success: err == nil,
@@ -254,7 +251,7 @@ func (d *Daemon) handleCrewHandoffGetWS(client *wsClient, msg *protocol.CrewHand
 	requestID, err := crewDocumentRequestID(msg.RequestID)
 	var result *protocol.CrewHandoffGetResult
 	if err == nil {
-		result, err = d.crewHandoffGet(msg.Member, msg.Filename)
+		result, err = d.crewHandoffGet(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member, msg.Filename)
 	}
 	response := protocol.CrewHandoffGetResultMessage{
 		Event: protocol.EventCrewHandoffGetResult, RequestID: requestID, Success: err == nil,

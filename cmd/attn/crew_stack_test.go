@@ -119,7 +119,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireLines(t, "agent list", agents, "MEMBER", "An ID or awake MEMBER here works with `attn agent peek <target>`")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
 	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
-	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "Keel is asleep", "never wakes", "`attn crew wake keel`")
+	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "keel is asleep", "never wakes", "`attn crew wake keel`")
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+" — nothing was launched."))
 
 	trellis.Exit(143)
@@ -144,4 +144,39 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 		codex.Exit(143)
 	}
 	testworld.AwaitSession(app, string(woken.SessionID), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+}
+
+func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	s.Start()
+	app := s.App()
+	home := app.SelectedProfile()
+	requireStdout(t, s.Attn("crew", "wake", "Keel"), "Keel is awake in session")
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	if unscoped := s.Attn("agent", "peek", "Keel"); unscoped.Code == 0 || !strings.Contains(unscoped.Stderr, "choose --profile") {
+		t.Fatalf("peek with two profiles and no caller: %+v", unscoped)
+	}
+	requireStdout(t, s.Attn("agent", "peek", "Keel", "--profile", home), "crew member: this session is Keel today")
+
+	homeCaller := s.Spawn(app, fakeagent.Claude, s.Path("home"))
+	sideApp := s.AppOn(created.Profile.ID)
+	sideCaller := s.Spawn(sideApp, fakeagent.Claude, s.Path("side"))
+	asCaller := func(caller string, peer *testworld.Peer, args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Args: args, Terminal: peer.Terminal(caller)})
+	}
+	requireStdout(t, asCaller(homeCaller, app, "agent", "peek", "keel"), "crew member: this session is Keel today")
+	if peek := asCaller(sideCaller, sideApp, "agent", "peek", "Keel"); peek.Code == 0 || !strings.Contains(peek.Stderr, "no session or crew member matches") {
+		t.Fatalf("peek of another profile's member: %+v", peek)
+	}
+	if wake := asCaller(sideCaller, sideApp, "crew", "wake", "Keel"); wake.Code == 0 || !strings.Contains(wake.Stderr, `no crew member named "Keel" in profile "Side"`) {
+		t.Fatalf("wake of another profile's member: %+v", wake)
+	}
+	if list := asCaller(sideCaller, sideApp, "crew", "list"); list.Code != 0 || !strings.Contains(list.Stdout, "No crew members are registered") {
+		t.Fatalf("Side roster: %+v", list)
+	}
 }

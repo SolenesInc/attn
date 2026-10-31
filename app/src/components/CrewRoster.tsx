@@ -1,7 +1,6 @@
 import type { KeyboardEvent, RefObject } from 'react';
 import type { CrewLaunchSaveState } from '../hooks/useCrewLaunchAutosave';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 
 export function CrewRoster({ members, visibleMembers, selectedId, filter, listRef, saveState, onFilterChange, onSelect }: {
   members: CrewMember[];
@@ -42,9 +41,9 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
               className={candidate.id === selectedId ? 'is-selected' : ''}
               onClick={() => onSelect(candidate.id)}
             >
-              <span className="crew-avatar" aria-hidden="true">{crewDisplayName(candidate.id).slice(0, 1)}</span>
+              <span className="crew-avatar" aria-hidden="true">{candidate.name.slice(0, 1)}</span>
               <span className="crew-roster-identity">
-                <strong>{crewDisplayName(candidate.id)}</strong>
+                <strong>{candidate.name}</strong>
                 <small>{candidate.launch_desktop?.label}</small>
                 <small><i className={awake ? 'is-awake' : ''} />{awake ? 'Awake' : 'Asleep'}</small>
               </span>

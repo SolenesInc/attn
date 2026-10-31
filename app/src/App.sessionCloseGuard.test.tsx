@@ -53,7 +53,7 @@ describe('chief and crew sessions are protected from close', () => {
     ['the close action', closeFromSidebar],
     ['⌘W', pressCmdW],
   ])('no-ops %s on a crew member and points to Sleep', async (_, close) => {
-    const { daemon } = await renderOrchestrator({ crew_member: 'coda' });
+    const { daemon } = await renderOrchestrator({ crew_member: 'coda', crew_member_name: 'Coda' });
 
     close();
 

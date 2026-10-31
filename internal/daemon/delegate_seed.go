@@ -88,7 +88,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	dispatch := observed
 	dispatch.Crown = seed.ID
 	dispatch.DispatcherSession = protocol.TrimID(plannerSessionID)
-	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
+	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession].ID
 	dispatch.FromChief = fromChief
 	dispatch.OperationID = strings.TrimSpace(operationID)
 	dispatchBody, err := dispatch.Encode()

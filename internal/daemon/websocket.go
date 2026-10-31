@@ -959,17 +959,33 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		wake.ProfileID = client.profileOr(wake.ProfileID)
 		d.life.Go("handleCrewWakeWS", func() { d.handleCrewWakeWS(client, wake) })
 	case protocol.CmdCrewCharterGet:
-		d.life.Go("handleCrewCharterGetWS", func() { d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage)) })
+		asked := msg.(*protocol.CrewCharterGetMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewCharterGetWS", func() { d.handleCrewCharterGetWS(client, asked) })
 	case protocol.CmdCrewCharterSet:
-		d.life.Go("handleCrewCharterSetWS", func() { d.handleCrewCharterSetWS(client, msg.(*protocol.CrewCharterSetMessage)) })
+		asked := msg.(*protocol.CrewCharterSetMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewCharterSetWS", func() { d.handleCrewCharterSetWS(client, asked) })
 	case protocol.CmdCrewHandoffsGet:
-		d.life.Go("handleCrewHandoffsGetWS", func() { d.handleCrewHandoffsGetWS(client, msg.(*protocol.CrewHandoffsGetMessage)) })
+		asked := msg.(*protocol.CrewHandoffsGetMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewHandoffsGetWS", func() { d.handleCrewHandoffsGetWS(client, asked) })
 	case protocol.CmdCrewHandoffGet:
-		d.life.Go("handleCrewHandoffGetWS", func() { d.handleCrewHandoffGetWS(client, msg.(*protocol.CrewHandoffGetMessage)) })
+		asked := msg.(*protocol.CrewHandoffGetMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewHandoffGetWS", func() { d.handleCrewHandoffGetWS(client, asked) })
 	case protocol.CmdCrewSleep:
-		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage)) })
+		asked := msg.(*protocol.CrewSleepMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, asked) })
+	case protocol.CmdCrewRename:
+		asked := msg.(*protocol.CrewRenameMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewRenameWS", func() { d.handleCrewRenameWS(client, asked) })
 	case protocol.CmdCrewSet:
-		d.life.Go("handleCrewSetWS", func() { d.handleCrewSetWS(client, msg.(*protocol.CrewSetMessage)) })
+		asked := msg.(*protocol.CrewSetMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewSetWS", func() { d.handleCrewSetWS(client, asked) })
 	case protocol.CmdFsList:
 		fsList := msg.(*protocol.FsListMessage)
 		d.life.Go("sendFsListWSResult", func() {
