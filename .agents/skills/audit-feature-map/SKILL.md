@@ -193,8 +193,9 @@ Write the `cleaned` note after each. When clean fails, stop launching, keep
 its output and the instance's env file, and ask the user with the instance
 name and the exact error.
 
-`clean` keeps `~/attn-notebook-<name>`. List each one in the report with its
-size and leave it in place.
+`clean` keeps `~/attn-notebook-<name>`. The pass made everything in it, so
+after a clean that succeeded, record its size and remove it:
+`du -sh ~/attn-notebook-<name> >> $runs/evidence/clean-<name>.log && rm -r ~/attn-notebook-<name>`.
 
 ## Repair the map
 
@@ -257,7 +258,7 @@ workers run detached and are not counted.
 <the output of `$S gaps` on this report>
 
 ## Cleanup
-<instance: clean.sh result>; residual paths and their size
+<instance: clean.sh result, notebook folder removed and its size>; anything else left behind
 
 ## Doors
 <the table from rows.md>
