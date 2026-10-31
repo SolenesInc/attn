@@ -18,8 +18,9 @@ to to work as a Pathfinder, and it takes the role right there.
 
 ## Before you start
 
-Open Settings > Delegation and click "Add Attn roles". This adds the five roles
-and installs the attn-workflow skill, which is how each role knows how to work.
+Open Settings > Delegation and click "Add Attn roles", or run
+`attn delegate roles install`. This adds the five roles and installs the
+attn-workflow skill, which is how each role knows how to work.
 See [delegation](../reference/delegation.md#roles) for what each role is.
 
 The roles arrive without a model, and agents can't pick a role until it has

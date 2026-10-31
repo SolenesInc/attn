@@ -113,15 +113,16 @@ Delegation turns the whole table off, and then agents pick harness and model on
 their own.
 
 Attn comes bundled with its own delegation roles you can opt into with "Add Attn
-roles" in Settings > Delegation. Each one arrives without a model, so pick one
+roles" in Settings > Delegation, or with `attn delegate roles install`. Each one
+arrives without a model, so pick one
 for each role you want agents to use. Adding them also installs the attn-workflow
 skill for your harnesses. The skill is necessary for the bundled roles, and any
 agent on your computer can use it (although it's designed to be used inside
 Attn). To change how a bundled role works, use "Make an editable copy".
 
 Agents can read and change the saved table for you with `attn delegate roles`
-(`attn delegate roles --help` lists the commands), for example to set a role's
-model. Adding Attn's roles for the first time has to happen in Settings.
+(`attn delegate roles --help` lists the commands), for example to add Attn's
+roles or set a role's model.
 
 ### Attn's roles
 
@@ -219,7 +220,7 @@ It reads your table with `attn delegate roles`, which lists only the roles that 
 <details>
 <summary>What does "Add Attn roles" install, and what happens to the roles I already have?</summary>
 
-It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code) and `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state).
+It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code) and `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state). `attn delegate roles install` doesn't ask: it adds each missing Attn role beside yours, as `builder-2` when one of yours already has the id `builder`.
 </details>
 
 <details>

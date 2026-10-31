@@ -27,11 +27,12 @@ switch.
    `attn delegate roles show`. If only one harness is found, ask whether the
    user expects another to work too. If attn's maintained roles (Pathfinder,
    Builder, Reviewer, Orchestrator, Prototyper) aren't in the table, explain
-   them and that the user adds them once with Add Attn roles in
-   Settings › Delegation, which also installs the `attn-workflow` skill they
-   use. Then offer concrete choices, such as planning on a deep model and
-   building on a cheaper one, or reviewing on a different harness than the one
-   that built. Make each agreed change with `attn delegate roles set` and the
+   them and the `attn-workflow` skill they follow, and offer to add them. If
+   the user agrees, run `attn delegate roles install` with their reason in
+   `-m`; it adds the roles, turns the table on and installs the skill for each
+   available harness. Then offer concrete choices, such as planning on a deep
+   model and building on a cheaper one, or reviewing on a different harness
+   than the one that built. Make each agreed change with `attn delegate roles set` and the
    user's reason in `-m`. Take model ids from the harness's model catalog;
    don't invent them. Keep roles the user already set up.
 4. Explain the Notebook. Its folder is `attn settings get notebook.root.effective`.

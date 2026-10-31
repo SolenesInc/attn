@@ -1168,6 +1168,7 @@ model DelegationPreferencesCommitMessage {
   cmd: "delegation_preferences_commit";
   preferences: DelegationPreferences;
   message?: string;
+  install_workflow_skill?: boolean;
 }
 
 @extension("x-on", #{ home: true })
@@ -6933,6 +6934,7 @@ model Response {
   delegation_operation?: DelegationOperation;
   delegation_roles?: DelegationRolesResult;
   delegation_preferences_revision?: DelegationPreferencesRevision;
+  workflow_skill_paths?: string[];
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   caller_session_id?: SessionID;

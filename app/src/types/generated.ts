@@ -4152,9 +4152,10 @@ export enum DelegationPreferencesChangedMessageEvent {
 }
 
 export interface DelegationPreferencesCommitMessage {
-    cmd:         DelegationPreferencesCommitMessageCmd;
-    message?:    string;
-    preferences: Preferences;
+    cmd:                     DelegationPreferencesCommitMessageCmd;
+    install_workflow_skill?: boolean;
+    message?:                string;
+    preferences:             Preferences;
     [property: string]: any;
 }
 
@@ -9162,6 +9163,7 @@ export interface Response {
     terminal_open_result?:            TerminalOpenResultObject;
     terminal_read_result?:            TerminalReadResultObject;
     terminal_wait_result?:            TerminalWaitResultObject;
+    workflow_skill_paths?:            string[];
     worktree_keep_result?:            WorktreeKeepResultObject;
     worktree_list_result?:            WorktreeListResultObject;
     worktree_refresh_result?:         WorktreeRefreshResultObject;
@@ -22168,6 +22170,7 @@ const typeMap: any = {
     ], "any"),
     "DelegationPreferencesCommitMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesCommitMessageCmd") },
+        { json: "install_workflow_skill", js: "install_workflow_skill", typ: u(undefined, true) },
         { json: "message", js: "message", typ: u(undefined, "") },
         { json: "preferences", js: "preferences", typ: r("Preferences") },
     ], "any"),
@@ -25211,6 +25214,7 @@ const typeMap: any = {
         { json: "terminal_open_result", js: "terminal_open_result", typ: u(undefined, r("TerminalOpenResultObject")) },
         { json: "terminal_read_result", js: "terminal_read_result", typ: u(undefined, r("TerminalReadResultObject")) },
         { json: "terminal_wait_result", js: "terminal_wait_result", typ: u(undefined, r("TerminalWaitResultObject")) },
+        { json: "workflow_skill_paths", js: "workflow_skill_paths", typ: u(undefined, a("")) },
         { json: "worktree_keep_result", js: "worktree_keep_result", typ: u(undefined, r("WorktreeKeepResultObject")) },
         { json: "worktree_list_result", js: "worktree_list_result", typ: u(undefined, r("WorktreeListResultObject")) },
         { json: "worktree_refresh_result", js: "worktree_refresh_result", typ: u(undefined, r("WorktreeRefreshResultObject")) },

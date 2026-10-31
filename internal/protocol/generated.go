@@ -3854,6 +3854,10 @@ type DelegationPreferencesCommitMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// InstallWorkflowSkill corresponds to the JSON schema field
+	// "install_workflow_skill".
+	InstallWorkflowSkill *bool `json:"install_workflow_skill,omitempty,omitzero"`
+
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
 
@@ -9516,6 +9520,9 @@ type Response struct {
 
 	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
 	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
+
+	// WorkflowSkillPaths corresponds to the JSON schema field "workflow_skill_paths".
+	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`

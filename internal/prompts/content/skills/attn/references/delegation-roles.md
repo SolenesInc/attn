@@ -15,7 +15,7 @@ Make the smallest change that does what the user asked, one command per change. 
 - Use the exact model ID the user gave. Resolve ambiguous names with the user rather than guessing; Attn checks that a model is available when a delegation launches, not when the table is saved.
 - Write an alternative's condition as a concrete test the delegating agent can apply to a task. An alternative with no condition is never picked.
 - Attn maintains the guidance of its own roles (Pathfinder, Builder, Reviewer, Orchestrator, Prototyper). Change their models directly. To change their guidance, copy the role, edit the copy, and turn off or remove the original if the user wants it replaced.
-- Adding Attn's maintained roles the first time installs the `attn-workflow` skill, which the user does from Settings > Delegation.
+- `attn delegate roles install` adds the maintained roles the table lacks, turns the table on and installs the `attn-workflow` skill those roles follow. Until it runs once, adding a maintained role is refused. The user can do the same with Add Attn roles in Settings > Delegation.
 - For a restructuring that touches most of the table, export it with `show --json`, edit the JSON, and `apply` it. Apply refuses when the table changed since the export; export again and redo the edit.
 
 A change is live for the next delegation launch. Delegations already started keep the role and model they launched with.

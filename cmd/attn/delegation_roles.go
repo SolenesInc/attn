@@ -52,6 +52,8 @@ func delegateRoles(w io.Writer, args []string) error {
 		return delegateRolesRollback(w, rest)
 	case "apply":
 		return delegateRolesApply(w, rest)
+	case "install":
+		return delegateRolesInstall(w, rest)
 	case "add", "set", "copy", "rm", "enable", "disable":
 		return delegateRolesEdit(w, command, rest)
 	}
@@ -91,10 +93,16 @@ reading:
         revisions newest first, with who changed what and why.
 
 changing (each accepts -m TEXT, the reason recorded in history):
+  install
+        add Attn's maintained roles the table lacks, turn roles on, and
+        install the attn-workflow skill they follow for every available
+        harness. Your roles stay. When one of yours already uses an Attn
+        role's id, the Attn role gets a numeric suffix, such as builder-2.
+
   add <role> --name NAME [guidance] [model]
         a custom role. Its default model comes from the model flags.
   add <role> --builtin pathfinder|builder|reviewer|orchestrator|prototyper [model]
-        one of Attn's maintained roles (needs Add Attn roles in Settings once).
+        one of Attn's maintained roles (needs install once).
   add <role>/<alt> [--when TEXT] [--name NAME] [model]
         an alternative model for a role, starting from its default model.
         --when says when an agent should pick it instead of the default;
@@ -322,6 +330,48 @@ func delegateRolesApply(w io.Writer, args []string) error {
 		return err
 	}
 	writeDelegationRevisionResult(w, saved)
+	return nil
+}
+
+func delegateRolesInstall(w io.Writer, args []string) error {
+	fs := flag.NewFlagSet("delegate roles install", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	message := fs.String("m", "", "reason recorded in history")
+	positionals, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil || len(positionals) != 0 {
+		return usagef("usage: attn delegate roles install [-m TEXT]")
+	}
+	c := client.New("")
+	live, err := c.DelegationPreferencesShow()
+	if err != nil {
+		return err
+	}
+	next := live.Preferences
+	next.Enabled, next.WorkflowSkillEnabled = true, true
+	for _, template := range prompts.DelegationRoleTemplates() {
+		if slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool {
+			return protocol.Deref(role.Builtin) == protocol.Deref(template.Builtin)
+		}) {
+			continue
+		}
+		stem := template.ID
+		for suffix := 2; slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool { return role.ID == template.ID }); suffix++ {
+			template.ID = fmt.Sprintf("%s-%d", stem, suffix)
+		}
+		next.Roles = append(next.Roles, template)
+	}
+	saved, paths, err := c.InstallDelegationRoles(next, *message)
+	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
+		return fmt.Errorf("the table changed while this command ran; run it again")
+	}
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		fmt.Fprintln(w, "installed "+path)
+	}
+	writeDelegationRevisionResult(w, saved)
+	writeDelegationTable(w, saved.Preferences)
 	return nil
 }
 
