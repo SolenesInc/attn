@@ -42,7 +42,7 @@ func newFakeHistoryService(t *testing.T) *fakeHistoryService {
 func (s *fakeHistoryService) add(repo, id string, body []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.receipts = append(s.receipts, storedReceipt{repo, id, bytes.TrimSpace(body)})
+	s.receipts = append(s.receipts, storedReceipt{strings.ToLower(repo), id, bytes.TrimSpace(body)})
 }
 
 func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/v1/receipts/"):
 		s.puts++
 		rest := strings.TrimPrefix(r.URL.Path, "/v1/receipts/")
-		repo, id := rest[:strings.LastIndex(rest, "/")], rest[strings.LastIndex(rest, "/")+1:]
+		repo, id := strings.ToLower(rest[:strings.LastIndex(rest, "/")]), rest[strings.LastIndex(rest, "/")+1:]
 		body, _ := io.ReadAll(r.Body)
 		body = bytes.TrimSpace(body)
 		if s.refuse[id] {
@@ -82,7 +82,7 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/receipts":
 		var after int
 		fmt.Sscan(r.URL.Query().Get("after"), &after)
-		repo := r.URL.Query().Get("repo")
+		repo := strings.ToLower(r.URL.Query().Get("repo"))
 		var page bytes.Buffer
 		page.WriteString(`{"receipts":[`)
 		next, written, more := after, 0, false
@@ -315,5 +315,21 @@ func TestAReceiptWithoutARepositoryDoesNotStopTheSync(t *testing.T) {
 	}
 	if w.service.stored(mine) == nil || w.shared("ci-0") == nil {
 		t.Fatalf("the unknown-repo receipt stopped the rest of the sync\nstdout: %s\nstderr: %s", out, errOut)
+	}
+}
+
+func TestSyncReadsCIHistorySpelledDifferentlyAndRestartsACursorFromAnotherService(t *testing.T) {
+	w := newSyncWorld(t)
+	w.captureReceipt()
+	w.service.add("github.com/ACME/Attn", "ci-0", []byte(`{"invocation_id":"ci-0"}`))
+	if out, errOut, code := w.sync(); code != 0 || w.shared("ci-0") == nil {
+		t.Fatalf("CI receipt spelled github.com/ACME/Attn not downloaded for checkout %s\nstdout: %s\nstderr: %s", checkoutRepository, out, errOut)
+	}
+
+	other := newFakeHistoryService(t)
+	other.add("github.com/acme/attn", "ci-elsewhere", []byte(`{"invocation_id":"ci-elsewhere"}`))
+	w.service = other
+	if out, errOut, code := w.sync(); code != 0 || w.shared("ci-elsewhere") == nil {
+		t.Fatalf("a cursor advanced on another service skipped this one's history\nstdout: %s\nstderr: %s", out, errOut)
 	}
 }

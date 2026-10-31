@@ -30,6 +30,7 @@ type syncState struct {
 	LastAttempt time.Time  `json:"last_attempt"`
 	LastError   string     `json:"last_error,omitempty"`
 	Cursor      int64      `json:"cursor"`
+	CursorOf    string     `json:"cursor_of,omitempty"`
 }
 
 type historyService struct {
@@ -234,6 +235,9 @@ func (s historyService) put(repo, id string, body []byte) (stored bool, refusal 
 func (s historyService) download(spool testhistory.Spool, repo string, state *syncState, report *syncReport) error {
 	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
 		return err
+	}
+	if namespace := s.base + " " + strings.ToLower(repo); state.CursorOf != namespace {
+		state.Cursor, state.CursorOf = 0, namespace
 	}
 	for {
 		status, reply, err := s.request(http.MethodGet, fmt.Sprintf("/v1/receipts?repo=%s&after=%d", url.QueryEscape(repo), state.Cursor), nil)

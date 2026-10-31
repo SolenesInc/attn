@@ -44,8 +44,8 @@ checkout shares. `go tool test-history spool` prints its path. It holds:
   reads them with the sealed ones.
 - `uploaded/<id>`: an empty file marking a sealed receipt the service
   acknowledged.
-- `sync.json`: the download cursor, and when sync last ran, last succeeded and
-  why it last failed.
+- `sync.json`: the download cursor with the service and repository it was read
+  from, and when sync last ran, last succeeded and why it last failed.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete. It
@@ -74,7 +74,11 @@ machine's receipts. It imports CI's receipt artifacts on its own;
   outside a checkout with an origin remote (`repo` is `unknown`). Sync reports
   each refused receipt, offers it again on every sync, and exits 1.
 - It downloads this repository's receipts into `shared/<id>.json`, resuming
-  after the cursor in `sync.json`.
+  after the cursor in `sync.json`. A cursor read from another service or
+  repository starts the download over. The service treats every spelling of a
+  repository as one, so a checkout whose origin is spelled
+  `github.com/solenesinc/attn` receives CI's `github.com/SolenesInc/attn`
+  receipts.
 - On success it prints how many receipts it uploaded and downloaded and how
   many wait to upload. On failure it prints how many wait to upload and when a
   sync last succeeded, keeps every receipt, and exits 1.
