@@ -325,7 +325,8 @@ Read the relevant entry when the task touches its subject. When changing or
 working on:
 
 - Database schema or migrations => docs/internal/db-migrations.md
-- Tests, before writing, changing, or deleting them => docs/internal/testing.md
+- Tests, before writing, changing, or deleting them => the write-test skill
+  (.agents/skills/write-test)
 - Test runners, their receipts, or `scripts/test-history` =>
   docs/internal/test-history.md
 - How a harness behaves, before relying on it => docs/internal/harnesses.md;

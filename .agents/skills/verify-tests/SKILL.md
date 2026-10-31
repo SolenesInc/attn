@@ -9,7 +9,9 @@ Judge whether each test this change adds, changes or deletes earns its place in
 the whole suite. Report findings; do not edit.
 
 `docs/internal/testing.md` and the "Writing tests" section of `AGENTS.md` are
-attn's testing strategy. Read all of it first. This skill does not repeat it.
+attn's testing strategy, and the Gotchas in the `write-test` skill name the
+habits that most often break it. Read all of them first. This skill does not
+repeat them.
 
 ## Read
 

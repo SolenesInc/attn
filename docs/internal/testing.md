@@ -52,25 +52,14 @@ both run against it.
 
 A committed test depends only on promises, never on internals. To check,
 imagine rewriting the code from scratch with the same behavior. If the test
-would break, it depends on internals.
+would break, it depends on internals. The `write-test` skill's Gotchas name
+the shortcuts that most often break this rule, and what replaces each.
 
-- Instead of writing a session's state to the store, spawn a fake agent and
-  have it `Reply` with the state marker.
-- Instead of writing rows to set up state from before a restart, create it
-  through the protocol, call `w.restart()`, and check it on the new daemon.
-- Instead of asserting a log line says mail was claimed, await the mail event
-  on a connected peer.
-- Instead of sleeping until a periodic tick runs, run in `inBubble` and
-  `w.advance` the clock.
-- Instead of reading a daemon struct to check a result, request it over the
-  protocol or through the CLI.
-- Instead of poking launch internals to catch an agent mid-boot, call
-  `w.HoldNextBoot()`, which holds the fake agent, not the daemon.
-
-When a promise cannot be reached or observed this way, extend the harness
-(`testworld`, `fakeagent`, the real-app harness) instead of reaching inside
-from the test. A harness capability models something outside attn, such as
-an agent, the user, the clock, or the network. It never sets attn's own state.
+When a promise cannot be reached or observed through other promises, extend
+the harness (`testworld`, `fakeagent`, the real-app harness) instead of
+reaching inside from the test. A harness capability models something outside
+attn, such as an agent, the user, the clock, or the network. It never sets
+attn's own state.
 
 Kernel tests build their function's input directly, since the function is
 itself a promise.
