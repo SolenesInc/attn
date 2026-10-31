@@ -44,16 +44,25 @@ function findTarget(selector: string): HTMLElement {
   return element;
 }
 
-function runningAnimationsOn(element: Element): Animation[] {
+function animationsOn(element: Element): Animation[] {
   const animations = element.getAnimations({ subtree: true });
   for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
     animations.push(...ancestor.getAnimations());
   }
-  return animations.filter((animation) => animation.playState === 'running');
+  return animations;
+}
+
+function runningAnimationsOn(element: Element): Animation[] {
+  return animationsOn(element).filter((animation) => animation.playState === 'running');
 }
 
 function endsInFiniteTime(animation: Animation): boolean {
   return Number.isFinite(animation.effect?.getComputedTiming().endTime);
+}
+
+function endedButNotRendered(animation: Animation): boolean {
+  const fill = animation.effect?.getComputedTiming().fill;
+  return animation.playState === 'finished' && fill !== 'forwards' && fill !== 'both';
 }
 
 function describeAnimation(animation: Animation) {
@@ -108,16 +117,26 @@ async function settledBox(target: NativeTarget, deadline: number) {
       await untilFinished(moving, deadline, target.selector);
       continue;
     }
+    if (animationsOn(element).some(endedButNotRendered)) {
+      if (performance.now() >= deadline) {
+        throw stillMovingError(target.selector, animationsOn(element), 'its ended animations were never rendered at their end');
+      }
+      await nextAnimationFrame();
+      framesWaited += 1;
+      continue;
+    }
     const before = element.getBoundingClientRect();
     await nextAnimationFrame();
     await nextAnimationFrame();
     framesWaited += 2;
     const after = element.getBoundingClientRect();
-    if (element.isConnected && sameBox(before, after) && !runningAnimationsOn(element).some(endsInFiniteTime)) {
+    const unsettled = animationsOn(element).some((animation) => endedButNotRendered(animation)
+      || (animation.playState === 'running' && endsInFiniteTime(animation)));
+    if (element.isConnected && sameBox(before, after) && !unsettled) {
       return { element, box: after, animationsWaited, framesWaited };
     }
     if (performance.now() >= deadline) {
-      throw stillMovingError(target.selector, runningAnimationsOn(element), `its box moved from ${JSON.stringify(before)} to ${JSON.stringify(after)} between frames`);
+      throw stillMovingError(target.selector, animationsOn(element), `its box moved from ${JSON.stringify(before)} to ${JSON.stringify(after)} between frames`);
     }
   }
 }
