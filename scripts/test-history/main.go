@@ -22,6 +22,11 @@ const usage = `usage: go tool test-history <command>
   summary <receipt.json>
       Print one line per requested unit (or reported unit, when none was
       requested); exit 1 unless each passed or skipped.
+  sync
+      Upload sealed receipts the history service has not acknowledged, then
+      download the receipts it holds for this repository into the spool's
+      shared directory. Prints what waits to upload and when a sync last
+      succeeded; exits 1 when the sync fails or a receipt is refused.
   spool
       Print the spool directory.
 
@@ -70,6 +75,8 @@ func main() {
 		os.Exit(measureCommand(os.Args[2:]))
 	case "replay":
 		os.Exit(replayCommand(os.Args[2:]))
+	case "sync":
+		os.Exit(syncHistory(os.Args[2:]))
 	case "spool":
 		dir, err := spoolDir()
 		if err != nil {

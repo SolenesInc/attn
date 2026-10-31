@@ -30,6 +30,11 @@ type Working struct {
 }
 
 func (s Spool) ReceiptsDir() string { return filepath.Join(s.Dir, "receipts") }
+func (s Spool) UploadedDir() string { return filepath.Join(s.Dir, "uploaded") }
+func (s Spool) SharedDir() string   { return filepath.Join(s.Dir, "shared") }
+func (s Spool) SyncStatePath() string {
+	return filepath.Join(s.Dir, "sync.json")
+}
 func (s Spool) workingRoot() string { return filepath.Join(s.Dir, "working") }
 
 func (s Spool) ReceiptPath(id string) string {
