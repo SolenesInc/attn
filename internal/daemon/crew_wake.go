@@ -475,6 +475,9 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 	if err != nil {
 		return nil, false, err
 	}
+	if msg.Home != nil && crewSetChangesLaunch(msg) {
+		return nil, false, errors.New("--home is a change of its own; run it without other settings")
+	}
 	asked, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		return nil, false, err
@@ -497,18 +500,21 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			}
 			setting = &chosen
 		}
-		revision := doc.Rev
 		if msg.Home != nil {
-			if member, revision, err = d.repointCrewHome(member, revision, *msg.Home); err != nil {
+			repointed, revision, err := d.repointCrewHome(member, doc.Rev, *msg.Home)
+			if err != nil {
 				return nil, false, err
 			}
+			wire := d.crewMemberWire(repointed, revision)
+			return &wire, false, nil
 		}
+		revision := doc.Rev
 		before := member
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
 		if msg.NotebookRoot != nil {
-			placed, placedRevision, err := d.placeChiefNotebook(before, revision, *msg.NotebookRoot)
+			placed, placedRevision, err := d.placeChiefNotebook(before, doc.Rev, *msg.NotebookRoot)
 			if err != nil {
 				return nil, false, err
 			}
@@ -536,6 +542,12 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			return &wire, true, nil
 		}
 	}
+}
+
+func crewSetChangesLaunch(msg *protocol.CrewSetMessage) bool {
+	return msg.Cwd != nil || msg.Agent != nil || msg.Model != nil || msg.Effort != nil ||
+		msg.AwarenessDirs != nil || msg.ClearAwarenessDirs != nil || msg.NotebookRoot != nil ||
+		msg.LaunchDesktop != nil || msg.LaunchDesktopName != nil || msg.LaunchDesktopSetting != nil
 }
 
 func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMessage) error {

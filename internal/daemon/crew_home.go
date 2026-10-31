@@ -148,7 +148,11 @@ func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string)
 	if moved.InDataDir() || crewHomeNamedFor(moved.Home, moved.Name) {
 		return moved, written[0].Rev, nil
 	}
-	return d.relocateCrewHome(moved, written[0].Rev, filepath.Dir(moved.Home), moved.Name, d.commitCrewHomeMove)
+	named, revision, err := d.relocateCrewHome(moved, written[0].Rev, filepath.Dir(moved.Home), moved.Name, d.commitCrewHomeMove)
+	if err != nil {
+		d.logf("crew: %s's home stays at %s until its next wake renames it: %v", moved.Name, moved.Home, err)
+	}
+	return named, revision, nil
 }
 
 func (d *Daemon) crewHomeAt(member crew.Member, dir string) (string, error) {

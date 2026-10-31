@@ -7591,7 +7591,7 @@ model CrewSetMessage {
   notebook_root?: string;
   // An existing folder holding the member's CHARTER.md, recorded as its home
   // after the folder was moved or renamed outside attn. The member must be
-  // asleep; the folder takes the member's name.
+  // asleep; outside attn's data folder the folder takes the member's name.
   home?: string;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;

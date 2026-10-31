@@ -362,6 +362,11 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 	}
 	_, err = repointCrewHome(cli, "Keel", empty)
 	crewErrorContains(t, err, empty, "has no CHARTER.md")
+	_, err = cli.CrewSetMessage(protocol.CrewSetMessage{Member: "Keel", Home: protocol.Ptr(aside), Model: protocol.Ptr("claude-sonnet-fake")})
+	crewErrorContains(t, err, "--home is a change of its own")
+	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != home {
+		t.Fatalf("a refused --home changed the member: %+v", got)
+	}
 	_, err = repointCrewHome(cli, "Keel", notebookCrewHome(w, "alder-missing"))
 	crewErrorContains(t, err, notebookCrewHome(w, "alder-missing"), "not there")
 
@@ -419,8 +424,8 @@ func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {
 	}
 	w.restart()
 	cli = w.Client()
-	if roster := crewRoster(t, cli); len(roster) != 3 {
-		t.Fatalf("a home back in the data folder joined the roster twice: %+v", roster)
+	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != dataHome {
+		t.Fatalf("a home back in the data folder after a restart: %+v", got)
 	}
 	if moved := moveCrewHome(t, w, "Keel"); moved.Member.HomeDir != notebook || moved.PreviousHome != dataHome {
 		t.Fatalf("move-home after coming back: %+v", moved)

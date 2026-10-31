@@ -50,15 +50,15 @@ every home where it is.
 
 If a member's home goes missing, Attn refuses to wake the member or open its
 charter and names the path. Other members keep working. Put the folder back, or,
-if you moved or renamed it on purpose, tell Attn where it is now with
-`attn crew set <member> --home <folder>`. The folder must hold the member's
-`CHARTER.md` and the member must be asleep. Attn renames the folder after the
-member if its name differs, and a working or awareness folder or past session
-inside the old home follows, as on a move.
+if you moved or renamed it on purpose, run
+`attn crew set <member> --home <folder>`, without other settings. The folder
+must hold the member's `CHARTER.md`, and the member must be asleep. Attn renames the folder after the
+member if its name differs. As with `move-home`, a working or awareness folder
+inside the old home follows, and so do its past sessions.
 
-To take a home back out of the Notebook, move its folder to
-`~/.attn/crew/<key>/` (for a named instance, `~/.attn-<instance>/crew/<key>/`)
-and point `--home` there.
+To undo `attn crew move-home`, move the folder to `~/.attn/crew/<key>/` (for a
+named instance, `~/.attn-<instance>/crew/<key>/`) and run
+`attn crew set <member> --home` on it. The folder keeps that name.
 
 ## The Crew section
 
