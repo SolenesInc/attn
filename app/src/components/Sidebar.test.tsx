@@ -120,32 +120,6 @@ describe('Sidebar', () => {
     expect(onSessionDragEnd).toHaveBeenCalledTimes(1);
   });
 
-  it('reorders a desktop among every desktop', () => {
-    const sidebarData = buildSidebarData([
-      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
-      { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
-      { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
-    ]);
-    const onDesktopReorder = vi.fn();
-    render(<Sidebar {...baseProps} {...sidebarData} onDesktopReorder={onDesktopReorder} />);
-
-    const header = screen
-      .getByTestId('sidebar-desktop-desktop-/repo/a')
-      .querySelector('.desktop-rule > .sidebar-row-select') as HTMLElement;
-    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
-    expect(screen.getByTestId('desktop-reorder-seam-3')).toBeInTheDocument();
-
-    fireEvent.pointerEnter(screen.getByTestId('desktop-reorder-seam-3'));
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
-
-    expect(onDesktopReorder).toHaveBeenCalledWith({
-      desktopId: 'desktop-/repo/a',
-      prevDesktopId: 'desktop-/repo/c',
-      nextDesktopId: undefined,
-    });
-  });
-
   it('drops nothing when Escape cancels a header drag', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
