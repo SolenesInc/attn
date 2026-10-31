@@ -276,8 +276,13 @@ func (d *Daemon) releaseUnresumableSingleton(definitionID int, agent string) err
 		return err
 	}
 	origin, err := d.store.GetAutomationRun(binding.OriginRunID)
-	if err != nil || origin == nil || origin.State != store.AutomationRunStateDelivered {
+	switch {
+	case err != nil || origin == nil:
 		return err
+	case origin.State == store.AutomationRunStateDelivered:
+	case origin.State == store.AutomationRunStateFailed && d.store.SessionLedgerEntry(binding.SessionID) != nil:
+	default:
+		return nil
 	}
 	if d.automationSessionIsLive(binding.SessionID) || d.conversationReady(agentdriver.Get(agent), strings.TrimSpace(d.store.GetResumeSessionID(binding.SessionID))) {
 		return nil

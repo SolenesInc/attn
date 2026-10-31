@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -215,4 +217,51 @@ func TestACodexAutomationWhoseAgentExitsRightAfterItsFirstTurnStartsIsDelivered(
 	if answered := awaitAutomationRunResult(app, "brief"); !answered.Success {
 		t.Fatalf("run answered %s, want success", describeRunAnswer(answered))
 	}
+}
+
+func TestACodexSingletonWhoseFirstLaunchExitsBeforeItsFirstTurnStartsFreshAtTheNextOccurrence(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
+			term.PaintScreen("Error: the model provider refused the login")
+			term.Exit(1)
+		})
+		id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "launch: {driver: claude}", "launch: {driver: codex}", 1)).ID
+		w.advance(2*time.Minute + 30*time.Second)
+		runs := automationRuns(t, cli, id)
+		if len(runs) != 1 || runs[0].State != "failed" {
+			t.Fatalf("after Codex exited before its first turn the runs are %+v, want one failed run", runs)
+		}
+		failed := runs[0]
+
+		launched := make(chan *testworld.Terminal, 1)
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+		w.advance(2 * time.Minute)
+		var replacement *testworld.Terminal
+		select {
+		case replacement = <-launched:
+		default:
+			latest := automationRuns(t, cli, id)[0]
+			t.Fatalf("after the first launch exited, the next occurrence launched nothing and is %s with %q", latest.State, protocol.Deref(latest.LastError))
+		}
+		if err := cli.UpdateStateFromHook(replacement.Options.ID, "working", ""); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+
+		runs = automationRuns(t, cli, id)
+		fresh := runs[0]
+		if len(runs) != 2 || fresh.State != "delivered" || protocol.Deref(fresh.SessionID) == protocol.Deref(failed.SessionID) || protocol.Deref(fresh.SeedID) == protocol.Deref(failed.SeedID) {
+			t.Fatalf("after the first launch exited, the next occurrence is %s on %s/%s with %q, want delivered on a session and seed of its own, not %s/%s", fresh.State, protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID), protocol.Deref(fresh.LastError), protocol.Deref(failed.SessionID), protocol.Deref(failed.SeedID))
+		}
+		if argv := strings.Join(replacement.Options.AgentArgv, " "); !strings.Contains(argv, "Sweep.") {
+			t.Fatalf("the replacement launched with %q, want its opening prompt", argv)
+		}
+		if first := runs[1]; first.ID != failed.ID || first.State != "failed" || !strings.Contains(protocol.Deref(first.LastError), "the model provider refused the login") {
+			t.Fatalf("the first run now reads %+v, want it still failed with the screen Codex left", first)
+		}
+	})
 }
