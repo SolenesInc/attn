@@ -15,7 +15,7 @@ import (
 func TestASnoozeStillWakesWhenANewerStateArrivesBeforeItsReply(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	committed := s.PauseAt(pausepoint.SessionSnoozeCommitted)
+	decided := s.PauseAt(pausepoint.SessionSnoozeDecided)
 	s.Start()
 	app, cli := s.App(), s.Client()
 	register(t, s, "waiting", "waiting")
@@ -28,7 +28,7 @@ func TestASnoozeStillWakesWhenANewerStateArrivesBeforeItsReply(t *testing.T) {
 	until := deadline.Format(time.RFC3339Nano)
 	answered := make(chan error, 1)
 	go func() { answered <- s.Client().SnoozeSession("", "waiting", deadline) }()
-	committed.Await()
+	decided.Await()
 	if err := cli.UpdateState(terminal, protocol.StateWorking); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestASnoozeStillWakesWhenANewerStateArrivesBeforeItsReply(t *testing.T) {
 		updated, err := time.Parse(time.RFC3339Nano, x.StateUpdatedAt)
 		return err == nil && updated.After(workedAt) && x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnSnoozedUntil) == until
 	})
-	committed.Release()
+	decided.Release()
 	if err := <-answered; err != nil {
 		t.Fatalf("the accepted snooze failed: %v", err)
 	}

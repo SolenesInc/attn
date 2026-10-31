@@ -48,7 +48,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Conversa
 	outcome := h.daemon.resolveMonitorConversation(h.sessionID(), pending, h.monitor)
 	if outcome.Kind == sessionmonitor.OutcomeOpened || outcome.Kind == sessionmonitor.OutcomeShows {
 		crashpoint.At("monitor-conversation-applied")
-		pausepoint.At(pausepoint.ConversationOutcome)
+		pausepoint.At(pausepoint.ConversationMoveSaved)
 	}
 	return outcome, true
 }

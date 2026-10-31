@@ -15,7 +15,7 @@ func (m *Monitor) react(view View) {
 	m.mu.Unlock()
 	driver := view.Driver.V
 	if m.Session() != "" && driver.Run != "" && driver.TranscriptPath != "" && (driver.Run != previous.Driver.V.Run || driver.TranscriptPath != previous.Driver.V.TranscriptPath) {
-		pausepoint.At(pausepoint.DriverTranscriptApplied)
+		pausepoint.At(pausepoint.DriverTranscriptWatchStarting)
 		m.WatchDriverUsage(driver.TranscriptPath)
 	}
 	state := view.State.V

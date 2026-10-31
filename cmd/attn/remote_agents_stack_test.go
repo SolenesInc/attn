@@ -164,7 +164,7 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 }
 
 func TestOutpostConversationMovesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationOutcome} {
+	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationMoveSaved} {
 		t.Run(point, func(t *testing.T) {
 			home := testworld.NewStack(t)
 			outcome := home.PauseAt(point)
@@ -457,7 +457,7 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 
 func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T) {
 	home := testworld.NewStack(t)
-	outcome := home.PauseAt(pausepoint.ConversationOutcome)
+	outcome := home.PauseAt(pausepoint.ConversationMoveSaved)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	bound := outpost.PauseAt(pausepoint.ConversationCandidateBound)
@@ -939,7 +939,7 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	started := home.PauseEvery(pausepoint.OutpostRecoveryStarted)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	decision := home.PauseEvery(pausepoint.ConversationDecision)
-	outcome := home.PauseEvery(pausepoint.ConversationOutcome)
+	outcome := home.PauseEvery(pausepoint.ConversationMoveSaved)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()

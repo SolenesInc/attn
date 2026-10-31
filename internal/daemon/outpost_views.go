@@ -50,7 +50,7 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 	outcome := d.resolveMonitorConversation(msg.SessionID, proposed, nil)
 	if outcome.Kind == sessionmonitor.OutcomeOpened || outcome.Kind == sessionmonitor.OutcomeShows {
 		crashpoint.At("monitor-conversation-applied")
-		pausepoint.At(pausepoint.ConversationOutcome)
+		pausepoint.At(pausepoint.ConversationMoveSaved)
 	}
 	result := protocol.ApplyMonitorViewResult{}
 	if outcome.Conversation != "" {

@@ -228,7 +228,7 @@ func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harnes
 
 func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID, runID string) {
 	if committed && runID != "" {
-		pausepoint.At(pausepoint.AgentLaunchReady)
+		pausepoint.At(pausepoint.AgentLaunchCommitReporting)
 	}
 	msg := protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed, ProfileID: profileID}
 	if runID != "" {

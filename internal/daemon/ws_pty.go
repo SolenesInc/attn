@@ -726,7 +726,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 		write := protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: msg.ID, Data: msg.Data, Source: source}
 		d.router().Send(write, func(err error) {
 			answered()
-			pausepoint.At(pausepoint.RemoteInputAnswered)
+			pausepoint.Done(pausepoint.RemoteInputAnswered, err)
 			d.ptyInputAnswered(client, msg, receivedAt, err)
 		})
 	})
