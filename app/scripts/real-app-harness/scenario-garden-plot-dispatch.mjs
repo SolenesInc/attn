@@ -244,9 +244,7 @@ async function main() {
 
     await runner.step('the_panel_walks_the_garden', async () => {
       await client.request('open_dock_panel', { panelId: 'garden' });
-      await delay(500);
-      const whole = await client.request('garden_get_state', {});
-      runner.assert(whole.present, 'the garden panel is on screen', { whole });
+      const whole = await awaitDockRow(client, crown);
       runner.assert(whole.trail.length === 1 && whole.trail[0].here,
         'the panel opens on the whole garden', { trail: whole.trail });
       const crownRow = whole.seeds.find((seed) => seed.id === crown);

@@ -155,8 +155,19 @@ async function main() {
       });
 
       // The default shell may not be fish; exec fish so the PTY emits OSC 133.
-      await client.request('write_pane', { sessionId, paneId: pane.paneId, text: 'exec fish' });
-      await delay(1_500);
+      await client.request('write_pane', { sessionId, paneId: pane.paneId, text: "exec fish -C 'echo fish-ready-$fish_pid'" });
+      await waitForPaneText(
+        client,
+        sessionId,
+        pane.paneId,
+        (text) => /fish-ready-\d+/.test(text),
+        'fish started',
+        20_000,
+      );
+      await waitForPaneShellReady(client, sessionId, pane.paneId, {
+        timeoutMs: 20_000,
+        description: 'fish prompt ready',
+      });
     });
 
     let token;
