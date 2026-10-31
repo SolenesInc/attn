@@ -1812,7 +1812,7 @@ func (d *Daemon) closeNormallyExitedSession(sessionID protocol.SessionID) {
 	if d.sessionCloseError(sessionID) != nil {
 		return
 	}
-	closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+	closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: who.Session(sessionID).Actor(), Reason: "Agent exited normally"}, nil)
 	if err != nil {
 		d.logf("closing normally exited session %s: %v", sessionID, err)
 		return
@@ -2041,7 +2041,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	if err := d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+	if err := d.closeSession(sessionID, store.SessionClose{By: who.User()}); err != nil {
 		lifecycleLock.Unlock()
 		d.logf("session teardown recovery close failed for %s: %v", sessionID, err)
 		return nil
@@ -3096,7 +3096,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: who.User()}); err != nil {
 		d.cancelSessionTeardown(msg.ID, teardown)
 		d.sendError(conn, fmt.Sprintf("close session: %v", err))
 		return

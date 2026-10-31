@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const terminalFirstPromptTripwire = 30 * time.Second
@@ -492,7 +493,7 @@ func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseM
 		d.sendError(conn, err.Error())
 		return
 	}
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: string(caller.ID), Reason: "shell closed by attn terminal close"}, nil)
+	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(caller.ID).Actor(), Reason: "shell closed by attn terminal close"}, nil)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleConnectOutpostInTerminal(client *wsClient, msg *protocol.ConnectOutpostInTerminalMessage) {
@@ -161,7 +162,7 @@ func (d *Daemon) closeOutpostCommand(id string) {
 		return
 	}
 	for _, session := range commands {
-		closing, err := d.beginSessionClose(session, store.SessionClose{By: store.SessionClosedByUser, Reason: "outpost connection cancelled"}, nil)
+		closing, err := d.beginSessionClose(session, store.SessionClose{By: who.User(), Reason: "outpost connection cancelled"}, nil)
 		if err != nil {
 			d.logf("close outpost connection terminal: %v", err)
 			continue

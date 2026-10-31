@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -52,5 +53,39 @@ INSERT INTO inbox_items(id,address,kind,source_id,created_at) VALUES
 		if d.Peer == nil || d.Peer.Sender != want[d.Item.ID] {
 			t.Errorf("%s sender: %+v, want %v", d.Item.ID, d.Peer, want[d.Item.ID])
 		}
+	}
+}
+
+func TestClosedByMigrationKeepsWhoClosedEachSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "closed.db")
+	old, err := newStoreAtVersion(path, 1793416602286212-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.db.Exec(`
+INSERT INTO sessions(id,user_label,directory,created_at,closed_at,closed_by) VALUES
+ ('closer','Closer','/tmp/closed','','',''),
+ ('by-agent','By agent','/tmp/closed','','2026-10-01T00:00:00Z','closer'),
+ ('by-user','By user','/tmp/closed','','2026-10-01T00:00:00Z','user');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := newStoreAtVersion(path, 1793416602286212)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	for id, want := range map[protocol.SessionID]string{"by-agent": "closer", "by-user": "user"} {
+		entry := upgraded.SessionLedgerEntry(id)
+		if entry == nil || protocol.Deref(entry.ClosedBy) != want {
+			t.Errorf("%s closed by %+v, want %q", id, entry, want)
+		}
+	}
+	var stored string
+	if err := upgraded.db.QueryRow("SELECT closed_by FROM sessions WHERE id = 'by-agent'").Scan(&stored); err != nil || stored != "session:closer" {
+		t.Fatalf("stored actor %q, %v", stored, err)
 	}
 }

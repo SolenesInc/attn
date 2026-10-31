@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-const SessionClosedByUser = "user"
-
 const SessionLedgerDefaultLimit = 20
 
 const SessionLedgerMaxLimit = 1000
@@ -23,7 +21,7 @@ const SessionLedgerMaxLimit = 1000
 var ErrSessionClosed = errors.New("session is closed")
 
 type SessionClose struct {
-	By            string
+	By            who.Actor
 	Reason        string
 	FallbackLabel string
 }
@@ -76,9 +74,9 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	by := strings.TrimSpace(closed.By)
-	if by == "" {
-		by = SessionClosedByUser
+	by := closed.By
+	if by.IsZero() {
+		by = who.User()
 	}
 	at := now.UTC().Format(time.RFC3339Nano)
 	delete(s.touchedAt, id)
@@ -597,7 +595,7 @@ func ledgerInstant(entry protocol.SessionLedgerEntry) string {
 
 type sessionCloseMark struct {
 	At      string
-	By      string
+	By      who.Actor
 	Reason  string
 	session *protocol.Session
 }
@@ -623,12 +621,21 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
-		entry.ClosedBy = protocol.Ptr(mark.By)
+		entry.ClosedBy = protocol.Ptr(closedByWire(mark.By))
 		if mark.Reason != "" {
 			entry.CloseReason = protocol.Ptr(mark.Reason)
 		}
 	}
 	return entry
+}
+
+func closedByWire(by who.Actor) string {
+	if party, ok := by.Party(); ok {
+		if id, ok := party.Session(); ok {
+			return string(id)
+		}
+	}
+	return by.String()
 }
 
 type ledgerScanner interface {
@@ -643,7 +650,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var (
 		profileDeletedAt string
 		closedAt         string
-		closedBy         string
+		closedBy         who.Actor
 		closeReason      string
 		pinnedAt         string
 		snoozedUntil     string
@@ -713,7 +720,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	}
 	if closedAt != "" {
 		entry.ClosedAt = protocol.Ptr(closedAt)
-		entry.ClosedBy = protocol.Ptr(closedBy)
+		entry.ClosedBy = protocol.Ptr(closedByWire(closedBy))
 		if closeReason != "" {
 			entry.CloseReason = protocol.Ptr(closeReason)
 		}

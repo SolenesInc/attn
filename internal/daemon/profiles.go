@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/who"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
@@ -740,7 +741,7 @@ func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 		d.detachSession(client, tile.RuntimeID)
 		return nil
 	}
-	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
+	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: who.User()}, client)
 	if err != nil {
 		return err
 	}

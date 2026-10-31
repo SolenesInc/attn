@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) crewV2Enabled() bool {
@@ -297,7 +298,7 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 }
 
 func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) error {
-	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"}); err != nil {
+	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member put to sleep"}); err != nil {
 		return err
 	}
 	if teardown.session != nil {

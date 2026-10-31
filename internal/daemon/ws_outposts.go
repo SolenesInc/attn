@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) changeOutpost(action, id, name, address string) error {
@@ -61,7 +62,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 			if protocol.Deref(session.Host) != id {
 				continue
 			}
-			closed := store.SessionClose{By: store.SessionClosedByUser, Reason: "outpost removed"}
+			closed := store.SessionClose{By: who.User(), Reason: "outpost removed"}
 			if reachable == nil {
 				closing, err := d.beginSessionClose(session.ID, closed, nil)
 				if err != nil {

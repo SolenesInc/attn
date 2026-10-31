@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
@@ -36,7 +37,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Resumable old work"})
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-	d.closeSession("sess-a", store.SessionClose{By: store.SessionClosedByUser})
+	d.closeSession("sess-a", store.SessionClose{By: who.User()})
 	d.gardenNow = func() time.Time { return now }
 
 	capture, err := d.captureGardenReview()

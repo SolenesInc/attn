@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleClearWarningsWS() {
@@ -15,12 +16,9 @@ func (d *Daemon) handleClearWarningsWS() {
 }
 
 func unregisterSessionClose(msg *protocol.UnregisterMessage) store.SessionClose {
-	closed := store.SessionClose{
-		By:     protocol.TrimID(protocol.Deref(msg.ClosedBy)),
-		Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason)),
-	}
-	if closed.By == "" {
-		closed.By = store.SessionClosedByUser
+	closed := store.SessionClose{By: who.User(), Reason: strings.TrimSpace(protocol.Deref(msg.CloseReason))}
+	if by := protocol.TrimID(protocol.Deref(msg.ClosedBy)); by != "" && by != "user" {
+		closed.By = who.Session(protocol.SessionID(by)).Actor()
 	}
 	return closed
 }
