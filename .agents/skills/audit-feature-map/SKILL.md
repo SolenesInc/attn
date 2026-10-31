@@ -63,7 +63,7 @@ file's `## Contexts` are not doors; drive the ones its recipe drives.
 | Outcome | When | Evidence | Follow-up |
 | --- | --- | --- | --- |
 | `pass` | Driven through the door; attn did what the file says | the action, its output and the state read back | — |
-| `fixed` | The file was wrong, attn is right; the corrected recipe then passed | as `pass`, plus what the old text did | map commit |
+| `fixed` | The file was wrong, attn is right; the corrected recipe then passed | as `pass`, plus what the old text did | the map commit, as landed on main |
 | `drift` | The file is wrong and you could not correct it this pass | what the file says and what attn does | seed |
 | `regression` | attn breaks intended behavior | as `drift`, plus why the behavior is intended | seed |
 | `harness` | `bridge`, `wsctl`, the mock agent or a scenario failed, not attn | the failing command and output | seed |
@@ -211,9 +211,13 @@ you prove them. Land them after cleanup, before you write the report:
    and harvests the stake in Finish. It landed only when `land.sh` printed
    `land: main is at <sha>`. When the rebase conflicts with someone else's
    edit to the same file, keep their edit and reapply yours where the drift
-   remains. When it cannot land, attach `git -C $repair format-patch
-   origin/main --stdout` to a seed for the drift, then `git -C $repair reset
-   --hard origin/main`.
+   remains. Landing rebases your commits, so the hashes in `rows.md` are not
+   on main: `. <runs>/pass.env && $S relink $runs/evidence/rows.md $rev`
+   replaces each with the landed commit of the same subject. When it cannot
+   land, attach `git -C $repair format-patch origin/main --stdout` to a seed
+   for the drift, then `git -C $repair reset --hard origin/main`, remove the
+   map commits from the rows, and turn the `fixed` rows into `drift` on that
+   seed.
 
 ## Seeds
 
@@ -250,7 +254,7 @@ workers run detached and are not counted.
 <seed: doors, new or reused>
 
 ## Coverage gaps
-<each door that is not pass or fixed: door, outcome, reason>
+<the output of `$S gaps` on this report>
 
 ## Cleanup
 <instance: clean.sh result>; residual paths and their size
@@ -259,7 +263,9 @@ workers run detached and are not counted.
 <the table from rows.md>
 ```
 
-`$S check $runs/evidence/report-$pass.md` must pass before you attach it.
+`$S check $runs/evidence/report-$pass.md` must pass before you attach it. It
+refuses a `fixed` row without a commit on `origin/main`, and a row that cites
+a commit not on it.
 
 ## Finish
 

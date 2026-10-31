@@ -10,6 +10,8 @@ FEATURES = ROOT / ".agents/skills/drive-attn/features"
 MAP_PROSE = re.compile(r"^\.agents/skills/drive-attn/(features/[^/]+\.md|SKILL\.md)$")
 OUTCOMES = {"pass", "fixed", "drift", "regression", "harness", "blocked", "ambiguous"}
 NEEDS_FOLLOW_UP = {"fixed", "drift", "regression", "harness", "ambiguous"}
+COVERED = {"pass", "fixed"}
+COMMIT = re.compile(r"\b[0-9a-f]{7,40}\b")
 HEADER = "| door | way in | outcome | evidence | follow-up |"
 
 
@@ -83,6 +85,11 @@ def cmd_check(args):
             problems.append(f"{door}: no evidence")
         if outcome in NEEDS_FOLLOW_UP and not follow_up:
             problems.append(f"{door}: outcome {outcome} needs a follow-up (commit, seed or ask)")
+        unlanded = [c for c in cited_commits(evidence + " " + follow_up) if not on_main(c)]
+        if unlanded:
+            problems.append(f"{door}: cites {', '.join(unlanded)}, not on origin/main; cite the landed commit, or none when the fix did not land")
+        if outcome == "fixed" and not cited_commits(follow_up):
+            problems.append(f"{door}: outcome fixed needs the landed map commit in its follow-up")
     extra = sorted(set(rows) - set(expected))
     problems += [f"{door}: not a door in the map at this revision" for door in extra]
     tally = {}
@@ -97,6 +104,44 @@ def cmd_check(args):
 
 def git(*args):
     return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).rstrip("\n")
+
+
+def cited_commits(text):
+    return [t for t in COMMIT.findall(text) if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{t}^{{commit}}"], capture_output=True).returncode == 0]
+
+
+def on_main(commit):
+    return subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", commit, "origin/main"], capture_output=True).returncode == 0
+
+
+def cmd_relink(args):
+    landed = {}
+    for line in git("log", "--format=%h %s", f"{args.since}..origin/main").splitlines():
+        sha, subject = line.split(" ", 1)
+        landed.setdefault(subject, []).append(sha)
+    report = Path(args.report)
+    text = report.read_text()
+    moved = {}
+    for commit in sorted(set(cited_commits(text))):
+        if on_main(commit):
+            continue
+        matches = landed.get(git("log", "-1", "--format=%s", commit), [])
+        if len(matches) != 1:
+            sys.exit(f"{commit}: {len(matches)} commits in {args.since}..origin/main share its subject, want 1; cite the landed commit by hand")
+        moved[commit] = matches[0]
+    for old, new in moved.items():
+        text = re.sub(rf"\b{old}\b", new, text)
+    report.write_text(text)
+    print(f"relinked {len(moved)} commits: " + ", ".join(f"{o}->{n}" for o, n in moved.items()))
+
+
+def cmd_gaps(args):
+    rows = report_rows(args.report)
+    for path in feature_files(args.features):
+        for door, _ in doors(path):
+            for _, _, outcome, evidence, follow_up in rows.get(door, [])[:1]:
+                if outcome not in COVERED:
+                    print(f"- {door}: {outcome}. {evidence}" + (f" Follow-up: {follow_up}" if follow_up.strip("—- ") else ""))
 
 
 def cmd_sources(args):
@@ -130,13 +175,18 @@ sub = parser.add_subparsers(dest="command", required=True)
 for name, func, helptext in [
     ("doors", cmd_doors, "print a report table with one row per door"),
     ("check", cmd_check, "check a report has one valid row per door"),
+    ("gaps", cmd_gaps, "list each door that is not pass or fixed, with its evidence and follow-up"),
     ("sources", cmd_sources, "list commits to each feature's named sources since its file last changed"),
 ]:
     p = sub.add_parser(name, help=helptext)
-    if name == "check":
+    if name in ("check", "gaps"):
         p.add_argument("report")
     p.add_argument("--features", type=lambda s: s.split(","), default=[], help="comma-separated feature ids; default all")
     p.set_defaults(func=func)
+p = sub.add_parser("relink", help="replace commits that landing rebased with the landed commit of the same subject")
+p.add_argument("report")
+p.add_argument("since", help="origin/main before landing, such as the pass's revision")
+p.set_defaults(func=cmd_relink)
 p = sub.add_parser("scope", help="refuse when anything but map prose changed since BASE")
 p.add_argument("base")
 p.set_defaults(func=cmd_scope)
