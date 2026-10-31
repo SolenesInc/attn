@@ -130,14 +130,23 @@ func TestThePickerResolvesAPathToItsRealDirectoryAndRepository(t *testing.T) {
 
 func pickerApp(w *world) *testworld.Peer {
 	w.T.Helper()
-	p := w.Connect(protocol.ClientHelloMessage{
+	return pickerAppOn(w, "")
+}
+
+func pickerAppOn(w *world, profileID string) *testworld.Peer {
+	w.T.Helper()
+	hello := protocol.ClientHelloMessage{
 		Cmd:              protocol.CmdClientHello,
 		ClientKind:       "tauri-app",
 		Version:          "protocol-" + protocol.ProtocolVersion,
 		Capabilities:     []string{},
 		ClientToken:      protocol.Ptr(config.ClientToken()),
 		BrowserHostToken: protocol.Ptr(config.BrowserHostToken()),
-	}, http.Header{"Origin": {"tauri://localhost"}})
+	}
+	if profileID != "" {
+		hello.ProfileID = protocol.Ptr(profileID)
+	}
+	p := w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	return p
 }

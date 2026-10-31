@@ -218,14 +218,14 @@ type Daemon struct {
 	notebookSyncWatch   bool
 	notebookMu          sync.Mutex
 	notebookStores      map[string]*notebook.Store
-	notebookWatcherMu   sync.Mutex
-	notebookWatch       func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error)
+	rootWatcherMu       sync.Mutex
+	rootWatch           func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error)
 	clock               *stepclock.Clock
-	notebookWatchers    map[string]*notebook.Watcher
+	rootWatchers        map[string]*notebook.Watcher
 	fsMu                sync.Mutex
 	fsStores            map[string]*fsdoc.Store
 	fsWatchMu           sync.Mutex
-	fsWatchers          map[string]*fsRootWatch
+	fsWatchRefs         map[string]map[*wsClient]int
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
@@ -509,7 +509,7 @@ func New(socketPath string) *Daemon {
 	d := &Daemon{
 		recentFileStat:      os.Stat,
 		notebookSyncWatch:   true,
-		notebookWatch:       openNotebookWatch,
+		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
@@ -547,7 +547,7 @@ func NewForTesting(socketPath string) *Daemon {
 	d := &Daemon{
 		recentFileStat:      os.Stat,
 		notebookSyncWatch:   true,
-		notebookWatch:       openNotebookWatch,
+		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
@@ -1664,8 +1664,7 @@ func (d *Daemon) stop() {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
 	d.monitors().registry.Close()
-	d.stopNotebookWatchers()
-	d.stopFsWatchers()
+	d.stopRootWatchers()
 	d.stopEventBus()
 	d.stopInstalledPlugins()
 	d.monitors().registry.StopTranscriptWatchers()

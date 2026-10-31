@@ -83,7 +83,7 @@ func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMe
 		return nil, err
 	}
 	if msg.Key == string(SettingNotebookProfileRoot) {
-		d.pruneNotebookWatchers()
+		d.pruneRootWatchers()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
 	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, profile.ID))
@@ -95,7 +95,7 @@ func (d *Daemon) settingChanged(key, value string) {
 		d.configureOutposts()
 	}
 	if key == string(SettingNotebookRoot) {
-		d.pruneNotebookWatchers()
+		d.pruneRootWatchers()
 	}
 
 	if harness, ok := isAgentExecutableSettingKey(key); ok {

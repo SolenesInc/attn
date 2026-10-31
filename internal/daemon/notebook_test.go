@@ -32,7 +32,7 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 
 func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 	d := newNotebookDaemon(t)
-	t.Cleanup(d.stopNotebookWatchers)
+	t.Cleanup(d.stopRootWatchers)
 	rootA := d.store.GetSetting(string(SettingNotebookRoot))
 	rootB := t.TempDir()
 	client := &wsClient{send: make(chan outboundMessage, 64)}

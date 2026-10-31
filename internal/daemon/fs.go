@@ -218,11 +218,7 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				if d.isNotebookRoot(root) {
-					d.noteNotebookSelfWrite(root, notebook.SelfWrite{Rel: changed, Hash: hash})
-				} else if w := d.fsWatcherFor(root); w != nil {
-					w.NoteSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
-				}
+				d.noteSelfWrite(root, notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastFsChanged(root, originUI, changed)
 			}
 		}
@@ -253,18 +249,10 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 		if readErr != nil {
 			err = readErr
 		} else {
-			inNotebook := d.isNotebookRoot(root)
-			if inNotebook {
-				d.noteNotebookSelfWrite(root,
-					notebook.SelfWrite{Rel: oldRel},
-					notebook.SelfWrite{Rel: newRel, Hash: hash},
-				)
-			} else if w := d.fsWatcherFor(root); w != nil {
-				w.NoteSelfWrite(
-					notebook.SelfWrite{Rel: oldRel},
-					notebook.SelfWrite{Rel: newRel, Hash: hash},
-				)
-			}
+			d.noteSelfWrite(root,
+				notebook.SelfWrite{Rel: oldRel},
+				notebook.SelfWrite{Rel: newRel, Hash: hash},
+			)
 			err = store.Rename(oldRel, newRel)
 			if err == nil {
 				result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
@@ -287,12 +275,7 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 		err = storeErr
 	}
 	if err == nil {
-		inNotebook := d.isNotebookRoot(root)
-		if inNotebook {
-			d.noteNotebookSelfWrite(root, notebook.SelfWrite{Rel: rel})
-		} else if w := d.fsWatcherFor(root); w != nil {
-			w.NoteSelfWrite(notebook.SelfWrite{Rel: rel})
-		}
+		d.noteSelfWrite(root, notebook.SelfWrite{Rel: rel})
 		err = store.Delete(rel)
 		if err == nil {
 			result = &protocol.FsDeleteResult{Path: rel}

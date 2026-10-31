@@ -416,7 +416,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		})
 		return profileActionOutcome{arranges: true, publish: func() {
-			d.pruneNotebookWatchers()
+			d.pruneRootWatchers()
 			d.announceClosedAsks(closedAsks)
 			d.publishFact(FactProfileDeleted, deleted.ID, nil)
 		}}, nil

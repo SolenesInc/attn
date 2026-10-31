@@ -12,6 +12,7 @@ import (
 
 	"nhooyr.io/websocket"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -253,5 +254,69 @@ func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 	fsAwaitLaterChange(t, app, refusedRoot)
 	if heard := fsChangesHeardByNow(remote); heard != 0 {
 		t.Fatalf("the refused root was watched after all: the unauthenticated client heard %d changes", heard)
+	}
+}
+
+func newFsWorldWithAFolderBesideIt(t *testing.T) (*world, string) {
+	t.Helper()
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", "fs-browser-host-token")
+	w := &world{World: prepareWorld(t)}
+	beside := filepath.Dir(w.Dir)
+	t.Setenv("ATTN_HARNESS_DATA_DIR", beside)
+	folder, err := os.MkdirTemp(beside, filepath.Base(w.Dir)+"-folder-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(folder) })
+	w.start()
+	w.closeWatchWindows()
+	return w, folder
+}
+
+func TestAnEditorWatchingAnotherProfilesNotebookKeepsHearingItAfterThatProfileMovesAway(t *testing.T) {
+	w, folder := newFsWorldWithAFolderBesideIt(t)
+	setup := w.App()
+	owner, browsing := createProfile(setup, "Owner"), createProfile(setup, "Browsing")
+	ownerApp, browsingApp := w.AppOn(owner.ID), pickerAppOn(w, browsing.ID)
+	if saved := notebookSetting(ownerApp, "notebook.profile_root", folder); !protocol.Deref(saved.Success) {
+		t.Fatalf("setting Owner's Notebook folder: %s", protocol.Deref(saved.Error))
+	}
+	notebookEffectiveRoot(ownerApp, folder)
+	fsMustWatch(t, browsingApp, folder)
+	fsWriteFile(t, filepath.Join(folder, "while-owned.txt"), []byte("x"))
+	fsAwaitChanged(browsingApp, func(m protocol.FsChangedMessage) bool {
+		return m.Root == folder && m.Origin == "external" && slices.Contains(m.Paths, "while-owned.txt")
+	})
+
+	if _, err := w.Client().SetSetting(client.SettingsCaller{Profile: owner.ID}, "notebook.profile_root", ""); err != nil {
+		t.Fatalf("clearing Owner's Notebook folder from outside attn: %v", err)
+	}
+	notebookEffectiveRoot(ownerApp, fsNotebookRoot(t, w))
+	fsWriteFile(t, filepath.Join(folder, "after-owner-left.txt"), []byte("x"))
+	fsAwaitChanged(browsingApp, func(m protocol.FsChangedMessage) bool {
+		return m.Root == folder && m.Origin == "external" && slices.Contains(m.Paths, "after-owner-left.txt")
+	})
+}
+
+func TestAFolderAnEditorWatchesStillTellsItsOwnSavesApartWhenItBecomesANotebook(t *testing.T) {
+	w, folder := newFsWorldWithAFolderBesideIt(t)
+	setup := w.App()
+	owner, browsing := createProfile(setup, "Owner"), createProfile(setup, "Browsing")
+	ownerApp, browsingApp := w.AppOn(owner.ID), pickerAppOn(w, browsing.ID)
+	fsMustWatch(t, browsingApp, folder)
+
+	if saved := notebookSetting(ownerApp, "notebook.profile_root", folder); !protocol.Deref(saved.Success) {
+		t.Fatalf("setting Owner's Notebook folder: %s", protocol.Deref(saved.Error))
+	}
+	notebookEffectiveRoot(ownerApp, folder)
+	fsAskWrite(browsingApp, folder, "own.txt", "attn wrote this", "")
+	fsAwaitChanged(browsingApp, func(m protocol.FsChangedMessage) bool {
+		return m.Root == folder && m.Origin == "ui" && slices.Contains(m.Paths, "own.txt")
+	})
+	fsWriteFile(t, filepath.Join(folder, "sentinel.txt"), []byte("edited outside"))
+	if external := fsAwaitChanged(browsingApp, func(m protocol.FsChangedMessage) bool {
+		return m.Root == folder && m.Origin == "external" && (slices.Contains(m.Paths, "own.txt") || slices.Contains(m.Paths, "sentinel.txt"))
+	}); slices.Contains(external.Paths, "own.txt") || !slices.Contains(external.Paths, "sentinel.txt") {
+		t.Fatalf("the first external change was %v, want the outside edit without attn's own write", external.Paths)
 	}
 }

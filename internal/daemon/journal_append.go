@@ -38,7 +38,7 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 		d.sendError(conn, "journal append: "+err.Error())
 		return
 	}
-	d.noteNotebookSelfWrite(store.Root(), notebook.SelfWrite{Rel: rel, Hash: hash})
+	d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: rel, Hash: hash})
 	d.broadcastFsChanged(store.Root(), originAgent, rel)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,

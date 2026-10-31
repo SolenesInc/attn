@@ -2,18 +2,15 @@ package daemon
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const maxFsWatchers = 16
-
-type fsRootWatch struct {
-	watcher *notebook.Watcher
-	refs    map[*wsClient]int
-}
 
 func (d *Daemon) clientNotebookRoot(client *wsClient, root string) bool {
 	own, err := d.notebookRoot(d.profileForClient(client))
@@ -24,8 +21,10 @@ func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err == nil && !d.clientNotebookRoot(client, root) {
 		err = d.addFsWatchRef(client, root)
-		if err == nil && d.isNotebookRoot(root) {
-			d.ensureNotebookWatcher(root)
+		if err == nil {
+			if err = d.ensureRootWatcher(root); err != nil {
+				d.dropFsWatchRef(client, root)
+			}
 		}
 	}
 	msg := protocol.FsWatchResultMessage{
@@ -62,103 +61,142 @@ func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
 func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 	d.fsWatchMu.Lock()
 	defer d.fsWatchMu.Unlock()
-	if d.fsWatchers == nil {
-		d.fsWatchers = make(map[string]*fsRootWatch)
+	if d.fsWatchRefs == nil {
+		d.fsWatchRefs = make(map[string]map[*wsClient]int)
 	}
-	entry, ok := d.fsWatchers[root]
+	refs, ok := d.fsWatchRefs[root]
 	if !ok {
-		if len(d.fsWatchers) >= maxFsWatchers {
+		if len(d.fsWatchRefs) >= maxFsWatchers {
 			return fmt.Errorf("too many watched roots")
 		}
-		entry = &fsRootWatch{refs: make(map[*wsClient]int)}
-		if !d.isNotebookRoot(root) {
-			w, err := notebook.NewWatcher(d.clock, root, fsdoc.CleanPath, func(paths []string) {
-				d.broadcastFsChanged(root, originExternal, paths...)
-			})
-			if err != nil {
-				return err
-			}
-			entry.watcher = w
-		}
-		d.fsWatchers[root] = entry
+		refs = make(map[*wsClient]int)
+		d.fsWatchRefs[root] = refs
 	}
-	entry.refs[client]++
+	refs[client]++
 	return nil
 }
 
 func (d *Daemon) dropFsWatchRef(client *wsClient, root string) {
 	d.fsWatchMu.Lock()
-	entry, ok := d.fsWatchers[root]
-	if !ok {
-		d.fsWatchMu.Unlock()
-		return
+	refs, ok := d.fsWatchRefs[root]
+	if ok {
+		if refs[client] > 1 {
+			refs[client]--
+		} else {
+			delete(refs, client)
+		}
+		if len(refs) == 0 {
+			delete(d.fsWatchRefs, root)
+		}
 	}
-	if entry.refs[client] > 1 {
-		entry.refs[client]--
-		d.fsWatchMu.Unlock()
-		return
-	}
-	delete(entry.refs, client)
-	var toClose *notebook.Watcher
-	if len(entry.refs) == 0 {
-		delete(d.fsWatchers, root)
-		toClose = entry.watcher
-	}
+	released := ok && len(refs) == 0
 	d.fsWatchMu.Unlock()
-	_ = toClose.Close()
+	if released {
+		d.pruneRootWatchers()
+	}
 }
 
 func (d *Daemon) dropFsWatchClient(client *wsClient) {
 	d.fsWatchMu.Lock()
-	var toClose []*notebook.Watcher
-	for root, entry := range d.fsWatchers {
-		if _, held := entry.refs[client]; !held {
+	released := false
+	for root, refs := range d.fsWatchRefs {
+		if _, held := refs[client]; !held {
 			continue
 		}
-		delete(entry.refs, client)
-		if len(entry.refs) == 0 {
-			delete(d.fsWatchers, root)
-			toClose = append(toClose, entry.watcher)
+		delete(refs, client)
+		if len(refs) == 0 {
+			delete(d.fsWatchRefs, root)
+			released = true
 		}
 	}
 	d.fsWatchMu.Unlock()
-	for _, w := range toClose {
-		_ = w.Close()
+	if released {
+		d.pruneRootWatchers()
 	}
-}
-
-func (d *Daemon) stopFsWatchers() {
-	d.fsWatchMu.Lock()
-	watchers := d.fsWatchers
-	d.fsWatchers = nil
-	d.fsWatchMu.Unlock()
-	for _, entry := range watchers {
-		_ = entry.watcher.Close()
-	}
-}
-
-func (d *Daemon) fsWatcherFor(root string) *notebook.Watcher {
-	d.fsWatchMu.Lock()
-	defer d.fsWatchMu.Unlock()
-	entry, ok := d.fsWatchers[root]
-	if !ok {
-		return nil
-	}
-	return entry.watcher
 }
 
 func (d *Daemon) sendFsChangedToWatchers(root string, msg protocol.FsChangedMessage) {
 	d.fsWatchMu.Lock()
-	entry, ok := d.fsWatchers[root]
-	var clients []*wsClient
-	if ok {
-		clients = make([]*wsClient, 0, len(entry.refs))
-		for c := range entry.refs {
-			clients = append(clients, c)
-		}
+	refs := d.fsWatchRefs[root]
+	clients := make([]*wsClient, 0, len(refs))
+	for c := range refs {
+		clients = append(clients, c)
 	}
 	d.fsWatchMu.Unlock()
 	for _, c := range clients {
 		d.sendToClient(c, msg)
+	}
+}
+
+func openRootWatch(clock *stepclock.Clock, root string, changed func([]string)) (*notebook.Watcher, error) {
+	return notebook.NewWatcher(clock, root, fsdoc.CleanPath, changed)
+}
+
+func (d *Daemon) ensureNotebookWatcher(root string) {
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return
+	}
+	if err := d.ensureRootWatcher(root); err != nil {
+		d.logf("notebook watcher: failed to watch %s: %v", root, err)
+	}
+}
+
+func (d *Daemon) ensureRootWatcher(root string) error {
+	select {
+	case <-d.life.Done():
+		return nil
+	default:
+	}
+	d.rootWatcherMu.Lock()
+	defer d.rootWatcherMu.Unlock()
+	if d.rootWatchers[root] != nil {
+		return nil
+	}
+	w, err := d.rootWatch(d.clock, root, func(paths []string) { d.rootChanged(root, paths) })
+	if err != nil {
+		return err
+	}
+	if d.rootWatchers == nil {
+		d.rootWatchers = make(map[string]*notebook.Watcher)
+	}
+	d.rootWatchers[root] = w
+	return nil
+}
+
+func (d *Daemon) noteSelfWrite(root string, writes ...notebook.SelfWrite) {
+	d.rootWatcherMu.Lock()
+	w := d.rootWatchers[root]
+	d.rootWatcherMu.Unlock()
+	w.NoteSelfWrite(writes...)
+}
+
+func (d *Daemon) pruneRootWatchers() {
+	kept := d.notebookRoots()
+	d.rootWatcherMu.Lock()
+	d.fsWatchMu.Lock()
+	for root := range d.fsWatchRefs {
+		kept[root] = struct{}{}
+	}
+	d.fsWatchMu.Unlock()
+	var stale []*notebook.Watcher
+	for root, w := range d.rootWatchers {
+		if _, used := kept[root]; !used {
+			delete(d.rootWatchers, root)
+			stale = append(stale, w)
+		}
+	}
+	d.rootWatcherMu.Unlock()
+	for _, w := range stale {
+		_ = w.Close()
+	}
+}
+
+func (d *Daemon) stopRootWatchers() {
+	d.rootWatcherMu.Lock()
+	watchers := d.rootWatchers
+	d.rootWatchers = nil
+	d.rootWatcherMu.Unlock()
+	for _, w := range watchers {
+		_ = w.Close()
 	}
 }

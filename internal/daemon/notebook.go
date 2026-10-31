@@ -9,11 +9,9 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const originAgent = "agent"
@@ -41,86 +39,29 @@ func (d *Daemon) notebookStoreFor(profileID string) (*notebook.Store, error) {
 	return store, nil
 }
 
-func openNotebookWatch(clock *stepclock.Clock, root string, changed func([]string)) (*notebook.Watcher, error) {
-	return notebook.NewWatcher(clock, root, fsdoc.CleanPath, changed)
-}
-
-func (d *Daemon) ensureNotebookWatcher(root string) {
-	select {
-	case <-d.life.Done():
-		return
-	default:
-	}
-	d.notebookWatcherMu.Lock()
-	defer d.notebookWatcherMu.Unlock()
-	if d.notebookWatchers[root] != nil {
+func (d *Daemon) rootChanged(root string, paths []string) {
+	d.broadcastFsChanged(root, originExternal, paths...)
+	if !d.isNotebookRoot(root) {
 		return
 	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+	d.notebookFilesChanged()
+	if !d.enrollmentStatus().IsHome() {
 		return
 	}
-	w, err := d.notebookWatch(d.clock, root, func(paths []string) {
-		d.broadcastFsChanged(root, originExternal, paths...)
-		d.notebookFilesChanged()
-		if !d.enrollmentStatus().IsHome() {
-			return
+	artifactSeeds := map[string]struct{}{}
+	for _, p := range paths {
+		if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
+			artifactSeeds[seedID] = struct{}{}
 		}
-		artifactSeeds := map[string]struct{}{}
-		for _, p := range paths {
-			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
-				artifactSeeds[seedID] = struct{}{}
-			}
-		}
-		if len(artifactSeeds) > 0 {
-			d.coalesceSnapshots(func() {
-				for seedID := range artifactSeeds {
-					if err := d.recordObservedSeedArtifacts(seedID); err != nil {
-						d.logf("Garden artifact observation for %s: %v", seedID, err)
-					}
+	}
+	if len(artifactSeeds) > 0 {
+		d.coalesceSnapshots(func() {
+			for seedID := range artifactSeeds {
+				if err := d.recordObservedSeedArtifacts(seedID); err != nil {
+					d.logf("Garden artifact observation for %s: %v", seedID, err)
 				}
-			})
-		}
-	})
-	if err != nil {
-		d.logf("notebook watcher: failed to watch %s: %v", root, err)
-		return
-	}
-	if d.notebookWatchers == nil {
-		d.notebookWatchers = make(map[string]*notebook.Watcher)
-	}
-	d.notebookWatchers[root] = w
-}
-
-func (d *Daemon) noteNotebookSelfWrite(root string, writes ...notebook.SelfWrite) {
-	d.notebookWatcherMu.Lock()
-	w := d.notebookWatchers[root]
-	d.notebookWatcherMu.Unlock()
-	w.NoteSelfWrite(writes...)
-}
-
-func (d *Daemon) pruneNotebookWatchers() {
-	roots := d.notebookRoots()
-	d.notebookWatcherMu.Lock()
-	var stale []*notebook.Watcher
-	for root, w := range d.notebookWatchers {
-		if _, used := roots[root]; !used {
-			delete(d.notebookWatchers, root)
-			stale = append(stale, w)
-		}
-	}
-	d.notebookWatcherMu.Unlock()
-	for _, w := range stale {
-		_ = w.Close()
-	}
-}
-
-func (d *Daemon) stopNotebookWatchers() {
-	d.notebookWatcherMu.Lock()
-	watchers := d.notebookWatchers
-	d.notebookWatchers = nil
-	d.notebookWatcherMu.Unlock()
-	for _, w := range watchers {
-		_ = w.Close()
+			}
+		})
 	}
 }
 
@@ -206,7 +147,7 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 		for i, write := range scaffolded {
 			createdPaths[i] = write.Rel
 		}
-		d.noteNotebookSelfWrite(store.Root(), scaffolded...)
+		d.noteSelfWrite(store.Root(), scaffolded...)
 		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
@@ -338,7 +279,7 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				d.noteNotebookSelfWrite(store.Root(), notebook.SelfWrite{Rel: changed, Hash: hash})
+				d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastFsChanged(store.Root(), originUI, changed)
 			}
 		}

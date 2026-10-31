@@ -39,7 +39,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {
-		d.notebookWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
+		d.rootWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix
 	d.httpListener = ws
