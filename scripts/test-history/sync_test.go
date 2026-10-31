@@ -13,7 +13,10 @@ import (
 	"testing"
 )
 
-const serviceToken = "sync-test-token"
+const (
+	serviceToken       = "sync-test-token"
+	checkoutRepository = "acme/attn"
+)
 
 type storedReceipt struct {
 	repo, id string
@@ -106,6 +109,12 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *fakeHistoryService) putCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.puts
+}
+
 func (s *fakeHistoryService) stored(id string) []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,6 +151,7 @@ func (w *syncWorld) captureReceipt() string {
 		before[r.InvocationID] = true
 	}
 	cmd := historyCommand(w.t, w.spool, fixtureModule(w.t), "capture", "go", "--", "-count=1", "-run", "TestPasses", "./good")
+	cmd.Env = append(cmd.Env, "GITHUB_REPOSITORY="+checkoutRepository)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		w.t.Fatalf("capture: %v\n%s", err, out)
 	}
@@ -157,7 +167,7 @@ func (w *syncWorld) captureReceipt() string {
 func (w *syncWorld) sync() (stdout, stderr string, code int) {
 	w.t.Helper()
 	cmd := historyCommand(w.t, w.spool, fixtureModule(w.t), "sync")
-	cmd.Env = append(cmd.Env, "ATTN_TEST_HISTORY_URL="+w.service.server.URL, "XDG_CONFIG_HOME="+w.config)
+	cmd.Env = append(cmd.Env, "ATTN_TEST_HISTORY_URL="+w.service.server.URL, "XDG_CONFIG_HOME="+w.config, "GITHUB_REPOSITORY="+checkoutRepository)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	code = exitCode(cmd.Run())
@@ -209,10 +219,10 @@ func TestSyncUploadsEachReceiptOnceAndDownloadsTheSharedHistory(t *testing.T) {
 		t.Error("downloaded another repository's receipt")
 	}
 
-	puts := w.service.puts
+	puts := w.service.putCount()
 	out, errOut, code = w.sync()
-	if code != 0 || !strings.Contains(out, "uploaded 0 (0 already stored), downloaded 0") || w.service.puts != puts {
-		t.Fatalf("second sync exited %d, %d new uploads\nstdout: %s\nstderr: %s", code, w.service.puts-puts, out, errOut)
+	if code != 0 || !strings.Contains(out, "uploaded 0 (0 already stored), downloaded 0") || w.service.putCount() != puts {
+		t.Fatalf("second sync exited %d, %d new uploads\nstdout: %s\nstderr: %s", code, w.service.putCount()-puts, out, errOut)
 	}
 	w.service.add(repo, "ci-3", []byte(`{"invocation_id":"ci-3"}`))
 	if out, _, _ = w.sync(); !strings.Contains(out, "downloaded 1;") || w.shared("ci-3") == nil {
