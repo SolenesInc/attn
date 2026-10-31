@@ -9,7 +9,7 @@ import (
 )
 
 func pollablePTMX(f *os.File) (*os.File, error) {
-	fd, err := syscall.Dup(int(f.Fd()))
+	fd, err := unix.FcntlInt(f.Fd(), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return nil, fmt.Errorf("dup pty master: %w", err)
 	}

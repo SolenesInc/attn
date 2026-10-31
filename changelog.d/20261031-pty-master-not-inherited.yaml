@@ -1,0 +1,4 @@
+kind: fixed
+area: terminals
+change: A terminal's PTY master is no longer inherited by the processes of sessions started later in the same host, so closing a session hangs up its terminal.
+notes: A worker that is watched by a restarted daemon also no longer misses the exit of a child that ends while the watch starts.

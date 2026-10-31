@@ -224,6 +224,8 @@ func (r *Runtime) run(ctx context.Context) error {
 	})
 	r.manager.SetStateHandler(func(_ string, obs pty.Observation) { r.observeState(obs) })
 	r.manager.SetExitHandler(func(info pty.ExitInfo) {
+		r.deliverMu.Lock()
+		defer r.deliverMu.Unlock()
 		r.stateMu.Lock()
 		code := info.ExitCode
 		r.exitCode = &code
