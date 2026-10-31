@@ -302,7 +302,7 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | the two use different instance names | Start an outpost with the same instance name as the home. |
 | the two run different builds | Choose **Update to home build** on the row or **Update outposts** in the banner. |
 | the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
-| the outpost is paired to another home | Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
+| the outpost is paired to another home | This home installs nothing there, even when its build differs. Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
 | ssh needs a host-key answer, passphrase, password, 2FA, or security-key touch | Choose **Connect in a terminal** and answer ssh there. When it succeeds, the outpost connects automatically. Close the terminal with **⌘W**. |
 | ssh says the machine's host key changed | Choose **Connect in a terminal** to read ssh's refusal. Check the machine's identity and follow ssh's message to fix your known hosts before trying again. |
 | it is the same outpost as another row | You added it twice under two destinations. Remove one. |

@@ -98,7 +98,7 @@ func TestSSHCommandProcess(t *testing.T) {
 		os.Exit(0)
 	}
 	if strings.Contains(last, "uname -sm") {
-		_, _ = io.WriteString(os.Stdout, "Linux x86_64\n{\"version\":\"test\",\"sourceFingerprint\":\"git:test\",\"protocolVersion\":\"test\"}\nb false\n")
+		_, _ = io.WriteString(os.Stdout, "Linux x86_64\n{\"version\":\"test\",\"sourceFingerprint\":\"git:test\",\"protocolVersion\":\"test\"}\n{\"daemon_id\":\"d-outpost\",\"home_daemon_id\":\"d-home\"}\nb false\n")
 	} else if strings.Contains(last, "_bridge") {
 		_, _ = io.Copy(os.Stdout, os.Stdin)
 	} else {
@@ -122,7 +122,7 @@ func TestSSHCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if probe.Platform != "linux/amd64" || probe.Build == nil || probe.Build.SourceFingerprint != "git:test" || probe.Build.ProtocolVersion != "test" {
+	if probe.Platform != "linux/amd64" || probe.Build == nil || probe.Build.SourceFingerprint != "git:test" || probe.Build.ProtocolVersion != "test" || probe.Enrollment.HomeDaemonID != "d-home" {
 		t.Fatalf("probe: %+v", probe)
 	}
 	if _, err := client.Run(ctx, "echo hello"); err != nil {

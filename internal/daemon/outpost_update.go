@@ -138,6 +138,9 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 		}
 		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
 	}
+	if err := probe.Enrollment.CheckHome(d.daemonInstanceID); err != nil {
+		return nil, &bridge.Refusal{Reason: "home", Detail: err.Error()}
+	}
 	different := probe.Build == nil || *probe.Build != d.bridgeIdentity().Build
 	if push != nil && (force || different) {
 		if err := d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, "") }); err != nil {

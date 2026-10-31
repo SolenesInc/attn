@@ -7,11 +7,13 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/enrollment"
 )
 
 type Probe struct {
 	Platform          string
 	Build             *bridge.Build
+	Enrollment        enrollment.Status
 	KillUserProcesses bool
 }
 
@@ -33,12 +35,13 @@ func parseKillUserProcesses(value string) (bool, error) {
 	}
 }
 func (c *Client) Probe(ctx context.Context) (Probe, error) {
-	out, err := c.Run(ctx, `uname -sm; if [ -x `+c.binaryPath()+` ]; then `+c.binaryPath()+` --build-info-json; else echo missing; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
+	binary := c.binaryPath()
+	out, err := c.Run(ctx, `uname -sm; if [ -x `+binary+` ]; then `+binary+` --build-info-json | tr -d "\n"; echo; `+binary+` enrollment status --json 2>/dev/null | tr -d "\n"; echo; else echo missing; echo; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
 	if err != nil {
 		return Probe{}, err
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) < 3 {
+	if len(lines) != 4 {
 		return Probe{}, fmt.Errorf("unexpected outpost probe: %s", out)
 	}
 	p := Probe{}
@@ -57,8 +60,7 @@ func (c *Client) Probe(ctx context.Context) (Probe, error) {
 	if p.KillUserProcesses {
 		return p, fmt.Errorf("logind KillUserProcesses is on; outpost agents would die when ssh disconnects; turn KillUserProcesses off before adding this outpost")
 	}
-	buildJSON := strings.Join(lines[1:len(lines)-1], "\n")
-	if buildJSON != "missing" {
+	if buildJSON := lines[1]; buildJSON != "missing" {
 		var b struct {
 			Version           string `json:"version"`
 			SourceFingerprint string `json:"sourceFingerprint"`
@@ -68,6 +70,11 @@ func (c *Client) Probe(ctx context.Context) (Probe, error) {
 			return p, err
 		}
 		p.Build = &bridge.Build{Version: b.Version, SourceFingerprint: b.SourceFingerprint, ProtocolVersion: b.ProtocolVersion}
+	}
+	if status := lines[2]; status != "" {
+		if err := json.Unmarshal([]byte(status), &p.Enrollment); err != nil {
+			return p, fmt.Errorf("outpost enrollment status %q: %w", status, err)
+		}
 	}
 	return p, nil
 }
