@@ -495,10 +495,20 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			}
 			setting = &chosen
 		}
+		before := member
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
-		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
+		revision := doc.Rev
+		if msg.NotebookRoot != nil {
+			placed, placedRevision, err := d.placeChiefNotebook(before, doc.Rev, *msg.NotebookRoot)
+			if err != nil {
+				return nil, false, err
+			}
+			member.Home, member.CWD, member.AwarenessDirs = placed.Home, placed.CWD, placed.AwarenessDirs
+			revision = placedRevision
+		}
+		revision, err = d.writeCrewMemberWithLaunch(*schema, member, revision, setting)
 		if err == nil {
 			if setting != nil {
 				d.publishArrangementChanged(member.ProfileID)

@@ -170,3 +170,79 @@ func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {
 	}
 	return count, nil
 }
+
+func (d *Daemon) placeChiefNotebook(member crew.Member, revision int64, root string) (crew.Member, int64, error) {
+	if !member.Chief {
+		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", SettingNotebookProfileRoot)
+	}
+	if member.Agent != "" {
+		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, SettingNotebookProfileRoot)
+	}
+	previous, changed, err := d.pointProfileNotebook(member.ProfileID, root)
+	if err != nil {
+		return member, revision, err
+	}
+	placed, revision, err := d.moveHomeIntoNotebook(member, revision)
+	if err != nil && changed {
+		if restoreErr := d.setProfileNotebookRoot(member.ProfileID, previous); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("put the profile's Notebook folder back to %q: %w", previous, restoreErr))
+		}
+	}
+	return placed, revision, err
+}
+
+func (d *Daemon) pointProfileNotebook(profileID, root string) (previous string, changed bool, err error) {
+	current, err := d.notebookRoot(profileID)
+	if err != nil {
+		return "", false, err
+	}
+	wanted, err := expandProfileNotebookRoot(strings.TrimSpace(root))
+	if err != nil {
+		return "", false, err
+	}
+	if same, err := sameDir(current, wanted); err != nil || same {
+		return "", false, err
+	}
+	previous = d.profileNotebookRoot(profileID)
+	if err := d.setProfileNotebookRoot(profileID, root); err != nil {
+		return "", false, err
+	}
+	return previous, true, nil
+}
+
+func (d *Daemon) setProfileNotebookRoot(profileID, root string) error {
+	_, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookProfileRoot), Value: root, ProfileID: &profileID})
+	return err
+}
+
+func (d *Daemon) moveHomeIntoNotebook(member crew.Member, revision int64) (crew.Member, int64, error) {
+	parent, err := d.notebookCrewHomes(member.ProfileID)
+	if err != nil {
+		return member, revision, err
+	}
+	if within, err := sameDirOrWithin(parent, member.HomeDir(d.dataRoot)); err != nil || within {
+		return member, revision, err
+	}
+	return d.relocateCrewHome(member, revision, parent, member.Name, func(c store.DocumentCommit) (store.DocumentWriteResult, error) {
+		return d.store.CommitDocumentWrite(c.Write, c.Fact, time.Now())
+	})
+}
+
+func sameDir(a, b string) (bool, error) {
+	left, right, err := canonicalPair(a, b)
+	return left == right, err
+}
+
+func sameDirOrWithin(root, path string) (bool, error) {
+	left, right, err := canonicalPair(root, path)
+	return err == nil && pathWithin(left, right), err
+}
+
+func canonicalPair(a, b string) (string, string, error) {
+	left, err := config.CanonicalRuntimePath(a)
+	if err != nil {
+		return "", "", err
+	}
+	right, err := config.CanonicalRuntimePath(b)
+	return left, right, err
+}

@@ -376,3 +376,59 @@ func TestSendingASeedToASleepingChiefMemberWakesIt(t *testing.T) {
 		t.Fatalf("charter %s is outside home %s", chief.CharterPath, chief.HomeDir)
 	}
 }
+
+func chiefSetupFromApp(app *testworld.Peer, requestID string, change protocol.CrewSetMessage) protocol.CrewSetResultMessage {
+	change.Cmd, change.Member, change.RequestID = protocol.CmdCrewSet, "chief", protocol.Ptr(requestID)
+	return testworld.Request(app, change, protocol.EventCrewSetResult, func(m protocol.CrewSetResultMessage) bool { return m.RequestID == requestID })
+}
+
+func TestChiefSetupPicksTheProfilesNotebookFolderAndMovesTheChiefsHomeThere(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := turnOnCrewV2(t, w)
+	if got := app.Initial.Settings["claude_cap_launch_instructions"]; got != "true" {
+		t.Fatalf("claude_cap_launch_instructions = %v, want true so setup offers Claude Code", got)
+	}
+	root := w.Path("work-notebook")
+	set := chiefSetupFromApp(app, "setup", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), ExpectedRevision: protocol.Ptr(chief.Revision), NotebookRoot: protocol.Ptr(root)})
+	home := filepath.Join(root, "crew", "chief")
+	if !set.Success || set.Member == nil || set.Member.HomeDir != home || protocol.Deref(set.Member.Agent) != "claude" {
+		t.Fatalf("Chief setup with a Notebook folder = %+v, want the home at %s and the harness recorded", set, home)
+	}
+	if _, err := os.Stat(filepath.Join(home, "CHARTER.md")); err != nil {
+		t.Fatalf("the Chief's charter did not move into the picked Notebook: %v", err)
+	}
+	if _, err := os.Stat(chief.HomeDir); !os.IsNotExist(err) {
+		t.Fatalf("the Chief's old home %s is still there: %v", chief.HomeDir, err)
+	}
+	if got := w.App().Initial.Settings["notebook.root.effective"]; got != root {
+		t.Fatalf("the profile's Notebook folder = %v, want %q", got, root)
+	}
+	woken := wakeCrew(t, cli, "chief", "")
+	w.Launched(string(woken.SessionID))
+	if session := queriedSession(t, cli, string(woken.SessionID)); session.Directory != home {
+		t.Fatalf("the Chief woke in %s, want its home in the picked Notebook, %s", session.Directory, home)
+	}
+
+	again := chiefSetupFromApp(app, "again", protocol.CrewSetMessage{NotebookRoot: protocol.Ptr(w.Path("other"))})
+	if again.Success || !strings.Contains(protocol.Deref(again.Error), "picked once, at setup") {
+		t.Fatalf("picking the Notebook folder of a configured Chief = %+v, want a refusal naming the profile setting", again)
+	}
+}
+
+func TestChiefSetupThatCannotMoveTheHomeLeavesTheNotebookFolderAndTheChiefAsTheyWere(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := turnOnCrewV2(t, w)
+	before := app.Initial.Settings["notebook.root.effective"]
+	set := chiefSetupFromApp(app, "inside", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), NotebookRoot: protocol.Ptr(filepath.Join(chief.HomeDir, "nested"))})
+	if set.Success || !strings.Contains(protocol.Deref(set.Error), "inside it") {
+		t.Fatalf("Chief setup into a folder inside its own home = %+v, want the move refused", set)
+	}
+	if got := w.App().Initial.Settings["notebook.root.effective"]; got != before {
+		t.Fatalf("a failed setup left the Notebook folder at %v, want %v", got, before)
+	}
+	if after := chiefOfRoster(t, crewRoster(t, cli)); after.Agent != nil || after.HomeDir != chief.HomeDir {
+		t.Fatalf("a failed setup changed the Chief: %+v", after)
+	}
+}

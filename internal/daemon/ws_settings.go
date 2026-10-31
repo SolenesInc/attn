@@ -252,6 +252,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[capabilitySettingKey(name, "yolo")] = strconv.FormatBool(caps.HasYolo)
 		hasHeadlessTask, _ := agentdriver.HeadlessTaskAvailability(driver)
 		settings[capabilitySettingKey(name, "headless_task")] = strconv.FormatBool(hasHeadlessTask)
+		settings[capabilitySettingKey(name, "launch_instructions")] = strconv.FormatBool(d.agentSupportsChiefGuidance(name))
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		settings[availabilitySettingKey(driver.Agent)] = "true"

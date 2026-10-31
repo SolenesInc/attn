@@ -3322,6 +3322,9 @@ type CrewSetMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// NotebookRoot corresponds to the JSON schema field "notebook_root".
+	NotebookRoot *string `json:"notebook_root,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 

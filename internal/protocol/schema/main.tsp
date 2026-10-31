@@ -7559,6 +7559,9 @@ model CrewSetMessage {
   // optional, so an empty list marshals away and reaches the daemon as absent,
   // which is how "leave it alone" is said.
   clear_awareness_dirs?: boolean;
+  // The Notebook folder for the Chief's profile, picked while the Chief has
+  // no harness yet. The Chief's home moves into its crew folder.
+  notebook_root?: string;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
 }

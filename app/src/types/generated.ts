@@ -3710,6 +3710,7 @@ export interface CrewSetMessage {
     launch_desktop_setting?: LaunchDesktopSettingObject;
     member:                  string;
     model?:                  string;
+    notebook_root?:          string;
     profile_id?:             string;
     request_id?:             string;
     source_session_id?:      string;
@@ -21800,6 +21801,7 @@ const typeMap: any = {
         { json: "launch_desktop_setting", js: "launch_desktop_setting", typ: u(undefined, r("LaunchDesktopSettingObject")) },
         { json: "member", js: "member", typ: "" },
         { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "notebook_root", js: "notebook_root", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
