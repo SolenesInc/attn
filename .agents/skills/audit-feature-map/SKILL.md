@@ -96,14 +96,20 @@ The automation's folder is the control checkout. It holds no work.
    commands source:
 
 ```bash
-pass=$(date +%Y%m%d-%H%M) runs=$PWD.runs/$pass && mkdir -p $runs/evidence &&
-git worktree add --detach $runs/work origin/main && cat > $runs/pass.env <<EOF
-control=$PWD pass=$pass runs=$runs rev=$(git rev-parse origin/main)
+pass=$(date +%Y%m%d-%H%M) runs=$PWD.runs/$pass rev=$(git rev-parse origin/main) &&
+mkdir -p $runs/evidence && git worktree add --detach $runs/work $rev &&
+git worktree add -b map-audit-$pass $runs/repair $rev && cat > $runs/pass.env <<EOF
+control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair
 S=$runs/work/.agents/skills/audit-feature-map/scripts/audit.py
 cd $runs/work
 EOF
 echo $runs
 ```
+
+The work checkout is what you build and drive. It never changes during the
+pass: the instance must run the source it was built from, and `bridge` refuses
+an app whose source moved. Map fixes go in the repair checkout, `$repair`.
+`audit.py` acts on the checkout you run it in.
 
 Each command after this starts in a fresh shell, so it begins with
 `. <runs>/pass.env &&`, `<runs>` written out; an instance command adds
@@ -141,15 +147,19 @@ cleanup. The instance is `mapaudit-<MMDD>`, with a letter after it for a
 second one. Record each instance note before `write-env.sh`. Run the doctor
 before the first action.
 
+A setup command that fails because of the machine, such as a shared cache
+removed under it or a full disk, is no door's outcome. Keep its log under a
+new name, find the cause, retry once it is gone, and name it in the report.
+
 ## Drive
 
 Take the features in `rows.md` order. For each one:
 
 1. Read its file whole, and the commits `sources.txt` lists for it.
 2. Drive every door through its file's recipe, as drive-attn's Evidence says,
-   into `$runs/evidence/<feature>/`. Start from the baseline as the README's
-   Runs section says; when the instance can no longer give one, clean it and
-   start another.
+   with `$runs/evidence/<feature>` as the recipe's proof folder `P`. Start
+   from the baseline as the README's Runs section says; when the instance can
+   no longer give one, clean it and start another.
 3. When a step fails, read the source and the commits before deciding. Retry
    a step whose own deadline expired once, then classify it.
 4. Fill the feature's rows in `rows.md`: outcome, evidence and follow-up.
@@ -160,13 +170,12 @@ the report keeps waiting apart from driving.
 
 ## Repair the map
 
-Commit map fixes in the work checkout on a branch, `git switch -c
-map-audit-$pass`, as you prove them. Land them once, after cleanup, so a
-rebase never changes the source under a live instance:
+Edit and commit map fixes in `$repair`, on its branch `map-audit-$pass`, as
+you prove them. Land them before you write the report:
 
-1. `$S scope origin/main` must print `map-only`. When it refuses, find the
-   change that is not map prose and remove it, keeping edits that are not
-   yours.
+1. `. <runs>/pass.env && cd $repair && $S scope origin/main` must print
+   `map-only`. When it refuses, find the change that is not map prose and
+   remove it, keeping edits that are not yours.
 2. Run the `verify-docs` skill on the diff and fix its findings.
 3. Land with the `land-on-main` skill. When the rebase conflicts with someone
    else's edit to the same file, keep their edit and reapply yours.
@@ -178,6 +187,17 @@ names the failure with `attn seed note <seed> -m "<pass, door, evidence>"`.
 Otherwise plant one with `--discovered-from <stake>`, its body a work prompt
 with the door, the commands, the output and what would fix it. Plant one seed
 per cause, not per door.
+
+## Clean up
+
+Every pass ends here, finished or abandoned. For each instance, run
+`. <runs>/pass.env && .agents/skills/drive-attn/scripts/clean.sh <name>` and
+write the `cleaned` note. When clean fails, stop launching, keep its output
+and the instance's env file, and ask the user with the instance name and the
+exact error.
+
+`clean` keeps `~/attn-notebook-<name>`. List each one in the report with its
+size and leave it in place.
 
 ## Report
 
@@ -209,7 +229,7 @@ workers run detached and are not counted.
 <each door that is not pass or fixed: door, outcome, reason>
 
 ## Cleanup
-<instance: clean.sh result>; work checkout removed; residual paths and size
+<instance: clean.sh result>; residual paths and their size
 
 ## Doors
 <the table from rows.md>
@@ -217,14 +237,9 @@ workers run detached and are not counted.
 
 `$S check $runs/evidence/report.md` must pass before you attach it.
 
-## Clean up
+## Finish
 
-Every pass ends here, finished or abandoned. For each instance, run
-`. <runs>/pass.env && .agents/skills/drive-attn/scripts/clean.sh <name>` and
-write the `cleaned` note.
-When clean fails, stop launching, keep its output and the instance's env file,
-and ask the user with the instance name and the exact error. Then land, attach
-and remove the work checkout:
+Attach the report and the evidence, then remove the checkouts:
 
 ```bash
 . <runs>/pass.env &&
@@ -232,12 +247,12 @@ tar -czf $runs/evidence-$pass.tar.gz -C $runs evidence &&
 attn seed attach <stake> --path $runs/evidence/report.md --copy &&
 attn seed attach <stake> --path $runs/evidence-$pass.tar.gz --move &&
 git -C $control worktree remove --force $runs/work &&
+git -C $control worktree remove --force $repair &&
 git -C $control branch -D map-audit-$pass
 ```
 
-`clean` keeps `~/attn-notebook-<name>`. List each one in the report with its
-size and leave it in place. Write the `done` note, then `attn seed harvest
-<stake> -m "pass <pass> at <sha>: <tally>; report attached"`.
+Write the `done` note, then `attn seed harvest <stake> -m "pass <pass> at
+<sha>: <tally>; report attached"`.
 
 ## Recover
 
@@ -247,7 +262,8 @@ finished features.
 1. Clean each instance without a `cleaned` note, as in [Clean up](#clean-up).
    When its env file is gone, run
    `. <runs>/pass.env && ./attn instance clean <name>`. Launch nothing until every one is clean.
-2. When the work checkout is gone, add it again at the recorded revision.
+2. When the work or repair checkout is gone, add it again at the recorded
+   revision, and the repair checkout on its branch when the branch survives.
    When a finished feature's evidence is gone, drive it again and say so in
    its note.
 3. Continue with the first feature without a `feature` note, on a new

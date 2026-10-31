@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(subprocess.check_output(["git", "-C", str(Path(__file__).parent), "rev-parse", "--show-toplevel"], text=True).strip())
+ROOT = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
 FEATURES = ROOT / ".agents/skills/drive-attn/features"
 MAP_PROSE = re.compile(r"^\.agents/skills/drive-attn/(features/[^/]+\.md|SKILL\.md)$")
 OUTCOMES = {"pass", "fixed", "drift", "regression", "harness", "blocked", "ambiguous"}
