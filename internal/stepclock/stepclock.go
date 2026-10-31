@@ -194,15 +194,28 @@ func (c *Clock) Advance(d time.Duration) {
 	c.mu.Lock()
 	c.pending.mark()
 	c.now = c.now.Add(d)
+	c.fireLocked(func(t *timer) bool { return !t.deadline.After(c.now) })
+}
+
+// Fire fires every pending timer named name now, without moving the clock, and returns once their callbacks have run.
+// It is for a timer whose moment is no promise, such as a poll for changes the test has just made.
+func (c *Clock) Fire(name Name) {
+	c.mu.Lock()
+	c.fireLocked(func(t *timer) bool { return t.name == name })
+}
+
+func (c *Clock) fireLocked(due func(*timer) bool) {
 	var callbacks []func()
 	for _, t := range c.pending.armed() {
-		if t.deadline.After(c.now) {
+		if !due(t) {
 			continue
 		}
 		c.pending.disarm(t)
 		c.reportLocked("disarmed %p", t)
 		if t.callback != nil {
 			callbacks = append(callbacks, t.callback)
+		} else if t.deadline.After(c.now) {
+			t.channel <- c.now
 		} else {
 			t.channel <- t.deadline
 		}
@@ -312,6 +325,11 @@ func (c *Clock) serve(socket string) {
 				panic(fmt.Sprintf("stepclock read: %v", err))
 			}
 			command, value, _ := strings.Cut(strings.TrimSpace(line), " ")
+			if command == "fire" && value != "" {
+				c.Fire(Name(value))
+				send("fired " + value)
+				continue
+			}
 			d, err := time.ParseDuration(value)
 			if command != "advance" || err != nil || d < 0 {
 				panic(fmt.Sprintf("stepclock invalid command %q", strings.TrimSpace(line)))

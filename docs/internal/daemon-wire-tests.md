@@ -104,6 +104,14 @@ On a `fakeagent.Run`:
   another operation's timer of the same duration.
   A test that waits for such a timer without advancing fails at the hang
   guard.
+- Transcript watchers, including a driver plugin's usage watcher, poll on
+  that clock too. Each transcript write a fake
+  agent makes fires the poll (`sessionmonitor.TranscriptPoll`) without moving
+  the clock, before the write returns to the agent, so the daemon reads it
+  with no advance. A test that writes a transcript itself calls
+  `w.readTranscripts()`. The discovery grace and the quiet window are time:
+  a test that depends on them advances past them, such as
+  `w.advance(sessionmonitor.TranscriptDiscoveryGrace)`.
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,
   which closes each folder watch's window as soon as it opens.
 - A test about scheduled automations calls `w.tickSchedulesUntil(what, done)`.

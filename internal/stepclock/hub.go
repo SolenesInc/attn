@@ -21,6 +21,7 @@ type Hub struct {
 	mu       sync.Mutex
 	peers    map[*peer]struct{}
 	stepping sync.Mutex
+	firing   sync.Mutex
 }
 
 type peerTimer struct {
@@ -33,6 +34,7 @@ type peer struct {
 	pid      int
 	ready    bool
 	advanced chan struct{}
+	fired    chan struct{}
 	done     chan struct{}
 	err      error
 }
@@ -50,7 +52,7 @@ func Listen(socket string) (*Hub, error) {
 			if err != nil {
 				return
 			}
-			p := &peer{conn: conn, advanced: make(chan struct{}, 1), done: make(chan struct{})}
+			p := &peer{conn: conn, advanced: make(chan struct{}, 1), fired: make(chan struct{}, 1), done: make(chan struct{})}
 			h.mu.Lock()
 			h.peers[p] = struct{}{}
 			h.mu.Unlock()
@@ -119,6 +121,8 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 		h.mu.Unlock()
 	case len(fields) == 2 && fields[0] == "advanced":
 		p.advanced <- struct{}{}
+	case len(fields) == 2 && fields[0] == "fired":
+		p.fired <- struct{}{}
 	case len(fields) == 1 && (fields[0] == "busy" || fields[0] == "idle"):
 	default:
 		return false
@@ -132,6 +136,21 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	defer h.stepping.Unlock()
 	h.mu.Lock()
 	h.pending.mark()
+	h.mu.Unlock()
+	return h.command(ctx, fmt.Sprintf("advance %s", d), func(p *peer) chan struct{} { return p.advanced })
+}
+
+// Fire fires every timer named name in every connected process now, without moving the clocks, and returns once each
+// has run their callbacks or exited. It is for a timer whose moment is no promise, such as a poll for changes the test
+// has just made. It neither waits for nor moves the AwaitTimer mark, so it runs beside a pending AwaitTimer.
+func (h *Hub) Fire(ctx context.Context, name Name) error {
+	h.firing.Lock()
+	defer h.firing.Unlock()
+	return h.command(ctx, fmt.Sprintf("fire %s", name), func(p *peer) chan struct{} { return p.fired })
+}
+
+func (h *Hub) command(ctx context.Context, command string, answer func(*peer) chan struct{}) error {
+	h.mu.Lock()
 	peers := make([]*peer, 0, len(h.peers))
 	for p := range h.peers {
 		if p.ready {
@@ -140,21 +159,21 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	}
 	h.mu.Unlock()
 	for _, p := range peers {
-		if _, err := fmt.Fprintf(p.conn, "advance %s\n", d); err != nil {
+		if _, err := fmt.Fprintln(p.conn, command); err != nil {
 			select {
 			case <-p.done:
 				continue
 			case <-ctx.Done():
-				return fmt.Errorf("advance process %d by %s: %w", p.pid, d, err)
+				return fmt.Errorf("%s in process %d: %w", command, p.pid, err)
 			}
 		}
 	}
 	for _, p := range peers {
 		select {
-		case <-p.advanced:
+		case <-answer(p):
 		case <-p.done:
 		case <-ctx.Done():
-			return fmt.Errorf("process %d did not advance by %s", p.pid, d)
+			return fmt.Errorf("process %d did not answer %s", p.pid, command)
 		}
 	}
 	return nil

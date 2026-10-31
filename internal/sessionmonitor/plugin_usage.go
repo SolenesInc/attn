@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -72,21 +71,25 @@ func (m *Monitor) SeedDriverUsageBaseline(path string) {
 func (w *pluginUsageWatcher) run(tracker *usageTracker) {
 	defer w.monitor.endUsageRun()
 	defer close(w.doneCh)
-	ticker := time.NewTicker(transcriptPollInterval)
-	defer ticker.Stop()
+	poll := startTranscriptPoll(w.monitor.registry.host.Clock())
+	defer poll.stop()
 
 	var read os.FileInfo
-	for {
-		select {
-		case <-w.stopCh:
-			reconcilePluginUsageOnStop(w.path, read != nil, tracker)
-			w.monitor.logf("plugin usage watcher: stopped session=%s", w.monitor.Label())
-			return
-		case <-w.monitor.registry.host.Done():
-			seen := read != nil
-			w.monitor.deferFinalUsage(func() { reconcilePluginUsageOnStop(w.path, seen, tracker) })
-			return
-		case <-ticker.C:
+	for pass := 0; ; pass++ {
+		if pass > 0 {
+			poll.finishPass()
+			select {
+			case <-w.stopCh:
+				reconcilePluginUsageOnStop(w.path, read != nil, tracker)
+				w.monitor.logf("plugin usage watcher: stopped session=%s", w.monitor.Label())
+				return
+			case <-w.monitor.registry.host.Done():
+				seen := read != nil
+				w.monitor.deferFinalUsage(func() { reconcilePluginUsageOnStop(w.path, seen, tracker) })
+				return
+			case done := <-poll.passes:
+				poll.take(done)
+			}
 		}
 
 		info, err := os.Stat(w.path)

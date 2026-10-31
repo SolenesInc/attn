@@ -10,15 +10,18 @@ import (
 	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
 const (
 	transcriptPollInterval   = 500 * time.Millisecond
-	transcriptQuietWindow    = 1500 * time.Millisecond
+	TranscriptQuietWindow    = 1500 * time.Millisecond
 	assistantDedupWindow     = 2 * time.Second
-	transcriptDiscoveryGrace = 2 * time.Second
+	TranscriptDiscoveryGrace = 2 * time.Second
 )
+
+const TranscriptPoll stepclock.Name = "transcript-poll"
 
 const (
 	AnnotatableMessageMaxChars = 64 * 1024
@@ -187,7 +190,7 @@ func (w *transcriptWatcher) discover() string {
 
 func (w *transcriptWatcher) discoveryDeadline(now time.Time) time.Time {
 	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.monitor.boundConversation().TranscriptPath) != "" {
-		return now.Add(transcriptDiscoveryGrace)
+		return now.Add(TranscriptDiscoveryGrace)
 	}
 	return now
 }
@@ -492,8 +495,9 @@ func (w *transcriptWatcher) run() {
 		return
 	}
 
-	ticker := time.NewTicker(transcriptPollInterval)
-	defer ticker.Stop()
+	clock := m.registry.host.Clock()
+	poll := startTranscriptPoll(clock)
+	defer poll.stop()
 
 	var (
 		transcriptPath string
@@ -505,7 +509,7 @@ func (w *transcriptWatcher) run() {
 		assistantSeq    int64
 		classifiedSeq   int64
 
-		discoveryDeadline = w.discoveryDeadline(time.Now())
+		discoveryDeadline = w.discoveryDeadline(clock.Now())
 		fallbackAttempted bool
 		usageState        = w.state()
 	)
@@ -515,18 +519,22 @@ func (w *transcriptWatcher) run() {
 		}
 	}()
 
-	for {
-		select {
-		case <-w.stopCh:
-			m.logf("transcript watcher: stopped session=%s", label)
-			return
-		case <-m.registry.host.Done():
-			if w.usageTracker != nil {
-				m.deferFinalUsage(w.usageTracker.Reconcile)
-				w.usageTracker = nil
+	for pass := 0; ; pass++ {
+		if pass > 0 {
+			poll.finishPass()
+			select {
+			case <-w.stopCh:
+				m.logf("transcript watcher: stopped session=%s", label)
+				return
+			case <-m.registry.host.Done():
+				if w.usageTracker != nil {
+					m.deferFinalUsage(w.usageTracker.Reconcile)
+					w.usageTracker = nil
+				}
+				return
+			case done := <-poll.passes:
+				poll.take(done)
 			}
-			return
-		case <-ticker.C:
 		}
 
 		sessionState := w.state()
@@ -536,7 +544,7 @@ func (w *transcriptWatcher) run() {
 
 		if transcriptPath == "" {
 			transcriptPath = w.resolveExactPath()
-			if transcriptPath == "" && time.Now().Before(discoveryDeadline) {
+			if transcriptPath == "" && clock.Now().Before(discoveryDeadline) {
 				continue
 			}
 			if transcriptPath == "" && sessionState == protocol.SessionStateLaunching {
@@ -590,7 +598,7 @@ func (w *transcriptWatcher) run() {
 			follower = nil
 			w.usageTracker = nil
 			readFileInfo = nil
-			discoveryDeadline = w.discoveryDeadline(time.Now())
+			discoveryDeadline = w.discoveryDeadline(clock.Now())
 			fallbackAttempted = false
 			continue
 		}
@@ -639,12 +647,12 @@ func (w *transcriptWatcher) run() {
 					}
 					content := event.Text
 					if w.behavior.DeduplicateAssistantEvents() &&
-						isDuplicateAssistantEvent(lastAssistant, lastAssistantAt, content, now) {
+						isDuplicateAssistantEvent(lastAssistant, lastAssistantAt, content, clock.Now()) {
 						continue
 					}
 					assistantSeq++
 					lastAssistant = content
-					lastAssistantAt = now
+					lastAssistantAt = clock.Now()
 					logMsg := content
 					if len(logMsg) > 120 {
 						logMsg = logMsg[:120] + "..."
@@ -670,7 +678,7 @@ func (w *transcriptWatcher) run() {
 		if assistantSeq > classifiedSeq &&
 			!lastAssistantAt.IsZero() &&
 			!quietSince.IsZero() &&
-			time.Since(quietSince) >= transcriptQuietWindow {
+			clock.Now().Sub(quietSince) >= TranscriptQuietWindow {
 			m.mu.Lock()
 			current := m.state.State
 			m.mu.Unlock()

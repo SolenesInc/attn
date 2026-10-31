@@ -64,6 +64,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	world := prepareIn(t, worldDir(t), binary, setup.harnesses, !setup.withoutAgentKit)
 	s := &Stack{World: world, binary: binary}
 	s.clock = listenForClock(t, s.Dir)
+	s.OnTranscriptWrite(s.readTranscripts)
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)

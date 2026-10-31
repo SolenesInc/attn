@@ -80,6 +80,7 @@ func TestAReplacedTranscriptFlagsTheUsageIncomplete(t *testing.T) {
 	if err := os.WriteFile(transcripts[0], []byte(replacement), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	w.readTranscripts()
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 		return s.Usage != nil && protocol.Deref(s.Usage.MeasurementIncomplete)
 	})

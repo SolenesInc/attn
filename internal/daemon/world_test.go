@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -113,6 +114,7 @@ func (w *world) start() {
 	}
 	if !w.bubbled && w.clock == nil {
 		w.clock = stepclock.New()
+		w.OnTranscriptWrite(w.readTranscripts)
 	}
 	if w.pauses != nil {
 		w.pauses.Reopen()
@@ -315,6 +317,10 @@ func (w *world) tickSchedulesUntil(what string, done func() bool) {
 	}
 	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
 }
+
+// readTranscripts fires every pending transcript poll without moving the clock and returns when their callbacks return.
+// A poll another fire already took reads later, so tests assert what the read shows, not that it finished.
+func (w *world) readTranscripts() { w.clock.Fire(sessionmonitor.TranscriptPoll) }
 
 // awaitTimer waits for the daemon of a world outside a bubble to arm the timer named name after the last advance or awaitTimer.
 func (w *world) awaitTimer(name stepclock.Name) {

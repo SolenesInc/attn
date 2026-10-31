@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 type Life interface {
@@ -29,6 +30,7 @@ type Life interface {
 
 type Host interface {
 	Life
+	Clock() *stepclock.Clock
 	Logf(format string, args ...any)
 	Debug() bool
 	HomeFor(*Monitor) Home

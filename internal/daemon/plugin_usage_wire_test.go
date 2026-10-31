@@ -83,6 +83,7 @@ func TestAPiSessionIsPricedFromTheTranscriptItsDriverReportsGuardianIncluded(t *
 	lines := piTranscriptLines(t)
 	appendTranscript(t, path, lines[:5])
 	appendTranscript(t, path, lines[5:])
+	w.readTranscripts()
 	usage := awaitPricedRows(app, session, 17386)
 	agent, guardian := usageRow(usage, "agent"), usageRow(usage, "guardian")
 	if agent.Model != "deepseek-v4-flash" || agent.OutputTokens != 1292 {
@@ -114,6 +115,7 @@ func TestAPiSessionThatEndsBeforeItsTranscriptAppearsIsNotIncomplete(t *testing.
 		t.Fatal(err)
 	}
 	appendTranscript(t, path, piTranscriptLines(t))
+	w.readTranscripts()
 	if usage := awaitPricedRows(app, session, 17386); protocol.Deref(usage.MeasurementIncomplete) {
 		t.Errorf("the usage = %+v, want the run that ended before writing anything not to mark it incomplete", usage)
 	}
@@ -172,5 +174,6 @@ func TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession
 		t.Fatalf("the reload closed run %s, want the replaced run %s", closed.RunID, first.RunID)
 	}
 	appendTranscript(t, path, piTranscriptLines(t))
+	w.readTranscripts()
 	awaitPricedRows(app, session, 17386)
 }

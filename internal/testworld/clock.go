@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -27,6 +28,17 @@ func listenForClock(t testing.TB, dir string) *stepclock.Hub {
 func (s *Stack) Advance(d time.Duration) {
 	s.T.Helper()
 	advanceHub(s.T, s.clock, d)
+}
+
+// readTranscripts fires every pending transcript poll of the daemon without moving the clock and returns when their
+// callbacks return. A poll another fire already took reads later, so tests assert what the read shows, not that it
+// finished.
+func (s *Stack) readTranscripts() {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if err := s.clock.Fire(ctx, sessionmonitor.TranscriptPoll); err != nil {
+		s.T.Errorf("read transcripts: %v within %s", err, fakeagent.HangGuard)
+	}
 }
 
 // AwaitTimer waits until the daemon or a process it started has a timer named name pending, armed after the last Advance or AwaitTimer.

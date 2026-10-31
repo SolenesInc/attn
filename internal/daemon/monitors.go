@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 type monitorBinding struct {
@@ -253,6 +254,7 @@ func (h monitorHost) Do(name string, fn func()) bool { return h.daemon.life.Do(n
 func (h monitorHost) AfterFunc(name string, delay time.Duration, fn func()) *time.Timer {
 	return h.daemon.life.AfterFunc(name, delay, fn)
 }
+func (h monitorHost) Clock() *stepclock.Clock         { return h.daemon.clock }
 func (h monitorHost) Context() context.Context        { return h.daemon.life.Context() }
 func (h monitorHost) Done() <-chan struct{}           { return h.daemon.life.Done() }
 func (h monitorHost) Ended() bool                     { return h.daemon.life.Ended() }
