@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -226,9 +227,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	client.holdArrangements()
 	outcome, err := run()
 	complete := func(err error) {
-		if pause := d.heldActionRan.Load(); pause != nil {
-			(*pause)()
-		}
+		pausepoint.At(pausepoint.ProfileActionRan)
 		if err == nil && outcome.profile != nil {
 			wire := protocolProfile(*outcome.profile)
 			result.Profile = &wire

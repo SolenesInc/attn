@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -105,16 +104,4 @@ func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
-}
-
-// PauseNextHeldAction blocks the next profile action after it ran, while its client's broadcasts are held.
-func (w *WireDaemon) PauseNextHeldAction(paused chan<- struct{}, resume <-chan struct{}) {
-	var once sync.Once
-	pause := func() {
-		once.Do(func() {
-			paused <- struct{}{}
-			<-resume
-		})
-	}
-	w.d.heldActionRan.Store(&pause)
 }

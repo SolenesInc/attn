@@ -7,12 +7,14 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
 	EnvPoints = "ATTN_PAUSE_AT"
 	EnvSocket = "ATTN_PAUSE_SOCK"
 	Release   = "go"
+	Failed    = "failed"
 	Every     = "*"
 )
 
@@ -71,6 +73,7 @@ const (
 	OutpostRecoveryStarted     = "outpost-recovery-started"
 	OutpostRecoveryApplied     = "outpost-recovery-applied"
 	ForwardSocketCreated       = "forward-socket-created"
+	ProfileActionRan           = "profile-action-ran"
 )
 
 type armed struct {
@@ -94,13 +97,43 @@ var load = sync.OnceValue(func() *armed {
 	return a
 })
 
+// Route holds this process at its armed points instead of the socket a stack test listens on.
+type Route interface {
+	Hold(name string, failed error)
+	Armed() []string
+}
+
+var inProcess atomic.Pointer[Route]
+
+// InProcess routes this process's At and Done calls to route until restore; it refuses a second route.
+func InProcess(route Route) (restore func(), err error) {
+	if !inProcess.CompareAndSwap(nil, &route) {
+		return nil, fmt.Errorf("pausepoint: a route is already installed with points %v; one in-process route per process", (*inProcess.Load()).Armed())
+	}
+	return func() { inProcess.CompareAndSwap(&route, nil) }, nil
+}
+
+// At holds the process here when a test armed name.
 func At(name string) {
+	reach(name, nil)
+}
+
+// Done marks a finished step: it holds like At when err is nil, and otherwise reports err to the test without holding.
+func Done(name string, err error) {
+	reach(name, err)
+}
+
+func reach(name string, failed error) {
+	if route := inProcess.Load(); route != nil {
+		(*route).Hold(name, failed)
+		return
+	}
 	if a := load(); a != nil {
-		a.pause(name)
+		a.pause(name, failed)
 	}
 }
 
-func (a *armed) pause(name string) {
+func (a *armed) pause(name string, failed error) {
 	a.mu.Lock()
 	every, armed := a.points[name]
 	// Once per process unless armed for every hit: a worker that re-execs itself for an upgrade arms again.
@@ -116,6 +149,10 @@ func (a *armed) pause(name string) {
 		return
 	}
 	defer conn.Close()
+	if failed != nil {
+		_, _ = fmt.Fprintf(conn, "%s %d %s %s\n", name, os.Getpid(), Failed, strings.Join(strings.Fields(failed.Error()), " "))
+		return
+	}
 	if _, err := fmt.Fprintf(conn, "%s %d\n", name, os.Getpid()); err != nil {
 		return
 	}

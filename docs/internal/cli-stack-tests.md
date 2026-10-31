@@ -20,7 +20,9 @@ returns `testworld.Main(m)`.
   pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`);
   `s.PauseEvery` holds it each time. Arm it before `Start`, or start with
   `s.StartHeldAt(pause)`. `Await` returns the held process's pid and `Release`
-  lets it go.
+  lets it go. It is the same `testworld.Pause` a daemon wire test gets, and
+  its `Await` fails at once with the step's error when a `Done` point's step
+  failed.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later

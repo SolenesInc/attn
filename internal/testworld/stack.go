@@ -29,7 +29,7 @@ type Stack struct {
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
-	pauses        *pauses
+	pauses        *pauseSocket
 	clock         *stepclock.Hub
 	wsListener    *net.TCPListener
 }
@@ -139,7 +139,7 @@ func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
 		s.launch()
 	}()
 	s.T.Cleanup(func() {
-		p.releaseAll()
+		s.pauses.Close()
 		<-started
 	})
 	p.Await()

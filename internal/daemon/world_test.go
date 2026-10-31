@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/testworld"
@@ -28,6 +29,7 @@ type world struct {
 	terms       *testworld.Terminals
 	gardenClock func() time.Time
 	clock       *stepclock.Clock
+	pauses      *testworld.Pauses
 }
 
 func newWorld(t testing.TB, agents ...fakeagent.Harness) *world {
@@ -95,12 +97,45 @@ func (w *world) start() {
 	if !w.bubbled && w.clock == nil {
 		w.clock = stepclock.New()
 	}
+	if w.pauses != nil {
+		w.pauses.Reopen()
+	}
 	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.clock, w.gardenClock)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}
 	w.daemon = started
 	w.T.Cleanup(w.stop)
+}
+
+// PauseAt holds the world's daemon the first time each run reaches the pause point name. A bubbled world can arm
+// before w.start, inside its bubble.
+func (w *world) PauseAt(name string) *testworld.Pause {
+	w.T.Helper()
+	return w.armPause(name, false)
+}
+
+// PauseEvery holds the world's daemon each time it reaches the pause point name.
+func (w *world) PauseEvery(name string) *testworld.Pause {
+	w.T.Helper()
+	return w.armPause(name, true)
+}
+
+func (w *world) armPause(name string, every bool) *testworld.Pause {
+	w.T.Helper()
+	if w.pauses == nil {
+		pauses := testworld.NewPauses()
+		unroute, err := pausepoint.InProcess(pauses)
+		if err != nil {
+			w.T.Fatalf("arm pause point %q: %v", name, err)
+		}
+		w.pauses = pauses
+		w.T.Cleanup(func() {
+			pauses.Close()
+			unroute()
+		})
+	}
+	return w.pauses.Arm(w.T, name, every)
 }
 
 func (w *world) listen() {
@@ -131,6 +166,9 @@ func (w *world) listen() {
 func (w *world) stop() {
 	if w.daemon == nil {
 		return
+	}
+	if w.pauses != nil {
+		w.pauses.Close()
 	}
 	if w.bubbled {
 		// Let calls the agents already have in flight land before their daemon goes away.

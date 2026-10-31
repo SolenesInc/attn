@@ -105,15 +105,13 @@ type Daemon struct {
 	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
-	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
-	heldActionRan    atomic.Pointer[func()]
-	socketPath       string
-	pidPath          string
-	pidFile          *os.File
-	dataRoot         string
-	daemonInstanceID string
-	clientToken      string
-	store            *store.Store
+	socketPath          string
+	pidPath             string
+	pidFile             *os.File
+	dataRoot            string
+	daemonInstanceID    string
+	clientToken         string
+	store               *store.Store
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                sync.Mutex
 	prDetailFetches            prDetailFetches

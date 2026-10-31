@@ -83,13 +83,19 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 - Asserting on a log line, such as one saying mail was claimed. Await the
   event on a connected peer.
 - Poking launch internals to catch an agent mid-boot. `w.HoldNextBoot()`
-  holds the fake agent, not the daemon.
+  holds the fake agent, not the daemon, and orders a daemon step only if that
+  step waits for the agent every time. To fault a daemon step, hold it at its
+  own pause point, arm the fault, then release it.
 - Avoiding a pause or crash point because it lives in attn's code, or calling
   it a harness that sets attn's state. When the promise is about a moment
   between two steps of one action, such as a change landing while a request
-  is held, `w.daemon.PauseNextHeldAction`, `s.PauseAt` or `s.StartCrashingAt`
-  is the way to reach it. A new point is the way to reach another such
-  moment.
+  is held, `w.PauseAt`, `s.PauseAt` or `s.StartCrashingAt` is the way to reach
+  it. A new point is the way to reach another such moment: `pausepoint.At`
+  for a moment, `pausepoint.Done` for a finished step, so a failed step never
+  looks finished.
+- Awaiting a state that may already hold as proof that your action was
+  processed. Await a receipt only the awaited step can produce, such as a
+  fresh label.
 - `vi.mock('../Component')`, or mocking any other module of attn's own. An
   app wire test fakes the daemon, which it scripts, and only the other fakes
   `docs/internal/app-wire-tests.md` lists. Render the real module through

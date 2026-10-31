@@ -39,12 +39,21 @@ When a promise cannot be reached or observed through other promises, extend
 the harness (`testworld`, `fakeagent`, the real-app harness) instead of
 reaching inside from the test. A harness capability models something outside
 attn, such as an agent, the user, the clock, or the network. It never sets
-attn's own state. The one reach inside is a pause or crash point: a step in
-attn's code where a test holds a process or one request, or kills the daemon,
-to reach a moment between two steps of one action that no outside event can.
-It sets no state; what the test observes still comes through promises.
-[CLI stack tests](cli-stack-tests.md) has the stack's pause and crash points,
-and [Daemon wire tests](daemon-wire-tests.md) the wire one.
+attn's own state. The one reach inside is a pause or crash point: a named
+step in attn's code (`internal/pausepoint`) where a test holds the process that
+reaches it, or kills the daemon, to reach a moment between two steps of one
+action that no outside event can. It sets no state; what the test observes
+still comes through promises. Stack and daemon wire tests arm the same points
+and get the same `testworld.Pause`; [CLI stack tests](cli-stack-tests.md) and
+[Daemon wire tests](daemon-wire-tests.md) say how each world arms them.
+
+A point says which moment it holds. `pausepoint.At(name)` marks a moment, such
+as the instant before a step's first effect. `pausepoint.Done(name, err)` marks
+a finished step: it holds only when the step succeeded, and otherwise fails the
+waiting test at once with the step's error. To fault an operation, hold it at
+its own point, arm the fault, then release it. A hold on something the
+operation might wait for, such as a fake agent's boot, orders nothing unless the
+operation waits for it every time.
 
 Kernel tests build their function's input directly, since the function is
 itself a promise.
