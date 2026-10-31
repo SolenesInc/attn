@@ -262,3 +262,51 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 		})
 	}
 }
+
+func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPathMoves(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	requireStdout(t, home.Attn("settings", "set", "crew_v2_enabled", "true"), "true")
+	created, err := home.Client().CrewCreate("Keel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(created.Member.HomeDir, "notes")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := home.Spawn(pair.App, fakeagent.Claude, folder, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	first := outpost.LaunchedCarrying(pair.App.Terminal(id))
+	pair.App.TypeLine(id, "work on the outpost")
+	first.Prompted()
+	first.Reply("Done. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil })
+	if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
+	})
+
+	renamed, err := home.Client().CrewRename("Keel", "Keeper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved := protocol.Deref(renamed.HomeDir); moved == "" || moved == created.Member.HomeDir {
+		t.Fatalf("the rename left Keel's home at %s: %+v", created.Member.HomeDir, renamed)
+	}
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := outpost.LaunchedCarrying(pair.App.Terminal(id))
+	if !second.Resumed || second.ConversationID != first.ConversationID || reopened.Directory != folder {
+		t.Fatalf("resume=%t conversation=%s want=%s directory=%s want=%s", second.Resumed, second.ConversationID, first.ConversationID, reopened.Directory, folder)
+	}
+}

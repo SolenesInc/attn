@@ -117,7 +117,7 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 }
 
 func (d *Daemon) dispatchesFollowingHome(previous, home string) ([]store.DocumentCommit, error) {
-	sessions, err := d.store.SessionsInDirectory(previous)
+	sessions, err := d.store.HomeSessionsInDirectory(previous)
 	if err != nil || len(sessions) == 0 {
 		return nil, err
 	}

@@ -211,12 +211,12 @@ type CrewHomeMove struct {
 	To        string
 }
 
-const sessionsInDirectory = `directory = ? OR substr(directory, 1, length(?) + 1) = ? || '/'`
+const homeSessionsInDirectory = `host = '' AND (directory = ? OR substr(directory, 1, length(?) + 1) = ? || '/')`
 
-func (s *Store) SessionsInDirectory(dir string) ([]protocol.SessionID, error) {
+func (s *Store) HomeSessionsInDirectory(dir string) ([]protocol.SessionID, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT id FROM sessions WHERE `+sessionsInDirectory, dir, dir, dir)
+	rows, err := s.db.Query(`SELECT id FROM sessions WHERE `+homeSessionsInDirectory, dir, dir, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (s *Store) RenameCrewMemberMovingHome(key, name string, move CrewHomeMove, 
 }
 
 func (m CrewHomeMove) followSessions(tx *sql.Tx) (bool, error) {
-	result, err := tx.Exec(`UPDATE sessions SET directory = ? || substr(directory, length(?) + 1) WHERE `+sessionsInDirectory,
+	result, err := tx.Exec(`UPDATE sessions SET directory = ? || substr(directory, length(?) + 1) WHERE `+homeSessionsInDirectory,
 		m.To, m.From, m.From, m.From, m.From)
 	if err != nil {
 		return false, fmt.Errorf("move saved session directories from %s to %s: %w", m.From, m.To, err)
