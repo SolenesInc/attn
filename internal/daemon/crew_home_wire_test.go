@@ -431,3 +431,21 @@ func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {
 		t.Fatalf("move-home after coming back: %+v", moved)
 	}
 }
+
+func TestARepointOverlappingAnotherProfilesMemberDoesNotNameIt(t *testing.T) {
+	w := newCrewWorld(t)
+	app := w.App()
+	cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
+	other := createProfile(app, "Other")
+	root := w.Path("other-notebook")
+	setSetting(t, w.AppOn(other.ID), "notebook.profile_root", root)
+	hidden := createCrew(t, w.Client().WithGardenProfile(other.ID, ""), "Hidden")
+	if err := os.WriteFile(filepath.Join(root, crew.CharterFileName), []byte("# Not Keel\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := repointCrewHome(cli, "Keel", root)
+	crewErrorContains(t, err, "overlaps another crew member's home")
+	if err != nil && (strings.Contains(err.Error(), "Hidden") || strings.Contains(err.Error(), hidden.HomeDir)) {
+		t.Fatalf("the refusal names another profile's member: %v", err)
+	}
+}

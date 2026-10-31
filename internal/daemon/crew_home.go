@@ -202,9 +202,13 @@ func (d *Daemon) refuseSharedCrewHome(member crew.Member, target string) error {
 		if err != nil {
 			continue
 		}
-		if pathWithin(theirs, target) || pathWithin(target, theirs) {
-			return fmt.Errorf("%s overlaps %s's home at %s; each member needs a home of its own", target, other.Name, other.HomeDir(d.dataRoot))
+		if !pathWithin(theirs, target) && !pathWithin(target, theirs) {
+			continue
 		}
+		if other.ProfileID != member.ProfileID {
+			return fmt.Errorf("%s overlaps another crew member's home; each member needs a home of its own", target)
+		}
+		return fmt.Errorf("%s overlaps %s's home at %s; each member needs a home of its own", target, other.Name, other.HomeDir(d.dataRoot))
 	}
 	return nil
 }
