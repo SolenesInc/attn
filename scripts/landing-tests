@@ -30,6 +30,8 @@ go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAf
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
 go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne
 go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnected
+go ./internal/daemon TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover
+go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal

@@ -18,11 +18,12 @@ pause point, below.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
 - `w.PauseAt(name)` holds the daemon the first time each daemon run reaches
   the pause point `name`, and `w.PauseEvery(name)` every time. Both return the
-  `testworld.Pause` a stack test gets. A bubbled world can arm before
-  `w.start()`, inside its bubble; any world can arm after it starts. `Await`
-  fails the test if nothing arrives within `fakeagent.HangGuard` (bubble time
-  inside a bubble), and at once with the step's error when a `Done` point's
-  step failed. Teardown and `w.restart()` release every hold before the daemon
+  `testworld.Pause` a stack test gets. Any world can arm after it starts;
+  `inBubbleHeldAt(t, points, script)` arms points before a bubbled world's
+  daemon starts, for a step the daemon takes on startup. `Await` fails the
+  test if nothing arrives within `fakeagent.HangGuard` (bubble time inside a
+  bubble), and at once with the step's error when a `Done` point's step
+  failed. Teardown and `w.restart()` release every hold before the daemon
   stops. Points match by name, so arm one while a single operation of its kind
   is in flight; one world per test binary can hold points at a time.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what

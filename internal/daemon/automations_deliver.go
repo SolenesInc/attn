@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -325,6 +326,7 @@ func (d *Daemon) settleAutomationLaunch(run *store.AutomationRun, agent string, 
 }
 
 func (d *Daemon) finalizeAutomationRun(run *store.AutomationRun, result automation.DeliveryResult) error {
+	pausepoint.At(pausepoint.AutomationRunFinalizing)
 	ready, err := d.automationWorkReadyOccurrence(run)
 	if err != nil {
 		return err

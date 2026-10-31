@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -18,20 +19,20 @@ func TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover(t *testing
 	}
 	applyAutomation(t, cli, strings.Replace(manualAutomation(w, "Check the code."), "driver: codex", "driver: claude", 1))
 	awaitAutomationChanged(app, 1)
-	boot := w.HoldNextBoot()
-	defer boot()
+	finalizing := w.PauseAt(pausepoint.AutomationRunFinalizing)
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"})
+	finalizing.Await()
 	awaitAutomationChanged(app, 1)
 	runs := automationRuns(t, cli, 1)
 	if len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("runs before boot = %+v, want one pending launch", runs)
+		t.Fatalf("runs before finalization = %+v, want one pending launch", runs)
 	}
 	run := runs[0]
 	sessionID := protocol.Deref(run.SessionID)
 	testworld.AwaitSession(app, string(sessionID), func(s protocol.Session) bool { return s.ID == sessionID })
 	restore := w.RefuseDatabaseCommits()
 	defer restore()
-	boot()
+	finalizing.Release()
 	result := testworld.Await(app, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
 	if result.Success {
 		t.Fatalf("run with unavailable persistence = %+v, want the launched run still pending", result)

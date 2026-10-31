@@ -6,7 +6,11 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestTheAppsSettingsShowWhenTheDaemonBackedUpOnStart(t *testing.T) {
@@ -73,4 +77,26 @@ func backedUpSetting(t *testing.T, path, key string) string {
 		t.Fatalf("read %s from the backup %s: %v", key, path, err)
 	}
 	return value
+}
+
+func TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites(t *testing.T) {
+	points := []string{pausepoint.DatabaseBackupStarting, pausepoint.DatabaseBackupCopied}
+	inBubbleHeldAt(t, points, func(t *testing.T, w *world, held map[string]*testworld.Pause) {
+		cli := w.Client()
+		starting, copied := held[pausepoint.DatabaseBackupStarting], held[pausepoint.DatabaseBackupCopied]
+		starting.Await()
+		synctest.Wait()
+		starting.Release()
+		copied.Await()
+		synctest.Wait()
+
+		restore := w.RefuseDatabaseCommits()
+		defer restore()
+		if _, err := cli.AutomationDefinitions(); err != nil {
+			t.Fatalf("listing automations after a backup while the database refuses writes: %v, want the list", err)
+		}
+		restore()
+		copied.Release()
+		synctest.Wait()
+	})
 }

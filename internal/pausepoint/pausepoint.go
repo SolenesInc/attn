@@ -74,6 +74,9 @@ const (
 	OutpostRecoveryApplied     = "outpost-recovery-applied"
 	ForwardSocketCreated       = "forward-socket-created"
 	ProfileActionRan           = "profile-action-ran"
+	DatabaseBackupStarting     = "database-backup-starting"
+	DatabaseBackupCopied       = "database-backup-copied"
+	AutomationRunFinalizing    = "automation-run-finalizing"
 )
 
 type armed struct {

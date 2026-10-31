@@ -51,6 +51,23 @@ func inBubble(t *testing.T, script func(t *testing.T, w *world)) {
 	inPreparedBubble(t, prepareWorld(t), script)
 }
 
+// inBubbleHeldAt runs script in a bubbled world whose pause points are armed before its daemon starts.
+func inBubbleHeldAt(t *testing.T, points []string, script func(t *testing.T, w *world, held map[string]*testworld.Pause)) {
+	t.Helper()
+	prepared := prepareWorld(t)
+	synctest.Test(t, func(t *testing.T) {
+		bubbled := *prepared
+		bubbled.T = t
+		w := &world{World: &bubbled, bubbled: true}
+		held := make(map[string]*testworld.Pause, len(points))
+		for _, point := range points {
+			held[point] = w.PauseAt(point)
+		}
+		w.start()
+		script(t, w, held)
+	})
+}
+
 func inCrewBubble(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
 	w := &world{World: prepareWorld(t)}
