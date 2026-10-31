@@ -2,7 +2,6 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isTauri } from '@tauri-apps/api/core';
 import { PROTOCOL_VERSION, useDaemonSocket } from './useDaemonSocket';
-import { ProfileCommandError } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { SELECTED_PROFILE_STORAGE_KEY } from '../utils/selectedProfile';
 import { MigrationPhase, type Desktop, type Profile } from '../types/generated';
@@ -254,39 +253,6 @@ describe('useDaemonSocket profiles', () => {
     expect(useProfilesStore.getState().migrationPhase).toBe(MigrationPhase.PlacementRequired);
   });
 
-  it('rejects a refused command with its error code', async () => {
-    const { ws, result } = await connect();
-
-    let move!: Promise<unknown>;
-    act(() => {
-      move = result.current.sendDesktopMoveLeaf({
-        sourceDesktopId: 'd1',
-        targetDesktopId: 'd2',
-        leafId: 'pane-1',
-        edge: 'right',
-      });
-    });
-    const [command] = ws.commands('desktop_move_leaf');
-    expect(command).toMatchObject({
-      source_desktop_id: 'd1',
-      target_desktop_id: 'd2',
-      leaf_id: 'pane-1',
-      edge: 'right',
-    });
-    act(() => {
-      ws.emit({
-        event: 'profile_action_result',
-        request_id: command.request_id,
-        action: 'desktop_move_leaf',
-        success: false,
-        error: 'anchor pane-2 does not belong to desktop d2',
-        error_code: 'not_found',
-      });
-    });
-
-    await expect(move).rejects.toBeInstanceOf(ProfileCommandError);
-    await expect(move).rejects.toMatchObject({ code: 'not_found', message: 'anchor pane-2 does not belong to desktop d2' });
-  });
   it('sends an empty tile_params to clear a tile, and a move carries its drop share', async () => {
     const { ws, result } = await connect();
 

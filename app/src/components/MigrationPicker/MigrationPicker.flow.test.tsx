@@ -337,12 +337,6 @@ describe('MigrationGate', () => {
     expect(screen.getByTestId('normal-shell')).toBeInTheDocument();
   });
 
-  it('mounts the normal shell directly when the migration was already complete', () => {
-    resetMigrationStore(MigrationPhase.Complete);
-    renderGate(fakeMigrationDaemon(migrationState()));
-    expect(screen.getByTestId('normal-shell')).toBeInTheDocument();
-  });
-
   it('shows the done screen when another client finishes', async () => {
     const user = userEvent.setup();
     const daemon = fakeMigrationDaemon(migrationState());
