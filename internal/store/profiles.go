@@ -583,7 +583,10 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		profile.ChiefSessionID = ""
 		profile.DeletedAt = now
 		profile.Revision++
-		_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id)
+		if _, err = tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE crew_members SET retired_at = ? WHERE retired_at = '' AND member_key = (SELECT chief_member FROM profiles WHERE id = ?)`, now, id)
 		return err
 	})
 	if err != nil {

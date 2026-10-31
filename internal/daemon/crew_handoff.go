@@ -169,6 +169,7 @@ func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID,
 		}
 		member.LetterFile = filepath.Base(path)
 		member.LetterSession = sessionID
+		member.FirstDay = nil
 		return true, nil
 	}); err != nil {
 		d.logf("crew: recording %s's filed letter at %s: %v", memberID, path, err)

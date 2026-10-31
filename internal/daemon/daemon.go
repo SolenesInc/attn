@@ -661,6 +661,7 @@ func (d *Daemon) Start() error {
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	d.ensureChiefs()
 	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))

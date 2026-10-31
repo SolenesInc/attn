@@ -18,6 +18,7 @@ type CrewIdentity struct {
 	ProfileID string
 	Name      string
 	Retired   bool
+	Chief     bool
 }
 
 func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
@@ -26,7 +27,8 @@ func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
 	if s.db == nil {
 		return nil, profiles.Errorf(profiles.CodeUnavailable, "crew members need the SQLite store")
 	}
-	rows, err := s.db.Query(`SELECT member_key, profile_id, name, retired_at != '' FROM crew_members`)
+	rows, err := s.db.Query(`SELECT m.member_key, m.profile_id, m.name, m.retired_at != '', COALESCE(p.chief_member = m.member_key, 0)
+		FROM crew_members m LEFT JOIN profiles p ON p.id = m.profile_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +36,7 @@ func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
 	identities := make(map[string]CrewIdentity)
 	for rows.Next() {
 		var m CrewIdentity
-		if err := rows.Scan(&m.Key, &m.ProfileID, &m.Name, &m.Retired); err != nil {
+		if err := rows.Scan(&m.Key, &m.ProfileID, &m.Name, &m.Retired, &m.Chief); err != nil {
 			return nil, err
 		}
 		identities[m.Key] = m
@@ -99,6 +101,48 @@ func (s *Store) CreateCrewMember(identity CrewIdentity) error {
 	})
 }
 
+func (s *Store) ProfileChiefMembers() (map[string]string, error) {
+	chiefs := map[string]string{}
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		rows, err := tx.Query(`SELECT id, chief_member FROM profiles WHERE deleted_at = ''`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var profileID, key string
+			if err := rows.Scan(&profileID, &key); err != nil {
+				return err
+			}
+			chiefs[profileID] = key
+		}
+		return rows.Err()
+	})
+	return chiefs, err
+}
+
+func (s *Store) CreateChiefMember(profileID, key string) error {
+	return s.profilesTx(func(tx *sql.Tx, now string) error {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		result, err := tx.Exec(`UPDATE profiles SET chief_member = ? WHERE id = ? AND chief_member = ''`, key, profileID)
+		if err != nil {
+			return err
+		}
+		if changed, err := result.RowsAffected(); err != nil || changed == 0 {
+			if err == nil {
+				err = fmt.Errorf("profile %s already has a Chief", profileID)
+			}
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO crew_members(member_key, profile_id, name) VALUES (?, ?, ?)`, key, profileID, crew.ChiefName); err != nil {
+			return err
+		}
+		return startOnOwnDesktop(tx, now, "crew", key)
+	})
+}
+
 func (s *Store) DeleteCrewMember(key string) error {
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
 		_, err := tx.Exec(`DELETE FROM crew_members WHERE member_key = ?`, key)
@@ -154,9 +198,6 @@ func (s *Store) RestoreCrewMember(key string) (bool, error) {
 }
 
 func (s *Store) RenameCrewMember(key, name string) (previous string, err error) {
-	if err := crew.ValidateName(name); err != nil {
-		return "", err
-	}
 	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
 		previous, err = renameCrewMember(tx, key, name)
 		return err
@@ -165,9 +206,6 @@ func (s *Store) RenameCrewMember(key, name string) (previous string, err error) 
 }
 
 func (s *Store) RenameCrewMemberMovingHome(key, name string, home DocumentCommit, now time.Time) (previous string, written DocumentWriteResult, err error) {
-	if err := crew.ValidateName(name); err != nil {
-		return "", DocumentWriteResult{}, err
-	}
 	table, err := s.documentTable(home.Write.Schema)
 	if err != nil {
 		return "", DocumentWriteResult{}, err

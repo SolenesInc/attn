@@ -804,7 +804,7 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 	if method != "thread/resume" && r.conversation(session) != "" {
 		return session, "", false
 	}
-	return session, session, r.d.isChiefOfStaffSession(session)
+	return session, session, r.d.isLegacyChiefSession(session)
 }
 
 func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {

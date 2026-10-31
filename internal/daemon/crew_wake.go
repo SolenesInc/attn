@@ -108,6 +108,17 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
 		V2Enabled:     d.crewV2Enabled(),
+		Chief:         member.Chief,
+	}
+	if member.Chief {
+		root, err := d.notebookRoot(member.ProfileID)
+		if err != nil {
+			return crew.Priming{}, err
+		}
+		priming.NotebookRoot = root
+		if member.FirstDay != nil {
+			priming.PreviousChief = string(member.FirstDay.PreviousChief)
+		}
 	}
 	d.primeCrewGarden(&priming, member)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
@@ -279,6 +290,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	}
 	if member.Retired {
 		return nil, retiredMemberError(member)
+	}
+	if err := d.chiefWakeRefusal(member); err != nil {
+		return nil, err
 	}
 	if beforeWake != nil {
 		if err := beforeWake(); err != nil {
@@ -517,6 +531,9 @@ func (d *Daemon) applyCrewSettings(member *crew.Member, msg *protocol.CrewSetMes
 	}
 	agentChanged := false
 	if msg.Agent != nil {
+		if member.Chief && strings.TrimSpace(*msg.Agent) == "" {
+			return fmt.Errorf("the Chief needs a harness; pick one with `attn crew set %s --agent <harness>`", crew.ChiefAlias)
+		}
 		before := member.LaunchAgent()
 		member.Agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
 		agentChanged = !strings.EqualFold(before, member.LaunchAgent())

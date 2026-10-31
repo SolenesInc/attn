@@ -20,7 +20,7 @@ func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.
 		if mailbox.MemberID != nil {
 			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
 		}
-		return who.ToChief(profileID), nil
+		return d.chiefMailbox(profileID), nil
 	case protocol.QuickCaptureMailboxKindCrewMember:
 		if strings.TrimSpace(protocol.Deref(mailbox.MemberID)) == "" {
 			return who.Address{}, fmt.Errorf("crew mailbox requires member_id")

@@ -40,6 +40,9 @@ type Priming struct {
 	CWD           string
 	AwarenessDirs []string
 	V2Enabled     bool
+	Chief         bool
+	NotebookRoot  string
+	PreviousChief string
 
 	Charter       string
 	Handoff       string
@@ -76,6 +79,9 @@ func (p Priming) Block() string {
 		"older_handoffs":   strings.Join(backticked(trimmed(p.OlderHandoffs)), ", "),
 		"handoff":          inlineHandoff(strings.TrimSpace(p.Handoff), filepath.Join(handoffsDir, p.HandoffName)),
 		"garden_holdings":  p.GardenSection(),
+		"chief":            fmt.Sprint(p.Chief),
+		"notebook_root":    p.NotebookRoot,
+		"previous_chief":   p.PreviousChief,
 	})
 }
 

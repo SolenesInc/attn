@@ -28,6 +28,9 @@ func (d *Daemon) retiredCrewMember(key string) (crew.Member, bool) {
 }
 
 func (d *Daemon) retireCrewMember(member crew.Member) (*protocol.CrewRetireResult, error) {
+	if err := chiefRefusesRetire(member); err != nil {
+		return nil, err
+	}
 	d.crewWakeMu.Lock()
 	retirement, err := d.store.RetireCrewMember(member.Key, time.Now())
 	d.crewWakeMu.Unlock()

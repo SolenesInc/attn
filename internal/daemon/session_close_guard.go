@@ -14,7 +14,7 @@ var (
 )
 
 func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
-	if d.isChiefOfStaffSession(sessionID) {
+	if d.isLegacyChiefSession(sessionID) {
 		return errChiefOfStaffProtected
 	}
 	members, _, err := d.readCrewMembers()

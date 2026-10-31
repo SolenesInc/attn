@@ -126,6 +126,9 @@ func (d *Daemon) settingChanged(key, value string) {
 	if monitorPolicySetting(key) {
 		d.pushMonitorPolicies()
 	}
+	if key == string(SettingCrewV2Enabled) {
+		d.crewV2EnabledChanged()
+	}
 	if key == string(SettingAutoSettleEnabled) {
 		if parseBooleanSetting(value) {
 			d.armAutoSettleForRunningSessions()

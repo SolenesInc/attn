@@ -58,8 +58,10 @@ Notebook at crew/<name>/. Every member belongs to a profile and wakes only
 there.
 
 A <member> is a name in your profile, or member:<key> for the permanent key
-that never changes. Inside attn, your session's profile applies; outside,
-pass --profile <name|id> when several profiles exist.
+that never changes. With crew_v2_enabled on, every profile has a Chief
+member, and chief reaches it whatever its name; it sleeps but is never retired.
+Inside attn, your session's profile applies; outside, pass --profile <name|id>
+when several profiles exist.
 
 commands:
   list [--all] [--json]

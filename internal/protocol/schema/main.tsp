@@ -7128,6 +7128,9 @@ model CrewMember {
   // A retired member keeps its name, home and unread mail, takes no new mail
   // or work, and does not wake until restored.
   retired: boolean;
+  // The profile's Chief: `chief` reaches it under any name; it sleeps but is
+  // never closed or retired.
+  chief?: boolean;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;

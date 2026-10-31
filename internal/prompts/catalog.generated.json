@@ -1598,6 +1598,86 @@
                 ]
               },
               {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "crew_v2_enabled",
+                    "kind": "flag",
+                    "description": "Use the crew v2 operating model."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "chief",
+                        "kind": "flag",
+                        "description": "The member is its profile's Chief."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "compose",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.v2.chief",
+                            "source": "content/crew/v2/chief.md",
+                            "bindings": [
+                              {
+                                "name": "notebook_root",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "notebook_root",
+                                    "kind": "text",
+                                    "description": "The Chief's profile Notebook directory."
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "previous_chief",
+                                "kind": "text",
+                                "description": "On the Chief's first day, the session that was the profile's Chief before Crew v2."
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.v2.chief-switchover",
+                                "source": "content/crew/v2/chief-switchover.md",
+                                "bindings": [
+                                  {
+                                    "name": "previous_chief",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "previous_chief",
+                                        "kind": "text",
+                                        "description": "On the Chief's first day, the session that was the profile's Chief before Crew v2."
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
                 "kind": "choose",
                 "condition": {
                   "field": {
@@ -6236,5 +6316,5 @@
       ]
     }
   ],
-  "definitions_hash": "2a29b9dbe50c2f638efe1d1a923ec14e782dab8811abcc94616846bd1f26aca7"
+  "definitions_hash": "a95848b859b52c86d72358b3ccfb7a2b6396ce62f2f21de8172a99e6bd000550"
 }

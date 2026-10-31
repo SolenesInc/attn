@@ -53,7 +53,7 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
-			upgraded, err := newStoreAtVersion(path, 1793408289794144)
+			upgraded, err := NewWithDB(path)
 			if err != nil {
 				t.Fatal(err)
 			}

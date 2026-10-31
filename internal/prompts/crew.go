@@ -17,6 +17,12 @@ func crewRecipient() Recipient {
 	heldLimit := TextField("held_limit", "How many held seeds this block lists.")
 	plotReady := TextField("plot_ready", "One line per plot with its ready count.")
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
+	chief := FlagField("chief", "The member is its profile's Chief.")
+	chiefNotebook := TextField("notebook_root", "The Chief's profile Notebook directory.")
+	previousChief := TextField("previous_chief", "On the Chief's first day, the session that was the profile's Chief before Crew v2.")
+	chiefGuidance := When(Enabled(chief), Compose(
+		template("crew.v2.chief", "content/crew/v2/chief.md", chiefNotebook),
+		When(Present(previousChief), template("crew.v2.chief-switchover", "content/crew/v2/chief-switchover.md", previousChief))))
 
 	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
 		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")))
@@ -68,6 +74,7 @@ func crewRecipient() Recipient {
 			Compose(
 				launchContext,
 				When(Enabled(v2), Use("crew.v2.operating-model", "content/crew/v2/operating-model.md")),
+				When(Enabled(v2), chiefGuidance),
 				Choose(Present(handoff),
 					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
 					noLetter),

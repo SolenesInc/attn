@@ -1,0 +1,1 @@
+Before you, this profile's Chief was the session {{previous_chief}}. It is an ordinary session now and keeps its own seeds. If you need its open work, claims or context, ask it with `attn agent msg {{previous_chief}} "<message>"`, or read its conversation with `attn session transcript {{previous_chief}}`.

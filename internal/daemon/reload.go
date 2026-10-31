@@ -334,7 +334,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		} else {
 			session := d.store.Get(sessionID)
 			var err error
-			agent, err = d.buildAgentReloadLaunch(session, &opts, d.isChiefOfStaffSession(sessionID))
+			agent, err = d.buildAgentReloadLaunch(session, &opts, d.isLegacyChiefSession(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -374,7 +374,7 @@ func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.Sp
 }
 
 func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
-	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
+	intent := launchIntentFromSpawnOptions(opts, d.isLegacyChiefSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
 	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
@@ -493,7 +493,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		Effort:           params.Effort,
 		LoginShellEnv:    d.cachedLoginShellEnv(),
 		AutoApprove:      false,
-		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isChiefOfStaffSession(sessionID)),
+		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isLegacyChiefSession(sessionID)),
 	}
 	if intent, ok := d.store.LaunchIntent(sessionID); ok && intent.Command != nil {
 		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)

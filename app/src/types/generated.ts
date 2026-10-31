@@ -3382,6 +3382,7 @@ export interface Member {
     awareness_dirs:   string[];
     binding_session?: string;
     charter_path:     string;
+    chief?:           boolean;
     cwd?:             string;
     effort?:          string;
     home_dir:         string;
@@ -3544,6 +3545,7 @@ export interface CrewMember {
     awareness_dirs:   string[];
     binding_session?: string;
     charter_path:     string;
+    chief?:           boolean;
     cwd?:             string;
     effort?:          string;
     home_dir:         string;
@@ -21581,6 +21583,7 @@ const typeMap: any = {
         { json: "awareness_dirs", js: "awareness_dirs", typ: a("") },
         { json: "binding_session", js: "binding_session", typ: u(undefined, "") },
         { json: "charter_path", js: "charter_path", typ: "" },
+        { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "cwd", js: "cwd", typ: u(undefined, "") },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "home_dir", js: "home_dir", typ: "" },
@@ -21684,6 +21687,7 @@ const typeMap: any = {
         { json: "awareness_dirs", js: "awareness_dirs", typ: a("") },
         { json: "binding_session", js: "binding_session", typ: u(undefined, "") },
         { json: "charter_path", js: "charter_path", typ: "" },
+        { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "cwd", js: "cwd", typ: u(undefined, "") },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "home_dir", js: "home_dir", typ: "" },

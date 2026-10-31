@@ -1,11 +1,9 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -36,19 +34,8 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 		}
 		return crew.Member{}, fmt.Errorf("%s already exists in profile %q", held.Name, profile.Name)
 	}
-	homes := filepath.Join(d.dataRoot, crew.HomesDirName)
-	key := crew.UnusedName(strings.ToLower(name), func(key string) bool {
-		if _, held := identities[key]; held {
-			return true
-		}
-		_, err := os.Lstat(filepath.Join(homes, key))
-		return !errors.Is(err, os.ErrNotExist)
-	})
-	parent, err := d.notebookCrewHomes(profileID)
-	if err != nil {
-		return crew.Member{}, err
-	}
-	home, err := reserveCrewHome(parent, name)
+	key := d.unusedCrewKey(name, identities)
+	home, err := d.newCrewHome(profileID, name)
 	if err != nil {
 		return crew.Member{}, err
 	}
@@ -59,9 +46,6 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 			_ = os.RemoveAll(member.HomeDir(d.dataRoot))
 		}
 	}()
-	if err := os.WriteFile(member.CharterPath(d.dataRoot), nil, 0o644); err != nil {
-		return crew.Member{}, err
-	}
 	if err := d.requireCrewFiles(member); err != nil {
 		return crew.Member{}, err
 	}

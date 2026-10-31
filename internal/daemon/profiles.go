@@ -369,6 +369,9 @@ func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCreateMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		profile, desktop, err := d.store.CreateProfile(msg.Name)
+		if err == nil {
+			d.ensureChiefs()
+		}
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
@@ -386,6 +389,9 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		if err := d.profileDeleteRefusal(msg.ProfileID); err != nil {
+			return profileActionOutcome{}, err
+		}
 		members, err := d.crewMembersWithHomes(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err

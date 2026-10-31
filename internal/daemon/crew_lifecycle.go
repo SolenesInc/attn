@@ -215,7 +215,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	heartbeat := d.crewBoolSetting(SettingCrewHeartbeatEnabled)
 	autoSleep := d.crewBoolSetting(SettingCrewAutoSleepEnabled)
 	for _, member := range members {
-		if !d.crewBindingLive(member) {
+		if member.Chief || !d.crewBindingLive(member) {
 			continue
 		}
 		session := d.store.Get(member.BindingSession)

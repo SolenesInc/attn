@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,8 +35,12 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 	scoped := w.Client().WithGardenProfile("", protocol.SessionID(plain))
 	sideSeed := plantSeedAs(t, w.Client(), plain, "Work for Side")
 	roster, err := scoped.CrewList()
-	if err != nil || len(roster.Members) != 1 || roster.Members[0].Name != "Bob" || roster.Members[0].ID != "bob" {
-		t.Fatalf("Side roster: %+v %v", roster, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := slices.DeleteFunc(roster.Members, func(m protocol.CrewMember) bool { return protocol.Deref(m.Chief) })
+	if len(members) != 1 || members[0].Name != "Bob" || members[0].ID != "bob" {
+		t.Fatalf("Side roster besides its Chief: %+v", roster)
 	}
 	for _, name := range []string{"Keel", "Nobody", "member:keel"} {
 		_, err := scoped.CrewWake(name, "", "")
@@ -77,7 +82,7 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		}
 		return false
 	})
-	if got, err := w.Client().WithGardenProfile(home, "").CrewList(); err != nil || len(got.Members) != 3 {
+	if got, err := w.Client().WithGardenProfile(home, "").CrewList(); err != nil || len(got.Members) != 4 || !slices.ContainsFunc(got.Members, func(m protocol.CrewMember) bool { return protocol.Deref(m.Chief) }) {
 		t.Fatalf("home roster: %+v %v", got, err)
 	}
 }

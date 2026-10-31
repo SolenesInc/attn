@@ -1,0 +1,1 @@
+ALTER TABLE profiles ADD COLUMN chief_member TEXT NOT NULL DEFAULT '';

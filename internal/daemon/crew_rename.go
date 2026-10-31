@@ -26,7 +26,11 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	name := strings.TrimSpace(msg.Name)
-	if err := crew.ValidateName(name); err != nil {
+	validate := crew.ValidateName
+	if member.Chief {
+		validate = crew.ValidateChiefName
+	}
+	if err := validate(name); err != nil {
 		return nil, err
 	}
 	previous, movedHome, err := d.renameCrewMember(member, name)

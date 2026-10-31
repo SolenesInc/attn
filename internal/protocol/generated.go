@@ -3075,6 +3075,9 @@ type CrewMember struct {
 	// CharterPath corresponds to the JSON schema field "charter_path".
 	CharterPath string `json:"charter_path"`
 
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd *string `json:"cwd,omitempty,omitzero"`
 

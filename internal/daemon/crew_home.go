@@ -161,7 +161,7 @@ func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {
 	}
 	count := 0
 	for _, member := range members {
-		if member.ProfileID != profileID || member.Retired {
+		if member.ProfileID != profileID || member.Retired || member.Chief {
 			continue
 		}
 		if _, err := os.Stat(member.HomeDir(d.dataRoot)); err == nil {

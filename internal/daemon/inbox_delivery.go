@@ -241,7 +241,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil
 				}
-				if retired := (errRetiredMember{}); errors.As(err, &retired) {
+				if retired := (errRetiredMember{}); errors.As(err, &retired) || errors.Is(err, errChiefHasNoHarness) {
 					state.wakeSession = ""
 					receipt.Detail = err.Error()
 					return receipt, nil

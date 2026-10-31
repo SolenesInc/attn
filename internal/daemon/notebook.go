@@ -239,7 +239,7 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 		d.sendError(conn, "notebook: "+err.Error())
 		return
 	}
-	sessionIsChief := d.isChiefOfStaffSession(sessionID)
+	sessionIsChief := d.isLegacyChiefSession(sessionID)
 	if sessionIsChief {
 		if _, _, serr := d.ensureNotebookScaffold(profileID); serr != nil {
 			d.logf("notebook guide: ensure scaffold failed: %v", serr)

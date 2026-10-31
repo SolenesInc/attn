@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "crew-v2-chief-first-day",
+  "description": "The Chief's first day after Crew v2 turned on for a profile with today's Chief session, prefilled from it.",
+  "recipient": "crew",
+  "event": "priming",
+  "values": {
+    "display_name": "Chief",
+    "home_dir": "/workspace/notebook/crew/chief",
+    "has_charter": "false",
+    "cwd": "",
+    "awareness_dirs": "",
+    "handoff": "",
+    "older_handoffs": "",
+    "handoffs_dirname": "handoffs",
+    "charter_file": "/workspace/notebook/crew/chief/CHARTER.md",
+    "charter_path": "/workspace/notebook/crew/chief/CHARTER.md",
+    "handoff_name": "previous.md",
+    "handoffs_dir": "/workspace/notebook/crew/chief/handoffs",
+    "crew_v2_enabled": "true",
+    "chief": "true",
+    "notebook_root": "/workspace/notebook",
+    "previous_chief": "3f2a9c1e-7b4d-4e8a-9c2f-1a5b6d7e8f90"
+  },
+  "inputs": {
+    "garden_holdings": "crew-garden-empty"
+  }
+}

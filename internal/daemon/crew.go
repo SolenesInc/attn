@@ -170,6 +170,13 @@ func (d *Daemon) crewMemberIn(profileID, ref string) (crew.Member, bool, error) 
 			inProfile = append(inProfile, member)
 		}
 	}
+	if strings.EqualFold(strings.TrimSpace(ref), crew.ChiefAlias) {
+		for _, member := range inProfile {
+			if member.Chief {
+				return member, true, nil
+			}
+		}
+	}
 	member, ok := crew.Resolve(ref, inProfile)
 	return member, ok, nil
 }
@@ -239,7 +246,7 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 			continue
 		}
 		identity := identities[member.ID]
-		member.Name, member.ProfileID, member.Retired = identity.Name, identity.ProfileID, identity.Retired
+		member.Name, member.ProfileID, member.Retired, member.Chief = identity.Name, identity.ProfileID, identity.Retired, identity.Chief
 		if member.Name == "" {
 			member.Name = crew.NameFromKey(member.ID)
 		}
@@ -526,6 +533,9 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		wire.ProfileName = protocol.Ptr(item.ProfileName)
 	} else {
 		d.logf("crew launch desktop %s: %v", member.ID, err)
+	}
+	if member.Chief {
+		wire.Chief = protocol.Ptr(true)
 	}
 	if member.CWD != "" {
 		wire.Cwd = protocol.Ptr(member.CWD)

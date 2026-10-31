@@ -11,6 +11,16 @@ func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
 	if d.store == nil {
 		return map[string]protocol.SessionID{}
 	}
+	if d.crewV2Enabled() {
+		return d.chiefMemberSessions()
+	}
+	return d.legacyProfileChiefs()
+}
+
+func (d *Daemon) legacyProfileChiefs() map[string]protocol.SessionID {
+	if d.store == nil {
+		return map[string]protocol.SessionID{}
+	}
 	byProfile, err := d.store.ProfileChiefs()
 	if err != nil {
 		d.logf("read profile chiefs: %v", err)
@@ -34,8 +44,13 @@ func (d *Daemon) isChiefOfStaffSession(sessionID protocol.SessionID) bool {
 	return err == nil && d.chiefOfProfile(profileID) == sessionID
 }
 
-func (d *Daemon) chiefForClient(client *wsClient) string {
-	return string(d.chiefOfProfile(d.profileForClient(client)))
+func (d *Daemon) isLegacyChiefSession(sessionID protocol.SessionID) bool {
+	sessionID = protocol.TrimID(sessionID)
+	if sessionID == "" || d.store == nil || d.crewV2Enabled() {
+		return false
+	}
+	profileID, err := d.store.SessionProfileID(sessionID)
+	return err == nil && profileID != "" && d.legacyProfileChiefs()[profileID] == sessionID
 }
 
 func (d *Daemon) profileForClient(client *wsClient) string {
@@ -112,6 +127,10 @@ func (d *Daemon) maybeAssignChiefOnSpawn(sessionID protocol.SessionID, agent str
 	if !requested || existingSession != nil || d.store == nil {
 		return false
 	}
+	if d.crewV2Enabled() {
+		d.logf("create-as-chief: with Crew v2 on the Chief is a crew member; session %s starts as an ordinary agent", sessionID)
+		return false
+	}
 	if !d.agentSupportsChiefGuidance(agent) {
 		d.logf("create-as-chief: agent %q for session %s has no chief-guidance launch path; ignoring", agent, sessionID)
 		return false
@@ -133,6 +152,10 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	sessionID := protocol.TrimID(msg.SessionID)
 	if sessionID == "" {
 		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("missing session_id"))
+		return
+	}
+	if d.crewV2Enabled() {
+		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("with Crew v2 on, the Chief is a crew member and no session can be marked Chief; wake it with `attn crew wake chief`"))
 		return
 	}
 	if host := d.sessionHost(sessionID); msg.ChiefOfStaff && host != "" {

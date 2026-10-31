@@ -74,10 +74,15 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, s
 	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
-func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID protocol.SessionID) (*protocol.SeedSendToChiefResult, error) {
-	if chiefSessionID == "" || d.store.Get(chiefSessionID) == nil {
+func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID string) (*protocol.SeedSendToChiefResult, error) {
+	chief, ok := d.chiefParty(profileID)
+	if !ok && d.crewV2Enabled() {
+		return nil, fmt.Errorf("this profile has no Chief yet; attn creates it at the next daemon start")
+	}
+	if !ok {
 		return nil, fmt.Errorf("this profile has no Chief; make one of its agents the Chief first")
 	}
+	chiefSessionID, _ := d.liveSessionOf(chief)
 	seedID := strings.TrimSpace(msg.SeedID)
 	guidance := strings.TrimSpace(protocol.Deref(msg.Guidance))
 	if len(guidance) > garden.MaxNoteBytes/2 {
@@ -108,7 +113,6 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	}
 	unclaimed := seed
 	unclaimed.Tender = who.Party{}
-	chief := d.partyOfSession(chiefSessionID)
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: chief.Actor(), Claimant: chief,
 	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
@@ -165,7 +169,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 }
 
 func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToChiefMessage) {
-	result, err := d.sendSeedToChief(msg, d.chiefOfProfile(protocol.Deref(msg.ProfileID)))
+	result, err := d.sendSeedToChief(msg, protocol.Deref(msg.ProfileID))
 	if err != nil {
 		d.sendGardenError(conn, "send-to-chief", err)
 		return
@@ -177,7 +181,7 @@ func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSen
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
 	}
-	result, err := d.sendSeedToChief(msg, protocol.SessionID(d.chiefForClient(client)))
+	result, err := d.sendSeedToChief(msg, d.profileForClient(client))
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
 	} else {

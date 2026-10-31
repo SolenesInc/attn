@@ -29,12 +29,17 @@ const CharterFileName = "CHARTER.md"
 
 const DefaultAgent = "claude"
 
+const ChiefName = "Chief"
+
+const ChiefAlias = "chief"
+
 type Member struct {
 	ID             string             `json:"id"`
 	Key            who.MemberKey      `json:"-"`
 	Name           string             `json:"-"`
 	ProfileID      string             `json:"-"`
 	Retired        bool               `json:"-"`
+	Chief          bool               `json:"-"`
 	Home           string             `json:"home_dir,omitempty"`
 	CWD            string             `json:"cwd"`
 	Agent          string             `json:"agent"`
@@ -47,6 +52,11 @@ type Member struct {
 	LetterSession    protocol.SessionID `json:"letter_session"`
 	AutonomousWakes  []string           `json:"autonomous_wakes"`
 	SwitchingSession protocol.SessionID `json:"switching_session,omitempty"`
+	FirstDay         *FirstDay          `json:"first_day,omitempty"`
+}
+
+type FirstDay struct {
+	PreviousChief protocol.SessionID `json:"previous_chief,omitempty"`
 }
 
 func (m Member) HomeDir(dataRoot string) string {
@@ -159,13 +169,20 @@ func ValidateName(name string) error {
 		return fmt.Errorf("%q is not a crew member name: letters, digits and - only, starting with a letter", name)
 	}
 	switch strings.ToLower(name) {
-	case "chief", DaemonID, "user", "you":
+	case ChiefAlias, DaemonID, "user", "you":
 		return fmt.Errorf("%q is reserved; attn uses it to address someone else", name)
 	}
 	if idShapedName.MatchString(name) {
 		return fmt.Errorf("%q looks like an ID; choose a name that does not", name)
 	}
 	return nil
+}
+
+func ValidateChiefName(name string) error {
+	if strings.EqualFold(name, ChiefName) {
+		return nil
+	}
+	return ValidateName(name)
 }
 
 func NameFromKey(key string) string {
