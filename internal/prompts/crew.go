@@ -20,9 +20,16 @@ func crewRecipient() Recipient {
 	chief := FlagField("chief", "The member is its profile's Chief.")
 	chiefNotebook := TextField("notebook_root", "The Chief's profile Notebook directory.")
 	previousChief := TextField("previous_chief", "On the Chief's first day, the session that was the profile's Chief before Crew v2.")
+	onboarding := FlagField("onboarding", "The Chief's onboarding is pending.")
+	onboardingTour := FlagField("onboarding_tour", "The pending onboarding is the tour, for a user who used attn before the Chief.")
+	chiefOnboarding := Use("crew.v2.chief-onboarding", "content/crew/v2/chief-onboarding.md",
+		Bind("onboarding_path", Choose(Enabled(onboardingTour),
+			Use("crew.v2.chief-onboarding-tour", "content/crew/v2/chief-onboarding-tour.md"),
+			Use("crew.v2.chief-onboarding-full", "content/crew/v2/chief-onboarding-full.md"))))
 	chiefGuidance := When(Enabled(chief), Compose(
 		template("crew.v2.chief", "content/crew/v2/chief.md", chiefNotebook),
-		When(Present(previousChief), template("crew.v2.chief-switchover", "content/crew/v2/chief-switchover.md", previousChief))))
+		When(Present(previousChief), template("crew.v2.chief-switchover", "content/crew/v2/chief-switchover.md", previousChief)),
+		When(Enabled(onboarding), chiefOnboarding)))
 
 	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
 		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")))

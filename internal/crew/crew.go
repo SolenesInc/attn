@@ -56,7 +56,19 @@ type Member struct {
 }
 
 type FirstDay struct {
-	PreviousChief protocol.SessionID `json:"previous_chief,omitempty"`
+	Onboarding    protocol.OnboardingPath `json:"onboarding,omitempty"`
+	PreviousChief protocol.SessionID      `json:"previous_chief,omitempty"`
+}
+
+func (m Member) PendingOnboarding() (protocol.OnboardingPath, bool) {
+	switch {
+	case m.FirstDay == nil:
+		return "", false
+	case m.FirstDay.Onboarding == protocol.OnboardingPathTour:
+		return protocol.OnboardingPathTour, true
+	default:
+		return protocol.OnboardingPathFull, true
+	}
 }
 
 func (m Member) HomeDir(dataRoot string) string {

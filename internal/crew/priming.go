@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const HandoffsDirName = "handoffs"
@@ -43,6 +44,7 @@ type Priming struct {
 	Chief         bool
 	NotebookRoot  string
 	PreviousChief string
+	Onboarding    protocol.OnboardingPath
 
 	Charter       string
 	Handoff       string
@@ -82,6 +84,8 @@ func (p Priming) Block() string {
 		"chief":            fmt.Sprint(p.Chief),
 		"notebook_root":    p.NotebookRoot,
 		"previous_chief":   p.PreviousChief,
+		"onboarding":       fmt.Sprint(p.Onboarding != ""),
+		"onboarding_tour":  fmt.Sprint(p.Onboarding == protocol.OnboardingPathTour),
 	})
 }
 

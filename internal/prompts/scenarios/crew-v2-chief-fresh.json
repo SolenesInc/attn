@@ -20,7 +20,9 @@
     "crew_v2_enabled": "true",
     "chief": "true",
     "notebook_root": "/workspace/notebook",
-    "previous_chief": ""
+    "previous_chief": "",
+    "onboarding": "true",
+    "onboarding_tour": "false"
   },
   "inputs": {
     "garden_holdings": "crew-garden-empty"

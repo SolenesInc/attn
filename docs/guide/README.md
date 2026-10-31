@@ -22,6 +22,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [sessions](reference/sessions.md) | Opening agents and shells, worktrees, the terminal, restarts, the ledger and resume |
 | [delegation](reference/delegation.md) | Agents starting agents you can steer, delegation roles, and the garden |
 | [crew](reference/crew.md) | Permanent agents with a name and a charter |
+| [chief](reference/chief.md) | The agent that looks after your other agents, and its first day with you |
 | [automations](reference/automations.md) | Agents that start on a schedule, on an event, or when you run them |
 | [annotations](reference/annotations.md) | Comments on what an agent wrote, sent back as one message |
 | [telemetry](reference/telemetry.md) | What analytics records and shares |

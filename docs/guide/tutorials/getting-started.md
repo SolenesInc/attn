@@ -86,7 +86,9 @@ This is where you keep an eye on all your agents and your open PRs:
   is an agent that keeps track of your other agents, delegates work for you and
   journals your day in the Notebook.
   Make any agent your Chief with **Make chief of staff** in its ••• menu, and
-  take the role away with **Remove chief role**.
+  take the role away with **Remove chief role**. [The Chief](../reference/chief.md)
+  says how to set it up, and how the experimental Chief crew member onboards
+  you on its first day.
 - **Pull Requests** lists your PRs and the ones waiting for your review, with
   their CI status. It needs `gh`.
 

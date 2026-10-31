@@ -128,6 +128,7 @@ var Placements = map[string][]Placement{
 	"mute_repo":                        {Placement{LocatorHome, ""}},
 	"notebook_guide":                   {Placement{LocatorHome, ""}},
 	"notebook_sync_report":             {Placement{LocatorHome, ""}},
+	"onboarding":                       {Placement{LocatorHome, ""}},
 	"open_browser":                     {Placement{LocatorHome, ""}},
 	"open_markdown":                    {Placement{LocatorHome, ""}},
 	"open_seed":                        {Placement{LocatorHome, ""}},
@@ -1461,6 +1462,18 @@ func (m NotebookSyncReportMessage) Placement() Placement {
 }
 
 func (m NotebookSyncReportMessage) Locate() string {
+	return ""
+}
+
+func (OnboardingMessage) CommandName() string {
+	return "onboarding"
+}
+
+func (m OnboardingMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m OnboardingMessage) Locate() string {
 	return ""
 }
 

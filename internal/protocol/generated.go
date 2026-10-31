@@ -7629,6 +7629,42 @@ type NotificationsUpdatedMessage struct {
 	UnreadCriticalCount int `json:"unread_critical_count"`
 }
 
+type OnboardingAction string
+
+const OnboardingActionAgain OnboardingAction = "again"
+const OnboardingActionDone OnboardingAction = "done"
+const OnboardingActionShow OnboardingAction = "show"
+
+type OnboardingMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action OnboardingAction `json:"action"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type OnboardingPath string
+
+const OnboardingPathFull OnboardingPath = "full"
+const OnboardingPathTour OnboardingPath = "tour"
+
+type OnboardingResult struct {
+	// Chief corresponds to the JSON schema field "chief".
+	Chief string `json:"chief"`
+
+	// Configured corresponds to the JSON schema field "configured".
+	Configured bool `json:"configured"`
+
+	// Pending corresponds to the JSON schema field "pending".
+	Pending *OnboardingPath `json:"pending,omitempty,omitzero"`
+}
+
 type OpenBrowserMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9356,6 +9392,9 @@ type Response struct {
 
 	// Ok corresponds to the JSON schema field "ok".
 	Ok bool `json:"ok"`
+
+	// OnboardingResult corresponds to the JSON schema field "onboarding_result".
+	OnboardingResult *OnboardingResult `json:"onboarding_result,omitempty,omitzero"`
 
 	// Profiles corresponds to the JSON schema field "profiles".
 	Profiles []Profile `json:"profiles,omitempty,omitzero"`

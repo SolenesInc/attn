@@ -12,7 +12,7 @@ Esc. Callouts are experimental and off until the user turns them on.
 - `callout-show`: up to 20 steps, each an anchor and at most 160 characters of text; a new callout replaces the one showing.
 - `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
 - `callout-stepping`: Enter or → goes to the next step, Enter on an agent or desktop step goes there, Esc or a click outside ends it.
-- `callout-setting`: the experimental switch the user turns on; every call checks it.
+- `callout-setting`: the experimental switch the user turns on; every call checks it, except from the Chief's session while its onboarding is pending (`attn onboarding`).
 
 ## How to get to it
 

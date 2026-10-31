@@ -137,6 +137,31 @@ model. Adding Attn's roles for the first time has to happen in Settings.
 [Building with roles](../tutorials/building-with-roles.md) walks through a whole
 change with them.
 
+## Watching pull requests
+
+An agent that opened or reviews a pull request runs `attn pr watch <url>` to
+hear about it in its inbox: readiness, failed checks, review findings, human
+comments and replies, reopened review threads, and monitoring outages. Watches
+survive restarts, and an unchanged observation doesn't ping the agent again.
+Feedback already on the PR at the first check is the baseline; changing modes
+keeps that history, and unwatching then watching again starts a new baseline.
+
+| Mode | Ready when |
+|---|---|
+| `green` (default) | The PR is open, not a draft, and GitHub reports it `CLEAN` or `HAS_HOOKS`. |
+| `codex` | `green`, plus the Codex app's 👍 and no 👀 after a 30-second settling window. Reactions are best effort, since GitHub doesn't tie them to a commit. |
+| `formal-review` | GitHub's overall approval. `--reviewer <login>` requires that reviewer's current verdict instead. |
+
+Comments, threads, requested changes and failed checks are feedback the agent
+hears about, not extra conditions for ready. A watch never changes anything on
+GitHub and never grants permission to merge.
+
+`attn pr status` lists the watches, and `attn pr unwatch <url>` stops one and
+clears its unread notifications. Closing or merging the PR ends its watch. For
+a script or a terminal that should block until the PR is ready, use
+`attn pr wait-ready <pr> --repo <owner/repo> --mode <mode>`; its `--help`
+explains reviewers, baselines, resuming and exit codes.
+
 ## The garden
 
 The garden is Attn's work tracker, and every delegation works on a seed in it.

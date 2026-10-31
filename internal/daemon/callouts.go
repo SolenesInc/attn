@@ -39,10 +39,22 @@ func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
 	if session == nil {
 		return fmt.Errorf("session not found")
 	}
-	if !parseBooleanSetting(d.homeSetting(SettingCalloutsEnabled)) {
+	if !parseBooleanSetting(d.homeSetting(SettingCalloutsEnabled)) && !d.onboardingChief(session.ID) {
 		return fmt.Errorf("callouts are off: the user can turn them on in Settings > Experimental > Agent callouts")
 	}
 	return nil
+}
+
+func (d *Daemon) onboardingChief(session protocol.SessionID) bool {
+	if !d.crewV2Enabled() {
+		return false
+	}
+	member, ok := d.crewMemberBoundToSession(session)
+	if !ok || !member.Chief {
+		return false
+	}
+	_, pending := member.PendingOnboarding()
+	return pending
 }
 
 func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutShowStep) ([]protocol.CalloutStep, error) {

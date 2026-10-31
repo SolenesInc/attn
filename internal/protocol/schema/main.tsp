@@ -6987,6 +6987,7 @@ model Response {
   crew_sleep_result?: CrewSleepResult;
   crew_apply_result?: CrewApplyResult;
   crew_set_result?: CrewSetResult;
+  onboarding_result?: OnboardingResult;
   crew_rename_result?: CrewRenameResult;
   crew_create_result?: CrewCreateResult;
   crew_retire_result?: CrewRetireResult;
@@ -7528,6 +7529,26 @@ model CrewApplyResultMessage {
   success: boolean;
   error?: string;
   result?: CrewApplyResult;
+}
+
+enum OnboardingAction { show, done, again }
+enum OnboardingPath { full, tour }
+
+// Show, finish or restart the Chief's onboarding in the asking profile.
+@extension("x-on", #{ home: true })
+model OnboardingMessage {
+  cmd: "onboarding";
+  action: OnboardingAction;
+  // The calling session's profile, else this profile.
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model OnboardingResult {
+  chief: string;
+  configured: boolean;
+  // Absent once onboarding is done.
+  pending?: OnboardingPath;
 }
 
 // Record where a member's sessions launch and which directories its charter is

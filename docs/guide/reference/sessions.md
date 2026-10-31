@@ -33,6 +33,10 @@ one forever from there.
 ## The terminal
 
 - Cmd+F (Ctrl+Shift+F on Linux) searches the whole scrollback.
+- Agents like Claude Code track the mouse, so a plain drag goes to the agent.
+  Hold Option (Alt on Linux) while you drag to select text instead.
+- When an agent copies text for you, Attn honors the terminal's OSC 52
+  clipboard sequence and puts it on your clipboard, even from a remote machine.
 - Cmd-click (Ctrl-click on Linux) a path or URL to open it. A `.md` file opens
   in a markdown tile next to the agent.
 - If your shell marks commands (fish does by default), click a command's output

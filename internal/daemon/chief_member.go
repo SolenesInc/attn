@@ -45,8 +45,11 @@ func (d *Daemon) ensureChief(profileID, key string) error {
 	} else if _, _, err := d.crewMember(key); err == nil {
 		return nil
 	}
-	member := crew.Member{ID: key, Name: crew.ChiefName, ProfileID: profileID, AwarenessDirs: []string{}, FirstDay: &crew.FirstDay{}}
+	member := crew.Member{ID: key, Name: crew.ChiefName, ProfileID: profileID, AwarenessDirs: []string{}, FirstDay: &crew.FirstDay{Onboarding: protocol.OnboardingPathFull}}
 	d.prefillChiefFromLegacySession(&member)
+	if member.FirstDay.PreviousChief != "" || d.attnUsedBefore() {
+		member.FirstDay.Onboarding = protocol.OnboardingPathTour
+	}
 	home, err := d.newCrewHome(profileID, crew.ChiefName)
 	if err != nil {
 		return err
@@ -63,7 +66,7 @@ func (d *Daemon) ensureChief(profileID, key string) error {
 	}
 	d.publishFact(FactCrewRegistered, key, nil)
 	d.publishArrangementChanged(profileID)
-	d.logf("chief: created %s (key %s) in profile %s at %s, prefilled from session %q", member.Name, key, profileID, home, member.FirstDay.PreviousChief)
+	d.logf("chief: created %s (key %s) in profile %s at %s, prefilled from session %q, onboarding on the %s path", member.Name, key, profileID, home, member.FirstDay.PreviousChief, member.FirstDay.Onboarding)
 	return nil
 }
 
@@ -81,6 +84,15 @@ func (d *Daemon) prefillChiefFromLegacySession(member *crew.Member) {
 	if info, err := os.Stat(session.Directory); err == nil && info.IsDir() {
 		member.CWD = session.Directory
 	}
+}
+
+func (d *Daemon) attnUsedBefore() bool {
+	ledger, err := d.store.SessionLedger(store.SessionLedgerQuery{Scope: store.SessionLedgerAll, Limit: 1})
+	if err != nil {
+		d.logf("chief: reading the session ledger to pick the onboarding path: %v", err)
+		return true
+	}
+	return len(ledger.Entries) > 0
 }
 
 func (d *Daemon) newCrewHome(profileID, name string) (string, error) {

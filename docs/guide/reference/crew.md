@@ -151,7 +151,7 @@ back, or asking the member to sleep, cancels it.
 <details>
 <summary>Do crew members wait in my queue?</summary>
 
-Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Run "Put the crew in the queue" from the command palette to make a member that owes you a turn wait in the queue too; its row stays in the Crew section. "Take the crew out of the queue" turns it off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. The Chief never waits in the queue; with Crew v2 on it is a crew member (see below).
+Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Run "Put the crew in the queue" from the command palette to make a member that owes you a turn wait in the queue too; its row stays in the Crew section. "Take the crew out of the queue" turns it off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. The Chief never waits in the queue; with Crew v2 on it is a crew member (see [the Chief](chief.md)).
 </details>
 
 <details>
@@ -224,28 +224,5 @@ next session. With it on:
 - Each letter records the session that wrote it, so Attn can keep that
   session's transcript for the member to read later.
 - You can rename members.
-- Every profile has a Chief, a crew member named Chief. `chief` reaches it
-  under any name, in `attn agent msg`, `attn crew` and the other commands that
-  take a member. It can sleep, but it can't be closed or retired, and Attn never
-  sends it heartbeats or puts it to sleep on its own. Deleting a profile needs
-  its Chief asleep, and retires it.
-- If a session was your Chief, the new Chief starts with that session's
-  harness, model, effort and folder, and the session becomes an ordinary one.
-  On its first day the new Chief knows it can message that session for open
-  work and context. A Chief with nothing to start from has no harness and
-  stays asleep, keeping its mail, until you set it up.
-- The Chief has its own row at the top of the sidebar's Crew section. While it
-  has no harness, the row opens its setup: pick Claude Code or Codex, the model
-  and effort, and the profile's Notebook folder, then press Enter to wake it.
-  The Chief's home moves into the folder you pick. If neither harness is
-  installed, the setup says so; install one and choose "Check again". From a
-  shell, `attn crew set chief --agent <harness> --model <model>` sets it up,
-  and `attn crew wake chief` wakes it.
-- The Chief's menus offer "Harness and model…" to change what it runs on for
-  its next wake, "Edit charter", and Sleep in place of Close. It wakes with one
-  click. The command palette has the same actions.
-- The Chief member runs on its own launch settings (`attn crew set chief`).
-  The Chief's model, effort and context budget in **Settings → Background
-  agents**, and the Chief of Staff card on Home, apply only to a Chief session
-  with Crew v2 off.
-- Turning Crew v2 off gives the Chief role back to the session that had it.
+- Every profile has a Chief, a crew member named Chief, which onboards you on
+  its first day. [The Chief](chief.md) covers it.

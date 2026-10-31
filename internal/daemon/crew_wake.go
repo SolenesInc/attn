@@ -119,6 +119,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		if member.FirstDay != nil {
 			priming.PreviousChief = string(member.FirstDay.PreviousChief)
 		}
+		priming.Onboarding, _ = member.PendingOnboarding()
 	}
 	d.primeCrewGarden(&priming, member)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {

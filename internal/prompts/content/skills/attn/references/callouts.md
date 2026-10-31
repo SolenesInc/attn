@@ -6,7 +6,8 @@ short text beside a named part of the app window. The user steps through it.
 
 Callouts are experimental and off unless the user turns them on in
 Settings > Experimental > Agent callouts. Both commands check that setting
-each time. A refusal names the toggle; let the user decide whether to enable it.
+each time, except from the Chief while its onboarding is pending. A refusal
+names the toggle; let the user decide whether to enable it.
 
 List the anchors first, then point:
 

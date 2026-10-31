@@ -45,6 +45,8 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 - **Write or update your crew charter:** read
   [references/charter.md](references/charter.md).
+- **Onboard the user as the Chief:** read
+  [references/onboarding.md](references/onboarding.md).
 
 - **Open shell splits, read terminals, type into them, wait, move them between desktops, or close them:** read
   [references/terminal.md](references/terminal.md).

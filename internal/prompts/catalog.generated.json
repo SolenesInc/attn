@@ -1670,6 +1670,52 @@
                                 ]
                               }
                             ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "onboarding",
+                                "kind": "flag",
+                                "description": "The Chief's onboarding is pending."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.v2.chief-onboarding",
+                                "source": "content/crew/v2/chief-onboarding.md",
+                                "bindings": [
+                                  {
+                                    "name": "onboarding_path",
+                                    "node": {
+                                      "kind": "choose",
+                                      "condition": {
+                                        "field": {
+                                          "name": "onboarding_tour",
+                                          "kind": "flag",
+                                          "description": "The pending onboarding is the tour, for a user who used attn before the Chief."
+                                        },
+                                        "test": "enabled"
+                                      },
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "id": "crew.v2.chief-onboarding-tour",
+                                          "source": "content/crew/v2/chief-onboarding-tour.md"
+                                        },
+                                        {
+                                          "kind": "text",
+                                          "id": "crew.v2.chief-onboarding-full",
+                                          "source": "content/crew/v2/chief-onboarding-full.md"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
                           }
                         ]
                       }
@@ -4001,6 +4047,18 @@
           }
         },
         {
+          "id": "onboarding",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.onboarding",
+            "source": "content/skills/attn/references/onboarding.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "showing",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",
@@ -6316,5 +6374,5 @@
       ]
     }
   ],
-  "definitions_hash": "a95848b859b52c86d72358b3ccfb7a2b6396ce62f2f21de8172a99e6bd000550"
+  "definitions_hash": "86ffa69ae5c326f8bd8fa4b23904a51d48571be250a9f50f26cddbf5a47336db"
 }
