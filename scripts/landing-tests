@@ -23,6 +23,7 @@ go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
+go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
 go ./scripts/test-history TestSelectRanksTheCheckoutsChangeFromItsHistory
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/

@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 	"path/filepath"
@@ -23,6 +24,7 @@ func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	a := testworld.NewSSH(t)
 	s := testworld.NewStack(t)
 	a.Use(s.World)
+	removeReplied := s.PauseAt(pausepoint.PtyRemoveReplied)
 	s.Start()
 	address := bridgeAddress(t)
 	a.Route(address, s)
@@ -41,6 +43,8 @@ func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	if err := conn.Call(context.Background(), "call", remove, nil); err != nil {
 		t.Fatalf("removing the terminal: %v", err)
 	}
+	removeReplied.Await()
+	defer removeReplied.Release()
 	kill := protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: terminal, Signal: "SIGTERM"}
 	if err := conn.Call(context.Background(), "call", kill, nil); err == nil {
 		t.Fatal("an ordinary kill of a missing terminal succeeded")

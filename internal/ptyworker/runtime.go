@@ -881,7 +881,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	case MethodInfo:
 		info, err := c.runtime.infoResult()
 		if err != nil {
-			c.sendError(req.ID, ErrInternal, err.Error())
+			c.sendError(req.ID, sessionErrorCode(err), err.Error())
 			return
 		}
 		c.sendResult(req.ID, info)
@@ -1283,7 +1283,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	case MethodHealth:
 		info, err := c.runtime.infoResult()
 		if err != nil {
-			c.sendError(req.ID, ErrInternal, err.Error())
+			c.sendError(req.ID, sessionErrorCode(err), err.Error())
 			return
 		}
 		c.sendResult(req.ID, map[string]any{
@@ -1293,6 +1293,13 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	default:
 		c.sendError(req.ID, ErrBadRequest, "unknown method")
 	}
+}
+
+func sessionErrorCode(err error) string {
+	if errors.Is(err, pty.ErrSessionNotFound) {
+		return ErrSessionNotFound
+	}
+	return ErrInternal
 }
 
 func (c *connCtx) sendResult(reqID string, result any) bool {
