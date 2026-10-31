@@ -137,7 +137,7 @@ Preconditions:
 - The baseline has no outpost to resume on ([outposts.md](outposts.md)), so resume on an outpost cannot be driven there; `scripts/verify-outpost-ledger-resume.sh` and `cmd/attn/session_reopen_outpost_stack_test.go` prove it.
 - `sessions_set_filter` and `sessions_row_action` click through the DOM. Use them to set up; prove a person's way in with native clicks or keys.
 - "Show worktree" opens the Worktrees list, which covers only repositories attn made a worktree in ([worktrees.md](worktrees.md)). A worktree made by hand shows "No worktrees tracked yet" there.
-- Under shared Codex, `/agents` and `/resume` take the mock's thread id, `mock-<uuid>`, which neither `session show` nor `conversation list` prints. Read it from the rollout file's name under `$ATTN_TOOL_HOME/.codex/sessions/`.
+- Under shared Codex, `/agents` and `/resume` take the mock's thread id, `mock-<uuid>`, which neither `session show` nor `conversation list` prints; [shared-codex.md](shared-codex.md)'s "Switch back by id" says where to read it.
 - The plain Codex mock's transcript holds only its first reply, without the user's prompts or later turns, so `session transcript --follow` on a Codex mock never shows a new turn. Drive `--follow` on a Claude session.
 - `session list --last` takes only its presets, `30d`, `7d`, `today` and `yesterday`; `--last 1h` exits 2 naming them. `--since` and `--until` leave out a live session that has never been seen, such as one a `/clear` just started.
 - Working but wrong: the row action and `attn session reopen` say Reopen, and the palette describes the ledger "with reopen", where the glossary says resume. The palette says "Open the sessions list" and the sidebar "Open Ledger" for the same dialog.

@@ -182,7 +182,7 @@ EOF
 ## Gotchas
 
 - Settings keeps its search text between visits. After the quiet-notifications step leaves `Experimental` in the search, the next ⌘, shows only the Experimental section, and `[data-testid="settings-nav-hygiene"]` is not in the page until the search is cleared.
-- `bridge native_key` with ⌘⇧A (`sidebar.agentList`) on the expanded queue sidebar answers `handledBy: ["menu"]` and the agent list stays closed (seed `diagnose-native-input-failures-found-drive`). Open the list with `[data-testid="queue-agents-toggle"]` instead; [sidebar.md](sidebar.md) owns the key.
+- `bridge native_key` with ⌘⇧A (`sidebar.agentList`) can answer `handledBy: ["menu"]` and leave the agent list closed (seed `diagnose-native-input-failures-found-drive`), so this recipe opens the list with `[data-testid="queue-agents-toggle"]`; [sidebar.md](sidebar.md) drives the key.
 - The quiet-notifications switch starts below the baseline window's visible Settings content; `dom_native_point` scrolls it into view before returning its point. Clicking section navigation after focusing Search clears keyboard focus.
 - A mock agent owes a turn as soon as it finishes booting, in either flow. Expect `owed` before any prompt.
 - Typing into an agent does not settle its turn; only a settle, a snooze or auto-settle does. A turn the agent did not open is the user's: `attn turn settle` from the agent exits 1 with `only the user settles it`. A turn the agent opened with `attn turn open` can be settled by the agent.

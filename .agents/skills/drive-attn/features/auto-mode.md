@@ -42,7 +42,7 @@ what the Guardian knows about this machine, is edited directly.
 
 - A Pi command that needs approval goes to the Guardian when auto mode is on, and to the user otherwise; a denial is recorded and announced (`internal/daemon/automode.go`).
 - attn reads the repository a folder belongs to for the `trusted_repo` and `repo_visibility` slots, and the rules its checkout carries (`internal/daemon/automode_detect.go`).
-- Only the user's promotion changes the rules, hosts or policy (`PromoteAutoModeProposal`, `internal/store/automode.go`).
+- Only the user changes the rules, hosts or policy: by promoting a proposal (`PromoteAutoModeProposal`, `internal/store/automode.go`) or by editing them in Settings. `attn automode rule`, `host` and `policy` only propose.
 
 ## Driving it
 
