@@ -111,8 +111,8 @@ def cmd_sources(args):
 
 
 def cmd_scope(args):
-    changed = set(git("diff", "--name-only", f"{args.base}...HEAD").splitlines())
-    changed |= set(git("diff", "--name-only", "HEAD").splitlines())
+    changed = set(git("diff", "--name-only", "--no-renames", f"{args.base}...HEAD").splitlines())
+    changed |= set(git("diff", "--name-only", "--no-renames", "HEAD").splitlines())
     changed |= set(git("ls-files", "--others", "--exclude-standard").splitlines())
     changed.discard("")
     if not changed:

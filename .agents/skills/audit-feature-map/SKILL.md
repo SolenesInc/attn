@@ -1,6 +1,6 @@
 ---
 name: audit-feature-map
-description: Use when running the recurring feature-map audit, the pass that drives every way in drive-attn's feature map lists on a fresh instance, fixes the map where it drifted, and reports each one's result.
+description: Use only when the feature-map audit automation starts you, or the user asks for the audit. A pass drives every door of drive-attn's feature map on a fresh instance, repairs the map's prose where it drifted, and reports each door's result.
 ---
 
 # Audit the feature map
@@ -17,14 +17,20 @@ A pass audits one pinned revision of `main`. It is done when:
 - its report has one row per door, `audit.py check` accepts it, and it is
   attached to your stake;
 - the map drift it proved is landed as map fixes, or on a seed;
-- each regression, harness failure and unmet precondition is on a seed,
-  reused when one already exists;
-- every instance it started is cleaned and its work checkout removed;
+- each regression and harness failure is on a seed, reused when one already
+  exists, and each blocked door names the seed that carries its cause when
+  one does;
+- every instance it started is cleaned and its checkouts removed;
 - your stake is harvested with the pass's tally.
 
-A door is one bullet under a feature file's `## How to get to it`, with the
-contexts its file lists. `audit.py doors` numbers them, such as
-`garden.agents.2`.
+A door is one bullet under a feature file's `## How to get to it`.
+`audit.py doors` numbers them, such as `garden.agents.2`. A bullet that names
+several ways in, such as verbs, palette commands or controls, is `pass` only
+when you drove each one; otherwise it takes the worst outcome among them and
+names the one that failed. A bullet that names no way in, such as "Nothing in
+the app shows …" or "Where people see what agents do: …", is checked against
+what the recipe showed: `pass` with the step that showed it, or `drift`. A
+file's `## Contexts` are not doors; drive the ones its recipe drives.
 
 ## Rules
 
@@ -47,8 +53,7 @@ contexts its file lists. `audit.py doors` numbers them, such as
   needs activation, system-wide keys, the user's clipboard, Finder, a
   dedicated display, an outpost peer, Pi or the Guardian, a local ingest
   service, or a real external service is `blocked`, naming that
-  precondition. Never turn on a real service to
-  get a pass.
+  precondition. Never turn on a real service to get a pass.
 - One pass at a time, one instance driving at a time.
 - Do not dispatch fixers or message authors. Review main, the sheriff and CI
   keep their jobs; reuse their evidence only for the exact claim it makes.
@@ -62,20 +67,22 @@ contexts its file lists. `audit.py doors` numbers them, such as
 | `drift` | The file is wrong and you could not correct it this pass | what the file says and what attn does | seed |
 | `regression` | attn breaks intended behavior | as `drift`, plus why the behavior is intended | seed |
 | `harness` | `bridge`, `wsctl`, the mock agent or a scenario failed, not attn | the failing command and output | seed |
-| `blocked` | A precondition the baseline lacks | the recipe command, run or, when running it would break a rule here, not run; and the missing precondition | seed if one exists |
+| `blocked` | A precondition the baseline lacks | the recipe's command with its output, or the command alone when running it would break a rule here; and the missing precondition | the seed that carries the cause, when one does |
 | `ambiguous` | Intent unclear | what each source says | ask id |
 
 Evidence is a path under the pass's evidence folder or a seed id, never only
-your account of it.
+your account of it. Write a `|` inside a cell as `\|`.
 
 ## Stake and pass notes
 
-Your stake is the seed the automation's opening names. It is the same seed
-every pass; the next occurrence replants it after a harvest. Pass progress
-lives in its notes, written as it happens, so a fresh session can resume:
+Your stake is the seed the automation's opening names. Under the scheduled
+trigger it is the same seed every pass, and the next occurrence replants it
+after a harvest. A manual run plants a fresh stake, so it has no earlier pass
+to recover and `previous` is `none`. Pass progress lives in the stake's notes,
+written as it happens, so a fresh session can resume:
 
 ```text
-pass <pass> start: revision <sha>, previous <sha|none>, folder <runs>/<pass>, usage <tokens and cost>
+pass <pass> start: revision <sha>, previous <sha|none>, folder <runs>, usage <tokens and cost>
 pass <pass> instance <name>            before write-env.sh
 pass <pass> feature <id>: <tally>, <minutes> min driving   once its rows are in the report
 pass <pass> cleaned <name>             once clean.sh succeeds
@@ -116,8 +123,8 @@ its revision.
 
 Each command after this starts in a fresh shell, so it begins with
 `. <runs>/pass.env &&`, `<runs>` written out; an instance command adds
-drive-attn's prefix after it. `previous` is the revision of the last `done`
-pass, or `none`. Usage is the `usage` line of `attn session show <session>`,
+drive-attn's prefix after it. `previous` is the revision of the newest pass
+that finished with a report, not an abandoned one, or `none`. Usage is the `usage` line of `attn session show <session>`,
 where `attn presence --session-id` prints your session. Write the start note
 before anything else.
 
@@ -135,8 +142,9 @@ its file last changed. Read each one that could add, remove or change a way in
 before you drive that feature. `entry-points.txt` shows changes since the
 previous pass in places a new way in appears; skip it on the first pass and say
 so in the report. A way in attn has and no file lists is `drift` against the
-feature that owns it: add it to that file, as a new bullet and a recipe step,
-and drive it; its row follows when you rerun `doors` after the fix.
+feature that owns it: add it to that file in `$repair`, as a new bullet and a
+recipe step, and drive it. The table keeps the pinned revision's doors, so the
+new door goes in the report's Map changes with its evidence, not in a row.
 
 Build and launch with drive-attn's Launch, measuring each setup command:
 
@@ -146,8 +154,9 @@ Build and launch with drive-attn's Launch, measuring each setup command:
 
 Its last three lines are wall, user and system seconds for the command and the
 children it waited for. Do the same for `make install INSTANCE=<name>` and for
-cleanup. The instance is `mapaudit-<MMDD>`, with a letter after it for a
-second one. Record each instance note before `write-env.sh`. Run the doctor
+cleanup. The instance is `ma${pass#20}`, such as `ma261031-1214`, unique to the
+pass so no earlier pass's notebook becomes its baseline; a replacement within
+the pass adds a letter, `b` and on, after the names its notes already list. Record each instance note before `write-env.sh`. Run the doctor
 before the first action.
 
 A setup command that fails because of the machine, such as a shared cache
@@ -171,19 +180,40 @@ Take the features in `rows.md` order. For each one:
 A native scenario waits for the shared display lock. Record when it waited, so
 the report keeps waiting apart from driving.
 
+## Clean up
+
+When the last feature is driven, and in a pass you abandon, clean every
+instance the pass started:
+
+```bash
+. <runs>/pass.env && /usr/bin/time -p .agents/skills/drive-attn/scripts/clean.sh <name> > $runs/evidence/clean-<name>.log 2>&1
+```
+
+Write the `cleaned` note after each. When clean fails, stop launching, keep
+its output and the instance's env file, and ask the user with the instance
+name and the exact error.
+
+`clean` keeps `~/attn-notebook-<name>`. List each one in the report with its
+size and leave it in place.
+
 ## Repair the map
 
 Edit and commit map fixes in `$repair`, on its branch `map-audit-$pass`, as
-you prove them. Land them before you write the report:
+you prove them. Land them after cleanup, before you write the report:
 
 1. `. <runs>/pass.env && cd $repair && $S scope origin/main` must print
-   `map-only` and name the repair checkout. `nothing to land` means the
-   pass made no fixes: skip the rest. When it refuses other paths, find the
-   change that is not map prose and remove it, keeping edits that are not
-   yours.
-2. Run the `verify-docs` skill on the diff and fix its findings.
-3. Land with the `land-on-main` skill. When the rebase conflicts with someone
-   else's edit to the same file, keep their edit and reapply yours.
+   `map-only` and name the repair checkout. `nothing to land` means the pass
+   made no fixes: skip the rest. When it refuses other paths, find the change
+   that is not map prose and remove it.
+2. Land with the `land-on-main` skill, from `$repair`:
+   `. <runs>/pass.env && cd $repair && scripts/land.sh`. Its review for map
+   prose is `verify-docs`. Stop at its push: the pass reports once, in Report,
+   and harvests the stake in Finish. It landed only when `land.sh` printed
+   `land: main is at <sha>`. When the rebase conflicts with someone else's
+   edit to the same file, keep their edit and reapply yours where the drift
+   remains. When it cannot land, attach `git -C $repair format-patch
+   origin/main --stdout` to a seed for the drift, then `git -C $repair reset
+   --hard origin/main`.
 
 ## Seeds
 
@@ -193,20 +223,9 @@ Otherwise plant one with `--discovered-from <stake>`, its body a work prompt
 with the door, the commands, the output and what would fix it. Plant one seed
 per cause, not per door.
 
-## Clean up
-
-Every pass ends here, finished or abandoned. For each instance, run
-`. <runs>/pass.env && .agents/skills/drive-attn/scripts/clean.sh <name>` and
-write the `cleaned` note. When clean fails, stop launching, keep its output
-and the instance's env file, and ask the user with the instance name and the
-exact error.
-
-`clean` keeps `~/attn-notebook-<name>`. List each one in the report with its
-size and leave it in place.
-
 ## Report
 
-Write `$runs/evidence/report.md`:
+Write `$runs/evidence/report-$pass.md`:
 
 ```text
 # Feature map audit <pass>
@@ -225,7 +244,7 @@ CPU covers commands and their waited-for children only; the app, daemon and
 workers run detached and are not counted.
 
 ## Map changes
-<landed commits>
+<landed commits, and each way in this pass added with its result>
 
 ## Seeds
 <seed: doors, new or reused>
@@ -240,17 +259,19 @@ workers run detached and are not counted.
 <the table from rows.md>
 ```
 
-`$S check $runs/evidence/report.md` must pass before you attach it.
+`$S check $runs/evidence/report-$pass.md` must pass before you attach it.
 
 ## Finish
 
 Attach the report and the evidence, then remove the checkouts and the pass's
-folder; the seed keeps the evidence:
+folder; the seed keeps the evidence. The first line refuses while the repair
+branch holds commits `main` lacks:
 
 ```bash
-. <runs>/pass.env &&
+. <runs>/pass.env && git -C $repair fetch -q origin &&
+test -z "$(git -C $repair rev-list origin/main..HEAD)" &&
 tar -czf $runs/evidence-$pass.tar.gz -C $runs evidence &&
-attn seed attach <stake> --path $runs/evidence/report.md --copy &&
+attn seed attach <stake> --path $runs/evidence/report-$pass.md --copy &&
 attn seed attach <stake> --path $runs/evidence-$pass.tar.gz --move &&
 git -C $control worktree remove --force $runs/work &&
 git -C $control worktree remove --force $repair &&
@@ -266,22 +287,30 @@ Write the `done` note, then `attn seed harvest <stake> -m "pass <pass> at
 The notes of the unfinished pass name its revision, folder, instances and
 finished features.
 
-1. Clean each instance without a `cleaned` note, as in [Clean up](#clean-up).
-   When its env file is gone, run
-   `. <runs>/pass.env && ./attn instance clean <name>`. Launch nothing until every one is clean.
-2. When the work or repair checkout is gone, add it again at the recorded
+1. When the work or repair checkout is gone, add it again at the recorded
    revision, and the repair checkout on its branch when the branch survives.
    When a finished feature's evidence is gone, drive it again and say so in
    its note.
-3. Continue with the first feature without a `feature` note, on a new
+2. A recipe that started a background process kept its PID in the instance's
+   env file, such as `SRV`. For each one, stop it only when `ps -p <pid> -o
+   command=` still shows the command the recipe started; otherwise leave it
+   and name it in your ask.
+3. Clean each instance without a `cleaned` note, as in [Clean up](#clean-up).
+   When its env file is gone, write it again first with
+   `. <runs>/pass.env && .agents/skills/drive-attn/scripts/write-env.sh <name>`,
+   after `make build` when `./attn` is missing. Launch nothing until every
+   one is clean.
+4. Continue with the first feature without a `feature` note, on a new
    instance, and keep the pass's revision and folder.
 
-A pass is never replaced. To abandon one, clean it, attach what it has, and
-write `pass <pass> done: abandoned, <reason>` before starting the next.
+A pass is never replaced. To abandon one, clean it, attach what it has, remove
+its checkouts and folder as [Finish](#finish) does, and write
+`pass <pass> done: abandoned, <reason>` before starting the next.
 
 ## Install
 
-The automation runs this skill from a control checkout of its own, made with
+Only the user installs the automation; a pass skips this section. The
+automation runs this skill from a control checkout of its own, made with
 `git clone`, never the user's working checkout. Its definition, written with
 the control checkout's path and the launch choices of the Builder role in
 `attn delegate roles`:
@@ -316,5 +345,6 @@ trigger:
   catch_up: latest
 ```
 
-`attn automation show <id>` keeps it disabled until `attn automation enable
-<id>`. It has no guard: a pass is due even when `main` has not moved.
+Applying it again keeps it disabled: the definition prints with
+`"enabled": false` until `attn automation enable <id>`. It has no guard: a
+pass is due even when `main` has not moved.
