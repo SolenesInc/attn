@@ -277,6 +277,9 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 			return awake, nil
 		}
 	}
+	if member.Retired {
+		return nil, retiredMemberError(member)
+	}
 	if beforeWake != nil {
 		if err := beforeWake(); err != nil {
 			return nil, err

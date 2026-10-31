@@ -240,6 +240,10 @@ wakes the member before it rings.
 - A wake that fails still uses an attempt, including one the wake limit
   refuses. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
+- attn never wakes a retired member. `attn agent msg` to a retired member, by
+  name or by their session, is refused; items that were unread at retirement
+  keep their attempts and wait. Restoring the member delivers them, which can
+  wake the member.
 - A member that goes back to sleep with unread items that have attempts left
   is woken again, 5 minutes after the last attempt, or at once for a user
   message.

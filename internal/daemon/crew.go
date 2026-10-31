@@ -240,7 +240,7 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 			continue
 		}
 		identity := identities[member.ID]
-		member.Name, member.ProfileID = identity.Name, identity.ProfileID
+		member.Name, member.ProfileID, member.Retired = identity.Name, identity.ProfileID, identity.Retired
 		if member.Name == "" {
 			member.Name = crew.NameFromKey(member.ID)
 		}
@@ -522,6 +522,7 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	wire := protocol.CrewMember{
 		ID:            member.ID,
 		Name:          member.Name,
+		Retired:       member.Retired,
 		ProfileID:     member.ProfileID,
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath(d.dataRoot),
@@ -573,6 +574,9 @@ func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	}
 	out := make([]protocol.CrewMember, 0, len(members))
 	for _, member := range members {
+		if member.Retired {
+			continue
+		}
 		out = append(out, d.crewMemberWire(member, docs[member.ID].Rev))
 	}
 	return out
@@ -607,7 +611,7 @@ func (d *Daemon) handleCrewList(conn net.Conn, msg *protocol.CrewListMessage) {
 	}
 	out := make([]protocol.CrewMember, 0, len(members))
 	for _, member := range members {
-		if member.ProfileID != profileID {
+		if member.ProfileID != profileID || (member.Retired && !protocol.Deref(msg.IncludeRetired)) {
 			continue
 		}
 		out = append(out, d.crewMemberWire(member, docs[member.ID].Rev))

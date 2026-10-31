@@ -7,7 +7,15 @@ import (
 )
 
 func (c *Client) CrewList() (*protocol.CrewListResult, error) {
-	resp, err := c.send(protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
+	return c.crewList(protocol.CrewListMessage{Cmd: protocol.CmdCrewList})
+}
+
+func (c *Client) CrewListAll() (*protocol.CrewListResult, error) {
+	return c.crewList(protocol.CrewListMessage{Cmd: protocol.CmdCrewList, IncludeRetired: protocol.Ptr(true)})
+}
+
+func (c *Client) crewList(msg protocol.CrewListMessage) (*protocol.CrewListResult, error) {
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -105,4 +113,37 @@ func (c *Client) CrewRename(member, name string) (*protocol.CrewRenameResult, er
 		return nil, fmt.Errorf("the daemon answered without a rename result")
 	}
 	return resp.CrewRenameResult, nil
+}
+
+func (c *Client) CrewCreate(name string) (*protocol.CrewCreateResult, error) {
+	resp, err := c.send(protocol.CrewCreateMessage{Cmd: protocol.CmdCrewCreate, Name: name})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewCreateResult == nil {
+		return nil, fmt.Errorf("the daemon answered without the new member")
+	}
+	return resp.CrewCreateResult, nil
+}
+
+func (c *Client) CrewRetire(member string) (*protocol.CrewRetireResult, error) {
+	resp, err := c.send(protocol.CrewRetireMessage{Cmd: protocol.CmdCrewRetire, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRetireResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a retirement result")
+	}
+	return resp.CrewRetireResult, nil
+}
+
+func (c *Client) CrewRestore(member string) (*protocol.CrewRestoreResult, error) {
+	resp, err := c.send(protocol.CrewRestoreMessage{Cmd: protocol.CmdCrewRestore, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewRestoreResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a restore result")
+	}
+	return resp.CrewRestoreResult, nil
 }

@@ -54,6 +54,12 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	if key, _ := to.Member(); !key.IsZero() {
+		if _, retired := d.retiredCrewMember(key.String()); retired {
+			d.sendError(conn, "you are retired, so the user takes no new asks from you; file your letter with `attn handoff`")
+			return
+		}
+	}
 	id, err := ask.NewID()
 	if err != nil {
 		d.sendError(conn, err.Error())

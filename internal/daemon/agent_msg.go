@@ -108,6 +108,13 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			address = d.inboxAddressOf(target.ID)
 		}
 	}
+	if key, _ := address.Member(); !key.IsZero() {
+		if retired, ok := d.retiredCrewMember(key.String()); ok {
+			result.Detail = retired.Name + " is retired"
+			d.replyAgentMsg(conn, result)
+			return
+		}
+	}
 	target := d.inboxHolder(address)
 	if target != nil {
 		result.TargetSessionID = target.ID

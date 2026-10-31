@@ -2800,6 +2800,25 @@ type CrewCharterSetResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type CrewCreateMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewCreateResult struct {
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+}
+
 type CrewDayClose string
 
 const CrewDayCloseNap CrewDayClose = "nap"
@@ -2961,6 +2980,9 @@ type CrewListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// IncludeRetired corresponds to the JSON schema field "include_retired".
+	IncludeRetired *bool `json:"include_retired,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
@@ -3021,6 +3043,9 @@ type CrewMember struct {
 
 	// ResolvedModel corresponds to the JSON schema field "resolved_model".
 	ResolvedModel *string `json:"resolved_model,omitempty,omitzero"`
+
+	// Retired corresponds to the JSON schema field "retired".
+	Retired bool `json:"retired"`
 
 	// Revision corresponds to the JSON schema field "revision".
 	Revision int `json:"revision"`
@@ -3100,6 +3125,65 @@ type CrewRenameResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type CrewRestoreMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewRestoreResult struct {
+	// AlreadyActive corresponds to the JSON schema field "already_active".
+	AlreadyActive bool `json:"already_active"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+}
+
+type CrewRetireMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewRetireResult struct {
+	// AlreadyRetired corresponds to the JSON schema field "already_retired".
+	AlreadyRetired bool `json:"already_retired"`
+
+	// ClosedAsks corresponds to the JSON schema field "closed_asks".
+	ClosedAsks []string `json:"closed_asks"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+
+	// ReleasedSeeds corresponds to the JSON schema field "released_seeds".
+	ReleasedSeeds []string `json:"released_seeds"`
+
+	// RemovedWatches corresponds to the JSON schema field "removed_watches".
+	RemovedWatches int `json:"removed_watches"`
+
+	// Sleep corresponds to the JSON schema field "sleep".
+	Sleep *CrewSleepResult `json:"sleep,omitempty,omitzero"`
+
+	// Unread corresponds to the JSON schema field "unread".
+	Unread int `json:"unread"`
 }
 
 type CrewSetMessage struct {
@@ -9039,6 +9123,9 @@ type Response struct {
 	// "crew_charter_set_result".
 	CrewCharterSetResult *CrewCharterSetResult `json:"crew_charter_set_result,omitempty,omitzero"`
 
+	// CrewCreateResult corresponds to the JSON schema field "crew_create_result".
+	CrewCreateResult *CrewCreateResult `json:"crew_create_result,omitempty,omitzero"`
+
 	// CrewHandoffGetResult corresponds to the JSON schema field
 	// "crew_handoff_get_result".
 	CrewHandoffGetResult *CrewHandoffGetResult `json:"crew_handoff_get_result,omitempty,omitzero"`
@@ -9058,6 +9145,12 @@ type Response struct {
 
 	// CrewRenameResult corresponds to the JSON schema field "crew_rename_result".
 	CrewRenameResult *CrewRenameResult `json:"crew_rename_result,omitempty,omitzero"`
+
+	// CrewRestoreResult corresponds to the JSON schema field "crew_restore_result".
+	CrewRestoreResult *CrewRestoreResult `json:"crew_restore_result,omitempty,omitzero"`
+
+	// CrewRetireResult corresponds to the JSON schema field "crew_retire_result".
+	CrewRetireResult *CrewRetireResult `json:"crew_retire_result,omitempty,omitzero"`
 
 	// CrewSetResult corresponds to the JSON schema field "crew_set_result".
 	CrewSetResult *CrewSetResult `json:"crew_set_result,omitempty,omitzero"`

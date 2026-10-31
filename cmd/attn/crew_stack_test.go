@@ -69,7 +69,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	})
 
 	s.Start()
-	requireStdout(t, s.Attn("crew", "list"), "No crew members are registered", "<name>/CHARTER.md")
+	requireStdout(t, s.Attn("crew", "list"), "No crew members in this profile", "attn crew create <name>")
 	s.Stop()
 	for _, name := range []string{"keel", "trellis"} {
 		writeCharter(t, s, name)
@@ -176,7 +176,50 @@ func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
 	if wake := asCaller(sideCaller, sideApp, "crew", "wake", "Keel"); wake.Code == 0 || !strings.Contains(wake.Stderr, `no crew member named "Keel" in profile "Side"`) {
 		t.Fatalf("wake of another profile's member: %+v", wake)
 	}
-	if list := asCaller(sideCaller, sideApp, "crew", "list"); list.Code != 0 || !strings.Contains(list.Stdout, "No crew members are registered") {
+	if list := asCaller(sideCaller, sideApp, "crew", "list"); list.Code != 0 || !strings.Contains(list.Stdout, "No crew members in this profile") {
 		t.Fatalf("Side roster: %+v", list)
+	}
+}
+
+func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	requireRefusals(t, s, []argvRefusal{
+		{args: []string{"crew", "create"}, want: "takes one member name"},
+		{args: []string{"crew", "create", "Keel", "extra"}, want: "takes one member name"},
+		{args: []string{"crew", "retire"}, want: "takes one member name"},
+		{args: []string{"crew", "restore", "Keel", "extra"}, want: "takes one member name"},
+	})
+	s.Start()
+	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: ", "attn crew wake Keel")
+	var created protocol.CrewMember
+	s.Attn("crew", "create", "Trellis", "--json").JSON(t, &created)
+	if created.ID != "trellis" || created.Name != "Trellis" {
+		t.Fatalf("created = %+v", created)
+	}
+	requireFailure(t, s.Attn("crew", "create", "keel"), "crew create: ", "Keel already exists")
+
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "released seeds: -", "removed watches: 0", "closed asks: -", "unread mail kept: 0", "attn crew restore Keel")
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel was already retired.")
+	if roster := crewRoster(t, s); len(roster) != 1 {
+		t.Fatalf("list without --all = %+v", roster)
+	}
+	if row := crewRow(t, s.Attn("crew", "list", "--all").Stdout, "Keel"); !strings.Contains(row, "retired") {
+		t.Fatalf("retired row = %q", row)
+	}
+	requireFailure(t, s.Attn("crew", "wake", "Keel"), "crew wake: ", "Keel is retired")
+	requireFailure(t, s.Attn("crew", "create", "Keel"), "crew create: ", "Keel is retired", "attn crew restore Keel")
+	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel is back.")
+	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel was not retired; nothing changed.")
+
+	var retired protocol.CrewRetireResult
+	s.Attn("crew", "retire", "Keel", "--json").JSON(t, &retired)
+	if !retired.Member.Retired || retired.AlreadyRetired {
+		t.Fatalf("retirement JSON = %+v", retired)
+	}
+	var restored protocol.CrewRestoreResult
+	s.Attn("crew", "restore", "Keel", "--json").JSON(t, &restored)
+	if restored.Member.Retired || restored.AlreadyActive {
+		t.Fatalf("restore JSON = %+v", restored)
 	}
 }

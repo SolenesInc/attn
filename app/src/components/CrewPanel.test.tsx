@@ -26,6 +26,7 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
     profile_id: DEFAULT_PROFILE_ID,
+    retired: false,
     resolved_agent: 'claude',
     ...values,
   };

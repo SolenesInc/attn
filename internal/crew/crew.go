@@ -34,6 +34,7 @@ type Member struct {
 	Key            who.MemberKey      `json:"-"`
 	Name           string             `json:"-"`
 	ProfileID      string             `json:"-"`
+	Retired        bool               `json:"-"`
 	CWD            string             `json:"cwd"`
 	Agent          string             `json:"agent"`
 	Model          string             `json:"model"`

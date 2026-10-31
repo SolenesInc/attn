@@ -5,16 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type CrewIdentity struct {
 	Key       string
 	ProfileID string
 	Name      string
+	Retired   bool
 }
 
 func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
@@ -23,7 +26,7 @@ func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
 	if s.db == nil {
 		return nil, profiles.Errorf(profiles.CodeUnavailable, "crew members need the SQLite store")
 	}
-	rows, err := s.db.Query(`SELECT member_key, profile_id, name FROM crew_members`)
+	rows, err := s.db.Query(`SELECT member_key, profile_id, name, retired_at != '' FROM crew_members`)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +34,7 @@ func (s *Store) CrewIdentities() (map[string]CrewIdentity, error) {
 	identities := make(map[string]CrewIdentity)
 	for rows.Next() {
 		var m CrewIdentity
-		if err := rows.Scan(&m.Key, &m.ProfileID, &m.Name); err != nil {
+		if err := rows.Scan(&m.Key, &m.ProfileID, &m.Name, &m.Retired); err != nil {
 			return nil, err
 		}
 		identities[m.Key] = m
@@ -79,6 +82,75 @@ func (s *Store) EnsureCrewMember(key, profileID string) (CrewIdentity, error) {
 		return startOnOwnDesktop(tx, now, "crew", key)
 	})
 	return identity, err
+}
+
+func (s *Store) CreateCrewMember(identity CrewIdentity) error {
+	if err := crew.ValidateName(identity.Name); err != nil {
+		return err
+	}
+	return s.profilesTx(func(tx *sql.Tx, now string) error {
+		if _, err := loadLiveProfile(tx, identity.ProfileID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO crew_members(member_key, profile_id, name) VALUES (?, ?, ?)`, identity.Key, identity.ProfileID, identity.Name); err != nil {
+			return err
+		}
+		return startOnOwnDesktop(tx, now, "crew", identity.Key)
+	})
+}
+
+func (s *Store) DeleteCrewMember(key string) error {
+	return s.profilesTx(func(tx *sql.Tx, _ string) error {
+		_, err := tx.Exec(`DELETE FROM crew_members WHERE member_key = ?`, key)
+		return err
+	})
+}
+
+type CrewRetirement struct {
+	AlreadyRetired bool
+	RemovedWatches int
+	ClosedAsks     []string
+}
+
+func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (CrewRetirement, error) {
+	var retirement CrewRetirement
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		result, err := tx.Exec(`UPDATE crew_members SET retired_at = ? WHERE member_key = ? AND retired_at = ''`, at.UTC().Format(time.RFC3339Nano), key.String())
+		if err != nil {
+			return err
+		}
+		changed, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		retirement.AlreadyRetired = changed == 0
+		result, err = tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id IN (SELECT id FROM sessions WHERE member_key = ?)`, key.String())
+		if err != nil {
+			return err
+		}
+		removed, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		retirement.RemovedWatches = int(removed)
+		retirement.ClosedAsks, err = closeAsksTo(tx, who.Member(key).Address())
+		return err
+	})
+	return retirement, err
+}
+
+func (s *Store) RestoreCrewMember(key string) (bool, error) {
+	restored := false
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		result, err := tx.Exec(`UPDATE crew_members SET retired_at = '' WHERE member_key = ? AND retired_at != ''`, key)
+		if err != nil {
+			return err
+		}
+		changed, err := result.RowsAffected()
+		restored = changed != 0
+		return err
+	})
+	return restored, err
 }
 
 func (s *Store) RenameCrewMember(key, name string) (previous string, err error) {

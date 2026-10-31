@@ -68,12 +68,15 @@ var Placements = map[string][]Placement{
 	"create_worktree_from_branch":      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
+	"crew_create":                      {Placement{LocatorHome, ""}},
 	"crew_handoff":                     {Placement{LocatorHome, ""}},
 	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
 	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
 	"crew_list":                        {Placement{LocatorHome, ""}},
 	"crew_prime":                       {Placement{LocatorHome, ""}},
 	"crew_rename":                      {Placement{LocatorHome, ""}},
+	"crew_restore":                     {Placement{LocatorHome, ""}},
+	"crew_retire":                      {Placement{LocatorHome, ""}},
 	"crew_set":                         {Placement{LocatorHome, ""}},
 	"crew_sleep":                       {Placement{LocatorHome, ""}},
 	"crew_wake":                        {Placement{LocatorHome, ""}},
@@ -739,6 +742,18 @@ func (m CrewCharterSetMessage) Locate() string {
 	return ""
 }
 
+func (CrewCreateMessage) CommandName() string {
+	return "crew_create"
+}
+
+func (m CrewCreateMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewCreateMessage) Locate() string {
+	return ""
+}
+
 func (CrewHandoffMessage) CommandName() string {
 	return "crew_handoff"
 }
@@ -808,6 +823,30 @@ func (m CrewRenameMessage) Placement() Placement {
 }
 
 func (m CrewRenameMessage) Locate() string {
+	return ""
+}
+
+func (CrewRestoreMessage) CommandName() string {
+	return "crew_restore"
+}
+
+func (m CrewRestoreMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewRestoreMessage) Locate() string {
+	return ""
+}
+
+func (CrewRetireMessage) CommandName() string {
+	return "crew_retire"
+}
+
+func (m CrewRetireMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewRetireMessage) Locate() string {
 	return ""
 }
 

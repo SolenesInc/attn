@@ -1563,6 +1563,11 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	protection foregroundCleanupProtection,
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
+	if verb == garden.VerbTend {
+		if retired, ok := d.retiredCrewMember(ask.Actor.Member); ok {
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, retiredMemberError(retired)
+		}
+	}
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(

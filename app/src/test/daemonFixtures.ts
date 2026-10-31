@@ -152,6 +152,7 @@ export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}
     home_dir: `/crew/${id}`,
     awareness_dirs: [],
     profile_id: DEFAULT_PROFILE_ID,
+    retired: false,
     resolved_agent: overrides.agent || 'claude',
     ...overrides,
   };

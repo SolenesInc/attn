@@ -6999,6 +6999,9 @@ model Response {
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
   crew_rename_result?: CrewRenameResult;
+  crew_create_result?: CrewCreateResult;
+  crew_retire_result?: CrewRetireResult;
+  crew_restore_result?: CrewRestoreResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -7115,6 +7118,8 @@ model AgentPeekResult {
 @extension("x-on", #{ home: true })
 model CrewListMessage {
   cmd: "crew_list";
+  // Retired members are left out unless this is true.
+  include_retired?: boolean;
   // The profile the request is asked from: the calling session's profile,
   // else this profile, else the connection's selected profile over WebSocket.
   // Member names resolve only inside it.
@@ -7130,6 +7135,9 @@ model CrewMember {
   id: string;
   // Unique in the member's profile, ignoring case; the user can change it.
   name: string;
+  // A retired member keeps its name, home and unread mail, takes no new mail
+  // or work, and does not wake until restored.
+  retired: boolean;
   profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
@@ -7363,6 +7371,59 @@ model CrewRenameResultMessage {
   success: boolean;
   error?: string;
   result?: CrewRenameResult;
+}
+
+// Add a crew member to the requester's profile. Its key comes from the name;
+// its home starts with an empty charter, which the member writes on its first
+// day. A name held by a retired member is refused with how to restore it.
+@extension("x-on", #{ home: true })
+model CrewCreateMessage {
+  cmd: "crew_create";
+  name: string;
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model CrewCreateResult {
+  member: CrewMember;
+}
+
+// Retire a crew member: it releases its claims (replanting each seed with a
+// note), drops its seed and pull request watches, closes its open asks, refuses
+// new mail and keeps its name taken. An awake member is asked to sleep. Retiring
+// again releases anything left and reports already_retired.
+@extension("x-on", #{ home: true })
+model CrewRetireMessage {
+  cmd: "crew_retire";
+  member: string;
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model CrewRetireResult {
+  member: CrewMember;
+  already_retired: boolean;
+  released_seeds: string[];
+  removed_watches: int32;
+  closed_asks: string[];
+  // Mail that arrived before retirement and waits for a restore.
+  unread: int32;
+  // The sleep request sent to the member's live session, when it was awake.
+  sleep?: CrewSleepResult;
+}
+
+// Restore a retired member. Its kept mail is delivered, which may wake it.
+@extension("x-on", #{ home: true })
+model CrewRestoreMessage {
+  cmd: "crew_restore";
+  member: string;
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model CrewRestoreResult {
+  member: CrewMember;
+  already_active: boolean;
 }
 
 // Ask an awake member to close its day and sleep. This is consented closure:

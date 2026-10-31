@@ -12,22 +12,21 @@ to by name.
 
 ## Add a member
 
-A member is a folder in Attn's data folder: `~/.attn/crew/<name>/` (for a named
-instance, `~/.attn-<instance>/crew/<name>/`), with a `CHARTER.md` inside.
+`attn crew create <name>` adds a member to your profile. A name is letters,
+digits and `-`, starting with a letter, at most 40 characters; `chief`, `attn`,
+`user` and `you` are taken. The member's home starts with an empty
+`CHARTER.md`: its first session agrees a charter with you, then writes the file
+in its own words.
 
-1. Pick a folder name: lowercase letters, digits and `-`, starting with a
-   letter, at most 40 characters. `attn` is taken. The folder name is the
-   member's permanent key; its name starts as the key with a capital letter,
-   so `fern` is Fern.
-2. Create `crew/<name>/CHARTER.md`. Leave it empty if you want the member to
-   write it: its first session agrees a name and charter with you, then
-   writes the file in its own words.
-3. Restart the daemon: `attn daemon stop`, then `attn daemon ensure`. Attn
-   adds new homes to the roster when the daemon starts.
+A home folder you make yourself also works: `~/.attn/crew/<key>/CHARTER.md`
+(for a named instance, `~/.attn-<instance>/crew/<key>/`), where the folder name
+is lowercase letters, digits and `-`. The daemon adds it to the roster at its
+next start (`attn daemon stop`, then `attn daemon ensure`). Its name starts as
+the key with a capital letter, so `fern` is Fern, and it joins the profile you
+used most recently.
 
-The member joins the profile you used most recently, and wakes only there.
-`attn crew list` shows the members of your profile, with their state,
-harness, model, launch desktop and home folder.
+A member wakes only in its profile. `attn crew list` shows the members of your
+profile, with their state, harness, model, launch desktop and home folder.
 
 A member's name is unique in its profile, ignoring case. Commands find a
 member by name in your profile: inside Attn, the profile of the session you
@@ -38,8 +37,9 @@ never changes.
 ## The Crew section
 
 The sidebar has a Crew section. In [queue flow](queue.md) it lists every
-member, asleep or awake. In desktop flow it lists the members who are asleep;
-awake members are tiles on their desktops.
+member that is not retired, asleep or awake. In desktop flow it lists the
+members who are asleep and not retired; awake members are tiles on their
+desktops.
 
 - A sleeping member's row shows a sun. Click it once to arm it and again to
   wake the member.
@@ -138,13 +138,20 @@ The member is asleep. Its next session starts from the last letter it filed, so 
 </details>
 
 <details>
-<summary>Can I rename or remove a member?</summary>
+<summary>Can I rename or retire a member?</summary>
 
 With Crew v2 on, rename a member with `attn crew rename <member> <name>` or
 **Rename** next to its name in Manage crew. Its key, home folder, letters,
-mail and seeds stay, and an awake member's agent takes the new name. Attn has
-no command to remove a member yet; the roster keeps every member it has
-imported.
+mail and seeds stay, and an awake member's agent takes the new name.
+
+`attn crew retire <member>` stops a member's work. The seeds they tend go back
+to planted, each with a note; their seed and pull request watches and open
+asks are removed; new mail to them is refused. An awake member is asked to
+file their letter and sleep, and that letter cannot start a next session.
+A retired member leaves the Crew section and `attn crew list` (`--all` shows
+them), does not wake, and does not stop you deleting their profile. Their home,
+letters, unread mail and name stay. `attn crew restore <member>` brings them
+back, and the mail they kept can wake them.
 </details>
 
 <details>

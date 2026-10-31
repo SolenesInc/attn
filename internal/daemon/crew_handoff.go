@@ -97,7 +97,7 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", member.Name, err)
 	}
-	if close != protocol.CrewDayCloseNap {
+	if close != protocol.CrewDayCloseNap || member.Retired {
 		if err := d.closeNappedSession(sessionID, teardown); err != nil {
 			d.cancelSessionTeardown(sessionID, teardown)
 			return nil, err

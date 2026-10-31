@@ -393,13 +393,13 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
+		identities, err := d.store.CrewIdentities()
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
 		members := 0
 		for _, member := range homes {
-			owner, err := d.store.CrewProfile(member.ID)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			if owner == msg.ProfileID {
+			if identity := identities[member.ID]; identity.ProfileID == msg.ProfileID && !identity.Retired {
 				members++
 			}
 		}

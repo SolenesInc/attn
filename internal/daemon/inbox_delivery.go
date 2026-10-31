@@ -242,6 +242,11 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil
 				}
+				if retired := (errRetiredMember{}); errors.As(err, &retired) {
+					state.wakeSession = ""
+					receipt.Detail = err.Error()
+					return receipt, nil
+				}
 				if err != nil {
 					state.wakeSession = ""
 					d.logf("inbox: wake %s refused: %v", a, err)
