@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -50,9 +51,12 @@ func (d *Daemon) outpostMachineReport() outpostMachine {
 	return report
 }
 
-func (d *Daemon) runningSessionTerminals(session protocol.SessionID) []harness.TerminalID {
+func (d *Daemon) runningSessionTerminals(session protocol.SessionID, removed ...harness.TerminalID) []harness.TerminalID {
 	running := []harness.TerminalID{}
 	for _, terminal := range d.terminalsOf(session) {
+		if slices.Contains(removed, terminal) {
+			continue
+		}
 		probe := d.recoveredTerminal(terminal)
 		if probe.Alive || probe.Error != "" {
 			running = append(running, terminal)

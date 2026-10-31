@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 )
@@ -59,12 +60,15 @@ func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	owner, _ := d.shownIn(t)
 	d.forgetTerminalTitle(t)
 	d.linkTerminalDropped(t)
+	var removed []harness.TerminalID
 	if err := d.removePTYSession(t); err != nil {
 		d.logf("removing the runtime of terminal %s: %v", t, err)
+	} else {
+		removed = append(removed, t)
 	}
 	if d.copiedSession(owner) {
 		d.life.Go("reportTerminalExit", func() {
-			_, err := Call[struct{}](d.life.Context(), d.router(), protocol.TerminalExitedMessage{Cmd: "terminal_exited", SessionID: owner, Running: d.runningSessionTerminals(owner)})
+			_, err := Call[struct{}](d.life.Context(), d.router(), protocol.TerminalExitedMessage{Cmd: "terminal_exited", SessionID: owner, Running: d.runningSessionTerminals(owner, removed...)})
 			if err != nil {
 				d.logf("reporting exit of terminal %s: %v; bridge recovery will reconcile it", t, err)
 			}
@@ -87,7 +91,9 @@ func (d *Daemon) terminalExited(ctx context.Context, msg protocol.TerminalExited
 	if origin, remote := OriginOf(ctx); remote && d.sessionHost(msg.SessionID) != origin.Host {
 		return struct{}{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
 	}
-	return struct{}{}, d.reconcileRemoteTerminals(ctx, msg.SessionID, msg.Running)
+	err := d.reconcileRemoteTerminals(ctx, msg.SessionID, msg.Running)
+	pausepoint.At(pausepoint.TerminalExitReconciled)
+	return struct{}{}, err
 }
 
 func (d *Daemon) reconcileRemoteTerminals(ctx context.Context, session protocol.SessionID, running []harness.TerminalID) error {

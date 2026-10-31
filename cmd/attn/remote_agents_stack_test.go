@@ -589,6 +589,11 @@ func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *
 			if offline {
 				exitHandled = outpost.PauseAt(pausepoint.PtyExitHandled)
 			}
+			var removeReplied, exitReconciled *testworld.Pause
+			if !offline {
+				removeReplied = outpost.PauseAt(pausepoint.PtyRemoveReplied)
+				exitReconciled = home.PauseAt(pausepoint.TerminalExitReconciled)
+			}
 			var reported, applied *testworld.Pause
 			if reload {
 				reported = home.PauseEvery(pausepoint.OutpostRecoveryReported)
@@ -625,6 +630,20 @@ func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *
 			}
 			mark := len(app.Log())
 			second.Exit(0)
+			if !offline {
+				removeReplied.Await()
+				exitReconciled.Await()
+				snapshot := home.App()
+				bindings := snapshot.Initial.TerminalBindings
+				snapshot.Close()
+				exitReconciled.Release()
+				removeReplied.Release()
+				for _, binding := range bindings {
+					if string(binding.TerminalID) == second.SessionID {
+						t.Fatalf("home kept exited terminal %s after reconciling its exit while its worker was still shutting down", second.SessionID)
+					}
+				}
+			}
 			if offline {
 				exitHandled.Await()
 				exitHandled.Release()

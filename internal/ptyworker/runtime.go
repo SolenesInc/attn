@@ -1237,6 +1237,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			return
 		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
+		pausepoint.At(pausepoint.PtyRemoveReplied)
 	case MethodWatch:
 		c.runtime.deliverMu.Lock()
 		defer c.runtime.deliverMu.Unlock()
