@@ -51,9 +51,9 @@ const usage = `usage: go tool test-history <command>
   report [--receipts <dir>] [--source <text>] [--dormant-after <n>]
          [--format table|markdown|json] [--main <ref>]
       Rank the tests that failed on clean commits of <ref> (default
-      origin/main): a flake also passed on the commit of its last failure; an
-      unresolved failure did not. Passes since counts the commits where the
-      test passed after its last failure; from --dormant-after (default 60) on,
+      origin/main): a flake also passed, failed cases included, on the commit
+      of its last failure; an unresolved failure did not. Passes since counts
+      the commits where the test passed after its last failure; from --dormant-after (default 60) on,
       a flake is dormant. Reads the spool, or every receipt under --receipts.
       --source describes where the receipts came from in the header.
   replay --from <rev> [--main <ref>] [--machine <class>]

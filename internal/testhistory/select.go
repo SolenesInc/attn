@@ -135,12 +135,10 @@ func Select(request SelectRequest) Selection {
 		order = append(order, unit)
 		return choice
 	}
-	runners := map[Runner]bool{}
 	for _, group := range request.Groups {
 		selection.Groups = append(selection.Groups, group.Name)
 		for _, unit := range group.Units {
 			choose(unit).Baseline = true
-			runners[UnitRunner(unit)] = true
 		}
 	}
 	if len(request.Groups) == 0 {
@@ -150,9 +148,7 @@ func Select(request SelectRequest) Selection {
 		choose(unit).Changed = true
 	}
 	for _, unit := range request.Health.FailureUnits() {
-		if runners[UnitRunner(unit)] || UnitRunner(unit) == RunnerNative {
-			choose(unit)
-		}
+		choose(unit)
 	}
 	for _, unit := range order {
 		choice := choices[unit]

@@ -23,13 +23,13 @@ func (h Health) FailureRecords() []FailureRecord {
 			}
 			standing, _ := h.laneStanding(lane, revisions)
 			record := FailureRecord{Unit: unit, Lane: lane, LastFailure: standing.Anchor.Commit, PassesSince: standing.PassesSince, Cases: standing.Anchor.Cases, Receipts: standing.Anchor.Evidence,
-				LastFlaky: revisions[standing.Anchor.Position].passedCases[""]}
+				LastFlaky: revisions[standing.Anchor.Position].alsoPassed()}
 			for _, outcome := range revisions {
 				if !outcome.failed() {
 					continue
 				}
 				record.FailedCommits++
-				if outcome.passedCases[""] {
+				if outcome.alsoPassed() {
 					record.FlakyCommits++
 				}
 			}
@@ -50,4 +50,14 @@ func (h Health) FailureRecords() []FailureRecord {
 		return a.Lane < b.Lane
 	})
 	return records
+}
+
+func (o *revisionOutcome) alsoPassed() bool {
+	var cases []string
+	for name := range o.failedCases {
+		if name != "" {
+			cases = append(cases, name)
+		}
+	}
+	return covers(o, cases)
 }

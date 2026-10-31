@@ -164,9 +164,9 @@ groups whose path pattern matched the change. It runs:
   files (those `include` in `app/vite.config.ts` names) and Playwright files
   (`app/e2e/**/*.spec.ts`);
 - every test that failed on `main` and has since passed there, on at least one
-  and fewer than 30 later main revisions in the lane where it failed, when a
-  matched group runs its runner. A test still red on `main`, with no pass
-  since its last failure, is listed as `RED` and not run: the sheriff owns it.
+  and fewer than 30 later main revisions in the lane where it failed, whatever
+  its runner. A test still red on `main`, with no pass since its last failure,
+  is listed as `RED` and not run: the sheriff owns it.
 
 It runs them through `scripts/landing-tests.sh --unit`, and any failure stops
 the push.
@@ -293,8 +293,9 @@ the machine that lands.
 `origin/main`, from the same health evidence as selection. An entry is a unit
 in one lane:
 
-- A **flake** also passed on the commit of its last failure in that lane: in a
-  retry, or in another run of that commit.
+- A **flake** also passed on the commit of its last failure in that lane, in a
+  retry or in another run of that commit, including each case that failed. A
+  run that passed only other cases of the test does not make it a flake.
 - An **unresolved** failure did not: a break, fixed or not, or a flake nobody
   ran again. Its earlier failures do not make it a flake.
 - **Passes since** counts the commits of `main` where the test passed afresh

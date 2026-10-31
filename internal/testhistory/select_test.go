@@ -245,6 +245,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	history := []th.Receipt{
 		receipt(on(at(1), linux), result(cleared, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
 		receipt(on(at(1), linux), result(elsewhere, th.Fail)),
+		receipt(on(at(2), linux), result(elsewhere, th.Pass)),
 		receipt(on(at(2), linux), result(recent, th.Fail)),
 		receipt(on(at(2), linux), result(red, th.Pass)),
 		receipt(on(at(3), linux), result(red, th.Fail)),
@@ -261,11 +262,11 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	}
 	selection := th.Select(request)
 	want := map[string]th.Status{
-		a: th.Selected, b: th.Selected, changed: th.Selected, recent: th.Selected, red: th.Red,
+		a: th.Selected, b: th.Selected, changed: th.Selected, recent: th.Selected, red: th.Red, elsewhere: th.Selected,
 		cleared: th.Cleared, gone: th.Missing, scenario: th.Unavailable,
 	}
 	if got := statuses(selection); !reflect.DeepEqual(got, want) {
-		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native failure is unavailable and a test gone from the checkout missing; a Go failure waits for a group that runs Go", got, want, n-1, n, n)
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native failure is unavailable and a test gone from the checkout missing; a Go failure that has passed since joins an app-only landing", got, want, n-1, n, n)
 	}
 	for _, choice := range selection.Choices {
 		if choice.Unit == recent && choice.PassesLeft() != 1 {

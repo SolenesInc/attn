@@ -16,6 +16,7 @@ for n in 1 2 3; do
 done
 
 unit() { printf 'go ./internal/example %s' "$1"; }
+case_result() { jq -nc --arg unit "$(unit "$1")" --arg case "$2" --arg outcome "$3" '{unit: $unit, case: $case, attempt: 1, outcome: $outcome}'; }
 result() { jq -nc --arg unit "$(unit "$1")" --argjson attempt "$2" --arg outcome "$3" --argjson cached "${4:-false}" \
   '{unit: $unit, attempt: $attempt, outcome: $outcome, cached: $cached}'; }
 artifact() {
@@ -32,13 +33,15 @@ artifact() {
   (cd "$work/receipt-$run" && zip -qr "$work/gh/zip-$run.zip" .)
 }
 
-artifact 901 "${commit[1]}" "$(result TestFlaky 1 fail)" "$(result TestFlaky 2 pass)" \
+artifact 900 "${commit[1]}" "$(case_result TestSubcase TestSubcase/other pass)" "$(result TestSubcase 1 pass)"
+artifact 901 "${commit[1]}" "$(case_result TestSubcase TestSubcase/broken fail)" "$(result TestSubcase 1 fail)" "$(result TestFlaky 1 fail)" "$(result TestFlaky 2 pass)" \
   "$(result TestBroken 1 fail)" "$(result TestSkipped 1 skip)" "$(result TestRelapsed 1 fail)" "$(result TestRelapsed 2 pass)"
 artifact 902 "${commit[2]}" "$(result TestFlaky 1 pass)" "$(result TestBroken 1 pass true)" "$(result TestRelapsed 1 pass)"
 artifact 903 "${commit[3]}" "$(result TestFlaky 1 pass)" "$(result TestBroken 1 pass)" "$(result TestRelapsed 1 fail)" "$(result TestRelapsed 2 fail)"
 artifact 904 "${commit[3]}" "$(result TestHidden 1 fail)"
 
 listing() { printf '{"artifacts":[{"id":%s,"name":"%s","expired":%s}]}\n' "$2" "$3" "$4" >"$work/gh/artifacts-$1.json"; }
+listing 900 900 test-receipts-packages-1 false
 listing 901 901 test-receipts-packages-1 false
 listing 902 902 test-receipts-packages-1 false
 listing 903 903 test-receipts-packages-1 false
@@ -47,7 +50,8 @@ listing 905 9050 app-acceptance-digest-1 false
 cat >"$work/gh/runs.json" <<'EOF'
 [{"databaseId":906,"status":"in_progress"},{"databaseId":905,"status":"completed"},
  {"databaseId":904,"status":"completed"},{"databaseId":903,"status":"completed"},
- {"databaseId":902,"status":"completed"},{"databaseId":901,"status":"completed"}]
+ {"databaseId":902,"status":"completed"},{"databaseId":901,"status":"completed"},
+ {"databaseId":900,"status":"completed"}]
 EOF
 
 cat >"$work/bin/gh" <<EOF
@@ -85,12 +89,12 @@ short() { git rev-parse --short=9 "$1"; }
 
 out="$(run_report --format json --dormant-after 2)"
 records="$(jq -c '[.failures[] | [.unit, .flaky_commits, .failed_commits, .passes_since]]' <<<"$out")"
-[ "$records" = '[["go ./internal/example TestRelapsed",1,2,0],["go ./internal/example TestFlaky",1,1,2],["go ./internal/example TestBroken",0,1,1]]' ] \
-  || fail "records: $records; a retry's pass makes a flake, a cached pass clears nothing, a skip or an expired artifact is no result"
-expect "$(jq -r .source <<<"$out")" "the last 5 completed ci.yml runs of example/attn (3 read, 1 expired, 0 unreadable; 1 runs uploaded none)"
+[ "$records" = '[["go ./internal/example TestRelapsed",1,2,0],["go ./internal/example TestFlaky",1,1,2],["go ./internal/example TestBroken",0,1,1],["go ./internal/example TestSubcase",0,1,0]]' ] \
+  || fail "records: $records; a retry's pass makes a flake, a cached pass clears nothing, a skip or an expired artifact is no result, and another case passing on the commit makes no flake of a failed case"
+expect "$(jq -r .source <<<"$out")" "the last 6 completed ci.yml runs of example/attn (4 read, 1 expired, 0 unreadable; 1 runs uploaded none)"
 
 out="$(run_report --dormant-after 2)"
-expect "$out" "3 receipts from 3 CI runs; 3 commits of main from $(short "${commit[1]}") to $(short "${commit[3]}")"
+expect "$out" "4 receipts from 4 CI runs; 3 commits of main from $(short "${commit[1]}") to $(short "${commit[3]}")"
 expect "$(sed -n '/^DORMANT/,/^$/p' <<<"$out")" "TestFlaky"
 expect "$(sed -n '/^UNRESOLVED/,$p' <<<"$out")" "TestBroken"
 expect "$(sed -n '/^UNRESOLVED/,$p' <<<"$out")" "TestRelapsed"
@@ -105,12 +109,12 @@ expect "$(sed -n '/^## Active/,/^## /p' <<<"$out")" "| 1 | 1 | 2 | $(short "${co
 refuse "$out" "## Dormant"
 
 out="$(FAKE_GH_DOWNLOADS_FAIL=1 run_report --format json 2>/dev/null)"
-[ "$(jq '.failures | length' <<<"$out")" -eq 3 ] || fail "cached artifacts were not read again: $out"
+[ "$(jq '.failures | length' <<<"$out")" -eq 4 ] || fail "cached artifacts were not read again: $out"
 
 rm -rf "$work/cache"
 out="$(FAKE_GH_DOWNLOADS_FAIL=1 run_report --format json 2>"$work/stderr")"
 expect "$(cat "$work/stderr")" "HTTP 401"
-expect "$(jq -r .source <<<"$out")" "(0 read, 1 expired, 3 unreadable; 1 runs uploaded none)"
+expect "$(jq -r .source <<<"$out")" "(0 read, 1 expired, 4 unreadable; 1 runs uploaded none)"
 [ "$(jq '.failures | length' <<<"$out")" -eq 0 ] || fail "an unreadable artifact produced records: $out"
 
 echo "ci-flake-report: all tests passed"

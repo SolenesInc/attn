@@ -146,7 +146,7 @@ func printFailureMarkdown(out io.Writer, r failureReport) {
 		fmt.Fprintf(out, " %d receipts skipped (%s).", count, reason)
 	}
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, "- A test is a **flake** when it also passed on the commit of its last failure, in a retry or another run. Otherwise it is unresolved, whatever its earlier failures did; **Flaky commits** counts the failures that also passed.")
+	fmt.Fprintln(out, "- A test is a **flake** when it also passed on the commit of its last failure, in a retry or another run, including each case that failed. Otherwise it is unresolved, whatever its earlier failures did; **Flaky commits** counts the failures that also passed.")
 	fmt.Fprintf(out, "- **Passes since** counts the commits of main where the test passed after its last failure. Past %d, an entry is dormant.\n", r.DormantAfter)
 	fmt.Fprint(out, "- A test that did not run on a commit says nothing about it; silence never clears a failure.\n\n")
 	active, dormant, unresolved := r.sections()

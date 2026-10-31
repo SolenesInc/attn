@@ -165,8 +165,8 @@ re-land seed.
   that arrives behind a newer one concludes `cancelled` with no jobs, so a red
   run covers every commit since the last green one.
 - Landings list a test that is still red on `main` and do not run it; it is
-  yours. Once it passes on `main` it runs in every landing whose groups run
-  its runner until it has passed on 30 later `main` commits.
+  yours. Once it passes on `main` it runs in every landing that runs landing
+  tests until it has passed on 30 later `main` commits.
 - "is not on this daemon" from `attn agent msg` means the session is gone:
   plant the re-land seed.
 - This clone holds no work: never commit in it.

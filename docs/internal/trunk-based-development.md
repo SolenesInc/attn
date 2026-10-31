@@ -50,7 +50,7 @@ runs of CI and of every machine; land.sh syncs it before it chooses and again
 after it pushes. [Test history](test-history.md) is the specification.
 
 - A test that fails on a clean commit of `main`, in CI or on any machine,
-  joins every landing whose groups run its runner once it has passed on `main`
+  joins every landing that runs landing tests once it has passed on `main`
   again. Until then it is red: landings list it and leave it to the sheriff,
   so it blocks no landing unless it is in the baseline or the landing changes
   it.
