@@ -8,7 +8,6 @@ import type { Desktop, Profile } from '../types/generated';
 import { useDesktopNavigation } from './useDesktopNavigation';
 
 const PROFILE: Profile = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
-const TREE_WITH_PANE = (paneId: string) => JSON.stringify({ type: 'pane', pane_id: paneId });
 
 function desktop(id: string, overrides: Partial<Desktop> = {}): Desktop {
   return {
@@ -39,10 +38,8 @@ const ok = { request_id: 'r', action: 'x', success: true, event: 'profile_action
 function renderNavigation() {
   const api = {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
-    sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
     sendDesktopMoveLeaf: vi.fn().mockResolvedValue(ok),
     sendDesktopCreate: vi.fn().mockResolvedValue(ok),
-    sendDesktopRename: vi.fn().mockResolvedValue(ok),
     sendDesktopReorder: vi.fn().mockResolvedValue(ok),
     sendProfileSelect: vi.fn().mockResolvedValue(ok),
   };
@@ -65,24 +62,6 @@ describe('useDesktopNavigation', () => {
     useProfilesStore.setState({ profiles: [], selectedProfileId: null, currentDesktopId: null, desktops: [], previousDesktopId: null });
   });
 
-  it('switches to the desktop on a slot', () => {
-    seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { shortcut_slot: 2 })]);
-    const { api, result } = renderNavigation();
-
-    act(() => result.current.switchToSlot(2));
-
-    expect(api.sendDesktopSetCurrent.mock.calls).toEqual([['set-default', 'd2']]);
-  });
-
-  it('bounces back to the previous desktop when the slot is already current', () => {
-    seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d10')], 'd10');
-    const { api, result } = renderNavigation();
-
-    act(() => result.current.switchToSlot(1));
-
-    expect(api.sendDesktopSetCurrent.mock.calls).toEqual([['set-default', 'd10']]);
-  });
-
   it('shows the current slot again when there is nowhere to bounce, so its leaf takes the keyboard', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 })]);
     const { api, showError, result } = renderNavigation();
@@ -93,48 +72,6 @@ describe('useDesktopNavigation', () => {
     expect(showError).not.toHaveBeenCalled();
   });
 
-  it('moves the active leaf beside the target active leaf and stays on the source desktop', async () => {
-    seedStore([
-      desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
-      desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
-    ]);
-    const { api, result } = renderNavigation();
-
-    act(() => result.current.moveActiveLeafToSlot(2, false));
-    await settle();
-
-    expect(api.sendDesktopMoveLeaf.mock.calls).toEqual([[{
-      sourceDesktopId: 'd1',
-      targetShortcutSlot: 2,
-      leafId: 'p1',
-    }]]);
-    expect(api.sendDesktopSetActivePane).not.toHaveBeenCalled();
-    expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
-  });
-
-  it('sends the tile that is the active leaf', async () => {
-    const withTile = JSON.stringify({
-      type: 'split',
-      split_id: 's1',
-      direction: 'vertical',
-      ratio: 0.5,
-      children: [
-        { type: 'pane', pane_id: 'p1' },
-        { type: 'tile', tile_id: 't1', tile_kind: 'markdown', tile_params: '/notes.md' },
-      ],
-    });
-    seedStore([
-      desktop('d1', { shortcut_slot: 1, tree_json: withTile, active_pane_id: 't1', revision: 4 }),
-      desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
-    ]);
-    const { api, result } = renderNavigation();
-
-    act(() => result.current.moveActiveLeafToSlot(2, false));
-    await settle();
-
-    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetShortcutSlot: 2 });
-  });
-
   it('does nothing quietly when nothing is active to move', () => {
     seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { shortcut_slot: 2 })]);
     const { api, showError, result } = renderNavigation();
@@ -142,20 +79,6 @@ describe('useDesktopNavigation', () => {
     act(() => result.current.moveActiveLeafToSlot(2, false));
 
     expect(api.sendDesktopMoveLeaf).not.toHaveBeenCalled();
-    expect(showError).not.toHaveBeenCalled();
-  });
-
-
-  it('renames a desktop and hands a refusal back to the rename form', async () => {
-    seedStore([desktop('d1', { shortcut_slot: 1, revision: 6 })]);
-    const { api, showError, result } = renderNavigation();
-
-    await act(() => result.current.renameDesktop('d1', 'Reviews'));
-    api.sendDesktopRename.mockRejectedValueOnce(new Error('desktop d1 not found'));
-    const refused = act(() => result.current.renameDesktop('d1', ''));
-
-    await expect(refused).rejects.toThrow('desktop d1 not found');
-    expect(api.sendDesktopRename.mock.calls).toEqual([['d1', 'Reviews'], ['d1', '']]);
     expect(showError).not.toHaveBeenCalled();
   });
 

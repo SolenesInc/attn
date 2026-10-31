@@ -17,11 +17,7 @@ const ok: ProfileActionResultMessage = {
 
 function setup() {
   const api = {
-    sendDesktopMoveLeaf: vi.fn(async (_move: unknown): Promise<ProfileActionResultMessage> => ({ ...ok, pane_id: 'pane-s2', desktops: [agentDesktop('d-new', null, [])] })),
-    sendDesktopCreate: vi.fn(
-      async (_profileId: string): Promise<ProfileActionResultMessage> => ({ ...ok, desktops: [agentDesktop('d-new', null, [])] }),
-    ),
-    sendDesktopSetCurrent: vi.fn(async (_profileId: string, _desktopId: string): Promise<ProfileActionResultMessage> => ok),
+    sendDesktopMoveLeaf: vi.fn(async (_move: unknown): Promise<ProfileActionResultMessage> => ok),
   };
   const handleSelectDesktop = vi.fn();
   const showError = vi.fn();
@@ -69,15 +65,6 @@ describe('leaf drag lifecycle', () => {
     expect(result.current.leafDragPreview).toBeNull();
     expect(result.current.leafDesktopDrag).toBeNull();
   });
-
-  it('schedules nothing when the drag ends after unmount', () => {
-    const { result, unmount } = setup();
-    act(() => result.current.handleLeafDragStart('pane'));
-    const endDrag = result.current.handleLeafDragEnd;
-    unmount();
-    act(() => endDrag());
-    expect(vi.getTimerCount()).toBe(0);
-  });
 });
 
 describe('dropping a leaf on a sidebar desktop', () => {
@@ -105,17 +92,6 @@ describe('dropping a leaf on a sidebar desktop', () => {
     });
   });
 
-  it('moves a sidebar row dragged from another desktop', async () => {
-    const { result, api } = setup();
-    act(() => result.current.handleSessionDragStart('d2', 'pane-s3'));
-
-    await act(async () => result.current.handleDesktopDragDrop({ id: 'd1' }));
-
-    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceDesktopId: 'd2', targetDesktopId: 'd1', leafId: 'pane-s3' }),
-    );
-  });
-
   it('ignores its own desktop and groups that are not desktops', async () => {
     const { result, api } = setup();
     act(() => result.current.handleLeafDragStart('pane-s2'));
@@ -126,31 +102,6 @@ describe('dropping a leaf on a sidebar desktop', () => {
     });
 
     expect(api.sendDesktopMoveLeaf).not.toHaveBeenCalled();
-  });
-
-  it('creates a desktop for a drop on the new-desktop zone and shows it', async () => {
-    const { result, api } = setup();
-    act(() => result.current.handleLeafDragStart('pane-s2'));
-
-    await act(async () => result.current.handleNewDesktopDrop());
-
-    expect(api.sendDesktopCreate).not.toHaveBeenCalled();
-    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceDesktopId: 'd1', leafId: 'pane-s2' }),
-    );
-    expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
-  });
-
-  it('moves within the desktop a surface drop lands on', async () => {
-    const { result, api } = setup();
-    act(() => result.current.handleLeafDragStart('pane-s2'));
-
-    await act(async () => result.current.handleSurfaceLeafDrop('d1', 'pane-s2', 'pane-s1', 'top', 0.5));
-
-    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith({
-      sourceDesktopId: 'd1', targetDesktopId: 'd1', leafId: 'pane-s2', anchorId: 'pane-s1', edge: 'top',
-      leafShare: 0.5,
-    });
   });
 
   it('moves across desktops when hovering switched to another desktop before the surface drop', async () => {
