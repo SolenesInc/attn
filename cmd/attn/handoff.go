@@ -16,8 +16,8 @@ func writeHandoffHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn handoff -m "<your letter>"
 
 File the letter closing this crew member's session. You write it; attn files it into
-the active instance's crew directory under <member>/handoffs/, with a UTC-stamped
-name, and never edits the prose. A correction is a new letter.
+handoffs/ in the member's home, with a UTC-stamped name, and never edits the
+prose. A correction is a new letter.
 
 Plain handoff ends the session and the member sleeps until something wakes it,
 whether or not the user is at the machine. --nap reloads the member by ending

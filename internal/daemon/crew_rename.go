@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
@@ -52,6 +53,11 @@ func (d *Daemon) renameCrewMember(asked crew.Member, name string) (previous stri
 			d.publishFact(FactCrewUpdated, asked.ID, nil)
 		}
 		return previous, nil, err
+	}
+	if holder, taken, err := d.crewMemberIn(asked.ProfileID, name); err != nil {
+		return "", nil, err
+	} else if taken && holder.ID != asked.ID {
+		return "", nil, fmt.Errorf("the name %q is already taken by %s in this profile", name, holder.Name)
 	}
 	member, doc, err := d.crewMember(asked.ID)
 	if err != nil {

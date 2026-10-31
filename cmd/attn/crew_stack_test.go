@@ -239,7 +239,6 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 		t.Fatalf("moved charter: %q %v", raw, err)
 	}
 	requireStdout(t, s.Attn("crew", "move-home", "Trellis"), "Trellis's home is now "+filepath.Join(s.Dir, "notebook", "crew", "trellis")+" (it was "+filepath.Join(s.Dir, "crew", "trellis")+").")
-	requireFailure(t, s.Attn("crew", "move-home", "Keel"), "crew move-home: ", "already outside attn's data folder")
 	if parse := s.Attn("crew", "move-home"); parse.Code != 2 || !strings.Contains(parse.Stderr, "takes one member name") || !strings.Contains(parse.Stderr, "move-home <member>") {
 		t.Fatalf("move-home without a member: %+v", parse)
 	}

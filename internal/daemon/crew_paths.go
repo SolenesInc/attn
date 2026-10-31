@@ -49,9 +49,6 @@ func (d *Daemon) crewHomeFence(member crew.Member) (string, error) {
 	if member.InDataDir() {
 		return d.resolvedCrewRoot()
 	}
-	if !filepath.IsAbs(member.Home) {
-		return "", fmt.Errorf("refusing crew member %s: its recorded home %q is not an absolute path", member.Name, member.Home)
-	}
 	if err := config.RequireWithinHarness(member.Name+"'s crew home", member.Home); err != nil {
 		return "", err
 	}
