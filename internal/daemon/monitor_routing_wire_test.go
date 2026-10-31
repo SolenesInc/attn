@@ -21,15 +21,22 @@ func TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter(t *testing.T) 
 	applyAutomation(t, cli, manualAutomation(w, "Check the code."))
 	awaitAutomationChanged(app, 1)
 	w.RequireEnterAtNextBoot("Do you trust the contents of this directory?")
-	result := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "trust"}, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("trust"))
-	if !result.Success {
+	boot := w.HoldNextBoot()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "trust"})
+	w.AwaitHeldBoot()
+	runs := automationRuns(t, cli, 1)
+	boot()
+	if len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("automation runs while the agent boots = %+v, want one pending run", runs)
+	}
+	run := awaitRunState(t, w, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if run.State != "delivered" {
+		t.Fatalf("automation run = %+v, want delivered", run)
+	}
+	if result := awaitAutomationRunResult(app, "trust"); !result.Success {
 		t.Fatalf("automation launch = %+v", result)
 	}
-	runs := automationRuns(t, cli, 1)
-	if len(runs) != 1 || runs[0].State != "delivered" {
-		t.Fatalf("automation runs = %+v, want one delivered run", runs)
-	}
-	agent := w.Launched(string(protocol.Deref(runs[0].SessionID)))
+	agent := w.Launched(string(protocol.Deref(run.SessionID)))
 	if prompt := agent.Prompted(); !strings.Contains(prompt, "Check the code.") {
 		t.Fatalf("automation prompt = %q", prompt)
 	}
