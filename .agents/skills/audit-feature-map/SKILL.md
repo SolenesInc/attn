@@ -103,8 +103,9 @@ The automation's folder is the control checkout. It holds no work.
    `attn agent list` still lists the `session` its `pass.env` names, that
    session owns the pass, perhaps waiting on the user: touch nothing of it.
    Ask the user with `attn ask` to answer or close that session, naming it
-   and the pass's stake, then wither your stake with that reason and stop.
-   Otherwise [Recover](#recover) the pass.
+   and the pass's stake, and end your turn with your stake open: an ask
+   closes with its seed or its session. When the answer arrives, run Start
+   again. Otherwise [Recover](#recover) the pass.
 3. With no pass folder, start a pass. This writes the pass's env file, which
    later commands source:
 
