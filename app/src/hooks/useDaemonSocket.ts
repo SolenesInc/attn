@@ -1,5 +1,5 @@
 import { handleCalloutDaemonEvent } from './daemonCalloutEvents';
-import { clearHarnesses } from './useHarnesses';
+import { refreshHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { normalizeInstallChannel } from '../utils/installChannel';
@@ -1137,7 +1137,7 @@ export function useDaemonSocket({
           case 'initial_state':
             setHomeBuild(data.home_build ?? '');
             clearHarnessModelCatalogs();
-            clearHarnesses();
+            refreshHarnesses();
             useDelegationPreferencesPush.getState().push();
             if (
               data.daemon_instance_id &&
@@ -2010,7 +2010,7 @@ export function useDaemonSocket({
             settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
             if (data.settings) {
               if (harnessRegistrySignature(settingsRef.current) !== harnessRegistrySignature(data.settings)) {
-                clearHarnesses();
+                refreshHarnesses();
                 clearHarnessModelCatalogs();
               }
               settingsRef.current = data.settings;
@@ -2031,7 +2031,7 @@ export function useDaemonSocket({
             const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.installation_state, plugin.connected, plugin.availability, plugin.runtime_state, plugin.health_status]));
             if (signature !== harnessPluginSignatureRef.current) {
               harnessPluginSignatureRef.current = signature;
-              clearHarnesses();
+              refreshHarnesses();
               clearHarnessModelCatalogs();
             }
             callbacksRef.current.onPluginsUpdate?.(plugins, issues);

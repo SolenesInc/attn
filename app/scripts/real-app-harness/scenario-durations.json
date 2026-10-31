@@ -62,6 +62,14 @@
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=20164 including cleanup. Covers native desktop shortcut followed immediately by typing, outgoing-shell exclusion, bounce, overview, another client, and tile moves. Remeasure on Linux CI."
       },
+      "refresh-focus": {
+        "run": "refresh-focus-2026-10-31T02-16-06-517Z",
+        "job": "Local packaged scenario, busyfocus named instance",
+        "recordedAt": "2026-10-31",
+        "seconds": 48.357,
+        "runnerClass": "local macOS",
+        "note": "Run 20 of a 20/20 green local soak (28-74s, most of it app launch). Holds Claude model discovery at a file gate while checking focus on the crew launch route through a reconnect and on keyboard-pressed model Refresh buttons. Remeasure on Linux CI."
+      },
       "crew-management": {
         "run": "crew-management-2026-10-10T21-35-13-264Z",
         "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
@@ -446,6 +454,7 @@
     "desktop-splits": 45.7,
     "worktree-surface": 25.748,
     "crew-management": 55.269,
+    "refresh-focus": 48.357,
     "clear-opens-session": 15.0,
     "claude-shared-conversation": 47.2,
     "pi-shared-conversation": 20.6,

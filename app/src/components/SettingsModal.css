@@ -425,6 +425,11 @@
   opacity: 0.48;
 }
 
+.settings-action[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.48;
+}
+
 .settings-action.danger {
   color: #ff746c;
   border-color: rgba(255, 116, 108, 0.38);

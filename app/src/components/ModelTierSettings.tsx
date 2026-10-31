@@ -40,7 +40,7 @@ function HarnessTiers({ harness, entries, setTier, remove }: { harness: Harness;
     return model?.name || model?.id || `none found, ${harness.name} decides`;
   };
   return <section className="settings-block" aria-label={`${harness.name} models`}>
-    <div className="model-tier-header"><h3>{harness.name}</h3>{harness.discovery && <button type="button" className="settings-action quiet" disabled={view.loading} onClick={() => view.discover(true)}>Refresh</button>}</div>
+    <div className="model-tier-header"><h3>{harness.name}</h3>{harness.discovery && <button type="button" className="settings-action quiet" aria-busy={view.loading} onClick={() => view.discover(true)}>Refresh</button>}</div>
     <div className="model-tier-defaults"><span>Light default → {defaultName(ModelTier.Light)}</span><span>Deep default → {defaultName(ModelTier.Deep)}</span></div>
     {view.error && <div className="settings-warning" role="alert">{view.error}</div>}
     {!harness.discovery && <p className="settings-description">This harness does not report a model catalog.</p>}

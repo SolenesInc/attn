@@ -133,7 +133,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
       {preview && !rules.harnesses.some(harness => harness.id === preview) && <button type="button" role="option" aria-selected disabled>{preview} (not offered here)</button>}
     </div>}
     <div className="route-popover-main">
-      <div className="route-kicker"><span>Model</span>{view.harness && view.harness.discovery !== false && <button type="button" onClick={() => view.discover(true)} disabled={view.loading}>Refresh</button>}</div>
+      <div className="route-kicker"><span>Model</span>{view.harness && view.harness.discovery !== false && <button type="button" onClick={() => view.discover(true)} aria-busy={view.loading}>Refresh</button>}</div>
       {view.effectiveHarness ? <>
         {view.canPinModel && <input ref={filter} className="settings-input route-filter" aria-label="Filter models or enter an ID" placeholder="Filter or enter a model ID" value={query} onChange={event => setQuery(event.target.value)} />}
         <ModelList view={view} query={query} onChange={pickModel} />

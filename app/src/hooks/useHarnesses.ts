@@ -18,6 +18,7 @@ const emit = () => { version++; for (const listener of listeners) listener(); };
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
 export function clearHarnesses() { generation++; harnesses = []; initial = undefined; initialVersion = -1; request = undefined; error = ''; emit(); }
+export function refreshHarnesses() { generation++; initialVersion = -1; request = undefined; error = ''; emit(); }
 export function rememberHarnesses(state: DelegationSettingsState) {
   harnesses = state.harnesses;
   initial = state;
@@ -43,12 +44,12 @@ export function useHarnesses(active = true) {
   useSyncExternalStore(subscribe, () => version);
   const epoch = generation;
   const retry = useCallback(() => { if (sendDelegationPreferencesGet) void readHarnessPreferences(sendDelegationPreferencesGet, true).catch(() => {}); }, [sendDelegationPreferencesGet]);
-  useEffect(() => { if (active && isConnected && sendDelegationPreferencesGet && !harnesses.length) void readHarnessPreferences(sendDelegationPreferencesGet).catch(() => {}); }, [active, isConnected, sendDelegationPreferencesGet, epoch]);
+  useEffect(() => { if (active && isConnected && sendDelegationPreferencesGet && initialVersion === -1) void readHarnessPreferences(sendDelegationPreferencesGet).catch(() => {}); }, [active, isConnected, sendDelegationPreferencesGet, epoch]);
   const currentHarnesses = useMemo(() => harnesses.map(harness => {
     const available = isBuiltinAgent(harness.id) ? api?.settings[`${harness.id}_available`] : undefined;
     return (available === 'true' || available === 'false') && harness.available !== (available === 'true') ? { ...harness, available: available === 'true' } : harness;
   }), [harnesses, api?.settings]);
-  return { harnesses: currentHarnesses, hasCatalog: Boolean(initial), error, loading: Boolean(request) || Boolean(active && isConnected && !initial && !error), retry };
+  return { harnesses: currentHarnesses, hasCatalog: Boolean(initial), error, loading: !initial && (Boolean(request) || Boolean(active && isConnected && !error)), retry };
 }
 
 export function useHarnessChoices(agents: string[], settings: Record<string, string>) {

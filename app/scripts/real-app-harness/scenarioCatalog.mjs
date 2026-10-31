@@ -308,6 +308,12 @@ export const scenarioCatalog = [
     timeoutMs: 300_000,
   },
   {
+    id: 'refresh-focus',
+    runnerId: 'RefreshFocus',
+    label: 'Refresh focus: the crew launch route through a reconnect and keyboard-pressed model Refresh buttons keep focus while discovery is held',
+    command: ['node', 'scripts/real-app-harness/scenario-refresh-focus.mjs'],
+  },
+  {
     id: 'crew-management',
     runnerId: 'CrewManagement',
     label: 'Crew management: launch lifecycle, seed attribution and tile return, charter recovery/conflicts, handoff history with seed return, quiet launch autosave, reconnect recovery, and a changed successor',

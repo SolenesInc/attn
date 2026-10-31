@@ -33,6 +33,7 @@
 .route-popover-main { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 10px; overflow-y: auto; }
 .route-kicker { display: flex; align-items: center; justify-content: space-between; }
 .route-kicker button { padding: 2px 4px; border: 0; background: none; color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.route-kicker button[aria-busy="true"] { opacity: .48; cursor: progress; }
 .route-model-list { display: grid; gap: 2px; }
 .route-group { padding: 10px 9px 4px; }
 .route-model-option { display: grid; gap: 3px; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }

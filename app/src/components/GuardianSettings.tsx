@@ -47,7 +47,7 @@ export function GuardianSettings({ value = {}, policy, loadModels }: {
     {error && <p className="settings-warning" role="alert">{error}</p>}
     {failure && <p className="settings-warning" role="alert">{failure}</p>}
     <div className="automode-model-actions">
-      <button type="button" className="settings-action" disabled={loading || busy} onClick={() => discover(true)}>Refresh models</button>
+      <button type="button" className="settings-action" disabled={busy} aria-busy={loading} onClick={() => discover(true)}>Refresh models</button>
       <button type="button" className="settings-action" disabled={busy || (!key && !value.effort)} onClick={() => void save({})}>Reset guardian default</button>
     </div>
   </div>;
