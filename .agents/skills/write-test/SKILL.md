@@ -21,7 +21,9 @@ habits that most often break it.
   the same command, event, CLI verb or world helper. Extend it instead of
   adding another.
 - When the harness cannot reach or observe the promise, extend it with
-  something outside attn: an agent, the user, the clock, the network.
+  something outside attn: an agent, the user, the clock, the network. When
+  the promise is about a moment between two steps of one action, add a pause
+  or crash point instead.
 
 ## Read
 
@@ -85,8 +87,9 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 - Avoiding a pause or crash point because it lives in attn's code, or calling
   it a harness that sets attn's state. When the promise is about a moment
   between two steps of one action, such as a change landing while a request
-  is held, `w.daemon.PauseNextHeldAction` or `s.StartCrashingAt` is the way
-  to reach it, and a new point is the way to reach another such moment.
+  is held, `w.daemon.PauseNextHeldAction`, `s.PauseAt` or `s.StartCrashingAt`
+  is the way to reach it. A new point is the way to reach another such
+  moment.
 - `vi.mock('../Component')`, or mocking any other module of attn's own. An
   app wire test fakes the daemon, which it scripts, and only the other fakes
   `docs/internal/app-wire-tests.md` lists. Render the real module through

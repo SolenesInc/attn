@@ -15,6 +15,12 @@ returns `testworld.Main(m)`.
 - The historical PTY upgrade test uses port `0`: older binaries cannot inherit
   that listener. After the daemon's bind-ready log, `lsof` discovers the captured
   PID's assigned port without releasing a reservation or retrying startup.
+- For a promise about a moment between two steps of one operation,
+  `s.PauseAt(point)` holds the daemon or a worker the first time it reaches a
+  pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`);
+  `s.PauseEvery` holds it each time. Arm it before `Start`, or start with
+  `s.StartHeldAt(pause)`. `Await` returns the held process's pid and `Release`
+  lets it go.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
