@@ -51,22 +51,25 @@ func TestABellHandsOverTheSinceReadOfEverythingItCovers(t *testing.T) {
 }
 
 func TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed(t *testing.T) {
-	w := &world{World: prepareWorld(t)}
-	w.start()
-	cli := w.Client()
-	registerSessions(t, w, cli, "planter", "watcher", "worker")
-	seed := plantSeedAs(t, cli, "planter", "older bell")
-	gardenNudgeWatch(t, cli, "watcher", seed, false)
-	gardenNudgeNote(t, cli, "worker", seed, "rang before the upgrade", true)
-	w.stop()
-	asTheMigrationLeftIt(t, w)
-	w.start()
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		watcher := w.bubbleClaude(t, w.App(), "watcher").id
+		registerSessions(t, w, cli, "planter", "worker")
+		seed := plantSeedAs(t, cli, "planter", "older bell")
+		gardenNudgeWatch(t, cli, watcher, seed, false)
+		gardenNudgeNote(t, cli, "worker", seed, "rang before the upgrade", true)
+		w.advance(0)
+		w.stop()
+		asTheMigrationLeftIt(t, w)
+		w.start()
+		w.advance(0)
 
-	items := readInbox(t, w.Client(), "watcher", 0).Items
-	want := seed + " moved: note.added — read it with `attn seed show " + seed + "`."
-	if len(items) != 1 || items[0].Content != want {
-		t.Fatalf("watcher's inbox holds %q, want %q", inboxContents(items), want)
-	}
+		items := readInbox(t, w.Client(), watcher, 0).Items
+		want := seed + " moved: note.added — read it with `attn seed show " + seed + "`."
+		if len(items) != 1 || items[0].Content != want {
+			t.Fatalf("watcher's inbox holds %q, want %q", inboxContents(items), want)
+		}
+	})
 }
 
 func asTheMigrationLeftIt(t *testing.T, w *world) {

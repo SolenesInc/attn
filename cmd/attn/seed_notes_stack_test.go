@@ -88,16 +88,27 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 		t.Errorf("notes --since %s --kind handoff returned %q, want only the new handoff", bookmark, got)
 	}
 
+	elsewhere := plant(t, s, "A seed outside the plot")
+	seedAs(t, s, "", "note", elsewhere.ID, "-m", "elsewhere before the printed read")
 	printed := seedAs(t, s, "", "notes", plot.ID, "--since", bookmark)
 	requireLines(t, "notes --since", printed,
 		"since "+bookmark+": 2 new entries",
 		seed.ID+"  handoff  a handoff after the bookmark",
-		seed.ID+"  note  after the bookmark",
-		"bookmark  attn seed notes "+plot.ID+" --since "+strconv.Itoa(since.Bookmark))
+		seed.ID+"  note  after the bookmark")
+	next := printedNotesBookmark(t, printed, plot.ID)
+	if next < since.Bookmark {
+		t.Errorf("notes --since %s printed bookmark %d, before the %d an earlier read returned", bookmark, next, since.Bookmark)
+	}
 	requireLines(t, "a full notes read", seedAs(t, s, "", "notes", seed.ID, "--kind", "check"),
 		"bookmark  attn seed notes "+seed.ID+" --kind check --since ")
-	requireLines(t, "a repeated since-read", seedAs(t, s, "", "notes", plot.ID, "--since", strconv.Itoa(since.Bookmark)),
-		"since "+strconv.Itoa(since.Bookmark)+": nothing new")
+
+	seedAs(t, s, "", "note", elsewhere.ID, "-m", "elsewhere after the printed read")
+	requireLines(t, "a since-read from the printed bookmark", seedAs(t, s, "", "notes", plot.ID, "--since", strconv.Itoa(next)),
+		"since "+strconv.Itoa(next)+": nothing new")
+	seedAs(t, s, "", "note", seed.ID, "-m", "after the printed bookmark")
+	requireLines(t, "a since-read from the printed bookmark", seedAs(t, s, "", "notes", plot.ID, "--since", strconv.Itoa(next)),
+		"since "+strconv.Itoa(next)+": 1 new entry",
+		seed.ID+"  note  after the printed bookmark")
 
 	refused := s.Run(testworld.Invocation{Args: []string{"seed", "notes", seed.ID, "--kind", "gossip"}})
 	if refused.Code == 0 {
@@ -116,4 +127,20 @@ func entryBodies(entries []protocol.SeedNote) string {
 		bodies = append(bodies, entry.Body)
 	}
 	return strings.Join(bodies, "|")
+}
+
+func printedNotesBookmark(t *testing.T, printed, plotID string) int {
+	t.Helper()
+	prefix := "bookmark  attn seed notes " + plotID + " --since "
+	for line := range strings.Lines(printed) {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), prefix); ok {
+			n, err := strconv.Atoi(rest)
+			if err != nil {
+				t.Fatalf("the printed bookmark %q is not a number: %v", line, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("notes --since printed no %q line:\n%s", prefix+"N", printed)
+	return 0
 }

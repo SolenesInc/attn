@@ -265,19 +265,22 @@ func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
 			members = append(members, id)
 			joinedMu.Unlock()
 		}
+		names := func(seed, checkID, text string) func() error {
+			return func() error {
+				_, err := cli.SeedCheck(checkAdd(seed, checkID, text))
+				if err != nil && strings.Contains(err.Error(), seed+" already defines "+checkID+";") {
+					return nil
+				}
+				return err
+			}
+		}
 		var moves []func() error
 		for i := range rounds {
 			moves = append(moves,
 				func() error { _, err := cli.SeedCheck(checkAdd(left, "", "left adds")); return err },
 				func() error { _, err := cli.SeedCheck(checkAdd(right, "", "right adds")); return err },
-				func() error {
-					_, err := cli.SeedCheck(checkAdd(left, fmt.Sprintf("C%d", 500+i), "left names"))
-					return err
-				},
-				func() error {
-					_, err := cli.SeedCheck(checkAdd(right, fmt.Sprintf("C%d", 500+i), "right names"))
-					return err
-				},
+				names(left, fmt.Sprintf("C%d", 500+i), "left names"),
+				names(right, fmt.Sprintf("C%d", 500+i), "right names"),
 				func() error {
 					planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
 						Title: fmt.Sprintf("planted %d", i), PartOf: protocol.Ptr(plot.Crown.ID),
