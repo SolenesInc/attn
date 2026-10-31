@@ -90,13 +90,8 @@ func capture(args []string) int {
 	started := time.Now().UTC()
 	receipt := describe(request, started)
 
-	var working *testhistory.Working
-	if dir, err := spoolDir(); err != nil {
-		warn("not recording a receipt: %v", err)
-	} else if working, err = (testhistory.Spool{Dir: dir}).Begin(receipt, goModule(request.runner)); err != nil {
-		warn("not recording a receipt: %v", err)
-		working = nil
-	}
+	working, discard := begin(receipt, goModule(request.runner))
+	defer discard()
 
 	ending, runErr := run(request, working)
 	if runErr != nil {
@@ -115,6 +110,30 @@ func capture(args []string) int {
 		}
 	}
 	return exitStatus(ending)
+}
+
+func begin(receipt testhistory.Receipt, goModule string) (*testhistory.Working, func()) {
+	dir, err := spoolDir()
+	if err == nil {
+		var working *testhistory.Working
+		if working, err = (testhistory.Spool{Dir: dir}).Begin(receipt, goModule); err == nil {
+			return working, func() {}
+		}
+	}
+	warn("test history will not keep this run: %v", err)
+	scratch, scratchErr := os.MkdirTemp("", "attn-test-history-")
+	if scratchErr != nil {
+		warn("not recording a receipt: %v", scratchErr)
+		return nil, func() {}
+	}
+	discard := func() { _ = os.RemoveAll(scratch) }
+	working, scratchErr := testhistory.Spool{Dir: scratch}.Begin(receipt, goModule)
+	if scratchErr != nil {
+		warn("not recording a receipt: %v", scratchErr)
+		discard()
+		return nil, func() {}
+	}
+	return working, discard
 }
 
 func exitStatus(ending testhistory.Ending) int {

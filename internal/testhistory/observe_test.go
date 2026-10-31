@@ -117,6 +117,8 @@ func TestRunnerOutputNormalizesToReceiptResults(t *testing.T) {
 				{unit: "playwright e2e/mixed.spec.mjs", test: "group › flaky", attempt: 1, outcome: Fail},
 				{unit: "playwright e2e/mixed.spec.mjs", test: "group › flaky", attempt: 2, outcome: Pass},
 				{unit: "playwright e2e/mixed.spec.mjs", test: "group › times out", attempt: 2, outcome: Fail, detail: "timed out"},
+				{unit: "playwright e2e/mixed.spec.mjs", test: "group › expected to fail but times out", attempt: 1, outcome: Fail, detail: "timed out"},
+				{unit: "playwright e2e/mixed.spec.mjs", test: "group › expected to fail but times out", attempt: 2, outcome: Fail, detail: "timed out"},
 			},
 		},
 		{

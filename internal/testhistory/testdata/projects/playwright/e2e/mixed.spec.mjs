@@ -8,4 +8,5 @@ test.describe('group', () => {
   test('expected to fail but passes', async () => { test.fail(); });
   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });
   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });
+  test('expected to fail but times out', async () => { test.fail(); test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });
 });

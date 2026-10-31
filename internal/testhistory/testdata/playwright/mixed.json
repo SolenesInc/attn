@@ -83,12 +83,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1,
+                  "duration": 0,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-10-31T12:31:21.453Z",
+                  "startTime": "2026-10-31T13:40:00.763Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -132,12 +132,12 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 4,
+                      "duration": 1,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:21.490Z",
+                      "startTime": "2026-10-31T13:40:00.779Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -166,7 +166,7 @@
                       "workerIndex": 0,
                       "parallelIndex": 0,
                       "status": "failed",
-                      "duration": 2,
+                      "duration": 1,
                       "error": {
                         "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
                         "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41",
@@ -190,7 +190,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:21.504Z",
+                      "startTime": "2026-10-31T13:40:00.783Z",
                       "annotations": [],
                       "attachments": [
                         {
@@ -209,7 +209,7 @@
                       "workerIndex": 1,
                       "parallelIndex": 0,
                       "status": "failed",
-                      "duration": 5,
+                      "duration": 2,
                       "error": {
                         "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
                         "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41",
@@ -233,7 +233,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 1,
-                      "startTime": "2026-10-31T12:31:21.939Z",
+                      "startTime": "2026-10-31T13:40:00.961Z",
                       "annotations": [],
                       "attachments": [
                         {
@@ -283,12 +283,12 @@
                       "workerIndex": 2,
                       "parallelIndex": 0,
                       "status": "skipped",
-                      "duration": 1,
+                      "duration": 0,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:22.320Z",
+                      "startTime": "2026-10-31T13:40:01.153Z",
                       "annotations": [
                         {
                           "type": "skip",
@@ -341,7 +341,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:22.342Z",
+                      "startTime": "2026-10-31T13:40:01.164Z",
                       "annotations": [
                         {
                           "type": "fixme",
@@ -388,7 +388,7 @@
                       "workerIndex": 2,
                       "parallelIndex": 0,
                       "status": "failed",
-                      "duration": 4,
+                      "duration": 2,
                       "error": {
                         "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
                         "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:7:66",
@@ -412,7 +412,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:22.342Z",
+                      "startTime": "2026-10-31T13:40:01.164Z",
                       "annotations": [
                         {
                           "type": "fail",
@@ -475,7 +475,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:22.359Z",
+                      "startTime": "2026-10-31T13:40:01.173Z",
                       "annotations": [
                         {
                           "type": "fail",
@@ -497,7 +497,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 1,
-                      "startTime": "2026-10-31T12:31:22.711Z",
+                      "startTime": "2026-10-31T13:40:01.338Z",
                       "annotations": [
                         {
                           "type": "fail",
@@ -535,7 +535,7 @@
                       "workerIndex": 4,
                       "parallelIndex": 0,
                       "status": "failed",
-                      "duration": 5,
+                      "duration": 3,
                       "error": {
                         "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m",
                         "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:9:58",
@@ -544,7 +544,7 @@
                           "column": 58,
                           "line": 9
                         },
-                        "snippet": "   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 | });\n  12 |"
+                        "snippet": "   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 |   test('expected to fail but times out', async () => { test.fail(); test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  12 | });"
                       },
                       "errors": [
                         {
@@ -553,13 +553,13 @@
                             "column": 58,
                             "line": 9
                           },
-                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n\n   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 | });\n  12 |\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:9:58"
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n\n   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 |   test('expected to fail but times out', async () => { test.fail(); test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  12 | });\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:9:58"
                         }
                       ],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:23.069Z",
+                      "startTime": "2026-10-31T13:40:01.520Z",
                       "annotations": [],
                       "attachments": [
                         {
@@ -578,12 +578,12 @@
                       "workerIndex": 5,
                       "parallelIndex": 0,
                       "status": "passed",
-                      "duration": 4,
+                      "duration": 1,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 1,
-                      "startTime": "2026-10-31T12:31:23.475Z",
+                      "startTime": "2026-10-31T13:40:01.694Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -612,7 +612,7 @@
                       "workerIndex": 5,
                       "parallelIndex": 0,
                       "status": "timedOut",
-                      "duration": 202,
+                      "duration": 203,
                       "error": {
                         "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
                         "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
@@ -625,7 +625,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-10-31T12:31:23.502Z",
+                      "startTime": "2026-10-31T13:40:01.705Z",
                       "annotations": [],
                       "attachments": [
                         {
@@ -639,7 +639,7 @@
                       "workerIndex": 6,
                       "parallelIndex": 0,
                       "status": "timedOut",
-                      "duration": 201,
+                      "duration": 202,
                       "error": {
                         "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
                         "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
@@ -652,7 +652,7 @@
                       "stdout": [],
                       "stderr": [],
                       "retry": 1,
-                      "startTime": "2026-10-31T12:31:24.078Z",
+                      "startTime": "2026-10-31T13:40:02.068Z",
                       "annotations": [],
                       "attachments": [
                         {
@@ -670,6 +670,108 @@
               "file": "mixed.spec.mjs",
               "line": 10,
               "column": 3
+            },
+            {
+              "title": "expected to fail but times out",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 200,
+                  "annotations": [
+                    {
+                      "type": "fail",
+                      "location": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "line": 11,
+                        "column": 61
+                      }
+                    }
+                  ],
+                  "expectedStatus": "failed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 203,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T13:40:02.449Z",
+                      "annotations": [
+                        {
+                          "type": "fail",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 11,
+                            "column": 61
+                          }
+                        }
+                      ],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-expected-to-fail-but-times-out/error-context.md"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 201,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-10-31T13:40:02.831Z",
+                      "annotations": [
+                        {
+                          "type": "fail",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 11,
+                            "column": 61
+                          }
+                        }
+                      ],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-expected-to-fail-but-times-out-retry1/error-context.md"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-d49f5748633fe662efc3",
+              "file": "mixed.spec.mjs",
+              "line": 11,
+              "column": 3
             }
           ]
         }
@@ -678,11 +780,11 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-10-31T12:31:20.934Z",
-    "duration": 3382.4219999999996,
+    "startTime": "2026-10-31T13:40:00.562Z",
+    "duration": 2489.649,
     "expected": 3,
     "skipped": 2,
-    "unexpected": 3,
+    "unexpected": 4,
     "flaky": 1
   }
 }

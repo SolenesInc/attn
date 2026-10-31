@@ -150,15 +150,15 @@ func playwrightOutcome(status, expected string) (Outcome, string) {
 			return Fail, "expected to fail but passed"
 		}
 		return Pass, ""
-	default:
-		detail := ""
-		if status == "timedOut" {
-			detail = "timed out"
-		}
+	case "timedOut":
+		return Fail, "timed out"
+	case "failed":
 		if expected == "failed" {
-			return ExpectedFailure, detail
+			return ExpectedFailure, ""
 		}
-		return Fail, detail
+		return Fail, ""
+	default:
+		return Fail, status
 	}
 }
 

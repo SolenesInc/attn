@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,35 +52,42 @@ func repository() string {
 }
 
 func revision() testhistory.Revision {
-	ids, err := git("rev-parse", "HEAD", "HEAD^{tree}")
-	fields := strings.Fields(ids)
+	root, err := git("rev-parse", "--show-toplevel")
+	if err != nil {
+		return testhistory.Revision{}
+	}
+	ids, err := gitIn(root, nil, "rev-parse", "HEAD", "HEAD^{tree}")
+	fields := strings.Fields(string(ids))
 	if err != nil || len(fields) != 2 {
 		return testhistory.Revision{}
 	}
-	return testhistory.Revision{Commit: fields[0], Tree: fields[1], DirtyFingerprint: dirtyFingerprint()}
+	return testhistory.Revision{Commit: fields[0], Tree: fields[1], DirtyFingerprint: dirtyFingerprint(root)}
 }
 
-func dirtyFingerprint() string {
-	status, err := exec.Command("git", "status", "--porcelain", "--untracked-files=all").Output()
-	if err != nil || len(bytes.TrimSpace(status)) == 0 {
+const unfingerprintedChanges = "unknown"
+
+func dirtyFingerprint(root string) string {
+	status, err := gitIn(root, nil, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return unfingerprintedChanges
+	}
+	if len(bytes.TrimSpace(status)) == 0 {
 		return ""
+	}
+	diff, err := gitIn(root, nil, "diff", "--binary", "HEAD")
+	if err != nil {
+		return unfingerprintedChanges
 	}
 	hash := sha256.New()
-	diff, err := exec.Command("git", "diff", "--binary", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
 	hash.Write(diff)
-	untracked, err := exec.Command("git", "ls-files", "--others", "--exclude-standard").Output()
+	untracked, err := gitIn(root, nil, "ls-files", "--others", "--exclude-standard")
 	if err != nil {
-		return ""
+		return unfingerprintedChanges
 	}
 	if paths := strings.TrimSpace(string(untracked)); paths != "" {
-		blobs := exec.Command("git", "hash-object", "--stdin-paths")
-		blobs.Stdin = strings.NewReader(paths + "\n")
-		ids, err := blobs.Output()
+		ids, err := gitIn(root, strings.NewReader(paths+"\n"), "hash-object", "--stdin-paths")
 		if err != nil {
-			return ""
+			return unfingerprintedChanges
 		}
 		hash.Write([]byte{0})
 		hash.Write([]byte(paths))
@@ -89,6 +97,11 @@ func dirtyFingerprint() string {
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
 }
 
+func gitIn(dir string, stdin io.Reader, args ...string) ([]byte, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir, cmd.Stdin = dir, stdin
+	return cmd.Output()
+}
 func machineClass() string {
 	host := "local"
 	if os.Getenv("GITHUB_ACTIONS") == "true" {

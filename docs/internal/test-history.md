@@ -23,7 +23,8 @@ Each of them runs through
 The runner is `go`, `vitest`, `playwright` or `native`. For `go`, the command is
 the arguments to `go test`: capture runs `go test -json` and prints the text
 `go test` itself prints. The output and the exit status are the command's own.
-When the receipt cannot be written, capture warns and the run goes on.
+When the spool cannot be written, capture warns that history will not keep
+the run, still writes `--receipt-out`, and the run goes on.
 
 - `--unit` names a requested unit (see [Receipt](#receipt)); one that reports
   nothing shows as `MISSING` in `summary`.
@@ -63,7 +64,8 @@ its types. A change to a field's meaning needs a new schema version.
 - `source`: `local` or `ci`, with the CI run, attempt, job and shard.
 - `revision`: the commit and tree tested. `dirty_fingerprint` is present when
   the checkout had changes: a SHA-256 of the diff against `HEAD` and of the
-  untracked files' blob ids. Source contents never leave the machine.
+  untracked files' blob ids, or `unknown` when the changes could not be
+  fingerprinted. Source contents never leave the machine.
 - `lane`: operating system, architecture and the Go race detector.
 - `diagnostics`: machine class and tool versions, for comparing cost.
 - `command`: the argv, the requested units, start, finish, exit code or signal,

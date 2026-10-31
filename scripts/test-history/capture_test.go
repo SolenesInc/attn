@@ -343,3 +343,66 @@ func TestATerminationSentToCaptureReachesTheCommand(t *testing.T) {
 		t.Fatalf("receipt command = %+v, want interrupted by SIGTERM with exit 9", receipt.Command)
 	}
 }
+
+func TestAnUnavailableSpoolStillHandsTheReceiptToItsCaller(t *testing.T) {
+	blocked := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocked, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	receipt := filepath.Join(t.TempDir(), "receipt.json")
+	out, err := historyCommand(t, filepath.Join(blocked, "spool"), fixtureModule(t), "capture", "go",
+		"--unit", "go ./good TestPasses", "--receipt-out", receipt, "--", "-count=1", "-run", "TestPasses", "./good").CombinedOutput()
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("capture exited %d, want the passing run's 0\n%s", got, out)
+	}
+	if !strings.Contains(string(out), "test-history:") {
+		t.Fatalf("capture did not warn that history kept nothing:\n%s", out)
+	}
+	summary, err := historyCommand(t, t.TempDir(), t.TempDir(), "summary", receipt).CombinedOutput()
+	if exitCode(err) != 0 || !strings.HasPrefix(string(summary), "PASS go ./good TestPasses ") {
+		t.Fatalf("summary of the handed-back receipt:\n%s", summary)
+	}
+}
+
+func TestADirtyCheckoutIsRecordedAsDirtyFromAnySubdirectory(t *testing.T) {
+	repo := t.TempDir()
+	git := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	if err := os.MkdirAll(filepath.Join(repo, "app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "app", "tracked.txt"), []byte("tracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", ".")
+	git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "base")
+	if err := os.WriteFile(filepath.Join(repo, "app", "new.test.ts"), []byte("untracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fingerprint := func(dir string) string {
+		spool := t.TempDir()
+		if err := historyCommand(t, spool, dir, "capture", "native", "--", "true").Run(); err != nil {
+			t.Fatal(err)
+		}
+		return onlyReceipt(t, spool).Revision.DirtyFingerprint
+	}
+	fromRoot, fromApp := fingerprint(repo), fingerprint(filepath.Join(repo, "app"))
+	if fromRoot == "" || fromRoot == "unknown" || fromApp != fromRoot {
+		t.Fatalf("dirty fingerprint from the root %q, from app/ %q; want the same fingerprint", fromRoot, fromApp)
+	}
+
+	unreadable := filepath.Join(repo, "app", "unreadable.txt")
+	if err := os.WriteFile(unreadable, []byte("secret\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if got := fingerprint(filepath.Join(repo, "app")); got != "unknown" {
+		t.Fatalf("a dirty checkout that cannot be fingerprinted recorded %q, want unknown", got)
+	}
+}
