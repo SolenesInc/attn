@@ -76,12 +76,16 @@ CI runs on `main` after every landing; pushes that arrive during a run are
 batched into the next one. A red `main` opens the
 `Branch health: main acceptance` issue. The sheriff automation watches `main`'s
 CI and counts a run as red when any job in it failed, even when the run itself
-concluded `cancelled`. It re-runs the failed jobs once, finds the commit that
-broke them, and delegates an agent to fix forward when the fix is small and
-clear, or to revert the commit when the revert is clean. Every revert gets an
-owner: the commit's live session, or a seed to land the change again that the
-chief receives. When neither path is clearly right, the sheriff asks the user. The `sheriff` skill is its procedure. Keep landing while `main` is
-red; a release waits for green.
+concluded `cancelled`. It never re-runs CI: it reads the first failed job as
+soon as it fails, finds the commit that broke it, and delegates an agent to fix
+forward when the fix is small and clear, or to revert the commit when the
+revert is clean. The fix lands like any other, and the next push run on `main`
+judges it. The issue records each failure once, with its owner and the repair
+that landed, so a failure already owned or already repaired gets no second
+fix. Every revert gets an owner: the commit's live session, or a seed to land
+the change again that the chief receives. When neither path is clearly right,
+the sheriff asks the user. The `sheriff` skill is its procedure. Keep landing
+while `main` is red; a release waits for green.
 
 ## Releases
 

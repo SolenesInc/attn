@@ -60,7 +60,7 @@ runs:
         sudo timeout "$download_timeout" apt-get install -y --download-only -o Acquire::Retries=3 \
           -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES || status=$?
         if [ "$status" = 124 ]; then
-          printf '\n::error::apt download exceeded %ss (healthy: 11s for 107 MB); the Ubuntu mirror is slow from this runner, rerun the job\n' "$download_timeout"
+          printf '\n::error::apt download exceeded %ss (healthy: 11s for 107 MB); the Ubuntu mirror is slow from this runner: a network failure, not a commit\n' "$download_timeout"
         fi
         exit "$status"
 
