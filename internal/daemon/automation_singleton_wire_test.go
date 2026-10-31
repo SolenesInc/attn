@@ -310,3 +310,58 @@ func TestASingletonRunDoesNotTakeBackASeedSomeoneElseTook(t *testing.T) {
 		t.Fatalf("the run is %s with %q, want it failed naming the seed's tender", refused.State, protocol.Deref(refused.LastError))
 	}
 }
+
+func TestASingletonWhoseNewSessionNeverStartedOpensItOnTheNextRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)
+	id := applyAutomation(t, cli, spec).ID
+	awaitSettled := func(earlier ...string) (run protocol.AutomationRunSummary) {
+		t.Helper()
+		w.tickSchedulesUntil("a settled run", func() bool {
+			runs := automationRuns(t, cli, id)
+			if len(runs) == 0 || runs[0].State == "pending" || slices.Contains(earlier, runs[0].ID) {
+				return false
+			}
+			run = runs[0]
+			return true
+		})
+		setAutomationEnabled(t, cli, id, false)
+		return run
+	}
+	first := awaitSettled()
+	seed := protocol.Deref(first.SeedID)
+	w.Launched(string(protocol.Deref(first.SessionID))).Prompted()
+	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(spec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
+	other := w.Spawn(app, fakeagent.Claude, w.Path(""))
+	w.Launched(other)
+	if _, err := cli.SeedTransition(protocol.SessionID(other), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	setAutomationEnabled(t, cli, id, true)
+	if refused := awaitSettled(first.ID); refused.State != "failed" {
+		t.Fatalf("with %s holding %s the run is %s, want it refused", other, seed, refused.State)
+	}
+	gardenNudgeMove(t, cli, other, seed, "park")
+
+	setAutomationEnabled(t, cli, id, true)
+	var next protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a delivered run", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State != "delivered" {
+			return false
+		}
+		next = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	if protocol.Deref(next.SeedID) != seed {
+		t.Fatalf("once %s let go, the run is on seed %s, want %s", other, protocol.Deref(next.SeedID), seed)
+	}
+	if opened := w.Launched(string(protocol.Deref(next.SessionID))); opened.Resumed || !strings.Contains(opened.Prompted(), "Sweep the branches.") {
+		t.Fatalf("the never-started session came up as %+v, want it opened on the new prompt", opened)
+	}
+}
