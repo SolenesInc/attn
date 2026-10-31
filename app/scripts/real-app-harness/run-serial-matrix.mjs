@@ -126,6 +126,51 @@ const signalExitCode = {
 let activeChild = null;
 let interruptHandled = false;
 let releaseMatrixLock = null;
+let matrixRun = null;
+
+function matrixEntry(result) {
+  const entry = { id: result.id, code: result.code, durationMs: result.durationMs };
+  if (result.skipped) {
+    entry.skipped = true;
+    entry.skipReason = result.skipReason;
+  }
+  if (result.timedOut) {
+    entry.timedOut = true;
+  }
+  if (result.signal) {
+    entry.signal = result.signal;
+  }
+  if (result.interrupted) {
+    entry.interrupted = true;
+  }
+  if (result.code !== 0 && result.outputTail) {
+    entry.outputTail = result.outputTail;
+  }
+  return entry;
+}
+
+function writeMatrixResults({ complete }) {
+  const document = `${JSON.stringify({
+    finishedAt: complete ? new Date().toISOString() : null,
+    complete,
+    shard: matrixRun.shard ? { index: matrixRun.shard.index, count: matrixRun.shard.count } : null,
+    results: matrixRun.results.map(matrixEntry),
+  }, null, 2)}\n`;
+  const targets = [path.join(harnessArtifactsRoot(), 'last-matrix.json')];
+  if (process.env.ATTN_TEST_RESULTS) {
+    targets.push(process.env.ATTN_TEST_RESULTS);
+  }
+  fs.mkdirSync(harnessArtifactsRoot(), { recursive: true });
+  for (const target of targets) {
+    fs.writeFileSync(`${target}.tmp`, document, 'utf8');
+    fs.renameSync(`${target}.tmp`, target);
+  }
+}
+
+function recordScenarioResult(result) {
+  matrixRun.results.push(result);
+  writeMatrixResults({ complete: false });
+}
 
 process.once('exit', () => {
   releaseMatrixLock?.();
@@ -149,14 +194,25 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
       return;
     }
     interruptHandled = true;
+    const interrupted = matrixRun?.active;
     terminateActiveChild(signal);
-    if (!activeChild) {
+    const exitInterrupted = () => {
+      if (interrupted) {
+        recordScenarioResult({
+          id: interrupted.scenario.id,
+          code: signalExitCode[signal] || 1,
+          durationMs: Date.now() - interrupted.startedAt,
+          signal,
+          interrupted: true,
+        });
+      }
       process.exit(signalExitCode[signal] || 1);
+    };
+    if (!activeChild) {
+      exitInterrupted();
       return;
     }
-    activeChild.once('exit', () => {
-      process.exit(signalExitCode[signal] || 1);
-    });
+    activeChild.once('exit', exitInterrupted);
   });
 }
 
@@ -194,6 +250,7 @@ function createOutputTailBuffer(maxLines = 40, maxLineLen = 400) {
 function runScenario(scenario, timeoutMs, runAgainstProd) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
+    matrixRun.active = { scenario, startedAt };
     const childArgs = scenario.command.slice(1);
     if (runAgainstProd) {
       if (!childArgs.includes('--')) {
@@ -225,6 +282,10 @@ function runScenario(scenario, timeoutMs, runAgainstProd) {
     }, effectiveTimeoutMs);
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
+      if (interruptHandled) {
+        return;
+      }
+      matrixRun.active = null;
       if (activeChild === child) {
         activeChild = null;
       }
@@ -316,20 +377,22 @@ async function main() {
       launchEnv: preflightLaunchEnv,
     });
   }
-  const results = [];
+  matrixRun = { shard, results: [], active: null };
+  const { results } = matrixRun;
+  writeMatrixResults({ complete: false });
 
   for (const scenario of scenarios) {
     console.log(`\n=== ${scenario.label} (${scenario.id}) ===`);
     const skipReason = scenarioSkipReason(scenario);
     if (skipReason) {
       console.log(`--- ${scenario.id}: skipped on ${process.platform}: ${skipReason} ---`);
-      results.push({
+      recordScenarioResult({
         id: scenario.id, label: scenario.label, code: 0, skipped: true, skipReason, durationMs: 0,
       });
       continue;
     }
     const result = await runScenario(scenario, timeoutMs, runAgainstProd);
-    results.push(result);
+    recordScenarioResult(result);
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
     console.log(`--- ${scenario.id}: ${status} (${result.durationMs}ms) ---`);
     if (scenario.freshWorldAfter && !productionTarget && !noFreshWorld) {
@@ -365,25 +428,7 @@ async function main() {
     .join('\n\n');
   const digestText = failureSections ? `${resultTable}\n\n${failureSections}\n` : `${resultTable}\n`;
   fs.writeFileSync(path.join(artifactsRoot, 'matrix-digest.txt'), digestText, 'utf8');
-  fs.writeFileSync(
-    path.join(artifactsRoot, 'last-matrix.json'),
-    `${JSON.stringify({
-      finishedAt: new Date().toISOString(),
-      shard: shard ? { index: shard.index, count: shard.count } : null,
-      results: results.map((result) => {
-        const entry = { id: result.id, code: result.code, durationMs: result.durationMs };
-        if (result.skipped) {
-          entry.skipped = true;
-          entry.skipReason = result.skipReason;
-        }
-        if (result.code !== 0 && result.outputTail) {
-          entry.outputTail = result.outputTail;
-        }
-        return entry;
-      }),
-    }, null, 2)}\n`,
-    'utf8',
-  );
+  writeMatrixResults({ complete: true });
 
   emitVerdict({
     ok: failed.length === 0,

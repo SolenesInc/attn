@@ -326,6 +326,8 @@ working on:
 
 - Database schema or migrations => docs/internal/db-migrations.md
 - Tests, before writing, changing, or deleting them => docs/internal/testing.md
+- Test runners, their receipts, or `scripts/test-history` =>
+  docs/internal/test-history.md
 - How a harness behaves, before relying on it => docs/internal/harnesses.md;
   check new claims in its source or with a probe and record them there
 - The inbox: addresses, rings, wakes, seed updates or notices =>

@@ -1,0 +1,120 @@
+{
+  "finishedAt": "2026-10-31T11:44:06.231Z",
+  "shard": {
+    "index": 3,
+    "count": 4
+  },
+  "results": [
+    {
+      "id": "focusless-native",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "The parked AppKit harness and in-process native input are macOS-only"
+    },
+    {
+      "id": "agent-reload",
+      "code": 0,
+      "durationMs": 14506
+    },
+    {
+      "id": "agent-terminals",
+      "code": 0,
+      "durationMs": 23409
+    },
+    {
+      "id": "palette-order",
+      "code": 0,
+      "durationMs": 46500
+    },
+    {
+      "id": "quick-capture",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "Quick Capture uses a macOS nonactivating panel"
+    },
+    {
+      "id": "session-creation-shortcuts",
+      "code": 0,
+      "durationMs": 31178
+    },
+    {
+      "id": "close-desktop",
+      "code": 0,
+      "durationMs": 20613
+    },
+    {
+      "id": "close-pane-nonblocking",
+      "code": 0,
+      "durationMs": 10505
+    },
+    {
+      "id": "session-close-ledger",
+      "code": 0,
+      "durationMs": 5893
+    },
+    {
+      "id": "profile-lifecycle",
+      "code": 0,
+      "durationMs": 11488
+    },
+    {
+      "id": "garden-profile-scope",
+      "code": 0,
+      "durationMs": 17036
+    },
+    {
+      "id": "garden-seed-header",
+      "code": 0,
+      "durationMs": 32846
+    },
+    {
+      "id": "notebook-sync",
+      "code": 0,
+      "durationMs": 26739
+    },
+    {
+      "id": "outposts-settings",
+      "code": 0,
+      "durationMs": 119378
+    },
+    {
+      "id": "refresh-focus",
+      "code": 0,
+      "durationMs": 25074
+    },
+    {
+      "id": "automation-lifecycle",
+      "code": 0,
+      "durationMs": 17257
+    },
+    {
+      "id": "automation-scheduled-cleanup",
+      "code": 0,
+      "durationMs": 31764
+    },
+    {
+      "id": "worktree-surface",
+      "code": 0,
+      "durationMs": 45413
+    },
+    {
+      "id": "terminal-block-copy",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "Cmd+C reaches the terminal through the macOS menu accelerator"
+    },
+    {
+      "id": "pty-host-setting",
+      "code": 0,
+      "durationMs": 26465
+    },
+    {
+      "id": "tr301-local-claude",
+      "code": 0,
+      "durationMs": 24133
+    }
+  ]
+}

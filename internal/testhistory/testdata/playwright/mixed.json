@@ -1,0 +1,688 @@
+{
+  "config": {
+    "argv": [
+      "/Users/victor/.local/share/mise/installs/node/26.12.1/bin/node",
+      "/Users/victor/projects/victor/attn--test-history-capture/app/node_modules/@playwright/test/cli.js",
+      "test",
+      "--reporter=list,json"
+    ],
+    "configFile": "/private/tmp/attn-test-history-fixtures/playwright/playwright.config.mjs",
+    "rootDir": "/private/tmp/attn-test-history-fixtures/playwright/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/private/tmp/attn-test-history-fixtures/playwright/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/private/tmp/attn-test-history-fixtures/playwright/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "good.spec.mjs",
+      "file": "good.spec.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "only passes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-31T12:31:21.453Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a44165982146526e9df0-ccf3bec7017874b6c3a0",
+          "file": "good.spec.mjs",
+          "line": 2,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "mixed.spec.mjs",
+      "file": "mixed.spec.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "group",
+          "file": "mixed.spec.mjs",
+          "line": 2,
+          "column": 6,
+          "specs": [
+            {
+              "title": "passes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:21.490Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-6258d67662938103d451",
+              "file": "mixed.spec.mjs",
+              "line": 3,
+              "column": 3
+            },
+            {
+              "title": "fails",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41",
+                        "location": {
+                          "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                          "column": 41,
+                          "line": 4
+                        },
+                        "snippet": "  2 | test.describe('group', () => {\n  3 |   test('passes', async () => { expect(1).toBe(1); });\n> 4 |   test('fails', async () => { expect(1).toBe(2); });\n    |                                         ^\n  5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n  6 |   test.fixme('is fixme', async () => {});\n  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "column": 41,
+                            "line": 4
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  2 | test.describe('group', () => {\n  3 |   test('passes', async () => { expect(1).toBe(1); });\n> 4 |   test('fails', async () => { expect(1).toBe(2); });\n    |                                         ^\n  5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n  6 |   test.fixme('is fixme', async () => {});\n  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:21.504Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-fails/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "column": 41,
+                        "line": 4
+                      }
+                    },
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 5,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41",
+                        "location": {
+                          "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                          "column": 41,
+                          "line": 4
+                        },
+                        "snippet": "  2 | test.describe('group', () => {\n  3 |   test('passes', async () => { expect(1).toBe(1); });\n> 4 |   test('fails', async () => { expect(1).toBe(2); });\n    |                                         ^\n  5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n  6 |   test.fixme('is fixme', async () => {});\n  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "column": 41,
+                            "line": 4
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  2 | test.describe('group', () => {\n  3 |   test('passes', async () => { expect(1).toBe(1); });\n> 4 |   test('fails', async () => { expect(1).toBe(2); });\n    |                                         ^\n  5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n  6 |   test.fixme('is fixme', async () => {});\n  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:4:41"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-10-31T12:31:21.939Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-fails-retry1/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "column": 41,
+                        "line": 4
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-bbcae7740dfc1e6c610d",
+              "file": "mixed.spec.mjs",
+              "line": 4,
+              "column": 3
+            },
+            {
+              "title": "skips",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "needs a display",
+                      "location": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "line": 5,
+                        "column": 36
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "skipped",
+                      "duration": 1,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:22.320Z",
+                      "annotations": [
+                        {
+                          "type": "skip",
+                          "description": "needs a display",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 5,
+                            "column": 36
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-bba74240e60f64ce4d3c",
+              "file": "mixed.spec.mjs",
+              "line": 5,
+              "column": 3
+            },
+            {
+              "title": "is fixme",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "fixme",
+                      "location": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "line": 6,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:22.342Z",
+                      "annotations": [
+                        {
+                          "type": "fixme",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 6,
+                            "column": 8
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-5bb563f7950c1930d02b",
+              "file": "mixed.spec.mjs",
+              "line": 6,
+              "column": 8
+            },
+            {
+              "title": "fails as expected",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "fail",
+                      "location": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "line": 7,
+                        "column": 48
+                      }
+                    }
+                  ],
+                  "expectedStatus": "failed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 4,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:7:66",
+                        "location": {
+                          "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                          "column": 66,
+                          "line": 7
+                        },
+                        "snippet": "   5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n   6 |   test.fixme('is fixme', async () => {});\n>  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n     |                                                                  ^\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n   9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "column": 66,
+                            "line": 7
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n   5 |   test('skips', async () => { test.skip(true, 'needs a display'); });\n   6 |   test.fixme('is fixme', async () => {});\n>  7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n     |                                                                  ^\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n   9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:7:66"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:22.342Z",
+                      "annotations": [
+                        {
+                          "type": "fail",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 7,
+                            "column": 48
+                          }
+                        }
+                      ],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-fails-as-expected/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "column": 66,
+                        "line": 7
+                      }
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-383ebb180632269bffea",
+              "file": "mixed.spec.mjs",
+              "line": 7,
+              "column": 3
+            },
+            {
+              "title": "expected to fail but passes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "fail",
+                      "location": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "line": 8,
+                        "column": 58
+                      }
+                    }
+                  ],
+                  "expectedStatus": "failed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:22.359Z",
+                      "annotations": [
+                        {
+                          "type": "fail",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 8,
+                            "column": 58
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    },
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-10-31T12:31:22.711Z",
+                      "annotations": [
+                        {
+                          "type": "fail",
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "line": 8,
+                            "column": 58
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-38a099e2b94f06da91a5",
+              "file": "mixed.spec.mjs",
+              "line": 8,
+              "column": 3
+            },
+            {
+              "title": "flaky",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 5,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:9:58",
+                        "location": {
+                          "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                          "column": 58,
+                          "line": 9
+                        },
+                        "snippet": "   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 | });\n  12 |"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                            "column": 58,
+                            "line": 9
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m1\u001b[39m\nReceived: \u001b[31m0\u001b[39m\n\n   7 |   test('fails as expected', async () => { test.fail(); expect(1).toBe(2); });\n   8 |   test('expected to fail but passes', async () => { test.fail(); });\n>  9 |   test('flaky', async ({}, info) => { expect(info.retry).toBe(1); });\n     |                                                          ^\n  10 |   test('times out', async () => { test.setTimeout(200); await new Promise(r => setTimeout(r, 1000)); });\n  11 | });\n  12 |\n    at /private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs:9:58"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:23.069Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-flaky/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/private/tmp/attn-test-history-fixtures/playwright/e2e/mixed.spec.mjs",
+                        "column": 58,
+                        "line": 9
+                      }
+                    },
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-10-31T12:31:23.475Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "flaky"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-49970e7c0d77cfb58772",
+              "file": "mixed.spec.mjs",
+              "line": 9,
+              "column": 3
+            },
+            {
+              "title": "times out",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 200,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 202,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-31T12:31:23.502Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-times-out/error-context.md"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 201,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 200ms exceeded.\u001b[39m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 1,
+                      "startTime": "2026-10-31T12:31:24.078Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/private/tmp/attn-test-history-fixtures/playwright/test-results/mixed-group-times-out-retry1/error-context.md"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "4ddbf1efc263b1490657-953358c30117b3d82793",
+              "file": "mixed.spec.mjs",
+              "line": 10,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-31T12:31:20.934Z",
+    "duration": 3382.4219999999996,
+    "expected": 3,
+    "skipped": 2,
+    "unexpected": 3,
+    "flaky": 1
+  }
+}

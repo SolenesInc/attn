@@ -1,0 +1,26 @@
+{"ImportPath":"example.invalid/fixture/broken [example.invalid/fixture/broken.test]","Action":"build-output","Output":"# example.invalid/fixture/broken [example.invalid/fixture/broken.test]\n"}
+{"ImportPath":"example.invalid/fixture/broken [example.invalid/fixture/broken.test]","Action":"build-output","Output":"broken/broken_test.go:5:42: declared and not used: x\n"}
+{"ImportPath":"example.invalid/fixture/broken [example.invalid/fixture/broken.test]","Action":"build-output","Output":"broken/broken_test.go:5:50: cannot use \"no\" (untyped string constant) as int value in variable declaration\n"}
+{"ImportPath":"example.invalid/fixture/broken [example.invalid/fixture/broken.test]","Action":"build-fail"}
+{"Time":"2026-10-31T13:31:12.48629+01:00","Action":"start","Package":"example.invalid/fixture/broken"}
+{"Time":"2026-10-31T13:31:12.486541+01:00","Action":"output","Package":"example.invalid/fixture/broken","Output":"FAIL\texample.invalid/fixture/broken [build failed]\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:12.486566+01:00","Action":"fail","Package":"example.invalid/fixture/broken","Elapsed":0,"FailedBuild":"example.invalid/fixture/broken [example.invalid/fixture/broken.test]"}
+{"Time":"2026-10-31T13:31:12.752929+01:00","Action":"start","Package":"example.invalid/fixture/good"}
+{"Time":"2026-10-31T13:31:12.753+01:00","Action":"start","Package":"example.invalid/fixture/mainfail"}
+{"Time":"2026-10-31T13:31:13.016025+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestPasses"}
+{"Time":"2026-10-31T13:31:13.016175+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"=== RUN   TestPasses\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.016213+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"    good_test.go:9: fine\n"}
+{"Time":"2026-10-31T13:31:13.016249+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"--- PASS: TestPasses (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.016259+01:00","Action":"pass","Package":"example.invalid/fixture/good","Test":"TestPasses","Elapsed":0}
+{"Time":"2026-10-31T13:31:13.016268+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestFails"}
+{"Time":"2026-10-31T13:31:13.016274+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestFails","Output":"=== RUN   TestFails\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.01629+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestFails","Output":"    good_test.go:11: broken on purpose\n","OutputType":"error"}
+{"Time":"2026-10-31T13:31:13.016314+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestFails","Output":"--- FAIL: TestFails (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.016322+01:00","Action":"fail","Package":"example.invalid/fixture/good","Test":"TestFails","Elapsed":0}
+{"Time":"2026-10-31T13:31:13.016328+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestSkips"}
+{"Time":"2026-10-31T13:31:13.016334+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"=== RUN   TestSkips\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.016352+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"    good_test.go:13: needs ClickHouse\n"}
+{"Time":"2026-10-31T13:31:13.016372+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"--- SKIP: TestSkips (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:13.016379+01:00","Action":"skip","Package":"example.invalid/fixture/good","Test":"TestSkips","Elapsed":0}
+{"Time":"2026-10-31T13:31:13.016386+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestCases"}
+{"Time":"2026-10-31T13:31:13.016391+01:00","Action":"output","Package":"example.invalid/fixture/good","Te

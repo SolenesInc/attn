@@ -1,0 +1,43 @@
+{"Time":"2026-10-31T13:31:14.655864+01:00","Action":"start","Package":"example.invalid/fixture/good"}
+{"Time":"2026-10-31T13:31:14.9647+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestPasses"}
+{"Time":"2026-10-31T13:31:14.964789+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"=== RUN   TestPasses\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.964836+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"    good_test.go:9: fine\n"}
+{"Time":"2026-10-31T13:31:14.964858+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"--- PASS: TestPasses (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.964868+01:00","Action":"pass","Package":"example.invalid/fixture/good","Test":"TestPasses","Elapsed":0}
+{"Time":"2026-10-31T13:31:14.96489+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestSleeps"}
+{"Time":"2026-10-31T13:31:14.964899+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"=== RUN   TestSleeps\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:16.969387+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"panic: test timed out after 2s\n"}
+{"Time":"2026-10-31T13:31:16.969467+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\trunning tests:\n"}
+{"Time":"2026-10-31T13:31:16.969484+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\t\tTestSleeps (2s)\n"}
+{"Time":"2026-10-31T13:31:16.969498+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\n"}
+{"Time":"2026-10-31T13:31:16.96951+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"goroutine 37 [running]:\n"}
+{"Time":"2026-10-31T13:31:16.969517+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.(*M).startAlarm.func1()\n"}
+{"Time":"2026-10-31T13:31:16.969523+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2961 +0x2c4\n"}
+{"Time":"2026-10-31T13:31:16.969528+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"created by time.goFunc\n"}
+{"Time":"2026-10-31T13:31:16.969535+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttime/sleep.go:182 +0x38\n"}
+{"Time":"2026-10-31T13:31:16.969541+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\n"}
+{"Time":"2026-10-31T13:31:16.969547+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"goroutine 1 [chan receive]:\n"}
+{"Time":"2026-10-31T13:31:16.969553+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.(*T).Run(0x90e5e64008, {0x10287eac6?, 0x90e5e5ba88?}, 0x1029e37d0)\n"}
+{"Time":"2026-10-31T13:31:16.969573+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2268 +0x3cc\n"}
+{"Time":"2026-10-31T13:31:16.969583+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.runTests.func1(0x90e5e64008)\n"}
+{"Time":"2026-10-31T13:31:16.969595+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2744 +0x38\n"}
+{"Time":"2026-10-31T13:31:16.969605+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.tRunner(0x90e5e64008, 0x90e5e5bbb8)\n"}
+{"Time":"2026-10-31T13:31:16.969656+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2195 +0xc4\n"}
+{"Time":"2026-10-31T13:31:16.969678+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.runTests({0x1028827ca, 0x17}, {0x102883e00, 0x1c}, 0x90e5e2a078, {0x102a05d78, 0x5, 0x5}, {0x90e5d9ac58?, 0x90e5e2e180?, ...})\n"}
+{"Time":"2026-10-31T13:31:16.969719+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2742 +0x400\n"}
+{"Time":"2026-10-31T13:31:16.969727+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.(*M).Run(0x90e5e14140)\n"}
+{"Time":"2026-10-31T13:31:16.969734+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2602 +0x578\n"}
+{"Time":"2026-10-31T13:31:16.969741+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"main.main()\n"}
+{"Time":"2026-10-31T13:31:16.969748+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\t_testmain.go:54 +0x80\n"}
+{"Time":"2026-10-31T13:31:16.969755+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\n"}
+{"Time":"2026-10-31T13:31:16.969764+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"goroutine 36 [sleep]:\n"}
+{"Time":"2026-10-31T13:31:16.96977+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"time.Sleep(0x6fc23ac00)\n"}
+{"Time":"2026-10-31T13:31:16.969777+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\truntime/time.go:368 +0x150\n"}
+{"Time":"2026-10-31T13:31:16.969784+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"example.invalid/fixture/good.TestSleeps(0x90e5e64488)\n"}
+{"Time":"2026-10-31T13:31:16.96979+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\texample.invalid/fixture/good/good_test.go:26 +0x6c\n"}
+{"Time":"2026-10-31T13:31:16.969797+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"testing.tRunner(0x90e5e64488, 0x1029e37d0)\n"}
+{"Time":"2026-10-31T13:31:16.969803+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2195 +0xc4\n"}
+{"Time":"2026-10-31T13:31:16.969814+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"created by testing.(*T).Run in goroutine 1\n"}
+{"Time":"2026-10-31T13:31:16.969821+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"\ttesting/testing.go:2260 +0x3b8\n"}
+{"Time":"2026-10-31T13:31:16.970201+01:00","Action":"output","Package":"example.invalid/fixture/good","Output":"FAIL\texample.invalid/fixture/good\t2.314s\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:16.970216+01:00","Action":"fail","Package":"example.invalid/fixture/good","Elapsed":2.314}

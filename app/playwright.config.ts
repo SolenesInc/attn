@@ -12,7 +12,9 @@ export default defineConfig({
   fullyParallel: false, // Run tests serially due to shared daemon
   retries: 0,
   workers: 1,
-  reporter: 'list',
+  reporter: process.env.ATTN_TEST_RESULTS
+    ? [['list'], ['json', { outputFile: process.env.ATTN_TEST_RESULTS }]]
+    : 'list',
   // Tripwire, not a budget: the slowest whole test here runs 2.9s locally and CI runs 3-4x
   // slower. Under the 30s test timeout, so a blown assertion reports itself.
   expect: { timeout: 15_000 },

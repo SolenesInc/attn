@@ -10,11 +10,15 @@ Before landing, run targeted tests for the behavior you changed, such as
 landing.
 
 `--packages` passes the remaining arguments to `go test` without running the
-full suite. The runner and Makefile use `-trimpath` so unchanged packages can
-reuse build artifacts across worktrees. The runner gives targeted and full
-test runs the same isolated outer data directory; each package's `TestMain`
-still creates a fresh directory when tests run. Go can reuse successful test
-results when their flags, environment, and file inputs also match.
+full suite; leading `--unit` and `--receipt-out` options go to test history.
+The runner and Makefile use `-trimpath` so unchanged packages can reuse build
+artifacts across worktrees. The runner gives targeted and full test runs the
+same isolated outer data directory; each package's `TestMain` still creates a
+fresh directory when tests run. Go can reuse successful test results when
+their flags, environment, and file inputs also match.
+`scripts/test-go.sh`, `pnpm --dir app test` and `pnpm --dir app run e2e`
+record a receipt of each run; `vitest` and `playwright` run directly do not.
+See [Test history](test-history.md).
 
 The runner and Makefile also share the pinned native VT artifact between
 worktrees. Before using Go commands directly, run

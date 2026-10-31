@@ -1,0 +1,14 @@
+{"Time":"2026-10-31T13:31:14.242236+01:00","Action":"start","Package":"example.invalid/fixture/good"}
+{"Time":"2026-10-31T13:31:14.24257+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestPasses"}
+{"Time":"2026-10-31T13:31:14.242595+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"=== RUN   TestPasses\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.24262+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"    good_test.go:9: fine\n"}
+{"Time":"2026-10-31T13:31:14.242633+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"--- PASS: TestPasses (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.242642+01:00","Action":"pass","Package":"example.invalid/fixture/good","Test":"TestPasses","Elapsed":0}
+{"Time":"2026-10-31T13:31:14.242658+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestSkips"}
+{"Time":"2026-10-31T13:31:14.242666+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"=== RUN   TestSkips\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.242675+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"    good_test.go:13: needs ClickHouse\n"}
+{"Time":"2026-10-31T13:31:14.242684+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSkips","Output":"--- SKIP: TestSkips (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.242692+01:00","Action":"skip","Package":"example.invalid/fixture/good","Test":"TestSkips","Elapsed":0}
+{"Time":"2026-10-31T13:31:14.2427+01:00","Action":"output","Package":"example.invalid/fixture/good","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:14.242709+01:00","Action":"output","Package":"example.invalid/fixture/good","Output":"ok  \texample.invalid/fixture/good\t(cached)\n"}
+{"Time":"2026-10-31T13:31:14.242718+01:00","Action":"pass","Package":"example.invalid/fixture/good","Elapsed":0}

@@ -84,6 +84,13 @@ export default defineConfig(async ({ command }) => ({
     environment: "happy-dom",
     env: { VITE_ATTN_BUILD_INSTANCE: "", VITE_CLIENT_TOKEN: "" },
     setupFiles: ["./src/test/setup.ts"],
+    ...(process.env.ATTN_TEST_RESULTS && {
+      reporters: [
+        "default",
+        ...(process.env.GITHUB_ACTIONS === "true" ? ["github-actions"] : []),
+        "./scripts/vitest-results-reporter.mjs",
+      ],
+    }),
     include: [
       "src/**/*.test.{ts,tsx}",
       // Plain-JS tests, for guards that must read source files off disk: the app tsconfig has no
