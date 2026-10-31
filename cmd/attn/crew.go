@@ -37,6 +37,8 @@ func runCrew() {
 		runCrewRestore(os.Args[3:])
 	case "move-home":
 		runCrewMoveHome(os.Args[3:])
+	case "prime":
+		runCrewPrime(os.Args[3:])
 	default:
 		recordUsageError("crew", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "crew: unknown command %q\n", os.Args[2])
@@ -80,6 +82,11 @@ commands:
         Ask the member to write a handoff and close with attn handoff.
         The member closes its own session. Do nothing if already asleep.
 
+  prime
+        Print the orientation your crew session started with, read fresh:
+        identity, charter, latest letter and held seeds. Run it when your
+        conversation starts empty, as after /clear or /new.
+
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
                [--launch-desktop <own|desktop>] [--awareness-dir <dir>]...
         Save launch settings without changing the member's markdown files.
@@ -114,6 +121,24 @@ commands:
         Bring a retired member back. Mail kept while retired is delivered,
         which can wake it.
 `)
+}
+
+func runCrewPrime(args []string) {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "crew prime: takes no arguments")
+		writeCrewHelp(os.Stderr)
+		os.Exit(2)
+	}
+	result, err := client.New("").CrewPrime(currentSessionOrExit())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew prime: %v\n", err)
+		os.Exit(1)
+	}
+	if result.Member == nil {
+		fmt.Fprintln(os.Stderr, "crew prime: this session is not a crew member's; nothing to prime")
+		os.Exit(1)
+	}
+	fmt.Println(protocol.Deref(result.Guidance))
 }
 
 type crewListArgs struct {

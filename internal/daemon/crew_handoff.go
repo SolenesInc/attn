@@ -36,11 +36,14 @@ func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, t
 	if err != nil {
 		return err
 	}
+	d.crewBindingMoved(memberID, from, to)
+	return nil
+}
 
+func (d *Daemon) crewBindingMoved(memberID string, from, to protocol.SessionID) {
 	d.invalidateGardenSeedParties("crew handoff")
 	d.publishFact(FactCrewBound, memberID, nil)
 	d.logf("crew: %s's binding moved from session %s to %s", memberID, from, to)
-	return nil
 }
 
 func (d *Daemon) crewMemberForSession(sessionID protocol.SessionID) (crew.Member, bool) {

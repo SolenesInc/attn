@@ -262,7 +262,7 @@ func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T
 	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
-func TestACrewMembersClearEndsItsDay(t *testing.T) {
+func TestACrewMembersClearKeepsItsDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	woken := wakeCrew(t, cli, "trellis", "")
@@ -272,11 +272,38 @@ func TestACrewMembersClearEndsItsDay(t *testing.T) {
 
 	next := clearClaude(app, day, string(woken.SessionID))
 	awaitClosed(app, string(woken.SessionID))
-	if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-		t.Errorf("after the day's /clear trellis is bound to %s, want its day ended", *binding)
+	if binding := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); binding != next.ID {
+		t.Errorf("after /clear trellis is bound to %q, want the successor %s", binding, next.ID)
 	}
-	if member := protocol.Deref(queriedSession(t, cli, string(next.ID)).CrewMember); member != "" {
-		t.Errorf("the session after /clear works as crew member %q, want it unbound", member)
+	if member := protocol.Deref(queriedSession(t, cli, string(next.ID)).CrewMember); member != "trellis" || next.Label != "Trellis" {
+		t.Errorf("the session after /clear works as crew member %q labelled %q, want trellis labelled Trellis", member, next.Label)
+	}
+}
+
+func TestASharedCodexCrewMembersNewKeepsItsDayInItsTerminal(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	workDir := w.Path("keel-work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(workDir, "trusted")
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), Agent: protocol.Ptr("codex")})
+	keel := string(wakeCrew(t, cli, "keel", "").SessionID)
+	codex := w.Launched(keel)
+	codex.Prompted()
+	codex.Reply("Ready. <!-- attn:state=idle -->")
+	terminal := app.Terminal(keel)
+
+	moveOn(t, app, codex, terminal, "/new", "start on the invoices")
+	testworld.AwaitSession(app, keel, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	next := sessionShownIn(t, w, app, terminal)
+	if binding := string(protocol.Deref(crewRosterMember(t, cli, "keel").BindingSession)); binding != next {
+		t.Errorf("after /new keel is bound to %q, want %s, which its terminal shows", binding, next)
+	}
+	if member := protocol.Deref(queriedSession(t, cli, next).CrewMember); member != "keel" {
+		t.Errorf("the session its terminal shows works as crew member %q, want keel", member)
 	}
 }
 

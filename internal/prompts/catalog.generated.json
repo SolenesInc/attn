@@ -213,6 +213,11 @@
                     "kind": "compose",
                     "children": [
                       {
+                        "kind": "text",
+                        "id": "crew.cleared",
+                        "source": "content/crew/cleared.md"
+                      },
+                      {
                         "kind": "input",
                         "field": {
                           "name": "crew_priming",
@@ -6185,5 +6190,5 @@
       ]
     }
   ],
-  "definitions_hash": "2d1afc3613554b014bf7e3d58671deb810ba819d7a542789b7d725cffd78ad93"
+  "definitions_hash": "803cdaaac9c63cd0e26f002208567518eba73282ebcea28a150afa0748306aff"
 }

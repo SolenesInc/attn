@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
 
 // Succession puts To in the terminal From showed: To takes From's place, process, driver run and
 // Conversation; everything else stays with From. A new To gets Label and Launch; an existing one keeps its own.
+// When Member's day is still From, the day moves to To.
 type Succession struct {
 	From, To     protocol.SessionID
 	Label        string
@@ -23,15 +24,19 @@ type Succession struct {
 	KeepFrom     bool
 	KeepTo       bool
 	Live         map[string]bool
+	Member       string
+}
+
+type SuccessionOutcome struct {
+	ClosedAsks []string
+	MemberDay  DocumentWriteResult
 }
 
 // CommitSuccession opens sc.To, or reopens it when it exists, in the pane that holds terminal; the pane now
 // shows it and To's other panes close unless their terminals are Live. sc.From closes into the ledger in the
-// same transaction unless KeepFrom, along with the asks addressed to it. It returns the desktops it changed,
-// terminal's first, and the ids of the asks it closed.
-func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([]profiles.Desktop, []string, error) {
-	var changed []profiles.Desktop
-	var closedAsks []string
+// same transaction unless KeepFrom, along with the asks addressed to it.
+func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) (SuccessionOutcome, error) {
+	var outcome SuccessionOutcome
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var open int
 		err := tx.QueryRow(`SELECT 1 FROM sessions WHERE id = ? AND closed_at = ''`, sc.From).Scan(&open)
@@ -60,8 +65,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([
 		if err := tx.QueryRow(`SELECT desktop_id FROM desktop_panes WHERE runtime_id = ?`, terminal).Scan(&desktopID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		dead, err := removeSessionTiles(tx, now, sc.To, sc.Live)
-		if err != nil {
+		if _, err := removeSessionTiles(tx, now, sc.To, sc.Live); err != nil {
 			return fmt.Errorf("close the dead panes of %s: %w", sc.To, err)
 		}
 		if err := unbindDeadTerminalsTx(tx, sc.To, sc.Live); err != nil {
@@ -72,11 +76,6 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([
 		}
 		if err := routeThroughTerminalTx(tx, terminal, sc.To); err != nil {
 			return err
-		}
-		for _, desktop := range dead {
-			if desktop.ID != desktopID {
-				changed = append(changed, desktop)
-			}
 		}
 		if desktopID != "" {
 			desktop, err := loadDesktop(tx, desktopID)
@@ -97,27 +96,58 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([
 			if err := writeCurrentArrivingArrangement(tx, now, &desktop, switched); err != nil {
 				return fmt.Errorf("show successor %s: %w", sc.To, err)
 			}
-			changed = append([]profiles.Desktop{desktop}, changed...)
+		}
+		if sc.Member != "" {
+			if outcome.MemberDay, err = moveMemberDayTx(tx, sc.Member, sc.From, sc.To); err != nil {
+				return fmt.Errorf("move crew member %s's day to %s: %w", sc.Member, sc.To, err)
+			}
 		}
 		if sc.KeepFrom {
 			return nil
 		}
-		if _, _, closedAsks, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err != nil {
+		if _, _, outcome.ClosedAsks, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err != nil {
 			return fmt.Errorf("succeed session %s: %w", sc.From, err)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return SuccessionOutcome{}, err
 	}
 	if sc.KeepFrom {
-		return changed, nil, nil
+		return outcome, nil
 	}
 	s.forgetSessionCost(sc.From)
 	s.mu.Lock()
 	delete(s.touchedAt, sc.From)
 	s.mu.Unlock()
-	return changed, closedAsks, nil
+	return outcome, nil
+}
+
+func moveMemberDayTx(tx *sql.Tx, key string, from, to protocol.SessionID) (DocumentWriteResult, error) {
+	schema, table, found, err := readCollectionTx(tx, crew.Namespace, crew.CollectionMembers)
+	if err != nil || !found {
+		return DocumentWriteResult{}, err
+	}
+	doc, exists, err := getDocumentWith(tx, schema.Namespace, schema.Collection, table, key)
+	if err != nil || !exists {
+		return DocumentWriteResult{}, err
+	}
+	member, err := crew.Decode(doc.Body)
+	if err != nil || member.BindingSession != from {
+		return DocumentWriteResult{}, err
+	}
+	member.BindingSession = to
+	body, err := member.Encode()
+	if err != nil {
+		return DocumentWriteResult{}, err
+	}
+	write := DocumentWrite{Schema: schema, ID: key, Body: body, Expected: &doc.Rev}
+	fact := DocumentChangedFact(schema.Namespace, schema.Collection, key, false)
+	results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now())
+	if err != nil {
+		return DocumentWriteResult{}, err
+	}
+	return results[0], recordMemberSessionTx(tx, key, to)
 }
 
 func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {

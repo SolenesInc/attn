@@ -209,17 +209,21 @@ func renameCrewMember(tx *sql.Tx, key, name string) (previous string, err error)
 
 func (s *Store) RecordMemberSession(key string, id protocol.SessionID) error {
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var stored string
-		if err := tx.QueryRow(`SELECT member_key FROM sessions WHERE id = ?`, id).Scan(&stored); err != nil {
-			return fmt.Errorf("record session %s for crew member %s: %w", id, key, err)
-		}
-		if stored != "" && stored != key {
-			return fmt.Errorf("session %s already belongs to crew member %s", id, stored)
-		}
-		if _, err := tx.Exec(`UPDATE sessions SET member_key = ? WHERE id = ?`, key, id); err != nil {
-			return err
-		}
-		_, err := tx.Exec(`UPDATE crew_members SET latest_session = ? WHERE member_key = ?`, id, key)
-		return err
+		return recordMemberSessionTx(tx, key, id)
 	})
+}
+
+func recordMemberSessionTx(tx *sql.Tx, key string, id protocol.SessionID) error {
+	var stored string
+	if err := tx.QueryRow(`SELECT member_key FROM sessions WHERE id = ?`, id).Scan(&stored); err != nil {
+		return fmt.Errorf("record session %s for crew member %s: %w", id, key, err)
+	}
+	if stored != "" && stored != key {
+		return fmt.Errorf("session %s already belongs to crew member %s", id, stored)
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET member_key = ? WHERE id = ?`, key, id); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE crew_members SET latest_session = ? WHERE member_key = ?`, id, key)
+	return err
 }

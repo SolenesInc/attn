@@ -148,6 +148,18 @@ A member's harness caches its conversation for a while; Attn assumes an hour for
 </details>
 
 <details>
+<summary>What happens when I clear a member's conversation?</summary>
+
+The member stays awake. `/clear` in Claude Code, or `/clear` and `/new` in
+Codex, starts a new conversation in the same terminal, and that conversation
+is the member's: it keeps the member's name, mail and the seeds it tends, and
+waking the member returns it. The new conversation starts empty, so the member
+runs `attn crew prime` to read its charter, freshest letter and seeds again.
+When the old conversation still shows in another terminal, the member stays
+with it, and the new conversation is an ordinary session.
+</details>
+
+<details>
 <summary>What happens if I close a member's agent without a letter?</summary>
 
 The member is asleep. Its next session starts from the last letter it filed, so anything the closed session did after that letter is only in the work itself and in its seeds.
@@ -165,7 +177,8 @@ while it is asleep; a home in Attn's data folder stays put.
 `attn crew retire <member>` stops a member's work. The seeds they tend go back
 to planted, each with a note; their seed and pull request watches and open
 asks are removed; new mail to them is refused. An awake member is asked to
-file their letter and sleep, and that letter cannot start a next session.
+file their letter and sleep, and that letter cannot start a next session; if
+you clear its conversation first, it is asked again.
 A retired member leaves the Crew section and `attn crew list` (`--all` shows
 them), does not wake, and does not stop you deleting their profile. Their home,
 letters, unread mail and name stay. `attn crew restore <member>` brings them

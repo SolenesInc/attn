@@ -164,13 +164,13 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 		}
 	}
 	visit(result.Trace)
-	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.quick-capture-guidance", "session.garden"}) {
+	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.quick-capture-guidance", "session.garden", "crew.cleared"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
 	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "ask.guidance", "session.vent-guidance", "session.vent-tools", "session.vent-attn-only", "session.vent-rules", "session.pull-request-guidance", "session.quick-capture-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
-	if !strings.HasSuffix(result.Text, "\n\nCrew {{literal}}.") {
+	if !strings.HasSuffix(result.Text, "read\nfresh.\n\nCrew {{literal}}.") {
 		t.Fatalf("crew input was altered: %q", result.Text)
 	}
 	if values["crew_priming"] != " Crew {{literal}}. " {

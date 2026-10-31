@@ -75,6 +75,9 @@ Probed on 2.1.288 with a mock API.
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`; attn reads the
   conversation id from that name.
+- Launch instructions from `--append-system-prompt` stay in force after
+  `/clear`: the new conversation still follows them (probed on 2.1.314 with
+  the real model).
 - `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.
@@ -266,6 +269,8 @@ Read in the source at openai/codex 60947e2341.
 - `/new` starts a new chat, after a worktree picker when managed worktrees are
   available; its SessionStart reports `startup`. `/clear` clears the terminal
   and starts a new chat; it reports `clear`.
+- Launch instructions from `-c developer_instructions=...` stay in force
+  after `/clear` and `/new` (probed on 0.166.0 with the real model).
 - `/agents` opens the agent command center. It lists **root sessions**,
   including ones running in other terminals, and switches this terminal to the
   one picked (`tui/src/app/agents_overview.rs`). It does not switch subagents.
@@ -698,6 +703,11 @@ two `SessionManager`s on one file that share nothing but the file:
 Pi has no link either, so two Pi terminals on one conversation are two
 sessions and the file forks, and both tiles warn until one process exits or
 moves to another conversation.
+
+attn gives Pi no launch instructions: the attn-pi driver does not declare the
+`launch_instructions` capability (`plugins/attn-pi/src/driver.ts`), so crew
+priming and the line asking a cleared member to run `attn crew prime` never
+reach it.
 
 ## Nisse
 

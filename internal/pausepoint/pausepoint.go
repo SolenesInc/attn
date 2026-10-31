@@ -48,6 +48,8 @@ const (
 	ConversationOutcome        = "conversation-outcome"
 	ConversationInputLookup    = "conversation-input-lookup"
 	ConversationCandidateBound = "conversation-candidate-bound"
+	ConversationCandidateStart = "conversation-candidate-start"
+	MemberRetiredClearSleep    = "member-retired-clear-sleep"
 	ConversationDropped        = "conversation-dropped"
 	ConversationReportReady    = "conversation-report-ready"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"

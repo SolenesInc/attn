@@ -9,4 +9,5 @@ const (
 	crashAfterGardenAdvice          = "garden-advice-received"
 	crashBeforeLinkRecorded         = "pull-request-link-saved-before-record"
 	crashBeforeTeardownKill         = "session-teardown-before-kill"
+	crashAfterSuccessionCommitted   = "succession-committed"
 )

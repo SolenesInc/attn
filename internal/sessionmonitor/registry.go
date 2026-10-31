@@ -224,6 +224,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	m.succeeds = Key{}
 	m.watch, m.conversation, m.localConversation = w, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
 	m.session = start.Session
+	m.SetTerminals(string(start.Session), m.terminalViews().terminals)
 	if m.pendingSession == "" {
 		m.pendingSession = start.Session
 	}

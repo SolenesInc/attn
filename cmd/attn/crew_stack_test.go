@@ -245,3 +245,52 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"))
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
 }
+
+func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	requireRefusals(t, s, []argvRefusal{
+		{args: []string{"crew", "prime", "extra"}, want: "takes no arguments"},
+	})
+	writeCharter(t, s, "keel")
+	s.Start()
+	s.App()
+	var wake protocol.CrewWakeResult
+	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &wake)
+	day := s.Launched(string(wake.SessionID))
+	day.Prompted()
+	day.Reply("Ready. <!-- attn:state=idle -->")
+	s.Stop()
+
+	s.StartCrashingAt("succession-committed")
+	app := s.App()
+	terminal := app.Terminal(string(wake.SessionID))
+	app.TypeLine(string(wake.SessionID), "/clear")
+	if got := day.Prompted(); got != "/clear" {
+		t.Fatalf("clear = %q", got)
+	}
+	s.AwaitCrash()
+	s.Start()
+	recovered := s.App()
+	var next protocol.Session
+	for _, session := range recovered.Initial.Sessions {
+		if protocol.Deref(session.Succeeds) == wake.SessionID {
+			next = session
+		}
+	}
+	if next.ID == "" || protocol.Deref(next.CrewMember) != "keel" || next.Label != "Keel" {
+		t.Fatalf("successor after the crash = %+v", next)
+	}
+	if bound := protocol.Deref(crewRoster(t, s)["keel"].BindingSession); bound != next.ID {
+		t.Fatalf("keel is bound to %q, want the successor %s", bound, next.ID)
+	}
+
+	requireStdout(t, s.Run(testworld.Invocation{Args: []string{"crew", "prime"}, Terminal: terminal}), "You are **Keel**")
+	requireFailure(t, s.Attn("crew", "prime"), "crew prime: ", "this session is not a crew member's")
+	var again protocol.CrewWakeResult
+	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &again)
+	if !again.AlreadyAwake || again.SessionID != next.ID {
+		t.Fatalf("wake after the clear = %+v, want the successor %s", again, next.ID)
+	}
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Asked Keel in session "+string(next.ID)[:8])
+}
