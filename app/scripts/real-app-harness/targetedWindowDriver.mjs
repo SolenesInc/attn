@@ -50,35 +50,27 @@ export class TargetedWindowDriver {
     }
   }
 
-  async #press(target, action, opts) {
+  async #aimed(target, { action, gesture, name }, opts) {
     const point = await this.pointOf(target);
     const receipt = await this.#delivered({
       webview: webviewOf(target),
-      expectation: { gesture: 'pointer', selector: selectorOf(target) },
-      action: `${action}(${JSON.stringify(target)})`,
+      expectation: { gesture, selector: selectorOf(target) },
+      action: `${name}(${JSON.stringify(target)})`,
       opts,
     }, () => this.#pointer({ action, point, opts }));
     return { ...point, receipt };
   }
 
   async click(target, opts = {}) {
-    return this.#press(target, 'click', opts);
+    return this.#aimed(target, { action: 'click', gesture: 'pointer', name: 'click' }, opts);
   }
 
   async rightClick(target, opts = {}) {
-    return this.#press(target, 'right_click', opts);
+    return this.#aimed(target, { action: 'right_click', gesture: 'pointer', name: 'rightClick' }, opts);
   }
 
   async hover(target, opts = {}) {
-    const point = await this.pointOf(target);
-    await this.#pointer({ action: 'move', point, opts });
-    return point;
-  }
-
-  async scroll(target, deltaY, opts = {}) {
-    const point = await this.pointOf(target);
-    await this.#pointer({ action: 'scroll', point, deltaY, opts });
-    return point;
+    return this.#aimed(target, { action: 'move', gesture: 'move', name: 'hover' }, opts);
   }
 
   async drag(fromTarget, toTarget, opts = {}) {
@@ -101,7 +93,15 @@ export class TargetedWindowDriver {
     return { from, to, receipt };
   }
 
+  get keysReachWebview() {
+    return true;
+  }
+
   async #keys(stroke, strokes, action, opts) {
+    if (this.client && !this.keysReachWebview && !opts.withoutReceipt) {
+      throw new Error(`${action} goes through system input, which reaches whichever window is key, `
+        + 'so no webview can confirm it; pass { withoutReceipt: \'<why>\' } and wait for its effect.');
+    }
     return this.#delivered({
       webview: 'main',
       expectation: { gesture: 'keys', strokes },

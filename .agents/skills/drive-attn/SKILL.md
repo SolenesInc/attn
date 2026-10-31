@@ -82,7 +82,7 @@ shell's environment:
 the app window at the screen's edge. Keep that default on a shared Mac. Never
 activate or unpark the window, set the parking or always-on-top variables
 yourself, or send physical input. That includes `open`, `make run`, `activateApp`,
-`osascript ... activate`, `cliclick`, the driver's `menu` and scrolling.
+`osascript ... activate`, `cliclick` and the driver's `menu`.
 Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
 input failure is a bridge or harness bug to diagnose, not permission to take
 focus. A scenario that requires activation or system input needs a dedicated

@@ -32,13 +32,13 @@ repository root.
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
-  `menu` and scrolling; on Linux, `xdotool` focuses the window the app reports
-  through the client and moves the pointer. Shared-Mac runs keep the parked
-  launch and never use activation, `menu`, scrolling or physical input; see the
+  `menu`; on Linux, `xdotool` focuses the window the app reports through the
+  client and moves the pointer. Shared-Mac runs keep the parked
+  launch and never use activation, `menu` or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
 - Point every native pointer action at an element: `driver.click`,
-  `rightClick`, `hover`, `scroll`, `drag` and `typeInto` take a selector or
+  `rightClick`, `hover`, `drag` and `typeInto` take a selector or
   `{ selector, at, offset }` (`at` is a fraction of the box, default its
   center; `offset` adds CSS pixels). Before measuring, the app waits for the
   element to appear and for it and its ancestors to stop moving, and scrolls
@@ -49,18 +49,20 @@ repository root.
   `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
   Quick Capture targets add `webview: 'capture'`, and its driver takes
   `systemInput: true` to keep system-level input.
-- Native input waits for delivery. `click`, `rightClick`, `drag`, `typeInto`,
-  `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return only after
-  the webview that should receive the input sees the trusted mouseup, or one
-  keyup per stroke, and settles, so the next read sees the input's effect.
-  Pointer input arms its target's webview; keys arm the main webview. Pointer
-  actions return the `receipt`; `receipt.matches` says whether the release
-  landed on the aimed selector. Input that lands in a browser tile page, starts
-  a native window drag, or replaces the page receiving it has no receipt, and
-  neither does a system-input click on a macOS window that is not key: that
-  click only makes the window key. Pass
-  `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers` for
-  `pressKey` and `pressKeyCode`. `hover` and `scroll` have no receipt.
+- Native input waits for delivery. `click`, `rightClick`, `drag`, `hover`,
+  `typeInto`, `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return
+  only after the webview that should receive the input sees the trusted
+  mouseup, the trusted mousemove for `hover`, or one keyup per stroke, so the
+  next read sees the input's effect. Pointer input arms its target's webview;
+  keys arm the main webview. Pointer actions return the `receipt`;
+  `receipt.matches` says whether the event landed on the aimed selector. Input
+  that lands in a browser tile page, starts a native window drag, or replaces
+  the page receiving it has no receipt, and neither does a system-input click
+  on a macOS window that is not key: that click only makes the window key. Nor
+  do keys from a `systemInput: true` driver, which reach whichever window is
+  key and paste text as one keystroke; the driver refuses them unreceipted.
+  Pass `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers`
+  for `pressKey` and `pressKeyCode`.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need

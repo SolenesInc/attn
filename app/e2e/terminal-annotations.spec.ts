@@ -145,6 +145,17 @@ test('native pointer receipt reports delivery to the wrong target', async ({ pag
   expect(await receipt).toMatchObject({ matches: false, target: 'canvas.' });
 });
 
+test('native move receipt ignores synthetic moves and identifies the hovered target', async ({ page }) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    window.__ANNOTATIONS__.armInput({ gesture: 'move', selector: '.anno-popup-quote' });
+    document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+  });
+  const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitInput());
+  await page.locator('.anno-popup-quote').hover();
+  expect(await receipt).toMatchObject({ gesture: 'move', matches: true, target: expect.stringContaining('anno-popup-quote') });
+});
+
 test('native key receipt waits for every stroke and ignores modifiers and synthetic keys', async ({ page }) => {
   await openEditor(page);
   await page.evaluate(() => {
