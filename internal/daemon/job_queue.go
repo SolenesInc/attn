@@ -51,7 +51,7 @@ func (d *Daemon) startJobQueue(home bool) error {
 	if home {
 		d.importLegacyTasks()
 	}
-	opts := jobs.Options{Log: d.logf, Store: queueStore}
+	opts := jobs.Options{Log: d.logf, Store: queueStore, Clock: d.clock}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
 		if err := d.registerTaskWithFailureRenderer(

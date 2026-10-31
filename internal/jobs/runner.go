@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const (
@@ -54,7 +56,7 @@ type EnqueueOptions struct {
 type Options struct {
 	Store        Store
 	Log          LogFunc
-	Now          func() time.Time
+	Clock        *stepclock.Clock
 	PollInterval time.Duration
 	MaxAttempts  int
 	BackoffBase  time.Duration
@@ -66,7 +68,7 @@ type Options struct {
 type Runner struct {
 	store    Store
 	log      LogFunc
-	now      func() time.Time
+	clock    *stepclock.Clock
 	disabled bool
 
 	pollInterval time.Duration
@@ -92,8 +94,14 @@ type Runner struct {
 	inflight map[string]int
 
 	wake chan struct{}
+	tick chan struct{}
 	done chan struct{}
 	exit chan struct{}
+
+	wakeMu sync.Mutex
+	// busy releases the clock hold covering wakes and ticks the loop has not finished handling.
+	busy    func()
+	stopped bool
 
 	// nextDue is when the earliest queued job becomes eligible; the zero value means now.
 	// Every job write nudges the loop, whose pass re-reads it, so ticks before it skip the store.
@@ -115,14 +123,10 @@ func New(opts Options) *Runner {
 	if log == nil {
 		log = func(string, ...interface{}) {}
 	}
-	now := opts.Now
-	if now == nil {
-		now = time.Now
-	}
 	r := &Runner{
 		store:        opts.Store,
 		log:          log,
-		now:          func() time.Time { return now().UTC() },
+		clock:        opts.Clock,
 		disabled:     opts.Store == nil,
 		handlers:     make(map[string]handler),
 		pendingArms:  make(map[string]*pendingArm),
@@ -135,6 +139,7 @@ func New(opts Options) *Runner {
 		retention:    nonZeroDuration(opts.Retention, DefaultRetention),
 		trimInterval: nonZeroDuration(opts.TrimInterval, DefaultTrimInterval),
 		wake:         make(chan struct{}, 1),
+		tick:         make(chan struct{}, 1),
 	}
 	return r
 }
@@ -234,6 +239,12 @@ func (r *Runner) Start() error {
 
 	r.armCron()
 
+	r.wakeMu.Lock()
+	r.stopped = false
+	if r.busy == nil {
+		r.busy = r.clock.Hold()
+	}
+	r.wakeMu.Unlock()
 	go r.loop()
 	go r.retentionLoop(done)
 	return nil
@@ -466,22 +477,27 @@ func (r *Runner) GetByKey(kind, uniqueKey string) (*Job, error) {
 	return r.store.LoadByKey(kind, uniqueKey)
 }
 
+func (r *Runner) now() time.Time { return r.clock.Now().UTC() }
+
 func (r *Runner) loop() {
 	defer close(r.exit)
-	ticker := time.NewTicker(r.pollInterval)
-	defer ticker.Stop()
+	defer r.settle(true)
+	poll := r.clock.AfterFunc(r.pollInterval, func() { r.signal(r.tick) })
+	defer poll.Stop()
 	woken := true
 	for {
 		r.retryCronArming()
 		if woken || !r.now().Before(r.nextDue) {
 			r.dispatchUntilIdle()
 		}
+		r.settle(false)
 		select {
 		case <-r.done:
 			return
 		case <-r.wake:
 			woken = true
-		case <-ticker.C:
+		case <-r.tick:
+			poll.Reset(r.pollInterval)
 			woken = false
 		}
 	}
@@ -597,7 +613,7 @@ func (r *Runner) dispatch() (progressed bool, err error) {
 		r.notifyTerminalFailure(dj)
 	}
 	for _, ls := range launch {
-		go r.execute(ls.job, ls.exec, ls.ctx, ls.run)
+		go r.execute(ls.job, ls.exec, ls.ctx, ls.run, r.clock.Hold())
 	}
 	return len(failedUnknownIDs) > 0 || len(launch) > 0, nil
 }
@@ -616,7 +632,8 @@ func (r *Runner) attemptCap(j *Job) int {
 	return r.maxAttempts
 }
 
-func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeRun) {
+func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeRun, release func()) {
+	defer release()
 	guard := run.guard
 	cancel := run.cancel
 
@@ -815,13 +832,14 @@ func (r *Runner) waitAll() {
 }
 
 func (r *Runner) retentionLoop(done <-chan struct{}) {
-	ticker := time.NewTicker(r.trimInterval)
-	defer ticker.Stop()
+	trim := r.clock.NewTimer(r.trimInterval)
+	defer trim.Stop()
 	for {
 		select {
 		case <-done:
 			return
-		case <-ticker.C:
+		case <-trim.C():
+			trim.Reset(r.trimInterval)
 			r.Trim()
 		}
 	}
@@ -844,11 +862,33 @@ func (r *Runner) Trim() int {
 	return n
 }
 
-func (r *Runner) nudge() {
+func (r *Runner) nudge() { r.signal(r.wake) }
+
+func (r *Runner) signal(ch chan struct{}) {
+	r.wakeMu.Lock()
+	defer r.wakeMu.Unlock()
+	if r.stopped {
+		return
+	}
+	if r.busy == nil {
+		r.busy = r.clock.Hold()
+	}
 	select {
-	case r.wake <- struct{}{}:
+	case ch <- struct{}{}:
 	default:
 	}
+}
+
+// settle releases the loop's clock hold once no wake or tick waits to be handled, or at once when stopping.
+func (r *Runner) settle(stopping bool) {
+	r.wakeMu.Lock()
+	defer r.wakeMu.Unlock()
+	r.stopped = stopping
+	if r.busy == nil || !stopping && len(r.wake)+len(r.tick) > 0 {
+		return
+	}
+	r.busy()
+	r.busy = nil
 }
 
 func (r *Runner) notifyWorkChange(kind, jobID string) {

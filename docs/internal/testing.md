@@ -215,12 +215,17 @@ Timers:
 - A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
-  it, such as a terminal's kill escalation and a folder watch's window, fire
-  only when the test calls `w.advance(d)`; `w.awaitTimer(d)` first waits until
-  a timer of `d` is armed. A test that waits for such a timer without
-  advancing fails at the hang guard.
+  it, such as a terminal's kill escalation, a folder watch's window and the
+  background job runner's schedule, fire only when the test calls
+  `w.advance(d)`; `w.awaitTimer(d)` first waits until a timer of `d` is armed.
+  A test that waits for such a timer without advancing fails at the hang
+  guard.
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,
   which closes each folder watch's window as soon as it opens.
+- A test about scheduled automations calls `w.tickSchedulesUntil(what, done)`.
+  Each tick waits until the job runner is idle, moves the clock one schedule
+  tick and waits until the runner is idle again, so `done` reads settled
+  state. It fails after `scheduleTickLimit` ticks.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
   terminal's `Stall(alive, err)` makes its worker stop answering until the
   test calls the returned function: recovery waits out its deadline and counts
@@ -264,10 +269,10 @@ returns `testworld.Main(m)`.
   `Wait`. The stack interrupts it at cleanup.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
   it started: the bridge's stall, loss, retry and dial-answer timers, a
-  terminal's kill escalation and a folder watch's window. Every stack uses
-  this stepped clock; the shared PTY host, which is not Go, keeps real time.
-  A test waiting for one of those timers without advancing fails at the hang
-  guard.
+  terminal's kill escalation, a folder watch's window and the background job
+  runner's schedule. Every stack uses this stepped clock; the shared PTY host,
+  which is not Go, keeps real time. A test waiting for one of those timers
+  without advancing fails at the hang guard.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.

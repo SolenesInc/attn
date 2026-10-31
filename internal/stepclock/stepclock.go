@@ -30,11 +30,13 @@ type Clock struct {
 	mu      sync.Mutex
 	now     time.Time
 	pending pending[*timer]
+	holds   int
+	idled   chan struct{}
 	report  func(event string)
 }
 
 func New() *Clock {
-	return &Clock{now: time.Now(), pending: newPending[*timer]()}
+	return &Clock{now: time.Now(), pending: newPending[*timer](), idled: make(chan struct{})}
 }
 
 var process = sync.OnceValue(func() *Clock {
@@ -75,6 +77,46 @@ func (c *Clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.now
+}
+
+// Hold marks the clock's process busy until release is called, so a test can step it only once that work has settled.
+func (c *Clock) Hold() (release func()) {
+	if c == nil {
+		return func() {}
+	}
+	c.mu.Lock()
+	c.holds++
+	if c.holds == 1 {
+		c.reportLocked("busy")
+	}
+	c.mu.Unlock()
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.holds--
+		if c.holds == 0 {
+			c.reportLocked("idle")
+			close(c.idled)
+			c.idled = make(chan struct{})
+		}
+	}
+}
+
+// AwaitIdle waits until nothing holds the clock. When ctx ends first it returns false.
+func (c *Clock) AwaitIdle(ctx context.Context) bool {
+	for {
+		c.mu.Lock()
+		holds, idled := c.holds, c.idled
+		c.mu.Unlock()
+		if holds == 0 {
+			return true
+		}
+		select {
+		case <-idled:
+		case <-ctx.Done():
+			return false
+		}
+	}
 }
 
 type timer struct {

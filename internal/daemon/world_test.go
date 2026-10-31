@@ -231,6 +231,35 @@ func (w *world) closeWatchWindows() {
 	})
 }
 
+// scheduleTickLimit is past the most schedule ticks any automation test waits for one outcome.
+const scheduleTickLimit = 10
+
+// tickSchedulesUntil ticks the automation schedule until done reports true after a tick. Each tick waits until the job
+// runner is idle, moves the daemon clock one schedule tick and waits until the runner is idle again.
+func (w *world) tickSchedulesUntil(what string, done func() bool) {
+	w.T.Helper()
+	if w.bubbled {
+		w.T.Fatal("tickSchedulesUntil steps the daemon clock, which a world inBubble does not have")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	awaitIdle := func() {
+		w.T.Helper()
+		if !w.clock.AwaitIdle(ctx) {
+			w.T.Fatalf("%s: the job runner was still busy after %s", what, fakeagent.HangGuard)
+		}
+	}
+	for range scheduleTickLimit {
+		awaitIdle()
+		w.clock.Advance(daemon.AutomationScheduleTick)
+		awaitIdle()
+		if done() {
+			return
+		}
+	}
+	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
+}
+
 // awaitTimer waits for the daemon of a world outside a bubble to arm a timer of d after the last advance or awaitTimer.
 func (w *world) awaitTimer(d time.Duration) {
 	w.T.Helper()

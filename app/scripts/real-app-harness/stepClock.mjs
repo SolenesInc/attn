@@ -61,6 +61,7 @@ export async function stepClock(socketPath, timeoutMs) {
         pending.delete(`${peer.pid} ${fields[1]}`);
       } else if (fields[0] === 'advanced' && fields.length === 2) {
         peer.advanced.shift()?.();
+      } else if ((fields[0] === 'busy' || fields[0] === 'idle') && fields.length === 1) {
       } else {
         finish(new Error(`step clock process ${peer.pid} sent ${JSON.stringify(line)}`));
         socket.destroy();

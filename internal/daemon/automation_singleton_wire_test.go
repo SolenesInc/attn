@@ -14,7 +14,6 @@ import (
 )
 
 func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "1s")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
@@ -33,15 +32,17 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 	legacy.Exit(1)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == legacySession })
 	applyAutomation(t, cli, automationEditSpec(id, spec))
-	awaitRun := func(earlier string) protocol.AutomationRunSummary {
+	awaitRun := func(earlier string) (run protocol.AutomationRunSummary) {
 		t.Helper()
-		for {
-			awaitAutomationChanged(app, id)
+		w.tickSchedulesUntil("a new delivered run", func() bool {
 			runs := automationRuns(t, cli, id)
-			if len(runs) > 0 && runs[0].ID != earlier && runs[0].State == "delivered" {
-				return runs[0]
+			if len(runs) == 0 || runs[0].ID == earlier || runs[0].State != "delivered" {
+				return false
 			}
-		}
+			run = runs[0]
+			return true
+		})
+		return run
 	}
 	first := awaitRun(initial.Run.ID)
 	session := protocol.Deref(first.SessionID)
@@ -87,57 +88,56 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 	agent.Exit(1)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == session })
 	setAutomationEnabled(t, cli, id, true)
-	for {
-		awaitAutomationChanged(app, id)
-		runs := automationRuns(t, cli, id)
-		if len(runs) == 0 || runs[0].State != "delivered" || protocol.Deref(runs[0].SessionID) == session {
-			continue
-		}
-		setAutomationEnabled(t, cli, id, false)
-		fresh := w.Launched(string(protocol.Deref(runs[0].SessionID)))
-		if fresh.Resumed || !strings.Contains(fresh.Prompted(), "Sweep.") || !containsAutomationFlag(fresh.Argv, "--effort", "high") {
-			t.Fatal("replacement did not start with the updated launch contract")
-		}
-		for _, run := range automationRuns(t, cli, id) {
-			if run.Automation == nil || protocol.Deref(run.Automation.Superseded) != (protocol.Deref(run.SessionID) != protocol.Deref(runs[0].SessionID)) {
-				t.Fatalf("run history disagrees about the current session: %+v", run.Automation)
-			}
-		}
-		listing, err := cli.List("")
-		if err != nil || len(listing.Sessions) != 3 {
-			t.Fatalf("want three preserved sessions, got %+v, %v", listing, err)
-		}
-		current := 0
-		for _, s := range listing.Sessions {
-			if s.Automation != nil && !protocol.Deref(s.Automation.Superseded) {
-				current++
-			}
-		}
-		if current != 1 {
-			t.Fatalf("three open sessions show %d current singletons, want one", current)
-		}
-		t.Logf("legacy manual %s; rename and harvest reused %s; effort edit preserved its busy agent; replacement %s launched with high effort; three sessions show one current singleton", legacySession, session, protocol.Deref(runs[0].SessionID))
-		break
+	var runs []protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a delivered run on a new session", func() bool {
+		runs = automationRuns(t, cli, id)
+		return len(runs) > 0 && runs[0].State == "delivered" && protocol.Deref(runs[0].SessionID) != session
+	})
+	setAutomationEnabled(t, cli, id, false)
+	fresh := w.Launched(string(protocol.Deref(runs[0].SessionID)))
+	if fresh.Resumed || !strings.Contains(fresh.Prompted(), "Sweep.") || !containsAutomationFlag(fresh.Argv, "--effort", "high") {
+		t.Fatal("replacement did not start with the updated launch contract")
 	}
+	for _, run := range automationRuns(t, cli, id) {
+		if run.Automation == nil || protocol.Deref(run.Automation.Superseded) != (protocol.Deref(run.SessionID) != protocol.Deref(runs[0].SessionID)) {
+			t.Fatalf("run history disagrees about the current session: %+v", run.Automation)
+		}
+	}
+	listing, err = cli.List("")
+	if err != nil || len(listing.Sessions) != 3 {
+		t.Fatalf("want three preserved sessions, got %+v, %v", listing, err)
+	}
+	current := 0
+	for _, s := range listing.Sessions {
+		if s.Automation != nil && !protocol.Deref(s.Automation.Superseded) {
+			current++
+		}
+	}
+	if current != 1 {
+		t.Fatalf("three open sessions show %d current singletons, want one", current)
+	}
+	t.Logf("legacy manual %s; rename and harvest reused %s; effort edit preserved its busy agent; replacement %s launched with high effort; three sessions show one current singleton", legacySession, session, protocol.Deref(runs[0].SessionID))
 }
 
 func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "100ms")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)).ID
-	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
+	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
 		t.Helper()
-		for {
-			if runs := automationRuns(t, cli, id); len(runs) > 0 && runs[0].State == "delivered" && !slices.Contains(earlier, runs[0].ID) {
-				setAutomationEnabled(t, cli, id, false)
-				return runs[0]
+		w.tickSchedulesUntil("a new delivered run", func() bool {
+			runs := automationRuns(t, cli, id)
+			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
+				return false
 			}
-			awaitAutomationChanged(app, id)
-		}
+			run = runs[0]
+			return true
+		})
+		setAutomationEnabled(t, cli, id, false)
+		return run
 	}
 	first := awaitDelivered()
 	lost := protocol.Deref(first.SessionID)

@@ -119,6 +119,7 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 		h.mu.Unlock()
 	case len(fields) == 2 && fields[0] == "advanced":
 		p.advanced <- struct{}{}
+	case len(fields) == 1 && (fields[0] == "busy" || fields[0] == "idle"):
 	default:
 		return false
 	}
