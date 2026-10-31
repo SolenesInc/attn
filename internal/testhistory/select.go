@@ -114,16 +114,18 @@ type Choice struct {
 	Baseline bool      `json:"baseline,omitempty"`
 	Standing *Standing `json:"standing,omitempty"`
 	CostMS   *int64    `json:"cost_ms,omitempty"`
+	Priced   bool      `json:"priced"`
 	Note     string    `json:"note,omitempty"`
 	Command  string    `json:"command,omitempty"`
 }
 
 type RunnerBudget struct {
-	Runner     Runner `json:"runner"`
-	BudgetMS   *int64 `json:"budget_ms,omitempty"`
-	BaselineMS *int64 `json:"baseline_ms,omitempty"`
-	EstimateMS int64  `json:"estimate_ms"`
-	Note       string `json:"note,omitempty"`
+	Runner     Runner   `json:"runner"`
+	BudgetMS   *int64   `json:"budget_ms,omitempty"`
+	BaselineMS *int64   `json:"baseline_ms,omitempty"`
+	EstimateMS int64    `json:"estimate_ms"`
+	Unpriced   []string `json:"unpriced,omitempty"`
+	Note       string   `json:"note,omitempty"`
 }
 
 type Selection struct {
@@ -157,6 +159,7 @@ func Select(request SelectRequest) Selection {
 		if cost, ok := request.Costs.UnitMS(unit); ok {
 			choice.CostMS = &cost
 		}
+		choice.Priced = request.Costs.Priced(unit)
 		choices[unit] = choice
 		order = append(order, unit)
 		return choice
@@ -206,9 +209,15 @@ func Select(request SelectRequest) Selection {
 	})
 
 	if request.Mode != ModeBaseline {
+		baseline := map[Runner][]string{}
+		for _, unit := range order {
+			if choice := choices[unit]; choice.Baseline && choice.Status != Unavailable {
+				baseline[UnitRunner(unit)] = append(baseline[UnitRunner(unit)], unit)
+			}
+		}
 		for _, runner := range []Runner{RunnerGo, RunnerVitest, RunnerPlaywright} {
 			if runners[runner] {
-				selection.Budgets = append(selection.Budgets, request.fit(runner, historical))
+				selection.Budgets = append(selection.Budgets, request.fit(runner, baseline[runner], historical))
 			}
 		}
 	}
@@ -232,19 +241,15 @@ func Select(request SelectRequest) Selection {
 
 var statusOrder = map[Status]int{Selected: 0, OverBudget: 1, Unpriced: 2, Unavailable: 3}
 
-func (request SelectRequest) fit(runner Runner, ranked []*Choice) RunnerBudget {
-	var candidates, baseline []*Choice
+func (request SelectRequest) fit(runner Runner, baseline []string, ranked []*Choice) RunnerBudget {
+	var candidates []*Choice
 	for _, choice := range ranked {
-		if UnitRunner(choice.Unit) != runner {
-			continue
-		}
-		candidates = append(candidates, choice)
-		if choice.Baseline {
-			baseline = append(baseline, choice)
+		if UnitRunner(choice.Unit) == runner {
+			candidates = append(candidates, choice)
 		}
 	}
 	budget := RunnerBudget{Runner: runner}
-	baselineMS, unpriced := request.Costs.Estimate(unitsOf(baseline))
+	baselineMS, unpriced := request.Costs.Estimate(baseline)
 	if len(unpriced) == 0 {
 		budget.BaselineMS = &baselineMS
 	}
@@ -289,16 +294,8 @@ func (request SelectRequest) fit(runner Runner, ranked []*Choice) RunnerBudget {
 		choice.Status = Selected
 		chosen = append(chosen, choice.Unit)
 	}
-	budget.EstimateMS, _ = request.Costs.Estimate(chosen)
+	budget.EstimateMS, budget.Unpriced = request.Costs.Estimate(chosen)
 	return budget
-}
-
-func unitsOf(choices []*Choice) []string {
-	units := make([]string, len(choices))
-	for i, choice := range choices {
-		units[i] = choice.Unit
-	}
-	return units
 }
 
 func (policy Policy) ranksBefore(a, b Choice) bool {

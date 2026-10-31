@@ -211,6 +211,8 @@ since.
 
 - `replace` selects ranked units, per runner, while the estimated cost of the
   selection stays within the estimated cost of that runner's baseline units.
+  A baseline unit the change touches runs as a changed test and still counts
+  in that budget.
 - `extend` keeps every baseline unit and adds ranked units, within the
   baseline's cost plus `--allowance` when one is given.
 - `baseline` selects only the baseline units of the selected groups, as
@@ -227,6 +229,15 @@ selects for that commit with the receipts that had finished by the commit's
 committer time, the history before it, and the commit's own list, tests and
 diff; then compares the selections of `baseline`, `success-count`,
 `recent-failure` and `extend-all` (extend without an allowance) with the
-failures later observed on that commit. A failure a selection included is not
+failures later observed on that commit. A receipt without a finish time, such
+as one `recover` sealed, is left out of the replay, since when its results
+existed is unknown; `select` still reads it.
+
+Each selection's `estimate_ms` lists the selected units it could not price
+under `unpriced`. `actual_landing` is the measured baseline on this machine at
+that commit: the median wall time of each run whose requested units are a
+baseline component (the Go baseline units together, or one app unit), summed.
+Components with no run are `missing`; runs with other requested units, such as
+`measure` of a test outside the baseline, are counted as `unattributed`. A failure a selection included is not
 proof that the selection would have prevented it: a Linux failure, for one,
 need not fail on the machine that lands.

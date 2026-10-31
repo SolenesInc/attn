@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -168,6 +169,9 @@ func printSelection(out io.Writer, report selectReport) {
 		if budget.BudgetMS != nil {
 			line += ", limit " + seconds(*budget.BudgetMS)
 		}
+		if len(budget.Unpriced) > 0 {
+			line += "; unpriced: " + strings.Join(budget.Unpriced, ", ")
+		}
 		if budget.Note != "" {
 			line += "; " + budget.Note
 		}
@@ -177,6 +181,9 @@ func printSelection(out io.Writer, report selectReport) {
 		fmt.Fprintf(out, "%-11s %s", strings.ToUpper(string(choice.Status)), choice.Unit)
 		if choice.CostMS != nil {
 			fmt.Fprintf(out, " (%s)", seconds(*choice.CostMS))
+		}
+		if choice.Status == testhistory.Selected && !choice.Priced {
+			fmt.Fprint(out, " (unpriced)")
 		}
 		fmt.Fprintln(out)
 		var reasons []string
@@ -408,13 +415,17 @@ type replaySelection struct {
 	Selected   []string                   `json:"selected"`
 	Pending    []string                   `json:"pending,omitempty"`
 	EstimateMS int64                      `json:"estimate_ms"`
+	Unpriced   []string                   `json:"unpriced,omitempty"`
 	Included   []string                   `json:"included"`
 	Missed     []string                   `json:"missed"`
 }
 
 type actualLanding struct {
-	WallMS   int64 `json:"wall_ms"`
-	Receipts int   `json:"receipts"`
+	WallMS       int64    `json:"wall_ms"`
+	Components   int      `json:"components"`
+	Attempts     int      `json:"attempts"`
+	Missing      []string `json:"missing,omitempty"`
+	Unattributed int      `json:"unattributed"`
 }
 
 var replayStrategies = []struct {
@@ -471,19 +482,14 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 	point := replayPoint{Commit: commit, SelectedAt: at, Selections: map[string]replaySelection{}}
 	position, _ := c.main.Position(commit)
 	point.Failures = observed.FailedAt(position)
+	var landed []testhistory.Receipt
 	for _, receipt := range c.receipts {
 		evidence, ok := testhistory.HealthEvidence(receipt, c.main)
 		if !ok || evidence != position {
 			continue
 		}
 		point.Observed++
-		if len(receipt.Command.RequestedUnits) > 0 && receipt.Diagnostics.MachineClass == c.key.Machine && receipt.Command.WallMS != nil {
-			if point.Actual == nil {
-				point.Actual = &actualLanding{}
-			}
-			point.Actual.WallMS += *receipt.Command.WallMS
-			point.Actual.Receipts++
-		}
+		landed = append(landed, receipt)
 	}
 	before := selectionContext{main: c.main.Before(commit), mainRef: commit + "^", history: c.history, key: c.key, receipts: c.history.availableAt(at)}
 	point.Available = len(before.receipts)
@@ -502,7 +508,7 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 			Selected: selection.Units(testhistory.Selected), Included: []string{}, Missed: []string{},
 			Pending: append(selection.Units(testhistory.Unpriced), selection.Units(testhistory.Unavailable)...),
 		}
-		result.EstimateMS, _ = request.Costs.Estimate(result.Selected)
+		result.EstimateMS, result.Unpriced = request.Costs.Estimate(result.Selected)
 		selected := map[string]bool{}
 		for _, unit := range result.Selected {
 			selected[unit] = true
@@ -516,5 +522,53 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 		}
 		point.Selections[strategy.name] = result
 	}
+	point.Actual = c.actualBaseline(landed, point.Selections["baseline"].Selected)
 	return point, nil
+}
+
+func (c selectionContext) actualBaseline(receipts []testhistory.Receipt, baseline []string) *actualLanding {
+	if len(baseline) == 0 {
+		return nil
+	}
+	components := map[string][]int64{}
+	var goUnits []string
+	for _, unit := range baseline {
+		if testhistory.UnitRunner(unit) == testhistory.RunnerGo {
+			goUnits = append(goUnits, unit)
+		} else {
+			components[unit] = nil
+		}
+	}
+	sort.Strings(goUnits)
+	if len(goUnits) > 0 {
+		components[strings.Join(goUnits, "\n")] = nil
+	}
+	actual := &actualLanding{Components: len(components)}
+	for _, receipt := range receipts {
+		if len(receipt.Command.RequestedUnits) == 0 || receipt.Diagnostics.MachineClass != c.key.Machine || receipt.Command.WallMS == nil {
+			continue
+		}
+		requested := append([]string(nil), receipt.Command.RequestedUnits...)
+		sort.Strings(requested)
+		key := strings.Join(requested, "\n")
+		if _, baselineRun := components[key]; !baselineRun {
+			actual.Unattributed++
+			continue
+		}
+		components[key] = append(components[key], *receipt.Command.WallMS)
+		actual.Attempts++
+	}
+	for key, walls := range components {
+		if len(walls) == 0 {
+			actual.Missing = append(actual.Missing, strings.ReplaceAll(key, "\n", ", "))
+			continue
+		}
+		sort.Slice(walls, func(i, j int) bool { return walls[i] < walls[j] })
+		actual.WallMS += walls[len(walls)/2]
+	}
+	sort.Strings(actual.Missing)
+	if actual.Attempts == 0 && actual.Unattributed == 0 {
+		return nil
+	}
+	return actual
 }

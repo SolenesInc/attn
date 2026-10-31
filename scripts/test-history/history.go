@@ -70,11 +70,7 @@ func loadHistory() (history, error) {
 func (h history) availableAt(at time.Time) []testhistory.Receipt {
 	var available []testhistory.Receipt
 	for _, receipt := range h.receipts {
-		ended := receipt.Command.StartedAt
-		if receipt.Command.FinishedAt != nil {
-			ended = *receipt.Command.FinishedAt
-		}
-		if !ended.After(at) {
+		if finished := receipt.Command.FinishedAt; finished != nil && !finished.After(at) {
 			available = append(available, receipt)
 		}
 	}

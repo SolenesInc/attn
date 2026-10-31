@@ -318,6 +318,19 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		}
 	})
 
+	t.Run("a changed baseline unit is required and still counts in the baseline's budget", func(t *testing.T) {
+		changedBaseline := request
+		changedBaseline.ChangedTests = []string{a}
+		selection := th.Select(changedBaseline)
+		if *selection.Budgets[0].BudgetMS != 7000 {
+			t.Fatalf("budget = %d, want the whole baseline's 7000", *selection.Budgets[0].BudgetMS)
+		}
+		want := selected{a: th.Selected, flaky: th.Selected, b: th.Selected, healed: th.Selected, gone: th.Unavailable}
+		if got := statuses(selection); !reflect.DeepEqual(got, want) {
+			t.Fatalf("statuses = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("recent-failure ranks by the newest anchor alone", func(t *testing.T) {
 		recent := request
 		recent.Policy = th.RecentFailure

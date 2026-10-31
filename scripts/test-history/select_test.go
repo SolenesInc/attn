@@ -152,7 +152,7 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	repo.receive(linuxFailure("ci-native-fails", admitted, "native agent-reload", start.Add(time.Minute)))
 
 	repo.git("checkout", "-q", "-b", "side")
-	repo.write("side.txt", "merged, not first-parent\n")
+	repo.write("side/side.go", "package side\n")
 	sideCommit := repo.commit("work merged into main", start.Add(2*time.Minute))
 	repo.receive(linuxFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
 	repo.git("checkout", "-q", "main")
@@ -162,6 +162,15 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	landed := repo.commit("land on main", time.Now().Add(time.Hour))
 	repo.runTests("./p", "./q")
 	repo.receive(linuxFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
+	recovered := linuxFailure("recovered-without-finish", admitted, "go ./p TestA", start)
+	recovered.Command.FinishedAt, recovered.Command.Exit, recovered.Complete = nil, nil, false
+	repo.receive(recovered)
+	if out, code := repo.history("capture", "go", "--unit", "go ./p TestA", "--", "-count=1", "-run", "^TestA$", "./p"); code != 0 {
+		t.Fatalf("baseline landing run exited %d:\n%s", code, out)
+	}
+	if out, code := repo.history("capture", "go", "--unit", "go ./q TestC", "--", "-count=1", "-run", "^TestC$", "./q"); code != 0 {
+		t.Fatalf("measure run exited %d:\n%s", code, out)
+	}
 
 	repo.git("checkout", "-q", "-b", "change")
 	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "first", "B")+"\nfunc TestNew(t *testing.T) {}\n")
@@ -292,8 +301,20 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 			t.Fatalf("failures at the landed commit = %v", point.Failures)
 		}
 		shared, _ := filepath.Glob(filepath.Join(repo.spool, "shared", "*.json"))
-		if want := len(sealedReceipts(t, repo.spool)) + len(shared) - 1; point.Available != want {
-			t.Fatalf("replay used %d receipts, want %d: all but ci-a-fails, which finished after the commit", point.Available, want)
+		if want := len(sealedReceipts(t, repo.spool)) + len(shared) - 2; point.Available != want {
+			t.Fatalf("replay used %d receipts, want %d: all but ci-a-fails, which finished after the commit, and the recovered receipt, whose finish is unknown", point.Available, want)
+		}
+		if merge := decode[replayPoint](t, lines[0]); strings.Join(merge.Selections["baseline"].Unpriced, " ") != "go ./p TestA" {
+			t.Fatalf("at the merge, before any run was priced, baseline unpriced = %v; a missing cost must stay visible", merge.Selections["baseline"].Unpriced)
+		}
+		actual := point.Actual
+		if actual == nil || actual.Components != 1 || actual.Attempts != 1 || actual.Unattributed != 1 || len(actual.Missing) != 0 {
+			t.Fatalf("actual landing = %+v, want the one baseline run attributed and the TestC run left unattributed", actual)
+		}
+		for _, receipt := range sealedReceipts(t, repo.spool) {
+			if strings.Join(receipt.Command.RequestedUnits, " ") == "go ./p TestA" && actual.WallMS != *receipt.Command.WallMS {
+				t.Fatalf("actual landing wall = %d, want the baseline run's %d", actual.WallMS, *receipt.Command.WallMS)
+			}
 		}
 		for name, selection := range point.Selections {
 			if strings.Join(selection.Included, " ") != "go ./p TestA" {
