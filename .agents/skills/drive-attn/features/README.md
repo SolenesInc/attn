@@ -131,9 +131,11 @@ In the index, "both" means people and agents.
   `[role="combobox"][aria-label="Commands"]` to take focus, type the
   command's title with `bridge native_text`, then press Enter. The map names
   the command id; you type its title.
-- Settings: press ⌘, (`ui.openSettings`), then click the section's nav
-  button, `[data-testid="settings-nav-<section>"]`, natively.
-  [settings.md](settings.md) lists the section ids.
+- Settings: press ⌘, (`ui.openSettings`; it closes the dialog when open),
+  clear any `search` that `bridge settings_get_state` shows, then click the
+  section's nav button, `[data-testid="settings-nav-<section>"]`, natively.
+  [settings.md](settings.md) lists the section ids and the step that clears
+  the search.
 - A native click: `bridge native_mouse` takes `x` and `y` from 0 to 1 across
   the window. Get them for an element with `bridge dom_native_point
   '{"selector":"..."}'`. It waits for the element to appear and for it and

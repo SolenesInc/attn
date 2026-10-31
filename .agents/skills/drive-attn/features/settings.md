@@ -94,7 +94,7 @@ Preconditions:
 
 ## Gotchas
 
-- The dialog first opens on Mobile and hosts (`connectivity`), not Appearance, and keeps the last section while the app runs.
+- The dialog first opens on Mobile and hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge settings_get_state` shows a `search`, clear it as the Mobile and hosts step does before clicking a `settings-nav-<section>` button.
 - The dialog shows the shell's `theme light` only because a fresh instance has no theme yet, and the app takes the first value it sees. On an instance that already had a theme, run the theme steps from the dialog first.
 - The Outposts and Analytics sections exist only while `outposts_enabled` or `analytics.enabled` is true. `bridge settings_select_section` refuses an unknown id and needs the dialog open; like `set_setting`, it skips native input and serves only as setup.
 - `""` restores a default only where the key's description says so. `attn settings set theme ""` is refused as an invalid theme.

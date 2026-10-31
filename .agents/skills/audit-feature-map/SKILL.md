@@ -54,6 +54,8 @@ file's `## Contexts` are not doors; drive the ones its recipe drives.
   dedicated display, an outpost peer, Pi or the Guardian, a local ingest
   service, or a real external service is `blocked`, naming that
   precondition. Never turn on a real service to get a pass.
+- A step the permissions deny is `blocked`, naming the denial. Never work
+  around a denial.
 - One pass at a time, one instance driving at a time.
 - Do not dispatch fixers or message authors. Review main, the sheriff and CI
   keep their jobs; reuse their evidence only for the exact claim it makes.
@@ -67,7 +69,7 @@ file's `## Contexts` are not doors; drive the ones its recipe drives.
 | `drift` | The file is wrong and you could not correct it this pass | what the file says and what attn does | seed |
 | `regression` | attn breaks intended behavior | as `drift`, plus why the behavior is intended | seed |
 | `harness` | `bridge`, `wsctl`, the mock agent or a scenario failed, not attn | the failing command and output | seed |
-| `blocked` | A precondition the baseline lacks | the recipe's command with its output, or the command alone when running it would break a rule here; and the missing precondition | the seed that carries the cause, when one does |
+| `blocked` | A precondition the baseline lacks, or a step the permissions deny | the recipe's command with its output, or the command alone when running it would break a rule here; and the missing precondition | the seed that carries the cause, when one does |
 | `ambiguous` | Intent unclear | what each source says | ask id |
 
 Evidence is a path under the pass's evidence folder or a seed id, never only
@@ -171,9 +173,8 @@ one at a time, so each starts with an empty context; your own context keeps
 only what they return. Give the subagent the path of `<runs>/pass.env`, the
 instance name, the feature id, its rows from `rows.md`, its lines from
 `sources.txt`, the Rules and Outcomes sections of this file, and steps 1–4.
-Tell it that the instance keeps what earlier features left on it, and that a
-step the permissions deny is `blocked`, naming the denial, never worked
-around.
+Tell it that the instance keeps what earlier features left on it, so it
+removes what its recipe needs gone, as the README's Runs section says.
 
 1. Read the feature's file whole, and the commits `sources.txt` lists for it.
 2. Drive every door through its file's recipe, as drive-attn's Evidence says,
@@ -182,16 +183,19 @@ around.
    section says.
 3. When a step fails, read the source and the commits before deciding. Retry
    a step whose own deadline expired once, then classify it.
-4. Commit each map fix in `$repair`, and return the feature's filled rows
-   (outcome, evidence and follow-up), its minutes of driving, and whether the
-   instance can still give a baseline.
+4. Commit each map fix in `$repair`. Return the feature's rows: outcome,
+   evidence, and the map commit for `fixed`; for `drift`, `regression` and
+   `harness`, the cause with its commands and output instead of a seed. Also
+   return its minutes of driving, how long it waited for the display lock,
+   and whether the instance can still give the baseline.
 
-Then fill the rows in `rows.md` and write the `feature` note. When the
+Then plant or reuse seeds as [Seeds](#seeds) says, fill the rows in
+`rows.md` with their ids, and write the `feature` note. When the
 instance can no longer give a baseline, clean it and start another before the
 next feature.
 
-A native scenario waits for the shared display lock. Record when it waited, so
-the report keeps waiting apart from driving.
+A native scenario waits for the shared display lock; the report keeps those
+waits apart from driving.
 
 ## Clean up
 
@@ -209,7 +213,7 @@ name and the exact error.
 `clean` keeps `~/attn-notebook-<name>` when the instance made one. The pass
 made everything in it, so after a clean that succeeded, record its size and
 remove it:
-`du -sh ~/attn-notebook-<name> >> $runs/evidence/clean-<name>.log && rm -r ~/attn-notebook-<name>`.
+`if [ -d ~/attn-notebook-<name> ]; then du -sh ~/attn-notebook-<name> >> $runs/evidence/clean-<name>.log && rm -r ~/attn-notebook-<name>; fi`.
 
 ## Repair the map
 
@@ -272,7 +276,7 @@ workers run detached and are not counted.
 <the output of `$S gaps` on this report>
 
 ## Cleanup
-<instance: clean.sh result, notebook folder removed and its size>; anything else left behind
+<instance: clean.sh result, its notebook folder's size when removed, or none>; anything else left behind
 
 ## Doors
 <the table from rows.md>
