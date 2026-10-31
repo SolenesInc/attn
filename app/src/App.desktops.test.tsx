@@ -248,6 +248,7 @@ describe('desktop surface', () => {
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       connectionError: null,
       hasReceivedInitialState: true,
+      settings: {},
       sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),
       sendNotificationMarkRead: vi.fn(async () => 0),
       rateLimit: null,
