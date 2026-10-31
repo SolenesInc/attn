@@ -486,6 +486,17 @@ func newSeedFlags(verb string) *seedFlags {
 	return f
 }
 
+func (f *seedFlags) seedID(verb, ref string) string {
+	if garden.ValidateID(ref) == nil {
+		return ref
+	}
+	shown, err := f.client().SeedShow(f.sessionID(), ref)
+	if err != nil {
+		seedFail(verb, err)
+	}
+	return shown.Seed.ID
+}
+
 func (f *seedFlags) noteKind() string {
 	if f.handoff {
 		return garden.NoteKindHandoff
@@ -788,6 +799,7 @@ func runSeedReview(args []string) {
 		if len(positionals) != 2 {
 			seedUsageError("review keep", fmt.Errorf("needs a review id and seed id"))
 		}
+		seedID := f.seedID("review keep", positionals[1])
 		shown, showErr := f.client().SeedReviewShow(positionals[0])
 		if showErr != nil {
 			seedFail("review keep", showErr)
@@ -795,7 +807,7 @@ func runSeedReview(args []string) {
 		var receipt *protocol.GardenReviewItem
 		if shown.Review != nil {
 			for i := range shown.Review.Items {
-				if shown.Review.Items[i].SeedID == positionals[1] {
+				if shown.Review.Items[i].SeedID == seedID {
 					receipt = &shown.Review.Items[i]
 					break
 				}
@@ -804,7 +816,7 @@ func runSeedReview(args []string) {
 		if receipt == nil {
 			seedFail("review keep", fmt.Errorf("seed %s is not part of Garden review %s", positionals[1], positionals[0]))
 		}
-		result, err = f.client().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
+		result, err = f.client().SeedReviewKeep(seedID, protocol.SeedReviewActionContext{
 			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
 		})
 	}
@@ -1131,13 +1143,7 @@ func runSeedEdit(args []string) {
 	if !f.wasSet("m") {
 		seedUsageError("edit", fmt.Errorf("%s", garden.EditRecipe(id)))
 	}
-	if garden.ValidateID(id) != nil {
-		shown, err := f.client().SeedShow(f.sessionID(), id)
-		if err != nil {
-			seedFail("edit", err)
-		}
-		id = shown.Seed.ID
-	}
+	id = f.seedID("edit", id)
 	body, base, err := garden.ParseStamped(id, f.text("edit"))
 	if err != nil {
 		seedFail("edit", err)

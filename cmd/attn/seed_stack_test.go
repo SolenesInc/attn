@@ -573,10 +573,12 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireFailure(t, s.Attn("seed", "review", "keep", "r-missing", "--json", "s-7k3f9m"), "seed review keep: ", "no Garden review r-missing exists")
 	})
 
-	t.Run("review show lists what each seed offers", func(t *testing.T) {
+	t.Run("review show lists what each seed offers, and keep takes an id or a slug", func(t *testing.T) {
 		register(t, s, "drifter", "drifter")
 		seed := plant(t, s, "Drifted work")
+		bySlug := plant(t, s, "Kept by slug")
 		seedAs(t, s, "drifter", "tend", seed.ID)
+		seedAs(t, s, "drifter", "tend", bySlug.ID)
 		if err := s.Client().Unregister("drifter"); err != nil {
 			t.Fatal(err)
 		}
@@ -585,8 +587,37 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		if started.Review == nil {
 			t.Fatalf("review start --json = %+v", started)
 		}
-		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
+		review := started.Review.Run.ID
+		requireLines(t, "review show", seedAs(t, s, "", "review", "show", review),
 			"\n"+seed.ID+"  Drifted work\n", "\nactions\tsend_to_chief, keep_growing, park, harvest, wither\n")
+
+		kept := func(id string) string {
+			t.Helper()
+			var shown protocol.SeedReviewResult
+			s.Attn("seed", "review", "show", review, "--json").JSON(t, &shown)
+			for _, item := range shown.Review.Items {
+				if item.SeedID == id {
+					return protocol.Deref(item.ResolvedAction)
+				}
+			}
+			t.Fatalf("review %s has no item for %s", review, id)
+			return ""
+		}
+		seedAs(t, s, "", "review", "keep", review, bySlug.StepSlug)
+		if action := kept(bySlug.ID); action != "keep_growing" {
+			t.Errorf("keep by slug %s resolved its item as %q", bySlug.StepSlug, action)
+		}
+
+		twin := plant(t, s, "Drifted work")
+		requireFailure(t, s.Attn("seed", "review", "keep", review, seed.StepSlug), "seed review keep: ",
+			"the slug "+seed.StepSlug+" names 2 seeds", seed.ID, twin.ID)
+		if action := kept(seed.ID); action != "" {
+			t.Errorf("an ambiguous slug resolved the item as %q", action)
+		}
+		seedAs(t, s, "", "review", "keep", review, seed.ID)
+		if action := kept(seed.ID); action != "keep_growing" {
+			t.Errorf("keep by id %s resolved its item as %q", seed.ID, action)
+		}
 	})
 
 	t.Run("checks print where each stands, from a move to a harvest", func(t *testing.T) {
