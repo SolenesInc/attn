@@ -26,6 +26,7 @@ go ./internal/daemon TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommits
 go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
 go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne
+go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnected
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
