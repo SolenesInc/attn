@@ -104,7 +104,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	if err != nil {
 		return nil, err
 	}
-	letters, err := d.crewLetterReferences()
+	letters, _, err := d.crewLetterReferences()
 	if err != nil {
 		return nil, err
 	}
@@ -287,9 +287,12 @@ func (d *Daemon) forgetConversation(id string, unlinkCrewLetters bool) (*protoco
 			sort.Strings(names)
 			return fmt.Errorf("conversation %s is kept by open seeds: %s; harvest or wither them before forgetting", key.resumeID, strings.Join(names, ", "))
 		}
-		letters, err := d.crewLetterReferences()
+		letters, unreadable, err := d.crewLetterReferences()
 		if err != nil {
 			return err
+		}
+		if unreadable != nil {
+			return fmt.Errorf("conversation %s may be kept by crew letters that cannot be read; restore them and retry: %w", key.resumeID, unreadable)
 		}
 		if len(letters[key]) > 0 && !unlinkCrewLetters {
 			names := make([]string, 0, len(letters[key]))

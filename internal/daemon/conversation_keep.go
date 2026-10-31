@@ -3,6 +3,7 @@ package daemon
 import (
 	"archive/tar"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -176,79 +177,86 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
-func (d *Daemon) crewLetterReferences() (map[conversationKey][]protocol.KeptConversationCrewLetter, error) {
+func (d *Daemon) crewLetterReferences() (referenced map[conversationKey][]protocol.KeptConversationCrewLetter, unreadable error, err error) {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	referenced := make(map[conversationKey][]protocol.KeptConversationCrewLetter)
+	referenced = make(map[conversationKey][]protocol.KeptConversationCrewLetter)
 	for _, member := range members {
-		dir, err := d.validateCrewHandoffsDir(member)
-		if err != nil {
-			return nil, err
-		}
-		letters, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("crew letter references for %s: %w", member.ID, err)
-		}
-		for _, letter := range letters {
-			if letter.IsDir() || !strings.HasSuffix(letter.Name(), ".md") {
-				continue
-			}
-			path := filepath.Join(dir, letter.Name())
-			for _, file := range []string{path, path + ".json"} {
-				if err := d.validateCrewLetterPath(member, file); err != nil {
-					return nil, err
-				}
-			}
-			sessionID, err := crew.HandoffSession(path)
-			if err != nil {
-				return nil, err
-			}
-			if sessionID == "" {
-				continue
-			}
-			when, err := crewHandoffTime(letter.Name())
-			if err != nil {
-				return nil, err
-			}
-			session := d.store.SessionLedgerEntry(sessionID)
-			if session == nil {
-				continue
-			}
-			resumeID := d.store.GetResumeSessionID(sessionID)
-			if resumeID == "" {
-				continue
-			}
-			key := conversationKey{session.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationCrewLetter{Member: member.ID, Filename: letter.Name(), OccurredAt: when})
+		if err := d.addCrewLetterReferences(referenced, member); err != nil {
+			unreadable = errors.Join(unreadable, err)
 		}
 	}
-	return referenced, nil
+	return referenced, unreadable, nil
 }
 
-func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
+func (d *Daemon) addCrewLetterReferences(referenced map[conversationKey][]protocol.KeptConversationCrewLetter, member crew.Member) error {
+	dir, err := d.validateCrewHandoffsDir(member)
+	if err != nil {
+		return err
+	}
+	letters, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("crew letter references for %s: %w", member.ID, err)
+	}
+	for _, letter := range letters {
+		if letter.IsDir() || !strings.HasSuffix(letter.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(dir, letter.Name())
+		for _, file := range []string{path, path + ".json"} {
+			if err := d.validateCrewLetterPath(member, file); err != nil {
+				return err
+			}
+		}
+		sessionID, err := crew.HandoffSession(path)
+		if err != nil {
+			return err
+		}
+		if sessionID == "" {
+			continue
+		}
+		when, err := crewHandoffTime(letter.Name())
+		if err != nil {
+			return err
+		}
+		session := d.store.SessionLedgerEntry(sessionID)
+		if session == nil {
+			continue
+		}
+		resumeID := d.store.GetResumeSessionID(sessionID)
+		if resumeID == "" {
+			continue
+		}
+		key := conversationKey{session.Agent, resumeID}
+		referenced[key] = append(referenced[key], protocol.KeptConversationCrewLetter{Member: member.ID, Filename: letter.Name(), OccurredAt: when})
+	}
+	return nil
+}
+
+func (d *Daemon) referencedConversations() (referenced map[conversationKey]bool, unreadable error, err error) {
 	seeds, err := d.conversationSeedReferences()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	referenced := make(map[conversationKey]bool, len(seeds))
+	referenced = make(map[conversationKey]bool, len(seeds))
 	for key := range seeds {
 		referenced[key] = true
 	}
-	letters, err := d.crewLetterReferences()
+	letters, unreadable, err := d.crewLetterReferences()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for key := range letters {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, pin := range pins {
 		if d.sessionHost(pin.SessionID) != "" {
@@ -256,7 +264,7 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 		}
 		referenced[conversationKey{pin.Agent, pin.ResumeID}] = true
 	}
-	return referenced, nil
+	return referenced, unreadable, nil
 }
 
 func (d *Daemon) keepConversations(now time.Time) {
@@ -265,10 +273,13 @@ func (d *Daemon) keepConversations(now time.Time) {
 	}
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
-	referenced, err := d.referencedConversations()
+	referenced, unreadable, err := d.referencedConversations()
 	if err != nil {
 		d.logf("conversation keep: read references: %v", err)
 		return
+	}
+	if unreadable != nil {
+		d.notifyConversationReferencesIncomplete(unreadable)
 	}
 	live := make(map[conversationKey]bool)
 	for _, session := range d.store.List("") {
@@ -362,6 +373,31 @@ func (d *Daemon) keepConversations(now time.Time) {
 	})
 }
 
+func (d *Daemon) notifyConversationReferencesIncomplete(cause error) {
+	d.logf("conversation keep: incomplete references: %v", cause)
+	impact := "attn keeps copying conversations, but expiry is paused because some crew letters could not be read. Restore the homes or letters listed below to resume expiry."
+	record, created, err := d.store.EnsureNotification(store.NotificationRecord{
+		ID:         fmt.Sprintf("conversation-references-incomplete:%x", sha256.Sum256([]byte(cause.Error()))),
+		Kind:       "conversation_references_incomplete",
+		Severity:   store.NotificationWarning,
+		Title:      "Conversation expiry is paused",
+		Body:       impact,
+		Detail:     cause.Error(),
+		Trigger:    "attn checked which conversations to keep.",
+		Impact:     impact,
+		Cause:      cause.Error(),
+		SourceKind: "task",
+		SourceID:   conversationKeepKind,
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add incomplete conversation references: %v", err)
+		return
+	}
+	if created {
+		d.publishFact(FactNotificationCreated, record.ID, nil)
+	}
+}
+
 func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[conversationKey]bool, now time.Time) {
 	if len(all) == 0 {
 		return
@@ -371,9 +407,12 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[c
 	d.gardenWatchMu.Lock()
 	defer d.gardenWatchMu.Unlock()
 	err := d.worktreeMaintenance.TryBackgroundRemoval(context.Background(), func(automaticWorktreeCleanupProtection) error {
-		referenced, err := d.referencedConversations()
+		referenced, unreadable, err := d.referencedConversations()
 		if err != nil {
 			return err
+		}
+		if unreadable != nil {
+			return unreadable
 		}
 		for _, kept := range all {
 			if !kept.DeletedAt.IsZero() {
