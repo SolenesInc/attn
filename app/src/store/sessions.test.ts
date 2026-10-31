@@ -198,6 +198,35 @@ describe('sessions store', () => {
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
   });
 
+  it('syncFromDaemonSessions puts a session that comes back on the desktop it is placed on', () => {
+    const daemonSession = {
+      id: 'blip-session',
+      label: 'Blip',
+      agent: 'codex',
+      directory: '/tmp/project',
+      profile_id: 'profile',
+      state: 'working',
+    };
+    const desktop = desktopWith('desktop-blip', JSON.stringify({ type: 'pane', pane_id: 'pane-blip' }), 'pane-blip', [
+      { pane_id: 'pane-blip', session_id: 'blip-session', title: 'Blip' },
+    ]);
+
+    useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
+    useSessionStore.getState().syncFromArrangement('profile', null, [desktop], { kind: 'scope' });
+    expect(
+      useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.desktop.agents,
+    ).toHaveLength(1);
+
+    useSessionStore.getState().syncFromDaemonSessions([]);
+    useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
+
+    const restored = useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session');
+    expect(restored).toMatchObject({ desktopId: 'desktop-blip', profileId: 'profile', daemonActivePaneId: 'pane-blip' });
+    expect(restored?.desktop.agents).toEqual([
+      { id: 'pane-blip', runtimeId: 'blip-session', sessionId: 'blip-session', title: 'Blip' },
+    ]);
+  });
+
   it('syncFromDaemonSessions keeps the session being created', async () => {
     const neighbour = {
       id: 'sess-neighbour',
