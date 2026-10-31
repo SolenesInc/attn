@@ -150,7 +150,9 @@ In the index, "both" means people and agents.
 - `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
-  buttons, needs a `move` over it first.
+  buttons, ignores the pointer until then, and `dom_native_point` refuses
+  it as covered. Resolve the row's point and `move` there first, then
+  resolve the control's point and click it.
 - Before resolving a point, show the intended desktop and scope the
   selector to its visible tile; retained desktops keep hidden copies of
   their elements. Native input rejects coordinates outside `[0,1)` and
