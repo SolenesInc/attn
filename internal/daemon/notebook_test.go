@@ -52,7 +52,7 @@ func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for {
 		select {
 		case message := <-client.send:

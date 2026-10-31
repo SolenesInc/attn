@@ -64,7 +64,7 @@ func TestSharedHost_MultipleSessionsAndBackendRecovery(t *testing.T) {
 	if err := backend.Input(context.Background(), "shared-one", []byte("printf '__RUST_HOST_ONE__\\n'\n")); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	var output bytes.Buffer
 	for !strings.Contains(output.String(), "__RUST_HOST_ONE__") {
 		select {
@@ -137,7 +137,7 @@ func TestSharedHost_InnerShellPromptSurvivesForegroundPolling(t *testing.T) {
 	}()
 	waitFor := func(claim, detail string, rejectBusy bool) {
 		t.Helper()
-		deadline := time.After(10 * time.Second)
+		deadline := time.After(fakeagent.HangGuard)
 		for {
 			select {
 			case obs := <-observations:
@@ -384,7 +384,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	}
 
 	got := make(map[string]ExitInfo, len(ids))
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for len(got) < len(ids) {
 		select {
 		case info := <-exits:
@@ -913,7 +913,7 @@ func TestSharedHost_AttachCarriesCommandBlocks(t *testing.T) {
 
 func waitForStreamText(t *testing.T, stream Stream, want string) OutputEvent {
 	t.Helper()
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	var output bytes.Buffer
 	for {
 		select {
@@ -933,7 +933,7 @@ func waitForStreamText(t *testing.T, stream Stream, want string) OutputEvent {
 
 func waitForExitInfo(t *testing.T, exits <-chan ExitInfo, id harness.TerminalID, matches func(ExitInfo) bool) {
 	t.Helper()
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for {
 		select {
 		case info := <-exits:

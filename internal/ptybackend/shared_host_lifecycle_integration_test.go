@@ -413,7 +413,7 @@ func TestSharedHost_KeystrokesReachTheChildAcrossDaemonReplacement(t *testing.T)
 
 func collectStreamUntil(t *testing.T, stream Stream, suffix string) []byte {
 	t.Helper()
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	var output bytes.Buffer
 	for !bytes.HasSuffix(output.Bytes(), []byte(suffix)) {
 		select {

@@ -122,8 +122,8 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 	var inspect func(ast.Node) bool
 	inspect = func(node ast.Node) bool {
 		if clause, ok := node.(*ast.CommClause); ok {
-			if deadline := selectDeadline(clause.Comm); deadline != nil && !mentionsHangGuard(deadline) {
-				violations = append(violations, fmt.Sprintf("%s in %s: select deadline other than fakeagent.HangGuard", fset.Position(deadline.Pos()), name))
+			if deadline := selectDeadline(clause.Comm); deadline != nil {
+				ast.Inspect(deadline, inspect)
 			}
 			for _, stmt := range clause.Body {
 				ast.Inspect(stmt, inspect)
@@ -133,6 +133,7 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 		if receive, ok := node.(*ast.UnaryExpr); ok && receive.Op == token.ARROW {
 			if call, ok := receive.X.(*ast.CallExpr); ok && isCall(call, "time", "After") {
 				violations = append(violations, fmt.Sprintf("%s in %s: <-time.After outside a select", fset.Position(call.Pos()), name))
+				return false
 			}
 		}
 		call, ok := node.(*ast.CallExpr)
@@ -141,6 +142,9 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 		}
 		if isCall(call, "synctest", "Test") {
 			return false
+		}
+		if isCall(call, "time", "After") && (len(call.Args) != 1 || !isHangGuard(call.Args[0])) {
+			violations = append(violations, fmt.Sprintf("%s in %s: time.After deadline other than fakeagent.HangGuard", fset.Position(call.Pos()), name))
 		}
 		for _, wait := range []string{"Sleep", "Tick", "NewTicker"} {
 			if isCall(call, "time", wait) {
@@ -174,17 +178,21 @@ func selectDeadline(comm ast.Stmt) *ast.CallExpr {
 	return call
 }
 
-func mentionsHangGuard(call *ast.CallExpr) bool {
-	found := false
-	for _, arg := range call.Args {
-		ast.Inspect(arg, func(node ast.Node) bool {
-			if ident, ok := node.(*ast.Ident); ok && ident.Name == "HangGuard" {
-				found = true
-			}
-			return !found
-		})
+func isHangGuard(expr ast.Expr) bool {
+	switch expr := expr.(type) {
+	case *ast.ParenExpr:
+		return isHangGuard(expr.X)
+	case *ast.Ident:
+		return expr.Name == "HangGuard"
+	case *ast.SelectorExpr:
+		pkg, ok := expr.X.(*ast.Ident)
+		return ok && pkg.Name == "fakeagent" && expr.Sel.Name == "HangGuard"
+	case *ast.BinaryExpr:
+		_, leftLiteral := expr.X.(*ast.BasicLit)
+		_, rightLiteral := expr.Y.(*ast.BasicLit)
+		return expr.Op == token.MUL && (leftLiteral && isHangGuard(expr.Y) || rightLiteral && isHangGuard(expr.X))
 	}
-	return found
+	return false
 }
 
 func isCall(call *ast.CallExpr, pkg, name string) bool {

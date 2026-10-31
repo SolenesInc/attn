@@ -1,6 +1,9 @@
 import { relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { Context, ESTree } from "@oxlint/plugins";
+
+const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 export const allowancesSchema = [
   {
@@ -12,7 +15,7 @@ export const allowancesSchema = [
 
 export function reporterHonoringAllowances(context: Context, messageId: string) {
   const options = context.options[0] as { allowed?: Record<string, string> } | undefined;
-  const path = relative(context.cwd, context.filename).split(sep).join("/");
+  const path = relative(repositoryRoot, context.filename).split(sep).join("/");
   const allowed = options?.allowed?.[path] !== undefined;
   let found = 0;
   return {

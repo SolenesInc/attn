@@ -4,22 +4,28 @@ import { allowancesSchema, reporterHonoringAllowances } from "../allowances.ts";
 
 import type { ESTree } from "@oxlint/plugins";
 
-const pollingQuery = /^find(All)?By/;
+const testingLibraryQuery =
+  /^find(All)?By(Role|LabelText|PlaceholderText|Text|DisplayValue|AltText|Title|TestId)$/;
+const vitestPolls = new Set(["waitFor", "waitUntil"]);
+const timerModules = new Set(["timers/promises", "node:timers/promises"]);
+
+function propertyName(callee: ESTree.Node): string | null {
+  if (callee.type !== "MemberExpression" || callee.computed || callee.property.type !== "Identifier") return null;
+  return callee.property.name;
+}
+
+function objectName(callee: ESTree.Node): string | null {
+  if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier") return null;
+  return callee.object.name;
+}
 
 function isTimer(callee: ESTree.Node): boolean {
   if (callee.type === "Identifier") return callee.name === "setTimeout";
-  return (
-    callee.type === "MemberExpression" &&
-    !callee.computed &&
-    callee.property.type === "Identifier" &&
-    callee.property.name === "setTimeout" &&
-    callee.object.type === "Identifier" &&
-    (callee.object.name === "globalThis" || callee.object.name === "window")
-  );
+  const object = objectName(callee);
+  return propertyName(callee) === "setTimeout" && (object === "globalThis" || object === "window");
 }
 
-function callsTimer(node: ESTree.Node | null | undefined): boolean {
-  if (!node || typeof node !== "object") return false;
+function callsTimer(node: ESTree.Node): boolean {
   if (node.type === "CallExpression" && isTimer(node.callee)) return true;
   for (const [key, value] of Object.entries(node)) {
     if (key === "parent") continue;
@@ -29,26 +35,6 @@ function callsTimer(node: ESTree.Node | null | undefined): boolean {
     }
   }
   return false;
-}
-
-function isBunSleep(callee: ESTree.Node): boolean {
-  return (
-    callee.type === "MemberExpression" &&
-    callee.object.type === "Identifier" &&
-    callee.object.name === "Bun" &&
-    callee.property.type === "Identifier" &&
-    (callee.property.name === "sleep" || callee.property.name === "sleepSync")
-  );
-}
-
-function isPollingQuery(callee: ESTree.Node, testingLibraryWaitFor: Set<string>): boolean {
-  if (callee.type === "Identifier") return testingLibraryWaitFor.has(callee.name) || pollingQuery.test(callee.name);
-  return (
-    callee.type === "MemberExpression" &&
-    !callee.computed &&
-    callee.property.type === "Identifier" &&
-    pollingQuery.test(callee.property.name)
-  );
 }
 
 export const noRealTimeWaitsRule = defineRule({
@@ -65,16 +51,21 @@ export const noRealTimeWaitsRule = defineRule({
   create(context) {
     const waits = reporterHonoringAllowances(context, "realTimeWait");
     const testingLibraryWaitFor = new Set<string>();
+    const testingLibraryNamespaces = new Set<string>();
+    const promisedTimers = new Set<string>();
     return {
       ImportDeclaration(node) {
-        if (!node.source.value.startsWith("@testing-library/")) return;
+        const source = node.source.value;
         for (const specifier of node.specifiers) {
-          if (
-            specifier.type === "ImportSpecifier" &&
-            specifier.imported.type === "Identifier" &&
-            specifier.imported.name === "waitFor"
-          ) {
+          if (source.startsWith("@testing-library/") && specifier.type === "ImportNamespaceSpecifier") {
+            testingLibraryNamespaces.add(specifier.local.name);
+          }
+          if (specifier.type !== "ImportSpecifier" || specifier.imported.type !== "Identifier") continue;
+          if (source.startsWith("@testing-library/") && specifier.imported.name === "waitFor") {
             testingLibraryWaitFor.add(specifier.local.name);
+          }
+          if (timerModules.has(source) && specifier.imported.name === "setTimeout") {
+            promisedTimers.add(specifier.local.name);
           }
         }
       },
@@ -86,7 +77,18 @@ export const noRealTimeWaitsRule = defineRule({
         }
       },
       CallExpression(node) {
-        if (isBunSleep(node.callee) || isPollingQuery(node.callee, testingLibraryWaitFor)) waits.report(node);
+        const callee = node.callee;
+        const property = propertyName(callee);
+        const object = objectName(callee);
+        const wait =
+          (callee.type === "Identifier" &&
+            (testingLibraryWaitFor.has(callee.name) || promisedTimers.has(callee.name) || testingLibraryQuery.test(callee.name))) ||
+          (property !== null && testingLibraryQuery.test(property)) ||
+          (property === "waitFor" && object !== null && testingLibraryNamespaces.has(object)) ||
+          (object === "vi" && property !== null && vitestPolls.has(property)) ||
+          (object === "expect" && property === "poll") ||
+          (object === "Bun" && (property === "sleep" || property === "sleepSync"));
+        if (wait) waits.report(node);
       },
       "Program:exit": waits["Program:exit"],
     };

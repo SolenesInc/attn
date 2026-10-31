@@ -71,6 +71,7 @@
               "app/src/App.desktops.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/App.moveLeaf.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/application/useAppDeepLinks.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/application/useSessionLaunch.placement.test.tsx": "polls with vi.waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/components/LocationPicker.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/components/MarkdownReader/anchoring/pipelineParity.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/components/MigrationPicker/MigrationPicker.flow.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",

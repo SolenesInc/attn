@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -18,7 +19,7 @@ func newProtocolTestClient() *wsClient {
 
 func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success bool) protocol.SpawnResultMessage {
 	t.Helper()
-	deadline := time.After(1 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for {
 		select {
 		case outbound := <-client.send:
