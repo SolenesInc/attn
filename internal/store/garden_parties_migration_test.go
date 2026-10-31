@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -165,4 +166,47 @@ func mustJSON(t *testing.T, body map[string]any) []byte {
 		t.Fatal(err)
 	}
 	return encoded
+}
+
+func TestSeedWatchMigrationKeysEachWatchByItsParty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "watches.db")
+	old, err := newStoreAtVersion(path, 1793422341369336-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.db.Exec(`
+INSERT INTO sessions(id,user_label,directory,created_at,member_key) VALUES
+ ('day','Keel','/tmp/watches','','keel'),
+ ('next-day','Keel','/tmp/watches','','keel'),
+ ('plain','Plain','/tmp/watches','','');
+INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES
+ ('day','s-aaaaaa','2026-10-01'),
+ ('next-day','s-aaaaaa','2026-10-02'),
+ ('next-day','s-bbbbbb','2026-10-02'),
+ ('plain','s-aaaaaa','2026-10-03'),
+ ('forgotten','s-bbbbbb','2026-10-04');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := newStoreAtVersion(path, 1793422341369336)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	watches, err := upgraded.GardenSeedWatches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, watch := range watches {
+		got = append(got, watch.Watcher.String()+" "+watch.SeedID)
+	}
+	slices.Sort(got)
+	want := []string{"member:keel s-aaaaaa", "member:keel s-bbbbbb", "session:forgotten s-bbbbbb", "session:plain s-aaaaaa"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("watches after the upgrade = %q, want %q", got, want)
+	}
 }

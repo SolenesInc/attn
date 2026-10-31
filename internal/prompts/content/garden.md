@@ -77,7 +77,7 @@ When attn sends an update notification, run the read it names. Reading acknowled
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the raw body with its first-line stamp
 
-Tending a plot makes you a party to updates from every seed under it, without a watch; ending the claim stops that coverage and withdraws unread updates unless a watch still covers them. A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
+Tending a plot makes you a party to updates from every seed under it, without a watch; ending the claim stops that coverage and withdraws unread updates unless a watch still covers them. A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not. A crew member's watch belongs to the member and lasts across the member's sessions.
 
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 

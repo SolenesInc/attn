@@ -151,7 +151,9 @@ quiet unless you add `--ring`. A successful action never rings the session that
 caused it. Automation acceptance is quiet; its bell waits until
 the work is ready or the attempt needs attention. `attn seed watch <id>`
 subscribes this session to the seed and its descendants, including children
-planted later. A new delegation starts the same watch on the seed it binds.
+planted later; a crew member's watch belongs to the member and lasts across
+the member's sessions. A new delegation starts the same watch on the seed it
+binds.
 
 `attn seed unwatch <id>` removes that subscription and drops a queued update only
 when the session is neither a current or covering tender nor covered by another

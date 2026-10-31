@@ -15,12 +15,17 @@ type GardenSeedWatch struct {
 	SeedID           string
 }
 
-func (w GardenSeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
+type SeedWatch struct {
+	Watcher who.Party
+	SeedID  string
+}
+
+func (w SeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
 	return func(tx *sql.Tx) (bool, error) {
-		if w.WatcherSessionID == "" || w.SeedID == "" {
+		if w.Watcher.IsZero() || w.SeedID == "" {
 			return false, nil
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, w.WatcherSessionID, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at) VALUES (?, ?, ?)`, w.Watcher, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
 			return false, fmt.Errorf("subscribe delegation dispatcher: %w", err)
 		}
 		return true, nil
@@ -40,7 +45,7 @@ type GardenSeedBellDelivery struct {
 
 const gardenSeedUnblockedHint = "unblocked"
 
-func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID string, watching bool, now time.Time) (bool, error) {
+func (s *Store) SetGardenSeedWatch(watcher who.Party, seedID string, watching bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,12 +55,12 @@ func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID s
 	)
 	if watching {
 		res, err = s.db.Exec(`
-			INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at)
+			INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at)
 			VALUES (?, ?, ?)
-		`, watcherSessionID, seedID, now.UTC().Format(sortableTimeFormat))
+		`, watcher, seedID, now.UTC().Format(sortableTimeFormat))
 	} else {
-		res, err = s.db.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id = ? AND seed_id = ?`,
-			watcherSessionID, seedID)
+		res, err = s.db.Exec(`DELETE FROM garden_seed_watches WHERE watcher = ? AND seed_id = ?`,
+			watcher, seedID)
 	}
 	if err != nil {
 		return false, fmt.Errorf("set garden seed watch: %w", err)
@@ -64,32 +69,32 @@ func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID s
 	return n > 0, err
 }
 
-func (s *Store) GardenSeedWatching(watcherSessionID, seedID string) (bool, error) {
+func (s *Store) GardenSeedWatching(watcher who.Party, seedID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var watching bool
 	if err := s.db.QueryRow(`
-		SELECT EXISTS(SELECT 1 FROM garden_seed_watches WHERE watcher_session_id = ? AND seed_id = ?)
-	`, watcherSessionID, seedID).Scan(&watching); err != nil {
+		SELECT EXISTS(SELECT 1 FROM garden_seed_watches WHERE watcher = ? AND seed_id = ?)
+	`, watcher, seedID).Scan(&watching); err != nil {
 		return false, fmt.Errorf("read garden seed watch: %w", err)
 	}
 	return watching, nil
 }
 
-func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
+func (s *Store) GardenSeedWatches() ([]SeedWatch, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT watcher_session_id, seed_id FROM garden_seed_watches`)
+	rows, err := s.db.Query(`SELECT watcher, seed_id FROM garden_seed_watches`)
 	if err != nil {
 		return nil, fmt.Errorf("list garden seed watches: %w", err)
 	}
 	defer rows.Close()
-	var watches []GardenSeedWatch
+	var watches []SeedWatch
 	for rows.Next() {
-		var watch GardenSeedWatch
-		if err := rows.Scan(&watch.WatcherSessionID, &watch.SeedID); err != nil {
+		var watch SeedWatch
+		if err := rows.Scan(&watch.Watcher, &watch.SeedID); err != nil {
 			return nil, fmt.Errorf("scan garden seed watch: %w", err)
 		}
 		watches = append(watches, watch)

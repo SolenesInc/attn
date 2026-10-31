@@ -313,7 +313,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 	})
 }
 
-func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
+func TestAMembersClaimAndWatchShareOneMemberInboxItem(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
 		cli := w.Client()
@@ -325,21 +325,16 @@ func TestAMemberTenderAndItsDayWatchKeepIndependentInboxItems(t *testing.T) {
 		gardenNudgeWatch(t, cli, day.id, seed, false)
 		app.TypeLine(day.id, "finish the current review")
 		gardenNudgeNote(t, cli, "sender", seed, "the deployment is ready", true)
-		mail := readInbox(t, cli, day.id, 0).Items
-		addresses := map[string]bool{}
-		for _, item := range mail {
-			addresses[item.Address] = true
-		}
-		if len(mail) != 2 || !addresses["member:trellis"] || !addresses["session:"+day.id] {
-			t.Fatalf("overlapping subscriptions inbox=%+v", mail)
+		if mail := readInbox(t, cli, day.id, 0).Items; len(mail) != 1 || mail[0].Address != "member:trellis" {
+			t.Fatalf("the member's claim and watch on one seed should share one item: %+v", mail)
 		}
 		gardenNudgeNote(t, cli, "sender", seed, "keep the watcher informed", true)
 		if _, err := cli.SeedTransition(protocol.SessionID(day.id), seed, "park", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		watcherMail := readInbox(t, cli, day.id, 0).Items
-		if len(watcherMail) != 1 || watcherMail[0].Address != "session:"+day.id || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
-			t.Fatalf("watcher inbox after tender parks=%+v", watcherMail)
+		if len(watcherMail) != 1 || watcherMail[0].Address != "member:trellis" || !strings.Contains(watcherMail[0].Content, seed+" moved: note.added") {
+			t.Fatalf("the member's watch after it parked the seed=%+v", watcherMail)
 		}
 	})
 }

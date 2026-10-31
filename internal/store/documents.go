@@ -385,13 +385,13 @@ func (s *Store) CommitDocumentWritesWithEvents(
 	return s.commitDocumentWrites(commits, events, now, false, nil)
 }
 
-func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
+func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch SeedWatch, now time.Time) ([]DocumentWriteResult, error) {
 	results, _, err := s.commitDocumentWrites(commits, nil, now, false, watch.subscribe(now))
 	return results, err
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watch GardenSeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, watch SeedWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
 	return s.commitDocumentWrites(commits, events, now, false, watch.subscribe(now))
 }

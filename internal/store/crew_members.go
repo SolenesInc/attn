@@ -124,7 +124,7 @@ func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (CrewRetiremen
 			return err
 		}
 		retirement.AlreadyRetired = changed == 0
-		result, err = tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id IN (SELECT id FROM sessions WHERE member_key = ?)`, key.String())
+		result, err = tx.Exec(`DELETE FROM garden_seed_watches WHERE watcher = ?`, who.Member(key))
 		if err != nil {
 			return err
 		}

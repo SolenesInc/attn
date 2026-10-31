@@ -142,7 +142,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	commits = append(commits, log.commits...)
 	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, log.events, d.gardenTime(),
+		commits, store.SeedWatch{Watcher: who.Session(sessionID), SeedID: seed.ID}, log.events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()

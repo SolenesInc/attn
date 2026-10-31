@@ -588,19 +588,25 @@ func TestRereadingAnOldPeerMessageDoesNotReleaseANewerOutstandingRing(t *testing
 
 func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		writeCrewCharter(t, w, "trellis")
-		w.restart()
-		cli := w.Client()
-		registerSessions(t, w, cli, "sender")
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		app, cli := w.App(), w.Client()
+		day := w.bubbleClaude(t, app, "chief")
+		if set := setChiefOfStaff(app, day.id, true); !set.Success {
+			t.Fatalf("make %s the chief: %s", day.id, protocol.Deref(set.Error))
+		}
+		synctest.Wait()
+		day = w.bootBubbleClaude(t, day.id)
 		day.reply("Ready. <!-- attn:state=idle -->")
+		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "Session watch")
 		gardenNudgeWatch(t, cli, day.id, seed, false)
 		gardenNudgeNote(t, cli, "sender", seed, "Watch update", true)
 		synctest.Wait()
 		day.reply("Later. <!-- attn:state=idle -->")
 		w.advance(time.Millisecond)
-		sendAgentMessage(t, cli, "sender", "trellis", "member first")
+		sent := lifeMove(t, cli, "sender", plantSeedAs(t, cli, "sender", "For the chief"), "tend", "", "")
+		if _, err := cli.SeedSendToChief("sender", sent, ""); err != nil {
+			t.Fatal(err)
+		}
 		day.reply("Later. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(inboxDoorbell); got != 2 {
 			t.Fatalf("separate address rings=%d", got)
@@ -611,7 +617,7 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 		}
 		synctest.Wait()
 		if got := day.promptsContaining(inboxDoorbell); got != 3 {
-			t.Fatalf("unread member address was not acknowledged: %d", got)
+			t.Fatalf("unread chief address was not acknowledged: %d", got)
 		}
 	})
 }

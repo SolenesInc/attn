@@ -349,13 +349,14 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		if err != nil {
 			return nil, err
 		}
-		sessions := make([]string, 0, len(coverage))
-		for sessionID := range coverage {
-			if r.daemon.store.Get(sessionID) != nil || r.daemon.store.DelegationSessionReserved(sessionID) {
-				sessions = append(sessions, who.ToSession(sessionID).String())
+		addresses := make([]string, 0, len(coverage))
+		for watcher := range coverage {
+			if sessionID, session := watcher.Session(); session && r.daemon.store.Get(sessionID) == nil && !r.daemon.store.DelegationSessionReserved(sessionID) {
+				continue
 			}
+			addresses = append(addresses, watcher.Address().String())
 		}
-		return sessions, nil
+		return addresses, nil
 	default:
 		return nil, fmt.Errorf("unsupported Garden seed audience role %d", role)
 	}

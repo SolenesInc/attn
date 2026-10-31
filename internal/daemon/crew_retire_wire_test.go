@@ -204,6 +204,8 @@ func TestRetiringAMemberRemovesItsGardenAndPullRequestWatches(t *testing.T) {
 	if watched := gardenNudgeWatch(t, cli, string(wake.SessionID), seed, true); watched.Changed {
 		t.Fatalf("the seed watch survived retirement: %+v", watched)
 	}
+	_, err := cli.SeedWatch(wake.SessionID, seed, false)
+	crewErrorContains(t, err, "is retired")
 }
 
 func TestRetiredMembersDoNotBlockProfileDeletion(t *testing.T) {

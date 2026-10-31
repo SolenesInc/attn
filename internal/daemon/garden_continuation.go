@@ -185,10 +185,10 @@ func (d *Daemon) updateGardenDispatch(
 		var writeErr error
 		if current.Crown == "" && next.Crown != "" {
 			var results []store.DocumentWriteResult
-			watcher, _ := d.sessionOfActor(next.Dispatcher)
+			watcher, _ := next.Dispatcher.Party()
 			d.lockGardenRoles()
-			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.GardenSeedWatch{
-				WatcherSessionID: watcher, SeedID: next.Crown,
+			results, writeErr = d.store.CommitGardenDispatchWrites([]store.DocumentCommit{commit}, store.SeedWatch{
+				Watcher: watcher, SeedID: next.Crown,
 			}, d.gardenTime())
 			d.unlockGardenRoles()
 			if writeErr == nil {

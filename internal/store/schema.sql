@@ -23,7 +23,7 @@ CREATE INDEX idx_desktop_panes_session ON desktop_panes(session_id, created_at);
 CREATE INDEX idx_desktops_profile ON desktops(profile_id, order_key);
 CREATE UNIQUE INDEX idx_document_collections_address ON document_collections(namespace, collection);
 CREATE INDEX idx_file_activity_last_at ON file_activity(last_at DESC);
-CREATE INDEX idx_garden_seed_watches_seed ON garden_seed_watches(seed_id, watcher_session_id);
+CREATE INDEX idx_garden_seed_watches_seed ON garden_seed_watches(seed_id, watcher);
 CREATE INDEX idx_inbox_source ON inbox_items(kind,source_id,address);
 CREATE INDEX idx_inbox_unread ON inbox_items(address,created_at,id) WHERE read_at = '';
 CREATE UNIQUE INDEX idx_inbox_unread_key ON inbox_items(address,kind,coalesce_key) WHERE coalesce_key != '' AND read_at = '';
@@ -75,7 +75,7 @@ CREATE TABLE file_activity ( path TEXT NOT NULL, source TEXT NOT NULL, session_i
 CREATE TABLE garden_seed_artifact_observations ( seed_id TEXT PRIMARY KEY, checksum TEXT NOT NULL, event_seq INTEGER NOT NULL UNIQUE, observed_at TEXT NOT NULL );
 CREATE TABLE garden_seed_event_receipts ( event_seq INTEGER PRIMARY KEY, handled_at TEXT NOT NULL );
 CREATE TABLE garden_seed_event_sources ( source_kind TEXT NOT NULL, source_id TEXT NOT NULL, event_name TEXT NOT NULL, event_seq INTEGER NOT NULL UNIQUE, PRIMARY KEY (source_kind, source_id, event_name) );
-CREATE TABLE garden_seed_watches ( watcher_session_id TEXT NOT NULL, seed_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(watcher_session_id, seed_id) );
+CREATE TABLE garden_seed_watches ( watcher TEXT NOT NULL, seed_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(watcher, seed_id) );
 CREATE TABLE inbox_delivery (address TEXT PRIMARY KEY, outstanding_at TEXT NOT NULL);
 CREATE TABLE inbox_items ( id TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, source_id TEXT NOT NULL DEFAULT '', coalesce_key TEXT NOT NULL DEFAULT '', hint TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', bell_name TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, attempted_at TEXT NOT NULL DEFAULT '', notified_at TEXT NOT NULL DEFAULT '', read_at TEXT NOT NULL DEFAULT '', read_by TEXT NOT NULL DEFAULT '', after_seq INTEGER NOT NULL DEFAULT 0, CHECK(read_at = '' OR notified_at != ''));
 CREATE TABLE jobs ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, unique_key TEXT NOT NULL DEFAULT '', priority INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL DEFAULT '', result TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 0, scheduled_at TEXT NOT NULL, last_error TEXT NOT NULL DEFAULT '', requeued INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL , last_diagnostic TEXT NOT NULL DEFAULT '');

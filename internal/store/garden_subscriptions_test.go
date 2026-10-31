@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -60,19 +61,36 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.SetGardenSeedWatch("planner", "plot", true, now); err != nil {
-		t.Fatal(err)
+	for _, watch := range []GardenSeedWatch{{"planner", "plot"}, {"explicit", "separate"}} {
+		legacySeedWatch(t, s, watch, true, now)
 	}
-	if _, err := s.SetGardenSeedWatch("explicit", "separate", true, now); err != nil {
+}
+
+func legacySeedWatch(t *testing.T, s *Store, watch GardenSeedWatch, watching bool, now time.Time) {
+	t.Helper()
+	query, args := `INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, []any{watch.WatcherSessionID, watch.SeedID, now.UTC().Format(sortableTimeFormat)}
+	if !watching {
+		query, args = `DELETE FROM garden_seed_watches WHERE watcher_session_id = ? AND seed_id = ?`, []any{watch.WatcherSessionID, watch.SeedID}
+	}
+	if _, err := s.db.Exec(query, args...); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func sortedGardenWatches(t *testing.T, s *Store) []GardenSeedWatch {
 	t.Helper()
-	watches, err := s.GardenSeedWatches()
+	rows, err := s.db.Query(`SELECT watcher_session_id, seed_id FROM garden_seed_watches`)
 	if err != nil {
 		t.Fatal(err)
+	}
+	defer rows.Close()
+	var watches []GardenSeedWatch
+	for rows.Next() {
+		var watch GardenSeedWatch
+		if err := rows.Scan(&watch.WatcherSessionID, &watch.SeedID); err != nil {
+			t.Fatal(err)
+		}
+		watches = append(watches, watch)
 	}
 	sort.Slice(watches, func(i, j int) bool {
 		if watches[i].WatcherSessionID == watches[j].WatcherSessionID {
@@ -113,9 +131,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.db.QueryRow(`SELECT created_at FROM garden_seed_watches WHERE watcher_session_id = 'planner' AND seed_id = 'plot'`).Scan(&preserved); err != nil || preserved != created {
 		t.Fatalf("explicit watch timestamp = %q, want %q: %v", preserved, created, err)
 	}
-	if _, err := s.SetGardenSeedWatch("planner", "plot", false, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	legacySeedWatch(t, s, GardenSeedWatch{"planner", "plot"}, false, time.Now())
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +140,8 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if watching, err := s.GardenSeedWatching("planner", "plot"); err != nil || watching {
-		t.Fatalf("restart resurrected subscription: %v %v", watching, err)
+	if got := sortedGardenWatches(t, s); slices.Contains(got, GardenSeedWatch{"planner", "plot"}) {
+		t.Fatalf("restart resurrected subscription: %+v", got)
 	}
 }
 
