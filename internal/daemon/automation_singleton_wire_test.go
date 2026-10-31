@@ -186,7 +186,7 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 	t.Logf("%s lost its transcript and the next run launched %s fresh; closing %s and running again resumed conversation %s", lost, session, session, replacement.ConversationID)
 }
 
-func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionWorking(t *testing.T) {
+func TestEditingASingletonsContractHandsItsSeedToANewSessionAndLeavesTheOldOneWorking(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
@@ -253,10 +253,14 @@ func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionW
 	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(codexSpec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
 	setAutomationEnabled(t, cli, id, true)
 	reworded := awaitDelivered(first.ID, again.ID, next.ID)
-	if protocol.Deref(reworded.SeedID) == stake || protocol.Deref(reworded.SessionID) == claudeSession {
-		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session on a new seed", protocol.Deref(reworded.SessionID), protocol.Deref(reworded.SeedID))
+	rewordedSession := protocol.Deref(reworded.SessionID)
+	if protocol.Deref(reworded.SeedID) != stake || rewordedSession == claudeSession {
+		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session continuing seed %s", rewordedSession, protocol.Deref(reworded.SeedID), stake)
 	}
-	t.Logf("codex %s kept working; claude %s took over %s; a later prompt edit started %s", codexSession, claudeSession, stake, protocol.Deref(reworded.SeedID))
+	if prompt := w.Launched(string(rewordedSession)).Prompted(); !strings.Contains(prompt, "Sweep the branches.") || !strings.Contains(prompt, stake) {
+		t.Fatalf("the agent for the new prompt opened on:\n%s", prompt)
+	}
+	t.Logf("codex %s kept working; claude %s took over %s; after a prompt edit %s continued it", codexSession, claudeSession, stake, rewordedSession)
 }
 
 func TestASingletonRunDoesNotTakeBackASeedSomeoneElseTook(t *testing.T) {
