@@ -13,15 +13,16 @@ and the transcript events since then.
   recoverable      - the process died and can be revived
   launching        - starting up
 
-If the state says the agent is blocked or finished, your line must say so —
-describe what it was doing when it stopped, not what it is doing now. A fluent
+If the state says the agent is blocked or finished, your line must say so.
+Describe what the agent was doing when it stopped, not what it is doing now. A fluent
 line that contradicts the state is wrong.
 
 ## The events win over the previous line
 
 Use the previous line for continuity and for what the events do not cover. Where
-they disagree, the events are newer: if the agent has moved on, so does the line.
-Do not repeat the previous line when something new has happened.
+the previous line and the events disagree, the events are newer. If the agent has
+moved on, move the line on too. Do not repeat the previous line when something
+new has happened.
 
 `thinking` is the agent's own reasoning about what it is trying to do.
 `assistant` is what it said to the user. The events may end slightly before the

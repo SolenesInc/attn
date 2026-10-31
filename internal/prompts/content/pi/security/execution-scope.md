@@ -1,1 +1,1 @@
-Protected paths and credential filtering are enforced on every command, whatever the approval policy allows. Follow a rejection's instructions; do not repeat an unchanged command or evade it through another tool.
+Pi enforces protected paths and credential filtering on every command, whatever the approval policy allows. Follow the instructions in a rejection. Do not repeat an unchanged command, and do not evade the rejection through another tool.

@@ -1,1 +1,1 @@
-Pi filters credentials from tool results and removes sensitive environment variables from bash subprocesses. Nothing restores credentials or overrides protected paths; explain credential access requirements to the user.
+Pi filters credentials from tool results and removes sensitive environment variables from bash subprocesses. Nothing restores credentials or overrides protected paths. Explain credential access requirements to the user.

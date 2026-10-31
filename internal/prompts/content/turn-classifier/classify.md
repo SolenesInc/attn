@@ -5,7 +5,7 @@ Return STRICT JSON only, matching exactly one of:
 {"verdict":"DONE"}
 {"verdict":"PARKED"}
 
-A line starting with "[harness facts]" after the message, when present, reports what the agent harness observed (e.g. background processes still running). It comes from the harness, not from the assistant.
+A line starting with "[harness facts]" after the message, when present, reports what the agent harness observed, for example background processes still running. It comes from the harness, not from the assistant.
 
 Decision rules (in order):
 1) WAITING if the assistant asks the user any direct question.

@@ -1,1 +1,1 @@
-Pi tools are blocked by a security configuration error: {{problem}}. Explain this to the user; do not work around it.
+A security configuration error blocks Pi tools: {{problem}}. Explain the error to the user. Do not work around it.

@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const ventGuidanceLead = "with `attn vent --about attn"
+const ventGuidanceLead = "by running `attn vent --about attn"
 
 func TestAnAgentIsTaughtToVentOnlyWhenItLaunchedWithAnalyticsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)

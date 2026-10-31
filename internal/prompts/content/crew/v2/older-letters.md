@@ -1,1 +1,1 @@
- Earlier letters are in `{{handoffs_dirname}}/`; read only as many as the work at hand needs.
+ Earlier letters are in `{{handoffs_dirname}}/`. Read only as many as the work at hand needs.

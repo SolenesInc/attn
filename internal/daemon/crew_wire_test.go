@@ -711,7 +711,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	alder := wakeCrew(t, cli, "alder", "")
 	w.Launched(string(alder.SessionID))
 	primed = crewPriming(t, cli, string(alder.SessionID))
-	cut := fmt.Sprintf("You hold %d seeds and this block lists the %d you claimed most recently; `attn seed ls --flat` has them all.", claims+1, crew.MaxHeldSeeds)
+	cut := fmt.Sprintf("You hold %d seeds, and this block lists the %d you claimed most recently. `attn seed ls --flat` lists them all.", claims+1, crew.MaxHeldSeeds)
 	if !strings.Contains(primed, cut) {
 		t.Errorf("alder's priming does not say %q:\n%s", cut, primed)
 	}

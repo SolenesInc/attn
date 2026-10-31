@@ -1,1 +1,1 @@
-Pi security is not initialized; tools cannot run.
+Pi security is not initialized. Tools cannot run.

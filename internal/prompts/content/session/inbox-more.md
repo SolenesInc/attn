@@ -1,1 +1,1 @@
-{{remaining}} more unread; run `attn agent inbox` again.
+{{remaining}} more unread. Run `attn agent inbox` again.
