@@ -405,14 +405,8 @@ func (p *Peer) attach(terminal string) {
 
 func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 	p.T.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
-	defer cancel()
-	p.untilContext(ctx, awaiting, check)
-}
-
-func (p *Peer) untilContext(ctx context.Context, awaiting func() string, check func() (bool, error)) {
-	p.T.Helper()
-	deadline, _ := ctx.Deadline()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
 	for {
 		p.mu.Lock()
 		done, err := check()
@@ -428,11 +422,11 @@ func (p *Peer) untilContext(ctx context.Context, awaiting func() string, check f
 		}
 		select {
 		case <-grew:
-		case <-ctx.Done():
+		case <-guard.C:
 			p.mu.Lock()
 			described = awaiting()
 			p.mu.Unlock()
-			p.T.Fatalf("still awaiting %s at deadline %s: %v", described, deadline.Format(time.RFC3339Nano), ctx.Err())
+			p.T.Fatalf("still awaiting %s after fakeagent.HangGuard=%s", described, fakeagent.HangGuard)
 		}
 	}
 }
@@ -445,15 +439,8 @@ func Await[T any](p *Peer, event string, match func(T) bool) T {
 // AwaitSince is Await over the frames from mark on, a len(p.Log()) taken earlier.
 func AwaitSince[T any](p *Peer, mark int, event string, match func(T) bool) T {
 	p.T.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
-	defer cancel()
-	return AwaitSinceContext(ctx, p, mark, event, match)
-}
-
-func AwaitSinceContext[T any](ctx context.Context, p *Peer, mark int, event string, match func(T) bool) T {
-	p.T.Helper()
 	var found T
-	p.takeSinceContext(ctx, mark, event, func(f frame) (bool, error) {
+	p.takeSince(mark, event, func(f frame) (bool, error) {
 		if f.event != event {
 			return false, nil
 		}
@@ -571,15 +558,8 @@ func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
 
 func (p *Peer) takeSince(mark int, awaiting string, accept func(frame) (bool, error)) {
 	p.T.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
-	defer cancel()
-	p.takeSinceContext(ctx, mark, awaiting, accept)
-}
-
-func (p *Peer) takeSinceContext(ctx context.Context, mark int, awaiting string, accept func(frame) (bool, error)) {
-	p.T.Helper()
 	scanned := mark
-	p.untilContext(ctx, func() string { return awaiting }, func() (bool, error) {
+	p.until(func() string { return awaiting }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]
 			if f.consumed {

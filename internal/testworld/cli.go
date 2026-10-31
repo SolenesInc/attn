@@ -63,7 +63,7 @@ func (s *Stack) Run(inv Invocation) Result {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		s.T.Fatalf("attn %q still running after %s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, boundedDiagnostic(stdout.String()), boundedDiagnostic(stderr.String()))
+		s.T.Fatalf("attn %q still running after fakeagent.HangGuard=%s\nstdout:\n%s\nstderr:\n%s", inv.Args, fakeagent.HangGuard, boundedDiagnostic(stdout.String()), boundedDiagnostic(stderr.String()))
 	}
 	return Result{Stdout: stdout.String(), Stderr: stderr.String(), Code: exitCode(s.T, inv, err)}
 }
@@ -179,7 +179,7 @@ func (r *Running) Wait() Result {
 		r.mu.Lock()
 		stderr := r.stderr.String()
 		r.mu.Unlock()
-		r.t.Fatalf("attn %q still running after %s\nstderr:\n%s", r.args, fakeagent.HangGuard, stderr)
+		r.t.Fatalf("attn %q still running after fakeagent.HangGuard=%s\nstderr:\n%s", r.args, fakeagent.HangGuard, stderr)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -15,10 +15,11 @@ import (
 	"time"
 )
 
-const (
-	HangGuard     = 10 * time.Second
-	ControlSocket = "fakeagent.sock"
-)
+// Slowest healthy stack wait: 17.0s for outposts_updated, outpost and ensure stack tests under -race at load 84 on a 10-core Mac.
+// Receipt: seed s-ag2rpw (2026-10-31).
+const HangGuard = 60 * time.Second
+
+const ControlSocket = "fakeagent.sock"
 
 var piManifest = fmt.Sprintf(`name = %q
 version = %q
