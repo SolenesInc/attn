@@ -116,6 +116,7 @@ type Daemon struct {
 	store            *store.Store
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                sync.Mutex
+	prDetailFetches            prDetailFetches
 	automationMu               sync.Mutex
 	automationLaunchFailures   sync.Map
 	automationLaunchResults    sync.Map
@@ -3510,11 +3511,11 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 		return nil, fmt.Errorf("no client for host %s", host)
 	}
 
-	details, err := client.FetchPRDetails(repo, number)
+	changed, err := d.fetchPRDetails(client, id, repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("fetch details for %s: %w", id, err)
 	}
-	if d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+	if changed {
 		d.publishFact(FactPRDetailsChanged, id, nil)
 	}
 
@@ -3725,8 +3726,11 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
-		details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
+			if errors.Is(err, errDaemonStopping) {
+				return
+			}
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
 					d.logf("Detail refresh: %s rate limited, stopping host refresh", host)
@@ -3739,19 +3743,8 @@ func (d *Daemon) doDetailRefresh() {
 				limitedHosts[host] = time.Now().Add(60 * time.Second)
 				continue
 			}
-			d.logf("Failed to fetch details for %s: %v", pr.ID, err)
+			d.logf("Failed to refresh details for %s: %v", pr.ID, err)
 			continue
-		}
-
-		var changed bool
-		stored := d.life.Do("doDetailRefresh", func() {
-			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
-				d.store.SetPRHot(pr.ID)
-			}
-			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		})
-		if !stored {
-			return
 		}
 		if changed {
 			changedIDs = append(changedIDs, pr.ID)
@@ -3839,8 +3832,11 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
+			if errors.Is(err, errDaemonStopping) {
+				return
+			}
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
 					d.logf("App launch: %s rate limited, stopping host fetch loop", host)
@@ -3855,13 +3851,6 @@ func (d *Daemon) fetchAllPRDetails() {
 			}
 			d.logf("Failed to fetch details for %s: %v", pr.ID, err)
 			continue
-		}
-
-		var changed bool
-		if !d.life.Do("fetchAllPRDetails", func() {
-			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		}) {
-			return
 		}
 		if changed {
 			changedIDs = append(changedIDs, pr.ID)
@@ -4069,8 +4058,11 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 
 	d.store.SetPRHot(prID)
 
-	details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+	changed, err := d.fetchPRDetails(client, prID, pr.Repo, pr.Number)
 	if err != nil {
+		if errors.Is(err, errDaemonStopping) {
+			return
+		}
 		if errors.Is(err, github.ErrRateLimited) {
 			d.logf("Immediate fetch for %s: rate limited", prID)
 			if info := client.GetRateLimit("core"); info != nil {
@@ -4086,7 +4078,7 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 		return
 	}
 
-	if d.store.UpdatePRDetails(prID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+	if changed {
 		d.publishFact(FactPRDetailsChanged, prID, nil)
 	}
 	d.logf("Immediate fetch complete for %s (heat=hot)", prID)

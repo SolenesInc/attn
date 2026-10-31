@@ -2,10 +2,13 @@ package daemon_test
 
 import (
 	"maps"
+	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -230,7 +233,7 @@ func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) 
 
 	setMergeableState(gh, "unstable", checkout, cart)
 	if pr := prNumbered(t, fetchPRDetails(t, app, checkoutID), 1); protocol.Deref(pr.CIStatus) != "pending" {
-		t.Fatalf("details after CI started = %+v, want CI pending", pr)
+		t.Fatalf("details after CI started = CI %q, mergeable %q; want CI pending", protocol.Deref(pr.CIStatus), protocol.Deref(pr.MergeableState))
 	}
 	if published := producedBy(busStatus(t, app), "pr.details.changed") - before; published != 1 {
 		t.Errorf("a read after CI started published %d pr.details.changed, want 1", published)
@@ -239,6 +242,112 @@ func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) 
 	setMergeableState(gh, "dirty", checkout, cart)
 	app.Send(protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: checkoutID})
 	prFlowAwait(app, checkoutID, func(pr protocol.PR) bool { return protocol.Deref(pr.CIStatus) == "failure" })
+}
+
+func TestAnOlderDetailsReadNeverOverwritesANewerOne(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	cli := w.Client()
+	if err := cli.ToggleMuteRepo("acme/docs"); err != nil {
+		t.Fatalf("mute repo: %v", err)
+	}
+	app := w.App()
+	docs := mockserver.MockPR{Repo: "acme/docs", Number: 3, Title: "Document checkout", Role: "reviewer"}
+	gh.AddPR(docs)
+	refreshPRs(t, app)
+	id := prNumbered(t, queryPRs(t, cli, ""), docs.Number).ID
+	fetchPRDetails(t, app, id)
+	facts := func() int { return producedBy(busStatus(t, app), "pr.details.changed") }
+
+	before := facts()
+	older := startDetailsReadHeldAtReviews(t, gh, app, docs, id)
+	setPRDetails(gh, docs, "unstable", "", 0)
+	if pr := prNumbered(t, fetchPRDetails(t, app, id), docs.Number); protocol.Deref(pr.CIStatus) != "pending" {
+		t.Fatalf("newer read = CI %q, mergeable %q; want the pending CI GitHub now reports", protocol.Deref(pr.CIStatus), protocol.Deref(pr.MergeableState))
+	}
+	assertDetailsRead(t, "an older read answering after a newer change", older(), docs.Number, "pending", "abc123")
+	assertStoredDetails(t, cli, docs.Number, "pending", "abc123", false)
+	if published := facts() - before; published != 1 {
+		t.Errorf("an older read answering after a newer change published %d pr.details.changed in all, want only the newer change's 1", published)
+	}
+
+	before = facts()
+	setPRDetails(gh, docs, "dirty", "def456", 0)
+	older = startDetailsReadHeldAtReviews(t, gh, app, docs, id)
+	setPRDetails(gh, docs, "unstable", "", 0)
+	fetchPRDetails(t, app, id)
+	assertDetailsRead(t, "an older read answering after a newer unchanged read", older(), docs.Number, "pending", "abc123")
+	assertStoredDetails(t, cli, docs.Number, "pending", "abc123", false)
+	if published := facts() - before; published != 0 {
+		t.Errorf("an older read answering after a newer unchanged read published %d pr.details.changed, want 0", published)
+	}
+
+	before = facts()
+	setPRDetails(gh, docs, "dirty", "def456", 0)
+	older = startDetailsReadHeldAtReviews(t, gh, app, docs, id)
+	setPRDetails(gh, docs, "dirty", "def456", http.StatusBadGateway)
+	failed := testworld.Request(app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id},
+		protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
+	if failed.Success {
+		t.Fatalf("a read GitHub answered with %d succeeded: %+v", http.StatusBadGateway, failed.Prs)
+	}
+	assertDetailsRead(t, "an older read answering after a newer read failed", older(), docs.Number, "failure", "def456")
+	assertStoredDetails(t, cli, docs.Number, "failure", "def456", true)
+	if published := facts() - before; published != 1 {
+		t.Errorf("an older read answering after a newer read failed published %d pr.details.changed, want its own 1", published)
+	}
+}
+
+func startDetailsReadHeldAtReviews(t *testing.T, gh *mockserver.Server, app *testworld.Peer, pr mockserver.MockPR, id string) (answer func() protocol.FetchPRDetailsResultMessage) {
+	t.Helper()
+	held, release := gh.HoldReviews(pr.Repo, pr.Number)
+	t.Cleanup(release)
+	app.Send(protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id})
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	select {
+	case <-held:
+	case <-guard.C:
+		t.Fatalf("the read of %s never asked GitHub for reviews within fakeagent.HangGuard=%s", id, fakeagent.HangGuard)
+	}
+	return func() protocol.FetchPRDetailsResultMessage {
+		t.Helper()
+		release()
+		return testworld.Await(app, protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
+	}
+}
+
+func setPRDetails(gh *mockserver.Server, pr mockserver.MockPR, mergeableState, headSHA string, status int) {
+	gh.Reset()
+	pr.MergeableState, pr.HeadSHA, pr.DetailsHTTPStatus = mergeableState, headSHA, status
+	gh.AddPR(pr)
+}
+
+func assertDetailsRead(t *testing.T, what string, read protocol.FetchPRDetailsResultMessage, number int, ci, head string) {
+	t.Helper()
+	if !read.Success {
+		t.Fatalf("%s: %s", what, protocol.Deref(read.Error))
+	}
+	if pr := prNumbered(t, read.Prs, number); protocol.Deref(pr.CIStatus) != ci || protocol.Deref(pr.HeadSHA) != head {
+		t.Errorf("%s returned CI %q, mergeable %q, head %q; want CI %q, head %q", what,
+			protocol.Deref(pr.CIStatus), protocol.Deref(pr.MergeableState), protocol.Deref(pr.HeadSHA), ci, head)
+	}
+}
+
+func assertStoredDetails(t *testing.T, cli *client.Client, number int, ci, head string, hot bool) {
+	t.Helper()
+	pr := prNumbered(t, queryPRs(t, cli, ""), number)
+	if protocol.Deref(pr.CIStatus) != ci || protocol.Deref(pr.HeadSHA) != head {
+		t.Errorf("stored details = CI %q, mergeable %q, head %q; want CI %q, head %q",
+			protocol.Deref(pr.CIStatus), protocol.Deref(pr.MergeableState), protocol.Deref(pr.HeadSHA), ci, head)
+	}
+	if isHot := protocol.Deref(pr.HeatState) == protocol.HeatStateHot; isHot != hot {
+		t.Errorf("stored heat = %q, want hot %v: only an applied read that moves the head heats a pull request", protocol.Deref(pr.HeatState), hot)
+	}
 }
 
 func fetchPRDetails(t *testing.T, app *testworld.Peer, id string) []protocol.PR {

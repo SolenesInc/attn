@@ -21,6 +21,12 @@ type Server struct {
 	mu       sync.Mutex
 	requests []RequestLog
 	PRs      []MockPR
+	holds    map[string]*reviewsHold
+}
+
+type reviewsHold struct {
+	held    chan struct{}
+	release chan struct{}
 }
 
 type MockPR struct {
@@ -30,13 +36,16 @@ type MockPR struct {
 	Draft  bool
 	Role   string
 
-	MergeableState string
+	MergeableState    string
+	HeadSHA           string
+	DetailsHTTPStatus int
 }
 
 func New() *Server {
 	s := &Server{
 		requests: []RequestLog{},
 		PRs:      []MockPR{},
+		holds:    map[string]*reviewsHold{},
 	}
 
 	mux := http.NewServeMux()
@@ -79,10 +88,16 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	prPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)$`)
 	if m := prPattern.FindStringSubmatch(r.URL.Path); m != nil && r.Method == "GET" {
+		pr := s.detailsOf(m[1], m[2])
+		if pr.DetailsHTTPStatus != 0 {
+			w.WriteHeader(pr.DetailsHTTPStatus)
+			json.NewEncoder(w).Encode(map[string]string{"message": http.StatusText(pr.DetailsHTTPStatus)})
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"mergeable":       true,
-			"mergeable_state": s.mergeableState(m[1], m[2]),
-			"head":            map[string]string{"sha": "abc123", "ref": "feature"},
+			"mergeable_state": pr.MergeableState,
+			"head":            map[string]string{"sha": pr.HeadSHA, "ref": "feature"},
 		})
 		return
 	}
@@ -97,6 +112,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	reviewsPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/reviews$`)
 	if reviewsPattern.MatchString(r.URL.Path) && r.Method == "GET" {
+		s.awaitReleaseOfHeld(r.URL.Path)
 		json.NewEncoder(w).Encode([]map[string]interface{}{})
 		return
 	}
@@ -132,15 +148,45 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) mergeableState(repo, number string) string {
+func (s *Server) detailsOf(repo, number string) MockPR {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	details := MockPR{MergeableState: "clean", HeadSHA: "abc123"}
 	for _, pr := range s.PRs {
-		if pr.Repo == repo && strconv.Itoa(pr.Number) == number && pr.MergeableState != "" {
-			return pr.MergeableState
+		if pr.Repo != repo || strconv.Itoa(pr.Number) != number {
+			continue
 		}
+		if pr.MergeableState != "" {
+			details.MergeableState = pr.MergeableState
+		}
+		if pr.HeadSHA != "" {
+			details.HeadSHA = pr.HeadSHA
+		}
+		details.DetailsHTTPStatus = pr.DetailsHTTPStatus
+		break
 	}
-	return "clean"
+	return details
+}
+
+func (s *Server) HoldReviews(repo string, number int) (held <-chan struct{}, release func()) {
+	hold := &reviewsHold{held: make(chan struct{}), release: make(chan struct{})}
+	s.mu.Lock()
+	s.holds[fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number)] = hold
+	s.mu.Unlock()
+	var once sync.Once
+	return hold.held, func() { once.Do(func() { close(hold.release) }) }
+}
+
+func (s *Server) awaitReleaseOfHeld(path string) {
+	s.mu.Lock()
+	hold := s.holds[path]
+	delete(s.holds, path)
+	s.mu.Unlock()
+	if hold == nil {
+		return
+	}
+	close(hold.held)
+	<-hold.release
 }
 
 func (s *Server) AddPR(pr MockPR) {
