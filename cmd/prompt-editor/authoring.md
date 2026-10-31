@@ -12,7 +12,8 @@ Before editing:
 
 After editing, reread the complete affected prompts. Check their order,
 priorities, terminology, examples and cross-references together. Remove stale
-or redundant instructions. Judge whether each recipient can understand and
-act on the result with the context available in that situation.
+or redundant instructions. Check the wording against `docs/internal/writing.md`.
+Judge whether each recipient can understand and act on the result with the
+context available in that situation.
 
 Do not make quick additions when the more appropriate change is a rewrite.

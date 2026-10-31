@@ -17,8 +17,9 @@ as a maintainer:
   accounting exist to serve this.
 - Linux. The daemon and CLI run on a Linux box, which is why `cmd/attn` and
   `internal/**` build on Linux.
-- The Garden is the work tracker: seeds planted, tended, harvested. It is the
-  unit agents hand off, work upon, and help them stay organized.
+- The Garden is the work tracker. Agents plant, tend and harvest seeds. A seed
+  is the unit of work agents hand off and work on, and the Garden keeps them
+  organized.
 - Visible orchestration. Delegations are full sessions the user can open and
   steer, from any harness to any harness, and agents can message each other.
 - Crew members are permanent agents with charters; the Chief is one.
@@ -27,7 +28,7 @@ as a maintainer:
   rendered markdown file, comments on it, and sends the batch to a session as
   one message.
 
-The app (the Tauri UI) is mac only for now; Linux support is being worked upon.
+The app (the Tauri UI) is mac only for now; Linux support is in progress.
 The daemon runs on Linux, so daemon code stays portable.
 
 ## What makes attn special?
@@ -50,14 +51,15 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## You are probably running inside attn
 
-- Never kill by name, pattern, or worktree path. Kill only a PID captured at
-  spawn, or a port/socket owner confirmed by working directory.
+- Never kill by name, pattern, or worktree path. Kill only a PID you captured
+  when you started the process, or the owner of a port or socket once you have
+  confirmed its working directory.
 - Production ~/.attn is read-only. Copy data out; never run a test daemon
   against it, open it read-write, or clean it.
-- Using attn CLI to interact with ~/.attn is allowed.
-- Non-production builds, installs, launches, and restarts are pre-authorized.
-  Production `make`, `make install`, and `make install-daemon` need Victor's
-  explicit approval.
+- You may use the attn CLI to work with ~/.attn.
+- You may build, install, launch and restart non-production instances without
+  asking. Production `make`, `make install`, and `make install-daemon` need
+  Victor's explicit approval.
 - Never redirect `HOME` or resolve test config paths to production `~/.attn`.
   Use the [test isolation rules](#test-safety) when adding or changing tests
   that reach config paths.
@@ -71,7 +73,7 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 Before introducing a wrapper, interface, configuration option, fallback, cache,
 or coordination layer, name the current requirement it serves. Search existing
 code and platform capabilities first. If the justification is hypothetical
-future flexibility, leave it out. An abstraction earns its place by removing
+future flexibility, leave it out. Add an abstraction only when it removes
 complexity from today's code; moving complexity behind a new name does not
 count. Preserve the full requested behavior.
 
@@ -98,8 +100,9 @@ count.
   schema changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
-- Riskier changes, such as a new harness integration or PTY runtime, land first
-  behind an experimental setting, off by default, like the shared PTY host.
+- Land a riskier change, such as a new harness integration or PTY runtime,
+  first behind an experimental setting that is off by default, as the shared
+  PTY host did.
 - Do not add explanatory code comments. Express intent through function and
   variable names and code structure. Rewrite code that needs a comment to be
   understood.
@@ -117,7 +120,7 @@ commits.
 system.
 
 - Land with the `land-on-main` skill: check, review, then `scripts/land.sh`.
-  Your work is done when it pushes.
+  Your work is done when `scripts/land.sh` pushes.
 - An Orchestrator reviews its Builders after landing. Corrections are new
   landings.
 
@@ -138,8 +141,8 @@ system.
 ### Author
 
 - Codex reviews every PR as `chatgpt-codex-connector[bot]`. It reviews each push
-  on its own. A 👍 reaction on the PR means it was approved with no feedback. 👀
-  reaction means Codex is reviewing.
+  on its own. A 👍 reaction on the PR means Codex approved it with no feedback.
+  A 👀 reaction means Codex is reviewing.
 - Read reviews, inline comments, review threads with `isResolved`, and PR
   reactions through the API (GraphQL for threads). `gh pr view` misses reactions
   and thread state.
@@ -148,8 +151,8 @@ system.
 - Use `attn pr watch <url> --mode codex` after pushing a PR to wait for
   CI/review. Do not loop for updates.
 - When addressing comments, avoid patchwork fixes. Understand the root cause of
-  the issue captured by the reviewer, and address it holistically, if necessary
-  by refactoring the system.
+  the issue the reviewer raised, and fix that cause across the system, by
+  refactoring if necessary.
 
 ## Commands and verification
 
@@ -195,7 +198,7 @@ summary.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/internal/instances.md#verification-requirements).
-Rendering changes must avoid continuous repainting.
+When you change rendering, make sure nothing repaints continuously.
 
 ## Writing tests
 
@@ -224,12 +227,13 @@ Follow [Testing](docs/internal/testing.md). In short:
 
 - Never resolve test config paths to production `~/.attn`; never redirect
   `HOME`.
-- Packages reaching config paths need `TestMain`: create a temp dir and call
-  `config.ScopeTestEnvironment(dir)` before `m.Run()`. It sets `ATTN_DATA_DIR`
+- A package whose tests reach config paths needs a `TestMain` that creates a
+  temp dir and calls `config.ScopeTestEnvironment(dir)` before `m.Run()`.
+  `ScopeTestEnvironment` sets `ATTN_DATA_DIR`
   and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv` is
   insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
   `testworld.Main(m)` does this for packages that run wire or stack worlds.
-- Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
+- For per-test isolation, use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Use `synctest.Test` for elapsed-time or never-happens assertions; no
   sleeps/polls.
 - Use `pgregory.net/rapid` for invariants over large inputs; commit failure
@@ -254,11 +258,11 @@ Follow [Testing](docs/internal/testing.md). In short:
 - Stop drains running jobs and lifetime work before closing Git or shutting down
   PTYs. Handler and Git deadlines still apply; shutdown itself does not fence or
   cancel their results.
-- Everything belongs to one profile for life, and anything in another profile is
-  treated as if it doesn't exist (e.g. /resume of its conversation opens a new
-  session here).
-- Crew files are authoritative and live under this instance's crew root. One
-  active session binding per member (`internal/daemon/crew.go`).
+- Everything belongs to one profile for life. attn treats anything in another
+  profile as if it doesn't exist: for example, /resume of that profile's
+  conversation opens a new session here.
+- Crew files are authoritative and live under this instance's crew root. Each
+  member has at most one active session binding (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller
   text.
@@ -284,7 +288,7 @@ Never hand-edit `internal/protocol/generated.go` or
   filesystem change bursts, tile content sent to its subscribers, and
   request/reply to one app client.
 - Projections only write to the wire. A state change or nested publish inside
-  one can deadlock.
+  a projection can deadlock.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
 - Durable handlers must be idempotent; unregister consumers when their owner is
   removed.
@@ -320,12 +324,12 @@ clearer.
 Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
 all of it and the other places that cover the same subject. Decide what to
 keep, rewrite, merge or remove before you add anything, so the result reads as
-one text.
+one text. Write it as [Writing](docs/internal/writing.md) says.
 
 ## Task-specific guidance
 
-Read the relevant entry when the task touches its subject. When changing or
-working on:
+Before you change or work on one of these subjects, read the doc or skill its
+entry names:
 
 - Database schema or migrations => docs/internal/db-migrations.md
 - Tests, before writing, changing, or deleting them => the write-test skill

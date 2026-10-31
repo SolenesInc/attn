@@ -27,8 +27,9 @@ Paths are relative to `app/src`.
   idle/active CPU; transform alone does not prove it is cheap.
 - Release hidden panes with `setSurfaceReleased(true)`. Reuse the WebGL context
   when font metrics change; recreating it exhausts WKWebView's pool.
-- PTY attachment deadlines belong to one pending waiter. Clear them when it settles;
-  a stale timer deleting a newer waiter blocks every later attachment for that session.
+- Each PTY attachment deadline belongs to one pending waiter. Clear the deadline
+  when its waiter settles: a stale timer that deletes a newer waiter blocks every
+  later attachment for that session.
 - Measure memory with `scenario-perf-baseline`; `ps` RSS misses graphics memory.
 
 ## Shortcuts
@@ -36,7 +37,8 @@ Paths are relative to `app/src`.
 - macOS menu accelerators can swallow keys before the DOM sees them; remove
   conflicting predefined items in `src-tauri/core/src/lib.rs`. Handle Cmd+C through
   `GhosttyTerminal`'s `copy` event.
-- Native keyboard regressions must exercise AppKit's shortcut dispatch.
-  Direct webview key delivery can bypass it, as with Ctrl+Return.
+- Regression tests for native keyboard input must go through AppKit's shortcut
+  dispatch. Keys delivered straight to the webview can skip it, as Ctrl+Return
+  did.
 - On Linux, plain Ctrl+letter belongs to the shell. App actions use Ctrl+Shift,
   or Ctrl+Alt when the macOS binding already has Shift.
