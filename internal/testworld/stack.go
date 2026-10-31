@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/stepclock"
 	"net"
 	"os"
 	"os/exec"
@@ -15,6 +14,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/stepclock"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/plugins"
@@ -315,7 +317,7 @@ func (s *Stack) reapWorkers() []ptyworker.ReapResult {
 		results <- ptyworker.ReapDataDir(s.Dir)
 	}()
 	for {
-		if _, armed := s.clock.AwaitTimer(ctx, workerKillDeadline); !armed {
+		if _, armed := s.clock.AwaitTimer(ctx, pty.KillDeadlineTimer); !armed {
 			return <-results
 		}
 		s.Advance(workerKillDeadline)

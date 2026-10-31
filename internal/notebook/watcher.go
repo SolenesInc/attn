@@ -15,6 +15,8 @@ import (
 
 const WatchDebounce = 400 * time.Millisecond
 
+const WatchDebounceTimer stepclock.Name = "notebook-watch-debounce"
+
 const selfWriteTTL = 3 * time.Second
 
 type treeEvent struct {
@@ -124,7 +126,7 @@ func (w *Watcher) loop() {
 			}
 			w.handleEvent(ev, pending)
 			if len(pending) > 0 && debounced == nil {
-				debounce = w.clock.NewTimer(WatchDebounce)
+				debounce = w.clock.NewTimer(WatchDebounceTimer, WatchDebounce)
 				debounced = debounce.C()
 			}
 		case <-debounced:

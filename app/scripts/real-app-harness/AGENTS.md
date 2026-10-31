@@ -64,8 +64,9 @@ repository root.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
 - Outpost scenarios that exercise silence use `stepClock` for each daemon and
   advance it around observed bridge states instead of waiting for liveness
-  timers. Await a fresh timer registration before advancing an asynchronous
-  retry or a dial whose answer is deliberately held. Supply each clock's
+  timers. Await a fresh timer registration by its name, such as
+  `bridge-retry`, before advancing an asynchronous retry or a dial whose
+  answer is deliberately held. Supply each clock's
   `env` through the daemon's child environment or the app's `launchEnv`; quit
   the old app before stopping its daemon so relaunch picks up that environment.
   Stop the daemons before closing their clocks. To measure a connecting notice,

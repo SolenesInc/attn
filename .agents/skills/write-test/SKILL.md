@@ -50,8 +50,8 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   end-to-end specs are the exception `testing.md` names.
 - Waiting for a timer to fire. Move the clock: `w.advance(d)` in a world,
   `s.Advance(d)` in a stack. When the timer is armed asynchronously, wait
-  for it first: `w.awaitTimer(d)` in a world outside a bubble,
-  `s.AwaitTimer(d)` in a stack.
+  for it first, by the name its package gives it: `w.awaitTimer(name)` in a
+  world outside a bubble, `s.AwaitTimer(name)` in a stack.
 - `time.After(5 * time.Second)` as a deadline, in a `select` or stored first.
   A short one fails on a loaded machine, and a long one is a sleep. The only
   real-time bound is `fakeagent.HangGuard`, for a signal that never arrives.

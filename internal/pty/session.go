@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/stepclock"
 	"io"
 	"math"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/victorarias/attn/internal/stepclock"
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
@@ -940,6 +941,12 @@ const sighupRepeat = 500 * time.Millisecond
 
 const shellCloseGrace = 500 * time.Millisecond
 
+const (
+	KillDeadlineTimer stepclock.Name = "pty-kill-deadline"
+	hangupGraceTimer  stepclock.Name = "pty-hangup-grace"
+	hangupRepeatTimer stepclock.Name = "pty-hangup-repeat"
+)
+
 func (s *Session) kill(clock *stepclock.Clock, sig syscall.Signal, waitTimeout time.Duration, logf LogFunc) error {
 	return s.killWithEscalation(clock, sig, waitTimeout, nil, logf)
 }
@@ -984,10 +991,10 @@ func (s *Session) killWithEscalation(clock *stepclock.Clock, sig syscall.Signal,
 		if half := waitTimeout / 2; grace > half {
 			grace = half
 		}
-		hup = clock.NewTimer(grace)
+		hup = clock.NewTimer(hangupGraceTimer, grace)
 		defer hup.Stop()
 	}
-	deadline := clock.NewTimer(waitTimeout)
+	deadline := clock.NewTimer(KillDeadlineTimer, waitTimeout)
 	defer deadline.Stop()
 
 	if hup != nil {
@@ -1004,7 +1011,7 @@ func (s *Session) killWithEscalation(clock *stepclock.Clock, sig syscall.Signal,
 	}
 
 	if sig == syscall.SIGHUP {
-		repeat := clock.NewTimer(sighupRepeat)
+		repeat := clock.NewTimer(hangupRepeatTimer, sighupRepeat)
 		defer repeat.Stop()
 		for escalated := false; !escalated; {
 			select {

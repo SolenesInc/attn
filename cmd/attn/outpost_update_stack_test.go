@@ -313,7 +313,7 @@ func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
 			if restart {
 				home.Stop()
 			} else {
-				home.AwaitTimer(bridge.RefusedRetryInterval)
+				home.AwaitTimer(bridge.RetryTimer)
 			}
 			ssh.Restore("first-auth")
 			ssh.StartMaster(home, refused.ID, "first-auth")

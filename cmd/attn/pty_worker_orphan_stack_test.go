@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -35,7 +36,7 @@ func TestAWorkerWhoseDaemonNeverReturnsEndsItsProgramAfterTheOrphanTTL(t *testin
 	app.TypeLine(shell, "exec 3>"+held+"; echo held-$((6*7))")
 	app.AwaitScreen(shell, "held-42")
 	s.Stop()
-	s.AwaitTimer(orphanedWorkerTTL)
+	s.AwaitTimer(ptyworker.OrphanTimer)
 	select {
 	case <-gone:
 		t.Fatalf("the shell ended before its worker's %s orphan TTL", orphanedWorkerTTL)

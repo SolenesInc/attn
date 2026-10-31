@@ -166,7 +166,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	typeRefused(t, app, terminal, "echo lost\r")
 	mark = len(app.Log())
-	home.AwaitTimer(bridge.ReconnectInterval)
+	home.AwaitTimer(bridge.RetryTimer)
 	a.Restore(address)
 	resume()
 	home.Advance(bridge.ReconnectInterval)

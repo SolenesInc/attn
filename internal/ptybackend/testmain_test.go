@@ -2,12 +2,13 @@ package ptybackend
 
 import (
 	"context"
-	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/stepclock"
 
 	"github.com/victorarias/attn/internal/config"
 )
@@ -44,12 +45,12 @@ func advance(t *testing.T, d time.Duration) {
 	}
 }
 
-// awaitTimer waits for this test process or a worker it started to arm a timer of d after the last advance or awaitTimer.
-func awaitTimer(t *testing.T, d time.Duration) {
+// awaitTimer waits for this test process or a worker it started to arm the timer named name after the last advance or awaitTimer.
+func awaitTimer(t *testing.T, name stepclock.Name) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if seen, ok := testClock.AwaitTimer(ctx, d); !ok {
-		t.Fatalf("awaitTimer(%s): no such timer armed within 10s; saw timer durations %v", d, seen)
+	if seen, ok := testClock.AwaitTimer(ctx, name); !ok {
+		t.Fatalf("awaitTimer(%s): no such timer armed within 10s; timers pending: %v", name, seen)
 	}
 }

@@ -50,11 +50,12 @@ returns `testworld.Main(m)`.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.
-- `s.AwaitTimer(d)` waits until a timer of `d`, armed or reset after the last
-  `Advance` or `AwaitTimer`, is pending in the daemon or one of its workers.
-  Use it before advancing an asynchronous dial, retry or kill: its row or
-  close can arrive before its timer is armed. A failure names the requested
-  duration and the timers pending.
+- `s.AwaitTimer(name)` waits until the timer with that `stepclock.Name`, such
+  as `bridge.RetryTimer` or `pty.KillDeadlineTimer`, armed or reset after the
+  last `Advance` or `AwaitTimer`, is pending in the daemon or one of its
+  workers. Use it before advancing an asynchronous dial, retry or kill: its
+  row or close can arrive before its timer is armed. A failure names the
+  requested timer and the timers pending, with their durations.
 - `s.CloseWatchWindows()` closes each folder watch's window as soon as it
   opens, until the test calls the returned function. Each close moves the
   whole clock, the bridge's timers included, so keep it to one wait for a

@@ -105,13 +105,13 @@ func (h *Hub) admit(p *peer) {
 
 func (h *Hub) apply(p *peer, fields []string) bool {
 	switch {
-	case len(fields) == 3 && fields[0] == "armed":
-		d, err := time.ParseDuration(fields[2])
+	case len(fields) == 4 && fields[0] == "armed":
+		d, err := time.ParseDuration(fields[3])
 		if err != nil {
 			return false
 		}
 		h.mu.Lock()
-		h.pending.arm(peerTimer{p, fields[1]}, d)
+		h.pending.arm(peerTimer{p, fields[1]}, Name(fields[2]), d)
 		h.mu.Unlock()
 	case len(fields) == 2 && fields[0] == "disarmed":
 		h.mu.Lock()
@@ -160,12 +160,12 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	return nil
 }
 
-// AwaitTimer waits until any process has a timer of duration d pending, armed or reset after the last Advance or AwaitTimer.
-// When ctx ends first it returns false with the durations of the timers pending then.
-func (h *Hub) AwaitTimer(ctx context.Context, d time.Duration) ([]time.Duration, bool) {
+// AwaitTimer waits until any process has a timer named name pending, armed or reset after the last Advance or AwaitTimer.
+// When ctx ends first it returns false with the timers pending then, as "name duration".
+func (h *Hub) AwaitTimer(ctx context.Context, name Name) ([]string, bool) {
 	h.stepping.Lock()
 	defer h.stepping.Unlock()
-	return h.pending.await(ctx, &h.mu, d)
+	return h.pending.await(ctx, &h.mu, name)
 }
 
 func (h *Hub) Close() {

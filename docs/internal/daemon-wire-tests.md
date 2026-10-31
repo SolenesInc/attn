@@ -98,7 +98,10 @@ On a `fakeagent.Run`:
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
   it, such as a terminal's kill escalation, a folder watch's window and the
   background job runner's schedule, fire only when the test calls
-  `w.advance(d)`; `w.awaitTimer(d)` first waits until a timer of `d` is armed.
+  `w.advance(d)`; `w.awaitTimer(name)` first waits until the timer with that
+  `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
+  stepped timer is named by the package that arms it, so a wait never matches
+  another operation's timer of the same duration.
   A test that waits for such a timer without advancing fails at the hang
   guard.
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,

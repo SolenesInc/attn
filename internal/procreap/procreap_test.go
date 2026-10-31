@@ -2,8 +2,6 @@ package procreap
 
 import (
 	"context"
-	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +10,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const testGrace = 3 * time.Second
@@ -236,7 +237,7 @@ func awaitGrace(t *testing.T, clock *stepclock.Clock) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if pending, ok := clock.AwaitTimer(ctx, testGrace); !ok {
+	if pending, ok := clock.AwaitTimer(ctx, goneDeadlineTimer); !ok {
 		t.Fatalf("the reap never started its %s grace within 10s; timers pending: %v", testGrace, pending)
 	}
 }

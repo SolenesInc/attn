@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -70,7 +71,7 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				if got.Code != 0 {
 					t.Fatalf("close: %+v", got)
 				}
-				machine.AwaitTimer(shellCloseGrace)
+				machine.AwaitTimer(pty.KillDeadlineTimer)
 				machine.Advance(shellCloseGrace)
 				awaitPipeReleased(t, held, name)
 			})

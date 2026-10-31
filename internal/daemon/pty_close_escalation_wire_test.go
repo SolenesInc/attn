@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 )
 
 func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
@@ -75,7 +76,7 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 	}
 
 	closeSession(resistant)
-	w.awaitTimer(shellCloseGrace)
+	w.awaitTimer(pty.KillDeadlineTimer)
 	select {
 	case <-gone[resistant]:
 		t.Fatalf("the program that %s ended before its %s close grace", resistant, shellCloseGrace)

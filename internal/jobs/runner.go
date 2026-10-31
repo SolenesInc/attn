@@ -15,13 +15,15 @@ import (
 )
 
 const (
-	DefaultMaxAttempts    = 5
-	DefaultBackoffBase    = time.Minute
-	DefaultBackoffCap     = time.Hour
-	DefaultHandlerTimeout = 5 * time.Minute
-	DefaultRetention      = 30 * 24 * time.Hour
-	DefaultTrimInterval   = time.Hour
-	defaultPollInterval   = time.Second
+	DefaultMaxAttempts                   = 5
+	DefaultBackoffBase                   = time.Minute
+	DefaultBackoffCap                    = time.Hour
+	DefaultHandlerTimeout                = 5 * time.Minute
+	DefaultRetention                     = 30 * 24 * time.Hour
+	DefaultTrimInterval                  = time.Hour
+	defaultPollInterval                  = time.Second
+	pollTimer             stepclock.Name = "jobs-poll"
+	trimTimer             stepclock.Name = "jobs-trim"
 )
 
 const eligiblePageSize = 1000
@@ -482,7 +484,7 @@ func (r *Runner) now() time.Time { return r.clock.Now().UTC() }
 func (r *Runner) loop() {
 	defer close(r.exit)
 	defer r.settle(true)
-	poll := r.clock.AfterFunc(r.pollInterval, func() { r.signal(r.tick) })
+	poll := r.clock.AfterFunc(pollTimer, r.pollInterval, func() { r.signal(r.tick) })
 	defer poll.Stop()
 	woken := true
 	for {
@@ -832,7 +834,7 @@ func (r *Runner) waitAll() {
 }
 
 func (r *Runner) retentionLoop(done <-chan struct{}) {
-	trim := r.clock.NewTimer(r.trimInterval)
+	trim := r.clock.NewTimer(trimTimer, r.trimInterval)
 	defer trim.Stop()
 	for {
 		select {

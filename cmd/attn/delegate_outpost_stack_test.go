@@ -425,7 +425,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 				t.Logf("removed target ends the wait: %s", strings.TrimSpace(failed.Stderr))
 				return
 			}
-			home.AwaitTimer(bridge.ReconnectInterval)
+			home.AwaitTimer(bridge.RetryTimer)
 			pair.Reconnect()
 			home.Advance(bridge.ReconnectInterval)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)

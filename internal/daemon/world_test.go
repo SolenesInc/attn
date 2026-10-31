@@ -275,7 +275,7 @@ func (w *world) closeWatchWindows() {
 	go func() {
 		defer close(done)
 		for {
-			if _, ok := w.clock.AwaitTimer(ctx, notebook.WatchDebounce); !ok {
+			if _, ok := w.clock.AwaitTimer(ctx, notebook.WatchDebounceTimer); !ok {
 				return
 			}
 			w.clock.Advance(notebook.WatchDebounce)
@@ -316,16 +316,16 @@ func (w *world) tickSchedulesUntil(what string, done func() bool) {
 	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
 }
 
-// awaitTimer waits for the daemon of a world outside a bubble to arm a timer of d after the last advance or awaitTimer.
-func (w *world) awaitTimer(d time.Duration) {
+// awaitTimer waits for the daemon of a world outside a bubble to arm the timer named name after the last advance or awaitTimer.
+func (w *world) awaitTimer(name stepclock.Name) {
 	w.T.Helper()
 	if w.bubbled {
 		w.T.Fatal("awaitTimer reads the stepped clock, which a world inBubble does not have")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
-	if seen, ok := w.clock.AwaitTimer(ctx, d); !ok {
-		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; saw timer durations %v", d, fakeagent.HangGuard, seen)
+	if seen, ok := w.clock.AwaitTimer(ctx, name); !ok {
+		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; timers pending: %v", name, fakeagent.HangGuard, seen)
 	}
 }
 

@@ -159,7 +159,7 @@ func TestNotebookKeepsItsOwnWriteQuietWhenItsEventsSpanTwoWatchWindows(t *testin
 
 	own := notebookNote("attn wrote this")
 	notebookAskWrite(app, "own.md", own, "")
-	w.awaitTimer(notebook.WatchDebounce)
+	w.awaitTimer(notebook.WatchDebounceTimer)
 	w.advance(notebook.WatchDebounce)
 
 	fsWriteFile(t, filepath.Join(root, ".own.md.tmp"), []byte(own))

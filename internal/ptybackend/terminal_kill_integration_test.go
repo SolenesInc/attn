@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -91,7 +92,7 @@ func TestTerminalKillReachesEveryProcessGroup(t *testing.T) {
 				killed := make(chan error, 1)
 				go func() { killed <- backend.Kill(ctx, id, syscall.SIGTERM) }()
 				if kind == "worker" {
-					awaitTimer(t, resistantChildKillAfter)
+					awaitTimer(t, pty.KillDeadlineTimer)
 					advance(t, resistantChildKillAfter)
 				}
 				if err := <-killed; err != nil {

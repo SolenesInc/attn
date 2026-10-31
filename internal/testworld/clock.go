@@ -29,10 +29,10 @@ func (s *Stack) Advance(d time.Duration) {
 	advanceHub(s.T, s.clock, d)
 }
 
-// AwaitTimer waits until the daemon or a process it started has a timer of d pending, armed after the last Advance or AwaitTimer.
-func (s *Stack) AwaitTimer(d time.Duration) {
+// AwaitTimer waits until the daemon or a process it started has a timer named name pending, armed after the last Advance or AwaitTimer.
+func (s *Stack) AwaitTimer(name stepclock.Name) {
 	s.T.Helper()
-	awaitHubTimer(s.T, s.clock, d)
+	awaitHubTimer(s.T, s.clock, name)
 }
 
 // CloseWatchWindows closes each of the daemon's folder-watch windows as soon as it opens, until stop is called.
@@ -43,7 +43,7 @@ func (s *Stack) CloseWatchWindows() (stop func()) {
 	go func() {
 		defer close(done)
 		for {
-			if _, ok := s.clock.AwaitTimer(ctx, notebook.WatchDebounce); !ok {
+			if _, ok := s.clock.AwaitTimer(ctx, notebook.WatchDebounceTimer); !ok {
 				return
 			}
 			guard, cancelGuard := context.WithTimeout(ctx, fakeagent.HangGuard)
@@ -85,9 +85,9 @@ func (c *ChildClock) Advance(d time.Duration) {
 	advanceHub(c.t, c.hub, d)
 }
 
-func (c *ChildClock) AwaitTimer(d time.Duration) {
+func (c *ChildClock) AwaitTimer(name stepclock.Name) {
 	c.t.Helper()
-	awaitHubTimer(c.t, c.hub, d)
+	awaitHubTimer(c.t, c.hub, name)
 }
 
 func advanceHub(t testing.TB, hub *stepclock.Hub, d time.Duration) {
@@ -102,14 +102,11 @@ func advanceHub(t testing.TB, hub *stepclock.Hub, d time.Duration) {
 	}
 }
 
-func awaitHubTimer(t testing.TB, hub *stepclock.Hub, d time.Duration) {
+func awaitHubTimer(t testing.TB, hub *stepclock.Hub, name stepclock.Name) {
 	t.Helper()
-	if d < 0 {
-		t.Fatalf("AwaitTimer duration %s is negative", d)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
-	if pending, ok := hub.AwaitTimer(ctx, d); !ok {
-		t.Fatalf("AwaitTimer(%s): no such timer armed within %s; timers pending: %v", d, fakeagent.HangGuard, pending)
+	if pending, ok := hub.AwaitTimer(ctx, name); !ok {
+		t.Fatalf("AwaitTimer(%s): no such timer armed within %s; timers pending: %v", name, fakeagent.HangGuard, pending)
 	}
 }
