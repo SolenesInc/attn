@@ -57,6 +57,9 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	if diskFull {
 		d.automationLaunchFailures.Store(run.ID, deliveryErr)
 	}
+	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
+		persistErr = errors.Join(persistErr, err)
+	}
 	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), diskFull, now); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
 		if diskFull {
@@ -65,9 +68,6 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 		}
 	} else {
 		d.automationLaunchFailures.Delete(run.ID)
-	}
-	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
-		persistErr = errors.Join(persistErr, err)
 	}
 	d.broadcastAutomationsChanged(run.DefinitionID)
 	failed, err := d.store.GetAutomationRun(run.ID)
