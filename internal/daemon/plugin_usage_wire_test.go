@@ -146,3 +146,31 @@ func TestAPiTranscriptReportedAfterItAlreadyExistsKeepsItsHeadBaseline(t *testin
 		}
 	})
 }
+
+func TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "attn-pi", "pi", map[string]bool{"state_reporting": true, "resume": true})
+	awaitDriverAvailable(app, "pi")
+	session, first := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.mu.Lock()
+	driver.holdLaunch = true
+	driver.mu.Unlock()
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
+	var reloading driverLaunch
+	reply := driver.asked("driver.resume", &reloading)
+	driver.launched()
+	path := w.Path("pi-session.jsonl")
+	if err := reportTranscript(driver, reloading.SessionID, reloading.RunID, path); err != nil {
+		t.Fatalf("the reloading run's transcript report was refused: %v", err)
+	}
+	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+	if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	if closed := driver.closed(); closed.RunID != first.RunID {
+		t.Fatalf("the reload closed run %s, want the replaced run %s", closed.RunID, first.RunID)
+	}
+	appendTranscript(t, path, piTranscriptLines(t))
+	awaitPricedRows(app, session, 17386)
+}

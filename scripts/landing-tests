@@ -21,6 +21,8 @@ go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
 go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
+go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins
+go ./internal/daemon TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
