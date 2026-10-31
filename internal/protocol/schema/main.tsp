@@ -7589,6 +7589,10 @@ model CrewSetMessage {
   // The Notebook folder for the Chief's profile, picked while the Chief has
   // no harness yet. The Chief's home moves into its crew folder.
   notebook_root?: string;
+  // An existing folder holding the member's CHARTER.md, recorded as its home
+  // after the folder was moved or renamed outside attn. The member must be
+  // asleep; the folder takes the member's name.
+  home?: string;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
 }

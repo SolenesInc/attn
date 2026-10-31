@@ -497,13 +497,18 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 			}
 			setting = &chosen
 		}
+		revision := doc.Rev
+		if msg.Home != nil {
+			if member, revision, err = d.repointCrewHome(member, revision, *msg.Home); err != nil {
+				return nil, false, err
+			}
+		}
 		before := member
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
-		revision := doc.Rev
 		if msg.NotebookRoot != nil {
-			placed, placedRevision, err := d.placeChiefNotebook(before, doc.Rev, *msg.NotebookRoot)
+			placed, placedRevision, err := d.placeChiefNotebook(before, revision, *msg.NotebookRoot)
 			if err != nil {
 				return nil, false, err
 			}

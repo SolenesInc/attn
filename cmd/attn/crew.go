@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/victorarias/attn/internal/client"
@@ -101,7 +102,7 @@ commands:
         if the member is asleep; its next wake uses the saved settings.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
-               [--launch-desktop <own|desktop>] [--awareness-dir <dir>]...
+               [--launch-desktop <own|desktop>] [--awareness-dir <dir>]... [--home <dir>]
         Save launch settings without changing the member's markdown files.
         --launch-desktop selects own, a desktop digit (an empty slot gets a new desktop), name or id.
         --cwd sets the working directory; --model selects the model.
@@ -111,6 +112,11 @@ commands:
         --effort "" restores the harness default.
         --awareness-dir sets context dirs. Repeat to replace the saved list.
         Use --awareness-dir "" to clear it.
+        --home records where the member's home is after you moved or renamed
+        its folder: a folder holding its CHARTER.md. The member must be
+        asleep. The folder is renamed after the member, and a working or
+        awareness directory inside the old home follows. A home moved to
+        crew/<key>/ in attn's data folder is back out of the Notebook.
 
   rename <member> <name> [--json]
         Give the member a new name, unique in its profile. Its key, letters,
@@ -346,6 +352,7 @@ type crewSetArgs struct {
 	effort      *string
 	desktop     *string
 	desktopName *string
+	home        *string
 	awareness   []string
 	profile     string
 	json        bool
@@ -360,6 +367,7 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	effort := fs.String("effort", "", "the effort the member's days run on; empty goes back to the harness default")
 	desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the member name)")
 	desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id in this member profile")
+	home := fs.String("home", "", "the folder holding the member's CHARTER.md, after it was moved or renamed")
 	var dirs crewDirList
 	fs.Var(&dirs, "awareness-dir", "a directory the member's charter is about; repeat for several")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
@@ -383,6 +391,8 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.desktop = desktop
 		case "desktop-name":
 			parsed.desktopName = desktopName
+		case "home":
+			parsed.home = home
 		}
 	})
 	if parsed.desktopName != nil && parsed.desktop == nil {
@@ -394,8 +404,15 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 			parsed.awareness = []string{}
 		}
 	}
-	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && parsed.effort == nil && parsed.desktop == nil && !dirs.set {
-		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --effort, --launch-desktop, --awareness-dir, or any of them together")
+	if parsed.home != nil && strings.TrimSpace(*parsed.home) != "" && !strings.HasPrefix(*parsed.home, "~") {
+		absolute, err := filepath.Abs(*parsed.home)
+		if err != nil {
+			return crewSetArgs{}, fmt.Errorf("--home %s: %w", *parsed.home, err)
+		}
+		parsed.home = &absolute
+	}
+	if parsed.cwd == nil && parsed.agent == nil && parsed.model == nil && parsed.effort == nil && parsed.desktop == nil && parsed.home == nil && !dirs.set {
+		return crewSetArgs{}, errors.New("nothing to set — pass --cwd, --agent, --model, --effort, --launch-desktop, --awareness-dir, --home, or any of them together")
 	}
 	return parsed, nil
 }
@@ -407,7 +424,10 @@ func runCrewSet(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := crewClient(parsed.profile).CrewSetWithNamedDesktop(parsed.member, parsed.cwd, parsed.agent, parsed.model, parsed.effort, parsed.awareness, parsed.desktop, parsed.desktopName)
+	result, err := crewClient(parsed.profile).CrewSetMessage(protocol.CrewSetMessage{
+		Member: parsed.member, Cwd: parsed.cwd, Agent: parsed.agent, Model: parsed.model, Effort: parsed.effort,
+		AwarenessDirs: parsed.awareness, LaunchDesktop: parsed.desktop, LaunchDesktopName: parsed.desktopName, Home: parsed.home,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		os.Exit(1)
@@ -420,6 +440,7 @@ func runCrewSet(args []string) {
 	fmt.Printf("%s launches in %s on %s, model %s, effort %s\n", record.Name, valueOrDash(protocol.Deref(record.Cwd)), valueOrDash(record.ResolvedAgent), valueOrDash(protocol.Deref(record.ResolvedModel)), valueOrDash(protocol.Deref(record.ResolvedEffort)))
 	fmt.Printf("profile: %s\nlaunch desktop: %s\n", protocol.Deref(record.ProfileName), launchDesktopText(record.LaunchDesktop))
 	fmt.Printf("awareness dirs: %s\n", valueOrDash(strings.Join(record.AwarenessDirs, ", ")))
+	fmt.Printf("home: %s\n", record.HomeDir)
 }
 
 func valueOrDash(value string) string {

@@ -3309,6 +3309,9 @@ type CrewSetMessage struct {
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
 
+	// Home corresponds to the JSON schema field "home".
+	Home *string `json:"home,omitempty,omitzero"`
+
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
 

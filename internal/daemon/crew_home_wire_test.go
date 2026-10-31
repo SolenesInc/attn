@@ -329,3 +329,100 @@ func sleepAfterADay(t *testing.T, w *world, member string) *fakeagent.Run {
 	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
 	return run
 }
+
+func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewSetResult, error) {
+	return cli.CrewSetMessage(protocol.CrewSetMessage{Member: member, Home: protocol.Ptr(home)})
+}
+
+func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
+	w := newCrewV2World(t, fakeagent.Claude)
+	cli := w.Client()
+	home := moveCrewHome(t, w, "Keel").Member.HomeDir
+	notes := filepath.Join(home, "notes")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes), AwarenessDirs: []string{notes}})
+	day := sleepAfterADay(t, w, "Keel")
+
+	tidied := w.Path("tidied")
+	if err := os.MkdirAll(tidied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aside := filepath.Join(tidied, "keel-old")
+	if err := os.Rename(home, aside); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cli.CrewWake("Keel", "", "")
+	crewErrorContains(t, err, home, "unavailable")
+
+	empty := w.Path("empty")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err = repointCrewHome(cli, "Keel", empty)
+	crewErrorContains(t, err, empty, "has no CHARTER.md")
+	_, err = repointCrewHome(cli, "Keel", notebookCrewHome(w, "alder-missing"))
+	crewErrorContains(t, err, notebookCrewHome(w, "alder-missing"), "not there")
+
+	repointed, err := repointCrewHome(cli, "Keel", aside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := filepath.Join(tidied, "keel")
+	movedNotes := filepath.Join(named, "notes")
+	if got := repointed.Member; got.HomeDir != named || protocol.Deref(got.Cwd) != movedNotes || len(got.AwarenessDirs) != 1 || got.AwarenessDirs[0] != movedNotes {
+		t.Fatalf("repointed member: %+v", got)
+	}
+	if _, err := os.Stat(aside); !os.IsNotExist(err) {
+		t.Fatalf("the repointed folder kept its old name: %v", err)
+	}
+
+	reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(day.SessionID)})
+	if err != nil || reopened.Directory != movedNotes {
+		t.Fatalf("a closed session after the repoint: %+v %v", reopened, err)
+	}
+	if resumed := w.Launched(day.SessionID); !resumed.Resumed || resumed.ConversationID != day.ConversationID {
+		t.Fatalf("resume after the repoint started %+v", resumed)
+	}
+
+	wake := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(wake.SessionID))
+	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != movedNotes {
+		t.Fatalf("launch directory after the repoint: %s", session.Directory)
+	}
+	prime, err := cli.CrewPrime(wake.SessionID)
+	if err != nil || !strings.Contains(protocol.Deref(prime.Guidance), "Resume this conversation later.") {
+		t.Fatalf("letters after the repoint: %+v %v", prime, err)
+	}
+	_, err = repointCrewHome(cli, "Keel", home)
+	crewErrorContains(t, err, "Keel is awake", "attn crew sleep Keel")
+}
+
+func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	dataHome := crewHome(w, "keel")
+	notebook := moveCrewHome(t, w, "Keel").Member.HomeDir
+	trellis := moveCrewHome(t, w, "Trellis").Member.HomeDir
+
+	_, err := repointCrewHome(cli, "Keel", trellis)
+	crewErrorContains(t, err, "Trellis's home", trellis)
+	_, err = repointCrewHome(cli, "Keel", crewHome(w, "alder"))
+	crewErrorContains(t, err, "attn's data folder", dataHome)
+
+	if err := os.Rename(notebook, dataHome); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := repointCrewHome(cli, "Keel", dataHome); err != nil || got.Member.HomeDir != dataHome {
+		t.Fatalf("repoint into the data folder: %+v %v", got, err)
+	}
+	w.restart()
+	cli = w.Client()
+	if roster := crewRoster(t, cli); len(roster) != 3 {
+		t.Fatalf("a home back in the data folder joined the roster twice: %+v", roster)
+	}
+	if moved := moveCrewHome(t, w, "Keel"); moved.Member.HomeDir != notebook || moved.PreviousHome != dataHome {
+		t.Fatalf("move-home after coming back: %+v", moved)
+	}
+}

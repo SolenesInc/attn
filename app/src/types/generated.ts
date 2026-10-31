@@ -3711,6 +3711,7 @@ export interface CrewSetMessage {
     cwd?:                    string;
     effort?:                 string;
     expected_revision?:      number;
+    home?:                   string;
     launch_desktop?:         string;
     launch_desktop_name?:    string;
     launch_desktop_setting?: LaunchDesktopSettingObject;
@@ -21876,6 +21877,7 @@ const typeMap: any = {
         { json: "cwd", js: "cwd", typ: u(undefined, "") },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "expected_revision", js: "expected_revision", typ: u(undefined, 0) },
+        { json: "home", js: "home", typ: u(undefined, "") },
         { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, "") },
         { json: "launch_desktop_name", js: "launch_desktop_name", typ: u(undefined, "") },
         { json: "launch_desktop_setting", js: "launch_desktop_setting", typ: u(undefined, r("LaunchDesktopSettingObject")) },

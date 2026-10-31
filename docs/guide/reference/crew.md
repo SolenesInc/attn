@@ -36,21 +36,29 @@ run them from; outside, pass `--profile <name|id>` when you have several.
 `member:<key>`, such as `member:fern`, reaches the member by its key, which
 never changes.
 
-## Move a member's home into the Notebook
+## Move a member's home
 
 A member whose home is in Attn's data folder, because you made the folder
 yourself or the member was added before homes moved to the Notebook, keeps it
 there until you run `attn crew move-home <member>`. That moves the home into its
-profile's Notebook, at `crew/<name>/` like a new member's. Its charter, letters and anything else in
-the folder move with it, and a working or awareness folder inside the home
-follows. So do its past sessions: [resume](sessions.md#resume) one from the ledger or
-with `attn session reopen` and it opens in the new home. The member must be
-asleep. Only this command and renaming the member move a home: changing the
-profile's Notebook folder later leaves every home where it is.
+profile's Notebook, at `crew/<name>/` like a new member's. Its charter, letters
+and anything else in the folder move with it, and a working or awareness folder
+inside the home follows. So do its past sessions: [resume](sessions.md#resume)
+one from the ledger or with `attn session reopen` and it opens in the new home.
+The member must be asleep. Changing the profile's Notebook folder later leaves
+every home where it is.
 
 If a member's home goes missing, Attn refuses to wake the member or open its
-charter and names the path; put the folder back to fix it. Other members keep
-working.
+charter and names the path. Other members keep working. Put the folder back, or,
+if you moved or renamed it on purpose, tell Attn where it is now with
+`attn crew set <member> --home <folder>`. The folder must hold the member's
+`CHARTER.md` and the member must be asleep. Attn renames the folder after the
+member if its name differs, and a working or awareness folder or past session
+inside the old home follows, as on a move.
+
+To take a home back out of the Notebook, move its folder to
+`~/.attn/crew/<key>/` (for a named instance, `~/.attn-<instance>/crew/<key>/`)
+and point `--home` there.
 
 ## The Crew section
 
@@ -123,6 +131,7 @@ It never touches the member's markdown files.
 | `--agent <name>` | `claude`, `codex` or an installed plugin harness. `""` goes back to the crew default, Claude Code. |
 | `--model <name>`, `--effort <level>` | The model and effort. `""` goes back to the harness default. |
 | `--awareness-dir <dir>` | A folder the charter is about, which the member can reach. Repeat to set several; `""` clears them. |
+| `--home <dir>` | Where the member's home is now, after you moved or renamed its folder. See [Move a member's home](#move-a-members-home). |
 
 By default a member starts on its own desktop, named after it, which Attn
 creates the first time the member wakes.

@@ -66,14 +66,12 @@ func (c *Client) CrewApply(member string) (*protocol.CrewApplyResult, error) {
 }
 
 func (c *Client) CrewSet(member string, cwd, agent, model, effort *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
-	return c.CrewSetWithNamedDesktop(member, cwd, agent, model, effort, awarenessDirs, nil, nil)
+	return c.CrewSetMessage(protocol.CrewSetMessage{Member: member, Cwd: cwd, Agent: agent, Model: model, Effort: effort, AwarenessDirs: awarenessDirs})
 }
-func (c *Client) CrewSetWithNamedDesktop(member string, cwd, agent, model, effort *string, awarenessDirs []string, desktop, name *string) (*protocol.CrewSetResult, error) {
-	msg := protocol.CrewSetMessage{
-		LaunchDesktop: desktop, LaunchDesktopName: name,
-		Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, Effort: effort, AwarenessDirs: awarenessDirs,
-	}
-	if awarenessDirs != nil && len(awarenessDirs) == 0 {
+
+func (c *Client) CrewSetMessage(msg protocol.CrewSetMessage) (*protocol.CrewSetResult, error) {
+	msg.Cmd = protocol.CmdCrewSet
+	if msg.AwarenessDirs != nil && len(msg.AwarenessDirs) == 0 {
 		msg.ClearAwarenessDirs = protocol.Ptr(true)
 	}
 	resp, err := c.send(msg)

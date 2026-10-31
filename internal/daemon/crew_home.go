@@ -97,31 +97,11 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 	if err != nil {
 		return member, revision, err
 	}
-	moved := member
-	moved.Home = home
-	moved.CWD = rebaseCrewPath(previous, home, member.CWD)
-	moved.AwarenessDirs = make([]string, len(member.AwarenessDirs))
-	for i, dir := range member.AwarenessDirs {
-		moved.AwarenessDirs[i] = rebaseCrewPath(previous, home, dir)
-	}
-	schema, err := d.crewCollection()
+	moved, documents, err := d.rehomedCrewRecord(member, revision, previous, home)
 	if err != nil {
 		_ = os.Remove(home)
 		return member, revision, err
 	}
-	body, err := moved.Encode()
-	if err != nil {
-		_ = os.Remove(home)
-		return member, revision, err
-	}
-	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
-	documents := []store.DocumentCommit{{Write: store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &revision}, Fact: fact}}
-	dispatches, err := d.dispatchesFollowingHome(previous, home)
-	if err != nil {
-		_ = os.Remove(home)
-		return member, revision, fmt.Errorf("find the saved sessions that move with %s's home: %w", member.Name, err)
-	}
-	documents = append(documents, dispatches...)
 	if err := syscall.Rename(source, home); err != nil {
 		_ = os.Remove(home)
 		if errors.Is(err, syscall.EXDEV) {
@@ -136,12 +116,133 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 		}
 		return member, revision, err
 	}
+	d.announceCrewHomeMove(member, documents, written, previous, home)
+	return moved, written[0].Rev, nil
+}
+
+func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string) (crew.Member, int64, error) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	if d.crewBindingLive(member) {
+		return member, revision, fmt.Errorf("%s is awake and works from its home; put it to sleep first: attn crew sleep %s", member.Name, member.Name)
+	}
+	home, err := d.crewHomeAt(member, dir)
+	if err != nil || home == member.HomeDir(d.dataRoot) {
+		return member, revision, err
+	}
+	pointed := member
+	pointed.Home = recordedCrewHome(member, d.dataRoot, home)
+	if err := d.requireCrewFiles(pointed); err != nil {
+		return member, revision, err
+	}
+	previous := member.HomeDir(d.dataRoot)
+	moved, documents, err := d.rehomedCrewRecord(member, revision, previous, home)
+	if err != nil {
+		return member, revision, err
+	}
+	written, err := d.commitCrewHomeMove(store.CrewHomeMove{Documents: documents, From: previous, To: home})
+	if err != nil {
+		return member, revision, err
+	}
+	d.announceCrewHomeMove(member, documents, written, previous, home)
+	if moved.InDataDir() || crewHomeNamedFor(moved.Home, moved.Name) {
+		return moved, written[0].Rev, nil
+	}
+	return d.relocateCrewHome(moved, written[0].Rev, filepath.Dir(moved.Home), moved.Name, d.commitCrewHomeMove)
+}
+
+func (d *Daemon) crewHomeAt(member crew.Member, dir string) (string, error) {
+	home, err := d.resolveCrewRecordedDir(dir)
+	if err != nil {
+		return "", err
+	}
+	if home == "" {
+		return "", fmt.Errorf("--home needs the folder that holds %s's %s", member.Name, crew.CharterFileName)
+	}
+	if _, err := os.Stat(filepath.Join(home, crew.CharterFileName)); errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("%s has no %s, so it is not %s's home; point --home at the folder that holds %s's charter", home, crew.CharterFileName, member.Name, member.Name)
+	} else if err != nil {
+		return "", err
+	}
+	target, err := config.CanonicalRuntimePath(home)
+	if err != nil {
+		return "", err
+	}
+	dataHome := crew.Member{ID: member.ID}.HomeDir(d.dataRoot)
+	if same, err := sameDir(dataHome, target); err != nil || same {
+		return dataHome, err
+	}
+	crewRoot, err := d.resolvedCrewRoot()
+	if err != nil {
+		return "", err
+	}
+	if pathWithin(crewRoot, target) {
+		return "", fmt.Errorf("%s is in attn's data folder, where %s's home can only be %s", home, member.Name, dataHome)
+	}
+	if current, err := config.CanonicalRuntimePath(member.HomeDir(d.dataRoot)); err == nil && current == target {
+		return member.HomeDir(d.dataRoot), nil
+	}
+	return home, d.refuseSharedCrewHome(member, target)
+}
+
+func (d *Daemon) refuseSharedCrewHome(member crew.Member, target string) error {
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		return err
+	}
+	for _, other := range members {
+		if other.ID == member.ID {
+			continue
+		}
+		theirs, err := config.CanonicalRuntimePath(other.HomeDir(d.dataRoot))
+		if err != nil {
+			continue
+		}
+		if pathWithin(theirs, target) || pathWithin(target, theirs) {
+			return fmt.Errorf("%s overlaps %s's home at %s; each member needs a home of its own", target, other.Name, other.HomeDir(d.dataRoot))
+		}
+	}
+	return nil
+}
+
+func recordedCrewHome(member crew.Member, dataRoot, home string) string {
+	if home == (crew.Member{ID: member.ID}).HomeDir(dataRoot) {
+		return ""
+	}
+	return home
+}
+
+func (d *Daemon) rehomedCrewRecord(member crew.Member, revision int64, previous, home string) (crew.Member, []store.DocumentCommit, error) {
+	moved := member
+	moved.Home = recordedCrewHome(member, d.dataRoot, home)
+	moved.CWD = rebaseCrewPath(previous, home, member.CWD)
+	moved.AwarenessDirs = make([]string, len(member.AwarenessDirs))
+	for i, dir := range member.AwarenessDirs {
+		moved.AwarenessDirs[i] = rebaseCrewPath(previous, home, dir)
+	}
+	schema, err := d.crewCollection()
+	if err != nil {
+		return member, nil, err
+	}
+	body, err := moved.Encode()
+	if err != nil {
+		return member, nil, err
+	}
+	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
+	documents := []store.DocumentCommit{{Write: store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &revision}, Fact: fact}}
+	dispatches, err := d.dispatchesFollowingHome(previous, home)
+	if err != nil {
+		return member, nil, fmt.Errorf("find the saved sessions that move with %s's home: %w", member.Name, err)
+	}
+	return moved, append(documents, dispatches...), nil
+}
+
+func (d *Daemon) announceCrewHomeMove(member crew.Member, documents []store.DocumentCommit, written []store.DocumentWriteResult, previous, home string) {
 	for i, document := range documents {
 		d.announceCommittedWrite(document.Fact, written[i].Seq)
 	}
 	d.publishFact(FactCrewUpdated, member.ID, nil)
 	d.logf("crew: moved %s's home from %s to %s", member.ID, previous, home)
-	return moved, written[0].Rev, nil
 }
 
 func (d *Daemon) dispatchesFollowingHome(previous, home string) ([]store.DocumentCommit, error) {
