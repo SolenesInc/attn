@@ -63,8 +63,9 @@ commands:
         --all includes retired members.
 
   create <name> [--json]
-        Add a member to your profile. Its home starts with an empty
-        CHARTER.md, which the member writes with you in its first session.
+        Add a member to your profile. Its home is crew/<name>/ in the profile's
+        Notebook (crew/<name>-2/ when that folder is taken) and starts with an
+        empty CHARTER.md, which the member writes with you in its first session.
 
   wake <member> [--agent <name>] [--json]
         Start a session using the member's saved launch settings, on its chosen

@@ -14,9 +14,11 @@ to by name.
 
 `attn crew create <name>` adds a member to your profile. A name is letters,
 digits and `-`, starting with a letter, at most 40 characters; `chief`, `attn`,
-`user` and `you` are taken. The member's home starts with an empty
-`CHARTER.md`: its first session agrees a charter with you, then writes the file
-in its own words.
+`user` and `you` are taken. The member's home is `crew/<name>/` in your
+profile's Notebook, or `crew/<name>-2/` when that folder is taken, so you can
+read and edit its charter and letters there. It starts with an empty
+`CHARTER.md`: the member's first session agrees a charter with you, then writes
+the file in its own words.
 
 A home folder you make yourself also works: `~/.attn/crew/<key>/CHARTER.md`
 (for a named instance, `~/.attn-<instance>/crew/<key>/`), where the folder name
@@ -36,14 +38,13 @@ never changes.
 
 ## Move a member's home into the Notebook
 
-`attn crew move-home <member>` moves a member's home from Attn's data folder
-into its profile's Notebook, at `crew/<name>/`, or `crew/<name>-2/` when that
-folder is taken. Its charter, letters and anything else in the folder move with
-it, and a working or awareness folder inside the home follows. There you can
-read and edit the charter in the Notebook, and the home stays with the rest of
-your notes when you back them up or sync them. The member must be asleep. Attn never moves a home on
-its own: members stay where they are until you run the command, and changing
-the profile's Notebook folder later leaves homes where they are.
+A member whose home is in Attn's data folder, because you made the folder
+yourself or the member was added before homes moved to the Notebook, keeps it
+there until you run `attn crew move-home <member>`. That moves the home into its
+profile's Notebook, at `crew/<name>/` like a new member's. Its charter, letters and anything else in
+the folder move with it, and a working or awareness folder inside the home
+follows. The member must be asleep. Attn never moves a home on its own:
+changing the profile's Notebook folder later leaves every home where it is.
 
 If a member's home goes missing, Attn refuses to wake the member or open its
 charter and names the path; put the folder back to fix it. Other members keep

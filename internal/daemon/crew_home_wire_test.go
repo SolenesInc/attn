@@ -236,3 +236,33 @@ func TestAMemberWithANotebookHomeKeepsItsProfile(t *testing.T) {
 		t.Fatalf("profile after removing the Notebook home: %+v", deleted)
 	}
 }
+
+func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	keel := createCrew(t, cli, "Keel")
+	if keel.HomeDir != notebookCrewHome(w, "keel") || keel.CharterPath != filepath.Join(keel.HomeDir, crew.CharterFileName) {
+		t.Fatalf("created home: %+v", keel)
+	}
+	if read := notebookAskRead(app, "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || read.Result.Content != "" {
+		t.Fatalf("the new charter in the Notebook: %+v", read)
+	}
+	wake := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(wake.SessionID))
+	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != keel.HomeDir {
+		t.Fatalf("launch directory: %s", session.Directory)
+	}
+
+	shared := createProfile(app, "Shared")
+	sharedKeel := createCrew(t, w.Client().WithGardenProfile(shared.ID, ""), "Keel")
+	if sharedKeel.HomeDir != notebookCrewHome(w, "keel-2") {
+		t.Fatalf("a second Keel in the same Notebook: %+v", sharedKeel)
+	}
+	own := createProfile(app, "Own")
+	root := w.Path("own-notebook")
+	setSetting(t, w.AppOn(own.ID), "notebook.profile_root", root)
+	ownKeel := createCrew(t, w.Client().WithGardenProfile(own.ID, ""), "Keel")
+	if ownKeel.HomeDir != filepath.Join(root, crew.HomesDirName, "keel") {
+		t.Fatalf("a Keel in a profile with its own Notebook: %+v", ownKeel)
+	}
+}

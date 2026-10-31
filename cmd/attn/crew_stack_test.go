@@ -191,7 +191,7 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 		{args: []string{"crew", "restore", "Keel", "extra"}, want: "takes one member name"},
 	})
 	s.Start()
-	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: ", "attn crew wake Keel")
+	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew wake Keel")
 	var created protocol.CrewMember
 	s.Attn("crew", "create", "Trellis", "--json").JSON(t, &created)
 	if created.ID != "trellis" || created.Name != "Trellis" {

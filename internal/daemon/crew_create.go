@@ -44,13 +44,15 @@ func (d *Daemon) createCrewMember(profileID, name string) (crew.Member, error) {
 		_, err := os.Lstat(filepath.Join(homes, key))
 		return !errors.Is(err, os.ErrNotExist)
 	})
-	member := crew.Member{ID: key, Name: name, ProfileID: profileID, AwarenessDirs: []string{}}
-	if err := os.MkdirAll(homes, 0o755); err != nil {
+	parent, err := d.notebookCrewHomes(profileID)
+	if err != nil {
 		return crew.Member{}, err
 	}
-	if err := os.Mkdir(member.HomeDir(d.dataRoot), 0o755); err != nil {
+	home, err := reserveCrewHome(parent, name)
+	if err != nil {
 		return crew.Member{}, err
 	}
+	member := crew.Member{ID: key, Name: name, ProfileID: profileID, Home: home, AwarenessDirs: []string{}}
 	created := false
 	defer func() {
 		if !created {
