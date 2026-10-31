@@ -68,6 +68,7 @@ type Monitor struct {
 	saveMu               sync.Mutex
 	saved                savedView
 	reacted              View
+	appliedState         uint64
 	registry             *Registry
 	home                 Home
 	label                string

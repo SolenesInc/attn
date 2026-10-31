@@ -2,7 +2,6 @@ package sessionmonitor
 
 import (
 	"github.com/victorarias/attn/internal/pausepoint"
-	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func (m *Monitor) react(view View) {
@@ -21,12 +20,8 @@ func (m *Monitor) react(view View) {
 	}
 	state := view.State.V
 	if state.Sequence != previous.State.V.Sequence && !state.Quiet {
+		pausepoint.At(pausepoint.SessionStateReacting)
 		m.UpdateTranscriptState(state.State)
-		source := state.Origin.Source
-		if source == "" {
-			source = state.Cause
-		}
-		m.Trace(statetrace.Observation{Source: source, Claim: string(state.State), Detail: state.Origin.Detail, Cause: state.Cause, Outcome: statetrace.OutcomeApplied, ObservedAt: state.Origin.ObservedAt})
 		if state.Resolve {
 			m.ResolveSoon()
 		}
