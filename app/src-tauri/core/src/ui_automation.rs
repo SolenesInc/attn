@@ -284,6 +284,38 @@ fn handle_request<R: Runtime>(
         };
     }
 
+    if request.action == "native_windows" {
+        return match native_windows(app) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action=native_windows", request_id),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action=native_windows error={}",
+                        request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
     if request.action == "set_window_bounds" {
         let payload = request.payload.clone().unwrap_or(Value::Null);
         return match set_window_bounds(app, &payload) {
@@ -895,6 +927,60 @@ fn window_bounds<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
             "height": logical_size.height,
         },
     }))
+}
+
+#[cfg(target_os = "linux")]
+fn native_windows<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
+    use gdkx11::X11Window;
+    use gtk::gdk::WindowState;
+    use gtk::glib::Cast;
+    use gtk::prelude::{GtkWindowExt, WidgetExt};
+
+    let windows = app.windows();
+    let (sender, receiver) = mpsc::channel();
+    app.run_on_main_thread(move || {
+        let described: Result<Vec<Value>, String> = windows
+            .into_iter()
+            .map(|(label, window)| {
+                let gtk_window = window
+                    .gtk_window()
+                    .map_err(|error| format!("window {label} has no GTK window: {error}"))?;
+                let gdk_window = gtk_window.window();
+                let xid = match &gdk_window {
+                    None => None,
+                    Some(gdk_window) => Some(
+                        gdk_window
+                            .clone()
+                            .downcast::<X11Window>()
+                            .map_err(|_| {
+                                format!("window {label} is not an X11 window; native window ids need X11")
+                            })?
+                            .xid(),
+                    ),
+                };
+                let server_mapped = gdk_window
+                    .as_ref()
+                    .is_some_and(|gdk_window| !gdk_window.state().contains(WindowState::WITHDRAWN));
+                Ok(serde_json::json!({
+                    "label": label,
+                    "title": gtk_window.title().map(|title| title.to_string()),
+                    "id": xid,
+                    "mapped": gtk_window.is_visible() && server_mapped,
+                }))
+            })
+            .collect();
+        let _ = sender.send(described);
+    })
+    .map_err(|error| format!("failed to request native windows: {error}"))?;
+    let windows = receiver
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "timed out resolving native windows".to_string())??;
+    Ok(serde_json::json!({ "pid": std::process::id(), "windows": windows }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn native_windows<R: Runtime>(_app: &AppHandle<R>) -> Result<Value, String> {
+    Err("native_windows reports X11 window ids and is only supported on Linux".into())
 }
 
 // Logical bounds, the coordinate system window_bounds returns. Drives Tauri's window

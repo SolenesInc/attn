@@ -27,17 +27,6 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function parsePositiveIntegers(stdout) {
-  return String(stdout || '')
-    .split(/\s+/)
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isInteger(value) && value > 0);
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function commandErrorDetail(error) {
   return error?.stderr?.toString?.().trim() || error?.message || String(error);
 }
@@ -116,6 +105,14 @@ export function parseXdotoolGeometry(stdout) {
   return geometry;
 }
 
+function selectOwnedWindow({ pid, windows }, { pid: launchedPid = null, windowTitle = null } = {}) {
+  if (launchedPid && pid !== launchedPid) {
+    throw new Error(`The app automation bridge answered from pid ${pid}, not the launched app pid ${launchedPid}`);
+  }
+  const window = windows.find(windowTitle ? (candidate) => candidate.title === windowTitle : (candidate) => candidate.label === 'main');
+  return window?.mapped ? window : null;
+}
+
 export class LinuxDriver extends TargetedWindowDriver {
   constructor({
     bundleId = null,
@@ -173,55 +170,46 @@ export class LinuxDriver extends TargetedWindowDriver {
     };
   }
 
-  async mainWindowId(opts = {}) {
-    const searchArgs = ['search', '--onlyvisible'];
-    const pid = Number.isInteger(opts.pid) && opts.pid > 0 ? opts.pid : null;
-    if (pid) {
-      searchArgs.push('--pid', String(pid));
-    } else {
-      const title = opts.windowTitle || this.appName;
-      searchArgs.push('--name', `^${escapeRegex(title)}$`);
+  async ownedWindows() {
+    if (!this.client) {
+      throw new Error('LinuxDriver resolves app windows through the app automation bridge; create it with createWindowDriver({ appPath, client })');
     }
     try {
-      const ids = parsePositiveIntegers(await this.runXdotoolCapture(searchArgs));
-      return ids[0] || null;
+      return await this.client.request('native_windows', {}, { timeoutMs: 5_000 });
     } catch (error) {
-      if (error?.cause?.code === 1 || error?.code === 1) {
-        this.lastEmptyLookup = { searchArgs, stderr: String(error?.cause?.stderr ?? '').trim() };
-        return null;
-      }
-      throw error;
+      throw new Error(`LinuxDriver could not ask the app for its windows through the automation bridge: ${error?.message || error}`, { cause: error });
     }
+  }
+
+  async mainWindowId(opts = {}) {
+    return selectOwnedWindow(await this.ownedWindows(), opts)?.id ?? null;
   }
 
   async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150, opts = {}) {
     const deadline = Date.now() + timeoutMs;
+    let lastError = null;
     while (Date.now() < deadline) {
-      const windowId = await this.mainWindowId(opts);
-      if (windowId) return windowId;
+      try {
+        const windowId = await this.mainWindowId(opts);
+        if (windowId) return windowId;
+        lastError = null;
+      } catch (error) {
+        lastError = error;
+      }
       await delay(pollIntervalMs);
     }
+    if (lastError) throw lastError;
     return null;
   }
 
   async windowList() {
-    const main = await this.mainWindowId();
-    if (!main) return [];
-    let ids = [main];
-    try {
-      const pid = await this.runXdotoolCapture(['getwindowpid', String(main)]);
-      ids = parsePositiveIntegers(await this.runXdotoolCapture([
-        'search', '--onlyvisible', '--pid', pid,
-      ]));
-    } catch {}
-
-    const windows = [];
-    for (const id of ids) {
-      const name = await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => '');
-      const bounds = await this.windowGeometry(id).catch(() => null);
-      if (bounds) windows.push({ id, name, ...bounds, layer: 0 });
+    const { windows } = await this.ownedWindows();
+    const listed = [];
+    for (const window of windows.filter((candidate) => candidate.mapped)) {
+      const bounds = await this.windowGeometry(window.id).catch(() => null);
+      if (bounds) listed.push({ id: window.id, name: window.title ?? '', ...bounds, layer: 0 });
     }
-    return windows;
+    return listed;
   }
 
   async waitForWindowTitled(title, { timeoutMs = 10_000, pollIntervalMs = 200 } = {}) {
@@ -312,6 +300,9 @@ export class LinuxDriver extends TargetedWindowDriver {
 
   async screenshot(outputPath, opts = {}) {
     const windowId = await this.requireWindow(opts);
+    await this.windowGeometry(windowId).catch((error) => {
+      throw new Error(`Linux window capture failed: window ${windowId} is gone: ${commandErrorDetail(error.cause ?? error)}`, { cause: error });
+    });
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     try {
       await this.run('import', ['-window', String(windowId), outputPath], {
@@ -355,7 +346,7 @@ export class LinuxDriver extends TargetedWindowDriver {
     ]));
   }
 
-  async nativeFocusState({ pid = null } = {}) {
+  async nativeFocusState() {
     const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
     const describeWindow = async (id) => ({
       id,
@@ -363,9 +354,6 @@ export class LinuxDriver extends TargetedWindowDriver {
       pid: await this.runXdotoolCapture(['getwindowpid', String(id)]).catch(() => null),
       geometry: await this.windowGeometry(id).catch(() => null),
     });
-    const searchPid = async (extra) => parsePositiveIntegers(
-      await this.runXdotoolCapture(['search', ...extra, '--pid', String(pid)]).catch(() => ''),
-    );
     const [mainWindow, focusedWindow, pointer, appWindows] = await Promise.all([
       read(async () => {
         const id = await this.mainWindowId();
@@ -376,9 +364,14 @@ export class LinuxDriver extends TargetedWindowDriver {
         (await this.runXdotoolCapture(['getmouselocation', '--shell'])).split(/\r?\n/).map((line) => line.split('=', 2)),
       )),
       read(async () => {
-        if (!pid) return null;
-        const [all, visible] = await Promise.all([searchPid([]), searchPid(['--onlyvisible']).then((ids) => new Set(ids))]);
-        return Promise.all(all.map(async (id) => ({ ...await describeWindow(id), visible: visible.has(id) })));
+        const { pid, windows } = await this.ownedWindows();
+        return {
+          pid,
+          windows: await Promise.all(windows.map(async (window) => ({
+            ...window,
+            native: window.id ? await describeWindow(window.id) : null,
+          }))),
+        };
       }),
     ]);
     return { mainWindow, focusedWindow, pointer, appWindows };
@@ -410,24 +403,13 @@ export class LinuxDriver extends TargetedWindowDriver {
   }
 
   async requireWindow(opts = {}) {
-    const windowId = await this.mainWindowId(opts);
-    if (windowId) return windowId;
-    const title = opts.windowTitle || this.appName;
-    const lookup = this.lastEmptyLookup;
-    const attnWindows = await this.attnWindows().catch((error) => String(error?.message || error));
-    throw new Error(`Linux input driver found no visible window titled ${JSON.stringify(title)} on DISPLAY=${this.env.DISPLAY}`
-      + `; xdotool ${JSON.stringify(lookup?.searchArgs)} stderr=${JSON.stringify(lookup?.stderr ?? '')}`
-      + `; attn windows now: ${JSON.stringify(attnWindows)}`);
-  }
-
-  async attnWindows() {
-    const search = (extra) => this.runXdotoolCapture(['search', ...extra, '--name', '^attn']).then(parsePositiveIntegers, () => []);
-    const [all, visible] = await Promise.all([search([]), search(['--onlyvisible']).then((ids) => new Set(ids))]);
-    return Promise.all(all.map(async (id) => ({
-      id,
-      name: await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => null),
-      visible: visible.has(id),
-    })));
+    if (opts.windowId) return opts.windowId;
+    const owned = await this.ownedWindows();
+    const window = selectOwnedWindow(owned, opts);
+    if (window) return window.id;
+    const wanted = opts.windowTitle ? `titled ${JSON.stringify(opts.windowTitle)}` : 'labelled "main"';
+    throw new Error(`Linux input driver found no mapped app window ${wanted} on DISPLAY=${this.env.DISPLAY}`
+      + `; app pid ${owned.pid} reports windows ${JSON.stringify(owned.windows)}`);
   }
 
   requireDisplay() {

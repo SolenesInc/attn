@@ -32,9 +32,9 @@ repository root.
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
-  `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
-  pointer. Shared-Mac runs keep the parked launch and never use activation,
-  `menu`, scrolling or physical input; see the
+  `menu` and scrolling; on Linux, `xdotool` focuses the window the app reports
+  through the client and moves the pointer. Shared-Mac runs keep the parked
+  launch and never use activation, `menu`, scrolling or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
 - Point every native pointer action at an element: `driver.click`,

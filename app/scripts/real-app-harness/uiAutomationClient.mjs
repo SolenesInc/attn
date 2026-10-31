@@ -159,7 +159,7 @@ export class UiAutomationClient {
 
   #focusDriver() {
     if (!this._focusDriver) {
-      this._focusDriver = this.platform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath });
+      this._focusDriver = this.platform.createWindowDriver({ bundleId: this.bundleId, appPath: this.appPath, client: this });
     }
     return this._focusDriver;
   }

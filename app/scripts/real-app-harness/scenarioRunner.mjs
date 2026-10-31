@@ -242,7 +242,7 @@ export function registerNativeFailureEvidence(runner, { client, driver, selector
   runner.registerFailureEvidence('window', () => request('get_window_bounds'));
   runner.registerFailureEvidence('dom', () => request('dom_focus_state', { selectors: selectors() }));
   runner.registerFailureEvidence('uiDiagnostics', () => request('ui_diagnostics'));
-  runner.registerFailureEvidence('native', () => driver.nativeFocusState({ pid: client.readManifest()?.pid ?? null }));
+  runner.registerFailureEvidence('native', () => driver.nativeFocusState());
 }
 
 export async function closeScenarioSessions(client, sessionIds) {

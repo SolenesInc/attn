@@ -393,7 +393,7 @@ async function main() {
       const opened = await readGraphicsRegions(openPid);
       await bringWindowForward(client);
       const shot = path.join(runDir, `dock-${options.dockProbe}-open.png`);
-      await captureFrontWindowScreenshot(shot).catch((error) => console.warn(`[perf] dock screenshot failed: ${error.message}`));
+      await captureFrontWindowScreenshot(shot, { client }).catch((error) => console.warn(`[perf] dock screenshot failed: ${error.message}`));
       summary.dockProbe = { panelId: options.dockProbe, closed, opened, screenshot: shot };
       console.log(
         `[perf] dock ${options.dockProbe}: closed surfaces=${closed?.largeCount ?? 'n/a'} `
@@ -411,7 +411,7 @@ async function main() {
         await client.request('select_session', { sessionId }, { timeoutMs: 15_000 });
         await delay(options.settleMs);
         const shot = path.join(runDir, `switch-${index + 1}.png`);
-        await captureFrontWindowScreenshot(shot)
+        await captureFrontWindowScreenshot(shot, { client })
           .catch((error) => console.warn(`[perf] switch screenshot failed: ${error.message}`));
         const surfaces = await readGraphicsRegions(webContentPid(await snapshot(appPid, daemonPid, webkitBaseline)));
         summary.switchProbe.push({ sessionId, screenshot: shot, graphicsSurfaces: surfaces ?? null });
