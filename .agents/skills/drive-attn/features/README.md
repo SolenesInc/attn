@@ -57,7 +57,7 @@ In the index, "both" means people and agents.
   needs a background process's exit code has the subshell that started it
   write the code to a file, as [doc-store.md](doc-store.md) does.
 
-### Doors and harnesses
+### Entrypoints and harnesses
 
 - People: `bridge` with native input (`native_key`, `native_text`,
   `native_mouse`) for shortcuts, the palette and controls; `./attn` for the
@@ -68,7 +68,7 @@ In the index, "both" means people and agents.
   reload, snooze, `attn terminal`, `attn turn`) behaves differently from a
   plain shell, so drive the agent's side through the mock.
 - The person's own shell can act as a session with `--session <id>` or
-  `--source-session <id>`. That is a door of its own, and a way to set up,
+  `--source-session <id>`. That is an entrypoint of its own, and a way to set up,
   never proof of what an agent can do.
 - Triggers: cause the real event (an agent stops, a note rings, a pull
   request changes on the mock GitHub) and observe what follows. Where the
@@ -311,7 +311,7 @@ path and scenario id must exist at HEAD.
 
 How the recipes were checked: [garden.md](garden.md)'s Driving it ran live
 on a named instance, daemon and CLI only, at commit `b3d0df90a`: every step
-from the instance shell and the Agents door, where the mock agent tended,
+from the instance shell and the agents' entrypoints, where the mock agent tended,
 watched, armed a harvest on merge and harvested. Its steps that arm a
 harvest without a url and take the arming back, its `bridge` steps, and
 every other file's Driving it, come from reading the source and the CLI's

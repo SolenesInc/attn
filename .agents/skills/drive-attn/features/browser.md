@@ -127,4 +127,4 @@ Preconditions:
 - `screenshot` and `pdf` write to the folder `attn` runs in, `attn-browser.png` or `attn-browser.pdf` by default, and replace a file of that name.
 - A recipe that points at a public site depends on the network; serve local pages instead.
 - `bridge capture_native_window_screenshot` needs macOS Screen Recording permission for the instance's app or your terminal; without it the capture fails.
-- Working but wrong: no key, palette command or sidebar control opens a browser tile, so a person without a shell has no way in, and closing the tile is a one-way door from the app.
+- Working but wrong: no key, palette command or sidebar control opens a browser tile, so a person without a shell has no way in, and once a person closes the tile in the app, they cannot open it again from the app.

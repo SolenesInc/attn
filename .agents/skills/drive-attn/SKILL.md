@@ -121,7 +121,7 @@ The two `protocol.` checks fail because no app is installed, so it prints
 
 ## Drive
 
-| Harness | Door | Reaches | Cannot reach |
+| Harness | Entrypoint | Reaches | Cannot reach |
 | --- | --- | --- | --- |
 | `./attn <verb>` in the instance shell | A person's own shell; agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app; verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |

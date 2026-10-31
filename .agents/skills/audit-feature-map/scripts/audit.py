@@ -12,7 +12,7 @@ OUTCOMES = {"pass", "fixed", "drift", "regression", "harness", "blocked", "ambig
 NEEDS_FOLLOW_UP = {"fixed", "drift", "regression", "harness", "ambiguous"}
 COVERED = {"pass", "fixed"}
 COMMIT = re.compile(r"\b[0-9a-f]{7,40}\b")
-HEADER = "| door | way in | outcome | evidence | follow-up |"
+HEADER = "| entrypoint | way in | outcome | evidence | follow-up |"
 
 
 def feature_files(selected):
@@ -34,7 +34,7 @@ def entry_section(path):
     return match.group(1)
 
 
-def doors(path):
+def entrypoints(path):
     audience, count, found = None, 0, []
     for line in entry_section(path).splitlines():
         heading = re.match(r"^### (\w+)", line)
@@ -51,19 +51,19 @@ def summary(text, width=90):
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def cmd_doors(args):
+def cmd_entrypoints(args):
     print(HEADER)
     print("| --- | --- | --- | --- | --- |")
     for path in feature_files(args.features):
-        for door, text in doors(path):
-            print(f"| {door} | {summary(text)} |  |  |  |")
+        for entrypoint, text in entrypoints(path):
+            print(f"| {entrypoint} | {summary(text)} |  |  |  |")
 
 
 def report_rows(report):
     rows = {}
     for line in Path(report).read_text().splitlines():
         cells = [c.strip() for c in re.split(r"(?<!\\)\|", line.strip())[1:-1]]
-        if len(cells) != 5 or cells[0] in ("door", "---"):
+        if len(cells) != 5 or cells[0] in ("entrypoint", "---"):
             continue
         rows.setdefault(cells[0], []).append(cells)
     return rows
@@ -71,32 +71,32 @@ def report_rows(report):
 
 def cmd_check(args):
     rows = report_rows(args.report)
-    expected = [door for path in feature_files(args.features) for door, _ in doors(path)]
+    expected = [entrypoint for path in feature_files(args.features) for entrypoint, _ in entrypoints(path)]
     problems = []
-    for door in expected:
-        found = rows.get(door, [])
+    for entrypoint in expected:
+        found = rows.get(entrypoint, [])
         if len(found) != 1:
-            problems.append(f"{door}: {len(found)} rows, want 1")
+            problems.append(f"{entrypoint}: {len(found)} rows, want 1")
             continue
         _, _, outcome, evidence, follow_up = found[0]
         if outcome not in OUTCOMES:
-            problems.append(f"{door}: outcome {outcome!r} is not one of {', '.join(sorted(OUTCOMES))}")
+            problems.append(f"{entrypoint}: outcome {outcome!r} is not one of {', '.join(sorted(OUTCOMES))}")
         if not evidence:
-            problems.append(f"{door}: no evidence")
+            problems.append(f"{entrypoint}: no evidence")
         if outcome in NEEDS_FOLLOW_UP and not follow_up:
-            problems.append(f"{door}: outcome {outcome} needs a follow-up (commit, seed or ask)")
+            problems.append(f"{entrypoint}: outcome {outcome} needs a follow-up (commit, seed or ask)")
         unlanded = [c for c in cited_commits(evidence + " " + follow_up) if not on_main(c)]
         if unlanded:
-            problems.append(f"{door}: cites {', '.join(unlanded)}, not on origin/main; cite the landed commit, or none when the fix did not land")
+            problems.append(f"{entrypoint}: cites {', '.join(unlanded)}, not on origin/main; cite the landed commit, or none when the fix did not land")
         if outcome == "fixed" and not cited_commits(follow_up):
-            problems.append(f"{door}: outcome fixed needs the landed map commit in its follow-up")
+            problems.append(f"{entrypoint}: outcome fixed needs the landed map commit in its follow-up")
     extra = sorted(set(rows) - set(expected))
-    problems += [f"{door}: not a door in the map at this revision" for door in extra]
+    problems += [f"{entrypoint}: not an entrypoint in the map at this revision" for entrypoint in extra]
     tally = {}
-    for door in expected:
-        for row in rows.get(door, [])[:1]:
+    for entrypoint in expected:
+        for row in rows.get(entrypoint, [])[:1]:
             tally[row[2]] = tally.get(row[2], 0) + 1
-    print(f"{len(expected)} doors; " + ", ".join(f"{k} {v}" for k, v in sorted(tally.items())))
+    print(f"{len(expected)} entrypoints; " + ", ".join(f"{k} {v}" for k, v in sorted(tally.items())))
     if problems:
         print("\n".join(problems), file=sys.stderr)
         sys.exit(1)
@@ -138,10 +138,10 @@ def cmd_relink(args):
 def cmd_gaps(args):
     rows = report_rows(args.report)
     for path in feature_files(args.features):
-        for door, _ in doors(path):
-            for _, _, outcome, evidence, follow_up in rows.get(door, [])[:1]:
+        for entrypoint, _ in entrypoints(path):
+            for _, _, outcome, evidence, follow_up in rows.get(entrypoint, [])[:1]:
                 if outcome not in COVERED:
-                    print(f"- {door}: {outcome}. {evidence}" + (f" Follow-up: {follow_up}" if follow_up.strip("—- ") else ""))
+                    print(f"- {entrypoint}: {outcome}. {evidence}" + (f" Follow-up: {follow_up}" if follow_up.strip("—- ") else ""))
 
 
 def cmd_sources(args):
@@ -173,9 +173,9 @@ def cmd_scope(args):
 parser = argparse.ArgumentParser(description="Helpers for the feature-map audit.")
 sub = parser.add_subparsers(dest="command", required=True)
 for name, func, helptext in [
-    ("doors", cmd_doors, "print a report table with one row per door"),
-    ("check", cmd_check, "check a report has one valid row per door"),
-    ("gaps", cmd_gaps, "list each door that is not pass or fixed, with its evidence and follow-up"),
+    ("entrypoints", cmd_entrypoints, "print a report table with one row per entrypoint"),
+    ("check", cmd_check, "check a report has one valid row per entrypoint"),
+    ("gaps", cmd_gaps, "list each entrypoint that is not pass or fixed, with its evidence and follow-up"),
     ("sources", cmd_sources, "list commits to each feature's named sources since its file last changed"),
 ]:
     p = sub.add_parser(name, help=helptext)
