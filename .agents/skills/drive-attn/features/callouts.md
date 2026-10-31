@@ -19,7 +19,7 @@ Esc. Callouts are experimental and off until the user turns them on.
 ### People
 
 - Settings, Experimental, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
-- The callout card (`app/src/callouts/CalloutOverlay.tsx`): the pointing agent's name and the step count, the text, "↵ Next", "↵ Done" or "↵ Go there", "→ Next" on agent and desktop steps, and "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
+- The callout card (`app/src/callouts/CalloutOverlay.tsx`): the pointing agent's name and the step count, the text, "↵ Next", "↵ Done" or "↵ Go there", "→ Next" or, on the last step, "→ Done" beside "↵ Go there" on agent and desktop steps, and "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
 - Where people see what agents do: the card names the agent that points, and the ring marks what it points at.
 - Their own shell: `attn settings set callouts_enabled true`, and `attn callout show --session <id>` to point from a session.
 
@@ -63,7 +63,7 @@ Preconditions:
 - **A missing anchor refuses the whole callout.** Run `wsctl input --id <agent> --text "point-queue" --enter`. Peek shows the command failing with `not on screen: queue; on screen now:` and the anchors that are. No card appears.
 - **From the person's shell.** Run `./attn callout show --session co-agent garden "Pointed from the shell"`. It prints `showing a callout with 1 step; the user steps through it` and exits 0, and the card names `co-agent`. `./attn callout show garden` exits 1 with `callout show: an anchor needs its text: "garden" is the last argument`.
 - **No app.** Quit the app with `./attn instance stop-app`, then run `./attn callout anchors --session co-agent`. It lists the anchors and exits 1 with `callout anchors: the attn app is not showing your profile`; `./attn callout show --session co-agent garden "x"` exits 1 with the same reason. Launch the app again with `bridge --launch --wait-ready ping`.
-- **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek co-agent` after each agent call, and `bridge dom_text '{"selector":".callout-card"}'` at each step. Capture `bridge capture_screenshot '{"path":"<P>/callouts-tour.png"}'` on the first step and `<P>/callouts-agent.png` with the agent ring, `<P>` written out. Put the way in in each file's name, such as `callouts-agent-tour-peek.txt`.
+- **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek co-agent` after each agent call, and `bridge dom_text '{"selector":".callout-card"}'` at each step. Capture `bridge capture_native_window_screenshot '{"path":"<P>/callouts-tour.png"}'` on the first step and `<P>/callouts-agent.png` with the agent ring, `<P>` written out. Put the way in in each file's name, such as `callouts-agent-tour-peek.txt`.
 
 ## Contexts
 
@@ -90,6 +90,7 @@ Preconditions:
 - `callout show` returns as soon as the app accepts the card, before the user reads it; there is no completion. Prove the stepping from the app with `bridge`, not from the CLI.
 - An agent anchor whose agent no tile shows still shows its step, saying it isn't on screen, and Enter still goes there.
 - In queue flow `queue` is on screen and `desktops` may not be; list anchors before choosing them in a recipe.
+- `bridge capture_screenshot` draws the page without the card or its ring; use `capture_native_window_screenshot` to see them.
 - `bridge dom_click` on the card's buttons skips native input; drive the steps with `native_key`.
 - A step over 160 characters or a 21st step refuses the whole callout, naming the limit and the count; the callout already showing stays.
 - Working but wrong: Enter on an agent or desktop step goes there and ends the callout, so the steps after it never show; → moves on without going. A tour that puts such a step in the middle loses its tail when the user presses Enter.
