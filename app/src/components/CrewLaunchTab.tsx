@@ -103,7 +103,7 @@ function ApplySettings({ member, saved, isConnected }: { member: CrewMember; sav
     setApplying(true);
     setOutcome(null);
     sendCrewApply(member.id)
-      .then((result) => setOutcome({ text: result.detail, failed: false }))
+      .then((result) => setOutcome({ text: `${result.detail}.`, failed: false }))
       .catch((error: unknown) => setOutcome({ text: error instanceof Error ? error.message : 'Applying the settings failed', failed: true }))
       .finally(() => setApplying(false));
   };

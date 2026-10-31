@@ -73,7 +73,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--cwd", workdir), "Trellis launches in "+workdir)
 	trellis := wakeMember(t, s, "trellis")
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", "codex"))
-	requireStdout(t, s.Attn("crew", "apply", "trellis"), "The letter request for Trellis is queued in session "+trellis[:8]+" — ")
+	requireStdout(t, s.Attn("crew", "apply", "trellis"), "Trellis's session "+trellis[:8]+" is busy; it will be asked to file its letter when it can take input, and its next session starts on codex from it.")
 	if err := os.Remove(workdir); err != nil {
 		t.Fatal(err)
 	}

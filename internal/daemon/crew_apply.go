@@ -104,7 +104,7 @@ func (d *Daemon) crewRequestHarnessSwitch(member crew.Member, sessionID protocol
 	detail := fmt.Sprintf("Asked %s in session %s to file its letter; its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.LaunchAgent())
 	if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
-		detail = receipt.Detail
+		detail = fmt.Sprintf("%s's session %s is busy; it will be asked to file its letter when it can take input, and its next session starts on %s from it", member.Name, shortSessionID(sessionID), member.LaunchAgent())
 	}
 	return &protocol.CrewApplyResult{
 		Member:         member.ID,

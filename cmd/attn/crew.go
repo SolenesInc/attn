@@ -317,9 +317,6 @@ func runCrewApply(args []string) {
 }
 
 func crewApplyOutcomeLine(result *protocol.CrewApplyResult) string {
-	if result.DeliveryStatus != nil && *result.DeliveryStatus == protocol.AgentMsgStatusQueued {
-		return fmt.Sprintf("The letter request for %s is queued in session %s — %s", result.Name, agentShortID(string(protocol.Deref(result.SessionID))), result.Detail)
-	}
 	return result.Detail + "."
 }
 
