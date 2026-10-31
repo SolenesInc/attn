@@ -118,7 +118,8 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 	}
 	now := time.Now()
-	counts, err := d.store.PeerMessageGuardCounts(sender.ID, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
+	senderParty := d.partyOfSession(sender.ID)
+	counts, err := d.store.PeerMessageGuardCounts(senderParty, address, content, now.Add(-agentMessageDedupeWindow), now.Add(-agentMessageRateWindow))
 	if err != nil {
 		d.logf("agent msg guard counts: %v", err)
 		d.sendError(conn, "internal_error")
@@ -129,7 +130,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		d.replyAgentMsg(conn, result)
 		return
 	}
-	message := inbox.Message{ID: uuid.NewString(), SenderSessionID: sender.ID, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
+	message := inbox.Message{ID: uuid.NewString(), Sender: senderParty, Body: content, CreatedAt: now.UTC().Format(time.RFC3339Nano)}
 	if err := d.store.PutPeerMessage(message, address); err != nil {
 		d.sendError(conn, "internal_error")
 		return

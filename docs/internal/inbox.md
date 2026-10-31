@@ -54,8 +54,13 @@ watch updates and notices.
 
 ### Peer messages
 
-An agent sends a peer message with `attn agent msg`. attn refuses the message,
-with the reason, when:
+An agent sends a peer message with `attn agent msg`. The message records its
+sender: the crew member when a member's session sends it, otherwise the
+session. The recipient's reply line names the member, so a reply reaches the
+member's current session or wakes the member, even after the session that
+sent it has ended. A session sender is named by its short id.
+
+attn refuses the message, with the reason, when:
 
 - it is empty, or longer than 32 KiB;
 - the sender sent the same text to the same address in the last 10 seconds;

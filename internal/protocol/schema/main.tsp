@@ -7,6 +7,9 @@ namespace Protocol;
 
 scalar SessionID extends string;
 scalar TerminalID extends string;
+// session:<id> or member:<key>.
+scalar PartyRef extends string;
+model PartyView { ref: PartyRef; name: string; }
 
 // ============================================================================
 // Enums
@@ -7542,8 +7545,9 @@ enum AgentMessageState {
 // The durable peer message returned to its authorized sender or recipient.
 model AgentPeerMessage {
   message_id: string;
-  sender_session_id: SessionID;
-  sender_label: string;
+  sender: PartyView;
+  // What the recipient passes to attn agent msg to answer the sender.
+  reply_to: string;
   target_session_id: string;
   content: string;
   state: AgentMessageState;
@@ -7562,8 +7566,8 @@ model AgentInboxItem {
   source_id?: string;
   hint?: string;
   content: string;
-  sender_session_id?: SessionID;
-  sender_label?: string;
+  sender?: PartyView;
+  reply_to?: string;
   created_at: string;
   notified_at: string;
   read_at: string;

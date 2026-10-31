@@ -60,6 +60,35 @@ func memberAddress(key string) (who.Address, error) {
 	return who.Member(k).Address(), nil
 }
 
+func (d *Daemon) partyOfSession(id protocol.SessionID) who.Party {
+	if member, bound := d.crewMemberBoundToSession(id); bound {
+		return who.Member(member.Key)
+	}
+	return who.Session(id)
+}
+
+func (d *Daemon) partyView(p who.Party) protocol.PartyView {
+	view := protocol.PartyView{Ref: protocol.PartyRef(p.String())}
+	if key, member := p.Member(); member {
+		view.Name = d.crewMemberName(key.String())
+		return view
+	}
+	id, _ := p.Session()
+	view.Name = shortSessionID(id)
+	if session := d.store.Get(id); session != nil {
+		view.Name = sessionDisplayName(session)
+	}
+	return view
+}
+
+func (d *Daemon) replyTo(p who.Party) string {
+	if key, member := p.Member(); member {
+		return d.crewMemberName(key.String())
+	}
+	id, _ := p.Session()
+	return shortSessionID(id)
+}
+
 func (d *Daemon) withdrawFromInbox(to who.Address, kind inbox.Kind, key string) error {
 	if err := d.store.WithdrawInbox(to, kind, key); err != nil {
 		return err

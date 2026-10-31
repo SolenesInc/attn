@@ -852,11 +852,11 @@
                 }
               },
               {
-                "name": "sender_id",
+                "name": "reply_to",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "sender_id",
+                    "name": "reply_to",
                     "kind": "text",
                     "description": "Reply target."
                   }
@@ -6185,5 +6185,5 @@
       ]
     }
   ],
-  "definitions_hash": "11c90e25b137a24d452e1586949f43c09840f70f328cd371571fa327a837c299"
+  "definitions_hash": "2d1afc3613554b014bf7e3d58671deb810ba819d7a542789b7d725cffd78ad93"
 }

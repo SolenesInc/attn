@@ -31,10 +31,10 @@ type Item struct {
 }
 
 type Message struct {
-	ID              string
-	SenderSessionID protocol.SessionID
-	Body            string
-	CreatedAt       string
+	ID        string
+	Sender    who.Party
+	Body      string
+	CreatedAt string
 }
 
 type State string

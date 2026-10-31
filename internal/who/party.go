@@ -25,6 +25,7 @@ type Address struct{ address ref }
 func Member(k MemberKey) Party                { return Party{ref{member, k.String()}} }
 func User() Actor                             { return Actor{ref{kind: user}} }
 func Attn() Actor                             { return Actor{ref{kind: attn}} }
+func Session(id protocol.SessionID) Party     { return Party{ref{session, string(id)}} }
 func ToSession(id protocol.SessionID) Address { return Address{ref{session, string(id)}} }
 func ToTenderOf(seedID string) Address        { return Address{ref{tenderOf, seedID}} }
 func ToChief(profileID string) Address        { return Address{ref{chief, profileID}} }

@@ -120,12 +120,8 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
 		if delivery.Peer != nil {
-			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)
-			label := shortSessionID(delivery.Peer.SenderSessionID)
-			if sender := d.store.Get(delivery.Peer.SenderSessionID); sender != nil {
-				label = sessionDisplayName(sender)
-			}
-			item.SenderLabel = protocol.Ptr(label)
+			item.Sender = protocol.Ptr(d.partyView(delivery.Peer.Sender))
+			item.ReplyTo = protocol.Ptr(d.replyTo(delivery.Peer.Sender))
 		}
 		items = append(items, item)
 	}
@@ -169,7 +165,7 @@ func (d *Daemon) handleAgentMsgStatus(conn net.Conn, msg *protocol.AgentMsgStatu
 		return
 	}
 	record, err := d.store.PeerMessageRecord(strings.TrimSpace(msg.MessageID))
-	if err != nil || record.Message.SenderSessionID != sender.ID {
+	if err != nil || record.Message.Sender != d.partyOfSession(sender.ID) {
 		if err != nil && !errors.Is(err, store.ErrPeerMessageNotFound) {
 			d.logf("agent msg status: id=%s err=%v", msg.MessageID, err)
 		}
@@ -194,10 +190,6 @@ func (d *Daemon) replyPeerMessageError(conn net.Conn, err error) {
 }
 
 func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerMessage {
-	senderLabel := shortSessionID(record.Message.SenderSessionID)
-	if sender := d.store.Get(record.Message.SenderSessionID); sender != nil {
-		senderLabel = sessionDisplayName(sender)
-	}
 	target := record.ReadBy
 	if target == "" {
 		target, _ = record.To.Session()
@@ -206,8 +198,8 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 		}
 	}
 	result := &protocol.AgentPeerMessage{
-		MessageID: record.Message.ID, SenderSessionID: record.Message.SenderSessionID,
-		SenderLabel: senderLabel, TargetSessionID: string(target),
+		MessageID: record.Message.ID, Sender: d.partyView(record.Message.Sender),
+		ReplyTo: d.replyTo(record.Message.Sender), TargetSessionID: string(target),
 		Content: record.Message.Body, State: protocol.AgentMessageState(record.State()),
 		CreatedAt: record.Message.CreatedAt,
 	}

@@ -152,11 +152,11 @@ type AgentInboxItem struct {
 	// ReadAt corresponds to the JSON schema field "read_at".
 	ReadAt string `json:"read_at"`
 
-	// SenderLabel corresponds to the JSON schema field "sender_label".
-	SenderLabel *string `json:"sender_label,omitempty,omitzero"`
+	// ReplyTo corresponds to the JSON schema field "reply_to".
+	ReplyTo *string `json:"reply_to,omitempty,omitzero"`
 
-	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID *SessionID `json:"sender_session_id,omitempty,omitzero"`
+	// Sender corresponds to the JSON schema field "sender".
+	Sender *PartyView `json:"sender,omitempty,omitzero"`
 
 	// SourceID corresponds to the JSON schema field "source_id".
 	SourceID *string `json:"source_id,omitempty,omitzero"`
@@ -364,11 +364,11 @@ type AgentPeerMessage struct {
 	// ReadAt corresponds to the JSON schema field "read_at".
 	ReadAt *string `json:"read_at,omitempty,omitzero"`
 
-	// SenderLabel corresponds to the JSON schema field "sender_label".
-	SenderLabel string `json:"sender_label"`
+	// ReplyTo corresponds to the JSON schema field "reply_to".
+	ReplyTo string `json:"reply_to"`
 
-	// SenderSessionID corresponds to the JSON schema field "sender_session_id".
-	SenderSessionID SessionID `json:"sender_session_id"`
+	// Sender corresponds to the JSON schema field "sender".
+	Sender PartyView `json:"sender"`
 
 	// State corresponds to the JSON schema field "state".
 	State AgentMessageState `json:"state"`
@@ -7771,6 +7771,16 @@ type PRsUpdatedMessage struct {
 
 	// Prs corresponds to the JSON schema field "prs".
 	Prs []PR `json:"prs,omitempty,omitzero"`
+}
+
+type PartyRef string
+
+type PartyView struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref PartyRef `json:"ref"`
 }
 
 type PathInspection struct {

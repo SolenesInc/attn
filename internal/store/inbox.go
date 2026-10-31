@@ -99,9 +99,11 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 		if peerID == "" {
 			return InboxDelivery{}, fmt.Errorf("peer mailbox item %s has no peer message", delivery.Item.ID)
 		}
-		delivery.Peer = &inbox.Message{
-			ID: peerID, SenderSessionID: protocol.SessionID(peerSender), Body: body, CreatedAt: at,
+		sender, err := who.ParseParty(peerSender)
+		if err != nil {
+			return InboxDelivery{}, fmt.Errorf("peer message %s: %w", peerID, err)
 		}
+		delivery.Peer = &inbox.Message{ID: peerID, Sender: sender, Body: body, CreatedAt: at}
 	}
 	return delivery, nil
 }
@@ -124,7 +126,7 @@ func (s *Store) UnreadInboxDeliveries(to who.Address) ([]InboxDelivery, error) {
 	rows, err := s.db.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
-		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
+		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
@@ -160,7 +162,7 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 	rows, err := tx.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
-		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
+		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id

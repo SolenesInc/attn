@@ -169,7 +169,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	}
 	var reread protocol.AgentPeerMessage
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json", messageID}, Session: recipient}).JSON(t, &reread)
-	if reread.MessageID != messageID || reread.SenderSessionID != reviewer || reread.Content != "the discount is applied after tax" {
+	if reread.MessageID != messageID || string(reread.Sender.Ref) != "session:"+string(reviewer) || reread.Content != "the discount is applied after tax" {
 		t.Errorf("a read by id with --json first = %+v", reread)
 	}
 	duplicate := s.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the discount is applied after tax"}, Session: reviewer})
@@ -192,7 +192,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 	}
 	var status protocol.AgentPeerMessage
 	s.Attn("agent", "msg-status", queued.MessageID, "--session", reviewer, "--json").JSON(t, &status)
-	if status.MessageID != queued.MessageID || status.SenderSessionID != reviewer || status.TargetSessionID != desk || status.State != protocol.AgentMessageStateQueued {
+	if status.MessageID != queued.MessageID || string(status.Sender.Ref) != "session:"+string(reviewer) || status.TargetSessionID != desk || status.State != protocol.AgentMessageStateQueued {
 		t.Errorf("msg-status --session %s --json = %+v", reviewer, status)
 	}
 	requireFailure(t, s.Run(testworld.Invocation{Args: []string{"agent", "msg-status", queued.MessageID}, Session: bystander}),
@@ -202,11 +202,11 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 
 	var batch protocol.AgentInboxBatchResult
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--session", desk, "--limit", "1", "--json"}, Session: bystander}).JSON(t, &batch)
-	if len(batch.Items) != 1 || batch.Items[0].Content != "-hello" || protocol.Deref(batch.Items[0].SenderSessionID) != reviewer || batch.Remaining != 1 {
+	if len(batch.Items) != 1 || batch.Items[0].Content != "-hello" || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:"+string(reviewer) || batch.Remaining != 1 {
 		t.Fatalf("the first of two unread = %+v", batch)
 	}
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: desk}).JSON(t, &batch)
-	if len(batch.Items) != 1 || protocol.Deref(batch.Items[0].SenderSessionID) != bystander || len(batch.Items[0].Content) != protocol.AgentMessageMaxChars {
+	if len(batch.Items) != 1 || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:"+string(bystander) || len(batch.Items[0].Content) != protocol.AgentMessageMaxChars {
 		t.Fatalf("the message sent with --source-session = %+v, want it attributed to %s", batch.Items, bystander)
 	}
 

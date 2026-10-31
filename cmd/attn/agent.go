@@ -665,11 +665,11 @@ func runAgentMsgStatus(args []string) {
 }
 
 func printAgentInbox(w io.Writer, message *protocol.AgentPeerMessage) {
-	origin := agentShortID(string(message.SenderSessionID))
-	if label := strings.TrimSpace(message.SenderLabel); label != "" && label != origin {
-		origin = fmt.Sprintf("%s (%s)", origin, label)
+	origin := message.ReplyTo
+	if name := strings.TrimSpace(message.Sender.Name); name != "" && name != origin {
+		origin = fmt.Sprintf("%s (%s)", origin, name)
 	}
-	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "sender_id": agentShortID(string(message.SenderSessionID))}))
+	fmt.Fprintln(w, prompts.RenderText("session", "peer-message", prompts.Values{"origin": origin, "message": message.Content, "reply_to": message.ReplyTo}))
 }
 
 func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
@@ -698,8 +698,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			continue
 		}
 		printAgentInbox(w, &protocol.AgentPeerMessage{
-			SenderSessionID: protocol.TrimID(protocol.Deref(item.SenderSessionID)),
-			SenderLabel:     protocol.Deref(item.SenderLabel), Content: content,
+			Sender: protocol.Deref(item.Sender), ReplyTo: protocol.Deref(item.ReplyTo), Content: content,
 		})
 	}
 	if result.Remaining > 0 {

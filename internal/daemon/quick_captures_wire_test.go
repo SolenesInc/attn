@@ -171,11 +171,11 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	capture := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
 	batch := readInbox(t, cli, "chief", 0)
-	if len(batch.Items) != 1 || batch.Items[0].Kind != "peer_message" || protocol.Deref(batch.Items[0].SenderSessionID) != "peer" || batch.Remaining != 0 {
+	if len(batch.Items) != 1 || batch.Items[0].Kind != "peer_message" || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:peer" || batch.Remaining != 0 {
 		t.Fatalf("the inbox read %+v, want only the peer message, attributed to its sender, with the quick capture left for the ring", batch)
 	}
 	_, item, err := cli.AgentInboxEntry(capture.CaptureID, "chief")
-	if err != nil || item == nil || item.Kind != "quick_capture" || item.SenderSessionID != nil || item.Content != "user request" {
+	if err != nil || item == nil || item.Kind != "quick_capture" || item.Sender != nil || item.Content != "user request" {
 		t.Fatalf("the quick capture reads %+v (%v), want the user's words with no sender session", item, err)
 	}
 }
@@ -301,7 +301,7 @@ func TestQuickCaptureWaitsForTheNextChief(t *testing.T) {
 		t.Fatal("inspection marked quick capture read")
 	}
 	_, item, err := cli.AgentInboxEntry(msg.CaptureID, "chief")
-	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.SenderSessionID != nil || item.Address != "chief:"+app.SelectedProfile() {
+	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.Sender != nil || item.Address != "chief:"+app.SelectedProfile() {
 		t.Fatalf("user attribution: %+v %v", item, err)
 	}
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != item.ReadAt {

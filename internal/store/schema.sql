@@ -30,7 +30,7 @@ CREATE UNIQUE INDEX idx_inbox_unread_key ON inbox_items(address,kind,coalesce_ke
 CREATE INDEX idx_jobs_eligible ON jobs(state, scheduled_at, priority DESC);
 CREATE UNIQUE INDEX idx_jobs_unique_key ON jobs(kind, unique_key) WHERE unique_key <> '';
 CREATE INDEX idx_notifications_created ON notifications(created_at);
-CREATE INDEX idx_peer_messages_sender_created ON peer_messages(sender_session_id, created_at);
+CREATE INDEX idx_peer_messages_sender_created ON peer_messages(sender, created_at);
 CREATE UNIQUE INDEX idx_profiles_live_name ON profiles(name) WHERE deleted_at = '';
 CREATE UNIQUE INDEX idx_prs_host_repo_number ON prs(host, repo, number);
 CREATE INDEX idx_pull_request_watches_pr ON pull_request_watches(pr_id,address);
@@ -87,7 +87,7 @@ CREATE TABLE monitored_worktree_repositories ( main_repo TEXT PRIMARY KEY NOT NU
 CREATE TABLE notifications ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', source_kind TEXT NOT NULL DEFAULT '', source_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, read_at TEXT NOT NULL DEFAULT '' , severity TEXT NOT NULL DEFAULT 'info', trigger TEXT NOT NULL DEFAULT '', impact TEXT NOT NULL DEFAULT '', cause TEXT NOT NULL DEFAULT '', diagnostic TEXT NOT NULL DEFAULT '', actions_json TEXT NOT NULL DEFAULT '');
 CREATE TABLE "outpost_outbox" ( id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT NOT NULL, tbl TEXT NOT NULL, key TEXT NOT NULL, UNIQUE (host, tbl, key) );
 CREATE TABLE outposts ( id TEXT PRIMARY KEY, name TEXT NOT NULL, destination TEXT NOT NULL UNIQUE, host_key TEXT, daemon_id TEXT UNIQUE, added_at TEXT NOT NULL, paired_at TEXT );
-CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender_session_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL );
+CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL );
 CREATE TABLE pr_interactions ( pr_id TEXT PRIMARY KEY, last_visited_at TEXT, last_approved_at TEXT, last_seen_sha TEXT, last_seen_comment_count INTEGER , last_seen_ci_status TEXT);
 CREATE TABLE profile_migration ( id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL, phase TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, imported_groups TEXT NOT NULL DEFAULT '', draft TEXT NOT NULL DEFAULT '' , launch_review_complete INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE profile_settings ( profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (profile_id, key) );

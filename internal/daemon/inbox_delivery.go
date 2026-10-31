@@ -115,7 +115,11 @@ func (d *Daemon) inboxWakeRequester(a who.Address) string {
 		return "a quick capture"
 	}
 	if peer := deliveries[0].Peer; peer != nil {
-		return d.launchRequester(peer.SenderSessionID, "another agent")
+		if key, member := peer.Sender.Member(); member {
+			return d.crewMemberName(key.String())
+		}
+		id, _ := peer.Sender.Session()
+		return d.launchRequester(id, "another agent")
 	}
 	return ""
 }
