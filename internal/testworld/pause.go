@@ -36,13 +36,14 @@ type Pauses struct {
 	mu          sync.Mutex
 	points      map[string]*Pause
 	order       []string
+	arrivals    map[string]int
 	consumed    map[string]bool
 	closed      bool
 	outstanding []func()
 }
 
 func NewPauses() *Pauses {
-	return &Pauses{points: map[string]*Pause{}, consumed: map[string]bool{}}
+	return &Pauses{points: map[string]*Pause{}, arrivals: map[string]int{}, consumed: map[string]bool{}}
 }
 
 func (ps *Pauses) Arm(t testing.TB, name string, every bool) *Pause {
@@ -76,6 +77,9 @@ func (ps *Pauses) Hold(name string, failed error) {
 func (ps *Pauses) arrive(name string, pid int, failed error, oneShot bool, resume func()) <-chan struct{} {
 	ps.mu.Lock()
 	p := ps.points[name]
+	if p != nil {
+		ps.arrivals[name]++
+	}
 	if ps.closed || p == nil || (oneShot && !p.every && ps.consumed[name]) {
 		ps.mu.Unlock()
 		resume()
@@ -108,6 +112,17 @@ func (ps *Pauses) Close() {
 	ps.mu.Unlock()
 	for _, release := range outstanding {
 		release()
+	}
+}
+
+// FailUnreached fails each test whose armed point no process reached over the arm's lifetime, restarts included.
+func (ps *Pauses) FailUnreached() {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	for name, p := range ps.points {
+		if ps.arrivals[name] == 0 {
+			p.t.Errorf("pause point %q was armed and never reached: the step it holds did not run or no longer passes through it", name)
+		}
 	}
 }
 
@@ -182,6 +197,7 @@ func (s *Stack) listenForPauses() *pauseSocket {
 		<-accepted
 		ps.Close()
 		admits.Wait()
+		ps.FailUnreached()
 	})
 	return ps
 }

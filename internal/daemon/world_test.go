@@ -150,6 +150,7 @@ func (w *world) armPause(name string, every bool) *testworld.Pause {
 		w.T.Cleanup(func() {
 			pauses.Close()
 			unroute()
+			pauses.FailUnreached()
 		})
 	}
 	return w.pauses.Arm(w.T, name, every)

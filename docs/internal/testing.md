@@ -53,7 +53,10 @@ a finished step: it holds only when the step succeeded, and otherwise fails the
 waiting test at once with the step's error. To fault an operation, hold it at
 its own point, arm the fault, then release it. A hold on something the
 operation might wait for, such as a fake agent's boot, orders nothing unless the
-operation waits for it every time.
+operation waits for it every time. Every point a test arms must be reached at
+least once during the test, by any daemon run or worker; otherwise the test
+fails at cleanup, naming the point, since a hold nothing reached ordered
+nothing.
 
 Kernel tests build their function's input directly, since the function is
 itself a promise.
