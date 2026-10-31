@@ -63,7 +63,7 @@ if [ -n "$go_entries" ]; then
   run_regex="^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$"
   echo "landing tests: go test -run '$run_regex' ${packages[*]}"
   go_status=0
-  ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/go.json" \
+  ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/go.json" \
     -count=1 -run "$run_regex" "${packages[@]}" >"$work/go.log" 2>&1 || go_status=$?
   if ! summarize "$work/go.json" "$go_status" "${units[@]}"; then
     cat "$work/go.log" >&2

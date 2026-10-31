@@ -114,16 +114,18 @@ make ingest-clickhouse-stop
 
 ## Testing
 
-The stack tests in `cmd/attn-ingest` run the built service against a real
-ClickHouse, each in its own database, through `testworld.NewClickHouse` and
-`testworld.StartIngest`. They need `ATTN_TEST_CLICKHOUSE_URL`:
+The stack tests in `cmd/attn-ingest` and the analytics upload wire tests in
+`internal/daemon` run against a real ClickHouse, each test in its own
+database, through `testworld.NewClickHouse` and `testworld.StartIngest`.
 
-```bash
-ATTN_TEST_CLICKHOUSE_URL=$(make -s ingest-clickhouse) go test ./cmd/attn-ingest
-```
-
-Without it they skip locally and fail under CI, where the Daemon job starts
-the same container before the Go suite.
+`ATTN_TEST_CLICKHOUSE_URL` names the ClickHouse to use. Without it, the first
+test in each test process runs `scripts/ingest-clickhouse.sh start`, the same
+container `make ingest-clickhouse` starts, and later runs reuse it; stop it
+with `make ingest-clickhouse-stop`. Nothing starts OrbStack or the Docker
+daemon. When no Docker daemon answers, the tests skip, naming what is missing.
+They fail instead under CI, or with `ATTN_TEST_REQUIRE_CLICKHOUSE` set, as
+`scripts/landing-tests.sh` sets it. The landing tests' `clickhouse` group runs
+them when a landing touches the analytics or ingest code.
 
 ## ClickHouse memory
 

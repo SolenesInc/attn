@@ -35,6 +35,21 @@ go ./internal/sessioninstructions TestLegacyPromptCompatibility
 go ./internal/agent TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
 
+group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
+go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
+go ./internal/daemon TestAttnIngestRefusingTheDaysBytesIsShownAndWaitedOut
+go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
+go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
+go ./internal/daemon TestRecordsMadeAfterClearingDuringAnUploadAreStillSent
+go ./cmd/attn-ingest TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted
+go ./cmd/attn-ingest TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected
+go ./cmd/attn-ingest TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay
+go ./cmd/attn-ingest TestOneAddressRegistersAtMostTwentyInstallsAnHour
+go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
+go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
+go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
+go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
+
 group app ^app/
 vitest src/App.desktops.test.tsx
 playwright e2e/queue-sidebar-fit.spec.ts
