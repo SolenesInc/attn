@@ -225,7 +225,7 @@ describe('App desktop layout', () => {
     expect(document.activeElement?.closest('[data-pane-id]')?.getAttribute('data-pane-id')).toBe(`pane-${spawn.id}`);
   });
 
-  it('reorders a desktop dragged in the sidebar between its new neighbours', async () => {
+  it('reorders a desktop dragged up or down in the sidebar between its new neighbours', async () => {
     fakeRects((element) => (
       element.classList.contains('desktop-reorder-seam')
         ? new DOMRect(0, Number(element.dataset.seamIndex) * 100, 200, 0)
@@ -249,10 +249,12 @@ describe('App desktop layout', () => {
 
     await drag('c', 250, 100);
     await drag('c', 250, 0);
+    await drag('a', 50, 400);
 
     expect(daemon.sentOf('desktop_reorder').map(({ desktop_id, previous_desktop_id, next_desktop_id }) => ({ desktop_id, previous_desktop_id, next_desktop_id }))).toEqual([
       { desktop_id: 'desktop-c', previous_desktop_id: 'desktop-a', next_desktop_id: 'desktop-b' },
       { desktop_id: 'desktop-c', previous_desktop_id: undefined, next_desktop_id: 'desktop-a' },
+      { desktop_id: 'desktop-a', previous_desktop_id: 'desktop-1', next_desktop_id: undefined },
     ]);
   });
 
