@@ -20,7 +20,6 @@ func (m *Monitor) react(view View) {
 	}
 	state := view.State.V
 	if state.Sequence != previous.State.V.Sequence && !state.Quiet {
-		pausepoint.At(pausepoint.SessionStateReacting)
 		m.UpdateTranscriptState(state.State)
 		if state.Resolve {
 			m.ResolveSoon()

@@ -74,7 +74,10 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 			if !r.copied(id) {
 				continue
 			}
-			view := monitor.Snapshot()
+			view, applied := d.monitorViewFor(id)
+			if !applied {
+				continue
+			}
 			if _, running := live[view.Key.V.Terminal]; !running && view.Exit.V == nil {
 				continue
 			}

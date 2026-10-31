@@ -35,7 +35,6 @@ const (
 	SessionInputPasteGap       = "session-input-paste-gap"
 	SessionInputLaneContended  = "session-input-lane-contended"
 	SessionSnoozeCommitted     = "session-snooze-committed"
-	SessionStateReacting       = "session-state-reacting"
 	SessionTeardownPrepared    = "session-teardown-prepared"
 	AgentCloseDrained          = "agent-close-drained"
 	SessionExitObserved        = "session-process-exit-observed"

@@ -121,9 +121,6 @@ func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionm
 	if d.store.Get(session) == nil {
 		return nil
 	}
-	if runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
-		return fmt.Errorf("runtime state was not saved")
-	}
 	if cost != nil {
 		if err := d.store.ApplySessionCostSnapshot(session, cost.Checkpoint, cost.Durable); err != nil {
 			return fmt.Errorf("cost: %w", err)
@@ -134,6 +131,9 @@ func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionm
 			ExitCode: exit.Code, ExitSignal: exit.Signal}, exit.At) {
 			return fmt.Errorf("exit screen was not saved")
 		}
+	}
+	if runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
+		return fmt.Errorf("runtime state was not saved")
 	}
 	return nil
 }

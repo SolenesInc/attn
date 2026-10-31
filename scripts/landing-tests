@@ -19,6 +19,7 @@ go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
 go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
 go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
+go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 
