@@ -119,7 +119,6 @@ export class LinuxDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
-    actionDelayMs = 250,
     env = process.env,
     run = execFileAsync,
   } = {}) {
@@ -127,7 +126,6 @@ export class LinuxDriver {
     this.appName = path.basename(appPath);
     this.bundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: this.bundleId });
-    this.actionDelayMs = actionDelayMs;
     this.env = env;
     this.run = run;
   }
@@ -144,13 +142,11 @@ export class LinuxDriver {
   async activateApp(opts = {}) {
     const windowId = await this.requireWindow(opts);
     await this.runXdotool(['windowraise', String(windowId), 'windowfocus', '--sync', String(windowId)]);
-    await delay(this.actionDelayMs);
   }
 
   async activateBackground(opts = {}) {
     const windowId = await this.requireWindow(opts);
     await this.runXdotool(['windowfocus', '--sync', String(windowId)]);
-    await delay(this.actionDelayMs);
   }
 
   async menu() {
@@ -241,13 +237,11 @@ export class LinuxDriver {
   async typeText(text) {
     await this.activateBackground();
     await this.runXdotool(['type', '--clearmodifiers', '--', String(text)]);
-    await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
     await this.activateBackground();
     await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(key, modifiers)]);
-    await delay(this.actionDelayMs);
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
@@ -261,7 +255,6 @@ export class LinuxDriver {
   async movePointerInWindow(relativeX, relativeY, opts = {}) {
     const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
     await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y)]);
-    await delay(this.actionDelayMs);
   }
 
   async clickWindow(relativeX, relativeY, opts = {}) {
@@ -289,7 +282,6 @@ export class LinuxDriver {
     args.push('mouseup', '1');
     await this.activateBackground(opts);
     await this.runXdotool(args);
-    await delay(this.actionDelayMs);
   }
 
   async scrollWindow(relativeX, relativeY, deltaY, opts = {}) {
@@ -301,7 +293,6 @@ export class LinuxDriver {
     const repeat = Number.isInteger(opts.steps) && opts.steps > 0 ? opts.steps : 1;
     await this.movePointerInWindow(relativeX, relativeY, opts);
     await this.runXdotool(['click', '--repeat', String(repeat), String(button)]);
-    await delay(this.actionDelayMs);
   }
 
   async parkWindow() {}
@@ -412,7 +403,6 @@ export class LinuxDriver {
     for (const modifier of [...modifiers].reverse()) args.push('keyup', modifier);
     await this.activateBackground(opts);
     await this.runXdotool(args);
-    await delay(this.actionDelayMs);
   }
 
   async requireWindow(opts = {}) {

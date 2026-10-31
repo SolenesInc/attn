@@ -19,7 +19,7 @@ if (process.env.ATTN_HARNESS_ALWAYS_ON_TOP === '0' || process.env.ATTN_HARNESS_P
 const runner = createScenarioRunner(options, { scenarioId: 'FOCUSLESS-NATIVE', tier: 'local', prefix: 'focusless-native' });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath, client, actionDelayMs: 0 });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const exec = promisify(execFile);
 const receipts = [];
 const invoke = client.request.bind(client);

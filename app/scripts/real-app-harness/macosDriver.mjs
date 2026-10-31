@@ -57,7 +57,6 @@ export class MacOSDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
-    actionDelayMs = 250,
     keyInputGuard = null,
     client = null,
   } = {}) {
@@ -65,7 +64,6 @@ export class MacOSDriver {
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.bundleId = resolvedBundleId;
     this.appPath = appPath;
-    this.actionDelayMs = actionDelayMs;
     this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
     this.client = client;
   }
@@ -94,12 +92,10 @@ export class MacOSDriver {
 
   async activateApp() {
     await this.runInputDriver(['activate']);
-    await delay(this.actionDelayMs);
   }
 
   async activateBackground() {
     await this.runInputDriver(['activate_background']);
-    await delay(this.actionDelayMs);
   }
 
   async menu(pathSegments) {
@@ -113,7 +109,6 @@ export class MacOSDriver {
       path.join('>'),
       '--prompt-accessibility',
     ]);
-    await delay(this.actionDelayMs);
   }
 
   async frontmostBundleId() {
@@ -187,7 +182,6 @@ export class MacOSDriver {
       this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
       await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
     }
-    await delay(this.actionDelayMs);
   }
 
   async pressKey(key, modifiers = {}) {
@@ -204,7 +198,6 @@ export class MacOSDriver {
         '--prompt-accessibility',
       ]);
     }
-    await delay(this.actionDelayMs);
   }
 
   async pressKeyCode(keyCode, modifiers = {}) {
@@ -221,7 +214,6 @@ export class MacOSDriver {
         '--prompt-accessibility',
       ]);
     }
-    await delay(this.actionDelayMs);
   }
 
   async pressEnter() {
@@ -241,7 +233,6 @@ export class MacOSDriver {
         '--prompt-accessibility',
       ], opts));
     }
-    await delay(this.actionDelayMs);
   }
 
   async clickWindow(relativeX, relativeY, opts = {}) {
@@ -274,7 +265,6 @@ export class MacOSDriver {
       }
       await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await delay(this.actionDelayMs);
   }
 
   // Interpolated leftMouseDragged events: the shape WebKit requires for text
@@ -308,7 +298,6 @@ export class MacOSDriver {
       }
       await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await delay(this.actionDelayMs);
   }
 
   // Positive deltaY scrolls content up, negative down (CGEvent convention).
@@ -330,7 +319,6 @@ export class MacOSDriver {
       args.push('--steps', String(opts.steps));
     }
     await this.runInputDriver(withWindowTitleArgs(args, opts));
-    await delay(this.actionDelayMs);
   }
 
   async parkWindow(visiblePx, opts = {}) {

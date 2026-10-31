@@ -131,6 +131,7 @@ async function main() {
       await pressShortcutKeys(client, driver, 'sessions.open');
       await driver.pressKey(']');
       await driver.pressKey(']');
+      await client.request('dom_wait', { selector: '.ledger-panel', textIncludes: 'Old spike', timeoutMs: 10_000 });
       const shown = await text('.ledger-panel');
       runner.assert(shown.includes('Pinned parser') && shown.includes('Seed work') && shown.includes('Old spike'), 'all three copies render', { shown });
       runner.assert(shown.includes('Forever · pinned') && shown.includes('Open: parser-work') && shown.includes('Deletes '), 'each retention reason renders', { shown });
