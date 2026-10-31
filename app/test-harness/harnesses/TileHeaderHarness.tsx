@@ -39,7 +39,6 @@ const notebookSurfaceValue: NotebookSurfaceContextValue = {
     existsFile: async () => ({ exists: false }),
     readAsset: async () => ({ data: '', mime_type: 'application/octet-stream' }),
     backlinksNotebook: async () => [],
-    sendToChief: async () => ({ delivered: false }),
     listFiles: async () => [],
   }),
   changeSignalFor: () => 0,

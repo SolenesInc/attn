@@ -1,5 +1,5 @@
 /** Renders the CodeMirror live-preview editor in a real browser (CM can't mount under
- * happy-dom). window.__HARNESS__ records value changes, link-follow and selection. */
+ * happy-dom). window.__HARNESS__ records value changes, link-follow. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 // The app's design tokens, so the transparent editor renders over the real dark pane
 // instead of the browser's default white page.
@@ -7,7 +7,7 @@ import '../../src/App.css';
 // Bounds the editor's height (.notebook-browser-live-editor flex column, react-codemirror
 // flex:1) so .cm-scroller actually overflows — the chain the real document pane provides.
 import '../../src/components/NotebookBrowser.css';
-import { LiveMarkdownEditor, type LiveMarkdownEditorHandle, type LiveSelection } from '../../src/components/notebook/LiveMarkdownEditor';
+import { LiveMarkdownEditor, type LiveMarkdownEditorHandle } from '../../src/components/notebook/LiveMarkdownEditor';
 import type { HarnessProps } from '../types';
 
 const SAMPLE = `# Notebook heading
@@ -64,10 +64,6 @@ export function LiveMarkdownEditorHarness({ onReady, setTriggerRerender }: Harne
     window.__HARNESS__.recordCall('followLink', [href]);
   }, []);
 
-  const handleSelectionChange = useCallback((selection: LiveSelection | null) => {
-    window.__HARNESS__.recordCall('selectionChange', [selection]);
-  }, []);
-
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
     setTriggerRerender(() => force((n) => n + 1));
@@ -89,7 +85,6 @@ export function LiveMarkdownEditorHarness({ onReady, setTriggerRerender }: Harne
           value={value}
           onChange={handleChange}
           onFollowLink={handleFollowLink}
-          onSelectionChange={handleSelectionChange}
           ariaLabel="Note"
         />
       </div>

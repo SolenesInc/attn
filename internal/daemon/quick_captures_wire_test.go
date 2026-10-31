@@ -551,3 +551,27 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		}
 	})
 }
+
+func TestAQuickCaptureForTheChiefRingsTheLiveChiefAndTheNextOne(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, trusted := w.App(), w.TrustedApp()
+		chiefMailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}
+		sendQuickCapture(t, trusted, chiefMailbox, "Captured before there was a chief")
+		chief := w.bubbleClaude(t, app, "chief")
+		if set := setChiefOfStaff(app, chief.id, true); !set.Success {
+			t.Fatalf("make %s the chief: %s", chief.id, protocol.Deref(set.Error))
+		}
+		synctest.Wait()
+		chief = w.bootBubbleClaude(t, chief.id)
+		w.advance(0)
+		if pasted := strings.Join(chief.term.Pasted(), "\n"); !strings.Contains(pasted, "Captured before there was a chief") {
+			t.Fatalf("the new chief was typed %q, want the capture that waited for it", pasted)
+		}
+
+		sendQuickCapture(t, trusted, chiefMailbox, "Captured for the live chief")
+		w.advance(0)
+		if pasted := strings.Join(chief.term.Pasted(), "\n"); !strings.Contains(pasted, "Captured for the live chief") {
+			t.Fatalf("the live chief was typed %q, want the new capture", pasted)
+		}
+	})
+}

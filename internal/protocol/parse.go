@@ -75,7 +75,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdNotebookGuide:                 decodeInto[NotebookGuideMessage],
 	CmdJournalAppend:                 decodeInto[JournalAppendMessage],
 	CmdNotebookBacklinks:             decodeInto[NotebookBacklinksMessage],
-	CmdNotebookSendToChief:           decodeInto[NotebookSendToChiefMessage],
 	CmdTaskList:                      decodeInto[TaskListMessage],
 	CmdTaskRetry:                     decodeInto[TaskRetryMessage],
 	CmdNotificationList:              decodeInto[NotificationListMessage],

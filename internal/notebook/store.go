@@ -138,16 +138,6 @@ func newJournalDoc(dateISO string) func() Document {
 	}
 }
 
-func (s *Store) AppendInbox(entry string) (relPath string, hash string, err error) {
-	if strings.TrimSpace(entry) == "" {
-		return "", "", fmt.Errorf("notebook: empty inbox entry")
-	}
-	hash, err = s.appendToNote(FileInbox, entry, func() Document {
-		return Document{Body: inboxTemplate}
-	})
-	return FileInbox, hash, err
-}
-
 func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash string, err error) {
 	abs, err := s.abs(rel)
 	if err != nil {

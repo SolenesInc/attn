@@ -5,9 +5,7 @@ func lifecycleRecipients() []Recipient {
 		crewRecipient(),
 		{ID: "chief",
 			Description: "Chief",
-			Events: []Event{On("seed-assignment", "user_message", "User assigned a seed to the chief to choose its working context.", template("chief.seed-assignment", "content/chief/seed-assignment.md", seedID)), On("inbox", "user_message", "internal/daemon/notebook.go: chiefInboxNudgePrompt",
-				template("chief.inbox", "content/chief/inbox.md",
-					TextField("inbox_path", "Inbox path")))}},
+			Events: []Event{On("seed-assignment", "user_message", "User assigned a seed to the chief to choose its working context.", template("chief.seed-assignment", "content/chief/seed-assignment.md", seedID))}},
 
 		{ID: "turn-classifier",
 			Description: "Separate model deciding whether a turn needs user input.",

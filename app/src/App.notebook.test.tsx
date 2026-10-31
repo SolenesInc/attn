@@ -1,7 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { stubTextLayout } from './test/appFixtures';
 import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { pressShortcut, renderApp } from './test/renderApp';
@@ -104,12 +103,6 @@ function hold<C extends Parameters<ScriptedDaemon['on']>[0]>(daemon: ScriptedDae
 
 async function notebookChanged(daemon: ScriptedDaemon, root = NOTEBOOK_ROOT) {
   daemon.emit({ event: 'fs_changed', root, origin: 'disk', paths: [] });
-  await daemon.idle();
-}
-
-async function selectInNote(daemon: ScriptedDaemon, from: number, to: number) {
-  const editor = noteEditor();
-  act(() => editor.dispatch({ selection: { anchor: from, head: to } }));
   await daemon.idle();
 }
 
@@ -535,49 +528,6 @@ describe('App notebook live preview', () => {
     fireEvent.keyDown(card, { key: 'Enter' });
 
     expect(shownLines()).toEqual(['---', 'tags:', '  - one', '---', 'Body']);
-  });
-});
-
-describe('App notebook send to chief', () => {
-  it('sends the selected text with its note to the chief and says it landed', async () => {
-    stubTextLayout();
-    const { daemon } = await openVault();
-    daemon.on('notebook_send_to_chief', () => ({ event: 'notebook_send_to_chief_result', success: true, result: { path: 'inbox.md', nudged: false } }));
-    await selectInNote(daemon, 0, 0);
-    expect(notebook().queryByRole('button', { name: 'Send to chief' })).toBeNull();
-
-    await selectInNote(daemon, INDEX.indexOf('buy'), INDEX.indexOf('buy') + 'buy milk'.length);
-    await click(daemon, notebook().getByRole('button', { name: 'Send to chief' }));
-
-    expect(daemon.sentOf('notebook_send_to_chief')).toEqual([expect.objectContaining({ selection: 'buy milk', source_path: 'knowledge/index.md' })]);
-    expect(notebook().getByText("Added to chief's inbox")).toBeInTheDocument();
-    expect(notebook().queryByRole('button', { name: 'Send to chief' })).toBeNull();
-  });
-
-  it('says why the chief could not take it', async () => {
-    stubTextLayout();
-    const { daemon } = await openVault();
-    daemon.on('notebook_send_to_chief', () => ({ event: 'notebook_send_to_chief_result', success: false, error: 'no chief reachable' }));
-
-    await selectInNote(daemon, INDEX.indexOf('buy'), INDEX.indexOf('buy') + 3);
-    await click(daemon, notebook().getByRole('button', { name: 'Send to chief' }));
-
-    expect(notebook().getByText('no chief reachable')).toBeInTheDocument();
-  });
-
-  it('shows nothing on the next note when a send answers after the user moved on', async () => {
-    stubTextLayout();
-    const { daemon } = await openVault();
-    hold(daemon, 'notebook_send_to_chief');
-    await selectInNote(daemon, INDEX.indexOf('buy'), INDEX.indexOf('buy') + 3);
-    await click(daemon, notebook().getByRole('button', { name: 'Send to chief' }));
-    const [send] = daemon.sentOf('notebook_send_to_chief');
-
-    await click(daemon, treeItem('notes.txt'));
-    daemon.replyTo(send, { event: 'notebook_send_to_chief_result', request_id: send.request_id, success: true, result: { path: 'inbox.md', nudged: false } });
-    await daemon.idle();
-
-    expect(notebook().queryByText("Added to chief's inbox")).toBeNull();
   });
 });
 

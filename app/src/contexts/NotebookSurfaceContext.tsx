@@ -7,7 +7,6 @@ import type {
   FsWatchResult,
   FsWriteResult,
   NotebookEntry,
-  NotebookSendToChiefResult,
 } from '../hooks/useDaemonSocket';
 
 export interface NotebookSurfaceDaemon {
@@ -17,13 +16,12 @@ export interface NotebookSurfaceDaemon {
   existsFile: (path: string) => Promise<FsExistsResult>;
   readAsset: (path: string) => Promise<FsReadAssetResult>;
   backlinksNotebook: (path: string) => Promise<NotebookEntry[]>;
-  sendToChief: (selection: string, sourcePath?: string) => Promise<NotebookSendToChiefResult>;
-  // Flat list for a tile's ⌘P finder. Unlike backlinksNotebook/sendToChief below,
+  // Flat list for a tile's ⌘P finder. Unlike backlinksNotebook below,
   // this one DOES follow `root`.
   listFiles: () => Promise<NotebookEntry[]>;
 }
 
-// CRITICAL BOUNDARY: backlinksNotebook and sendToChief stay bound to the notebook root
+// CRITICAL BOUNDARY: backlinksNotebook stays bound to the notebook root
 // whatever `root` says — widening them to an arbitrary filesystem root is forbidden.
 export type MakeNotebookSurfaceDaemon = (root?: string) => NotebookSurfaceDaemon;
 

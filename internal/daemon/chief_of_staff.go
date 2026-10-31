@@ -3,10 +3,7 @@ package daemon
 import (
 	"fmt"
 	"sort"
-	"strings"
 
-	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -109,22 +106,6 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {
 	if _, err := d.store.ClearProfileChief(sessionID); err != nil {
 		d.logf("clear chief of staff role failed for session %s: %v", sessionID, err)
 	}
-}
-
-func (d *Daemon) nudgeChiefOfStaff(profileID, attemptKey, prompt string) bool {
-	if d.store == nil || profileID == "" {
-		return false
-	}
-	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
-	if strings.TrimSpace(attemptKey) == "" {
-		itemID = "chief-inbox/" + uuid.NewString()
-	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: inbox.ToChief(profileID), Kind: inbox.Notice, Source: "notebook-inbox", Text: prompt})
-	if err != nil {
-		d.logf("chief inbox: queue failed: %v", err)
-		return false
-	}
-	return receipt.Rang || receipt.Outstanding
 }
 
 func (d *Daemon) maybeAssignChiefOnSpawn(sessionID protocol.SessionID, agent string, profileID string, requested bool, existingSession *protocol.Session) bool {

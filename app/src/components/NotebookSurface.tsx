@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import FocusTrap from './AppFocusTrap';
-import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
+import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { matchesShortcut } from '../shortcuts/registry';
 import { resolveBinding } from '../shortcuts/resolver';
@@ -11,7 +11,7 @@ import { FileTree } from './notebook/FileTree';
 import { fileKind, isBinaryPath, isMarkdownPath } from './notebook/fileKind';
 import { parseFrontmatter } from './notebook/frontmatter';
 import { headingSlug, noteDir, resolveNotebookLink } from './notebook/linkResolver';
-import { LiveMarkdownEditor, type LiveMarkdownEditorHandle, type LiveSelection } from './notebook/LiveMarkdownEditor';
+import { LiveMarkdownEditor, type LiveMarkdownEditorHandle } from './notebook/LiveMarkdownEditor';
 import { NotebookFinder } from './notebook/NotebookFinder';
 import { registerPaletteClaim } from './palette/paletteClaim';
 import { parseOutline } from './notebook/outline';
@@ -30,7 +30,6 @@ export interface NotebookSurfaceProps {
   existsFile: (path: string) => Promise<FsExistsResult>;
   readAsset: (path: string) => Promise<FsReadAssetResult>;
   backlinksNotebook?: (path: string) => Promise<NotebookEntry[]>;
-  sendToChief?: (selection: string, sourcePath?: string) => Promise<NotebookSendToChiefResult>;
   changeSignal?: number;
   listFiles?: () => Promise<NotebookEntry[]>;
   chiefActive?: boolean;
@@ -60,7 +59,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   existsFile,
   readAsset,
   backlinksNotebook,
-  sendToChief,
   changeSignal = 0,
   listFiles,
   chiefActive,
@@ -152,7 +150,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     const seq = ++loadSeqRef.current;
     setSelectedPath(path);
     onOpenFile?.(path);
-    setChiefSel(null);
     setBacklinks([]);
     setBacklinksLoading(false);
 
@@ -225,10 +222,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   const dirty = note ? draft !== note.content : false;
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
-
-  const [chiefSel, setChiefSel] = useState<LiveSelection | null>(null);
-  const [sendingToChief, setSendingToChief] = useState(false);
-  const [chiefStatus, setChiefStatus] = useState<{ text: string; error: boolean } | null>(null);
 
   const writeBuffer = useCallback(async (baseHash: string, content: string): Promise<PersistOutcome> => {
     const path = selectedPathRef.current;
@@ -332,28 +325,8 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     }
   }, [readFile, backlinksNotebook]);
 
-  const sendSelectionToChief = useCallback(async () => {
-    if (!chiefSel || !sendToChief) return;
-    const path = selectedPathRef.current ?? undefined;
-    const seq = loadSeqRef.current;
-    setSendingToChief(true);
-    try {
-      await sendToChief(chiefSel.text, path);
-      if (loadSeqRef.current !== seq || (selectedPathRef.current ?? undefined) !== path) return;
-      setChiefSel(null);
-      setChiefStatus({ text: "Added to chief's inbox", error: false });
-    } catch (err) {
-      if (loadSeqRef.current !== seq || (selectedPathRef.current ?? undefined) !== path) return;
-      setChiefStatus({ text: err instanceof Error ? err.message : 'Could not send to chief', error: true });
-    } finally {
-      setSendingToChief(false);
-    }
-  }, [chiefSel, sendToChief]);
-
   useEffect(() => {
     if (!active) return;
-    setChiefStatus(null);
-    setChiefSel(null);
     setJustSaved(false);
     let cancelled = false;
     void (async () => {
@@ -434,8 +407,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     setConflict(null);
     setSaveError(null);
     setJustSaved(false);
-    setChiefSel(null);
-    setChiefStatus(null);
     editorRef.current?.closeSearchPanel();
     setSearchOpen(false);
   }, [selectedPath]);
@@ -448,24 +419,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [draft, note, noteLoading, saving, conflict, persist]);
-
-  useEffect(() => {
-    if (!chiefStatus) return;
-    const timer = window.setTimeout(() => setChiefStatus(null), chiefStatus.error ? 6000 : 3000);
-    return () => window.clearTimeout(timer);
-  }, [chiefStatus]);
-
-  // Scroll is captured, not bubbled, or a nested code-block scroller slips past and strands the button.
-  useEffect(() => {
-    if (!chiefSel) return;
-    const clear = () => setChiefSel(null);
-    window.addEventListener('resize', clear);
-    document.addEventListener('scroll', clear, true);
-    return () => {
-      window.removeEventListener('resize', clear);
-      document.removeEventListener('scroll', clear, true);
-    };
-  }, [chiefSel]);
 
   useEffect(() => {
     if (!justSaved) return;
@@ -495,11 +448,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
       window.open(resolved.href, '_blank', 'noreferrer');
     }
   }, [loadFile]);
-
-  const handleSelectionChange = useCallback((selection: LiveSelection | null) => {
-    if (!sendToChief) return;
-    setChiefSel(selection);
-  }, [sendToChief]);
 
   const resolveImageSrc = useCallback(async (src: string) => {
     const path = notebookLinkPath(src, noteDir(selectedPathRef.current ?? ''));
@@ -588,14 +536,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
                 <p>{note.path}</p>
               </div>
               <div className="notebook-browser-document-actions">
-                {chiefStatus && (
-                  <span
-                    className={`notebook-browser-chief-status${chiefStatus.error ? ' is-error' : ''}`}
-                    role="status"
-                  >
-                    {chiefStatus.text}
-                  </span>
-                )}
                 {saveStatus && (
                   <span className="notebook-browser-save-status" role="status">{saveStatus}</span>
                 )}
@@ -638,7 +578,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
                     value={draft}
                     onChange={setDraft}
                     onFollowLink={handleFollowLink}
-                    onSelectionChange={handleSelectionChange}
                     existsFile={existsFile}
                     resolveImageSrc={resolveImageSrc}
                     revalidateSignal={changeSignal}
@@ -802,20 +741,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     />
   ) : null;
 
-  const floatingChief = chiefSel && sendToChief ? (
-    <button
-      type="button"
-      className="notebook-browser-send-chief"
-      style={{ top: chiefSel.top, left: chiefSel.left }}
-      // Keep the selection intact so onClick reads it uncollapsed.
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => void sendSelectionToChief()}
-      disabled={sendingToChief}
-    >
-      {sendingToChief ? 'Sending…' : 'Send to chief'}
-    </button>
-  ) : null;
-
   if (variant === 'tile') {
     return (
       <div
@@ -825,7 +750,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
         onKeyDown={handleSurfaceKeyDown}
       >
         {body}
-        {floatingChief}
         {finderOverlay}
       </div>
     );
@@ -859,7 +783,6 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
             </div>
           </header>
           {body}
-          {floatingChief}
           {finderOverlay}
         </div>
       </FocusTrap>

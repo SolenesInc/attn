@@ -1277,16 +1277,6 @@ model NotebookWriteMessage {
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
-// Send a Notebook selection to the chief of staff. The daemon appends it to the
-// chief inbox note and, when a chief session is live and idle/waiting, fires a
-// bounded PTY nudge. The UI never messages the chief directly.
-model NotebookSendToChiefMessage {
-  cmd: "notebook_send_to_chief";
-  selection: string;
-  source_path?: string; // the note the selection came from (root-absolute or relative)
-  request_id?: string; // set by the WS frontend for result correlation
-}
-
 // Resolve a session's notebook role and root for the agent-launch wrapper. The
 // daemon answers whether the session is the chief of staff and where the notebook
 // root is; the launcher injects the canonical operating guidance from that. This
@@ -7822,22 +7812,6 @@ model NotebookWriteResultMessage {
   result?: NotebookWriteResult;
 }
 
-// Result of notebook_send_to_chief. path is the inbox note the selection was
-// appended to; nudged is true when a live chief had an inbox doorbell placed or
-// already outstanding. A busy chief keeps the durable item queued.
-model NotebookSendToChiefResult {
-  path: string;
-  nudged: boolean;
-}
-
-model NotebookSendToChiefResultMessage {
-  event: "notebook_send_to_chief_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: NotebookSendToChiefResult;
-}
-
 // Result of task_list: the durable runner's records, newest-updated
 // first. An empty/absent tasks array means the runner is disabled or has no work.
 model TaskListResultMessage {
@@ -8366,7 +8340,6 @@ alias DaemonEvent =
   | NotebookReadResultMessage
   | NotebookBacklinksResultMessage
   | NotebookWriteResultMessage
-  | NotebookSendToChiefResultMessage
   | FsListResultMessage
   | FsReadResultMessage
   | FsReadAssetResultMessage

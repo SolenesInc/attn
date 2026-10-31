@@ -11,7 +11,6 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/notebook"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -45,13 +44,6 @@ func notebookAskBacklinks(p *testworld.Peer, path string) protocol.NotebookBackl
 	p.T.Helper()
 	return fsRequest[protocol.NotebookBacklinksResultMessage](p, protocol.EventNotebookBacklinksResult, func(id *string) any {
 		return protocol.NotebookBacklinksMessage{Cmd: protocol.CmdNotebookBacklinks, RequestID: id, Path: path}
-	})
-}
-
-func notebookAskSendToChief(p *testworld.Peer, source, selection string) protocol.NotebookSendToChiefResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.NotebookSendToChiefResultMessage](p, protocol.EventNotebookSendToChiefResult, func(id *string) any {
-		return protocol.NotebookSendToChiefMessage{Cmd: protocol.CmdNotebookSendToChief, RequestID: id, SourcePath: protocol.Ptr(source), Selection: selection}
 	})
 }
 
@@ -201,10 +193,10 @@ func TestAttnsOwnNotebookWritesReachEveryOpenView(t *testing.T) {
 	}
 	heard("agent", "journal/2026-07-05.md")
 
-	if sent := notebookAskSendToChief(writer, "/index.md", "remember this"); !sent.Success {
-		t.Fatalf("sending to the chief: %s", protocol.Deref(sent.Error))
+	if written := notebookAskWrite(writer, "note.md", notebookNote("remember this"), ""); !written.Success {
+		t.Fatalf("writing the Notebook: %s", protocol.Deref(written.Error))
 	}
-	heard("ui", "inbox.md")
+	heard("ui", "note.md")
 }
 
 func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
@@ -277,121 +269,4 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 			})
 		}
 	}
-}
-
-func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	setSetting(t, app, "auto_approve_enabled", "false")
-	root := fsNotebookRoot(t, w)
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
-		m.InitialPrompt = protocol.Ptr("keep the notebook")
-	})
-	agent := w.Launched(chief)
-	agent.Prompted()
-	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	agent.Reply("Ready. <!-- attn:state=idle -->")
-	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	sent := notebookAskSendToChief(app, "/knowledge/index.md", "remember this decision")
-	if !sent.Success || sent.Result == nil || sent.Result.Path != "inbox.md" || !sent.Result.Nudged {
-		t.Fatalf("sending to an idle chief = %+v (%s), want it in inbox.md and the chief nudged", sent.Result, protocol.Deref(sent.Error))
-	}
-	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("the idle chief was prompted with %q, want the inbox doorbell", got)
-	}
-	if covered := notebookAskSendToChief(app, "/knowledge/index.md", "another selection before reading"); !covered.Success || covered.Result == nil || !covered.Result.Nudged {
-		t.Fatalf("send covered by the outstanding ring=%+v, want nudged", covered)
-	}
-	wantPrompt := prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
-	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 2 || mail.Items[0].Content != wantPrompt || mail.Items[1].Content != wantPrompt {
-		t.Fatalf("the chief's inbox = %+v, %v; want both selections covered by the same ring", mail, err)
-	}
-	if inbox := notebookAskRead(app, "inbox.md"); inbox.Result == nil || !strings.Contains(inbox.Result.Content, "> remember this decision") || !strings.Contains(inbox.Result.Content, "(/knowledge/index.md)") {
-		t.Fatalf("inbox.md = %+v, want the selection blockquoted with a backlink to its source", inbox.Result)
-	}
-
-	if queued := notebookAskSendToChief(app, "/index.md", "do not interrupt"); !queued.Success || queued.Result == nil || queued.Result.Nudged {
-		t.Fatalf("sending to a working chief = %+v (%s), want it queued without a nudge", queued.Result, protocol.Deref(queued.Error))
-	}
-	agent.Reply("Read it. <!-- attn:state=idle -->")
-	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("when the chief went idle it was prompted with %q, want the queued doorbell", got)
-	}
-	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 1 || mail.Items[0].Content != wantPrompt {
-		t.Fatalf("the chief's inbox after the queued doorbell = %+v, %v; want the inbox prompt", mail, err)
-	}
-
-	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(chief)), "permission_prompt", "Allow edit?"); err != nil {
-		t.Fatal(err)
-	}
-	testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
-	if pending := notebookAskSendToChief(app, "/index.md", "wait for approval"); !pending.Success || pending.Result == nil || pending.Result.Nudged {
-		t.Fatalf("sending to a chief waiting on an approval = %+v (%s), want it kept without a nudge", pending.Result, protocol.Deref(pending.Error))
-	}
-}
-
-func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-
-	for name, selection := range map[string]string{"an empty selection": "   ", "an oversize selection": strings.Repeat("a", 32<<10+1)} {
-		if refused := notebookAskSendToChief(app, "/index.md", selection); refused.Success || refused.Result != nil || refused.Error == nil {
-			t.Errorf("sending %s = %+v, want a refusal", name, refused)
-		}
-	}
-	if inbox := notebookAskRead(app, "inbox.md"); inbox.Success {
-		t.Fatalf("refused selections created inbox.md: %q", inbox.Result.Content)
-	}
-
-	sent := notebookAskSendToChief(app, "/knowledge/areas/x.md", "queued for later")
-	if !sent.Success || sent.Result == nil || sent.Result.Path != "inbox.md" || sent.Result.Nudged {
-		t.Fatalf("sending with no chief = %+v (%s), want it in inbox.md without a nudge", sent.Result, protocol.Deref(sent.Error))
-	}
-	for source, selection := range map[string]string{
-		"/knowledge/areas/Q3 (draft).md":           "x",
-		"/knowledge/areas/a.md\n## INJECTED\nb.md": "y",
-		"/index.md": "line1\r\nline2",
-	} {
-		if appended := notebookAskSendToChief(app, source, selection); !appended.Success {
-			t.Fatalf("sending from %q: %s", source, protocol.Deref(appended.Error))
-		}
-	}
-
-	inbox := notebookAskRead(app, "inbox.md").Result.Content
-	for _, want := range []string{"> queued for later", "`/knowledge/areas/Q3 (draft).md`", "> line1\n> line2"} {
-		if !strings.Contains(inbox, want) {
-			t.Errorf("inbox.md does not hold %q:\n%s", want, inbox)
-		}
-	}
-	for _, unwanted := range []string{"\r", "\n## INJECTED", "](/knowledge/areas/Q3"} {
-		if strings.Contains(inbox, unwanted) {
-			t.Errorf("inbox.md holds %q:\n%s", unwanted, inbox)
-		}
-	}
-	if back := notebookAskBacklinks(app, "/knowledge/areas/x.md"); !slices.Equal(notebookEntryPaths(back.Entries), []string{"inbox.md"}) {
-		t.Errorf("backlinks of the clean source = %v, want inbox.md", notebookEntryPaths(back.Entries))
-	}
-	if back := notebookAskBacklinks(app, "/knowledge/areas/Q3 (draft).md"); len(back.Entries) != 0 {
-		t.Errorf("the source with special characters is linked from %v, want it shown as code only", notebookEntryPaths(back.Entries))
-	}
-	chief, _ := mailIdleAgent(w, app, "next-chief")
-	if assigned := setChiefOfStaff(app, chief, true); !assigned.Success {
-		t.Fatalf("assign Chief=%+v", assigned)
-	}
-	agent := w.Launched(chief)
-	if prompt := agent.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
-		t.Fatalf("next Chief prompt=%q", prompt)
-	}
-	mail := readInbox(t, w.Client(), chief, 0).Items
-	if len(mail) != 4 {
-		t.Fatalf("next Chief inbox=%+v", mail)
-	}
-	for _, item := range mail {
-		if item.Address != "chief:"+app.SelectedProfile() {
-			t.Fatalf("Chief item address=%s", item.Address)
-		}
-	}
-
 }

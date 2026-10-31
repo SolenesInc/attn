@@ -19,12 +19,6 @@ import { acceleratorBindings } from './acceleratorKeymap';
 
 const acceleratorSearchKeymap: readonly KeyBinding[] = acceleratorBindings(searchKeymap);
 
-export interface LiveSelection {
-  text: string;
-  top: number;
-  left: number;
-}
-
 export interface LiveMarkdownEditorHandle {
   scrollToPos: (pos: number) => void;
   // Replace as a MINIMAL edit so scroll and selection stay anchored: the
@@ -38,7 +32,6 @@ interface LiveMarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   onFollowLink?: (href: string) => void;
-  onSelectionChange?: (selection: LiveSelection | null) => void;
   existsFile?: (path: string) => Promise<ExistsCheck>;
   resolveImageSrc?: (src: string) => Promise<string | null>;
   revalidateSignal?: number;
@@ -119,7 +112,6 @@ export const LiveMarkdownEditor = forwardRef<LiveMarkdownEditorHandle, LiveMarkd
   value,
   onChange,
   onFollowLink,
-  onSelectionChange,
   existsFile,
   resolveImageSrc,
   revalidateSignal,
@@ -201,26 +193,8 @@ export const LiveMarkdownEditor = forwardRef<LiveMarkdownEditorHandle, LiveMarkd
             onSearchOpenChange(isOpen);
           }
         }
-        if (!onSelectionChange) return;
-        if (!update.selectionSet && !update.docChanged && !update.focusChanged) return;
-        const range = update.state.selection.main;
-        if (range.empty) {
-          onSelectionChange(null);
-          return;
-        }
-        const text = update.state.sliceDoc(range.from, range.to).trim();
-        if (!text) {
-          onSelectionChange(null);
-          return;
-        }
-        const coords = update.view.coordsAtPos(range.to);
-        if (!coords) {
-          onSelectionChange(null);
-          return;
-        }
-        onSelectionChange({ text, top: coords.bottom, left: (coords.left + coords.right) / 2 });
       },
-    [onSelectionChange, onSearchOpenChange],
+    [onSearchOpenChange],
   );
 
   return (

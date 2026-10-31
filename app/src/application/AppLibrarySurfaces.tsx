@@ -72,7 +72,6 @@ export function AppLibrarySurfaces() {
     sendFsExists,
     sendFsReadAsset,
     sendNotebookBacklinks,
-    sendNotebookToChief,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -155,7 +154,6 @@ export function AppLibrarySurfaces() {
         existsFile={sendFsExists}
         readAsset={sendFsReadAsset}
         backlinksNotebook={sendNotebookBacklinks}
-        sendToChief={sendNotebookToChief}
         listFiles={notebookBrowserListFiles}
         changeSignal={notebookRootChangeSignal}
         chiefActive={notebookChiefActive}

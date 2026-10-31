@@ -27,7 +27,7 @@ drives them. Reading another agent's screen with `attn agent peek` is
 
 - No control of its own opens the inbox. People see a ring as the 📬 line in the agent's terminal, and the typed text of their own answers and quick captures there.
 - Settings, Experimental: "Quiet notifications in the queue" keeps a ring's run out of the queue; [queue-flow.md](queue-flow.md) drives it.
-- Items people put in come through other features: an answer to an ask ([asks.md](asks.md)), a quick capture ([quick-capture.md](quick-capture.md)), and a Notebook selection sent to the chief ([notebook.md](notebook.md)).
+- Items people put in come through other features: an answer to an ask ([asks.md](asks.md)) and a quick capture ([quick-capture.md](quick-capture.md)).
 - Their own shell: `attn agent msg <target> "text" --source-session <id>` sends as that session, and `attn agent inbox --session <id>` reads as it.
 
 ### Agents

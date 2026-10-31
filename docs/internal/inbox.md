@@ -134,7 +134,6 @@ when monitoring recovers.
 
 Notices are attn's own messages to an agent:
 
-- a new selection in the chief's Notebook inbox;
 - a seed sent to the chief;
 - crew sleep and auto-sleep requests.
 

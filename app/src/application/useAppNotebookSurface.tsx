@@ -9,7 +9,6 @@ interface Options {
   sendFsExists: ReturnType<typeof useDaemonApi>['sendFsExists'];
   sendFsReadAsset: ReturnType<typeof useDaemonApi>['sendFsReadAsset'];
   sendNotebookBacklinks: ReturnType<typeof useDaemonApi>['sendNotebookBacklinks'];
-  sendNotebookToChief: ReturnType<typeof useDaemonApi>['sendNotebookToChief'];
   sendFsIndex: ReturnType<typeof useDaemonApi>['sendFsIndex'];
   fsChangeSignals: AppContentProps['fsChangeSignals'];
   effectiveNotebookRoot: string;
@@ -24,7 +23,6 @@ export function useAppNotebookSurface({
   sendFsExists,
   sendFsReadAsset,
   sendNotebookBacklinks,
-  sendNotebookToChief,
   sendFsIndex,
   fsChangeSignals,
   effectiveNotebookRoot,
@@ -41,7 +39,6 @@ export function useAppNotebookSurface({
       existsFile: (path: string) => sendFsExists(path, root),
       readAsset: (path: string) => sendFsReadAsset(path, root),
       backlinksNotebook: sendNotebookBacklinks,
-      sendToChief: sendNotebookToChief,
       listFiles: () => sendFsIndex(root).then(fsIndexToNotebookEntries),
     }),
     [
@@ -51,7 +48,6 @@ export function useAppNotebookSurface({
       sendFsExists,
       sendFsReadAsset,
       sendNotebookBacklinks,
-      sendNotebookToChief,
       sendFsIndex,
     ],
   );

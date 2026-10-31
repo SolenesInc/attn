@@ -425,44 +425,6 @@
   white-space: nowrap;
 }
 
-.notebook-browser-chief-status {
-  font-size: 12px;
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.notebook-browser-chief-status.is-error {
-  color: var(--color-danger, #e5534b);
-}
-
-/* Floating action over a rendered-markdown text selection. Fixed to the viewport,
-   hanging below the selection end (centered on its last char), above the modal
-   chrome — never over the selection or the line above it. */
-.notebook-browser-send-chief {
-  position: fixed;
-  transform: translate(-50%, 8px);
-  z-index: 500;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-bg-base, #0b0b0d);
-  background: var(--accent);
-  border: none;
-  border-radius: 7px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.notebook-browser-send-chief:hover {
-  filter: brightness(1.08);
-}
-
-.notebook-browser-send-chief:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
-
 /* Live editor surface — read and type in one. The pane scrolls inside the editor
    (CM owns its scroller); the meta header and backlinks strip stay fixed. */
 .notebook-browser-live {
