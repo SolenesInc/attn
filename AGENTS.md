@@ -324,7 +324,7 @@ clearer.
 Edit text as a whole. Before you change a doc, skill, prompt or CLI help, read
 all of it and the other places that cover the same subject. Decide what to
 keep, rewrite, merge or remove before you add anything, so the result reads as
-one text. Write it as [Writing](docs/internal/writing.md) says.
+one text. Write it as [Technical writing](internal/prompts/content/skills/attn-workflow/references/technical-writing.md) says.
 
 ## Task-specific guidance
 
