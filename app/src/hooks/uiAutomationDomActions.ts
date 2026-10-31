@@ -4,10 +4,11 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { waitForAutomationDom } from './uiAutomationDom';
 import {
-  armNativePointerWitness,
-  disarmNativePointerWitness,
-  waitForNativePointerWitness,
-} from './nativePointerWitness';
+  armNativeInputWitness,
+  disarmNativeInputWitness,
+  parseInputExpectation,
+  waitForNativeInputWitness,
+} from './nativeInputWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
 import { parseNativeTarget, settledNativePoint, waitForFiniteAnimations } from './uiAutomationSettledTarget';
 import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
@@ -581,14 +582,12 @@ export async function runDomAutomationAction(
         },
       };
     }
-    case 'arm_native_pointer_witness': {
-      const selector = typeof payload.selector === 'string' ? payload.selector : '';
-      if (!selector) throw new Error('arm_native_pointer_witness requires selector');
-      armNativePointerWitness(selector);
+    case 'arm_native_input_witness': {
+      armNativeInputWitness(parseInputExpectation(payload));
       return { armed: true };
     }
-    case 'wait_native_pointer_witness': {
-      const receipt = await waitForNativePointerWitness();
+    case 'wait_native_input_witness': {
+      const receipt = await waitForNativeInputWitness();
       await settleUi();
       return receipt;
     }
@@ -639,7 +638,7 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
     });
 
     return () => {
-      disarmNativePointerWitness();
+      disarmNativeInputWitness();
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);

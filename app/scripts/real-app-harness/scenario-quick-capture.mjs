@@ -416,7 +416,7 @@ try {
     await driver.click(captureEditor, { windowTitle: 'Quick Capture' });
     const before = await captureStack();
     const pointer = { x: before.width * -0.2, y: before.height * -0.23 };
-    await driver.drag({ webview: 'capture', selector: 'main.capture', at: { x: 0.5, y: 0.02 } }, { by: pointer }, { windowTitle: 'Quick Capture' });
+    await driver.drag({ webview: 'capture', selector: 'main.capture', at: { x: 0.5, y: 0.02 } }, { by: pointer }, { windowTitle: 'Quick Capture', withoutReceipt: 'a window drag hands the mouse-up to the OS' });
     const after = await captureStack();
     const moved = { x: after.x - before.x, y: after.y - before.y };
     runner.writeJson('panel-drag.json', { before, after, moved, pointer });

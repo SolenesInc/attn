@@ -128,19 +128,33 @@ test('note editing preserves the marks', async ({ page }) => {
 test('native pointer receipt ignores synthetic clicks and identifies the delivered target', async ({ page }) => {
   await openEditor(page);
   await page.evaluate(() => {
-    window.__ANNOTATIONS__.armPointer('.anno-popup-quote');
+    window.__ANNOTATIONS__.armInput({ gesture: 'pointer', selector: '.anno-popup-quote' });
     document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
   });
   await page.locator('.anno-popup-quote').click();
-  const receipt = await page.evaluate(() => window.__ANNOTATIONS__.waitPointer());
+  const receipt = await page.evaluate(() => window.__ANNOTATIONS__.waitInput());
   expect(receipt.matches).toBe(true);
   expect(receipt.target).toContain('anno-popup-quote');
 });
 
 test('native pointer receipt reports delivery to the wrong target', async ({ page }) => {
   await openEditor(page);
-  await page.evaluate(() => window.__ANNOTATIONS__.armPointer('.anno-popup-quote'));
-  const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitPointer());
+  await page.evaluate(() => window.__ANNOTATIONS__.armInput({ gesture: 'pointer', selector: '.anno-popup-quote' }));
+  const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitInput());
   await page.getByTestId('desktop-first').getByRole('textbox', { name: 'Terminal input' }).click({ position: { x: 20, y: 20 } });
   expect(await receipt).toMatchObject({ matches: false, target: 'canvas.' });
+});
+
+test('native key receipt waits for every stroke and ignores modifiers and synthetic keys', async ({ page }) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    window.__ANNOTATIONS__.armInput({ gesture: 'keys', strokes: 2 });
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'x' }));
+  });
+  const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitInput());
+  await page.keyboard.press('Shift+A');
+  const pending = await Promise.race([receipt.then(() => 'delivered'), page.evaluate(() => 'pending')]);
+  expect(pending).toBe('pending');
+  await page.keyboard.press('Escape');
+  expect((await receipt).events.map(event => event.key)).toEqual(['A', 'Escape']);
 });

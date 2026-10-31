@@ -62,7 +62,7 @@ export class MacOSDriver extends TargetedWindowDriver {
     client = null,
     systemInput = false,
   } = {}) {
-    super({ client, pointer: (gesture) => this.#pointer(gesture) });
+    super({ client, pointer: (gesture) => this.#pointer(gesture), keyboard: (stroke) => this.#keyboard(stroke) });
     this.systemInput = systemInput;
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
@@ -178,49 +178,24 @@ export class MacOSDriver extends TargetedWindowDriver {
     return null;
   }
 
-  async typeText(text) {
+  async #keyboard({ kind, key, keyCode, modifiers, text }) {
     if (this.injectsInApp) {
-      await this.#inApp('native_text', { text });
-    } else {
+      if (kind === 'text') {
+        await this.#inApp('native_text', { text });
+      } else {
+        await this.#inApp('native_key', { ...(kind === 'keycode' ? { keyCode } : { key }), modifiers: modifierNames(modifiers) });
+      }
+      return;
+    }
+    const serialized = this.serializeModifiers(modifiers);
+    if (kind === 'text') {
       this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
       await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
+      return;
     }
-  }
-
-  async pressKey(key, modifiers = {}) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_key', { key, modifiers: modifierNames(modifiers) });
-    } else {
-      this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-      await this.runInputDriver([
-        'key',
-        '--key',
-        key,
-        '--modifiers',
-        this.serializeModifiers(modifiers),
-        '--prompt-accessibility',
-      ]);
-    }
-  }
-
-  async pressKeyCode(keyCode, modifiers = {}) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_key', { keyCode, modifiers: modifierNames(modifiers) });
-    } else {
-      this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-      await this.runInputDriver([
-        'keycode',
-        '--key-code',
-        String(keyCode),
-        '--modifiers',
-        this.serializeModifiers(modifiers),
-        '--prompt-accessibility',
-      ]);
-    }
-  }
-
-  async pressEnter() {
-    await this.pressKeyCode(36);
+    const [command, flag, value] = kind === 'keycode' ? ['keycode', '--key-code', String(keyCode)] : ['key', '--key', key];
+    this.keyInputGuard.assertReaches(`${kind === 'keycode' ? 'pressKeyCode' : 'pressKey'}(${value}, ${serialized || 'no modifiers'})`);
+    await this.runInputDriver([command, flag, value, '--modifiers', serialized, '--prompt-accessibility']);
   }
 
   async #pointer({ action, point, to, deltaY, opts }) {

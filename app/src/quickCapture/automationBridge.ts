@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { QuickCaptureClient, QuickCaptureItem } from './client';
 import { parseNativeTarget, settledNativePoint } from '../hooks/uiAutomationSettledTarget';
+import { armNativeInputWitness, disarmNativeInputWitness, parseInputExpectation, waitForNativeInputWitness } from '../hooks/nativeInputWitness';
+import { settleUi } from '../hooks/uiAutomationSettle';
 import type { QuickCaptureAttachment, AttachmentMotion } from '../components/QuickCaptureAttachmentPreview';
 type QuickCaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; selectedText?: string; composing?: boolean; mailbox?: string; fontScale?: number };
 
@@ -40,12 +42,15 @@ export function installQuickCaptureAutomationBridge(options: QuickCaptureAutomat
           result = { binding: payload.payload.binding || '' };
         } else if (payload.action === 'capture_dismiss') { await invoke('capture_hide'); result = {}; }
         else if (payload.action === 'capture_native_point') result = await settledNativePoint(parseNativeTarget(payload.payload as Record<string, unknown>));
+        else if (payload.action === 'capture_arm_native_input_witness') { armNativeInputWitness(parseInputExpectation(payload.payload as Record<string, unknown>)); result = { armed: true }; }
+        else if (payload.action === 'capture_wait_native_input_witness') { result = await waitForNativeInputWitness(); await settleUi(); }
         else throw new Error(`Unknown capture action ${payload.action}`);
       } catch (e) { error = String(e); }
       await emit('attn://ui-automation/response', { request_id: payload.request_id, ok: !error, result, error });
     });
  return () => {
   ['keydown', 'beforeinput', 'input'].forEach(type => document.removeEventListener(type, traceInput, true));
+  disarmNativeInputWitness();
   void automation.then(unlisten => unlisten());
  };
 }

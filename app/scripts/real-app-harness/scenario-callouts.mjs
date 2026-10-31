@@ -194,7 +194,7 @@ try {
     runner.assert(receipt.session.id === agents[0].sessionId, 'the terminal keeps native input when the browser returns', receipt.session);
   });
   await runner.step('palette_takes_native_keys_after_browser_focus', async () => {
-    await driver.click(`${browserTileSelector} .browser-tile-host`);
+    await driver.click(`${browserTileSelector} .browser-tile-host`, { withoutReceipt: 'the browser page takes it' });
     await client.request('dom_click', { selector: '[data-callout-anchor="commands"]' });
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.pressKey('Escape');

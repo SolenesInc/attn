@@ -49,6 +49,16 @@ repository root.
   `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
   Quick Capture targets add `webview: 'capture'`, and its driver takes
   `systemInput: true` to keep system-level input.
+- Native input waits for delivery. `click`, `rightClick`, `drag`, `typeInto`,
+  `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return only after
+  the webview that should receive the input sees the trusted mouseup, or one
+  keyup per stroke, and settles, so the next read sees the input's effect.
+  Pointer input arms its target's webview; keys arm the main webview. Pointer
+  actions return the `receipt`; `receipt.matches` says whether the release
+  landed on the aimed selector. Input that lands in a browser tile page, starts
+  a native window drag, or replaces the page receiving it has no receipt: pass
+  `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers` for
+  `pressKey` and `pressKeyCode`. `hover` and `scroll` have no receipt.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need

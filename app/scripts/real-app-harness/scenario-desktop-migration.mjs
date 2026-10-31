@@ -292,9 +292,7 @@ async function main() {
       const source = '.mp-source[data-drag-group="mig-ws-11"] .mp-grip';
       const anchor = '[data-migration-desktop] [data-migration-group="mig-ws-4"]';
       await client.request('dom_scroll_into_view', { selector: '.mp-source[data-drag-group="mig-ws-11"]' });
-      await client.request('arm_native_pointer_witness', { selector: '.mp-shell' });
-      const { from, to } = await driver.drag(source, { selector: anchor, at: { x: 0.9, y: 0.5 } }, { steps: 24 });
-      const receipt = await client.request('wait_native_pointer_witness', {});
+      const { from, to, receipt } = await driver.drag(source, { selector: anchor, at: { x: 0.9, y: 0.5 } }, { steps: 24 });
       const inside = (box, x, y) => x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height;
       runner.assert(inside(to.bounds, receipt.clientX, receipt.clientY),
         `The trusted native mouseup landed outside the anchor group: ${JSON.stringify({ receipt, anchor: to.bounds, from, to })}`);
@@ -382,7 +380,7 @@ async function main() {
       const shell = await client.request('dom_wait', { selector: '.app', absent: true, timeoutMs: 2_000 });
       runner.assert(Boolean(shell), 'The normal shell mounted before Continue');
       await screenshot('05-done.png');
-      await driver.pressKey('Enter');
+      await driver.pressKey('Enter', {}, { withoutReceipt: 'Continue replaces the page' });
       await client.waitForFrontendResponsive(30_000);
       const rows = queryDaemonDb(dbPath, `SELECT replace(substr(d.id, instr(d.id, '/') + 1), 'desktop_', '') || ':' || p.session_id FROM desktop_panes p JOIN desktops d ON d.id = p.desktop_id WHERE p.session_id LIKE 'mig-agent-%' ORDER BY 1;`);
       for (const agent of [...agentsOf(1), ...agentsOf(2)]) {

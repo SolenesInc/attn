@@ -62,12 +62,19 @@ export function linuxKeyName(key, modifiers = {}) {
     '=': 'equal',
     '[': 'bracketleft',
     ']': 'bracketright',
+    '{': 'braceleft',
+    '}': 'braceright',
+    '&': 'ampersand',
+    '`': 'grave',
+    '~': 'asciitilde',
     Enter: 'Return',
     Backspace: 'BackSpace',
     ArrowLeft: 'Left',
     ArrowRight: 'Right',
     ArrowDown: 'Down',
     ArrowUp: 'Up',
+    PageUp: 'Page_Up',
+    PageDown: 'Page_Down',
   };
   const raw = String(key || '').trim();
   const normalized = keyNames[raw] || raw;
@@ -121,7 +128,7 @@ export class LinuxDriver extends TargetedWindowDriver {
     run = execFileAsync,
     client = null,
   } = {}) {
-    super({ client, pointer: (gesture) => this.#pointer(gesture) });
+    super({ client, pointer: (gesture) => this.#pointer(gesture), keyboard: (stroke) => this.#keyboard(stroke) });
     this.appPath = appPath;
     this.appName = path.basename(appPath);
     this.bundleId = bundleId || bundleIdentifierForAppPath(appPath);
@@ -225,22 +232,14 @@ export class LinuxDriver extends TargetedWindowDriver {
     return null;
   }
 
-  async typeText(text) {
+  async #keyboard({ kind, key, keyCode, modifiers, text }) {
     await this.activateBackground();
-    await this.runXdotool(['type', '--clearmodifiers', '--', String(text)]);
-  }
-
-  async pressKey(key, modifiers = {}) {
-    await this.activateBackground();
-    await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(key, modifiers)]);
-  }
-
-  async pressKeyCode(keyCode, modifiers = {}) {
-    await this.pressKey(linuxKeyCodeName(keyCode), modifiers);
-  }
-
-  async pressEnter() {
-    await this.pressKeyCode(36);
+    if (kind === 'text') {
+      await this.runXdotool(['type', '--clearmodifiers', '--', text]);
+      return;
+    }
+    const name = kind === 'keycode' ? linuxKeyCodeName(keyCode) : key;
+    await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(name, modifiers)]);
   }
 
   async #pointer({ action, point, to, deltaY, opts }) {

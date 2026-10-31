@@ -44,9 +44,7 @@ const cli = async (...args) => {
   return result.stdout;
 };
 const click = async (selector) => {
-  await request('arm_native_pointer_witness', { selector });
-  await driver.click(selector);
-  const receipt = await request('wait_native_pointer_witness');
+  const { receipt } = await driver.click(selector);
   runner.assert(receipt.matches, 'native mouseup reaches the requested control', { selector, receipt });
 };
 let parkedFrame;
@@ -191,19 +189,19 @@ try {
     const hostSelector = `[data-session-terminal-desktop="${desktop.id}"] .browser-tile-host`;
     await wait(hostSelector);
     const inPage = (x, y) => ({ selector: hostSelector, at: { x: 0, y: 0 }, offset: { x: rect.x + x, y: rect.y + y } });
-    await driver.click(inPage(rect.width / 2, rect.height / 2));
+    await driver.click(inPage(rect.width / 2, rect.height / 2), { withoutReceipt: 'the browser page takes it' });
     const { label } = await request('get_browser_focus_state');
     runner.assert(Boolean(label), 'native clicking focuses the browser page');
-    await driver.typeText('probe');
+    await driver.typeText('probe', { withoutReceipt: 'the browser page takes it' });
     await cli('browser', 'wait', '--using', 'css', '--value', '#password:valid', '--state', 'visible', '--session', sessionId);
     const value = JSON.parse(await cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: 'return document.querySelector("#password").value', args: [] }), '--session', sessionId));
     runner.assert(value === 'probe', 'native typing stays in the clicked browser webview', { value });
-    await driver.drag(inPage(2, rect.height / 2), inPage(rect.width - 2, rect.height / 2));
+    await driver.drag(inPage(2, rect.height / 2), inPage(rect.width - 2, rect.height / 2), { withoutReceipt: 'the browser page takes it' });
     const buttons = JSON.parse(await cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: 'return document.body.dataset.buttons', args: [] }), '--session', sessionId));
     runner.assert(buttons === '1', 'browser editable drag moves retain their pressed button', { buttons });
     const native = await request('native_input_state', { window: label });
     runner.assert(native.webviewIsFirstResponder && !native.secureInput, 'a parked password field keeps native secure input off', { native });
-    await driver.pressKey('w', { command: true });
+    await driver.pressKey('w', { command: true }, { withoutReceipt: 'the browser page takes it' });
     await wait(`[data-session-terminal-desktop="${desktop.id}"] [data-tile-kind="browser"]`, { absent: true });
     await inactive('browser password and native menu close');
   });

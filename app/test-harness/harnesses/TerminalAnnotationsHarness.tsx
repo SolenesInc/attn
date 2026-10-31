@@ -7,7 +7,7 @@ import type { TerminalDesktopState } from '../../src/types/desktop';
 import type { HarnessProps } from '../types';
 import { settleUi } from '../../src/hooks/uiAutomationSettle';
 import { listenPtyEvents } from '../../src/pty/bridge';
-import { armNativePointerWitness, disarmNativePointerWitness, waitForNativePointerWitness } from '../../src/hooks/nativePointerWitness';
+import { armNativeInputWitness, disarmNativeInputWitness, waitForNativeInputWitness } from '../../src/hooks/nativeInputWitness';
 import appStyles from '../../src/App.css?inline';
 
 const quote = 'The parser already handles CRLF, so the retry wrapper is safe to land as is.';
@@ -25,8 +25,8 @@ interface AnnotationHarnessControl {
   switchDesktop: () => Promise<void>;
   requestMessages: () => void;
   deliverMessages: () => Promise<void>;
-  armPointer: typeof armNativePointerWitness;
-  waitPointer: typeof waitForNativePointerWitness;
+  armInput: typeof armNativeInputWitness;
+  waitInput: typeof waitForNativeInputWitness;
 }
 
 declare global {
@@ -71,8 +71,8 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
       await settleUi();
     };
     window.__ANNOTATIONS__ = {
-      armPointer: armNativePointerWitness,
-      waitPointer: waitForNativePointerWitness,
+      armInput: armNativeInputWitness,
+      waitInput: waitForNativeInputWitness,
       refreshDesktop,
       switchDesktop: async () => {
         setActive(value => value === 'first' ? 'second' : 'first');
@@ -94,7 +94,7 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
     };
     setTriggerRerender(refreshDesktop);
     onReady();
-    return disarmNativePointerWitness;
+    return disarmNativeInputWitness;
   }, [onReady, setTriggerRerender]);
 
   useEffect(() => {
