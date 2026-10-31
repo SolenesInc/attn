@@ -135,23 +135,26 @@ In the index, "both" means people and agents.
   button, `[data-testid="settings-nav-<section>"]`, natively.
   [settings.md](settings.md) lists the section ids.
 - A native click: `bridge native_mouse` takes `x` and `y` from 0 to 1 across
-  the window. Take the element's box from `bridge dom_bounds
-  '{"selector":"..."}'` (`bounds`), the window's from `bridge
-  get_window_bounds` (`logicalBounds`), and the web view's from `bridge
-  dom_focus_state` (`viewport`). The web view sits below the title bar and
-  centered across the window, so
-  `x = (max(0, window.width - viewport.innerWidth) / 2 + box.x + box.width / 2) / window.width`
-  and
-  `y = (max(0, window.height - viewport.innerHeight) + box.y + box.height / 2) / window.height`.
+  the window. Get them for an element with `bridge dom_native_point
+  '{"selector":"..."}'`. It waits for the element to appear and for it and
+  its ancestors to stop moving, scrolls it into view when its point is
+  offscreen or covered, then returns `x` and `y` for the center of its box,
+  with `bounds` in page pixels. `at` picks another point as fractions of the
+  box, such as `{"x":0.9,"y":0.5}`, and `offset` adds page pixels to it. A
+  terminal cell's `get_pane_cell_rect` result carries a `target` to pass as
+  the payload. It refuses, naming the cause, an element with an empty box
+  (hidden on a retained desktop, for example) and a point that stays
+  offscreen or covered after scrolling.
+- Resolve the point right before each native action, and resolve it again
+  after anything that can move the element; a stored point goes stale.
 - `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
   buttons, needs a `move` over it first.
-- Before calculating coordinates, show the intended desktop and scope the
-  selector to its visible tile. Retained desktops can have hidden elements
-  with empty boxes. Scroll offscreen controls into view with
-  `dom_scroll_into_view` as setup, then read their bounds again. Native input
-  rejects coordinates outside `[0,1)` and clicks in native window chrome.
+- Before resolving a point, show the intended desktop and scope the
+  selector to its visible tile; retained desktops keep hidden copies of
+  their elements. Native input rejects coordinates outside `[0,1)` and
+  clicks in native window chrome.
 - `native_mouse` hit-tests the target window, including browser page webviews.
   Keys and text follow its native first responder. An explicit `"window"`
   targets that webview instead: `"window":"main"` for app controls,

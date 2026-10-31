@@ -8,6 +8,7 @@ import {
   bundleIdentifierForAppPath,
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
+import { TargetedWindowDriver } from './targetedWindowDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -115,13 +116,15 @@ export function parseXdotoolGeometry(stdout) {
   return geometry;
 }
 
-export class LinuxDriver {
+export class LinuxDriver extends TargetedWindowDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
     env = process.env,
     run = execFileAsync,
+    client = null,
   } = {}) {
+    super({ client, pointer: (gesture) => this.#pointer(gesture) });
     this.appPath = appPath;
     this.appName = path.basename(appPath);
     this.bundleId = bundleId || bundleIdentifierForAppPath(appPath);
@@ -252,20 +255,21 @@ export class LinuxDriver {
     await this.pressKeyCode(36);
   }
 
-  async movePointerInWindow(relativeX, relativeY, opts = {}) {
+  async #pointer({ action, point, to, deltaY, opts }) {
+    if (action === 'move') return this.#move(point.x, point.y, opts);
+    if (action === 'click') return this.#click(1, point.x, point.y, opts);
+    if (action === 'right_click') return this.#click(3, point.x, point.y, opts);
+    if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
+    if (action === 'scroll') return this.#scroll(point.x, point.y, deltaY, opts);
+    throw new Error(`LinuxDriver has no pointer action ${action}`);
+  }
+
+  async #move(relativeX, relativeY, opts) {
     const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
     await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y)]);
   }
 
-  async clickWindow(relativeX, relativeY, opts = {}) {
-    await this.clickButton(1, relativeX, relativeY, opts);
-  }
-
-  async rightClickWindow(relativeX, relativeY, opts = {}) {
-    await this.clickButton(3, relativeX, relativeY, opts);
-  }
-
-  async dragWindow(relativeX, relativeY, toRelativeX, toRelativeY, opts = {}) {
+  async #drag(relativeX, relativeY, toRelativeX, toRelativeY, opts) {
     const start = await this.relativePoint(relativeX, relativeY, opts);
     const end = await this.relativePoint(toRelativeX, toRelativeY, opts);
     const stepCount = Math.max(2, Number.isInteger(opts.steps) ? opts.steps : 12);
@@ -284,14 +288,14 @@ export class LinuxDriver {
     await this.runXdotool(args);
   }
 
-  async scrollWindow(relativeX, relativeY, deltaY, opts = {}) {
+  async #scroll(relativeX, relativeY, deltaY, opts) {
     const deltaX = Number(opts.deltaX || 0);
     const vertical = Math.abs(Number(deltaY)) >= Math.abs(deltaX);
     const delta = vertical ? Number(deltaY) : deltaX;
     if (!Number.isFinite(delta) || delta === 0) return;
     const button = vertical ? (delta > 0 ? 4 : 5) : (delta > 0 ? 6 : 7);
     const repeat = Number.isInteger(opts.steps) && opts.steps > 0 ? opts.steps : 1;
-    await this.movePointerInWindow(relativeX, relativeY, opts);
+    await this.#move(relativeX, relativeY, opts);
     await this.runXdotool(['click', '--repeat', String(repeat), String(button)]);
   }
 
@@ -392,7 +396,7 @@ export class LinuxDriver {
 
   // `mousemove --sync` waits for a motion event, and none comes when the
   // pointer already sits at the point (a repeated click), so it hangs.
-  async clickButton(button, relativeX, relativeY, opts = {}) {
+  async #click(button, relativeX, relativeY, opts) {
     const point = await this.relativePoint(relativeX, relativeY, opts);
     const modifiers = linuxModifierNames(opts.modifiers);
     const args = [

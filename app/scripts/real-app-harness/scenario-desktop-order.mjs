@@ -28,7 +28,7 @@ async function main() {
     }
   });
   runner.registerCleanup('move_pointer', async () => {
-    if (profile) await driver.movePointerInWindow(0.5, 0.5);
+    if (profile) await driver.hover('body');
   });
   const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
   const assertOrder = async (ids) => {
@@ -86,15 +86,7 @@ async function main() {
     });
     await runner.step('undo_restores_order', async () => {
       const restored = observer.waitForMessage((m) => m.event === 'profile_arrangement_changed' && m.profile.id === profile.id && m, 'Undo arrangement');
-      const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-        client.request('dom_bounds', { selector: '.toast-row--action button' }),
-        client.request('get_window_bounds'),
-        client.request('get_terminal_context_menu_state'),
-      ]);
-      await driver.clickWindow(
-        (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-        (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-      );
+      await driver.click('.toast-row--action button');
       const state = await restored;
       runner.assert(JSON.stringify(state.desktops.map((d) => d.id)) === JSON.stringify(runner.before), 'Undo restores the complete previous order', state);
       await assertOrder(runner.before);

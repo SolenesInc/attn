@@ -5,7 +5,6 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance } from './harnessInstance.mjs';
 import { createWindowDriver } from './platform.mjs';
-import { sleep } from './scenarioAssertions.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -18,20 +17,8 @@ const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ garden: '.garden-frame', drawer: '.side-panel-shell.is-open' }) });
 
-// Native input in the existing harness takes 250ms per action; this is its
-// standard 15s hung-UI guard, not a delay for panel transitions.
+// The standard 15s hung-UI guard, not a delay for panel transitions.
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
-const click = async selector => {
-  const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-    client.request('dom_bounds', { selector }),
-    client.request('get_window_bounds'),
-    client.request('get_terminal_context_menu_state'),
-  ]);
-  await driver.clickWindow(
-    (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-    (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-  );
-};
 const screenshot = async name => {
   const windowId = await driver.mainWindowId();
   await driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId });
@@ -55,17 +42,11 @@ try {
   });
 
   await runner.step('star_opens_a_clickable_panel_over_home', async () => {
-    await click('[aria-label="Show Automations"]');
+    await driver.click('[aria-label="Show Automations"]');
     await waitDom('.side-panel-shell.is-open [data-testid="automations-panel"]');
     const { innerWidth } = await client.request('get_terminal_context_menu_state');
-    const fits = (rect) => rect.width > 0 && rect.x >= 0 && rect.x + rect.width <= innerWidth;
-    const settleBy = Date.now() + 5_000;
-    let { bounds } = await client.request('dom_bounds', { selector: '[data-testid="automations-panel"]' });
-    while (!fits(bounds) && Date.now() < settleBy) {
-      await sleep(50);
-      ({ bounds } = await client.request('dom_bounds', { selector: '[data-testid="automations-panel"]' }));
-    }
-    runner.assert(fits(bounds), 'the panel slides in to fit inside the window', { bounds, innerWidth });
+    const { bounds } = await driver.pointOf('[data-testid="automations-panel"]');
+    runner.assert(bounds.width > 0 && bounds.x >= 0 && Math.round(bounds.x + bounds.width) <= innerWidth, 'the panel slides in to fit inside the window', { bounds, innerWidth });
     await screenshot('automations-over-home');
     const home = await client.request('home_get_state');
     runner.assert(home.onScreen, 'opening the dock keeps home on screen', { home });
@@ -76,16 +57,13 @@ try {
     await driver.pressEnter();
     await waitDom('[data-testid="crew-panel-close"]', { focused: true });
     await screenshot('crew-over-dock');
-    await click('[data-testid="crew-panel-close"]');
+    await driver.click('[data-testid="crew-panel-close"]');
     await waitDom('.crew-panel-layer.is-open', { absent: true });
     await waitDom('[aria-label="Hide Automations"]');
-    await click('[data-testid="automation-new"]');
-    await waitDom('[data-testid="automation-form-name"]');
-    await click('[data-testid="automation-form-name"]');
-    await waitDom('[data-testid="automation-form-name"]', { focused: true });
-    await driver.typeText('Home dock draft');
+    await driver.click('[data-testid="automation-new"]');
+    await driver.typeInto('[data-testid="automation-form-name"]', 'Home dock draft');
     await waitDom('[data-testid="automation-form-name"]', { valueEquals: 'Home dock draft' });
-    await click('[data-testid="automation-form-close"]');
+    await driver.click('[data-testid="automation-form-close"]');
     await driver.pressKey('Escape');
     await waitDom('[aria-label="Show Automations"]');
     await screenshot('home-after-escape');
@@ -95,18 +73,18 @@ try {
     await pressShortcutKeys(client, driver, 'dock.attention');
     await waitDom('.side-panel-shell.is-open .attention-drawer-panel');
     await screenshot('attention-over-home');
-    await click('.side-panel-shell.is-open .drawer-close');
+    await driver.click('.side-panel-shell.is-open .drawer-close');
     await waitDom('.side-panel-shell.is-open .attention-drawer-panel', { absent: true });
     runner.assert((await client.request('home_get_state')).onScreen, 'home remains usable after closing the dock');
   });
 
   await runner.step('garden_keeps_its_dismissal_order_after_fullscreen', async () => {
     await pressShortcutKeys(client, driver, 'dock.attention');
-    await click('[aria-label="Show the garden"]');
+    await driver.click('[aria-label="Show the garden"]');
     await waitDom('.garden-frame.is-dock');
-    await click('[aria-label="Expand the garden"]');
+    await driver.click('[aria-label="Expand the garden"]');
     await waitDom('.garden-frame.is-full');
-    await click('[aria-label="Return the garden to the dock"]');
+    await driver.click('[aria-label="Return the garden to the dock"]');
     await waitDom('.garden-frame.is-dock');
     await driver.pressKey('Escape');
     await waitDom('[aria-label="Show the garden"]');

@@ -84,7 +84,7 @@ Preconditions:
 
 ## Gotchas
 
-- The Agent callouts switch starts below the baseline Settings viewport. Scroll it into view with `dom_scroll_into_view` as setup, then read its bounds and click natively. Native input rejects offscreen coordinates. Select Experimental before focusing Search settings; clicking navigation afterward clears keyboard focus, so Tab can move through the page behind Settings.
+- The Agent callouts switch starts below the baseline Settings viewport; `dom_native_point` scrolls it into view before returning its point. Select Experimental before focusing Search settings; clicking navigation afterward clears keyboard focus, so Tab can move through the page behind Settings.
 - The setting is off on every fresh instance. A refusal naming Settings > Experimental > Agent callouts means the switch, not a bug.
 - While another overlay is open (Settings, the palette, What's new, the notebook), `callout show` is refused with `not on screen:` naming every anchor of the callout and `on screen now:` empty. Close the overlay and call again.
 - `callout show` returns as soon as the app accepts the card, before the user reads it; there is no completion. Prove the stepping from the app with `bridge`, not from the CLI.

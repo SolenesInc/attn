@@ -43,25 +43,9 @@ const cli = async (...args) => {
   runner.log('cli', { args, ...result });
   return result.stdout;
 };
-const relative = async (x, y) => {
-  const [{ logicalBounds: window }, { viewport }] = await Promise.all([request('get_window_bounds'), request('dom_focus_state')]);
-  return {
-    x: (Math.max(0, window.width - viewport.innerWidth) / 2 + x) / window.width,
-    y: (Math.max(0, window.height - viewport.innerHeight) + y) / window.height,
-  };
-};
-const point = async (selector, textIncludes) => {
-  const { bounds } = await request('dom_bounds', { selector, textIncludes });
-  const { viewport } = await request('dom_focus_state');
-  runner.assert(bounds.width > 0 && bounds.height > 0 && bounds.x >= 0 && bounds.y >= 0
-    && bounds.x + bounds.width <= viewport.innerWidth && bounds.y + bounds.height <= viewport.innerHeight,
-  'the native target is inside the viewport', { selector, bounds, viewport });
-  return relative(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-};
-const click = async (selector, textIncludes) => {
-  const target = await point(selector, textIncludes);
+const click = async (selector) => {
   await request('arm_native_pointer_witness', { selector });
-  await driver.clickWindow(target.x, target.y);
+  await driver.click(selector);
   const receipt = await request('wait_native_pointer_witness');
   runner.assert(receipt.matches, 'native mouseup reaches the requested control', { selector, receipt });
 };
@@ -103,8 +87,7 @@ try {
   await runner.step('native_hover_and_row_actions', async () => {
     const row = `.queue-row[data-session-id="${sessionId}"]`;
     await request('native_pointer_trace_start');
-    const target = await point(row);
-    await driver.movePointerInWindow(target.x, target.y);
+    await driver.hover(row);
     const trace = await request('native_pointer_trace_read');
     runner.assert(trace.events.some(event => event.type === 'mousemove' && event.trusted
       && event.hover.some(element => String(element.className).includes('queue-row'))), 'native movement establishes CSS hover', { trace });
@@ -117,8 +100,7 @@ try {
     await wait(`[data-testid="queue-turn-${sessionId}"]`, { absent: true });
     await click('[data-testid="queue-agents-toggle"]');
     await wait('[aria-label="Wake Focusless native"]');
-    const wake = await point(`[data-testid="queue-snoozed-${sessionId}"]`);
-    await driver.movePointerInWindow(wake.x, wake.y);
+    await driver.hover(`[data-testid="queue-snoozed-${sessionId}"]`);
     await click('[aria-label="Wake Focusless native"]');
     await wait(`[data-testid="queue-turn-${sessionId}"]`);
     const sessions = JSON.parse(await cli('agent', 'list', '--json'));
@@ -139,11 +121,9 @@ try {
     await click('[aria-label="Search settings"]');
     await driver.typeText('sweep');
     await wait('[aria-label="Search settings"][value="sweep"]');
-    const { bounds } = await request('dom_bounds', { selector: '[aria-label="Search settings"]' });
-    const from = await relative(bounds.x + 2, bounds.y + bounds.height / 2);
-    const to = await relative(bounds.x + bounds.width - 2, bounds.y + bounds.height / 2);
+    const search = '[aria-label="Search settings"]';
     await request('native_pointer_trace_start');
-    await driver.dragWindow(from.x, from.y, to.x, to.y);
+    await driver.drag({ selector: search, at: { x: 0, y: 0.5 }, offset: { x: 2, y: 0 } }, { selector: search, at: { x: 1, y: 0.5 }, offset: { x: -2, y: 0 } });
     const trace = await request('native_pointer_trace_read');
     runner.assert(trace.events.filter(event => event.type === 'mousemove').slice(1).every(event => event.buttons === 1), 'drag button state survives editable input handling', { trace });
     await driver.typeText('replacement');
@@ -176,10 +156,8 @@ try {
     runner.assert(row >= 0, 'the mock quote is rendered in the terminal');
     const start = await request('get_pane_cell_rect', { sessionId, cell: { col: 2, row } });
     const end = await request('get_pane_cell_rect', { sessionId, cell: { col: 15, row } });
-    const from = await relative(start.centerX, start.centerY);
-    const to = await relative(end.centerX, end.centerY);
     await request('native_pointer_trace_start');
-    await driver.dragWindow(from.x, from.y, to.x, to.y, { modifiers: { option: true } });
+    await driver.drag(start.target, end.target, { modifiers: { option: true } });
     const trace = await request('native_pointer_trace_read');
     runner.assert(trace.events.filter(event => event.type === 'mousemove').slice(1).every(event => event.buttons === 1 && event.alt), 'native Alt-drag retains button and modifier state', { trace });
     const annotation = await request('get_annotation_state');
@@ -212,19 +190,15 @@ try {
     const rect = JSON.parse(await cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: 'const r=document.querySelector("#password").getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}', args: [] }), '--session', sessionId));
     const hostSelector = `[data-session-terminal-desktop="${desktop.id}"] .browser-tile-host`;
     await wait(hostSelector);
-    const { bounds: host } = await request('dom_bounds', { selector: hostSelector });
-    runner.assert(host.width > 0 && host.height > 0, 'the browser target has visible host bounds', { host });
-    const target = await relative(host.x + rect.x + rect.width / 2, host.y + rect.y + rect.height / 2);
-    await driver.clickWindow(target.x, target.y);
+    const inPage = (x, y) => ({ selector: hostSelector, at: { x: 0, y: 0 }, offset: { x: rect.x + x, y: rect.y + y } });
+    await driver.click(inPage(rect.width / 2, rect.height / 2));
     const { label } = await request('get_browser_focus_state');
     runner.assert(Boolean(label), 'native clicking focuses the browser page');
     await driver.typeText('probe');
     await cli('browser', 'wait', '--using', 'css', '--value', '#password:valid', '--state', 'visible', '--session', sessionId);
     const value = JSON.parse(await cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: 'return document.querySelector("#password").value', args: [] }), '--session', sessionId));
     runner.assert(value === 'probe', 'native typing stays in the clicked browser webview', { value });
-    const from = await relative(host.x + rect.x + 2, host.y + rect.y + rect.height / 2);
-    const to = await relative(host.x + rect.x + rect.width - 2, host.y + rect.y + rect.height / 2);
-    await driver.dragWindow(from.x, from.y, to.x, to.y);
+    await driver.drag(inPage(2, rect.height / 2), inPage(rect.width - 2, rect.height / 2));
     const buttons = JSON.parse(await cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: 'return document.body.dataset.buttons', args: [] }), '--session', sessionId));
     runner.assert(buttons === '1', 'browser editable drag moves retain their pressed button', { buttons });
     const native = await request('native_input_state', { window: label });
@@ -234,8 +208,7 @@ try {
     await inactive('browser password and native menu close');
   });
   await runner.step('native_settle', async () => {
-    const target = await point(`.queue-row[data-session-id="${sessionId}"]`);
-    await driver.movePointerInWindow(target.x, target.y);
+    await driver.hover(`.queue-row[data-session-id="${sessionId}"]`);
     await click('[aria-label="Settle Focusless native"]');
     await wait(`[data-testid="queue-turn-${sessionId}"]`, { absent: true });
     const sessions = JSON.parse(await cli('agent', 'list', '--json'));

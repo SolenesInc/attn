@@ -36,17 +36,6 @@ function parseArgs(argv) {
   };
 }
 
-// Window bounds include the title bar; the page does not.
-function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
-  const { width, height } = windowBounds.logicalBounds;
-  const chromeX = Math.max(0, width - innerWidth);
-  const chromeY = Math.max(0, height - innerHeight);
-  return {
-    relativeX: (chromeX / 2 + pageX) / width,
-    relativeY: (chromeY + pageY) / height,
-  };
-}
-
 function startProbeServer() {
   return new Promise((resolve, reject) => {
     const hits = [];
@@ -301,25 +290,12 @@ async function main() {
         throw new Error(`Path line for ${relPath} not found. Pane text:\n${read.text}`);
       }
       const col = lines[row].indexOf(relPath) + Math.floor(relPath.length / 2);
-      const windowBounds = await client.request('get_window_bounds', {});
-      if (!windowBounds?.logicalBounds) {
-        throw new Error(`No window bounds: ${JSON.stringify(windowBounds)}`);
-      }
       const cellRect = await client.request('get_pane_cell_rect', {
         sessionId,
         paneId: pane.paneId,
         cell: { row, col },
       });
-      return {
-        cell: { row, col },
-        ...windowRelativePoint(
-          cellRect.centerX,
-          cellRect.centerY,
-          windowBounds,
-          cellRect.innerWidth,
-          cellRect.innerHeight,
-        ),
-      };
+      return { cell: { row, col }, native: cellRect.target };
     };
 
     const markdownTileIds = async () => {
@@ -335,8 +311,8 @@ async function main() {
     };
 
     const movePointerOntoCellFromElsewhere = async (target) => {
-      await driver.movePointerInWindow(0.5, 0.9);
-      await driver.movePointerInWindow(target.relativeX, target.relativeY);
+      await driver.hover({ selector: 'body', at: { x: 0.5, y: 0.9 } });
+      await driver.hover(target.native);
     };
 
     // The pointer cursor is the receipt that the async path-exists check resolved.
@@ -371,7 +347,7 @@ async function main() {
 
     const cmdClickPath = async (relPath, done, description) => {
       const target = await pointAtLiveLink(relPath);
-      await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      await driver.click(target.native, { modifiers: { command: true } });
       await waitFor(done, description);
     };
 
@@ -384,7 +360,7 @@ async function main() {
     let alphaNode;
     await runner.step('plain_click_beta_opens_nothing_cmd_click_alpha_docks', async () => {
       const plainTarget = await pointAtLiveLink('./beta.md');
-      await driver.clickWindow(plainTarget.relativeX, plainTarget.relativeY);
+      await driver.click(plainTarget.native);
 
       await cmdClickPath(
         './alpha.md',
@@ -484,7 +460,7 @@ async function main() {
 
     await runner.step('plain_click_on_the_osc8_label_does_not_navigate', async () => {
       const target = await pointAtLiveLink(label);
-      await driver.clickWindow(target.relativeX, target.relativeY);
+      await driver.click(target.native);
       // A negative has no signal to wait on. 1s is the window a followed link has
       // needed to reach the probe server: on a pass the next step resolves under it.
       await delay(1_000);
@@ -496,7 +472,7 @@ async function main() {
 
     await runner.step('cmd_click_on_the_osc8_label_reaches_the_system_browser', async () => {
       const target = await pointAtLiveLink(label);
-      await driver.clickWindow(target.relativeX, target.relativeY, { modifiers: { command: true } });
+      await driver.click(target.native, { modifiers: { command: true } });
       await waitFor(() => hits.length > 0, 'the probe server to receive the followed OSC 8 uri', 10_000);
       runner.assert(hits.includes('/osc8-hit'), `Probe server received unexpected path(s): ${JSON.stringify(hits)}`);
     });

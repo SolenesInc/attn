@@ -78,7 +78,7 @@ Preconditions:
 
 - A named instance has no guard of its own against the real service. Turning sharing on, "Forget this install…" and "Delete from server" all reach `https://attn-telemetry.caketroll.cloud` unless the daemon was started with `ATTN_ANALYTICS_INGEST_URL`, which the baseline exports. `make install` and `./attn daemon ensure` start the daemon with the instance shell's environment, so a daemon started without the env file lacks it.
 - With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and Settings › Analytics is absent.
-- The "Usage analytics" switch sits low in Settings › Experimental. A box below the window makes a native click miss: run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-analytics-toggle\"]"}'` before reading its box. Scrolling is setup, not the person's way in.
+- The "Usage analytics" switch sits low in Settings › Experimental; `dom_native_point` scrolls it into view before returning its point.
 - A click that removes the focused control, such as a "Clear…" or "Forget…" confirm, or `m` pressed on a Machine settings button, leaves the page without focus: its keys do nothing until a row or button inside it is clicked.
 - The record lists load when a list opens. A record made while the list is open shows only after `r` or the Refresh button.
 - Turning recording off and on again starts the mirror at the head of the bus: facts from the gap are never recorded.

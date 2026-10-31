@@ -87,6 +87,6 @@ Preconditions:
 - Use `"resumable": true` in the fixture so the relaunch can find the prior conversation in scratch harness storage. Without it the cap reload starts fresh and has no `Measured.` reply to replay.
 - A reload keeps the terminal id and can keep `state_since` when the state stays waiting. Change the fixture banner before a cap action, then read the new banner and replay to prove the process restarted.
 - A parked-window `capture_screenshot` can miss the receipt and terminal layers even when DOM reads find them. The screenshot precondition uses an on-screen app and `capture_native_window_screenshot`; it showed the receipt and instance marker on `drive-1`.
-- Background-cap fields can be below the settings viewport. Scroll each field into view before converting its bounds to a native click. An out-of-window `native_mouse` coordinate can hang the app until it is restarted; `drive-1` reproduced this at `y=1.30375`, with its headless field at `y=992` in a 768px viewport.
+- Background-cap fields can be below the settings viewport; `dom_native_point` scrolls each into view before returning its point.
 - Setting or clearing a cap relaunches the agent at once.
 - Working but wrong: the badge says `2.1k tokens` and the receipt `2,095 tokens` for the same number; and a partially priced session shows a dollar amount with a `*` that only the receipt explains.

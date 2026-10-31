@@ -431,7 +431,7 @@ fn handle_request<R: Runtime>(
 
     let delivery = if matches!(
         bridge_request.action.as_str(),
-        "capture_state" | "capture_binding" | "capture_dismiss"
+        "capture_state" | "capture_binding" | "capture_dismiss" | "capture_native_point"
     ) {
         app.emit_to("capture", "attn://capture/automation", &bridge_request)
     } else {

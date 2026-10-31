@@ -92,12 +92,12 @@ Preconditions:
 
 - Installing the bundled plugin is enough to expose Pi and its auto mode switch; no Pi session needs to start. Wait for the plugin to connect before selecting it.
 - On the baseline at `b292a5aa5`, Guardian model selection remains unreachable after the plugin connects: `[aria-label="Guardian model"]` contains only `Follow session model`. The section reports `harness "pi" is not available. Refresh models after fixing the harness.` ArrowDown and Enter leave the Guardian unset. This verifies no Guardian decision.
-- Proposals sit below the baseline window's viewport. Scroll each Promote or Discard button into view before taking its bounds and clicking natively.
+- Proposals sit below the baseline window's viewport. Scroll each Promote or Discard button into view before resolving its point and clicking natively.
 - `rule`, `host` and `policy` only propose, and nothing over the CLI promotes. A run that expects `automode show` to change after `rule add` has not promoted yet.
 - `env` writes at once, unlike the rest; a shipped forbidden rule keeps a session out of it.
 - `automode show` reads the folder it runs in. From the repository root it prints `trusted_repo  (detected here: …)` and may merge the checkout's rules; run it from a folder outside any repository for the plain view.
 - On the baseline nothing asks for approval: the mock agent is not Pi, so the Guardian never answers and `denials` stays empty. Denials and the Guardian need a real Pi session with the `attn-pi` plugin, as `automode-environment` and `scenario-pi-automode.mjs` run.
-- Proposed rules can be below the settings viewport. Scroll Promote and Discard into view before taking their bounds and clicking natively. Close Settings before driving the picker, then reopen Auto mode for the Guardian read.
+- Proposed rules can be below the settings viewport. Scroll Promote and Discard into view before resolving their points and clicking natively. Close Settings before driving the picker, then reopen Auto mode for the Guardian read.
 - A proposal number is the daemon's counter; take it from the propose output or `--json`, never from an earlier run.
 - `rule add` with no tokens exits 2 with `automode rule add: name the command tokens`.
 - Working but wrong: the Settings section describes itself as "Manage attn's pi automode plugin" though it also holds the environment and the Guardian; and the CLI tells agents to "Promote it in the attn app" while nothing in the app points at a new proposal outside Settings.

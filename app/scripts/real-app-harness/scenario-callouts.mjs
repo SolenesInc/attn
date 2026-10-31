@@ -194,15 +194,7 @@ try {
     runner.assert(receipt.session.id === agents[0].sessionId, 'the terminal keeps native input when the browser returns', receipt.session);
   });
   await runner.step('palette_takes_native_keys_after_browser_focus', async () => {
-    const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-      client.request('dom_bounds', { selector: `${browserTileSelector} .browser-tile-host` }),
-      client.request('get_window_bounds'),
-      client.request('get_terminal_context_menu_state'),
-    ]);
-    await driver.clickWindow(
-      (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-      (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-    );
+    await driver.click(`${browserTileSelector} .browser-tile-host`);
     await client.request('dom_click', { selector: '[data-callout-anchor="commands"]' });
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.pressKey('Escape');

@@ -42,18 +42,6 @@ async function waitForBanner(expected, timeoutMs = 30_000) {
   await client.request('dom_wait', { selector: BANNER, textIncludes: expected, timeoutMs });
 }
 
-async function click(selector) {
-  const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-    client.request('dom_bounds', { selector }),
-    client.request('get_window_bounds'),
-    client.request('get_terminal_context_menu_state'),
-  ]);
-  await driver.clickWindow(
-    (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-    (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-  );
-}
-
 async function paneOf(sessionId) {
   const desktop = await waitForSessionDesktop(client, sessionId, (entry) => entry.panes.some((pane) => pane.sessionId === sessionId && pane.runtimeId), `a tile showing ${sessionId}`);
   return desktop.panes.find((pane) => pane.sessionId === sessionId);
@@ -85,7 +73,7 @@ try {
 
   await runner.step('install_runs_in_a_tile_and_shared_codex_moves_to_it', async () => {
     const before = new Set(observer.sessionsById.keys());
-    await click(BANNER_ACTION);
+    await driver.click(BANNER_ACTION);
     const shell = await observer.waitFor(
       () => [...observer.sessionsById.values()].find((session) => !before.has(session.id) && session.agent === 'shell')?.id,
       'a shell tile running Codex\'s update',
@@ -101,9 +89,9 @@ try {
   });
 
   await runner.step('reload_tiles_moves_the_old_tile_to_the_new_codex', async () => {
-    await click(BANNER_ACTION);
+    await driver.click(BANNER_ACTION);
     await client.request('dom_wait', { selector: CONFIRM, timeoutMs: 10_000 });
-    await click(CONFIRM);
+    await driver.click(CONFIRM);
     await client.request('dom_wait', { selector: BANNER, absent: true, timeoutMs: 30_000 });
     const status = attn('codex', 'status');
     runner.assert(/^server\s+1\.1\.0$/m.test(status) && !/^old tiles/m.test(status), 'no tile runs an older Codex after the reload', status);

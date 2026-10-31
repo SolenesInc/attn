@@ -74,16 +74,6 @@ function prosePrompt(sentence) {
   ].join(' ');
 }
 
-function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
-  const { width, height } = windowBounds.logicalBounds;
-  const chromeX = Math.max(0, width - innerWidth);
-  const chromeY = Math.max(0, height - innerHeight);
-  return {
-    relativeX: (chromeX / 2 + pageX) / width,
-    relativeY: (chromeY + pageY) / height,
-  };
-}
-
 function inside(rect, point) {
   return Boolean(rect)
     && point.x >= rect.left
@@ -92,19 +82,17 @@ function inside(rect, point) {
     && point.y <= rect.top + rect.height;
 }
 
-function terminalPointOutside(paneRects, ...avoid) {
-  for (const pane of paneRects) {
-    const inset = Math.min(24, pane.width / 4, pane.height / 4);
-    const candidates = [
-      { x: pane.left + inset, y: pane.top + inset },
-      { x: pane.left + pane.width - inset, y: pane.top + inset },
-      { x: pane.left + inset, y: pane.top + pane.height - inset },
-      { x: pane.left + pane.width - inset, y: pane.top + pane.height - inset },
-    ];
-    const point = candidates.find((candidate) => avoid.every((rect) => !inside(rect, candidate)));
-    if (point) return point;
-  }
-  return null;
+function terminalTargetOutside(paneSelector, pane, ...avoid) {
+  const inset = Math.min(24, pane.width / 4, pane.height / 4);
+  const corner = [[0, 0], [1, 0], [0, 1], [1, 1]].find(([x, y]) => {
+    const point = { x: pane.left + x * pane.width + (x ? -inset : inset), y: pane.top + y * pane.height + (y ? -inset : inset) };
+    return avoid.every((rect) => !inside(rect, point));
+  });
+  return corner && {
+    selector: paneSelector,
+    at: { x: corner[0], y: corner[1] },
+    offset: { x: corner[0] ? -inset : inset, y: corner[1] ? -inset : inset },
+  };
 }
 
 function workingCommentaryPrompt(sentence, startedMarker, releaseMarker) {
@@ -553,25 +541,20 @@ async function main() {
       const comment = 'checked against the real behaviour';
       await client.request('dom_type', { selector: '.anno-popup-text', text: comment });
 
-      const [typed, windowBounds] = await Promise.all([
-        client.request('get_annotation_state', {}),
-        client.request('get_window_bounds', {}),
-      ]);
-      runner.assert(Boolean(windowBounds?.logicalBounds), `No window bounds: ${JSON.stringify(windowBounds)}`);
-      const outside = terminalPointOutside(typed.paneRects, typed.popupRect, typed.panelRect);
-      runner.assert(Boolean(outside), `No terminal point clears the editor and panel: ${JSON.stringify(typed)}`);
-      const outsideWindow = windowRelativePoint(
-        outside.x,
-        outside.y,
-        windowBounds,
-        typed.viewport.width,
-        typed.viewport.height,
+      const typed = await client.request('get_annotation_state', {});
+      const popupPane = typed.paneRects.find((pane) => contains(pane, typed.popupRect));
+      const outside = popupPane && terminalTargetOutside(
+        `[data-pane-session-id="${sessionId}"] .terminal-container.ghostty-terminal`,
+        popupPane,
+        typed.popupRect,
+        typed.panelRect,
       );
+      runner.assert(Boolean(outside), `No terminal point clears the editor and panel: ${JSON.stringify(typed)}`);
       await client.request('arm_native_pointer_witness', { selector: '.terminal-container.ghostty-terminal' });
-      await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      const outsidePoint = await driver.click(outside);
       const outsideReceipt = await client.request('wait_native_pointer_witness', {});
       runner.assert(outsideReceipt.matches,
-        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsideWindow, outsideReceipt })}`);
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsidePoint, outsideReceipt })}`);
 
       const afterOutside = await client.request('get_annotation_state', {});
       runner.assert(
@@ -583,38 +566,22 @@ async function main() {
         'The outside terminal click did not take focus away from the comment box',
       );
 
-      const quoteRect = afterOutside.popupQuoteRect;
-      runner.assert(Boolean(quoteRect), `The open editor has no quote background: ${JSON.stringify(afterOutside)}`);
-      const quoteWindow = windowRelativePoint(
-        quoteRect.left + quoteRect.width / 2,
-        quoteRect.top + quoteRect.height / 2,
-        windowBounds,
-        afterOutside.viewport.width,
-        afterOutside.viewport.height,
-      );
+      runner.assert(Boolean(afterOutside.popupQuoteRect), `The open editor has no quote background: ${JSON.stringify(afterOutside)}`);
       await client.request('arm_native_pointer_witness', { selector: '.anno-popup-quote' });
-      await driver.clickWindow(quoteWindow.relativeX, quoteWindow.relativeY);
+      const quotePoint = await driver.click('.anno-popup-quote');
       const quoteReceipt = await client.request('wait_native_pointer_witness', {});
       runner.assert(quoteReceipt.matches,
-        `Native editor click landed elsewhere: ${JSON.stringify({ quoteWindow, quoteReceipt })}`);
+        `Native editor click landed elsewhere: ${JSON.stringify({ quotePoint, quoteReceipt })}`);
       let refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
         `Clicking the editor background did not restore its focus and draft: ${JSON.stringify(refocused)}`,
       );
 
-      await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      await driver.click(outside);
       refocused = await client.request('get_annotation_state', {});
-      const commentRect = refocused.popupCommentRect;
-      runner.assert(Boolean(commentRect), `The open editor has no comment box: ${JSON.stringify(refocused)}`);
-      const commentWindow = windowRelativePoint(
-        commentRect.left + commentRect.width / 2,
-        commentRect.top + commentRect.height / 2,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      await driver.clickWindow(commentWindow.relativeX, commentWindow.relativeY);
+      runner.assert(Boolean(refocused.popupCommentRect), `The open editor has no comment box: ${JSON.stringify(refocused)}`);
+      await driver.click('.anno-popup-text');
       refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
@@ -622,29 +589,9 @@ async function main() {
       );
 
       const beforeDrag = refocused.popupRect;
-      const handleRect = refocused.popupDragHandleRect;
-      runner.assert(Boolean(beforeDrag && handleRect), `The open editor has no drag handle: ${JSON.stringify(refocused)}`);
-      const dragFrom = windowRelativePoint(
-        handleRect.left + handleRect.width / 2,
-        handleRect.top + handleRect.height / 2,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      const dragTo = windowRelativePoint(
-        handleRect.left + handleRect.width / 2 + 48,
-        handleRect.top + handleRect.height / 2 + 36,
-        windowBounds,
-        refocused.viewport.width,
-        refocused.viewport.height,
-      );
-      await driver.dragWindow(
-        dragFrom.relativeX,
-        dragFrom.relativeY,
-        dragTo.relativeX,
-        dragTo.relativeY,
-        { steps: 6 },
-      );
+      runner.assert(Boolean(beforeDrag && refocused.popupDragHandleRect), `The open editor has no drag handle: ${JSON.stringify(refocused)}`);
+      const handle = '.anno-popup-drag-handle';
+      await driver.drag(handle, { selector: handle, offset: { x: 48, y: 36 } }, { steps: 6 });
       const afterDrag = await client.request('get_annotation_state', {});
       runner.assert(
         afterDrag.popupOpen

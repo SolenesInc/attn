@@ -156,7 +156,8 @@ actions: `attn` runs an attn verb as that session, `reply` prints text,
 '{"selector":"...","timeoutMs":5000}'`, which waits for a selector. Native
 input: `native_key '{"key":"t","modifiers":["command","shift"]}'`,
 `native_text '{"text":"..."}'`, `native_mouse
-'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates.
+'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates from
+`dom_native_point '{"selector":"..."}'`.
 Capture: `capture_screenshot '{"path":"<file>"}'`. DOM actions (`dom_click`,
 `dispatch_shortcut`, `garden_toggle_frame` and the like) skip native input:
 use them to set up, never as proof of a person's way in. The actions are the

@@ -47,7 +47,7 @@ client.quitApp = async () => {
   client.launch = null;
 };
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client, systemInput: true });
 registerNativeFailureEvidence(runner, { client, driver });
 const fixtureId = `com.attn.capture-fixture.${runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
 const fixture = createWindowDriver({ appPath: options.appPath, bundleId: fixtureId });
@@ -70,6 +70,8 @@ async function screenshot(name) {
 }
 const appVisible = () => execFileSync('osascript', ['-e', `tell application "System Events" to get visible of (first application process whose bundle identifier is "${client.bundleId}")`], { encoding: 'utf8' }).trim() === 'true';
 const mainTitle = path.basename(options.appPath, '.app');
+const captureEditor = { webview: 'capture', selector: '.capture textarea' };
+const captureRecent = { webview: 'capture', selector: '[aria-label="Recent messages"]' };
 const testBinding = 'Control+Alt+B';
 const instance = instanceForAppPath(options.appPath);
 assert.ok(instance, 'Quick Capture scenarios require a named instance');
@@ -370,7 +372,7 @@ try {
     await driver.parkWindow(Math.ceil(main.width * 0.2), { windowTitle: mainTitle });
     runner.registerCleanup('main-position', () => execFileSync('osascript', ['-e',
       `tell application "System Events" to tell (first application process whose bundle identifier is "${client.bundleId}") to set position of first window to {${main.x}, ${main.y}}`]));
-    await driver.clickWindow(0.1, 0.1, { windowTitle: mainTitle });
+    await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle });
     assert.equal((await state()).nativeFocused, false, 'The deliberate main-window click must transfer native key focus');
     await client.request('capture_dismiss');
     assert.equal(await driver.frontmostBundleId(), driver.bundleId);
@@ -393,14 +395,12 @@ try {
   });
   await runner.step('native_pointer_keeps_capture_keyboard_focus', async () => {
     const before = await state();
-    const editor = before.controls.editor;
-    await driver.clickWindow(editor.x, editor.y, { windowTitle: 'Quick Capture' });
+    await driver.click(captureEditor, { windowTitle: 'Quick Capture' });
     assert.equal((await state()).nativeFocused, true, 'Clicking the editor keeps the panel key');
     await driver.runInputDriver(['global_text', '--text', ' after editor click']);
     assert.equal((await state()).text, before.text + ' after editor click');
     await key('arrowleft');
-    const recent = (await state()).controls.recent;
-    await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
+    await driver.click(captureRecent, { windowTitle: 'Quick Capture' });
     assert.equal((await state({ view: 'recent' })).nativeFocused, true, 'Clicking Recent keeps the panel key');
     await screenshot('recent-messages.png');
     await key('escape'); await state({ view: 'compose' });
@@ -413,13 +413,12 @@ try {
     await driver.runInputDriver(['global_text', '--text', before.text]);
   });
   await runner.step('panel_surface_drags_the_panel', async () => {
-    const editor = (await state()).controls.editor;
-    await driver.clickWindow(editor.x, editor.y, { windowTitle: 'Quick Capture' });
+    await driver.click(captureEditor, { windowTitle: 'Quick Capture' });
     const before = await captureStack();
-    await driver.dragWindow(0.5, 0.02, 0.3, -0.21, { windowTitle: 'Quick Capture' });
+    const pointer = { x: before.width * -0.2, y: before.height * -0.23 };
+    await driver.drag({ webview: 'capture', selector: 'main.capture', at: { x: 0.5, y: 0.02 } }, { by: pointer }, { windowTitle: 'Quick Capture' });
     const after = await captureStack();
     const moved = { x: after.x - before.x, y: after.y - before.y };
-    const pointer = { x: before.width * -0.2, y: before.height * -0.23 };
     runner.writeJson('panel-drag.json', { before, after, moved, pointer });
     assert.ok(Math.abs(moved.x - pointer.x) <= 2 && Math.abs(moved.y - pointer.y) <= 2, `Dragging the panel's top edge moves it with the pointer: moved ${JSON.stringify(moved)}, pointer ${JSON.stringify(pointer)}`);
     assert.equal((await state()).focused, true, 'Dragging keeps the message field focused');
@@ -509,8 +508,7 @@ try {
     await screenshot('dropped-pdf.png');
   }));
   await runner.step('remove_image_and_keyboard_mailbox', async () => {
-    const remove = (await state()).controls.remove;
-    await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
+    await driver.click({ webview: 'capture', selector: '.capture-files button' }, { windowTitle: 'Quick Capture' });
     assert.equal((await state({ attachmentCount: 2 })).files.length, 2);
     await key('2', ['command']);
     assert.equal((await state({ mailbox })).mailbox, mailbox);
@@ -542,8 +540,7 @@ try {
   });
   await runner.step('plain_recent_history', async () => {
     await openCapture();
-    const recent = (await state()).controls.recent;
-    await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
+    await driver.click(captureRecent, { windowTitle: 'Quick Capture' });
     await recordHostedStep('plain-recent', async () => {
     const actual = await state({ view: 'recent', recentText: path.basename(pdfPath) });
     assert.ok(actual.recentRows.some(row => row.text.includes('Read') && row.text.includes(path.basename(pdfPath))));
@@ -577,8 +574,7 @@ try {
       const receipts = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'mailbox-image-receipt.json')));
       assert.ok(receipts.some(file => file.name === path.basename(walkthroughPdf)));
       await openCapture();
-      const recent = (await state()).controls.recent;
-      await driver.clickWindow(recent.x, recent.y, { windowTitle: 'Quick Capture' });
+      await driver.click(captureRecent, { windowTitle: 'Quick Capture' });
       await state({ view: 'recent', recentText: path.basename(walkthroughPdf), selectedText: 'Check the launch notes' });
       await key('arrowup');
       await state({ view: 'recent', selectedText: 'Keep the release checklist handy' });

@@ -54,17 +54,6 @@ const screenshot = async name => {
   await driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId });
 };
 const waitForChainFocus = (id, description) => waitForSelector(`${popup} [data-chain-session="${id}"]:focus`, description);
-const nativeTarget = async selector => {
-  const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-    client.request('dom_scroll_into_view', { selector }),
-    client.request('get_window_bounds'),
-    client.request('get_terminal_context_menu_state'),
-  ]);
-  return {
-    x: (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-    y: (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-  };
-};
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -119,8 +108,7 @@ try {
     await waitForSelector(header, 'Builder header');
     runner.assert((await text(header)) === 'Builder', 'header spells out the assigned role');
     const row = `[data-testid="sidebar-session-${builder}"]`;
-    const rowTarget = await nativeTarget(row);
-    await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
+    await driver.hover(row);
     await waitForSelector(popup, 'hovered chain');
     await waitForChainFocus(builder, 'row hover focuses the current agent');
     runner.assert((await text(`${popup} .delegation-chain-heading`)).includes('Build chain navigator'), 'the shared card contains the complete title');
@@ -133,15 +121,14 @@ try {
     await waitForChainFocus(root, 'row hover accepts native arrows');
     await driver.pressKey('Escape');
     await waitForSelector(popup, 'Escape closes the hover card', { absent: true });
-    await driver.movePointerInWindow(rowTarget.x, rowTarget.y);
+    await driver.hover(row);
     runner.assert(!await exists(popup), 'dismissal does not reopen under a stationary pointer');
-    const headerTarget = await nativeTarget(header);
-    await driver.movePointerInWindow(headerTarget.x, headerTarget.y);
+    await driver.hover(header);
     await waitForChainFocus(builder, 'header hover focuses the current agent');
     await driver.pressKey('ArrowDown');
     await waitForChainFocus(child, 'header hover accepts native arrows');
     await driver.pressKey('Escape');
-    await driver.clickWindow(headerTarget.x, headerTarget.y);
+    await driver.click(header);
     await waitForChainFocus(builder, 'click focuses the current agent');
     await hold();
     await driver.pressKey('Escape');

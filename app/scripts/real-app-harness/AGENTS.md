@@ -37,6 +37,18 @@ repository root.
   `menu`, scrolling or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
+- Point every native pointer action at an element: `driver.click`,
+  `rightClick`, `hover`, `scroll`, `drag` and `typeInto` take a selector or
+  `{ selector, at, offset }` (`at` is a fraction of the box, default its
+  center; `offset` adds CSS pixels). Before measuring, the app waits for the
+  element to appear and for it and its ancestors to stop moving, and scrolls
+  it into view when its point is offscreen or covered; `typeInto` also waits
+  for the element to take focus before typing. The drivers send no input to
+  raw coordinates, so a scenario never measures geometry or waits for an
+  animation before acting. `get_pane_cell_rect` returns a terminal cell's
+  `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
+  Quick Capture targets add `webview: 'capture'`, and its driver takes
+  `systemInput: true` to keep system-level input.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need

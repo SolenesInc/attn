@@ -9,6 +9,7 @@ import {
   waitForNativePointerWitness,
 } from './nativePointerWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
+import { parseNativeTarget, settledNativePoint, waitForFiniteAnimations } from './uiAutomationSettledTarget';
 import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
@@ -372,13 +373,10 @@ export async function runDomAutomationAction(
       if (!(element instanceof HTMLElement)) {
         throw new Error(`dom_wait_finite_animations selector not found in DOM: ${selector}`);
       }
-      const animations = element.getAnimations({ subtree: true }).filter((animation) => {
-        const endTime = animation.effect?.getComputedTiming().endTime;
-        return typeof endTime === 'number' && Number.isFinite(endTime);
-      });
-      await Promise.all(animations.map((animation) => animation.finished));
-      return { finished: animations.length };
+      return { finished: await waitForFiniteAnimations(selector, element.getAnimations({ subtree: true })) };
     }
+    case 'dom_native_point':
+      return settledNativePoint(parseNativeTarget(payload));
     case 'dom_bounds': {
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_bounds requires selector');

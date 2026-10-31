@@ -13,7 +13,6 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
-import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance } from './harnessInstance.mjs';
@@ -40,16 +39,6 @@ const LONG_RUN_TURN = {
   includes: LONG_RUN_PROMPT,
   actions: [{ type: 'delay', ms: LONG_RUN_MS }, { type: 'reply', text: '1 ... 2000', state: 'idle' }],
 };
-
-function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
-  const { width, height } = windowBounds.logicalBounds;
-  const chromeX = Math.max(0, width - innerWidth);
-  const chromeY = Math.max(0, height - innerHeight);
-  return {
-    relativeX: (chromeX / 2 + pageX) / width,
-    relativeY: (chromeY + pageY) / height,
-  };
-}
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -224,13 +213,6 @@ async function main() {
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
       await driver.activateApp();
-      const logicalBounds = await getFrontWindowBounds(null, {
-        appPath: options.appPath,
-        client,
-        driver,
-      });
-      runner.assert(Boolean(logicalBounds), `window bounds available: ${JSON.stringify(logicalBounds)}`);
-      const windowBounds = { logicalBounds };
       const cellA = await client.request('get_pane_cell_rect', {
         sessionId: agentId,
         paneId: agentPaneId,
@@ -241,20 +223,14 @@ async function main() {
         paneId: agentPaneId,
         cell: { row: 15, col: 40 },
       });
-      const points = [cellA, cellB].map((cell) => windowRelativePoint(
-        cell.centerX,
-        cell.centerY,
-        windowBounds,
-        cell.innerWidth,
-        cell.innerHeight,
-      ));
-      note('pointer movement targets', { points });
+      const targets = [cellA.target, cellB.target];
+      note('pointer movement targets', { targets });
 
       const until = Date.now() + QUIET_WINDOW_MS * 2.5;
       let moves = 0;
       while (Date.now() < until) {
-        for (const point of points) {
-          await driver.movePointerInWindow(point.relativeX, point.relativeY);
+        for (const target of targets) {
+          await driver.hover(target);
           moves += 1;
         }
         await delay(2_000);
