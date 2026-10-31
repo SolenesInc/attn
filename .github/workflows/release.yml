@@ -46,7 +46,7 @@ jobs:
     needs: validate-tag
     permissions:
       contents: write
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Resolve release tag
