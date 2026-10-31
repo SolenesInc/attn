@@ -267,6 +267,12 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
+  const witnessNativePointer = async (selector, act) => {
+    await client.request('arm_native_pointer_witness', { selector });
+    const point = await act();
+    const receipt = await client.request('wait_native_pointer_witness', {});
+    return { point, receipt };
+  };
   const cwd = path.join(runner.sessionDir, 'annotated');
   let sessionId = null;
   let paneId = null;
@@ -550,11 +556,10 @@ async function main() {
         typed.panelRect,
       );
       runner.assert(Boolean(outside), `No terminal point clears the editor and panel: ${JSON.stringify(typed)}`);
-      await client.request('arm_native_pointer_witness', { selector: '.terminal-container.ghostty-terminal' });
-      const outsidePoint = await driver.click(outside);
-      const outsideReceipt = await client.request('wait_native_pointer_witness', {});
-      runner.assert(outsideReceipt.matches,
-        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsidePoint, outsideReceipt })}`);
+      const terminal = '.terminal-container.ghostty-terminal';
+      const outsideClick = await witnessNativePointer(terminal, () => driver.click(outside));
+      runner.assert(outsideClick.receipt.matches,
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsideClick })}`);
 
       const afterOutside = await client.request('get_annotation_state', {});
       runner.assert(
@@ -567,21 +572,23 @@ async function main() {
       );
 
       runner.assert(Boolean(afterOutside.popupQuoteRect), `The open editor has no quote background: ${JSON.stringify(afterOutside)}`);
-      await client.request('arm_native_pointer_witness', { selector: '.anno-popup-quote' });
-      const quotePoint = await driver.click('.anno-popup-quote');
-      const quoteReceipt = await client.request('wait_native_pointer_witness', {});
-      runner.assert(quoteReceipt.matches,
-        `Native editor click landed elsewhere: ${JSON.stringify({ quotePoint, quoteReceipt })}`);
+      const quoteClick = await witnessNativePointer('.anno-popup-quote', () => driver.click('.anno-popup-quote'));
+      runner.assert(quoteClick.receipt.matches,
+        `Native editor click landed elsewhere: ${JSON.stringify(quoteClick)}`);
       let refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
         `Clicking the editor background did not restore its focus and draft: ${JSON.stringify(refocused)}`,
       );
 
-      await driver.click(outside);
+      const secondOutsideClick = await witnessNativePointer(terminal, () => driver.click(outside));
+      runner.assert(secondOutsideClick.receipt.matches,
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, secondOutsideClick })}`);
       refocused = await client.request('get_annotation_state', {});
       runner.assert(Boolean(refocused.popupCommentRect), `The open editor has no comment box: ${JSON.stringify(refocused)}`);
-      await driver.click('.anno-popup-text');
+      const commentClick = await witnessNativePointer('.anno-popup-text', () => driver.click('.anno-popup-text'));
+      runner.assert(commentClick.receipt.matches,
+        `Native comment box click landed elsewhere: ${JSON.stringify(commentClick)}`);
       refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
@@ -591,7 +598,12 @@ async function main() {
       const beforeDrag = refocused.popupRect;
       runner.assert(Boolean(beforeDrag && refocused.popupDragHandleRect), `The open editor has no drag handle: ${JSON.stringify(refocused)}`);
       const handle = '.anno-popup-drag-handle';
-      await driver.drag(handle, { selector: handle, offset: { x: 48, y: 36 } }, { steps: 6 });
+      const drag = await witnessNativePointer(
+        '.anno-popup',
+        () => driver.drag(handle, { selector: handle, offset: { x: 48, y: 36 } }, { steps: 6 }),
+      );
+      runner.assert(drag.receipt.matches,
+        `Native drag released outside the comment editor: ${JSON.stringify(drag)}`);
       const afterDrag = await client.request('get_annotation_state', {});
       runner.assert(
         afterDrag.popupOpen
