@@ -33,13 +33,16 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	if err := validate(name); err != nil {
 		return nil, err
 	}
-	previous, movedHome, err := d.renameCrewMember(member, name)
+	renamed, err := d.renameCrewMember(member.ID, name)
 	if err != nil {
 		return nil, err
 	}
 	d.publishArrangementChanged(member.ProfileID)
-	d.logf("crew: member %s renamed from %s to %s", member.ID, previous, name)
-	result := &protocol.CrewRenameResult{Member: member.ID, Name: name, PreviousName: previous, HomeDir: movedHome}
+	d.logf("crew: member %s renamed from %s to %s", member.ID, renamed.previous, name)
+	result := &protocol.CrewRenameResult{Member: member.ID, Name: name, PreviousName: renamed.previous, HomeDir: renamed.movedHome}
+	if renamed.homeMovesAtWake {
+		result.HomeMovesAtWake = protocol.Ptr(true)
+	}
 	if d.crewBindingLive(member) {
 		if err := d.renameSession(&protocol.RenameSessionMessage{SessionID: member.BindingSession, Label: name}); err != nil {
 			d.logf("crew: %s's session %s keeps its label: %v", name, member.BindingSession, err)
@@ -50,32 +53,41 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	return result, nil
 }
 
-func (d *Daemon) renameCrewMember(asked crew.Member, name string) (previous string, movedHome *string, err error) {
-	if asked.InDataDir() || strings.EqualFold(asked.Name, name) {
-		previous, err = d.store.RenameCrewMember(asked.ID, name)
-		if err == nil {
-			d.publishFact(FactCrewUpdated, asked.ID, nil)
-		}
-		return previous, nil, err
-	}
-	if holder, taken, err := d.crewMemberIn(asked.ProfileID, name); err != nil {
-		return "", nil, err
-	} else if taken && holder.ID != asked.ID {
-		return "", nil, fmt.Errorf("the name %q is already taken by %s in this profile", name, holder.Name)
-	}
-	member, doc, err := d.crewMember(asked.ID)
+type crewRenaming struct {
+	previous        string
+	movedHome       *string
+	homeMovesAtWake bool
+}
+
+func (d *Daemon) renameCrewMember(key, name string) (crewRenaming, error) {
+	member, doc, err := d.crewMember(key)
 	if err != nil {
-		return "", nil, err
+		return crewRenaming{}, err
 	}
-	moved, _, err := d.relocateCrewHome(member, doc.Rev, filepath.Dir(member.HomeDir(d.dataRoot)), name, func(move store.CrewHomeMove) ([]store.DocumentWriteResult, error) {
+	homeFits := member.InDataDir() || crewHomeNamedFor(member.Home, name)
+	if homeFits || d.crewBindingLive(member) {
+		previous, err := d.store.RenameCrewMember(member.ID, name)
+		if err != nil {
+			return crewRenaming{}, err
+		}
+		d.publishFact(FactCrewUpdated, member.ID, nil)
+		return crewRenaming{previous: previous, homeMovesAtWake: !homeFits}, nil
+	}
+	if holder, taken, err := d.crewMemberIn(member.ProfileID, name); err != nil {
+		return crewRenaming{}, err
+	} else if taken && holder.ID != member.ID {
+		return crewRenaming{}, fmt.Errorf("the name %q is already taken by %s in this profile", name, holder.Name)
+	}
+	var previous string
+	moved, _, err := d.relocateCrewHome(member, doc.Rev, filepath.Dir(member.Home), name, func(move store.CrewHomeMove) ([]store.DocumentWriteResult, error) {
 		var written []store.DocumentWriteResult
 		previous, written, err = d.store.RenameCrewMemberMovingHome(member.ID, name, move, time.Now())
 		return written, err
 	})
 	if err != nil {
-		return "", nil, err
+		return crewRenaming{}, err
 	}
-	return previous, &moved.Home, nil
+	return crewRenaming{previous: previous, movedHome: &moved.Home}, nil
 }
 
 func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage) {

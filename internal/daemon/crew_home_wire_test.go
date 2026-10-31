@@ -124,8 +124,6 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if err != nil || !strings.Contains(protocol.Deref(prime.Guidance), "A letter that moves with me.") {
 		t.Fatalf("moved letters: %+v %v", prime, err)
 	}
-	_, err = cli.CrewRename("Keeper", "Anchor")
-	crewErrorContains(t, err, "KEEPER is awake")
 }
 
 func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
@@ -269,11 +267,11 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 }
 
 func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
-	for _, relocation := range []string{"move", "rename"} {
+	for _, relocation := range []string{"move", "rename", "rename while awake"} {
 		t.Run(relocation, func(t *testing.T) {
 			w := newCrewV2World(t, fakeagent.Claude)
 			cli := w.Client()
-			if relocation == "rename" {
+			if relocation != "move" {
 				moveCrewHome(t, w, "Keel")
 			}
 			home := crewRosterMember(t, cli, "keel").HomeDir
@@ -285,10 +283,21 @@ func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 			setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes)})
 			inNotes := sleepAfterADay(t, w, "Keel")
 
-			if relocation == "move" {
+			switch relocation {
+			case "move":
 				moveCrewHome(t, w, "Keel")
-			} else if _, err := cli.CrewRename("Keel", "Keeper"); err != nil {
-				t.Fatal(err)
+			case "rename":
+				if _, err := cli.CrewRename("Keel", "Keeper"); err != nil {
+					t.Fatal(err)
+				}
+			case "rename while awake":
+				day := wakeCrew(t, cli, "Keel", "")
+				w.Launched(string(day.SessionID)).Prompted()
+				if _, err := cli.CrewRename("Keel", "Keeper"); err != nil {
+					t.Fatal(err)
+				}
+				crewHandoff(t, cli, string(day.SessionID), "Renamed today.", false)
+				sleepAfterADay(t, w, "Keeper")
 			}
 			moved := crewRosterMember(t, cli, "keel").HomeDir
 			if moved == home {

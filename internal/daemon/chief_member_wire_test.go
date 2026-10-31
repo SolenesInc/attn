@@ -183,6 +183,45 @@ func TestChiefMailReachesItAfterSleepAndRename(t *testing.T) {
 	crewErrorContains(t, err, "reserved")
 }
 
+func TestAnOnboardingChiefTakesTheNameItAgreesOnAndItsHomeFollowsAtItsNextWake(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	fresh := turnOnCrewV2(t, w)
+	wakeConfiguredChief(t, w, cli)
+	day := chiefSession(t, cli)
+
+	renamed, err := cli.WithGardenProfile("", day).CrewRename("chief", "Alfred")
+	if err != nil || renamed.Name != "Alfred" || renamed.HomeDir != nil || !protocol.Deref(renamed.HomeMovesAtWake) || protocol.Deref(renamed.SessionID) != day {
+		t.Fatalf("the onboarding Chief renaming itself = %+v, %v; want Alfred now and its home moving at its next wake", renamed, err)
+	}
+	awake := chiefOfRoster(t, crewRoster(t, cli))
+	session := queriedSession(t, cli, string(day))
+	if awake.Name != "Alfred" || awake.HomeDir != fresh.HomeDir || session.Label != "Alfred" || session.Directory != fresh.HomeDir {
+		t.Fatalf("while awake, Alfred = %+v in session %+v; want the new name and the home its session works from", awake, session)
+	}
+	crewHandoff(t, cli, string(day), "Onboarding: named Alfred; delegation roles are next.", false)
+
+	woken := wakeCrew(t, cli, "chief", "")
+	next := w.Launched(string(woken.SessionID))
+	home := filepath.Join(filepath.Dir(fresh.HomeDir), "alfred")
+	asleepAgain := chiefOfRoster(t, crewRoster(t, cli))
+	if asleepAgain.ID != fresh.ID || asleepAgain.HomeDir != home || asleepAgain.CharterPath != filepath.Join(home, "CHARTER.md") {
+		t.Fatalf("Alfred after its next wake = %+v; want the same member with its home at %s", asleepAgain, home)
+	}
+	if _, err := os.Stat(fresh.HomeDir); !os.IsNotExist(err) {
+		t.Fatalf("the Chief's old home folder remains: %v", err)
+	}
+	if session := queriedSession(t, cli, string(woken.SessionID)); session.Directory != home {
+		t.Fatalf("Alfred's next day launched in %s, want %s", session.Directory, home)
+	}
+	guidance := launchGuidance(t, next)
+	for _, want := range []string{"You are **Alfred**", "You are this profile's Chief", "Onboarding: named Alfred; delegation roles are next.", "Onboarding isn't finished"} {
+		if !strings.Contains(guidance, want) {
+			t.Fatalf("Alfred's next guidance lacks %q: %s", want, guidance)
+		}
+	}
+}
+
 func TestTheChiefKeepsItsRoleAndAuthorityAcrossClear(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

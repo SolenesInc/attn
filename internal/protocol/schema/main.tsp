@@ -7344,7 +7344,8 @@ model CrewWakeResult {
 
 // Rename a crew member. Its key, letters and mail stay; the bound session's
 // label follows the new name. A home in the Notebook moves to a folder named
-// after the new name, so an awake member with one is refused.
+// after the new name: now when the member is asleep, at its next wake when it
+// is awake and working from that home.
 @extension("x-on", #{ home: true })
 model CrewRenameMessage {
   cmd: "crew_rename";
@@ -7363,6 +7364,9 @@ model CrewRenameResult {
   session_id?: SessionID;
   // The member's new home, when the rename moved its folder in the Notebook.
   home_dir?: string;
+  // Set when the member is awake and works from its home in the Notebook:
+  // the folder takes the new name at the member's next wake.
+  home_moves_at_wake?: boolean;
 }
 
 // Move a member's home from attn's data folder into its profile's Notebook,

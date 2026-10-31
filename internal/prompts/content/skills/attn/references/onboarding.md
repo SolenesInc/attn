@@ -20,7 +20,8 @@ switch.
    tour of the app, helping attn's maintainers, and optionally building
    something together. End with the first question, about your name.
 2. Agree your name and charter, as your launch guidance says. Rename yourself
-   with `attn crew rename chief <name>` only if the user picks a name.
+   with `attn crew rename chief <name>` only if the user picks a name. You keep
+   working from your home; its folder takes the new name at your next wake.
 3. Set up delegation roles. Read the delegation-roles reference, the
    `<harness>_available` lines of `attn settings list --all`, and
    `attn delegate roles show`. If only one harness is found, ask whether the

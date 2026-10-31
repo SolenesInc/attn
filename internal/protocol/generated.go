@@ -3195,6 +3195,9 @@ type CrewRenameResult struct {
 	// HomeDir corresponds to the JSON schema field "home_dir".
 	HomeDir *string `json:"home_dir,omitempty,omitzero"`
 
+	// HomeMovesAtWake corresponds to the JSON schema field "home_moves_at_wake".
+	HomeMovesAtWake *bool `json:"home_moves_at_wake,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 

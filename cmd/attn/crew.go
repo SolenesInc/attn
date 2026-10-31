@@ -115,7 +115,8 @@ commands:
   rename <member> <name> [--json]
         Give the member a new name, unique in its profile. Its key, letters,
         mail and seeds stay. A home in the Notebook moves to a folder named
-        after the new name, so the member must be asleep. Needs crew_v2_enabled.
+        after the new name: at once when the member is asleep, at its next
+        wake when it is awake. Needs crew_v2_enabled.
 
   move-home <member> [--json]
         Move the member's home from attn's data folder into its profile's
@@ -509,6 +510,10 @@ func runCrewRename(args []string) {
 	}
 	if result.HomeDir != nil {
 		fmt.Printf("%s is now %s, and its home moved to %s; its key %s, letters and mail stay.\n", result.PreviousName, result.Name, *result.HomeDir, crew.KeyRefPrefix+result.Member)
+		return
+	}
+	if protocol.Deref(result.HomeMovesAtWake) {
+		fmt.Printf("%s is now %s; its home keeps its folder while it is awake and moves to one named after %s at its next wake. Its key %s, letters and mail stay.\n", result.PreviousName, result.Name, result.Name, crew.KeyRefPrefix+result.Member)
 		return
 	}
 	fmt.Printf("%s is now %s; its key %s, home, letters and mail stay.\n", result.PreviousName, result.Name, crew.KeyRefPrefix+result.Member)

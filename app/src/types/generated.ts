@@ -3620,11 +3620,12 @@ export enum CrewRenameMessageCmd {
 }
 
 export interface CrewRenameResult {
-    home_dir?:     string;
-    member:        string;
-    name:          string;
-    previous_name: string;
-    session_id?:   string;
+    home_dir?:           string;
+    home_moves_at_wake?: boolean;
+    member:              string;
+    name:                string;
+    previous_name:       string;
+    session_id?:         string;
     [property: string]: any;
 }
 
@@ -3642,11 +3643,12 @@ export enum CrewRenameResultMessageEvent {
 }
 
 export interface CrewRenameResultObject {
-    home_dir?:     string;
-    member:        string;
-    name:          string;
-    previous_name: string;
-    session_id?:   string;
+    home_dir?:           string;
+    home_moves_at_wake?: boolean;
+    member:              string;
+    name:                string;
+    previous_name:       string;
+    session_id?:         string;
     [property: string]: any;
 }
 
@@ -21810,6 +21812,7 @@ const typeMap: any = {
     ], "any"),
     "CrewRenameResult": o([
         { json: "home_dir", js: "home_dir", typ: u(undefined, "") },
+        { json: "home_moves_at_wake", js: "home_moves_at_wake", typ: u(undefined, true) },
         { json: "member", js: "member", typ: "" },
         { json: "name", js: "name", typ: "" },
         { json: "previous_name", js: "previous_name", typ: "" },
@@ -21824,6 +21827,7 @@ const typeMap: any = {
     ], "any"),
     "CrewRenameResultObject": o([
         { json: "home_dir", js: "home_dir", typ: u(undefined, "") },
+        { json: "home_moves_at_wake", js: "home_moves_at_wake", typ: u(undefined, true) },
         { json: "member", js: "member", typ: "" },
         { json: "name", js: "name", typ: "" },
         { json: "previous_name", js: "previous_name", typ: "" },

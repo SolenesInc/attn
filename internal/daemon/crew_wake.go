@@ -300,6 +300,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 			return nil, err
 		}
 	}
+	member = d.moveHomeToItsName(member)
 	profile, err := d.liveLaunchProfile(member.ProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("wake %s: %w", member.Name, err)

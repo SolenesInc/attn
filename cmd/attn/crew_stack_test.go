@@ -226,7 +226,7 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 
 func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "keel")
 	writeCharter(t, s, "trellis")
 	s.Start()
@@ -244,6 +244,10 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	}
 	requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"))
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
+	var wake protocol.CrewWakeResult
+	s.Attn("crew", "wake", "Anchor", "--json").JSON(t, &wake)
+	s.Launched(string(wake.SessionID)).Prompted()
+	requireStdout(t, s.Attn("crew", "rename", "Anchor", "Keeper"), "Anchor is now Keeper; its home keeps its folder while it is awake and moves to one named after Keeper at its next wake. Its key member:keel, letters and mail stay.")
 }
 
 func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {

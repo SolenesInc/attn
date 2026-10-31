@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -42,6 +43,33 @@ func reserveCrewHome(parent, name string) (string, error) {
 		}
 		candidate = fmt.Sprintf("%s-%d", base, n)
 	}
+}
+
+func crewHomeNamedFor(home, name string) bool {
+	folder, base := filepath.Base(home), strings.ToLower(name)
+	if folder == base {
+		return true
+	}
+	suffix, ok := strings.CutPrefix(folder, base+"-")
+	n, err := strconv.Atoi(suffix)
+	return ok && err == nil && n >= 2 && strconv.Itoa(n) == suffix
+}
+
+func (d *Daemon) moveHomeToItsName(member crew.Member) crew.Member {
+	if member.InDataDir() || crewHomeNamedFor(member.Home, member.Name) {
+		return member
+	}
+	current, doc, err := d.crewMember(member.ID)
+	if err != nil {
+		d.logf("crew: %s's home stays at %s for this wake: %v", member.Name, member.Home, err)
+		return member
+	}
+	moved, _, err := d.relocateCrewHome(current, doc.Rev, filepath.Dir(current.Home), current.Name, d.commitCrewHomeMove)
+	if err != nil {
+		d.logf("crew: %s's home stays at %s for this wake: %v", current.Name, current.Home, err)
+		return current
+	}
+	return moved
 }
 
 type crewHomeCommit func(store.CrewHomeMove) ([]store.DocumentWriteResult, error)
