@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -440,7 +441,7 @@ func TestSharedHost_ShellCloseHandlesIgnoredHangup(t *testing.T) {
 		if info.Signal != "" || info.ExitCode != 23 {
 			t.Fatalf("shell exit = %+v, want its TERM trap to exit 23 despite ignored HUP", info)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatal("missing shell exit notification")
 	}
 }
@@ -669,7 +670,7 @@ func TestSharedHost_BlockedTerminationDoesNotBlockAnotherSession(t *testing.T) {
 		if err != nil {
 			t.Fatalf("termination call: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatal("termination call did not observe the child exit")
 	}
 }

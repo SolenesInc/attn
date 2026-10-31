@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/procwait"
 	"net"
 	"os"
@@ -493,7 +494,7 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 			t.Fatalf("Atoi(pid file %q) error: %v", line, parseErr)
 		}
 		pid = parsedPID
-	case <-time.After(5 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatalf("timed out waiting for fake worker pid file at %s", pidFile)
 	}
 
@@ -503,7 +504,7 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 		if err == nil || !errors.Is(err, context.Canceled) {
 			t.Fatalf("Spawn() error = %v, want context canceled", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatal("Spawn() did not return after context cancellation")
 	}
 

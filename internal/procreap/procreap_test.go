@@ -2,6 +2,7 @@ package procreap
 
 import (
 	"context"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"os/exec"
@@ -226,8 +227,8 @@ func awaitReady(t *testing.T, fifo string) {
 		if err != nil {
 			t.Fatalf("open ready pipe: %v", err)
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the process never reported ready within 10s")
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatalf("the process never reported ready within %s", fakeagent.HangGuard)
 	}
 }
 

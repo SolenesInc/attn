@@ -11,6 +11,10 @@
     {
       "name": "anti-slop",
       "specifier": "./app/lint/anti-slop/index.ts"
+    },
+    {
+      "name": "attn",
+      "specifier": "./app/lint/attn/index.ts"
     }
   ],
   "rules": {
@@ -47,6 +51,71 @@
           {
             "property": "waitForTimeout",
             "message": "A fixed pause makes a spec slow and lets it pass by luck. Wait on what the page shows (expect, expect.poll, page.waitForFunction), or install page.clock and runFor the timers the behavior depends on."
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "app/src/test/**",
+        "plugins/*/test/**",
+        "sdk/*/test/**"
+      ],
+      "rules": {
+        "attn/no-real-time-waits": [
+          "error",
+          {
+            "allowed": {
+              "app/src/App.desktops.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/App.moveLeaf.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/application/useAppDeepLinks.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/LocationPicker.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/MarkdownReader/anchoring/pipelineParity.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/MigrationPicker/MigrationPicker.flow.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/ProfileSwitcher.keyboard.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/SessionTerminalDesktop.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.attentionRing.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.paneHeader.test.tsx": "polls with Testing Library's findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/components/Sidebar.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/hooks/useDaemonSocket.profiles.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "app/src/hooks/useDaemonSocket.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
+              "plugins/attn-pi/test/driver.test.ts": "sleeps on a real setTimeout; have the fake resolve a promise when the awaited call arrives",
+              "plugins/attn-pi/test/netproxy.test.ts": "sleeps on a real setTimeout; have the fake resolve a promise when the awaited call arrives",
+              "plugins/attn-pi/test/suite-reload-probe.ts": "sleeps on a real setTimeout; have the fake resolve a promise when the awaited call arrives",
+              "plugins/attn-pi/test/suite.test.ts": "sleeps on a real setTimeout; have the fake resolve a promise when the awaited call arrives",
+              "sdk/plugin/test/client.test.ts": "sleeps with Bun.sleep; have the fake resolve a promise when the awaited call arrives"
+            }
+          }
+        ],
+        "attn/no-mocking-attn-modules": [
+          "error",
+          {
+            "allowed": {
+              "app/src/App.desktops.test.tsx": "mocks 14 of attn's own modules; use the real ones",
+              "app/src/App.moveLeaf.test.tsx": "mocks attn's own components/GhosttyTerminal, pty/bridge; use the real module",
+              "app/src/application/useAppDiagnostics.test.tsx": "mocks attn's own utils/diagnosticReport; use the real module",
+              "app/src/application/useSessionLaunch.placement.test.tsx": "mocks attn's own pty/bridge; use the real module",
+              "app/src/components/LocationPicker.test.tsx": "mocks attn's own hooks/useFilesystemSuggestions; use the real module",
+              "app/src/components/MarkdownReader/anchoring/anchoring.test.ts": "mocks attn's own rebase; use the real module",
+              "app/src/components/SessionTerminalDesktop.test.tsx": "mocks 4 of attn's own modules; use the real ones",
+              "app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx": "mocks attn's own NotebookSurface; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.attentionRing.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.closeFocusedLeaf.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.paneHeader.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.pointerActivity.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.readyFocus.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.tileLeaves.test.tsx": "mocks attn's own BrowserTileBody, GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.zoomMode.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/terminalKeyHandler.test.ts": "mocks attn's own shortcuts/useShortcut; use the real module",
+              "app/src/components/SessionTerminalDesktop/useGhosttyPaneRuntime.test.ts": "mocks attn's own pty/bridge; use the real module",
+              "app/src/components/Toast.lifecycle.test.tsx": "mocks attn's own contexts/DaemonApiContext; use the real module",
+              "app/src/hooks/useDesktopRuntimeController.test.ts": "mocks attn's own components/SessionTerminalDesktop/paneRuntimeEventRouter; use the real module",
+              "app/src/store/sessions.test.ts": "mocks attn's own pty/bridge; use the real module",
+              "app/src/test/renderApp.tsx": "stubs the terminal's WebAssembly, which jsdom cannot run"
+            }
           }
         ]
       }

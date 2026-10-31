@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -602,7 +603,7 @@ func requireAbandoned(t *testing.T, backend *WorkerBackend, host ptyhost.HostReg
 	t.Helper()
 	select {
 	case <-exited:
-	case <-time.After(10 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatalf("terminal %s was never stopped", id)
 	}
 	if err := backend.commitSharedSession(context.Background(), incarnationOfHost(host), id); !errors.Is(err, pty.ErrSessionNotFound) {
