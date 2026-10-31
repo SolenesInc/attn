@@ -33,7 +33,8 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\ngo ./p TestRenamed\n")
 	repo.write("p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n")
-	repo.write("q/q_test.go", "package q\n\nimport \"testing\"\n\nfunc TestRecent(t *testing.T) {}\n\nfunc TestCleared(t *testing.T) {}\n")
+	repo.write("q/q_test.go", "package q\n\nimport \"testing\"\n\nfunc TestRecent(t *testing.T) {}\n\nfunc TestCleared(t *testing.T) {}\n\nfunc TestStillRed(t *testing.T) {}\n")
+	repo.write("q/elsewhere_plan9_test.go", "package q\n\nimport \"testing\"\n\nfunc TestElsewhere(t *testing.T) {}\n")
 	failedAt := repo.commit("tests", start)
 	share := func(id, commit, unit string, outcome testhistory.Outcome) {
 		body, err := json.Marshal(otherLaneRun(id, commit, unit, outcome, start.Add(time.Minute)))
@@ -44,12 +45,15 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	}
 	share("recent-fails", failedAt, "go ./q TestRecent", testhistory.Fail)
 	share("cleared-fails", failedAt, "go ./q TestCleared", testhistory.Fail)
+	share("still-red-fails", failedAt, "go ./q TestStillRed", testhistory.Fail)
+	share("elsewhere-fails", failedAt, "go ./q TestElsewhere", testhistory.Fail)
 	for i := range testhistory.ClearedAfter {
 		repo.gitAt(start.Add(time.Duration(i+1)*time.Second), "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("main %d", i))
 		commit := repo.git("rev-parse", "HEAD")
 		share(fmt.Sprintf("cleared-passes-%d", i), commit, "go ./q TestCleared", testhistory.Pass)
 		if i == 0 {
 			share("recent-passes", commit, "go ./q TestRecent", testhistory.Pass)
+			share("elsewhere-passes", commit, "go ./q TestElsewhere", testhistory.Pass)
 		}
 	}
 	repo.git("checkout", "-q", "-b", "change")
@@ -89,8 +93,12 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 		"landing tests for " + short(head) + ":",
 		"ADDED       go ./q TestRecent",
 		fmt.Sprintf("failed on %s at %s; passed on 1 main revisions since, runs until %d more pass", otherLane(), short(failedAt), testhistory.ClearedAfter-1),
-		"UNAVAILABLE go ./p TestRenamed",
-		"requested anyway: every baseline line must name a test in the checkout",
+		"RED         go ./q TestStillRed",
+		"still red on main: the sheriff owns it; landings run it once it passes on main",
+		"UNAVAILABLE go ./q TestElsewhere",
+		"its test file does not build on this platform",
+		"MISSING     go ./p TestRenamed",
+		"requested anyway, so the run fails until its baseline line names a test",
 		"baseline: 1 units; 1 tests that failed on main have cleared",
 	} {
 		if !strings.Contains(out, want) {

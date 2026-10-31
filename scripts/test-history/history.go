@@ -2,12 +2,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -144,6 +147,11 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 	if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() == 1) {
 		return nil, fmt.Errorf("git grep for Go tests: %v", err)
 	}
+	constrained, err := t.constrainedTestFiles()
+	if err != nil {
+		return nil, err
+	}
+	builds := map[string]bool{}
 	for _, line := range strings.Split(string(out), "\n") {
 		if t.revision != "" {
 			line = strings.TrimPrefix(line, t.revision+":")
@@ -152,9 +160,15 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 		if !ok || !goTestFile(file) {
 			continue
 		}
+		if _, seen := builds[file]; !seen {
+			if builds[file], err = t.buildsHere(file, constrained[file]); err != nil {
+				return nil, err
+			}
+		}
 		_, source, _ := strings.Cut(rest, ":")
 		if match := goTestFunc.FindStringSubmatch(source); match != nil && isGoTest(match[1]) {
-			inventory[goUnit(file, match[1])] = true
+			unit := goUnit(file, match[1])
+			inventory[unit] = inventory[unit] || builds[file]
 		}
 	}
 	files, err := t.files("app/")
@@ -167,6 +181,37 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 		}
 	}
 	return inventory, nil
+}
+
+func (t tree) constrainedTestFiles() (map[string]bool, error) {
+	args := []string{"grep", "-l"}
+	if t.revision == "" {
+		args = append(args, "--untracked", "-E", `^//go:build `)
+	} else {
+		args = append(args, "-E", `^//go:build `, t.revision)
+	}
+	out, err := exec.Command("git", append(args, "--", "*_test.go")...).Output()
+	var exitErr *exec.ExitError
+	if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() == 1) {
+		return nil, fmt.Errorf("git grep for build constraints: %v", err)
+	}
+	files := map[string]bool{}
+	for _, file := range strings.Fields(string(out)) {
+		files[strings.TrimPrefix(file, t.revision+":")] = true
+	}
+	return files, nil
+}
+
+func (t tree) buildsHere(file string, constrained bool) (bool, error) {
+	context := build.Default
+	context.OpenFile = func(path string) (io.ReadCloser, error) {
+		if !constrained {
+			return io.NopCloser(strings.NewReader("package p\n")), nil
+		}
+		data, err := t.read(path)
+		return io.NopCloser(bytes.NewReader(data)), err
+	}
+	return context.MatchFile(filepath.Dir(file), filepath.Base(file))
 }
 
 func goTestFile(path string) bool {

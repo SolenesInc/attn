@@ -163,16 +163,18 @@ groups whose path pattern matched the change. It runs:
   changed line in a `_test.go` file outside `testdata`, and changed Vitest
   files (those `include` in `app/vite.config.ts` names) and Playwright files
   (`app/e2e/**/*.spec.ts`);
-- every test that failed on `main` and has not yet passed on 30 later main
-  revisions in the lane where it failed, when a matched group runs its runner.
+- every test that failed on `main` and has since passed there, on at least one
+  and fewer than 30 later main revisions in the lane where it failed, when a
+  matched group runs its runner. A test still red on `main`, with no pass
+  since its last failure, is listed as `RED` and not run: the sheriff owns it.
 
 It runs them through `scripts/landing-tests.sh --unit`, and any failure stops
 the push.
 
 - `land` prints each added test with the commit and lane it failed at, its
-  passes since and how many more passes clear it; each unavailable test with
-  the reason; the baseline's size; and how many failures have cleared or are
-  gone from the checkout. A
+  passes since and how many more passes clear it; each red, missing baseline
+  or unavailable test with the reason; the baseline's size; and how many
+  failures have cleared or are gone from the checkout. A
   baseline unit missing from the checkout, such as a renamed test, is
   requested anyway: the run reports it `MISSING` and the landing fails until
   its line in `scripts/landing-tests` names a test again.
@@ -229,21 +231,25 @@ failure named cases, a passing revision must also pass each of them, or be a
 run of the whole unit that no longer reports the case, as after a renamed
 subtest. A run filtered to other cases (Go `-run` with a subtest or `-skip`,
 Vitest `-t`, Playwright `--grep`) does not clear it, nor does a skip of the
-case. A failure in one lane makes the unit
-a candidate wherever it can run, and only passes in the failing lane clear it.
-The unit stands in its least cleared lane: fewest passes, then the newest
-anchor. It has cleared once that lane has 30 passes since; a failure on a
-later revision starts it again.
+case. A failure in one lane makes the unit a candidate wherever it can run,
+and only passes in the failing lane clear it. The unit stands in its least
+cleared lane: fewest passes, then the newest anchor. With no pass since, it is
+red; it has cleared once that lane has 30 passes since; a failure on a later
+revision starts it again.
 
-30 catches 87 of 97 observed recurrences: over 312 main commits of CI history,
-87 of the 97 tests that failed again did so within 30 passing revisions.
+30 catches 40 of 50 observed recurrences: over 312 main commits of CI history,
+40 of the 50 tests that failed again after passing on `main` did so within 30
+passing revisions. At 30, a landing added a median of 7 tests and at most 36,
+and the largest set took this Mac's Go landing tests from 20.6s to 38.3s.
 `testhistory.ClearedAfter` keeps the measurement; remeasure it when landings
-miss recurrences or carry too many tests.
+miss recurrences, carry too many tests or slow down.
 
 A failed test that is no longer in the checkout, such as a renamed or removed
-one, is `MISSING`: `land` only counts it. No group runs native scenarios, so a
-native scenario that has not cleared is `UNAVAILABLE`, with the reason: broad
-CI runs it.
+one, is `MISSING`: `land` only counts it. A baseline unit missing from the
+checkout is `MISSING` too, and requested anyway, as above. A test whose file
+does not build on this platform, such as a `_linux_test.go` test on a Mac, is
+`UNAVAILABLE`, with the reason; so is a native scenario that has not cleared,
+since no group runs native scenarios: broad CI runs them.
 
 ### Cost
 

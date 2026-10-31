@@ -6,10 +6,11 @@ import (
 	"strings"
 )
 
-// A failing test returned within 30 later passing main revisions in 87 of 97
-// recurrences across 312 main commits of CI history (bc2d33c36..69e37edd9,
-// 2026-10-31); 20 caught 81, 50 caught 91. At 30, a landing carried a median
-// of 7 such tests, at most 37.
+// Of 50 tests that failed on main again after passing there, across 312 main
+// commits of CI history (bc2d33c36..69e37edd9, 2026-10-31), 40 did so within
+// 30 passing revisions; 20 caught 34, 50 caught 44. At 30 a landing added a
+// median of 7 tests, at most 36; on a 10-core Mac the largest set took the Go
+// landing tests from 20.6s to 38.3s.
 const ClearedAfter = 30
 
 func AppTestUnit(repoPath string) (string, bool) {
@@ -48,12 +49,22 @@ func hasAnySuffix(name string, suffixes []string) bool {
 
 type Inventory map[string]bool
 
+func (inventory Inventory) Has(unit string) bool {
+	_, present := inventory[unit]
+	return present
+}
+
 func (inventory Inventory) Unavailable(unit string) string {
 	switch {
 	case UnitRunner(unit) == RunnerNative:
 		return "native scenarios have no landing recipe; broad CI runs them"
-	case !inventory[unit]:
+	}
+	runs, present := inventory[unit]
+	switch {
+	case !present:
 		return "not in this checkout: renamed, removed, or not a test"
+	case !runs:
+		return "its test file does not build on this platform"
 	}
 	return ""
 }
@@ -72,6 +83,7 @@ const (
 	Cleared     Status = "cleared"
 	Unavailable Status = "unavailable"
 	Missing     Status = "missing"
+	Red         Status = "red"
 )
 
 type Choice struct {
@@ -148,10 +160,14 @@ func Select(request SelectRequest) Selection {
 		case !choice.Baseline && !choice.Changed && choice.PassesLeft() == 0:
 			choice.Status = Cleared
 			choice.Note = fmt.Sprintf("passed on %d main revisions since, %d clear it", choice.Standing.PassesSince, ClearedAfter)
-		case !choice.Baseline && !choice.Changed && UnitRunner(unit) != RunnerNative && !request.Inventory[unit]:
+		case choice.Baseline && UnitRunner(unit) != RunnerNative && !request.Inventory.Has(unit):
+			choice.Status, choice.Note = Missing, "not in this checkout; requested anyway, so the run fails until its baseline line names a test"
+		case !choice.Changed && UnitRunner(unit) != RunnerNative && !request.Inventory.Has(unit):
 			choice.Status, choice.Note = Missing, "failed on main, and no longer in this checkout"
 		case request.Inventory.Unavailable(unit) != "":
 			choice.Status, choice.Note = Unavailable, request.Inventory.Unavailable(unit)
+		case !choice.Baseline && !choice.Changed && choice.Standing.PassesSince == 0:
+			choice.Status, choice.Note = Red, "still red on main: the sheriff owns it; landings run it once it passes on main"
 		default:
 			choice.Status = Selected
 		}
@@ -163,7 +179,7 @@ func Select(request SelectRequest) Selection {
 	return selection
 }
 
-var statusOrder = map[Status]int{Selected: 0, Unavailable: 1, Missing: 2, Cleared: 3}
+var statusOrder = map[Status]int{Selected: 0, Red: 1, Unavailable: 2, Missing: 3, Cleared: 4}
 
 func (c Costs) UnitMS(unit string) (int64, bool) {
 	return median(c.units[unit])

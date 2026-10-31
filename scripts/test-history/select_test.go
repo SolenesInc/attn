@@ -211,13 +211,13 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		}
 		nominated := choiceOf(t, selection, "go ./q TestC")
 		standing := nominated.Standing
-		if nominated.Status != testhistory.Selected || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
-			t.Fatalf("a failure in another lane, cleared only by passes in this one, must stand uncleared: %+v %+v", nominated, standing)
+		if nominated.Status != testhistory.Red || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
+			t.Fatalf("a failure in another lane, cleared only by passes there, has not passed since and must stand red, listed and not run: %+v %+v", nominated, standing)
 		}
 		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Unavailable || !strings.Contains(native.Note, "no landing recipe") {
 			t.Fatalf("an uncleared native failure must be unavailable for want of a landing recipe: %+v", native)
 		}
-		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Unavailable || gone.Note == "" {
+		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Missing || gone.Note == "" {
 			t.Fatalf("missing baseline test: %+v", gone)
 		}
 		if nominated.Command != "./scripts/test-go.sh --packages -count=1 -run '^TestC$' ./q" {
@@ -303,8 +303,8 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		if selected := strings.Join(point.Selections["baseline"].Selected, " "); selected != "go ./p TestA" {
 			t.Fatalf("baseline selected %s", selected)
 		}
-		if landing := point.Selections["landing"].Selected; len(landing) != 2 {
-			t.Fatalf("landing selected %v, want TestA and the failed TestC", landing)
+		if landing := point.Selections["landing"].Selected; strings.Join(landing, " ") != "go ./p TestA go ./q TestC" {
+			t.Fatalf("landing selected %v, want TestA and TestC, which the commit changed", landing)
 		}
 	})
 }

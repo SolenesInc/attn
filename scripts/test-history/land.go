@@ -57,7 +57,7 @@ func landCommand(args []string) int {
 func landingUnits(selection testhistory.Selection) []string {
 	var units []string
 	for _, choice := range selection.Choices {
-		if choice.Status == testhistory.Selected || choice.Baseline && choice.Status == testhistory.Unavailable {
+		if choice.Status == testhistory.Selected || choice.Baseline && choice.Status == testhistory.Missing {
 			units = append(units, choice.Unit)
 		}
 	}
@@ -77,7 +77,7 @@ func printLanding(out io.Writer, report selectReport, head, fallback string) {
 		case choice.Status == testhistory.Cleared:
 			cleared++
 			continue
-		case choice.Status == testhistory.Missing:
+		case choice.Status == testhistory.Missing && !choice.Baseline:
 			missing++
 			continue
 		case choice.Baseline && choice.Status == testhistory.Selected:
@@ -91,9 +91,6 @@ func printLanding(out io.Writer, report selectReport, head, fallback string) {
 		fmt.Fprintf(out, "%-11s %s\n", label, choice.Unit)
 		for _, reason := range choiceReasons(choice) {
 			fmt.Fprintf(out, "            %s\n", reason)
-		}
-		if choice.Baseline && choice.Status == testhistory.Unavailable {
-			fmt.Fprintln(out, "            requested anyway: every baseline line must name a test in the checkout")
 		}
 	}
 	fmt.Fprintf(out, "baseline: %d units", baseline)

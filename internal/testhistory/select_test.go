@@ -232,6 +232,7 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	const (
 		a, b      = "vitest src/a.test.tsx", "vitest src/b.test.tsx"
 		recent    = "vitest src/recent.test.tsx"
+		red       = "vitest src/red.test.tsx"
 		cleared   = "vitest src/cleared.test.tsx"
 		changed   = "vitest src/changed.test.tsx"
 		gone      = "vitest src/gone.test.tsx"
@@ -240,11 +241,13 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		playwrite = "playwright e2e/x.spec.ts"
 	)
 	list := recipes(t, "group app ^app/\nvitest src/a.test.tsx\nvitest src/b.test.tsx\ngroup e2e ^app/e2e/\nplaywright e2e/x.spec.ts\n")
-	inventory := th.Inventory{a: true, b: true, recent: true, cleared: true, changed: true, playwrite: true, elsewhere: true}
+	inventory := th.Inventory{a: true, b: true, recent: true, red: true, cleared: true, changed: true, playwrite: true, elsewhere: true}
 	history := []th.Receipt{
 		receipt(on(at(1), linux), result(cleared, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
 		receipt(on(at(1), linux), result(elsewhere, th.Fail)),
 		receipt(on(at(2), linux), result(recent, th.Fail)),
+		receipt(on(at(2), linux), result(red, th.Pass)),
+		receipt(on(at(3), linux), result(red, th.Fail)),
 	}
 	for i := 2; i < n+2; i++ {
 		history = append(history, receipt(on(at(i), linux), result(cleared, th.Pass)))
@@ -258,11 +261,11 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 	}
 	selection := th.Select(request)
 	want := map[string]th.Status{
-		a: th.Selected, b: th.Selected, changed: th.Selected, recent: th.Selected,
+		a: th.Selected, b: th.Selected, changed: th.Selected, recent: th.Selected, red: th.Red,
 		cleared: th.Cleared, gone: th.Missing, scenario: th.Unavailable,
 	}
 	if got := statuses(selection); !reflect.DeepEqual(got, want) {
-		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one with %d passes has cleared; a native failure is unavailable and a test gone from the checkout missing; a Go failure waits for a group that runs Go", got, want, n-1, n, n)
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one still red since its last failure is listed, not run; one with %d passes has cleared; a native failure is unavailable and a test gone from the checkout missing; a Go failure waits for a group that runs Go", got, want, n-1, n, n)
 	}
 	for _, choice := range selection.Choices {
 		if choice.Unit == recent && choice.PassesLeft() != 1 {
@@ -273,11 +276,12 @@ func TestSelectionFollowsTheSpecification(t *testing.T) {
 		}
 	}
 
-	t.Run("a baseline unit missing from the checkout is unavailable", func(t *testing.T) {
+	t.Run("a baseline unit missing from the checkout is missing; one built only elsewhere is unavailable", func(t *testing.T) {
 		request := request
-		request.Inventory = th.Inventory{b: true}
-		if got := statuses(th.Select(request))[a]; got != th.Unavailable {
-			t.Fatalf("missing baseline unit is %s", got)
+		request.Inventory = th.Inventory{b: false}
+		got := statuses(th.Select(request))
+		if got[a] != th.Missing || got[b] != th.Unavailable {
+			t.Fatalf("baseline a absent is %s, b built elsewhere is %s", got[a], got[b])
 		}
 	})
 

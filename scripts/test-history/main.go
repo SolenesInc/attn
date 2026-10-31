@@ -37,8 +37,9 @@ const usage = `usage: go tool test-history <command>
       Choose the landing tests for HEAD's change against <ref> (default
       origin/main), as scripts/land.sh does, for the groups it matched: their
       baseline units, the tests the change touches, and every test that failed
-      on main and has not yet passed on enough later main revisions. Writes the
-      units to run, one per line, to <file>, and prints each added or
+      on main and has since passed there, until it passes on 30 later main
+      revisions; one still red on main is listed, not run. Writes the units to
+      run, one per line, to <file>, and prints each added, red, missing or
       unavailable test with its reason. With no successful sync in the spool,
       it chooses the baseline.
   select [--group <group>]... [--main <ref>] [--json]

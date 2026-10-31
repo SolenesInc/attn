@@ -151,7 +151,7 @@ func selectCommand(args []string) int {
 }
 
 func printSelection(out io.Writer, report selectReport) {
-	fmt.Fprintf(out, "test-history select: groups %s; a test that failed on main runs until it passes on %d main revisions\n", joinOrNone(report.Groups), report.ClearedAfter)
+	fmt.Fprintf(out, "test-history select: groups %s; a test that failed on main runs once it passes there again, until it has passed on %d main revisions\n", joinOrNone(report.Groups), report.ClearedAfter)
 	printHistory(out, report.Freshness)
 	for _, choice := range report.Choices {
 		fmt.Fprintf(out, "%-11s %s\n", strings.ToUpper(string(choice.Status)), choice.Unit)
@@ -286,10 +286,17 @@ func explainCommand(args []string) int {
 				fmt.Printf("    pass at %s\n", short(commit))
 			}
 		}
-		if left := result.ClearedAfter - result.Standing.PassesSince; left > 0 {
+		switch left := result.ClearedAfter - result.Standing.PassesSince; {
+		case !result.Available:
+		case result.Standing.PassesSince == 0:
+			fmt.Printf("  red on main in %s: landings list it and do not run it until it passes there\n", result.Standing.Lane)
+		case left > 0:
 			fmt.Printf("  landings run it until it passes on %d more main revisions in %s\n", left, result.Standing.Lane)
-		} else {
+		default:
 			fmt.Printf("  cleared: %d passing main revisions in its least cleared lane, %s\n", result.Standing.PassesSince, result.Standing.Lane)
+		}
+		if result.Available {
+			fmt.Println("  a landing whose baseline holds it, or that changes it, runs it whatever its history")
 		}
 	}
 	if result.CostMS != nil {

@@ -124,13 +124,12 @@ checks the resolution touches, and run `scripts/land.sh` again.
 
 The gate's landing tests come from the shared test history: the groups of
 `scripts/landing-tests` that the changed paths match, the tests you changed,
-and every test that failed on `main` and has not yet passed on 30 later
-`main` commits. It prints each one it added, and why. A failing landing test
-stops the push like any other check, whether you touched it or not. When it
-fails the same way on `origin/main`, it is `main`'s failure and the sheriff's:
-wait for the repair, rebase onto it, and tell the user if the wait blocks you.
-When it passes on `origin/main` and on a second run of `scripts/land.sh`, it is
-a flake: land, and name it in your report. `scripts/land.sh --baseline` runs
+and every test that failed on `main` and has since passed there, until it has
+passed on 30 later `main` commits. It prints each one it added, and why, and
+lists tests still red on `main` without running them: the sheriff owns those.
+A failing landing test stops the push like any other check, whether you
+touched it or not. When it passes on `origin/main` and on a second run of
+`scripts/land.sh`, it is a flake: land, and name it in your report. `scripts/land.sh --baseline` runs
 the baseline groups alone: use it only when the history or the choice
 misbehaves, never to skip a failing test.
 

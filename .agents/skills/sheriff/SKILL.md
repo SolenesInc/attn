@@ -164,9 +164,9 @@ re-land seed.
 - CI runs one push at a time and keeps only the newest push waiting. A push
   that arrives behind a newer one concludes `cancelled` with no jobs, so a red
   run covers every commit since the last green one.
-- A test that failed on `main` runs in every landing whose groups run its
-  runner until it has passed on 30 later `main` commits, so a real break
-  blocks those landings until its repair lands.
+- Landings list a test that is still red on `main` and do not run it; it is
+  yours. Once it passes on `main` it runs in every landing whose groups run
+  its runner until it has passed on 30 later `main` commits.
 - "is not on this daemon" from `attn agent msg` means the session is gone:
   plant the re-land seed.
 - This clone holds no work: never commit in it.
