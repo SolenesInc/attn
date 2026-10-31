@@ -185,3 +185,50 @@ func TestAnExitedTenderKeepsSeedBellsUntilItsAgentResumes(t *testing.T) {
 		}
 	})
 }
+
+func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	first := wakeCrew(t, cli, "keel", "").SessionID
+	w.Launched(string(first))
+	seed := plantSeedAs(t, cli, string(first), "Resume the member")
+	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	rev := lifeShow(t, cli, seed).Seed.Rev
+	crewHandoff(t, cli, string(first), "Ready to wake later.", false)
+	if offered := seedReaderDocument(app, seed); !offered.Success || offered.Document.Seed.Continuation == nil || !offered.Document.Seed.Continuation.ResumeAvailable {
+		t.Fatalf("an asleep member's seed does not offer Resume: %+v", offered.Document)
+	}
+	resumed := seedResumeRequest(app, seed)
+	if !resumed.Success || resumed.SessionID == nil || *resumed.SessionID == first || protocol.Deref(resumed.AlreadyRunning) {
+		t.Fatalf("resuming an asleep member's seed = %+v, want a new session for the member", resumed)
+	}
+	w.Launched(string(*resumed.SessionID))
+	again := seedResumeRequest(app, seed)
+	if !again.Success || !protocol.Deref(again.AlreadyRunning) || protocol.Deref(again.SessionID) != *resumed.SessionID {
+		t.Fatalf("resuming an awake member's seed = %+v, want its session %s", again, *resumed.SessionID)
+	}
+	shown := lifeShow(t, cli, seed).Seed
+	if shown.Rev != rev || shown.Tender == nil || shown.Tender.Ref != "member:keel" || protocol.Deref(shown.Tender.SessionID) != *resumed.SessionID {
+		t.Fatalf("resume changed the claim: %+v", shown)
+	}
+}
+
+func TestRetiredMembersCannotReclaimWorkThroughResume(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	createCrew(t, cli, "Keel")
+	first := wakeCrew(t, cli, "Keel", "").SessionID
+	w.Launched(string(first)).Prompted()
+	seed := plantSeedAs(t, cli, string(first), "Leave this work released")
+	lifeMove(t, cli, string(first), seed, "tend", "", "")
+	retireCrew(t, cli, "Keel")
+	released := lifeShow(t, cli, seed).Seed
+	if resumed := seedResumeRequest(app, seed); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "Keel is retired") {
+		t.Fatalf("resuming a retired member's seed = %+v, want it refused", resumed)
+	}
+	if shown := lifeShow(t, cli, seed).Seed; shown.Rev != released.Rev || shown.Claimed || shown.Tender != nil {
+		t.Fatalf("the refused resume changed the seed: %+v", shown)
+	}
+}

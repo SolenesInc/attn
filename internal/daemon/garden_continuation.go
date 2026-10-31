@@ -466,6 +466,15 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 	if entry != nil && entry.ProfileID == seed.ProfileID {
 		continuation.Resume = strings.TrimSpace(d.store.GetResumeSessionID(entry.ID))
 	}
+	if key, member := d.seedResumeMember(seed, execution.SessionID); member {
+		if retired, ok := d.retiredCrewMember(key.String()); ok {
+			continuation.ResumeReason = retiredMemberError(retired).Error()
+		} else {
+			continuation.ResumeAvailable = true
+		}
+		d.planSeedHandoverPlacement(continuation)
+		return continuation
+	}
 	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil && d.sessionHasLiveWorker(live.ID) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true

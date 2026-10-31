@@ -57,6 +57,13 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
 	continuation := d.continuationForSeedForeground(seed)
+	var executed protocol.SessionID
+	if continuation != nil {
+		executed = continuation.Execution.SessionID
+	}
+	if key, member := d.seedResumeMember(seed, executed); member {
+		return d.resumeMemberSeed(protection, seed, key, review, expectedRev, seed.Tender.IsZero())
+	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
 			return nil, fmt.Errorf("%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender))
@@ -122,6 +129,49 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	d.logf("resume: reopened seed %q as session %s", seedID, sessionID)
 	return &seedResumeOutcome{SessionID: reopened.SessionID, ProfileID: reopened.ProfileID}, nil
+}
+
+func (d *Daemon) seedResumeMember(seed garden.Seed, executed protocol.SessionID) (who.MemberKey, bool) {
+	if key, member := seed.Tender.Member(); member {
+		return key, true
+	}
+	if !seed.Tender.IsZero() || protocol.TrimID(executed) == "" {
+		return who.MemberKey{}, false
+	}
+	entry := d.store.SessionLedgerEntry(executed)
+	if entry == nil {
+		return who.MemberKey{}, false
+	}
+	key, err := who.ParseMemberKey(protocol.Deref(entry.MemberKey))
+	return key, err == nil
+}
+
+func (d *Daemon) resumeMemberSeed(
+	protection foregroundCleanupProtection,
+	seed garden.Seed, key who.MemberKey, review *protocol.SeedReviewActionContext, expectedRev int64, claim bool,
+) (*seedResumeOutcome, error) {
+	if retired, ok := d.retiredCrewMember(key.String()); ok {
+		return nil, retiredMemberError(retired)
+	}
+	if claim {
+		member := who.Member(key)
+		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
+			seed.ID, garden.VerbTend, garden.Ask{Actor: who.User(), Claimant: member}, "", d.sessionActive, expectedRev); err != nil {
+			return nil, err
+		}
+	}
+	woken, err := d.crewWake(key.String(), "")
+	if err != nil {
+		return nil, err
+	}
+	if err := d.resolveGardenReviewAction(review, seed.ID, "resume"); err != nil {
+		d.logf("Garden review: settle %s after Resume: %v", seed.ID, err)
+	}
+	profileID := woken.ProfileID
+	if profileID == "" {
+		profileID = seed.ProfileID
+	}
+	return &seedResumeOutcome{SessionID: woken.SessionID, ProfileID: profileID, AlreadyRunning: woken.AlreadyAwake}, nil
 }
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
