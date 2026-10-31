@@ -209,7 +209,14 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 		}
 		var hash string
 		var conflict *fsdoc.Conflict
-		if hash, conflict, err = store.Write(path, []byte(content), baseHash); err == nil {
+		d.mutateRoot(root, func() []notebook.SelfWrite {
+			hash, conflict, err = store.Write(path, []byte(content), baseHash)
+			if err != nil || conflict != nil {
+				return nil
+			}
+			return []notebook.SelfWrite{{Rel: changed, Hash: hash}}
+		})
+		if err == nil {
 			result = &protocol.FsWriteResult{Path: changed}
 			if conflict != nil {
 				result.Conflict = true
@@ -218,7 +225,6 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				d.noteSelfWrite(root, notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastFsChanged(root, originUI, changed)
 			}
 		}
@@ -245,19 +251,19 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 		err = storeErr
 	}
 	if err == nil {
-		_, hash, readErr := store.Read(oldRel)
-		if readErr != nil {
-			err = readErr
-		} else {
-			d.noteSelfWrite(root,
-				notebook.SelfWrite{Rel: oldRel},
-				notebook.SelfWrite{Rel: newRel, Hash: hash},
-			)
-			err = store.Rename(oldRel, newRel)
-			if err == nil {
-				result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
-				d.broadcastFsChanged(root, originUI, oldRel, newRel)
+		d.mutateRoot(root, func() []notebook.SelfWrite {
+			var hash string
+			if _, hash, err = store.Read(oldRel); err != nil {
+				return nil
 			}
+			if err = store.Rename(oldRel, newRel); err != nil {
+				return nil
+			}
+			return []notebook.SelfWrite{{Rel: oldRel}, {Rel: newRel, Hash: hash}}
+		})
+		if err == nil {
+			result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
+			d.broadcastFsChanged(root, originUI, oldRel, newRel)
 		}
 	}
 	msg := protocol.FsRenameResultMessage{Event: protocol.EventFsRenameResult, RequestID: requestID, Success: err == nil, Result: result}
@@ -275,8 +281,12 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 		err = storeErr
 	}
 	if err == nil {
-		d.noteSelfWrite(root, notebook.SelfWrite{Rel: rel})
-		err = store.Delete(rel)
+		d.mutateRoot(root, func() []notebook.SelfWrite {
+			if err = store.Delete(rel); err != nil {
+				return nil
+			}
+			return []notebook.SelfWrite{{Rel: rel}}
+		})
 		if err == nil {
 			result = &protocol.FsDeleteResult{Path: rel}
 			d.broadcastFsChanged(root, originUI, rel)

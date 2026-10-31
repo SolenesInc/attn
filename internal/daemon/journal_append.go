@@ -33,12 +33,17 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 		d.sendError(conn, "journal append: "+err.Error())
 		return
 	}
-	rel, hash, err := store.AppendJournal(date, entry)
+	var rel, hash string
+	d.mutateRoot(store.Root(), func() []notebook.SelfWrite {
+		if rel, hash, err = store.AppendJournal(date, entry); err != nil {
+			return nil
+		}
+		return []notebook.SelfWrite{{Rel: rel, Hash: hash}}
+	})
 	if err != nil {
 		d.sendError(conn, "journal append: "+err.Error())
 		return
 	}
-	d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: rel, Hash: hash})
 	d.broadcastFsChanged(store.Root(), originAgent, rel)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
