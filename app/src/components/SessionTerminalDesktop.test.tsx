@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef, useEffect, useImperativeHandle, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionTerminalDesktop } from './SessionTerminalDesktop';
@@ -356,6 +356,81 @@ describe('SessionTerminalDesktop', () => {
     expect(container.querySelector('.desktop-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.400');
   });
 
+  it('releases selection locks when divider and tile drags are cancelled', () => {
+    const { container, rerender } = render(
+      <SessionTerminalDesktop
+        desktopId="desktop-session-1"
+        desktopSessions={[
+          { id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" },
+          { id: "session-2", label: "Session 2", agent: "claude", cwd: "/tmp/repo" },
+        ]}
+        terminalState={createSplitDesktop()}
+        activePaneId={SESSION_PANE_ID}
+        fontSize={14}
+        enabled
+        isActiveSession
+        eventRouter={mockEventRouter}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />,
+      { wrapper: NotebookSurfaceTestWrapper },
+    );
+    const panes = container.querySelector('.session-terminal-panes') as HTMLElement;
+    vi.spyOn(panes, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
+    });
+
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
+    expect(document.body.style.userSelect).toBe('none');
+    expect(container.querySelector('.desktop-resize-shield')).toHaveAttribute('data-resizing-split-id', 'root');
+    expect(panes).toHaveAttribute('data-resizing-split-id', 'root');
+    expect(document.documentElement).toHaveAttribute('data-attn-desktop-resizing', '1');
+    expect(Number(document.documentElement.dataset.attnDesktopMouseSuppressUntil)).toBeGreaterThan(Date.now());
+    fireEvent.pointerCancel(window);
+    expect(document.body.style.userSelect).toBe('');
+    expect(container.querySelector('.desktop-resize-shield')).toBeNull();
+    expect(panes).not.toHaveAttribute('data-resizing-split-id');
+    expect(document.documentElement).not.toHaveAttribute('data-attn-desktop-resizing');
+
+    rerender(
+      <SessionTerminalDesktop
+        desktopId="desktop-session-1"
+        desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" }]}
+        terminalState={{
+          agents: [{ id: SESSION_PANE_ID, runtimeId: 'session-1', sessionId: 'session-1', title: 'Session 1' }],
+          layoutTree: {
+            type: 'split',
+            splitId: 'root-tile',
+            direction: 'vertical',
+            ratio: 0.7,
+            children: [
+              { type: 'pane', paneId: SESSION_PANE_ID },
+              { type: 'tile', tileId: 'tile-md', tileKind: 'markdown', tileParams: '/tmp/notes.md' },
+            ],
+          },
+        }}
+        activePaneId={SESSION_PANE_ID}
+        fontSize={14}
+        enabled
+        isActiveSession
+        eventRouter={mockEventRouter}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />
+    );
+
+    fireEvent.pointerDown(container.querySelector('.desktop-dock-tile-header') as HTMLElement, { button: 0, clientX: 750, clientY: 250 });
+    expect(document.body.style.userSelect).toBe('');
+    fireEvent.pointerMove(window, { clientX: 760, clientY: 280 });
+    expect(document.body.style.userSelect).toBe('none');
+    fireEvent.blur(window);
+    expect(document.body.style.userSelect).toBe('');
+  });
+
   it('keeps the session pane mounted when the split topology changes around it', () => {
     const { rerender } = render(
       <SessionTerminalDesktop
@@ -457,6 +532,43 @@ describe('SessionTerminalDesktop', () => {
     );
 
     expect(terminalLifecycleCounts.get('agent:Session 1:codex:session-1')?.mounts).toBeGreaterThan(0);
+  });
+
+  it('refits a revealed pane again while it still overflows its container', () => {
+    // Grid larger than the container while cols/rows stay unremarkable: only
+    // overflowsContainer() reports it, so the late retries must consult it.
+    vi.useFakeTimers();
+    mockTerminalFit.mockReset();
+    mockTerminalOverflowsContainer.mockReset().mockReturnValue(true);
+
+    render(
+      <SessionTerminalDesktop
+        desktopId="desktop-session-1"
+        desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" }]}
+        terminalState={createSingleAgentDesktop()}
+        activePaneId={SESSION_PANE_ID}
+        fontSize={14}
+        enabled
+        isActiveSession
+        eventRouter={mockEventRouter}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />
+    );
+
+    expect(mockTerminalFit).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(75);
+    });
+    expect(mockTerminalFit).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      vi.advanceTimersByTime(325);
+    });
+    expect(mockTerminalFit).toHaveBeenCalledTimes(3);
   });
 
 });

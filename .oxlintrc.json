@@ -103,6 +103,7 @@
               "app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx": "mocks attn's own NotebookSurface; use the real module",
               "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.attentionRing.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
               "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.paneHeader.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
+              "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.readyFocus.test.tsx": "mocks attn's own GhosttyTerminal; use the real module",
               "app/src/components/SessionTerminalDesktop/SessionTerminalDesktop.tileLeaves.test.tsx": "mocks attn's own BrowserTileBody, GhosttyTerminal; use the real module",
               "app/src/components/SessionTerminalDesktop/useGhosttyPaneRuntime.test.ts": "mocks attn's own pty/bridge; use the real module",
               "app/src/components/Toast.lifecycle.test.tsx": "mocks attn's own contexts/DaemonApiContext; use the real module",
