@@ -498,6 +498,10 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	if intent, ok := d.store.LaunchIntent(sessionID); ok && intent.Command != nil {
 		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)
 	}
+	if member, bound := d.crewMemberForSession(sessionID); bound && strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent()) {
+		opts.Model = protocol.Deref(d.crewWakeModel(member, session.Agent))
+		opts.Effort = protocol.Deref(d.crewWakeEffort(member, session.Agent))
+	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {
 			return ptybackend.SpawnOptions{}, fmt.Errorf("invalid recorded unattended launch contract: %w", err)

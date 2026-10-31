@@ -271,6 +271,24 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     expect(screen.getByTestId('crew-panel').querySelector('.crew-member-heading')).toHaveTextContent('Awake');
   });
 
+  it('applies an awake member’s saved settings and shows what happened', async () => {
+    const { daemon } = await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis' })] });
+    daemon.on('crew_apply', () => ({
+      event: 'crew_apply_result', success: true,
+      result: { member: 'trellis', name: 'Trellis', outcome: 'letter_requested', session_id: 'session-trellis', delivery_status: 'notified', detail: 'Asked Trellis in session session- to file its letter; its next session starts on codex from it' },
+    }));
+
+    await click(daemon, 'Apply');
+    expect(daemon.sentOf('crew_apply')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
+    expect(panel().getByText(/its next session starts on codex from it/)).toBeInTheDocument();
+    expect(daemon.sentOf('crew_sleep')).toEqual([]);
+  });
+
+  it('offers no apply while the member is asleep', async () => {
+    await renderPanel({ members: [member('trellis', 4)] });
+    expect(panel().queryByTestId('crew-apply')).toBeNull();
+  });
+
   it('closes with Escape and an app wake shows the sleeping member’s day', async () => {
     const { daemon, openCrew, closeWithEscape } = await renderPanel({
       members: [member('keel', 5)],

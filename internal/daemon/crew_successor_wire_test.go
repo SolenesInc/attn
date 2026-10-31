@@ -26,7 +26,10 @@ func TestASuccessorKeepsItsDaysApprovalModeAndReturnsToTheMembersSavedPins(t *te
 	}
 
 	setSetting(t, app, "auto_approve_enabled", "false")
-	handed := crewHandoff(t, cli, string(day.SessionID), "Back to the usual harness tomorrow.", false, protocol.CrewDayCloseNap)
+	if applied := applyCrew(t, cli, "keel"); applied.Outcome != protocol.CrewApplyOutcomeLetterRequested {
+		t.Fatalf("applying keel's saved claude to its codex day = %+v, want its letter requested", applied)
+	}
+	handed := crewHandoff(t, cli, string(day.SessionID), "Back to the usual harness tomorrow.", false)
 	next := w.Launched(string(protocol.Deref(handed.SessionID)))
 	model, effort := crewLaunchFlag(next.Argv, "--model"), crewLaunchFlag(next.Argv, "--effort")
 	if next.Harness != fakeagent.Claude || model != "claude-opus-4-1" || effort != "high" {

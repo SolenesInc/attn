@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,9 +30,9 @@ func filedLetter(t *testing.T, stdout, member string) string {
 	return path
 }
 
-func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
+func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	for _, row := range []struct {
 		args []string
 		want []string
@@ -42,6 +43,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 		{[]string{"handoff", "--retry", "-m", "another one"}, []string{"--retry"}},
 		{[]string{"handoff", "-m", "x", "trellis"}, []string{`"trellis"`}},
 		{[]string{"handoff", "-m", "x", "--sleep"}, []string{"flag provided but not defined: -sleep"}},
+		{[]string{"handoff", "-m", "x", "--nap"}, []string{"flag provided but not defined: -nap"}},
 	} {
 		refused := s.Attn(row.args...)
 		if refused.Code != 2 || !strings.HasPrefix(refused.Stderr, "handoff: ") {
@@ -70,31 +72,62 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 	}
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--cwd", workdir), "Trellis launches in "+workdir)
 	trellis := wakeMember(t, s, "trellis")
+	requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", "codex"))
+	requireStdout(t, s.Attn("crew", "apply", "trellis"), "The letter request for Trellis is queued in session "+trellis[:8]+" — ")
 	if err := os.Remove(workdir); err != nil {
 		t.Fatal(err)
 	}
-	stuck := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "Dear next trellis,", "--nap", "--session", trellis}, Session: keel})
+	stuck := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "Dear next trellis,", "--session", trellis}, Session: keel})
 	if stuck.Code != 1 {
-		t.Fatalf("a nap that could not wake a successor exited %d: %s", stuck.Code, stuck.Stderr)
+		t.Fatalf("a handoff whose successor could not start exited %d: %s", stuck.Code, stuck.Stderr)
 	}
 	requireLines(t, "stdout", stuck.Stdout, "Trellis's letter is filed at ")
-	requireLines(t, "stderr", stuck.Stderr, "handoff: no successor was woken: ", "`attn handoff --retry`")
+	requireLines(t, "stderr", stuck.Stderr, "handoff: the next session did not start: ", "`attn handoff --retry`", "`attn crew sleep Trellis`")
 	path := filedLetter(t, stuck.Stdout, "Trellis")
 	if day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); string(day) != trellis {
-		t.Fatalf("after the failed nap trellis is bound to %q, want its day %s", day, trellis)
+		t.Fatalf("after the failed successor trellis is bound to %q, want its day %s", day, trellis)
 	}
 
 	if err := os.MkdirAll(workdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry", "--nap"}, Session: trellis})
-	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next day is session ")
+	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry"}, Session: trellis})
+	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next session is ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
-	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string("session "+next[:8]+", waking now")) {
-		t.Fatalf("the retry woke %q:\n%s", next, retried.Stdout)
+	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string(next[:8]+" on its new harness")) {
+		t.Fatalf("the retry started %q:\n%s", next, retried.Stdout)
 	}
-	s.Launched(string(next)).Prompted()
+	if run := s.Launched(string(next)); run.Harness != fakeagent.Codex {
+		t.Fatalf("trellis's next session runs %s, want codex", run.Harness)
+	}
 	if filed, err := os.ReadFile(path); err != nil || string(filed) != "Dear next trellis,\n" {
 		t.Fatalf("the retried letter reads %q (%v), want the one letter filed before", filed, err)
+	}
+}
+
+func TestCrewApplyReloadsAModelChangeInPlace(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	s.Start()
+	requireStdout(t, s.Attn("crew", "apply", "keel"), "Keel is already asleep; its next wake uses the saved settings.")
+	var woken protocol.CrewWakeResult
+	s.Attn("crew", "wake", "keel", "--json").JSON(t, &woken)
+	keel := string(woken.SessionID)
+	first := s.Launched(keel)
+	first.Prompted()
+
+	requireStdout(t, s.Attn("crew", "set", "keel", "--model", "claude-sonnet-fake"))
+	requireStdout(t, s.Attn("crew", "apply", "keel"), "Reloaded Keel's session "+keel[:8]+" in place on claude with its saved settings; its conversation continues.")
+	again := s.Launched(keel)
+	model := ""
+	if i := slices.Index(again.Argv, "--model"); i >= 0 && i+1 < len(again.Argv) {
+		model = again.Argv[i+1]
+	}
+	if !again.Resumed || again.ConversationID != first.ConversationID || model != "claude-sonnet-fake" {
+		t.Fatalf("the reload ran resumed=%v conversation=%s model=%q, want %s kept on claude-sonnet-fake", again.Resumed, again.ConversationID, model, first.ConversationID)
+	}
+	if day := protocol.Deref(crewRoster(t, s)["keel"].BindingSession); string(day) != keel {
+		t.Fatalf("after the reload keel is bound to %q, want %s", day, keel)
 	}
 }

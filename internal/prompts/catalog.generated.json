@@ -1918,7 +1918,7 @@
         {
           "id": "successor",
           "delivery": "user_message",
-          "description": "crew_handoff.go: successor after a nap.",
+          "description": "crew_handoff.go: successor on a new harness after crew apply.",
           "body": {
             "kind": "choose",
             "condition": {
@@ -1951,6 +1951,52 @@
             "kind": "text",
             "id": "crew.sleep-requested",
             "source": "content/crew/sleep-requested.md"
+          }
+        },
+        {
+          "id": "settings-applied",
+          "delivery": "user_message",
+          "description": "crew_apply.go: the member's session reloaded in place with its saved settings.",
+          "body": {
+            "kind": "text",
+            "id": "crew.settings-applied",
+            "source": "content/crew/settings-applied.md",
+            "bindings": [
+              {
+                "name": "charter_path",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "charter_path",
+                    "kind": "text",
+                    "description": "Charter path."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "switch-requested",
+          "delivery": "user_message",
+          "description": "crew_apply.go: the member's saved harness differs from its running session.",
+          "body": {
+            "kind": "text",
+            "id": "crew.switch-requested",
+            "source": "content/crew/switch-requested.md",
+            "bindings": [
+              {
+                "name": "agent",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "agent",
+                    "kind": "text",
+                    "description": "Saved harness."
+                  }
+                }
+              }
+            ]
           }
         },
         {
@@ -6190,5 +6236,5 @@
       ]
     }
   ],
-  "definitions_hash": "803cdaaac9c63cd0e26f002208567518eba73282ebcea28a150afa0748306aff"
+  "definitions_hash": "699e78dc4e7d048c44772944d838f986307ca32662edcf88b284255b7d158021"
 }

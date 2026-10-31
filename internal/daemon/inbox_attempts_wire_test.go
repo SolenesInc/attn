@@ -164,7 +164,7 @@ func TestInboxDeliveryWakesAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) 
 		if got := day.promptsContaining(inboxDoorbell); got != 1 {
 			t.Fatalf("wake ring=%d", got)
 		}
-		if _, err := cli.CrewHandoff(protocol.SessionID(day.id), "sleep before reading", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(day.id), "sleep before reading", false); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(5*time.Minute - time.Second)
@@ -397,7 +397,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 		initial := w.bootBubbleClaude(t, string(initialID))
 		initial.reply("Ready. <!-- attn:state=idle -->")
 		readInbox(t, cli, string(initialID), 0)
-		if _, err := cli.CrewHandoff(initialID, "Sleep before the message", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(initialID, "Sleep before the message", false); err != nil {
 			t.Fatal(err)
 		}
 		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
@@ -463,7 +463,7 @@ func TestTheThirdInboxWakeCompletesItsRingAndNeverWakesAFourthDay(t *testing.T) 
 			if day.promptsContaining(inboxDoorbell) != 1 {
 				t.Fatalf("wake %d did not finish its ring", attempt)
 			}
-			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep); err != nil {
+			if _, err := cli.CrewHandoff(id, "sleep unread", false); err != nil {
 				t.Fatal(err)
 			}
 			w.advance(5 * time.Minute)
@@ -625,7 +625,7 @@ func TestAMessageToACrewDaysSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T
 		first := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 		first.reply("Ready. <!-- attn:state=idle -->")
 		sent := sendAgentMessage(t, cli, "sender", first.id, "Reply for the next day")
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "sleep unread", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "sleep unread", false); err != nil {
 			t.Fatal(err)
 		}
 		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))

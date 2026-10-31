@@ -74,8 +74,10 @@ func crewRecipient() Recipient {
 				When(Present(holdings), Input(holdings)),
 				closure)),
 		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Enabled(v2), Use("crew.v2.wake", "content/crew/v2/wake.md"), Use("crew.wake", "content/crew/wake.md"))),
-		On("successor", "user_message", "crew_handoff.go: successor after a nap.", Choose(Enabled(v2), Use("crew.v2.successor", "content/crew/v2/successor.md"), Use("crew.successor", "content/crew/successor.md"))),
+		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Choose(Enabled(v2), Use("crew.v2.successor", "content/crew/v2/successor.md"), Use("crew.successor", "content/crew/successor.md"))),
 		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
+		On("settings-applied", "user_message", "crew_apply.go: the member's session reloaded in place with its saved settings.", Use("crew.settings-applied", "content/crew/settings-applied.md", Bind("charter_path", Input(TextField("charter_path", "Charter path."))))),
+		On("switch-requested", "user_message", "crew_apply.go: the member's saved harness differs from its running session.", Use("crew.switch-requested", "content/crew/switch-requested.md", Bind("agent", Input(TextField("agent", "Saved harness."))))),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),
 		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.sleep-away", "content/crew/sleep-away.md")),
 	}}

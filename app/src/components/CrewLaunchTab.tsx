@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { LaunchDesktopKind } from '../types/generated';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
@@ -94,6 +95,38 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
   );
 }
 
+function ApplySettings({ member, saved, isConnected }: { member: CrewMember; saved: boolean; isConnected: boolean }) {
+  const { sendCrewApply } = useDaemonApi();
+  const [applying, setApplying] = useState(false);
+  const [outcome, setOutcome] = useState<{ text: string; failed: boolean } | null>(null);
+  const apply = () => {
+    setApplying(true);
+    setOutcome(null);
+    sendCrewApply(member.id)
+      .then((result) => setOutcome({ text: result.detail, failed: false }))
+      .catch((error: unknown) => setOutcome({ text: error instanceof Error ? error.message : 'Applying the settings failed', failed: true }))
+      .finally(() => setApplying(false));
+  };
+  return (
+    <section className="crew-session-action crew-apply">
+      <div>
+        <h3>Apply settings now</h3>
+        <p>The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.</p>
+        {outcome && <p className={outcome.failed ? 'crew-apply-failed' : undefined} role="status">{outcome.text}</p>}
+      </div>
+      <button
+        type="button"
+        data-testid="crew-apply"
+        disabled={!isConnected || !saved || applying}
+        title={!saved ? 'Wait for launch settings to be saved' : undefined}
+        onClick={apply}
+      >
+        {applying ? 'Applying…' : 'Apply'}
+      </button>
+    </section>
+  );
+}
+
 export interface CrewLaunchTabProps {
   member: CrewMember;
   edit: CrewLaunchEdit;
@@ -141,6 +174,7 @@ export function CrewLaunchTab({
         onRetryCatalog={onRetryCatalog}
         autosave={autosave}
       />
+      {member.binding_session && <ApplySettings key={member.id} member={member} saved={edit.state === 'saved'} isConnected={isConnected} />}
       <section className="crew-session-action">
         <h3>{member.binding_session ? 'Sleep member' : 'Wake member'}</h3>
         <button

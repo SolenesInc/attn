@@ -2973,6 +2973,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep:
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
+	case protocol.CmdCrewApply:
+		d.handleCrewApply(conn, msg.(*protocol.CrewApplyMessage))
 	case protocol.CmdCrewRename:
 		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewCreate:

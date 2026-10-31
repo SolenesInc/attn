@@ -1,0 +1,1 @@
+[attn] Your launch settings now run you on {{agent}}, a different harness from this session's, and you are asked to move now. Finish what you need to settle, write your letter, and file it with `attn handoff -m "<your letter>"`. Filing ends this session and starts your next one on {{agent}} from the letter.

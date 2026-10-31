@@ -2700,6 +2700,66 @@ type CreateWorktreeResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type CrewApplyMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewApplyOutcome string
+
+const CrewApplyOutcomeAsleep CrewApplyOutcome = "asleep"
+const CrewApplyOutcomeLetterRequested CrewApplyOutcome = "letter_requested"
+const CrewApplyOutcomeReloaded CrewApplyOutcome = "reloaded"
+
+type CrewApplyResult struct {
+	// DeliveryStatus corresponds to the JSON schema field "delivery_status".
+	DeliveryStatus *AgentMsgStatus `json:"delivery_status,omitempty,omitzero"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome CrewApplyOutcome `json:"outcome"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewApplyResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *CrewApplyResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type CrewCharterDocument struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -2831,8 +2891,8 @@ type CrewCreateResult struct {
 
 type CrewDayClose string
 
-const CrewDayCloseNap CrewDayClose = "nap"
 const CrewDayCloseSleep CrewDayClose = "sleep"
+const CrewDayCloseSuccessor CrewDayClose = "successor"
 
 type CrewHandoffDocument struct {
 	// Content corresponds to the JSON schema field "content".
@@ -2897,9 +2957,6 @@ type CrewHandoffGetResultMessage struct {
 }
 
 type CrewHandoffMessage struct {
-	// Close corresponds to the JSON schema field "close".
-	Close *CrewDayClose `json:"close,omitempty,omitzero"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -2920,9 +2977,6 @@ type CrewHandoffResult struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
-	// NapError corresponds to the JSON schema field "nap_error".
-	NapError *string `json:"nap_error,omitempty,omitzero"`
-
 	// Outcome corresponds to the JSON schema field "outcome".
 	Outcome *CrewDayClose `json:"outcome,omitempty,omitzero"`
 
@@ -2931,6 +2985,9 @@ type CrewHandoffResult struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// SuccessorError corresponds to the JSON schema field "successor_error".
+	SuccessorError *string `json:"successor_error,omitempty,omitzero"`
 }
 
 type CrewHandoffSummary struct {
@@ -9152,6 +9209,9 @@ type Response struct {
 
 	// CodexStatusResult corresponds to the JSON schema field "codex_status_result".
 	CodexStatusResult *CodexStatusResult `json:"codex_status_result,omitempty,omitzero"`
+
+	// CrewApplyResult corresponds to the JSON schema field "crew_apply_result".
+	CrewApplyResult *CrewApplyResult `json:"crew_apply_result,omitempty,omitzero"`
 
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".

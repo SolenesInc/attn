@@ -66,6 +66,7 @@ var Placements = map[string][]Placement{
 	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
 	"create_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"create_worktree_from_branch":      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"crew_apply":                       {Placement{LocatorHome, ""}},
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
 	"crew_create":                      {Placement{LocatorHome, ""}},
@@ -716,6 +717,18 @@ func (m CreateWorktreeFromBranchMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}
+	return ""
+}
+
+func (CrewApplyMessage) CommandName() string {
+	return "crew_apply"
+}
+
+func (m CrewApplyMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewApplyMessage) Locate() string {
 	return ""
 }
 

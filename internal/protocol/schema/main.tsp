@@ -6985,6 +6985,7 @@ model Response {
   crew_handoff_get_result?: CrewHandoffGetResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
+  crew_apply_result?: CrewApplyResult;
   crew_set_result?: CrewSetResult;
   crew_rename_result?: CrewRenameResult;
   crew_create_result?: CrewCreateResult;
@@ -7475,6 +7476,54 @@ model CrewSleepResult {
   detail: string;
 }
 
+// Apply an awake member's saved launch settings and charter to its running
+// session. On the same harness the session reloads in place and keeps its
+// conversation. On a different harness the member is asked to file its letter;
+// that letter ends the session and starts the next one on the saved harness.
+// The caller may be the member itself, an agent above it in the delegation
+// chain, the profile's chief, or the app. An asleep member is a named no-op:
+// its next wake uses the saved settings.
+@extension("x-on", #{ home: true })
+model CrewApplyMessage {
+  cmd: "crew_apply";
+  // The profile the request is asked from: the calling session's profile,
+  // else this profile, else the connection's selected profile over WebSocket.
+  // Member names resolve only inside it.
+  profile_id?: string;
+  source_session_id?: SessionID;
+  member: string;
+  request_id?: string; // set by the WS frontend to correlate the result event
+}
+
+// How a member's running session takes its saved settings.
+enum CrewApplyOutcome {
+  // Reloaded in place on the same harness, conversation kept.
+  reloaded,
+  // Asked to file its letter so its next session starts on the saved harness.
+  letter_requested,
+  // Asleep: nothing runs, and the next wake uses the saved settings.
+  asleep,
+}
+
+model CrewApplyResult {
+  member: string;
+  name: string;
+  outcome: CrewApplyOutcome;
+  // The running session the settings were applied to. Absent when asleep.
+  session_id?: SessionID;
+  // How the letter request reached the session, for `letter_requested`.
+  delivery_status?: AgentMsgStatus;
+  detail: string;
+}
+
+model CrewApplyResultMessage {
+  event: "crew_apply_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  result?: CrewApplyResult;
+}
+
 // Record where a member's sessions launch and which directories its charter is
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
@@ -7553,30 +7602,28 @@ model CrewHandoffMessage {
   // writing one. The way out of a turnover that failed behind a filed letter:
   // the line is append-only, so the letter cannot be written a second time.
   retry?: boolean;
-  // What the filing does to the session. Absent ends the session and leaves
-  // the member asleep until something wakes it. Only nap starts a new session.
-  close?: CrewDayClose;
 }
 
-// Whether a filed letter starts the next day or ends this one.
+// Whether a filed letter started the next session or ended the member's day.
+// Only a harness switch asked by `crew_apply` starts the next session.
 enum CrewDayClose {
-  nap,
+  successor,
   sleep,
 }
 
 // Where the letter landed, and what became of the day. A filed letter is never
-// undone by what follows it: when the nap cannot run, the letter is still filed
-// and `nap_error` says why the successor was not woken.
+// undone by what follows it: when the successor cannot start, the letter is
+// still filed and `successor_error` says why.
 model CrewHandoffResult {
   member: string;
   name: string;
   path: string;
-  // The session living the member's new day. Absent when no nap ran.
+  // The member's next session. Absent when no successor started.
   session_id?: SessionID;
-  // Why no successor was woken, when none was.
-  nap_error?: string;
-  // What the day did: `nap` started the next one, `sleep` ended it. Absent when
-  // neither happened, which is what nap_error explains.
+  // Why no successor started, when one was due.
+  successor_error?: string;
+  // What the day did: `successor` started the next session, `sleep` ended it.
+  // Absent when neither happened, which is what successor_error explains.
   outcome?: CrewDayClose;
 }
 
@@ -8442,6 +8489,7 @@ alias DaemonEvent =
   | CrewHandoffGetResultMessage
   | CrewWakeResultMessage
   | CrewSleepResultMessage
+  | CrewApplyResultMessage
   | CrewSetResultMessage
   | CrewRenameResultMessage
   | OpenSeedResultMessage

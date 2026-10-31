@@ -54,6 +54,17 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 	return resp.CrewSleepResult, nil
 }
 
+func (c *Client) CrewApply(member string) (*protocol.CrewApplyResult, error) {
+	resp, err := c.send(protocol.CrewApplyMessage{Cmd: protocol.CmdCrewApply, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewApplyResult == nil {
+		return nil, fmt.Errorf("the daemon answered without saying how the settings were applied")
+	}
+	return resp.CrewApplyResult, nil
+}
+
 func (c *Client) CrewSet(member string, cwd, agent, model, effort *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
 	return c.CrewSetWithNamedDesktop(member, cwd, agent, model, effort, awarenessDirs, nil, nil)
 }
@@ -86,13 +97,10 @@ func (c *Client) CrewPrime(sessionID protocol.SessionID) (*protocol.CrewPrimeRes
 	return resp.CrewPrimeResult, nil
 }
 
-func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
+func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool) (*protocol.CrewHandoffResult, error) {
 	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note}
 	if retry {
 		msg.Retry = protocol.Ptr(true)
-	}
-	if close != "" {
-		msg.Close = protocol.Ptr(close)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

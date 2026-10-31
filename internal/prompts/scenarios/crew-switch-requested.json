@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-switch-requested",
+  "description": "Crew apply asks the member to file its letter and move to another harness.",
+  "recipient": "crew",
+  "event": "switch-requested",
+  "values": {
+    "agent": "codex"
+  }
+}

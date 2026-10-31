@@ -159,7 +159,7 @@ func TestCrewNamesFollowTheNameRules(t *testing.T) {
 }
 
 func TestAMemberIsOneLedgerRow(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
 	app := w.App()
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
@@ -168,10 +168,11 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return s.State == protocol.StateIdle })
 	day := wakeCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
-	for range 2 {
-		result := crewHandoff(t, cli, string(day.SessionID), "Leave this for tomorrow.", false, protocol.CrewDayCloseNap)
-		if result.NapError != nil || result.SessionID == nil {
-			t.Fatalf("nap: %+v", result)
+	for _, agent := range []string{"codex", "claude"} {
+		switchCrewHarness(t, cli, "Keel", agent)
+		result := crewHandoff(t, cli, string(day.SessionID), "Leave this for tomorrow.", false)
+		if result.SuccessorError != nil || result.SessionID == nil {
+			t.Fatalf("successor: %+v", result)
 		}
 		day.SessionID = *result.SessionID
 		run := w.Launched(string(day.SessionID))
@@ -208,7 +209,7 @@ func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
 		w.restart()
 		cli := w.Client()
 		day := wakeCrew(t, cli, "Keel", "")
-		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false); err != nil {
 			t.Fatal(err)
 		}
 		w.terms.RefuseNextSpawn(errors.New("PTY allocation failed"))
@@ -234,7 +235,7 @@ func TestASleepingMemberKeepsItsLastDayInTheLedger(t *testing.T) {
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
-	crewHandoff(t, cli, string(day.SessionID), "Sleep on it.", false, protocol.CrewDayCloseSleep)
+	crewHandoff(t, cli, string(day.SessionID), "Sleep on it.", false)
 	page := ledger(t, cli, client.SessionListOptions{All: true})
 	if len(page.Entries) != 1 || page.Entries[0].ID != day.SessionID || protocol.Deref(page.Entries[0].MemberKey) != "keel" || page.Entries[0].ClosedAt == nil {
 		t.Fatalf("asleep member ledger: %+v", page.Entries)
@@ -248,7 +249,7 @@ func TestAResumedCrewConversationStaysInTheOpenLedgerAfterANewWake(t *testing.T)
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
-	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false, protocol.CrewDayCloseSleep)
+	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: day.SessionID}); err != nil {
 		t.Fatal(err)
 	}

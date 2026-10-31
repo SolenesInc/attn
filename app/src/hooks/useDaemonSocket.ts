@@ -58,6 +58,7 @@ import type {
   SeedArtifactTargetResult,
   SeedArtifactTransferResult,
   SeedDocument as GeneratedSeedDocument,
+  CrewApplyResult as GeneratedCrewApplyResult,
   CrewMember as GeneratedCrewMember,
   MarkdownAnnotation,
   PRRole,
@@ -1593,6 +1594,16 @@ export function useDaemonSocket({
             }
             break;
           }
+
+          case 'crew_apply_result':
+            settlePendingRequest(
+              pendingActionsRef.current,
+              'crew_apply',
+              data,
+              (event) => event.result,
+              'Applying the member settings failed',
+            );
+            break;
 
           case 'crew_sleep_result':
             settlePendingRequest(
@@ -3516,6 +3527,15 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
+  const sendCrewApply = useCallback(
+    (member: string): Promise<GeneratedCrewApplyResult> => sendRequest(
+      'crew_apply',
+      { member: crewRef(member) },
+      'Applying the crew member settings timed out',
+    ),
+    [sendRequest],
+  );
+
   const sendCrewSet = useCallback((options: CrewSetOptions): Promise<CrewMutationOutcome> => (
     sendRequest(
       'crew_set',
@@ -4371,6 +4391,7 @@ export function useDaemonSocket({
     sendSeedReviewDraft,
     sendCrewWake,
     sendCrewSleep,
+    sendCrewApply,
     sendCrewRename,
     sendCrewSet,
     sendCrewCharterGet,

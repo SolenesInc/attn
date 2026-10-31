@@ -763,8 +763,9 @@ commands:
         interrupt and reload agents in place, as "Reload this agent" does.
         Running work is interrupted and non-persistent state may be lost.
         Full ids, unique prefixes and awake crew names work; a sleeping
-        member stays asleep. A session may reload itself and descendants;
-        the profile's chief may reload any agent in that profile.
+        member stays asleep. A member reloads with its saved model and effort.
+        A session may reload itself and descendants; the profile's chief may
+        reload any agent in that profile.
         --all is chief-only, includes the chief and crew, and excludes shells.
         Chief and crew close protections do not prevent reload.
         Each target reports an outcome; failures leave successful reloads in place

@@ -436,7 +436,7 @@ func TestAChiefsAskIsTheChiefsAndMovesToTheNextChief(t *testing.T) {
 }
 
 func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
 
@@ -457,13 +457,14 @@ func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("crew ask: %v", err)
 	}
-	successor := protocol.Deref(crewHandoff(t, cli, string(day.SessionID), "Still waiting on the cache answer.", false, protocol.CrewDayCloseNap).SessionID)
+	switchCrewHarness(t, cli, "trellis", "codex")
+	successor := protocol.Deref(crewHandoff(t, cli, string(day.SessionID), "Still waiting on the cache answer.", false).SessionID)
 	w.Launched(string(successor))
 	if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != asked.ID || protocol.Deref(shown[0].CrewMember) != "trellis" {
-		t.Fatalf("after trellis napped the app shows %+v, want its open ask", shown)
+		t.Fatalf("after trellis switched harness the app shows %+v, want its open ask", shown)
 	}
 	if listed, err := cli.AskList(successor); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
-		t.Fatalf("trellis's next day lists %+v (%v), want the ask filed before the nap", listed, err)
+		t.Fatalf("trellis's next session lists %+v (%v), want the ask filed before the switch", listed, err)
 	}
 }
 

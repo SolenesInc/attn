@@ -77,7 +77,7 @@ Make an agent jump to the front of the queue with Cmd+Shift+I (Ctrl+Alt+I on
 Linux), "Mark priority" in the ••• menu on its row, or "Mark as priority" in the
 command palette. A ⚑ marks it in the sidebar. Priority turns come first, in the
 order they opened. The flag stays until you clear it, across restarts, /clear,
-handovers and crew naps. A snoozed agent stays snoozed when you mark it.
+handovers and crew harness switches. A snoozed agent stays snoozed when you mark it.
 
 ## Details
 

@@ -522,6 +522,14 @@
 
 .crew-session-action button:disabled { opacity: 0.45; cursor: default; }
 
+.crew-apply p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.crew-apply .crew-apply-failed { color: var(--color-error); }
+
 .crew-charter,
 .crew-handoffs {
   width: min(900px, 100%);

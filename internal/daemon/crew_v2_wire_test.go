@@ -79,19 +79,20 @@ func TestCrewV2DisablesClaudeMemoryAtEachLaunch(t *testing.T) {
 				if got := slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"); got != enabled {
 					t.Fatalf("v2=%t Claude memory disabled=%t", enabled, got)
 				}
-				crewHandoff(t, cli, string(day.SessionID), "The next launch reads the setting again.", false, protocol.CrewDayCloseSleep)
+				crewHandoff(t, cli, string(day.SessionID), "The next launch reads the setting again.", false)
 			}
 		})
 	}
 }
 
 func TestCrewV2SuccessorGetsTheOperatingModelAndDiscoveryPrompt(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
 	setSetting(t, w.App(), "crew_v2_enabled", "true")
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID)).Prompted()
-	handed := crewHandoff(t, cli, string(day.SessionID), "Follow s-example to the current work.", false, protocol.CrewDayCloseNap)
+	switchCrewHarness(t, cli, "trellis", "codex")
+	handed := crewHandoff(t, cli, string(day.SessionID), "Follow s-example to the current work.", false)
 	next := w.Launched(string(protocol.Deref(handed.SessionID)))
 	if got, want := next.Prompted(), prompts.RenderText("crew", "successor", prompts.Values{"crew_v2_enabled": "true"}); got != want {
 		t.Fatalf("v2 successor prompt = %q, want %q", got, want)

@@ -91,6 +91,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdCrewHandoffGet:                commandMetadata(false, true),
 	protocol.CmdCrewWake:                      commandMetadata(false, true),
 	protocol.CmdCrewSleep:                     commandMetadata(false, true),
+	protocol.CmdCrewApply:                     commandMetadata(true, true),
 	protocol.CmdCrewSet:                       commandMetadata(false, true),
 	protocol.CmdCrewRename:                    commandMetadata(false, true),
 	protocol.CmdCrewCreate:                    commandMetadata(false, true),

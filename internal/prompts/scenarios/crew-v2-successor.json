@@ -1,7 +1,7 @@
 {
   "version": 1,
   "id": "crew-v2-successor",
-  "description": "Successor after a nap, with crew v2 on.",
+  "description": "Successor on a new harness after crew apply, with crew v2 on.",
   "recipient": "crew",
   "event": "successor",
   "values": {

@@ -73,13 +73,9 @@ func (d *Daemon) boundCrewMember(sessionID protocol.SessionID) (crew.Member, boo
 	return crew.Member{}, false, nil
 }
 
-func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
+func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool) (*protocol.CrewHandoffResult, error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
-	return d.crewHandoffLocked(sessionID, note, retry, close)
-}
-
-func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	if sessionID == "" {
 		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (run from its terminal or pass --session)")
 	}
@@ -91,17 +87,17 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	if err != nil {
 		return nil, err
 	}
-	return d.crewTurnover(member, sessionID, path, close)
+	return d.crewTurnover(member, sessionID, path)
 }
 
-func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, path string, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
+func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, path string) (*protocol.CrewHandoffResult, error) {
 	result := &protocol.CrewHandoffResult{Member: member.ID, Name: member.Name, Path: path}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", member.Name, err)
 	}
-	if close != protocol.CrewDayCloseNap || member.Retired {
-		if err := d.closeNappedSession(sessionID, teardown); err != nil {
+	if member.SwitchingSession != sessionID || member.Retired {
+		if err := d.closeCrewDay(sessionID, teardown); err != nil {
 			d.cancelSessionTeardown(sessionID, teardown)
 			return nil, err
 		}
@@ -109,14 +105,14 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
 		return result, nil
 	}
-	newSessionID, err := d.crewNap(member, sessionID, teardown)
+	newSessionID, err := d.crewSwitchHarness(member, sessionID, teardown)
 	if err != nil {
-		d.logf("crew: %s's letter is filed but the nap did not run: %v", member.Name, err)
-		result.NapError = protocol.Ptr(err.Error())
+		d.logf("crew: %s's letter is filed but its successor did not start: %v", member.Name, err)
+		result.SuccessorError = protocol.Ptr(err.Error())
 		return result, nil
 	}
 	result.SessionID = protocol.Ptr(newSessionID)
-	result.Outcome = protocol.Ptr(protocol.CrewDayCloseNap)
+	result.Outcome = protocol.Ptr(protocol.CrewDayCloseSuccessor)
 	return result, nil
 }
 
@@ -175,7 +171,7 @@ func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID,
 	return nil
 }
 
-func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, teardown *sessionTeardown) (newSessionID protocol.SessionID, err error) {
+func (d *Daemon) crewSwitchHarness(member crew.Member, oldSessionID protocol.SessionID, teardown *sessionTeardown) (newSessionID protocol.SessionID, err error) {
 	committed := false
 	defer func() {
 		if !committed {
@@ -198,7 +194,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 			return "", err
 		}
 	}
-	spawnMsg, policy := d.crewNapSpawn(member, session)
+	spawnMsg, policy := d.crewSuccessorSpawn(member, session)
 	launchDir, err := d.resolveCrewWorkDir(spawnMsg.Cwd)
 	if err != nil {
 		return "", fmt.Errorf("wake %s's successor in %s: %w", member.Name, spawnMsg.Cwd, err)
@@ -221,16 +217,17 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 	}
 	d.recordMemberSession(member.ID, newSessionID)
 
-	if err := d.closeNappedSession(oldSessionID, teardown); err != nil {
+	if err := d.closeCrewDay(oldSessionID, teardown); err != nil {
 		return newSessionID, fmt.Errorf("successor %s is running, but session %s could not close: %w", newSessionID, oldSessionID, err)
 	}
 	committed = true
+	d.clearCrewSwitching(member.ID)
 	d.announceBackgroundLaunch("crew", member.ID, newSessionID, member.Name+" handoff")
-	d.logf("crew: %s napped — session %s ended, session %s is the new day", member.Name, oldSessionID, newSessionID)
+	d.logf("crew: %s switched to %s — session %s ended, session %s continues from its letter", member.Name, member.LaunchAgent(), oldSessionID, newSessionID)
 	return newSessionID, nil
 }
 
-func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*protocol.SpawnSessionMessage, internalSpawnPolicy) {
+func (d *Daemon) crewSuccessorSpawn(member crew.Member, session *protocol.Session) (*protocol.SpawnSessionMessage, internalSpawnPolicy) {
 	cols, rows := d.crewSessionGeometry(session.ID)
 	var spawnMsg *protocol.SpawnSessionMessage
 	var policy internalSpawnPolicy
@@ -300,7 +297,7 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 	return cols, rows
 }
 
-func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) error {
+func (d *Daemon) closeCrewDay(sessionID protocol.SessionID, teardown *sessionTeardown) error {
 	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member put to sleep"}); err != nil {
 		return err
 	}
@@ -313,7 +310,7 @@ func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sess
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {
-	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close))
+	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry))
 	if err != nil {
 		d.sendCrewError(conn, "handoff", err)
 		return

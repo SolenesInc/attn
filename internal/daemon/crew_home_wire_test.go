@@ -48,7 +48,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	_, err := cli.CrewMoveHome("Keel")
 	crewErrorContains(t, err, "Keel is awake", "attn crew sleep Keel")
-	crewHandoff(t, cli, string(awake.SessionID), "A letter that moves with me.", false, protocol.CrewDayCloseSleep)
+	crewHandoff(t, cli, string(awake.SessionID), "A letter that moves with me.", false)
 
 	moved := moveCrewHome(t, w, "Keel")
 	if moved.Member.HomeDir != notebookCrewHome(w, "keel") || moved.PreviousHome != before.HomeDir {

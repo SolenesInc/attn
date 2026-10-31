@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -47,33 +48,20 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 	if err != nil {
 		return nil, err
 	}
-	sessionID := protocol.TrimID(member.BindingSession)
-	if sessionID == "" {
-		return &protocol.CrewSleepResult{
-			Member:        member.ID,
-			Name:          member.Name,
-			AlreadyAsleep: true,
-			Detail:        fmt.Sprintf("%s is already asleep; no sleep request was sent", member.Name),
-		}, nil
-	}
-	live, err := d.crewSessionActuallyLive(sessionID)
+	sessionID, asleep, err := d.crewAwakeSession(member)
 	if err != nil {
-		return nil, fmt.Errorf("check %s's bound session %s: %w", member.Name, shortSessionID(sessionID), err)
+		return nil, err
 	}
-	if !live {
-		if _, err := d.releaseCrewBinding(member.ID, sessionID); err != nil {
-			return nil, fmt.Errorf("release %s's exited session %s: %w", member.Name, shortSessionID(sessionID), err)
-		}
-		d.noteCrewExitedSession(member.ID, sessionID)
+	if asleep != "" {
 		return &protocol.CrewSleepResult{
 			Member:        member.ID,
 			Name:          member.Name,
 			AlreadyAsleep: true,
-			Detail: fmt.Sprintf("%s is already asleep; previous session %s had exited and its binding was released; no sleep request was sent",
-				member.Name, shortSessionID(sessionID)),
+			Detail:        asleep + "; no sleep request was sent",
 		}, nil
 	}
 
+	d.clearCrewSwitching(member.ID)
 	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
@@ -92,4 +80,23 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 		DeliveryStatus: protocol.Ptr(status),
 		Detail:         detail,
 	}, nil
+}
+
+func (d *Daemon) crewAwakeSession(member crew.Member) (sessionID protocol.SessionID, asleep string, err error) {
+	sessionID = protocol.TrimID(member.BindingSession)
+	if sessionID == "" {
+		return "", fmt.Sprintf("%s is already asleep", member.Name), nil
+	}
+	live, err := d.crewSessionActuallyLive(sessionID)
+	if err != nil {
+		return "", "", fmt.Errorf("check %s's bound session %s: %w", member.Name, shortSessionID(sessionID), err)
+	}
+	if live {
+		return sessionID, "", nil
+	}
+	if _, err := d.releaseCrewBinding(member.ID, sessionID); err != nil {
+		return "", "", fmt.Errorf("release %s's exited session %s: %w", member.Name, shortSessionID(sessionID), err)
+	}
+	d.noteCrewExitedSession(member.ID, sessionID)
+	return "", fmt.Sprintf("%s is already asleep; previous session %s had exited and its binding was released", member.Name, shortSessionID(sessionID)), nil
 }

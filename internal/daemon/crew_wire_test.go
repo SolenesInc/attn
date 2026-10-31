@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
@@ -528,7 +527,7 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 		t.Fatalf("copied member was primed with the wrong files: %s", priming)
 	}
 	letter := "A letter filed by the copied instance.\n"
-	handed := crewHandoff(t, cli, string(woken.SessionID), letter, false, protocol.CrewDayCloseSleep)
+	handed := crewHandoff(t, cli, string(woken.SessionID), letter, false)
 	if filepath.Dir(handed.Path) != filepath.Join(crewHome(copied, "trellis"), crew.HandoffsDirName) {
 		t.Fatalf("letter filed outside the copied instance: %s", handed.Path)
 	}
@@ -786,23 +785,11 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 			t.Fatalf("refused saves changed alder: %+v", current)
 		}
 
-		for key, value := range map[string]string{"crew.wake_limit": "0", "crew.away_seconds": "60", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
-			setSetting(t, app, key, value)
-		}
 		if err := w.InjectCrewSession("alder-day", "alder-day", w.Path("alder-day"), "alder"); err != nil {
 			t.Fatal(err)
 		}
-		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})
-		w.advance(time.Minute)
-		w.advance(3 * time.Minute)
 		awake := crewRosterMember(t, cli, "alder").Revision
-		filed := crewHandoff(t, cli, "alder-day", "Filed from the day.", false, protocol.CrewDayCloseNap)
-		if !strings.Contains(protocol.Deref(filed.NapError), "crew.wake_limit=0") {
-			t.Fatalf("handoff = %+v, want the nap refused at the wake limit", filed)
-		}
-		if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != "alder-day" {
-			t.Fatalf("after the refused nap alder is bound to %q, want alder-day", got)
-		}
+		crewHandoff(t, cli, "alder-day", "Filed from the day.", false)
 		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "alder" && m.Revision > awake })
 		})

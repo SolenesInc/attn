@@ -978,6 +978,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		asked := msg.(*protocol.CrewSleepMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)
 		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, asked) })
+	case protocol.CmdCrewApply:
+		asked := msg.(*protocol.CrewApplyMessage)
+		asked.ProfileID = client.profileOr(asked.ProfileID)
+		d.life.Go("handleCrewApplyWS", func() { d.handleCrewApplyWS(client, asked) })
 	case protocol.CmdCrewRename:
 		asked := msg.(*protocol.CrewRenameMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)

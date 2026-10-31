@@ -10,7 +10,7 @@ import (
 )
 
 func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	x, xRun := mailIdleAgent(w, app, "peer")
 	day := wakeCrew(t, cli, "Keel", "")
@@ -31,10 +31,11 @@ func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	if sender.Ref != "member:keel" || sender.Name != "Keel" || protocol.Deref(batch.Items[0].ReplyTo) != "Keel" {
 		t.Fatalf("member sender: %+v reply to %q", sender, protocol.Deref(batch.Items[0].ReplyTo))
 	}
-	next := crewHandoff(t, cli, old, "Continue the conversation with our peer.", false, protocol.CrewDayCloseNap)
+	switchCrewHarness(t, cli, "Keel", "codex")
+	next := crewHandoff(t, cli, old, "Continue the conversation with our peer.", false)
 	id := string(protocol.Deref(next.SessionID))
-	if id == "" || next.NapError != nil {
-		t.Fatalf("nap: %+v", next)
+	if id == "" || next.SuccessorError != nil {
+		t.Fatalf("successor: %+v", next)
 	}
 	nextRun := w.Launched(id)
 	nextRun.Prompted()

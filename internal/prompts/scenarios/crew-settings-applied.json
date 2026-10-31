@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-settings-applied",
+  "description": "Crew apply reloaded the member in place on the same harness.",
+  "recipient": "crew",
+  "event": "settings-applied",
+  "values": {
+    "charter_path": "/notebook/crew/keel/CHARTER.md"
+  }
+}

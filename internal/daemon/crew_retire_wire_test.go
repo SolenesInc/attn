@@ -137,7 +137,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if !again.AlreadyRetired || len(again.ReleasedSeeds) != 0 {
 		t.Fatalf("repeat retire = %+v", again)
 	}
-	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, ""); err != nil {
+	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false); err != nil {
 		t.Fatal(err)
 	}
 	awaitClosed(app, string(wake.SessionID))
@@ -231,25 +231,28 @@ func TestRetiredMembersDoNotBlockProfileDeletion(t *testing.T) {
 	}
 }
 
-func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
+func TestARetiredMembersLetterClosesTheDayWithoutASuccessor(t *testing.T) {
 	for _, how := range []struct {
-		name  string
-		close protocol.CrewDayClose
+		name      string
+		switching bool
 	}{
-		{name: "default"}, {name: "nap", close: protocol.CrewDayCloseNap},
+		{name: "default"}, {name: "with a harness switch pending", switching: true},
 	} {
 		t.Run(how.name, func(t *testing.T) {
-			w := newWorld(t, fakeagent.Claude)
+			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
 			keel := createCrew(t, cli, "Keel")
 			wake := wakeCrew(t, cli, "Keel", "")
 			w.Launched(string(wake.SessionID)).Prompted()
+			if how.switching {
+				switchCrewHarness(t, cli, "Keel", "codex")
+			}
 			retireCrew(t, cli, "Keel")
-			filed, err := cli.CrewHandoff(wake.SessionID, "Keep my letter for a later return.", false, how.close)
+			filed, err := cli.CrewHandoff(wake.SessionID, "Keep my letter for a later return.", false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.NapError != nil {
+			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.SuccessorError != nil {
 				t.Fatalf("retired closure = %+v", filed)
 			}
 			letter, err := os.ReadFile(filed.Path)

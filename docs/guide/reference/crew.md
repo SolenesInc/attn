@@ -67,8 +67,8 @@ desktops.
 **Manage crew** has four tabs for each member:
 
 - **Launch settings**. The launch desktop and the harness, model and effort
-  the next session starts with, and the Wake or Sleep button. Changes save as
-  you make them.
+  the next session starts with, the Wake or Sleep button, and Apply while the
+  member is awake. Changes save as you make them.
 - **Charter**. Edits `CHARTER.md` and saves as you type. If the file changes
   on disk while you edit, you pick "Use file version" or "Keep my edit".
 - **Handoffs**. The member's letters, read only.
@@ -99,17 +99,15 @@ file it. The member ends its own session; nothing stops it mid-sentence.
 
 A member files its letter with `attn handoff -m "<letter>"` (or `-m -` to
 read it from stdin). Attn saves it as a new file in `handoffs/` in the
-member's home and never edits it; a correction is a new letter. Then:
+member's home and never edits it; a correction is a new letter. Filing ends
+the session and the member sleeps until something wakes it. The one exception
+is a letter asked for by a harness change you applied, which starts the next
+session on the new harness (see below).
 
-- Plain `attn handoff` ends the session and the member sleeps until something
-  wakes it.
-- `attn handoff --nap` ends the session and starts the next one right away
-  from the letters. The new session picks up any exchange that was in
-  progress without asking you to repeat yourself.
-
-If the turnover fails, the letter stays filed and the session keeps running.
-`attn handoff --retry` uses that letter to end the session with the member
-asleep; `--retry --nap` starts the next session instead.
+If the session cannot end or the next one cannot start, the letter stays filed
+and the session keeps running. `attn handoff --retry` tries again with that
+letter. To give up on a harness switch, ask the member to sleep first; the
+retry then ends the session with the member asleep.
 
 ## Configuring a member
 
@@ -126,6 +124,24 @@ It never touches the member's markdown files.
 
 By default a member starts on its own desktop, named after it, which Attn
 creates the first time the member wakes.
+
+## Applying changed settings
+
+Saved settings reach an awake member when you apply them: **Apply** in Manage
+crew's Launch settings, or `attn crew apply <member>`. The member itself, an
+agent above it in the delegation chain, and the Chief can run it too.
+
+- On the same harness, such as a new model or effort or an edited charter, the
+  session reloads in place and keeps its conversation. Attn then asks the
+  member to read its charter again.
+- On a different harness, Attn asks the member to file its letter. Filing ends
+  the session and starts the next one on the new harness from the letter. The
+  new session picks up any exchange that was in progress without asking you to
+  repeat yourself.
+
+An asleep member needs nothing: its next wake uses the saved settings. Any
+reload of a member's session, such as "Reload this agent" or
+`attn agent reload`, also uses its saved model and effort.
 
 ## Details
 

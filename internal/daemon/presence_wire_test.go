@@ -115,9 +115,10 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				}
 				days := make(map[string]string)
 				for _, member := range []string{"trellis", "alder"} {
-					day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, member, "").SessionID))
+					day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, member, "codex").SessionID))
 					day.reply("Ready. <!-- attn:state=idle -->")
 					days[member] = day.id
+					applyCrew(t, cli, member)
 				}
 				w.advance(4 * time.Minute)
 				presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
@@ -128,14 +129,14 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				app.Close()
 				w.advance(29 * time.Second)
 				presenceTierIs(t, cli, "after the app disconnected", "away")
-				early := crewHandoff(t, cli, days["trellis"], "The last presence is still recent.", false, protocol.CrewDayCloseNap)
-				if protocol.Deref(early.Outcome) != protocol.CrewDayCloseNap || early.NapError != nil {
-					t.Fatalf("59 seconds after the last report the handoff = %+v, want a nap", early)
+				early := crewHandoff(t, cli, days["trellis"], "The last presence is still recent.", false)
+				if protocol.Deref(early.Outcome) != protocol.CrewDayCloseSuccessor || early.SuccessorError != nil {
+					t.Fatalf("59 seconds after the last report the handoff = %+v, want a successor", early)
 				}
 				w.advance(time.Second)
-				ended := crewHandoff(t, cli, days["alder"], "The user has been away for a minute.", false, protocol.CrewDayCloseNap)
-				if ended.SessionID != nil || !strings.Contains(protocol.Deref(ended.NapError), "crew.wake_limit=0") {
-					t.Fatalf("60 seconds after the last report the nap = %+v, want the autonomous wake limit to refuse it", ended)
+				ended := crewHandoff(t, cli, days["alder"], "The user has been away for a minute.", false)
+				if ended.SessionID != nil || !strings.Contains(protocol.Deref(ended.SuccessorError), "crew.wake_limit=0") {
+					t.Fatalf("60 seconds after the last report the handoff = %+v, want the autonomous wake limit to refuse its successor", ended)
 				}
 			})
 		})

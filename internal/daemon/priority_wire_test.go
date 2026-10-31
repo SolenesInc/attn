@@ -69,18 +69,19 @@ func TestPriorityDelegationAndHandover(t *testing.T) {
 	}
 }
 
-func TestCrewNapInheritsPriority(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+func TestCrewSuccessorInheritsPriority(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
 	day := wakeCrew(t, cli, "keel", "claude")
 	w.Launched(string(day.SessionID))
 	if err := cli.SetSessionPriority(day.SessionID, true); err != nil {
 		t.Fatal(err)
 	}
-	next := crewHandoff(t, cli, string(day.SessionID), "Continue the work", false, protocol.CrewDayCloseNap)
+	switchCrewHarness(t, cli, "keel", "codex")
+	next := crewHandoff(t, cli, string(day.SessionID), "Continue the work", false)
 	id := protocol.Deref(next.SessionID)
 	w.Launched(string(id))
 	if !protocol.Deref(queriedSession(t, cli, string(id)).Priority) {
-		t.Fatal("nap lost priority")
+		t.Fatal("the successor lost priority")
 	}
 }

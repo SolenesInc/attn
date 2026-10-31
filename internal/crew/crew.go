@@ -43,9 +43,10 @@ type Member struct {
 	AwarenessDirs  []string           `json:"awareness_dirs"`
 	BindingSession protocol.SessionID `json:"binding_session"`
 
-	LetterFile      string             `json:"letter_file"`
-	LetterSession   protocol.SessionID `json:"letter_session"`
-	AutonomousWakes []string           `json:"autonomous_wakes"`
+	LetterFile       string             `json:"letter_file"`
+	LetterSession    protocol.SessionID `json:"letter_session"`
+	AutonomousWakes  []string           `json:"autonomous_wakes"`
+	SwitchingSession protocol.SessionID `json:"switching_session,omitempty"`
 }
 
 func (m Member) HomeDir(dataRoot string) string {

@@ -287,7 +287,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 		first := w.bootBubbleClaude(t, string(protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)))
 		first.reply("Ready. <!-- attn:state=idle -->")
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "done for now", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "done for now", false); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeWatch(t, cli, "watcher", seed, false)

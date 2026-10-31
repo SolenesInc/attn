@@ -19,16 +19,16 @@ File the letter closing this crew member's session. You write it; attn files it 
 handoffs/ in the member's home, with a UTC-stamped name, and never edits the
 prose. A correction is a new letter.
 
-Plain handoff ends the session and the member sleeps until something wakes it,
-whether or not the user is at the machine. --nap reloads the member by ending
-this session and starting a new one from its letters.
+Filing ends the session and the member sleeps until something wakes it,
+whether or not the user is at the machine. When attn crew apply asked this
+session for its letter because the member's harness changed, filing instead
+starts the next session on the new harness from the letter.
 
-Filing immediately runs the turnover. With crew_v2_enabled on, the letter also
-records this session so attn can keep its transcript.
+With crew_v2_enabled on, the letter also records this session so attn can keep
+its transcript.
 
-If turnover fails, the letter stays filed and this session keeps running.
---retry uses that letter and ends the session with the member asleep.
---retry --nap uses it to reload the member.
+If the session cannot end or the next one cannot start, the letter stays filed
+and this session keeps running. --retry tries again with that letter.
 
 Only the session living a member's day can file one. The note for whoever tends
 a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
@@ -36,7 +36,6 @@ a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
 flags:
   -m <text>          the letter; - reads it from stdin
   --retry            turn the day over with the letter already filed; no -m
-  --nap              end this session and start a new one from the letters
   --session <id>     the session closing its day (defaults to the current session)
   --json             print the machine result as JSON
 `)
@@ -45,7 +44,6 @@ flags:
 type handoffArgs struct {
 	note    string
 	retry   bool
-	close   protocol.CrewDayClose
 	session protocol.SessionID
 	json    bool
 }
@@ -55,7 +53,6 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "the letter; - reads it from stdin")
 	retry := fs.Bool("retry", false, "turn the day over with the letter already filed")
-	nap := fs.Bool("nap", false, "end this session and start a new one from the letters")
 	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := parseFlags(fs, args); err != nil {
@@ -71,9 +68,6 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 		return handoffArgs{}, errors.New(`the letter is the handoff — pass it with -m "<your letter>", or -m - to pipe it in`)
 	}
 	parsed := handoffArgs{note: *message, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
-	if *nap {
-		parsed.close = protocol.CrewDayCloseNap
-	}
 	if parsed.session == "" {
 		parsed.session = protocol.TrimID(envSession())
 	}
@@ -96,7 +90,7 @@ func runHandoff(args []string) {
 		}
 		note = string(raw)
 	}
-	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry, parsed.close)
+	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
 		os.Exit(1)
@@ -114,14 +108,14 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 	} else {
 		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
 	}
-	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
-		fmt.Fprintf(os.Stderr, "handoff: no successor was woken: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` ends it with the member asleep; add --nap to reload. The letter above is filed, so do not write another.\n", napErr, result.Name)
+	if successorErr := strings.TrimSpace(protocol.Deref(result.SuccessorError)); successorErr != "" {
+		fmt.Fprintf(os.Stderr, "handoff: the next session did not start: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` tries again; `attn crew sleep %[2]s` makes the retry end it with the member asleep. The letter above is filed, so do not write another.\n", successorErr, result.Name)
 		os.Exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
 		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", result.Name)
 		return
 	}
-	fmt.Printf("%s's next day is session %s, waking now. This one ends here.\n",
+	fmt.Printf("%s's next session is %s on its new harness, starting now. This one ends here.\n",
 		result.Name, agentShortID(string(protocol.Deref(result.SessionID))))
 }
