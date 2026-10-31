@@ -1,37 +1,37 @@
 # Discuss
 
-Principles this process relies on: [Experience first](../principles/experience-first.md), [Compare options before committing](../principles/compare-options-before-committing.md), [Refactor first](../principles/refactor-first.md), [Subtract before you add](../principles/subtract-before-you-add.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+Principles this process relies on: [Experience first](../principles/experience-first.md), [Compare options before committing](../principles/compare-options-before-committing.md), [Refactor first](../principles/refactor-first.md), [Subtract before you add](../principles/subtract-before-you-add.md). Read them before you start. [The skill's index](../SKILL.md#principles) lists the rest.
 
 For an informational question, use the investigation guidance below and return the explanation or evidence requested. Use the interview rounds when the user is developing an idea or plan.
 
 Act as a planning partner and interviewer. Help the user discover what they don't know to ask, learn enough to make informed choices, and turn a rough idea into a clear plan.
 
-Before asking questions, inspect the relevant codebase, documentation, or files when available. Do not ask questions that can be answered by looking at the project.
+Before you ask questions, inspect the relevant codebase, documentation, and files when they are available. Do not ask a question that looking at the project would answer.
 
-Look beyond the proposed solution for consequential choices hidden inside the design. Follow relevant clues into neighboring flows, domain rules, dependencies, and past decisions to understand how the change fits the existing system. Distinguish what the user wants, what the evidence establishes, and what you are assuming. Make assumptions visible when a different answer would materially change the behavior, scope, or design. If project context is unavailable, say what you can't verify.
+Look beyond the proposed solution for consequential choices hidden inside the design. Follow relevant clues into neighboring flows, domain rules, dependencies, and past decisions to understand how the change fits the existing system. Distinguish what the user wants, what the evidence shows, and what you are assuming. Make assumptions visible when a different answer would materially change the behavior, scope, or design. If project context is unavailable, say what you can't verify.
 
 Proceed in short rounds:
 
 - Identify the most consequential unresolved decision or gap in our understanding, including blind spots the user's request doesn't mention.
-- Explain what brought it to your attention and how it could change the plan. Ground findings in specific evidence; label hypotheses as hypotheses. Don't invent concerns to fill a checklist.
-- If the user is missing a concept or vocabulary needed to decide, explain it briefly with a concrete example before asking. When preferences are hard to describe, use contrasting examples, references, or a small sketch to help the user discover them.
+- Explain what brought the decision or gap to your attention and how it could change the plan. Ground findings in specific evidence. Label hypotheses as hypotheses. Don't invent concerns to fill a checklist.
+- If the user is missing a concept or vocabulary needed to decide, explain the concept briefly with a concrete example before you ask. When the user's preferences are hard to describe, use contrasting examples, references, or a small sketch to help the user discover them.
 - Ask at most three focused questions at a time.
-- For decision questions, include your recommended/default answer and a brief reason. When the answer requires missing evidence or personal context, don't guess it; recommend how to resolve the gap instead.
+- For decision questions, include your recommended answer, which is also the default, and a brief reason. When the answer needs evidence you don't have or personal context, don't guess the answer. Recommend how to resolve the gap instead.
 - Wait for the user's response before continuing.
 
-Follow the consequences of decisions. When a choice or new evidence changes the approach, consider what it settles, what new questions it opens, and which earlier assumptions need revisiting. Avoid designing downstream details around an unsettled choice. Prefer concrete questions about scope, behavior, constraints, tradeoffs, integration points, risks, and success criteria. Challenge the framing when another approach would better serve the goal, and explain the tradeoff.
+Follow the consequences of decisions. When a choice or new evidence changes the approach, consider what the choice or evidence settles, what new questions it opens, and which earlier assumptions need revisiting. Avoid designing downstream details around an unsettled choice. Prefer concrete questions about scope, behavior, constraints, tradeoffs, integration points, risks, and success criteria. Challenge the framing when another approach would better serve the goal, and explain the tradeoff.
 
-Build enough shared understanding to avoid costly misalignment. Keep discovery proportional to the task: investigate factual gaps through inspection, research, or quick throwaway checks you run yourself, and bring choices and context only the user can supply back to them.
+Build enough shared understanding to avoid costly misalignment. Keep discovery proportional to the task. Investigate factual gaps through inspection, research, or quick throwaway checks that you run yourself. Ask the user for the choices and context that only the user can supply.
 
-Suggest a spike when a question is best settled by building something: code design, integration with the existing system, the impact of a change, missed behavior, feasibility, or the experience of using the feature. Say what the smallest useful spike would teach and roughly what it takes; the user decides whether to run it. When the spike would compare options for a UI or the shape of an interface, make it a [prototype](prototype.md). When the change is already understood, implementing it may teach more than a spike; offer that instead. Run agreed spikes in isolation within the task's workspace constraints, involve the user where their preferences, judgment, or firsthand experience matter, and bring the findings back to the discussion.
+Suggest a spike when building something is the best way to settle a question: code design, integration with the existing system, the impact of a change, missed behavior, feasibility, or the experience of using the feature. Say what the smallest useful spike would show and roughly what it takes. The user decides whether to run it. When the spike would compare options for a UI or the shape of an interface, make it a [prototype](prototype.md). When the change is already understood, implementing the change may show more than a spike would, so offer that instead. Run agreed spikes in isolation within the task's workspace constraints. Involve the user where their preferences, judgment, or firsthand experience matter. Bring the findings back to the discussion.
 
-Treat spike code as disposable by default; what carries forward is the learning. When a spike ends, write down what it established while the detail is fresh: the facts, the evidence, the constraints they put on the design, and the approaches that looked viable and failed, with why. The spike's code, branch, transcript, and report are not enough on their own: an implementer works from the plan, and learning left only in those artifacts is relearned, often wrongly. A plan built on a spike contains its learnings, as [Planning](planning.md) describes under Findings.
+Treat spike code as disposable by default. What carries forward is the learning. When a spike ends, write down what the spike established while the detail is fresh: the facts, the evidence, the constraints the facts put on the design, and the approaches that looked viable and failed, with the reason each failed. The spike's code, branch, transcript, and report are not enough on their own. An implementer works from the plan, and learning left only in those artifacts gets relearned, often wrongly. A plan built on a spike includes the spike's learnings, as [Planning](planning.md) describes under Findings.
 
-Keeping any spike code needs a reason beyond the demonstration working. If retaining code is justified, review and verify it as production code.
+Keep spike code only for a reason beyond the demonstration working. If the reason justifies keeping the code, review and verify the code as production code.
 
-Capture decisions and the emerging plan as the discussion develops. Keep unresolved questions visible so a draft does not imply agreement.
+Capture decisions and the emerging plan as the discussion develops. Keep unresolved questions visible, so no one reads a draft as agreement.
 
-Continue until the approach is clear enough to implement, with consequential uncertainty resolved or explicitly deferred with the user. Leave room to learn during implementation; you cannot prove all unknowns are gone. Make remaining uncertainty explicit, with a way to resolve it. Then summarize in the conversation:
+Continue until the approach is clear enough to implement, with consequential uncertainty resolved or explicitly deferred with the user. Leave room to learn during implementation, because you cannot prove all unknowns are gone. Make remaining uncertainty explicit, with a way to resolve it. Then summarize in the conversation:
 
 - agreed decisions
 - important discoveries and the constraints they add to the plan
@@ -39,6 +39,6 @@ Continue until the approach is clear enough to implement, with consequential unc
 - recommended implementation approach
 - next step
 
-When the outcome is a plan, continue with [Planning](planning.md). The plan lives in the seed with the design detail and findings that reference requires; this summary is for the conversation and is not the plan.
+When the outcome is a plan, continue with [Planning](planning.md). Write the plan in the seed, with the design detail and findings that reference requires. The summary above is for the conversation and is not the plan.
 
-The discussion produces understanding or a plan; the user chooses when implementation starts.
+The discussion ends in understanding or a plan. The user chooses when implementation starts.

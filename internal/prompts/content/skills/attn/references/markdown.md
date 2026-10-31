@@ -1,8 +1,7 @@
 # Markdown
 
-Open a markdown document in a live-reloading tile next to the current session:
+To show the user a markdown document, open it in a live-reloading tile next to the current session:
 
     attn open <path/to/file.md>
 
-The path may be relative or absolute. Use `--session <session-id>` to target a
-different session. Edits to the file appear in the tile automatically.
+The path can be relative or absolute. To open the tile next to a different session, add `--session <session-id>`. The tile reloads whenever the file changes.

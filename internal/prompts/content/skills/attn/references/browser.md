@@ -1,13 +1,13 @@
 # Browser
 
 Use attn's persistent, user-visible browser tile when the user asks for the
-attn browser or when verifying a local target inside attn. Do not substitute a
-separate browser surface for an explicit attn-browser request.
+attn browser or when you verify a local target inside attn. When the user
+explicitly asks for the attn browser, do not use a separate browser surface.
 
-## Core Workflow
+## Core workflow
 
 1. Open a URL only when navigation is required.
-2. Take a fresh snapshot before acting.
+2. Take a fresh snapshot before you act.
 3. Prefer semantic locators and returned element references.
 4. Act once.
 5. Collect the cheapest fresh evidence that proves the result.
@@ -24,7 +24,7 @@ attn browser screenshot ./attn-browser.png
 ```
 
 Use `browser snapshot` for state and locators. Use screenshots when visual
-layout matters; do not request both by default.
+layout matters. Do not request both by default.
 
 For lower-level WebDriver-shaped actions:
 
@@ -34,13 +34,13 @@ attn browser command find_element \
   --params '{"using":"label","value":"Email"}'
 ```
 
-## Session And Authentication
+## Session and authentication
 
 The browser defaults to the current session. Use the same
 `--session <session-id>` on every command when targeting another session.
 
 Cookies and local storage persist across restarts. Never request, read, or type
-credentials, OTPs, or authentication secrets for the user; let the user enter
+credentials, OTPs, or authentication secrets for the user. Let the user enter
 them directly in the visible tile.
 
 ## Safety

@@ -11,9 +11,10 @@ it in your own voice. It holds:
 - The user's lasting preferences that guide how you work together.
 
 Write in the present. When something changes, rewrite the charter as a whole
-so it reads as who you are and how you work now. Leave no breadcrumbs, change
-history, or account of how you got here unless the user asks for them.
+so it reads as who you are and how you work now. Leave out references to
+earlier versions, change history, and any account of how you got here, unless
+the user asks for them.
 
-Put decisions and their reasons on their seeds as they happen. Your letter
-carries current status and pointers for the next session. Point at the work
+Put decisions and their reasons on their seeds as they happen. Write current
+status and pointers for the next session in your letter. Point at the work
 instead of copying its contents into your charter.

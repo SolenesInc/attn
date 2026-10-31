@@ -1,57 +1,59 @@
 # Notebook
 
-Load this reference when you read or maintain the attn Notebook — your
-profile's durable markdown store — especially when your session is the chief of
+Load this reference when you read or maintain the attn Notebook, your
+profile's durable markdown store, especially when your session is the chief of
 staff. The Notebook outlives any single agent.
 
-The Notebook is plain markdown on disk. Read it and edit knowledge notes with
-native tools (Read/Write/Edit and `ls`/`rg`). Append journal entries through
-`attn journal append`, which serializes writes at the home.
-There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance (the chief-of-staff launch injection), and
-`attn settings get notebook.root.effective` prints it. Profiles share one folder,
-`~/attn-notebook` by default (per-instance variants append the instance name),
-unless a profile sets its own with `notebook.profile_root`. Paths below are
-written relative to that `<root>`. On an outpost, `notebook.root.effective` names
-that machine's copy of the shared Notebook, which syncs with the home; a folder
-a profile set for itself does not sync. `attn seed show <seed>` prints that
-machine's artifact folder.
+The Notebook is plain markdown on disk. Read the files and edit knowledge notes
+with your native tools (Read, Write, Edit, `ls`, `rg`). Append journal entries
+with `attn journal append`, which serializes writes at the home.
+There is no `attn notebook` CLI. Your operating guidance gives you the notebook
+root, and the chief of staff gets that guidance in the launch injection.
+`attn settings get notebook.root.effective` prints the root. Profiles share one
+folder, `~/attn-notebook` by default, unless a profile sets its own folder with
+`notebook.profile_root`. Per-instance variants append the instance name. Paths
+below are relative to that `<root>`. On an outpost, `notebook.root.effective`
+names that machine's copy of the shared Notebook, which syncs with the home. A
+folder that a profile set for itself does not sync. `attn seed show <seed>`
+prints that machine's artifact folder.
 
-`<root>/crew/` holds crew members' homes: a folder per member with its charter
-and letters. attn owns that folder and records where each home is, so don't
-move, rename or delete anything in it.
+`<root>/crew/` holds crew members' homes: a folder per member with the member's
+charter and letters. attn owns that folder and records where each home is, so
+do not move, rename or delete anything in it.
 
-## Orient First
+## Orient first
 
-Load what is already known before adding anything — read the index files:
+Before you add anything, load what is already known by reading the index files:
 
     <root>/index.md             # the bundle guide
     <root>/knowledge/index.md   # the knowledge-base nav
 
-Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
-`<root>/journal/`).
+Then browse the relevant subtree with `ls` or `grep` under
+`<root>/knowledge/...` or `<root>/journal/`.
 
-## Two Layers
+## Two layers
 
-- **The journal** — `<root>/journal/<date>.md`, dated entries: the durable,
-  curated log of what was done across attn, kept for the user's
-  recall and reviews, not a raw dump. Entries carry `type: journal`.
-- **The knowledge base** — `<root>/knowledge/`, distilled, timeless notes worth
-  keeping: decisions, gotchas, domain knowledge that outlived a single change. It is
-  organized **PARA-style**: `projects/` (bounded efforts, roughly one per
-  plot or epic), `areas/` (ongoing responsibilities and subsystems),
-  `resources/` (reference material), `archive/` (inactive items). As a project
-  finishes, promote its durable knowledge up into `areas/`.
+- **The journal** is `<root>/journal/<date>.md`: dated entries that form the
+  durable, curated log of what was done across attn. It is kept for the user's
+  recall and reviews, not as a raw dump. Entries have `type: journal`.
+- **The knowledge base** is `<root>/knowledge/`: distilled, timeless notes worth
+  keeping, such as decisions, gotchas, and domain knowledge that outlived a
+  single change. It is organized **PARA-style**. `projects/` holds bounded
+  efforts, roughly one per plot or epic. `areas/` holds ongoing
+  responsibilities and subsystems. `resources/` holds reference material.
+  `archive/` holds inactive items. When a project finishes, promote its durable
+  knowledge up into `areas/`.
 
-When a `projects/<slug>/` folder corresponds to a plot in the garden, stamp its
-`index.md` frontmatter with `resource: attn:seed/<plot-id>`. Move the folder under `archive/`
-yourself when the work ends, and promote anything durable into `areas/` first,
-since archived notes drop out of the active view.
+When a `projects/<slug>/` folder corresponds to a plot in the garden, stamp the
+`index.md` frontmatter of that folder with `resource: attn:seed/<plot-id>`.
+When the work ends, first promote anything durable into `areas/`, because
+archived notes drop out of the active view. Then move the folder under
+`archive/` yourself.
 
 The knowledge base is not a task tracker. Capture what is *known*, not what is
 *to do*.
 
-## Append A Journal Entry
+## Append a journal entry
 
 Append a short prose entry through the home:
 
@@ -64,9 +66,9 @@ The command creates the day's file with journal frontmatter when needed. Without
 `--date`, it uses the home's date. Use the command from outposts too, so concurrent
 appends share the same writer. Read the resulting file through your local copy.
 
-## Write Or Edit A Knowledge Note
+## Write or edit a knowledge note
 
-Create a file under the right PARA directory, e.g.
+Create a file under the right PARA directory, such as
 `<root>/knowledge/areas/notebook.md`, with OKF frontmatter and a tight body:
 
     ---
@@ -79,30 +81,33 @@ Create a file under the right PARA directory, e.g.
 
     The Notebook's markdown files are canonical; edits are plain file writes.
 
-To edit, just Read then Edit the file — ordinary on-disk edits. The daemon's
-filesystem watcher notices your change and refreshes any open in-app browser.
+To edit, Read the file, then Edit it. These are ordinary on-disk edits. The
+daemon's filesystem watcher notices your change and refreshes any open in-app
+browser.
 
-## Rules That Make The Knowledge Base Trustworthy
+## Rules that keep the knowledge base trustworthy
 
-- **Grounding is required.** Every durable knowledge note must carry resolvable
-  `sources:` in its frontmatter — journal anchors or URLs. Do not author a note
+- **Grounding is required.** Give every durable knowledge note resolvable
+  `sources:` in its frontmatter, as journal anchors or URLs. Do not write a note
   from paraphrase alone.
-- **Frontmatter is OKF.** `type:` is the one required field — an open,
-  author-chosen string (e.g. `note`), not a fixed enum. `title`, `summary`,
+- **Frontmatter is OKF.** `type:` is the one required field. It is an open,
+  author-chosen string, such as `note`, not a fixed enum. `title`, `summary`,
   `tags`, `created`, `updated`, and `sources` are recommended. Unknown keys are
-  preserved untouched. The reserved files `index.md` and `log.md` carry no
+  preserved untouched. The reserved files `index.md` and `log.md` have no
   frontmatter.
 - **Links are root-absolute markdown:** `[label](/knowledge/areas/foo.md)`, not
-  `[[wikilinks]]`. Keep the relationship kind (supersedes, relates-to) in prose.
-- **Be concise.** Notes are read by future agents under a token budget; prefer a
+  `[[wikilinks]]`. Keep the relationship kind, such as supersedes or
+  relates-to, in prose.
+- **Be concise.** Future agents read notes under a token budget, so prefer a
   tight summary plus a `sources:` pointer over a transcript.
 
-## As Chief Of Staff
+## As chief of staff
 
-The Notebook is your home. When you are promoted to the role mid-session, attn
-points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
-record durable decisions in the knowledge base as you make them, and keep the
-day's journal current with your view of your profile. Write at a chief-of-staff
-altitude — what moved across your profile's agents, what you delegated and
-decided — not a per-agent play-by-play. Each profile has its own chief; chiefs
-of profiles that share a Notebook folder write to the same files.
+The Notebook is your home. When attn promotes you to the role mid-session, it
+points you at `<root>/index.md`. Read that file to orient. Then read
+`<root>/knowledge/index.md`, record durable decisions in the knowledge base as
+you make them, and keep the day's journal current with your view of your
+profile. Write at a chief-of-staff level of detail: what moved across your
+profile's agents, what you delegated, and what you decided. Do not narrate each
+agent's work. Each profile has its own chief. Chiefs of profiles that share a
+Notebook folder write to the same files.
