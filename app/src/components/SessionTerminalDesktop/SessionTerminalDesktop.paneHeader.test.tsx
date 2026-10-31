@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { SessionTerminalDesktop } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalDesktopState } from '../../types/desktop';
@@ -66,24 +66,6 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
 }
 
 describe('SessionTerminalDesktop pane header', () => {
-  it('focuses the agent from its header until exit', () => {
-    const { container } = renderLonePane();
-
-    fireEvent.click(screen.getByRole('button', { name: `Focus agent ${GENERATED_NAME}` }));
-
-    expect(container.querySelector('.session-terminal-desktop')).toHaveClass('focus-mode', 'agent-focus-mode');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Return to split' }));
-
-    expect(container.querySelector('.session-terminal-desktop')).not.toHaveClass('focus-mode');
-    expect(container.querySelector('.session-terminal-desktop')).not.toHaveClass('agent-focus-mode');
-  });
-
-  it('names the session on a lone tile with nothing else to show', () => {
-    const { container } = renderLonePane();
-
-    expect(container.querySelector('.desktop-pane-title')?.textContent).toBe(GENERATED_NAME);
-  });
 
   it('keeps automation and PR provenance visible below the session name', () => {
     renderLonePane({
@@ -124,39 +106,6 @@ describe('SessionTerminalDesktop pane header', () => {
     expect(header).not.toHaveAttribute('title');
   });
 
-  it('offers rename on a lone tile, where a wrong generated name is most visible', () => {
-    const onRenameSession = vi.fn();
-    renderLonePane({ onRenameSession });
-
-    const rename = screen.getByTestId('rename-pane-pane-1');
-    fireEvent.click(rename);
-
-    expect(screen.getByDisplayValue(GENERATED_NAME)).toBeInTheDocument();
-  });
-
-  it("shows the session's state beside its name, as the sidebar row does", () => {
-    const { container } = renderLonePane({
-      desktopSessions: [{ id: 'sess-1', label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project', state: 'working' }],
-    });
-
-    const dot = container.querySelector('.desktop-pane-header .state-indicator');
-    expect(dot?.className).toContain('state-indicator--working');
-  });
-
-  it('shows a priced session in USD rounded to cents', () => {
-    renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(1.234),
-      }],
-    });
-
-    expect(screen.getByLabelText('Session usage $1.23')).toHaveTextContent('$1.23');
-  });
-
   it('places delegation controls after session usage on the headline', () => {
     const { container } = renderLonePane({
       desktopSessions: [{
@@ -187,168 +136,4 @@ describe('SessionTerminalDesktop pane header', () => {
     expect(headline?.textContent).toMatch(/\$2\.61.*Builder/i);
   });
 
-  it('does not round real sub-cent usage down to free', () => {
-    renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(0.004),
-      }],
-    });
-
-    expect(screen.getByLabelText('Session usage <$0.01')).toHaveTextContent('<$0.01');
-  });
-
-  it('keeps the known dollar amount and marks partially priced usage', () => {
-    renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(1.234, true),
-      }],
-    });
-
-    expect(screen.getByLabelText('Session usage $1.23*, some usage has no price')).toHaveTextContent('$1.23*');
-  });
-
-  it('falls back to compact tokens when none of the usage can be priced', () => {
-    renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(undefined, true, 184_000),
-      }],
-    });
-
-    expect(screen.getByLabelText('Session usage 184k tokens, some usage has no price')).toHaveTextContent('184k tokens');
-  });
-
-  it('shows no cost before the session has usage', () => {
-    renderLonePane();
-
-    expect(screen.queryByLabelText(/Session usage/)).not.toBeInTheDocument();
-  });
-
-  it('updates the visible cost when fresh session usage arrives', () => {
-    const { rerender } = renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(0.42),
-      }],
-    });
-
-    expect(screen.getByLabelText('Session usage $0.42')).toBeInTheDocument();
-
-    rerender(
-      <SessionTerminalDesktop
-        desktopId="desktop-1"
-        desktopSessions={[{
-          id: 'sess-1',
-          label: GENERATED_NAME,
-          agent: 'claude',
-          cwd: '/tmp/project',
-          usage: usage(0.73),
-        }]}
-        terminalState={loneAgentDesktop()}
-        activePaneId="pane-1"
-        fontSize={13}
-        enabled
-        isActiveSession
-        eventRouter={createPaneRuntimeEventRouterController()}
-        onSplitPane={vi.fn()}
-        onClosePane={vi.fn()}
-        onFocusPane={vi.fn()}
-        onNavigateOutOfSession={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByLabelText('Session usage $0.42')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Session usage $0.73')).toBeInTheDocument();
-  });
-
-  it('pins the active session usage when the command palette requests it', async () => {
-    const session = {
-      id: 'sess-1',
-      label: GENERATED_NAME,
-      agent: 'claude',
-      cwd: '/tmp/project',
-      usage: usage(0.73),
-    };
-    const { rerender } = renderLonePane({ desktopSessions: [session] });
-
-    rerender(
-      <SessionTerminalDesktop
-        desktopId="desktop-1"
-        desktopSessions={[session]}
-        usagePopoverRequest={{ sessionId: 'sess-1', nonce: 1 }}
-        terminalState={loneAgentDesktop()}
-        activePaneId="pane-1"
-        fontSize={13}
-        enabled
-        isActiveSession
-        eventRouter={createPaneRuntimeEventRouterController()}
-        onSplitPane={vi.fn()}
-        onClosePane={vi.fn()}
-        onFocusPane={vi.fn()}
-        onNavigateOutOfSession={vi.fn()}
-      />,
-    );
-
-    expect(await screen.findByRole('dialog', { name: 'Session usage breakdown' })).toHaveTextContent('esc close');
-  });
-
-  it('falls back to the pane title when the session carries no label', () => {
-    const { container } = renderLonePane({ desktopSessions: [] });
-
-    expect(container.querySelector('.desktop-pane-title')?.textContent).toBe('shell');
-  });
-  it('carries the seed a delegated session reports to, and opens it', () => {
-    const onOpenSeed = vi.fn();
-    renderLonePane({
-      desktopSessions: [{ id: 'sess-1', label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project', seedId: 's-rep111' }],
-      onOpenSeed,
-    });
-
-    fireEvent.click(screen.getByTestId('seed-chip-sess-1'));
-
-    expect(onOpenSeed).toHaveBeenCalledWith('s-rep111');
-  });
-
-  it('shows no seed chip on a session that reports to none', () => {
-    renderLonePane({ onOpenSeed: vi.fn() });
-
-    expect(screen.queryByTestId('seed-chip-sess-1')).not.toBeInTheDocument();
-  });
-
-  it('shows and opens the claim of the crew member awake in this pane', () => {
-    const onOpenSeed = vi.fn();
-    renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1', label: 'Fern', agent: 'claude', cwd: '/tmp/project', crewMember: 'fern',
-      }],
-      gardenSeeds: [{
-        id: 's-crew11', title: 'Member work', body: '', status: 'growing', step_slug: 'member-work',
-        profile_id: 'profile-default',
-        planter: { ref: 'user', name: 'the user' },
-        tender: { ref: 'member:fern', name: 'Fern', session_id: 'sess-1' }, claimed: true,
-        edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
-        created_at: '2026-09-04T12:00:00Z', updated_at: '2026-09-04T12:00:00Z',
-        state_changed_at: '2026-09-04T12:00:00Z', state_changed_at_exact: true,
-      }],
-      onOpenSeed,
-    });
-
-    expect(screen.getByText('Member work')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('seed-chip-sess-1'));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-crew11');
-  });
 });

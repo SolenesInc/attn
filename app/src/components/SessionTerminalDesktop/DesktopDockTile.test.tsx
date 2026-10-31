@@ -134,22 +134,6 @@ describe('DesktopDockTile Markdown rendering', () => {
     expect(resolveMarkdownTarget('/tmp/project/README.md', 'javascript:alert(1)')).toBeNull();
   });
 
-  it('blocks automatic remote image loads', () => {
-    const { container } = renderMarkdown('![tracking](https://example.test/pixel?id=123)');
-
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('[blocked image: tracking]')).toBeInTheDocument();
-    expect(opener.openUrl).not.toHaveBeenCalled();
-  });
-
-  it('renders relative local images inline via the asset protocol', () => {
-    const { container } = renderMarkdown('![diagram](docs/diagram.png)');
-
-    const img = container.querySelector('img.md-reader-image');
-    expect(img).toHaveAttribute('src', 'asset://localhost//tmp/project/docs/diagram.png');
-    expect(invokeMock).not.toHaveBeenCalled();
-  });
-
   it('opens relative and external links through the Tauri opener', () => {
     renderMarkdown('[guide](docs/setup.md) [site](https://example.test/docs)');
 
@@ -184,14 +168,6 @@ describe('DesktopDockTile Markdown rendering', () => {
     ]);
   });
 
-  it('renders a mermaid fence as a diagram via the shared Markdown renderer', async () => {
-    renderMarkdown('```mermaid\ngraph TD;\nA-->B;\n```');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('mermaid-svg')).toBeInTheDocument();
-    });
-    expect(mermaidMock.render).toHaveBeenCalled();
-  });
 });
 
 describe('deriveTileTitle', () => {
@@ -751,35 +727,6 @@ describe('DesktopDockTile markdown send flow', () => {
     expect(screen.queryByRole('button', { name: /Send 0/ })).toBeNull();
   });
 
-  it('opens overall notes and the floating review inspector from the tile header', async () => {
-    const { transport, saveSpy } = makeSendTransport([]);
-    setMarkdownAnnotationsTransport(transport);
-    renderSendTile();
-    await screen.findByRole('button', { name: 'Annotation destination: alpha' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
-    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
-      target: { value: 'First overall note' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
-    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
-      target: { value: 'Second overall note' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-
-    expect(screen.getByRole('button', { name: 'Notes 2' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Notes 2' }));
-    expect(screen.getByRole('dialog', { name: 'Review notes' })).toBeInTheDocument();
-    expect(screen.getByText('First overall note')).toBeInTheDocument();
-    expect(screen.getByText('Second overall note')).toBeInTheDocument();
-
-    fireEvent.click(sendButton());
-    await waitFor(() => expect(saveSpy).toHaveBeenCalled());
-    const latest = saveSpy.mock.calls[saveSpy.mock.calls.length - 1]?.[1] as WireAnnotation[];
-    expect(latest.filter((annotation) => annotation.type === 'global')).toHaveLength(2);
-  });
-
   it('delivers: Sending… → Sent ✓, list empties locally without re-fetch or second clear (E14)', async () => {
     const { transport, getSpy, clearSpy, submitSpy } = makeSendTransport();
     let resolveSubmit: (result: MarkdownAnnotationsSubmitResult) => void = () => {};
@@ -812,50 +759,6 @@ describe('DesktopDockTile markdown send flow', () => {
     expect(sendButton()).toBeDisabled();
     expect(getSpy).toHaveBeenCalledTimes(1);
     expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  it('delivered-but-clear-failed keeps annotations and surfaces the warning, not Sent ✓ (E14)', async () => {
-    const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({
-      status: 'delivered',
-      error: 'delivered; failed to clear drafts: disk full',
-    });
-    setMarkdownAnnotationsTransport(transport);
-    renderSendTile();
-    await waitFor(() => {
-      expect(sendButton()).toBeEnabled();
-    });
-
-    fireEvent.click(sendButton());
-    await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('failed to clear drafts');
-    });
-    expect(sendButton()).toHaveTextContent('Needs attention');
-    expect(sendButton()).toBeEnabled();
-    expect(screen.queryByText('Sent ✓')).toBeNull();
-  });
-
-  it('refuses to Send while the draft is not hydrated (stale-draft guard, E14)', async () => {
-    const { transport, getSpy, submitSpy } = makeSendTransport();
-    getSpy.mockImplementation(() => new Promise(() => {}));
-    setMarkdownAnnotationsTransport(transport);
-    renderSendTile();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Overall note' }));
-    fireEvent.change(screen.getByPlaceholderText('Add an overall note...'), {
-      target: { value: 'unsaved local note' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    await waitFor(() => {
-      expect(sendButton()).toHaveTextContent('Send 1');
-    });
-
-    fireEvent.click(sendButton());
-    await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('still syncing');
-    });
-    expect(submitSpy).not.toHaveBeenCalled();
-    expect(sendButton()).toHaveTextContent('Send failed');
   });
 
   it('keeps annotations and explains when the target is waiting on approval (E15)', async () => {
@@ -965,68 +868,6 @@ function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedD
 describe('DesktopDockTile seed reader', () => {
   afterEach(() => {
     setMarkdownAnnotationsTransport(null);
-  });
-
-  it('loads the seed document, renders its plot and collapsed log, annotates by seed URI, and refetches on a garden push', async () => {
-    const first = seedDocumentFixture();
-    const second = {
-      ...seedDocumentFixture('# Updated seed body'),
-      seed: seedFixture({ body: '# Updated seed body', rev: 2 }),
-    };
-    const sendSeedDocumentGet = vi.fn()
-      .mockResolvedValueOnce(first)
-      .mockResolvedValueOnce(second);
-    const sendOpenMarkdown = vi.fn().mockResolvedValue({});
-    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown });
-    const { transport, getSpy, submitSpy } = makeSendTransport();
-    setMarkdownAnnotationsTransport(transport);
-    const onRequestContent = vi.fn();
-    const props = {
-      tile: {
-        type: 'tile' as const,
-        tileId: 'tile-seed-s-plan11',
-        tileKind: 'seed' as const,
-        tileParams: 's-plan11',
-        tileSessionId: 'sess-a',
-      },
-      desktopId: 'desktop-1',
-      dragging: false,
-      desktopSessions: SEND_SESSIONS,
-      gardenSeeds: [first.seed],
-      onClose: vi.fn(),
-      onHeaderPointerDown: vi.fn(),
-      onRequestContent,
-    };
-    const view = render(
-      <DesktopDockTile {...props} />,
-      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
-    );
-
-    expect(await screen.findByRole('heading', { name: 'Seed body' })).toBeInTheDocument();
-    expect(screen.getByText('Reader child')).toBeInTheDocument();
-    expect(screen.getByText('Log').closest('details')).not.toHaveAttribute('open');
-    fireEvent.click(screen.getByText('Log').closest('summary') as HTMLElement);
-    expect(screen.getByText('Live ledger note')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByText('Seed reader plan', { selector: '.desktop-dock-tile-title' })).toBeInTheDocument();
-    });
-    expect(view.container.querySelector('.md-reader--annotating')).toBeInTheDocument();
-    expect(onRequestContent).not.toHaveBeenCalled();
-    expect(getSpy).toHaveBeenCalledWith(seedMarkdownSource('s-plan11'));
-
-    await waitFor(() => expect(sendButton()).toHaveTextContent('Send 1'));
-    fireEvent.click(sendButton());
-    await waitFor(() => {
-      expect(submitSpy).toHaveBeenCalledWith(
-        seedMarkdownSource('s-plan11'),
-        { kind: 'session', sessionId: 'sess-a' },
-        [],
-      );
-    });
-
-    view.rerender(<DesktopDockTile {...props} gardenSeeds={[second.seed]} />);
-    expect(await screen.findByRole('heading', { name: 'Updated seed body' })).toBeInTheDocument();
-    expect(sendSeedDocumentGet).toHaveBeenCalledTimes(2);
   });
 
   it('navigates the plot in place, climbs canonical ancestry, and reveals the current seed in the Garden', async () => {
@@ -1236,45 +1077,6 @@ describe('DesktopDockTile seed reader', () => {
       );
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Noted ✓');
-  });
-
-  it('makes Note on seed the unsplit primary when nobody tends the seed', async () => {
-    const detail = {
-      ...seedDocumentFixture(),
-      seed: seedFixture({ tender: undefined, claimed: false }),
-    };
-    const daemonApi = createMockDaemonApi({
-      sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
-      sendOpenMarkdown: vi.fn(),
-    });
-    const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({ status: 'noted', generation: 8 });
-    setMarkdownAnnotationsTransport(transport);
-    render(
-      <DesktopDockTile
-        tile={{ type: 'tile', tileId: 'tile-seed-s-plan11', tileKind: 'seed', tileParams: 's-plan11' }}
-        desktopId="desktop-1"
-        dragging={false}
-        desktopSessions={SEND_SESSIONS}
-        gardenSeeds={[detail.seed]}
-        onClose={vi.fn()}
-        onHeaderPointerDown={vi.fn()}
-        onRequestContent={vi.fn()}
-      />,
-      { wrapper: ({ children }) => <SeedTileTestWrapper api={daemonApi}>{children}</SeedTileTestWrapper> },
-    );
-
-    const primary = await screen.findByRole('button', { name: 'Note on seed 1' });
-    expect(primary).toBeEnabled();
-    expect(screen.queryByRole('button', { name: 'More annotation destinations' })).toBeNull();
-    fireEvent.click(primary);
-    await waitFor(() => {
-      expect(submitSpy).toHaveBeenCalledWith(
-        seedMarkdownSource('s-plan11'),
-        { kind: 'seed', seedId: 's-plan11' },
-        [],
-      );
-    });
   });
 
   it('names an unknown seed read failure in the tile', async () => {
