@@ -1671,7 +1671,10 @@ func connectSQLite(dbPath string) (*sql.DB, *tableWrites) {
 				return 0
 			})
 			conn.RegisterRollbackHook(func() { dirty = false })
-			conn.RegisterUpdateHook(func(op int, _, table string, _ int64) {
+			conn.RegisterUpdateHook(func(op int, database, table string, _ int64) {
+				if database != "main" {
+					return
+				}
 				dirty = true
 				switch {
 				case table == "sessions" || table == "session_runtime":
