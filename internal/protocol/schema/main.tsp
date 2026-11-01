@@ -1716,6 +1716,31 @@ model DeleteWorktreeMessage {
   request_id?: string;
 }
 
+// A machine about to remove a worktree asks the home, which owns the Garden,
+// which open seeds the worktree serves and whether its branch must stay.
+@extension("x-on", #{ home: true })
+model WorktreeRemovalPrepareMessage {
+  cmd: "worktree_removal_prepare";
+  main_repo: string;
+  path: string;
+  branch: string;
+}
+model WorktreeRemovalPlan {
+  seeds: string[];
+  keep_branch: boolean;
+}
+
+// A machine that removed a worktree tells the home, which owns the sessions,
+// to close that machine's sessions under the path and note the removal on
+// the seeds the plan named.
+@extension("x-on", #{ home: true })
+model WorktreeRemovedMessage {
+  cmd: "worktree_removed";
+  path: string;
+  seeds?: string[];
+  note?: string;
+}
+
 // The Worktrees surface: every worktree of every repository attn tracks, read
 // from the registry. Never runs git, so it answers at once however slow the
 // repository is.

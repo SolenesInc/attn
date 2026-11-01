@@ -221,6 +221,8 @@ var Placements = map[string][]Placement{
 	"worktree_keep":                    {Placement{LocatorHere, ""}},
 	"worktree_list":                    {Placement{LocatorHere, ""}},
 	"worktree_refresh":                 {Placement{LocatorHere, ""}},
+	"worktree_removal_prepare":         {Placement{LocatorHome, ""}},
+	"worktree_removed":                 {Placement{LocatorHome, ""}},
 	"worktree_sweep_log":               {Placement{LocatorHere, ""}},
 }
 
@@ -2617,6 +2619,30 @@ func (m WorktreeRefreshMessage) Placement() Placement {
 }
 
 func (m WorktreeRefreshMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeRemovalPrepareMessage) CommandName() string {
+	return "worktree_removal_prepare"
+}
+
+func (m WorktreeRemovalPrepareMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeRemovalPrepareMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeRemovedMessage) CommandName() string {
+	return "worktree_removed"
+}
+
+func (m WorktreeRemovedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeRemovedMessage) Locate() string {
 	return ""
 }
 

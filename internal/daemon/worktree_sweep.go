@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -177,7 +176,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			var seeds []string
+			removal := deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}
 			deleteErr := lease.TryAutomaticRemoval(func(protection automaticWorktreeCleanupProtection) error {
 				if err := d.finalWorktreeSweepGitCheck(protection.Context(), candidate); err != nil {
 					return err
@@ -185,9 +184,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				if err := d.finalWorktreeSweepProtectionCheck(candidate); err != nil {
 					return err
 				}
-				var failure *removalFailure
-				seeds, failure = d.removeWorktreeCheckout(protection, wt, false)
-				if failure != nil {
+				if failure := d.removeWorktreeCheckout(protection, wt, removal); failure != nil {
 					return failure.err
 				}
 				return nil
@@ -200,7 +197,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
+			d.recordWorktreeRemoval(wt, removal, now)
 			d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
 			removed++
 		}
@@ -396,26 +393,26 @@ func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now t
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
-func (d *Daemon) recordWorktreeRemoval(
-	wt *store.Worktree, seeds []string, opts deleteWorktreeOptions, now time.Time,
-) {
-	action, reason := opts.RemovalAction, opts.RemovalReason
-	if action == "" {
-		action, reason = "deleted", "at your request"
+func removalActionAndReason(opts deleteWorktreeOptions) (string, string) {
+	if opts.RemovalAction == "" {
+		return "deleted", "at your request"
 	}
+	return opts.RemovalAction, opts.RemovalReason
+}
+
+func worktreeRemovalNote(wt *store.Worktree, opts deleteWorktreeOptions) string {
+	action, reason := removalActionAndReason(opts)
+	return fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
+		action, wt.Path, wt.Branch, wt.MainRepo, reason)
+}
+
+func (d *Daemon) recordWorktreeRemoval(wt *store.Worktree, opts deleteWorktreeOptions, now time.Time) {
+	action, reason := removalActionAndReason(opts)
 	entry := store.WorktreeSweepLogEntry{
 		Path: wt.Path, MainRepo: wt.MainRepo, Branch: wt.Branch,
 		Action: action, Reason: reason,
 	}
 	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
-
-	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
-		action, wt.Path, wt.Branch, wt.MainRepo, reason)
-	for _, seedID := range seeds {
-		if _, err := d.appendSeedNote(seedID, body, who.Attn(), "", nil, false, ""); err != nil {
-			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
-		}
-	}
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 

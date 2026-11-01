@@ -211,7 +211,9 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 				d.logf("Worktree %s doesn't exist and not in registry, treating as already deleted", path)
 				d.publishFact(FactWorktreeDeleted, path, nil)
-				d.cleanupDeletedWorktreeSessions(path)
+				if _, err := Call[struct{}](protection.Context(), d.router(), protocol.WorktreeRemovedMessage{Cmd: protocol.CmdWorktreeRemoved, Path: path}); err != nil {
+					return &deleteWorktreeError{err: fmt.Errorf("worktree %s is gone, but closing its sessions failed: %w", path, err), kind: deleteWorktreeFailureGitError}
+				}
 				return nil
 			}
 			return &deleteWorktreeError{
@@ -221,51 +223,79 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 		}
 	}
 
-	seeds, failure := d.removeWorktreeCheckout(protection, wt, opts.Force)
-	if failure != nil {
-		if failure.fromProvider {
+	if failure := d.removeWorktreeCheckout(protection, wt, opts); failure != nil {
+		switch {
+		case failure.unclassified:
+			return &deleteWorktreeError{err: failure.err, kind: deleteWorktreeFailureGitError}
+		case failure.fromProvider:
 			return d.classifyDeleteWorktreeProviderError(path, opts.Force, failure.err)
 		}
 		return d.classifyDeleteWorktreeGitError(path, opts.Force, failure.err)
 	}
-	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
+	d.recordWorktreeRemoval(wt, opts, time.Now())
 	return nil
 }
 
 type removalFailure struct {
 	err          error
 	fromProvider bool
+	unclassified bool
 }
 
-func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt *store.Worktree, force bool) ([]string, *removalFailure) {
-	d.captureGardenExecutionsInDirectory(wt.Path)
-	seeds := d.seedsForWorktree(wt)
-	handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, force)
+func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt *store.Worktree, opts deleteWorktreeOptions) *removalFailure {
+	plan, err := Call[protocol.WorktreeRemovalPlan](protection.Context(), d.router(), protocol.WorktreeRemovalPrepareMessage{
+		Cmd: protocol.CmdWorktreeRemovalPrepare, MainRepo: wt.MainRepo, Path: wt.Path, Branch: wt.Branch,
+	})
+	if err != nil {
+		return &removalFailure{err: fmt.Errorf("worktree %s was left in place: %w", wt.Path, err), unclassified: true}
+	}
+	handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, opts.Force)
 	switch {
 	case !handled && providerErr == nil:
 		deleteErr := d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
-			if err := client.DeleteWorktree(ctx, wt.MainRepo, wt.Path, force); err != nil {
+			if err := client.DeleteWorktree(ctx, wt.MainRepo, wt.Path, opts.Force); err != nil {
 				return err
 			}
-			d.deleteWorktreeBranch(ctx, client, wt.MainRepo, wt.Branch)
+			d.deleteWorktreeBranch(ctx, client, wt.MainRepo, wt.Branch, plan.KeepBranch)
 			return nil
 		})
 		if deleteErr != nil {
-			return seeds, &removalFailure{err: deleteErr}
+			return &removalFailure{err: deleteErr}
 		}
 	default:
 		if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
 			if providerErr == nil {
 				providerErr = errors.New("worktree delete provider reported success but the worktree still exists")
 			}
-			return seeds, &removalFailure{err: providerErr, fromProvider: true}
+			return &removalFailure{err: providerErr, fromProvider: true}
 		}
-		if err := d.settleProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch); err != nil {
-			return seeds, &removalFailure{err: err}
+		if err := d.settleProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch, plan.KeepBranch); err != nil {
+			return &removalFailure{err: err}
 		}
 	}
-	d.finalizeDeletedWorktree(protection, wt.Path)
-	return seeds, nil
+	return d.finalizeDeletedWorktree(protection, wt, plan.Seeds, opts)
+}
+
+func (d *Daemon) prepareWorktreeRemovalHere(_ context.Context, msg protocol.WorktreeRemovalPrepareMessage) (protocol.WorktreeRemovalPlan, error) {
+	d.captureGardenExecutionsInDirectory(msg.Path)
+	return protocol.WorktreeRemovalPlan{
+		Seeds:      d.seedsForWorktree(&store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch}),
+		KeepBranch: d.gardenKeepsBranch(msg.MainRepo, msg.Branch),
+	}, nil
+}
+
+func (d *Daemon) worktreeRemovedHere(ctx context.Context, msg protocol.WorktreeRemovedMessage) (struct{}, error) {
+	machine := ""
+	if origin, remote := OriginOf(ctx); remote {
+		machine = origin.Host
+	}
+	d.closeWorktreeSessions(machine, msg.Path)
+	for _, seedID := range msg.Seeds {
+		if _, err := d.appendSeedNote(seedID, protocol.Deref(msg.Note), who.Attn(), "", nil, false, ""); err != nil {
+			d.logf("worktree removal: noting %s on seed %s: %v", msg.Path, seedID, err)
+		}
+	}
+	return struct{}{}, nil
 }
 
 func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path string) bool {
@@ -286,8 +316,8 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 	return true
 }
 
-func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, branch string) error {
-	deleteBranch := d.worktreeBranchIsDeletable(mainRepo, branch)
+func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, branch string, keepBranch bool) error {
+	deleteBranch := worktreeBranchIsDeletable(d.logf, branch, keepBranch)
 	return d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
 		if err := client.PruneWorktrees(runCtx, mainRepo); err != nil {
 			return fmt.Errorf("provider removed a worktree of %s but pruning its registration failed: %w", mainRepo, err)
@@ -299,18 +329,18 @@ func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, br
 	})
 }
 
-func (d *Daemon) deleteWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string) {
-	if d.worktreeBranchIsDeletable(mainRepo, branch) {
+func (d *Daemon) deleteWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string, keepBranch bool) {
+	if worktreeBranchIsDeletable(d.logf, branch, keepBranch) {
 		d.deleteDeletableWorktreeBranch(ctx, client, mainRepo, branch)
 	}
 }
 
-func (d *Daemon) worktreeBranchIsDeletable(mainRepo, branch string) bool {
+func worktreeBranchIsDeletable(logf func(string, ...any), branch string, keepBranch bool) bool {
 	if branch == "" {
 		return false
 	}
-	if d.gardenKeepsBranch(mainRepo, branch) {
-		d.logf("Preserved branch %s because an open seed can continue from it", branch)
+	if keepBranch {
+		logf("Preserved branch %s because an open seed can continue from it", branch)
 		return false
 	}
 	return true
@@ -324,15 +354,21 @@ func (d *Daemon) deleteDeletableWorktreeBranch(ctx context.Context, client *git.
 	d.logf("Deleted branch %s along with worktree", branch)
 }
 
-func (d *Daemon) finalizeDeletedWorktree(_ worktreeCleanupProtection, path string) {
-	d.cleanupDeletedWorktreeSessions(path)
-	d.store.RemoveWorktree(path)
-	d.publishFact(FactWorktreeDeleted, path, nil)
+func (d *Daemon) finalizeDeletedWorktree(protection worktreeCleanupProtection, wt *store.Worktree, seeds []string, opts deleteWorktreeOptions) *removalFailure {
+	_, err := Call[struct{}](protection.Context(), d.router(), protocol.WorktreeRemovedMessage{
+		Cmd: protocol.CmdWorktreeRemoved, Path: wt.Path, Seeds: seeds, Note: protocol.Ptr(worktreeRemovalNote(wt, opts)),
+	})
+	d.store.RemoveWorktree(wt.Path)
+	d.publishFact(FactWorktreeDeleted, wt.Path, nil)
+	if err != nil {
+		return &removalFailure{err: fmt.Errorf("worktree %s was removed, but closing its sessions and noting its seeds failed: %w", wt.Path, err), unclassified: true}
+	}
+	return nil
 }
 
-func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
+func (d *Daemon) closeWorktreeSessions(machine, path string) {
 	for _, session := range d.store.List("") {
-		if !pathAtOrBelow(d.localDirectory(session), path) {
+		if d.sessionHost(session.ID) != machine || !pathAtOrBelow(session.Directory, path) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)

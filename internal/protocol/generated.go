@@ -14220,6 +14220,42 @@ type WorktreeRefreshResultEvent struct {
 	Success bool `json:"success"`
 }
 
+type WorktreeRemovalPlan struct {
+	// KeepBranch corresponds to the JSON schema field "keep_branch".
+	KeepBranch bool `json:"keep_branch"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []string `json:"seeds"`
+}
+
+type WorktreeRemovalPrepareMessage struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MainRepo corresponds to the JSON schema field "main_repo".
+	MainRepo string `json:"main_repo"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type WorktreeRemovedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []string `json:"seeds,omitempty,omitzero"`
+}
+
 type WorktreeRepository struct {
 	// IntegrationBranch corresponds to the JSON schema field "integration_branch".
 	IntegrationBranch *string `json:"integration_branch,omitempty,omitzero"`

@@ -22,7 +22,7 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 - `remote-terminals`: shells and agents on an outpost in tiles beside local ones. Their attn commands reach the home.
 - `offline`: a terminal whose outpost is unreachable stays in place, marked, and sends no typing.
 - `ledger-resume`: a closed outpost session's ledger row names the outpost, and resume brings the session back on that outpost with its conversation and cost. For the ledger itself, see [ledger.md](ledger.md).
-- `launcher-reads`: `browse_directory`, `inspect_path`, `get_repo_info`, `create_worktree` and `delete_worktree` with `host` run on that outpost, and `agent_catalog` returns its harnesses. The app does not send `host` with them yet.
+- `launcher-reads`: `browse_directory`, `inspect_path`, `get_repo_info`, `create_worktree` and `delete_worktree` with `host` run on that outpost, and `agent_catalog` returns its harnesses. A worktree removed on an outpost, whether by a delete or by the sweep, asks the home first: the home's open seeds keep its branch and get the removal note, and the home closes its sessions there. Without the home, the outpost refuses the removal. The app does not send `host` with these commands yet.
 - `notebook-sync`: the home and its outposts keep one notebook in sync, and the outpost's row shows the sync. For the notebook itself, see [notebook.md](notebook.md).
 
 ## How to get to it
@@ -136,7 +136,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`.
-- Stack: `cmd/attn/outposts_stack_test.go`, `cmd/attn/outpost_connect_terminal_stack_test.go`, `cmd/attn/outpost_*_stack_test.go`, `cmd/attn/remote_*_stack_test.go`, `cmd/attn/enrollment_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `cmd/attn/delegate_outpost_stack_test.go`, `cmd/attn/session_reopen_outpost_stack_test.go`, `cmd/attn/launcher_reads_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
+- Stack: `cmd/attn/outposts_stack_test.go`, `cmd/attn/outpost_connect_terminal_stack_test.go`, `cmd/attn/outpost_*_stack_test.go`, `cmd/attn/remote_*_stack_test.go`, `cmd/attn/enrollment_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `cmd/attn/delegate_outpost_stack_test.go`, `cmd/attn/session_reopen_outpost_stack_test.go`, `cmd/attn/launcher_reads_stack_test.go`, `cmd/attn/remote_worktree_delete_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
 - Scenario: `outposts-settings`, `outpost-update`, `notebook-sync`.
 - Kernel: `internal/enrollment/*_test.go`, `internal/outpostbuild/*_test.go`.
 - App: `app/src/App.outpostsSettings.test.tsx`, `app/src/App.outpostUpdates.test.tsx`, `app/src/App.remoteAgents.test.tsx`, `app/src/App.remoteShell.test.tsx`, `app/src/App.outpostPaths.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/components/ledger/SessionsTab.outposts.test.tsx`.

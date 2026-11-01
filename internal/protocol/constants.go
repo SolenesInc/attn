@@ -278,13 +278,15 @@ const (
 )
 
 const (
-	CmdLaunchCommitted       = "launch_committed"
-	CmdConversationReadiness = "conversation_readiness"
-	CmdAgentCatalog          = "agent_catalog"
-	CmdCheckoutInspect       = "checkout_inspect"
-	CmdReopenInspect         = "reopen_inspect"
-	CmdReopenWorktree        = "reopen_worktree"
-	CmdAgentLaunchClose      = "agent_launch_close"
+	CmdLaunchCommitted        = "launch_committed"
+	CmdConversationReadiness  = "conversation_readiness"
+	CmdAgentCatalog           = "agent_catalog"
+	CmdWorktreeRemovalPrepare = "worktree_removal_prepare"
+	CmdWorktreeRemoved        = "worktree_removed"
+	CmdCheckoutInspect        = "checkout_inspect"
+	CmdReopenInspect          = "reopen_inspect"
+	CmdReopenWorktree         = "reopen_worktree"
+	CmdAgentLaunchClose       = "agent_launch_close"
 )
 
 const (
