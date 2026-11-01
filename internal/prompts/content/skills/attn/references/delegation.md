@@ -60,7 +60,7 @@ attn delegate --seed s-example --handover --role orchestrator \
 
 Attn saves the note and transfers ownership before it starts the successor. The previous agent keeps running. Handover is the explicit transfer choice, so it has no extra force or confirm flag. A handover does not widen what the user authorized for the task. An ordinary progress note does not cancel a handover. If the tender changes during preparation, or the seed closes, reconsider the request.
 
-For a completed design, recommend an Orchestrator when the plan needs coordinated or reviewed Builder work, or when mixing harnesses or models between the coordinating agent and its Builders would help. Otherwise recommend a Builder. Follow the planning process's checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Skip the checkpoint only when the user explicitly said to dispatch without reviewing the plan, as that process describes.
+For a completed design, recommend an Orchestrator when the plan needs coordinated or reviewed Builder work, or when mixing harnesses or models between the coordinating agent and its Builders would help. Otherwise recommend a Builder. Before you dispatch, follow the dispatch checkpoint in the `attn-workflow` skill's Planning reference.
 
 ## Choose the machine, folder and checkout
 

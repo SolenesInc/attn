@@ -103,9 +103,9 @@ Preconditions:
 
 - The CLI prints the wire names `waiting_input` and `pending_approval`. The home screen says "Waiting for input" and "Pending approval". The glossary says waiting and needs approval. Match the name each view prints.
 - The baseline refuses background model tasks, so the turn classifier never runs. The mock decides instead: a turn with a reply ends `waiting_input`, a turn with no action ends `idle`. A real harness on the baseline can sit in a state the classifier would have changed.
-- The needs-approval step stands in for Claude Code's permission dialog through the same hook it calls. Report the prompt while the agent is idle: the mock repeats its busy title every half second during a turn, and busy evidence newer than the prompt outranks the prompt. A real dialog needs a real harness.
+- The needs-approval step stands in for Claude Code's permission dialog through the same hook it calls. The step reports the prompt while the agent is idle because the mock repeats its busy title every half second during a turn, and busy evidence newer than the prompt outranks the prompt. A real dialog needs a real harness.
 - `wsctl input` counts as the user typing, so it opens and settles turns as typing does. The turn itself is [queue-flow.md](queue-flow.md).
-- The activity switch is disabled until an agent is chosen, so a native click on the baseline does nothing. You can set `activity.enabled` from the shell without an agent, and then `attn activity` reports that no agent is selected. With an agent chosen the status reads `activity: on`, and no line is ever written while background tasks are off. `presence: away` means nobody is looking, and nothing is generated then either.
+- With an agent chosen the status reads `activity: on`, and no line is ever written while background tasks are off. `presence: away` means nobody is looking, and nothing is generated then either.
 - `attn state explain` on a session whose state predates the daemon's start prints `No state observations recorded.`. Send the agent a prompt to get rows.
 - A stopped agent reads `idle`, not `recoverable`, as [agent-launch.md](agent-launch.md) explains.
 - Working but wrong: `attn agent list` lists sessions from every profile, while everything else shows one profile.

@@ -179,23 +179,9 @@ Adapt the assignment and its completion check to the work:
 
 The garden instructions explain how to repeat a move, why you replant a seed
 before you change how it closed (harvested or withered), and why a plot closes
-only after its direct children.
-
-When the only thing left is a pull request merging, say so once and let attn
-close it:
-
-    attn seed harvest <id> --when-merged [<pr-url>] -m "<outcome and verification>"
-                                                  with no url, this session's
-                                                  single open pull request
-    attn seed harvest <id> --when-merged --clear      take the arming back
-
-If you were growing the seed, attn parks it and releases your claim.
-Either way, the seed points at the pull request, and attn harvests the seed
-with your reason when the merge lands. Without `-m`, the reason is
-"PR #N merged: <title>". The command merges nothing. If the pull request closes
-without merging, attn clears the arming instead. Use the command only when the
-merge is genuinely the last step. Review notes to answer, docs to write, and
-evidence to attach are work, and work belongs to a tender.
+only after its direct children. They also explain
+`attn seed harvest <id> --when-merged`, which harvests the seed when its pull
+request merges. Use it only when the merge is the last step.
 
 ARTIFACTS
 

@@ -71,7 +71,7 @@ Number findings (F1, F2) and cite them where the design depends on them and in t
 
 Show each design part instead of describing it. A part with prose alone is incomplete.
 
-When the shape already exists in the codebase, show its change as a diff of that shape: `+` and `-` lines on the file tree, the type, the call tree or the sequence. Show the whole shape when most of it is new, when a diff would hide ownership or order, or when the implementer needs a copyable target. A diff shows what changes where prose would describe it.
+When the shape already exists in the codebase, show its change as a diff of that shape: `+` and `-` lines on the file tree, the type, the call tree or the sequence. The showing reference below says when to show the whole shape instead.
 
 Scale each picture to the change. Give it enough detail that the reader can judge the design without reconstructing it from the code, and no more. Use names from the codebase. Put each picture beside the short explanation it supports, in a fenced code block, or in a Mermaid block for component interaction and data flow, because the Garden renders both. Keep pictures narrow, and split a wide picture into smaller views. Show separate production and test wiring when the distinction matters.
 

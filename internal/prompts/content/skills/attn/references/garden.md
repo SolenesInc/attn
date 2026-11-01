@@ -16,24 +16,14 @@ exchange. Do not correct them or switch the other concepts unless they do.
 Track work that outlives this turn in seeds, not in markdown TODO lists or your harness's todo tool, because those end with the session. Examples are a bug you found, a follow-up you are not doing now, and a piece you split off. Search before you plant. `attn seed search <words>` ranks stemmed word-prefix matches across titles, bodies and logs, including identifier parts and closed seeds, so you find work that already exists instead of planting it twice. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so the new seed stays with the plot's plan. If you discover work while tending another seed, add `--discovered-from <seed>` so the origin is on record. Before your turn ends, plant what is still undone.
 
 Every seed body, including the body of a plot child, is a work prompt for
-someone without this conversation. In the body, state the task and outcome,
-the starting context, the constraints and the completion check. A short body
-is enough when it gives that direction.
+someone without this conversation. WRITING A BODY in `attn seed guide` says
+what the prompt contains.
 
 ## Editing a body
 
-Export the body, edit the file with any tool, then submit it:
-
-    attn seed export s-7k3f9m
-    # edit s-7k3f9m.md; keep its first line
-    attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
-
-The first line of the exported file is a stamp that names the seed and its body hash. If another edit changed the body,
-export again and reapply your change. attn refuses an empty body. Each edit saves
-an undoable body version and one log entry. `--note` adds your explanation to
-the log entry. Read the entries with `attn seed notes s-7k3f9m`. Restore the
-previous version with `attn seed rollback s-7k3f9m`, or a named version with
-`attn seed rollback s-7k3f9m 2`. A rollback saves a new version too.
+To change a body, export it, edit the file, and submit it with
+`attn seed edit`. EDITING A BODY in `attn seed guide` gives the steps and
+explains how to roll back an edit.
 
 ## Planting a plot
 

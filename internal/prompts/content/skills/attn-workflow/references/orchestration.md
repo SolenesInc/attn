@@ -14,7 +14,7 @@ When you advise a Builder, read the relevant code and evidence, and ask follow-u
 
 ## Questions for the user
 
-Before you ask, classify the question as [Never block on the user](../principles/never-block-on-the-user.md) describes. As the Orchestrator, you are the coordinating agent, so you decide a reversible call inside the agreed scope, record the decision in the plan, and report the decision with the alternative. Send the user only a product or preference call that no experiment settles, a change to the agreed scope or intent, or an irreversible or outward-facing step the task has not authorized.
+Before you ask, classify the question as [Never block on the user](../principles/never-block-on-the-user.md) describes. As the Orchestrator, you are the coordinating agent. Decide each reversible call inside the agreed scope yourself, record the decision in the plan, and report the decision with the alternative. Send the user only the rest that the principle names.
 
 Before you ask, record the question as an open item under the plan's Decisions in the seed, in the shape [Planning](planning.md) gives open questions. Keep working on tasks that do not depend on the question. Then write the question so the user can answer it without this conversation. Use one line that says how many things need the user. For each question, use two lines: the decision with your recommendation and the reason, then what happens without an answer, with a link to the seed for the detail. Batch questions that arrive close together, ask each question once, and do not repeat open questions in every progress update.
 

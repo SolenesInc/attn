@@ -378,22 +378,3 @@ the outpost's binary.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.
-
-## Checking a change to outposts
-
-The stack tests in `cmd/attn` pair through testworld's fake ssh and run real
-daemons, bridge processes and terminal workers. Run the focused lifecycle check:
-
-```sh
-go test ./cmd/attn -run TestSSH -v
-```
-
-For a fresh Add, Update, and Remove on your ssh route, run
-`scripts/verify-ssh-outposts/install.mjs --help`. It starts from no files for
-its named instance, records upload time, verifies a shell survives Update,
-and checks that Remove keeps the instance's files and stops its daemon.
-
-`scripts/verify-ssh-outposts/transport.mjs` measures typing echo beside a plain
-echo on the same master. The script adds the outpost, and Add installs the matching binary. Use `--mode bulk`
-with a copied Notebook to measure a first sync. The harness removes the
-instances and scratch files it starts.
