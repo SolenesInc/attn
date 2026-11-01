@@ -46,6 +46,8 @@ agent works in. A scheduled trigger also takes:
   the prompt, harness, model, effort or directory, the next run starts a new
   agent on the same seed, so the new agent picks up where the old one left
   off. Attn leaves the old agent running, and you can still open the old agent.
+  The new agent takes the seed once: if the old agent tends the seed again,
+  later runs fail and name its tender instead of taking the seed back.
 - **Missed runs**. What happens to a time that passed while Attn was off or
   the automation was disabled. **Skip** runs the missed time only if Attn
   notices within 5 minutes. **Latest** runs once for the most recent missed time.

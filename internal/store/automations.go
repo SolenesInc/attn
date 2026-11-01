@@ -519,15 +519,23 @@ func seedOfEditedThreadTx(tx *sql.Tx, definitionID int, continuityKey string) (s
 	return seedID, err
 }
 
-func (s *Store) AutomationSessionHeldSeed(definitionID int, seedID string, sessionID protocol.SessionID) (bool, error) {
+func (s *Store) AutomationRunTakesOverRotatedSeed(definitionID int, runID, seedID string, previous protocol.SessionID) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return false, errors.New("automation persistence unavailable")
 	}
-	var held int
-	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM automation_continuity_bindings WHERE definition_id=? AND seed_id=? AND session_id=?)`, definitionID, seedID, sessionID).Scan(&held)
-	return held != 0, err
+	var handover int
+	err := s.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM automation_continuity_bindings
+			WHERE definition_id=? AND seed_id=? AND origin_run_id=? AND status=?
+		) AND EXISTS(
+			SELECT 1 FROM automation_continuity_bindings
+			WHERE definition_id=? AND seed_id=? AND session_id=? AND released_reason=?
+		)
+	`, definitionID, seedID, runID, AutomationBindingStatusActive, definitionID, seedID, previous, AutomationBindingReleasedContractRotated).Scan(&handover)
+	return handover != 0, err
 }
 
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID protocol.SessionID) (bool, error) {

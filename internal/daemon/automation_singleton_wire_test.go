@@ -249,10 +249,34 @@ func TestEditingASingletonsContractHandsItsSeedToANewSessionAndLeavesTheOldOneWo
 		t.Fatalf("the old session was not told its stake moved; its inbox holds %q", told)
 	}
 
+	if _, err := cli.SeedTransition(codexSession, stake, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	setAutomationEnabled(t, cli, id, true)
+	var refused protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a settled run after the old session took its stake back", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State == "pending" || slices.Contains([]string{first.ID, again.ID, next.ID}, runs[0].ID) {
+			return false
+		}
+		refused = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	if shown, err = cli.SeedShow("", stake); err != nil {
+		t.Fatal(err)
+	}
+	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != codexSession {
+		t.Fatalf("after %s took %s back, the next ordinary run (%s, %q) left it with %+v", codexSession, stake, refused.State, protocol.Deref(refused.LastError), shown.Seed.Tender)
+	}
+	if refused.State != "failed" || !strings.Contains(protocol.Deref(refused.LastError), "being tended by") {
+		t.Fatalf("the run is %s with %q, want it failed naming the seed's tender", refused.State, protocol.Deref(refused.LastError))
+	}
+
 	applyAutomation(t, cli, automationEditSpec(id, codexSpec))
 	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(codexSpec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
 	setAutomationEnabled(t, cli, id, true)
-	reworded := awaitDelivered(first.ID, again.ID, next.ID)
+	reworded := awaitDelivered(first.ID, again.ID, next.ID, refused.ID)
 	rewordedSession := protocol.Deref(reworded.SessionID)
 	if protocol.Deref(reworded.SeedID) != stake || rewordedSession == claudeSession {
 		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session continuing seed %s", rewordedSession, protocol.Deref(reworded.SeedID), stake)
