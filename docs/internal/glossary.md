@@ -35,8 +35,8 @@ link                    a way attn reaches a harness besides its terminal,
                         such as the shared Codex app-server or the Nisse
                         server; a session runs over the link its
                         conversation runs on now
-agent                   a harness that runs in a terminal; the user talks to
-                        them; like a coding agent
+agent                   a harness that runs in a terminal, which the user talks
+                        to; like a coding agent
 ├─ session (1 at a time)
 └─ state (1)            what the agent is doing now; like a presence status
    ├─ launching         starting up
@@ -46,7 +46,7 @@ agent                   a harness that runs in a terminal; the user talks to
    ├─ scheduled         will continue by itself at a set time
    ├─ idle              nothing to do
    ├─ recoverable       stopped; attn can bring it back
-   └─ unknown           attn cannot tell; may be an error
+   └─ unknown           attn cannot tell; it may be an error
 session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
