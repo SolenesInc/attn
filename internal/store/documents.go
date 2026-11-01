@@ -40,6 +40,8 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	}
 	ts := now.UTC().Format(docstore.TimeFormat)
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, fmt.Errorf("store: defining %s/%s: %w", schema.Namespace, schema.Collection, err)
@@ -50,6 +52,7 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	if err != nil {
 		return false, err
 	}
+	defer func() { s.writes.documents.reset(table) }()
 
 	if !found {
 		res, err := tx.Exec(
@@ -148,6 +151,8 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("store: deleting %s/%s: %w", namespace, collection, err)
@@ -161,6 +166,7 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	if !found {
 		return 0, nil
 	}
+	s.writes.documents.reset(table)
 
 	var n int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
@@ -189,19 +195,22 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 	if err != nil {
 		return 0, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rev, err := putDocumentWith(tx, schema, table, id, body, now, expected)
+	rev, err := putDocumentWith(tx, &s.writes.documents, schema, table, id, body, now, expected)
 	if err != nil {
 		return 0, err
 	}
 	return rev, tx.Commit()
 }
 
-func putDocumentWith(q execQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+func putDocumentWith(q execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+	written.count(table, id)
 	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
 		return 0, err
 	}
@@ -276,19 +285,22 @@ func (s *Store) DeleteDocument(schema docstore.CollectionSchema, id string, expe
 	if err != nil {
 		return false, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	found, err := deleteDocumentWith(tx, schema, table, id, expected)
+	found, err := deleteDocumentWith(tx, &s.writes.documents, schema, table, id, expected)
 	if err != nil {
 		return false, err
 	}
 	return found, tx.Commit()
 }
 
-func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
+func deleteDocumentWith(x execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
+	written.count(table, id)
 	if expected != nil && *expected == docstore.ExpectAbsent {
 		return false, fmt.Errorf("store: deleting %s/%s/%s: rev %d means the document must not exist, which a delete cannot expect; pass the revision you read, or none to delete unconditionally",
 			schema.Namespace, schema.Collection, id, docstore.ExpectAbsent)
@@ -422,7 +434,7 @@ func (s *Store) commitDocumentWrites(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	results, changed, err := commitDocumentWritesWith(tx, commits, tables, now)
+	results, changed, err := commitDocumentWritesWith(tx, &s.writes.documents, commits, tables, now)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -456,20 +468,20 @@ func (s *Store) commitDocumentWrites(
 	return results, eventSeqs, nil
 }
 
-func commitDocumentWritesWith(tx *sql.Tx, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {
+func commitDocumentWritesWith(tx *sql.Tx, written *documentWrites, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {
 	results := make([]DocumentWriteResult, len(commits))
 	changed := false
 	for i, commit := range commits {
 		w := commit.Write
 		out := &results[i]
 		if w.Delete {
-			existed, err := deleteDocumentWith(tx, w.Schema, tables[i], w.ID, w.Expected)
+			existed, err := deleteDocumentWith(tx, written, w.Schema, tables[i], w.ID, w.Expected)
 			if err != nil {
 				return nil, false, err
 			}
 			out.Changed = existed
 		} else {
-			rev, err := putDocumentWith(tx, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
+			rev, err := putDocumentWith(tx, written, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
 			if err != nil {
 				return nil, false, err
 			}

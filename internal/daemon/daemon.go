@@ -112,6 +112,7 @@ type Daemon struct {
 	daemonInstanceID    string
 	clientToken         string
 	store               *store.Store
+	gardenSeeds         store.DocumentsMemo[gardenSeeds]
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                sync.Mutex
 	prDetailFetches            prDetailFetches

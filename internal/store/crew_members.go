@@ -248,7 +248,7 @@ func (s *Store) RenameCrewMemberMovingHome(key, name string, move CrewHomeMove, 
 		if previous, err = renameCrewMember(tx, key, name); err != nil {
 			return err
 		}
-		if written, _, err = commitDocumentWritesWith(tx, move.Documents, tables, now); err != nil {
+		if written, _, err = commitDocumentWritesWith(tx, &s.writes.documents, move.Documents, tables, now); err != nil {
 			return err
 		}
 		_, err = move.followSessions(tx)

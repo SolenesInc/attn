@@ -724,3 +724,124 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 		}
 	})
 }
+
+func TestEveryGardenReadShowsTheWriteBeforeIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
+	planted, err := cli.SeedPlot(planter, protocol.SeedPlotMessage{
+		Title: "the plot", Children: []protocol.SeedPlotChild{{Title: "first"}, {Title: "second"}},
+	})
+	if err != nil {
+		t.Fatalf("plot: %v", err)
+	}
+	crown, first, second := planted.Crown.ID, planted.Children[0].ID, planted.Children[1].ID
+	read := func(step string) (map[string]protocol.Seed, protocol.SeedPlotProgress) {
+		t.Helper()
+		seeds := map[string]protocol.Seed{}
+		for _, seed := range gardenPlotList(t, cli, false, 0).Seeds {
+			seeds[seed.ID] = seed
+		}
+		shown, err := cli.SeedShow(planter, crown)
+		if err != nil {
+			t.Fatalf("show the crown after %s: %v", step, err)
+		}
+		if shown.Seed.PlotProgress == nil {
+			t.Fatalf("after %s the crown shows no plot progress", step)
+		}
+		return seeds, *shown.Seed.PlotProgress
+	}
+	expect := func(step string, progress protocol.SeedPlotProgress, check func(map[string]protocol.Seed) string) {
+		t.Helper()
+		seeds, got := read(step)
+		if !reflect.DeepEqual(got, progress) {
+			t.Errorf("after %s the crown shows progress %+v, want %+v", step, got, progress)
+		}
+		if problem := check(seeds); problem != "" {
+			t.Errorf("after %s %s", step, problem)
+		}
+	}
+	checkState := func(seed protocol.Seed, id string) string {
+		for _, check := range seed.Checks {
+			if check.ID == id && !check.Removed {
+				return check.State
+			}
+		}
+		return "absent"
+	}
+	expect("the plot", protocol.SeedPlotProgress{Total: 2, Ready: 2}, func(map[string]protocol.Seed) string { return "" })
+
+	lifeMove(t, cli, string(planter), first, "tend", "", "")
+	expect("the tend", protocol.SeedPlotProgress{Total: 2, Growing: 1, Ready: 1}, func(seeds map[string]protocol.Seed) string {
+		if seeds[first].Status != garden.StatusGrowing {
+			return "the listed seed is " + seeds[first].Status + ", want growing"
+		}
+		return ""
+	})
+
+	if _, err := cli.SeedCheck(protocol.SeedCheckMessage{SourceSessionID: &planter, SeedID: second, Verb: "add", CheckID: protocol.Ptr("C1"), Text: protocol.Ptr("it works")}); err != nil {
+		t.Fatalf("add a check: %v", err)
+	}
+	expect("the check", protocol.SeedPlotProgress{Total: 2, Growing: 1, Ready: 1, Checks: &protocol.SeedCheckTally{Total: 1}}, func(seeds map[string]protocol.Seed) string {
+		if state := checkState(seeds[second], "C1"); state != "open" {
+			return "C1 is " + state + ", want open"
+		}
+		return ""
+	})
+
+	if _, err := cli.SeedCheck(protocol.SeedCheckMessage{SourceSessionID: &planter, SeedID: second, Verb: "report", CheckID: protocol.Ptr("C1"), Summary: protocol.Ptr("ran it"), Evidence: []string{"https://example.com/run"}}); err != nil {
+		t.Fatalf("report the check: %v", err)
+	}
+	expect("the report", protocol.SeedPlotProgress{Total: 2, Growing: 1, Ready: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.Seed) string {
+		if state := checkState(seeds[second], "C1"); state != "reported" {
+			return "C1 is " + state + ", want reported"
+		}
+		return ""
+	})
+
+	if _, err := cli.SeedLink(first, garden.EdgeBlocks, second, false); err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	expect("the link", protocol.SeedPlotProgress{Total: 2, Growing: 1, Blocked: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.Seed) string {
+		if seeds[second].Ready {
+			return "the blocked seed is still listed ready"
+		}
+		return ""
+	})
+
+	if _, err := editSeedBody(t, cli, second, "the new body"); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	expect("the edit", protocol.SeedPlotProgress{Total: 2, Growing: 1, Blocked: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.Seed) string {
+		if seeds[second].Body != "the new body" {
+			return "the listed body is " + strconv.Quote(seeds[second].Body)
+		}
+		return ""
+	})
+
+	third, err := cli.SeedPlant(planter, "third", "", crown, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect("the planting", protocol.SeedPlotProgress{Total: 3, Growing: 1, Ready: 1, Blocked: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.Seed) string {
+		if _, ok := seeds[third.Seed.ID]; !ok {
+			return "the new seed is not listed"
+		}
+		return ""
+	})
+
+	lifeMove(t, cli, string(planter), first, "harvest", "done", "")
+	expect("the harvest", protocol.SeedPlotProgress{Total: 3, Done: 1, Ready: 2, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(seeds map[string]protocol.Seed) string {
+		if seeds[first].Status != garden.StatusHarvested || !seeds[second].Ready {
+			return "the list shows " + seeds[first].Status + " and ready=" + strconv.FormatBool(seeds[second].Ready) + ", want harvested and the blocked seed ready"
+		}
+		return ""
+	})
+
+	if _, err := cli.SeedNote(planter, second, "found the seam", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if bodies := lifeNoteBodies(t, cli, second); !slices.Contains(bodies, "found the seam") {
+		t.Errorf("the log after the note reads %q, want the note", bodies)
+	}
+}

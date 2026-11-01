@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 	"strings"
@@ -200,20 +201,44 @@ type gardenRead struct {
 	plots  garden.PlotTree
 }
 
+type gardenSeeds struct {
+	seeds []garden.Seed
+	docs  map[string]docstore.Document
+	plots garden.PlotTree
+}
+
 func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
-	out := gardenRead{daemon: d, docs: map[string]docstore.Document{}, ready: map[string]bool{}}
+	schema, err := d.seedsCollection()
+	if err != nil {
+		return gardenRead{}, err
+	}
+	all, err := store.RememberDocuments(d.store, &d.gardenSeeds, *schema, d.readGardenSeeds, func(previous gardenSeeds, written []string) (gardenSeeds, error) {
+		return d.refreshGardenSeeds(*schema, previous, written)
+	})
+	if err != nil {
+		return gardenRead{}, err
+	}
+	seeds := all.inProfile(firstProfile(profileID))
+	out := gardenRead{daemon: d, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}}
+	for _, seed := range garden.Ready(out.seeds, d.partyHolds) {
+		out.ready[seed.ID] = true
+	}
+	return out, nil
+}
+
+func (d *Daemon) readGardenSeeds() (gardenSeeds, error) {
+	out := gardenSeeds{docs: map[string]docstore.Document{}}
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{
 			Namespace:  garden.Namespace,
 			Collection: garden.CollectionSeeds,
-			Filters:    gardenProfileFilters(firstProfile(profileID)),
 			Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
 			Limit:      docstore.MaxLimit,
 			After:      after,
 		})
 		if err != nil {
-			return gardenRead{}, err
+			return gardenSeeds{}, err
 		}
 		for _, doc := range read.Documents {
 			seed, err := garden.Decode(doc.Body)
@@ -229,11 +254,70 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}
-	for _, seed := range garden.Ready(out.seeds, d.partyHolds) {
-		out.ready[seed.ID] = true
-	}
 	out.plots = garden.NewPlotTree(out.seeds)
 	return out, nil
+}
+
+func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous gardenSeeds, written []string) (gardenSeeds, error) {
+	out := gardenSeeds{docs: maps.Clone(previous.docs)}
+	changed := map[string]bool{}
+	var fresh []garden.Seed
+	for _, id := range written {
+		if changed[id] {
+			continue
+		}
+		changed[id] = true
+		delete(out.docs, id)
+		doc, found, err := d.store.GetDocument(schema, id)
+		if err != nil {
+			return gardenSeeds{}, err
+		}
+		if !found {
+			continue
+		}
+		seed, err := garden.Decode(doc.Body)
+		if err != nil {
+			d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
+			continue
+		}
+		fresh = append(fresh, seed)
+		out.docs[seed.ID] = *doc
+	}
+	out.seeds = make([]garden.Seed, 0, len(previous.seeds)+len(fresh))
+	for _, seed := range previous.seeds {
+		if !changed[seed.ID] {
+			out.seeds = append(out.seeds, seed)
+		}
+	}
+	out.seeds = append(out.seeds, fresh...)
+	slices.SortStableFunc(out.seeds, func(a, b garden.Seed) int {
+		if c := out.docs[b.ID].CreatedAt.Compare(out.docs[a.ID].CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
+	out.plots = garden.NewPlotTree(out.seeds)
+	return out, nil
+}
+
+func (s gardenSeeds) inProfile(profileID string) gardenSeeds {
+	if profileID == "" {
+		return s
+	}
+	seeds := make([]garden.Seed, 0, len(s.seeds))
+	for _, seed := range s.seeds {
+		if seed.ProfileID == profileID {
+			seeds = append(seeds, seed)
+		}
+	}
+	if len(seeds) == len(s.seeds) {
+		return s
+	}
+	docs := make(map[string]docstore.Document, len(seeds))
+	for _, seed := range seeds {
+		docs[seed.ID] = s.docs[seed.ID]
+	}
+	return gardenSeeds{seeds: seeds, docs: docs, plots: garden.NewPlotTree(seeds)}
 }
 
 func (g gardenRead) wire(seeds []garden.Seed) []protocol.Seed {

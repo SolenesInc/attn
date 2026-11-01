@@ -1510,8 +1510,10 @@ func sqliteDSN(dbPath string) string {
 
 // tableWrites counts row writes to the tables the store caches reads of, and signals copy changes
 // waiting for an outpost. SQLite's update hook feeds it on every connection, so no write path can skip it.
+// The hook never fires for WITHOUT ROWID tables, so the document row writers count documents themselves.
 type tableWrites struct {
 	sessions    atomic.Uint64
+	documents   documentWrites
 	commitFault atomic.Bool
 	outbox      changeSignal
 }

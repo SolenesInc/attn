@@ -98,7 +98,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) (S
 			}
 		}
 		if sc.Member != "" {
-			if outcome.MemberDay, err = moveMemberDayTx(tx, sc.Member, sc.From, sc.To); err != nil {
+			if outcome.MemberDay, err = moveMemberDayTx(tx, &s.writes.documents, sc.Member, sc.From, sc.To); err != nil {
 				return fmt.Errorf("move crew member %s's day to %s: %w", sc.Member, sc.To, err)
 			}
 		}
@@ -123,7 +123,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) (S
 	return outcome, nil
 }
 
-func moveMemberDayTx(tx *sql.Tx, key string, from, to protocol.SessionID) (DocumentWriteResult, error) {
+func moveMemberDayTx(tx *sql.Tx, written *documentWrites, key string, from, to protocol.SessionID) (DocumentWriteResult, error) {
 	schema, table, found, err := readCollectionTx(tx, crew.Namespace, crew.CollectionMembers)
 	if err != nil || !found {
 		return DocumentWriteResult{}, err
@@ -143,7 +143,7 @@ func moveMemberDayTx(tx *sql.Tx, key string, from, to protocol.SessionID) (Docum
 	}
 	write := DocumentWrite{Schema: schema, ID: key, Body: body, Expected: &doc.Rev}
 	fact := DocumentChangedFact(schema.Namespace, schema.Collection, key, false)
-	results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now())
+	results, _, err := commitDocumentWritesWith(tx, written, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now())
 	if err != nil {
 		return DocumentWriteResult{}, err
 	}

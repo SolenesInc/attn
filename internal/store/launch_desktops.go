@@ -282,7 +282,7 @@ func (s *Store) PrepareLaunchMigration() error {
 	})
 }
 
-func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
+func launchItemDesktop(tx *sql.Tx, written *documentWrites, now string, profile profiles.Profile, kind, id string) (profiles.Desktop, error) {
 	var desktopID string
 	if _, err := rowFound(tx.QueryRow(`SELECT desktop_id FROM launch_desktops WHERE kind = ? AND item_id = ?`, kind, id), &desktopID); err != nil {
 		return profiles.Desktop{}, err
@@ -293,7 +293,7 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 	desktop, created, err := loadOrCreateNumberedDesktop(tx, now, profile.ID, desktopID)
 	switch {
 	case profiles.IsNotFound(err):
-		if desktop, err = insertNamedLaunchDesktop(tx, now, profile.ID, kind, id, desktopID); err != nil {
+		if desktop, err = insertNamedLaunchDesktop(tx, written, now, profile.ID, kind, id, desktopID); err != nil {
 			return desktop, err
 		}
 	case err != nil:
@@ -307,7 +307,7 @@ func launchItemDesktop(tx *sql.Tx, now string, profile profiles.Profile, kind, i
 	return desktop, appendLaunchDesktopFacts(tx, desktop.ID)
 }
 
-func insertNamedLaunchDesktop(tx *sql.Tx, now, profileID, kind, id, missingDesktopID string) (profiles.Desktop, error) {
+func insertNamedLaunchDesktop(tx *sql.Tx, written *documentWrites, now, profileID, kind, id, missingDesktopID string) (profiles.Desktop, error) {
 	item, err := loadCurrentLaunchItem(tx, kind, id)
 	if err != nil {
 		return profiles.Desktop{}, err
@@ -316,10 +316,10 @@ func insertNamedLaunchDesktop(tx *sql.Tx, now, profileID, kind, id, missingDeskt
 	if err != nil {
 		return desktop, err
 	}
-	return desktop, rebindLaunchDesktop(tx, missingDesktopID, desktop.ID)
+	return desktop, rebindLaunchDesktop(tx, written, missingDesktopID, desktop.ID)
 }
 
-func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
+func rebindLaunchDesktop(tx *sql.Tx, written *documentWrites, oldID, newID string) error {
 	if _, err := tx.Exec(`UPDATE automation_definitions SET revision = revision + 1
   WHERE id IN (SELECT item_id FROM launch_desktops WHERE kind = 'automation' AND desktop_id = ?)`, oldID); err != nil {
 		return err
@@ -343,7 +343,7 @@ func rebindLaunchDesktop(tx *sql.Tx, oldID, newID string) error {
 			}
 			write := DocumentWrite{Schema: schema, ID: id, Body: doc.Body, Expected: &doc.Rev}
 			fact := DocumentChangedFact(schema.Namespace, schema.Collection, id, false)
-			if _, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now()); err != nil {
+			if _, _, err := commitDocumentWritesWith(tx, written, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, time.Now()); err != nil {
 				return err
 			}
 		}
@@ -385,7 +385,7 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 				desktop, err = loadLaunchDesktop(tx, profile, "")
 			}
 		} else {
-			desktop, err = launchItemDesktop(tx, now, profile, kind, id)
+			desktop, err = launchItemDesktop(tx, &s.writes.documents, now, profile, kind, id)
 		}
 		if err != nil {
 			return err
@@ -485,7 +485,7 @@ func (s *Store) CommitCrewSettings(w DocumentWrite, fact BusEvent, now time.Time
 	}
 	var result DocumentWriteResult
 	err = s.profilesTx(func(tx *sql.Tx, stamp string) error {
-		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: w, Fact: fact}}, []string{table}, now)
+		results, _, err := commitDocumentWritesWith(tx, &s.writes.documents, []DocumentCommit{{Write: w, Fact: fact}}, []string{table}, now)
 		if err != nil {
 			return err
 		}
