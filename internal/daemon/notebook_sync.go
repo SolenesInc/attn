@@ -82,6 +82,7 @@ type notebookSyncRun struct {
 	engine    *attnsync.Engine
 	home      string
 	folders   map[string]string
+	parked    map[string]string
 	failed    map[string]string
 	peers     []string
 	cancel    context.CancelFunc
@@ -208,41 +209,45 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 		return nil, err
 	}
 	prepared, unprepared, leaving := d.notebookFolderStates()
-	nested := map[string]string{}
+	nested, parked := map[string]string{}, map[string]string{}
 	for _, folder := range listed {
-		if folder.Nested != "" {
-			nested[folder.ID] = folder.Nested
-			delete(prepared, folder.ID)
-			delete(unprepared, folder.ID)
+		if folder.Nested == "" {
+			continue
 		}
+		nested[folder.ID] = folder.Nested
+		if root, indexed := prepared[folder.ID]; indexed {
+			parked[folder.ID] = root
+		}
+		delete(prepared, folder.ID)
+		delete(unprepared, folder.ID)
 	}
 	unindexed := maps.Clone(leaving)
 	for id, entry := range unprepared {
 		unindexed[id] = entry.Root
 	}
 	if old == nil {
-		run, err := d.startNotebookSync(home, peers, prepared, unindexed)
+		run, err := d.startNotebookSync(home, peers, prepared, parked, unindexed)
 		if err != nil {
 			return nil, err
 		}
 		old = run
 	} else if len(unindexed) != 0 {
-		if err := old.engine.Configure(d.notebookEngineConfig(peers, prepared, nil)); err != nil {
+		if err := old.engine.Configure(d.notebookEngineConfig(peers, prepared, parked)); err != nil {
 			return nil, err
 		}
 		r.mu.Lock()
-		old.peers, old.folders = slices.Clone(peers), prepared
+		old.peers, old.folders, old.parked = slices.Clone(peers), prepared, parked
 		r.mu.Unlock()
 	}
 	ready, failed := d.prepareNotebookFolders(prepared, unprepared)
 	maps.Copy(failed, nested)
-	if !slices.Equal(old.peers, peers) || !maps.Equal(old.folders, ready) {
-		if err := old.engine.Configure(d.notebookEngineConfig(peers, ready, nil)); err != nil {
+	if !slices.Equal(old.peers, peers) || !maps.Equal(old.folders, ready) || !maps.Equal(old.parked, parked) {
+		if err := old.engine.Configure(d.notebookEngineConfig(peers, ready, parked)); err != nil {
 			return nil, err
 		}
 	}
 	r.mu.Lock()
-	old.peers, old.folders, old.failed = slices.Clone(peers), ready, failed
+	old.peers, old.folders, old.parked, old.failed = slices.Clone(peers), ready, parked, failed
 	for id := range old.snapshots {
 		if _, kept := ready[id]; !kept {
 			delete(old.snapshots, id)
@@ -490,14 +495,16 @@ func (d *Daemon) saveNotebookSyncDiskLocked(disk notebookSyncDisk) error {
 	return nil
 }
 
-func (d *Daemon) startNotebookSync(home string, peers []string, ready, paused map[string]string) (*notebookSyncRun, error) {
+func (d *Daemon) startNotebookSync(home string, peers []string, ready, parked, unindexed map[string]string) (*notebookSyncRun, error) {
 	logger := slog.New(slog.NewTextHandler(notebookSyncLog{d}, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	paused := maps.Clone(parked)
+	maps.Copy(paused, unindexed)
 	engine, err := attnsync.New(filepath.Join(d.notebookSyncDir(), "index"), d.notebookEngineConfig(peers, ready, paused), notebookDevice(d.daemonInstanceID), logger)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
-	run := &notebookSyncRun{engine: engine, home: home, folders: ready, failed: map[string]string{}, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]map[string]notebookFolderSnapshot{}, remote: map[string]notebookSyncReport{}, conflicts: map[string]map[string]struct{}{}, streams: map[string]notebookSyncStream{}}
+	run := &notebookSyncRun{engine: engine, home: home, folders: ready, parked: parked, failed: map[string]string{}, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]map[string]notebookFolderSnapshot{}, remote: map[string]notebookSyncReport{}, conflicts: map[string]map[string]struct{}{}, streams: map[string]notebookSyncStream{}}
 	d.notebookSync.mu.Lock()
 	d.notebookSync.run = run
 	d.notebookSync.mu.Unlock()
@@ -586,13 +593,13 @@ func (d *Daemon) startNotebookSync(home string, peers []string, ready, paused ma
 		close(run.done)
 		return nil, errDaemonStopping
 	}
-	if len(paused) != 0 {
+	if len(unindexed) != 0 {
 		select {
 		case <-engine.Ready():
 		case <-run.done:
 			return nil, errors.New("sync engine stopped before it started")
 		}
-		if err := engine.Configure(d.notebookEngineConfig(peers, ready, nil)); err != nil {
+		if err := engine.Configure(d.notebookEngineConfig(peers, ready, parked)); err != nil {
 			cancel()
 			<-run.done
 			return nil, err

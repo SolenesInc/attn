@@ -471,6 +471,48 @@ func TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync(t *testing.T) {
 	t.Logf("pairing with a nested folder synced the outer one and reported: %s; an equal folder synced once into %s; nesting by a setting write while paired was refused: %s; a new profile on the default folder left only the inner folder out: %s", pairing, copies[1], strings.TrimSpace(refused.Stderr), fresh)
 }
 
+func TestAFileDeletedAtTheHomeWhileItsFolderWasNestedStaysDeleted(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	outpost.Start()
+	home.Start()
+	inner, outer := notebookPath(home, "inner"), notebookPath(home)
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", filepath.Join(home.Dir, "default-notebook")))
+	created := testworld.Request(home.App(), protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
+	writeFileAt(t, filepath.Join(inner, "deleted.md"), "deleted at the home while nested")
+	pair.Connect()
+	copied := outpostCopyPlacement(outpost, "inner", inner)
+	awaitOutpostFile(t, pair, filepath.Join(copied, "deleted.md"), "deleted at the home while nested", false)
+
+	created = testworld.Request(pair.App, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "fresh", Name: "Fresh"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "fresh" })
+	if !created.Success {
+		t.Fatalf("create Fresh: %+v", created)
+	}
+	awaitNotebookError(t, pair, "Side", inner, "Fresh", outer)
+	if err := os.Remove(filepath.Join(inner, "deleted.md")); err != nil {
+		t.Fatal(err)
+	}
+	home.Stop()
+	home.Start()
+	pair.App = home.App()
+	nested := awaitNotebookError(t, pair, "Side", inner, "Fresh", outer)
+
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", filepath.Join(home.Dir, "fresh-notebook"), "--profile", "Fresh"))
+	writeFileAt(t, filepath.Join(inner, "after.md"), "written once the nesting resolved")
+	awaitOutpostFile(t, pair, filepath.Join(copied, "after.md"), "written once the nesting resolved", false)
+	awaitOutpostFile(t, pair, filepath.Join(copied, "deleted.md"), "", true)
+	pair.App = home.App()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	if _, err := os.Stat(filepath.Join(inner, "deleted.md")); !os.IsNotExist(err) {
+		t.Fatalf("a file deleted at the home while its folder was nested came back at the home: %v", err)
+	}
+	t.Logf("the folder reported %q across a home restart, and deleted.md stayed deleted at %s and %s once the nesting resolved", nested, inner, copied)
+}
+
 func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 	for _, side := range []string{"home", "outpost"} {
 		t.Run(side, func(t *testing.T) {
