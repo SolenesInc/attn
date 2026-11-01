@@ -571,19 +571,19 @@ func TestResumeToAConversationHeldInAnotherProfileOpensANewSessionHere(t *testin
 	}
 }
 
-func TestSessionUpdateSaysWhenItsAgentHasRecordedAConversation(t *testing.T) {
+func TestSessionUpdateSaysWhenItsAgentHasStartedAConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	id := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	registered := *testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && string(e.Session.ID) == id
 	}).Session
-	if protocol.Deref(registered.ConversationRecorded) {
-		t.Fatalf("session %s registered as having recorded a conversation before its agent started one", id)
+	if protocol.Deref(registered.ConversationStarted) {
+		t.Fatalf("session %s registered as having started a conversation before its agent started one", id)
 	}
 
 	w.Launched(id)
 	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == id && protocol.Deref(e.Session.ConversationRecorded)
+		return e.Session != nil && string(e.Session.ID) == id && protocol.Deref(e.Session.ConversationStarted)
 	})
 }

@@ -16,8 +16,8 @@ export async function workInFolder({ observer, cwd }) {
     SPAWN_TIMEOUT_MS,
   );
   const recorded = observer.waitForMessage(
-    (message) => sessionsIn(message).some((session) => session.id === id && session.conversation_recorded),
-    `agent session ${id} in ${cwd} to record a conversation`,
+    (message) => sessionsIn(message).some((session) => session.id === id && session.conversation_started),
+    `agent session ${id} in ${cwd} to start a conversation`,
     SPAWN_TIMEOUT_MS + CONVERSATION_TIMEOUT_MS,
   );
   recorded.catch(() => {});

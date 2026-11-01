@@ -6385,8 +6385,8 @@ export interface SessionObject {
     chief_of_staff?:            boolean;
     command_terminal?:          boolean;
     context_window_cap?:        number;
-    conversation_recorded?:     boolean;
     conversation_shared_with?:  string[];
+    conversation_started?:      boolean;
     crew_member?:               string;
     crew_member_name?:          string;
     delegated_from_chief?:      boolean;
@@ -11147,8 +11147,8 @@ export interface Session {
     chief_of_staff?:            boolean;
     command_terminal?:          boolean;
     context_window_cap?:        number;
-    conversation_recorded?:     boolean;
     conversation_shared_with?:  string[];
+    conversation_started?:      boolean;
     crew_member?:               string;
     crew_member_name?:          string;
     delegated_from_chief?:      boolean;
@@ -23757,8 +23757,8 @@ const typeMap: any = {
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "command_terminal", js: "command_terminal", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
-        { json: "conversation_recorded", js: "conversation_recorded", typ: u(undefined, true) },
         { json: "conversation_shared_with", js: "conversation_shared_with", typ: u(undefined, a("")) },
+        { json: "conversation_started", js: "conversation_started", typ: u(undefined, true) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
@@ -26846,8 +26846,8 @@ const typeMap: any = {
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "command_terminal", js: "command_terminal", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
-        { json: "conversation_recorded", js: "conversation_recorded", typ: u(undefined, true) },
         { json: "conversation_shared_with", js: "conversation_shared_with", typ: u(undefined, a("")) },
+        { json: "conversation_started", js: "conversation_started", typ: u(undefined, true) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "crew_member_name", js: "crew_member_name", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
