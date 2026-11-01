@@ -7029,6 +7029,9 @@ type NotebookReadResultMessage struct {
 }
 
 type NotebookSyncFolder struct {
+	// Epoch corresponds to the JSON schema field "epoch".
+	Epoch string `json:"epoch"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 

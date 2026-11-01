@@ -348,6 +348,49 @@ func TestChangingANotebookFolderWhilePairedStartsAFreshSyncedFolder(t *testing.T
 	t.Logf("pointing back moved the stale copy to %s and synced %s fresh; the deleted file stayed deleted", aside, first)
 }
 
+func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletions(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	writeNotebookFile(t, home, "deleted-offline.md", "deleted while the outpost was away")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	first := reportedCopy(t, outpost, plant(t, home, "Offline folder change").ID)
+	if !fileHolds(filepath.Join(first, "deleted-offline.md"), "deleted while the outpost was away", false) {
+		t.Fatalf("the first sync missed deleted-offline.md in %s", first)
+	}
+
+	lost := pair.App.EventCount()
+	pair.Disconnect()
+	outpostStateSince(pair.App, "outpost", protocol.OutpostStateLost, lost)
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", filepath.Join(home.Dir, "second")))
+	if err := os.Remove(notebookPath(home, "deleted-offline.md")); err != nil {
+		t.Fatal(err)
+	}
+	writeNotebookFile(t, home, "while-away.md", "written while the outpost was away")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", ""))
+
+	pair.Reconnect()
+	home.Advance(bridge.ReconnectInterval)
+	awaitOutpostFile(t, pair, filepath.Join(first, "while-away.md"), "written while the outpost was away", false)
+	pair.App = home.App()
+	state := awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	for _, path := range []string{notebookPath(home, "deleted-offline.md"), filepath.Join(first, "deleted-offline.md")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("a file deleted at the home while its folder was out of the set came back at %s: %v", path, err)
+		}
+	}
+	aside := ""
+	for _, candidate := range strings.Split(protocol.Deref(state.PreviousRoot), ", ") {
+		if strings.HasPrefix(candidate, first+".before-sync-") {
+			aside = candidate
+		}
+	}
+	if !fileHolds(filepath.Join(aside, "deleted-offline.md"), "deleted while the outpost was away", false) {
+		t.Fatalf("the outpost's stale copy was not moved aside: %+v", state)
+	}
+	t.Logf("the returning folder synced %s fresh, kept the stale copy at %s, and deleted-offline.md stayed deleted on both sides", first, aside)
+}
+
 func TestNestedNotebookFoldersAreRefusedWhilePaired(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -596,7 +639,7 @@ func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *test
 	}
 	side := filepath.Join(home.Dir, "side-notebook")
 	writeFileAt(t, filepath.Join(side, "secret plan.sync-conflict-20261027-120000-device.md"), "a conflict copy")
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", side, "--profile", "Side"))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", side, "--profile", "Side"))
 	blocked := outpostCopyPlacement(outpost, "side-notebook", side)
 	writeFileAt(t, blocked, "a file where the copy belongs")
 	pair.Connect()

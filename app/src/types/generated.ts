@@ -7214,6 +7214,7 @@ export enum NotebookFoldersMessageCmd {
 }
 
 export interface FolderElement {
+    epoch:    string;
     id:       string;
     key:      string;
     name:     string;
@@ -7301,6 +7302,7 @@ export interface NotebookReadObject {
 }
 
 export interface NotebookSyncFolder {
+    epoch:    string;
     id:       string;
     key:      string;
     name:     string;
@@ -23611,6 +23613,7 @@ const typeMap: any = {
         { json: "folders", js: "folders", typ: a(r("FolderElement")) },
     ], "any"),
     "FolderElement": o([
+        { json: "epoch", js: "epoch", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "key", js: "key", typ: "" },
         { json: "name", js: "name", typ: "" },
@@ -23660,6 +23663,7 @@ const typeMap: any = {
         { json: "path", js: "path", typ: "" },
     ], "any"),
     "NotebookSyncFolder": o([
+        { json: "epoch", js: "epoch", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "key", js: "key", typ: "" },
         { json: "name", js: "name", typ: "" },

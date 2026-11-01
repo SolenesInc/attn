@@ -43,6 +43,7 @@ type notebookSyncDisk struct {
 
 type notebookSyncFolderDisk struct {
 	Root         string
+	Epoch        string
 	PreviousRoot string
 	Initialized  bool
 	Completed    map[string]bool
@@ -177,13 +178,8 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	isHome := err == nil && home == d.daemonInstanceID
 	var listed []notebookFolder
 	if isHome {
-		if listed, err = d.notebookFolders(); err == nil {
-			r.mu.Lock()
-			d.setHomeNotebookFoldersLocked(listed)
-			r.mu.Unlock()
-			if len(peers) != 0 {
-				err = d.refuseNestedNotebooksAtHome()
-			}
+		if listed, err = d.notebookFolders(); err == nil && len(peers) != 0 {
+			err = d.refuseNestedNotebooksAtHome()
 		}
 	}
 	r.mu.Lock()
@@ -205,20 +201,35 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	r.mu.Lock()
 	err = d.loadNotebookSyncDiskLocked(home)
 	if err == nil && isHome {
-		err = d.listHomeNotebookFoldersLocked(listed)
+		if err = d.listHomeNotebookFoldersLocked(listed); err == nil {
+			d.setHomeNotebookFoldersLocked(d.stampNotebookFolderEpochsLocked(listed))
+		}
 	}
 	r.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	ready, failed, leaving := d.prepareNotebookFolders()
+	prepared, unprepared, leaving := d.notebookFolderStates()
+	unindexed := maps.Clone(leaving)
+	for id, entry := range unprepared {
+		unindexed[id] = entry.Root
+	}
 	if old == nil {
-		run, err := d.startNotebookSync(home, peers, ready, leaving)
+		run, err := d.startNotebookSync(home, peers, prepared, unindexed)
 		if err != nil {
 			return nil, err
 		}
 		old = run
-	} else if !slices.Equal(old.peers, peers) || !maps.Equal(old.folders, ready) || len(leaving) != 0 {
+	} else if len(unindexed) != 0 {
+		if err := old.engine.Configure(d.notebookEngineConfig(peers, prepared, nil)); err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		old.peers, old.folders = slices.Clone(peers), prepared
+		r.mu.Unlock()
+	}
+	ready, failed := d.prepareNotebookFolders(prepared, unprepared)
+	if !slices.Equal(old.peers, peers) || !maps.Equal(old.folders, ready) {
 		if err := old.engine.Configure(d.notebookEngineConfig(peers, ready, nil)); err != nil {
 			return nil, err
 		}
@@ -286,7 +297,7 @@ func (d *Daemon) listHomeNotebookFoldersLocked(listed []notebookFolder) error {
 		inList[folder.ID] = true
 		entry, known := disk.Folders[folder.ID]
 		if !known {
-			entry = notebookSyncFolderDisk{Root: folder.HomePath, Completed: map[string]bool{}}
+			entry = notebookSyncFolderDisk{Root: folder.HomePath, Epoch: strconv.FormatInt(time.Now().UnixNano(), 10), Completed: map[string]bool{}}
 		}
 		entry.Profiles = slices.Clone(folder.Profiles)
 		disk.Folders[folder.ID] = entry
@@ -303,23 +314,42 @@ func (d *Daemon) listHomeNotebookFoldersLocked(listed []notebookFolder) error {
 	return d.saveNotebookSyncDiskLocked(disk)
 }
 
+func (d *Daemon) stampNotebookFolderEpochsLocked(listed []notebookFolder) []notebookFolder {
+	stamped := slices.Clone(listed)
+	for i := range stamped {
+		stamped[i].Epoch = d.notebookSync.disk.Folders[stamped[i].ID].Epoch
+	}
+	return stamped
+}
+
 func notebookSyncDiskEqual(a, b notebookSyncDisk) bool {
 	return a.Home == b.Home && maps.EqualFunc(a.Folders, b.Folders, func(x, y notebookSyncFolderDisk) bool {
-		return x.Root == y.Root && x.PreviousRoot == y.PreviousRoot && x.Initialized == y.Initialized && maps.Equal(x.Completed, y.Completed) && slices.Equal(x.Profiles, y.Profiles)
+		return x.Root == y.Root && x.Epoch == y.Epoch && x.PreviousRoot == y.PreviousRoot && x.Initialized == y.Initialized && maps.Equal(x.Completed, y.Completed) && slices.Equal(x.Profiles, y.Profiles)
 	})
 }
 
-func (d *Daemon) prepareNotebookFolders() (ready, failed, leaving map[string]string) {
+func (d *Daemon) notebookFolderStates() (prepared map[string]string, unprepared map[string]notebookSyncFolderDisk, leaving map[string]string) {
 	r := &d.notebookSync
 	r.mu.Lock()
 	disk := r.disk.clone()
 	r.mu.Unlock()
-	ready, failed, leaving = map[string]string{}, map[string]string{}, map[string]string{}
+	prepared, unprepared, leaving = map[string]string{}, map[string]notebookSyncFolderDisk{}, map[string]string{}
 	for id, entry := range disk.Folders {
-		if len(entry.Profiles) == 0 {
+		switch {
+		case len(entry.Profiles) == 0:
 			leaving[id] = entry.Root
-			continue
+		case entry.Initialized:
+			prepared[id] = entry.Root
+		default:
+			unprepared[id] = entry
 		}
+	}
+	return prepared, unprepared, leaving
+}
+
+func (d *Daemon) prepareNotebookFolders(prepared map[string]string, unprepared map[string]notebookSyncFolderDisk) (ready, failed map[string]string) {
+	ready, failed = maps.Clone(prepared), map[string]string{}
+	for id, entry := range unprepared {
 		if err := d.prepareNotebookFolder(id, entry); err != nil {
 			failed[id] = err.Error()
 			d.logf("Notebook sync: prepare %s: %v", entry.Root, err)
@@ -327,7 +357,7 @@ func (d *Daemon) prepareNotebookFolders() (ready, failed, leaving map[string]str
 		}
 		ready[id] = entry.Root
 	}
-	return ready, failed, leaving
+	return ready, failed
 }
 
 func (d *Daemon) prepareNotebookFolder(id string, entry notebookSyncFolderDisk) error {
@@ -453,9 +483,9 @@ func (d *Daemon) saveNotebookSyncDiskLocked(disk notebookSyncDisk) error {
 	return nil
 }
 
-func (d *Daemon) startNotebookSync(home string, peers []string, ready, leaving map[string]string) (*notebookSyncRun, error) {
+func (d *Daemon) startNotebookSync(home string, peers []string, ready, paused map[string]string) (*notebookSyncRun, error) {
 	logger := slog.New(slog.NewTextHandler(notebookSyncLog{d}, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	engine, err := attnsync.New(filepath.Join(d.notebookSyncDir(), "index"), d.notebookEngineConfig(peers, ready, leaving), notebookDevice(d.daemonInstanceID), logger)
+	engine, err := attnsync.New(filepath.Join(d.notebookSyncDir(), "index"), d.notebookEngineConfig(peers, ready, paused), notebookDevice(d.daemonInstanceID), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +579,7 @@ func (d *Daemon) startNotebookSync(home string, peers []string, ready, leaving m
 		close(run.done)
 		return nil, errDaemonStopping
 	}
-	if len(leaving) != 0 {
+	if len(paused) != 0 {
 		select {
 		case <-engine.Ready():
 		case <-run.done:

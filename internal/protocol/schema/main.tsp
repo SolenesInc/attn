@@ -370,6 +370,7 @@ model NotebookSyncFolder {
   id: string;
   key: string;
   name: string;
+  epoch: string;
   profiles: string[];
 }
 

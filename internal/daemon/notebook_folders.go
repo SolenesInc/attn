@@ -17,6 +17,7 @@ type notebookFolder struct {
 	ID       string
 	Key      string
 	Name     string
+	Epoch    string
 	HomePath string
 	Profiles []string
 }
@@ -118,7 +119,7 @@ func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) err
 func notebookFoldersWire(folders []notebookFolder) []protocol.NotebookSyncFolder {
 	wire := make([]protocol.NotebookSyncFolder, len(folders))
 	for i, folder := range folders {
-		wire[i] = protocol.NotebookSyncFolder{ID: folder.ID, Key: folder.Key, Name: folder.Name, Profiles: slices.Clone(folder.Profiles)}
+		wire[i] = protocol.NotebookSyncFolder{ID: folder.ID, Key: folder.Key, Name: folder.Name, Epoch: folder.Epoch, Profiles: slices.Clone(folder.Profiles)}
 	}
 	return wire
 }
@@ -143,7 +144,7 @@ func (d *Daemon) notebookFoldersChanges() <-chan struct{} {
 func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 	r := &d.notebookSync
 	if slices.EqualFunc(r.folders, folders, func(a, b notebookFolder) bool {
-		return a.ID == b.ID && a.HomePath == b.HomePath && slices.Equal(a.Profiles, b.Profiles)
+		return a.ID == b.ID && a.Epoch == b.Epoch && a.HomePath == b.HomePath && slices.Equal(a.Profiles, b.Profiles)
 	}) {
 		return
 	}
@@ -163,7 +164,7 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn) {
 		folders := notebookFoldersWire(d.notebookSync.folders)
 		d.notebookSync.mu.Unlock()
 		if !pushed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
-			return a.ID == b.ID && slices.Equal(a.Profiles, b.Profiles)
+			return a.ID == b.ID && a.Epoch == b.Epoch && slices.Equal(a.Profiles, b.Profiles)
 		}) {
 			err := conn.Call(conn.Context(), bridgeCall, protocol.NotebookFoldersMessage{Cmd: protocol.CmdNotebookFolders, Folders: folders}, nil)
 			if err == nil {
@@ -217,8 +218,8 @@ func (d *Daemon) storeOutpostNotebookFoldersLocked(home, base string, folders []
 		}
 		listed[folder.ID] = true
 		entry, known := disk.Folders[folder.ID]
-		if !known {
-			entry = notebookSyncFolderDisk{Root: notebook.OutpostCopyRoot(base, folder.Name, folder.Key), Completed: map[string]bool{}}
+		if !known || entry.Epoch != folder.Epoch {
+			entry = notebookSyncFolderDisk{Root: notebook.OutpostCopyRoot(base, folder.Name, folder.Key), Epoch: folder.Epoch, Completed: map[string]bool{}}
 		}
 		entry.Profiles = slices.Clone(folder.Profiles)
 		disk.Folders[folder.ID] = entry
