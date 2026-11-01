@@ -599,9 +599,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	return &spawnOutcome{}
 }
 
-// Outpost checkout_inspect round trips took 35-89ms in the bridge receipts.
-const remoteRecentInspectTripwire = 10 * time.Second
-
 func (d *Daemon) recordRecentLocation(host, cwd string) {
 	if host == "" {
 		d.store.UpsertRecentLocation("", cwd, "")
@@ -615,9 +612,7 @@ func (d *Daemon) recordRecentLocation(host, cwd string) {
 }
 
 func (d *Daemon) resolveRemoteRecentLocation(host, cwd string) (folder, repoRoot string) {
-	ctx, cancel := context.WithTimeout(context.Background(), remoteRecentInspectTripwire)
-	defer cancel()
-	inspection, err := Call[protocol.CheckoutInspection](ctx, d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
+	inspection, err := d.inspectRemoteCheckout(host, cwd)
 	if err != nil {
 		d.logf("recent location %s on %s recorded unresolved: %v", cwd, host, err)
 		return cwd, ""

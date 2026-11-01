@@ -276,20 +276,23 @@ func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt
 	return d.finalizeDeletedWorktree(protection, wt, plan.Seeds, opts)
 }
 
-func (d *Daemon) prepareWorktreeRemovalHere(_ context.Context, msg protocol.WorktreeRemovalPrepareMessage) (protocol.WorktreeRemovalPlan, error) {
-	d.captureGardenExecutionsInDirectory(msg.Path)
+func (d *Daemon) prepareWorktreeRemovalHere(ctx context.Context, msg protocol.WorktreeRemovalPrepareMessage) (protocol.WorktreeRemovalPlan, error) {
+	d.captureGardenExecutionsInDirectory(removingMachine(ctx), msg.Path)
 	return protocol.WorktreeRemovalPlan{
 		Seeds:      d.seedsForWorktree(&store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch}),
 		KeepBranch: d.gardenKeepsBranch(msg.MainRepo, msg.Branch),
 	}, nil
 }
 
-func (d *Daemon) worktreeRemovedHere(ctx context.Context, msg protocol.WorktreeRemovedMessage) (struct{}, error) {
-	machine := ""
+func removingMachine(ctx context.Context) string {
 	if origin, remote := OriginOf(ctx); remote {
-		machine = origin.Host
+		return origin.Host
 	}
-	d.closeWorktreeSessions(machine, msg.Path)
+	return ""
+}
+
+func (d *Daemon) worktreeRemovedHere(ctx context.Context, msg protocol.WorktreeRemovedMessage) (struct{}, error) {
+	d.closeWorktreeSessions(removingMachine(ctx), msg.Path)
 	for _, seedID := range msg.Seeds {
 		if _, err := d.appendSeedNote(seedID, protocol.Deref(msg.Note), who.Attn(), "", nil, false, ""); err != nil {
 			d.logf("worktree removal: noting %s on seed %s: %v", msg.Path, seedID, err)

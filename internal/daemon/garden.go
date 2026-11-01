@@ -1677,6 +1677,12 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 	}
+	var tending gardenObservation
+	if verb == garden.VerbTend {
+		if working, ok := d.liveSessionOf(ask.Claimant); ok {
+			tending = d.observeGardenSession(working)
+		}
+	}
 	d.lockGardenRoles()
 	defer d.unlockGardenRoles()
 	const attempts = 3
@@ -1705,7 +1711,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		next := outcome.Seed
 		if working, ok := d.liveSessionOf(ask.Claimant); verb == garden.VerbTend && ok &&
 			(outcome.Moved || working != protocol.TrimID(seed.LastExecutionID)) {
-			execution, executionErr := d.ensureGardenExecution(working)
+			execution, executionErr := d.ensureObservedGardenExecution(working, tending)
 			if executionErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, executionErr
 			}

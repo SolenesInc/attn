@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -135,4 +137,81 @@ func TestDeletingAWorktreeOnAnOutpostAnswersToTheHome(t *testing.T) {
 		t.Errorf("a refused delete must leave the branch: %v", err)
 	}
 	t.Logf("kept feat at %s; seed noted; shell closed on the home; without the home: %s", unmerged, protocol.Deref(refused.Error))
+}
+
+func TestAStalledOutpostNeverHoldsUpTheHome(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	recentRecorded := home.PauseAt(pausepoint.RemoteRecentRecorded)
+	pair.Start()
+	app, host := pair.App, pair.Host
+
+	repo := home.Path("shop")
+	gitRepo(t, repo)
+	worktree := home.Path("shop--feat")
+	created := testworld.Request(app, protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: "feat", Path: protocol.Ptr(worktree), RequestID: protocol.Ptr("create")},
+		protocol.EventCreateWorktreeResult, func(r protocol.CreateWorktreeResultMessage) bool { return protocol.Deref(r.RequestID) == "create" })
+	if !created.Success {
+		t.Fatalf("create the home's worktree: %s", protocol.Deref(created.Error))
+	}
+	shell := fakeagent.Harness(protocol.SessionAgentShell)
+	remote := home.Spawn(app, shell, worktree, func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(host) })
+	recentRecorded.Await()
+	recentRecorded.Release()
+	local := home.Spawn(app, shell, repo)
+	app.TypeLine(remote, "echo up-$((1+1))")
+	app.AwaitScreen(remote, "up-2")
+	testworld.AwaitSession(app, remote, func(s protocol.Session) bool { return protocol.Deref(s.Branch) == "feat" })
+	cli := home.Client()
+	planted, err := cli.SeedPlant(protocol.SessionID(remote), "Continue on the outpost", "Finish feat.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := cli.SeedPlant(protocol.SessionID(local), "Work on the home", "Finish it here.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	within := func(what string, call func() error) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() { done <- call() }()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s: %v", what, err)
+			}
+		case <-time.After(fakeagent.HangGuard):
+			t.Fatalf("%s still waits on the stalled outpost after %s", what, fakeagent.HangGuard)
+		}
+	}
+
+	resume := pair.SSH.Pause(pair.Destination)
+	tended := make(chan error, 1)
+	go func() {
+		_, err := cli.SeedTransition(protocol.SessionID(remote), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{})
+		tended <- err
+	}()
+	home.AwaitTimer("remote-checkout-inspect")
+	within("a home seed's tend while another tend waits on the stalled outpost", func() error {
+		_, err := cli.SeedTransition(protocol.SessionID(local), other.Seed.ID, "tend", "", false, client.SeedTransitionOptions{})
+		return err
+	})
+	home.Advance(10 * time.Second)
+	within("the outpost session's tend after its checkout_inspect tripwire", func() error { return <-tended })
+	shown, err := cli.SeedShow("", planted.Seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if continuation := shown.Seed.Continuation; continuation == nil || protocol.Deref(continuation.Branch) != "feat" {
+		t.Errorf("continuation after the tripwire = %+v; want the monitor view's branch feat", shown.Seed.Continuation)
+	}
+
+	deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktree, RequestID: protocol.Ptr("delete-home")},
+		protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool { return protocol.Deref(r.RequestID) == "delete-home" })
+	if !deleted.Success {
+		t.Fatalf("the home's delete with a stalled outpost holding a session at the same path: %s", protocol.Deref(deleted.Error))
+	}
+	resume()
+	t.Logf("tend returned after the tripwire with branch %s; the home's delete never waited on the stalled outpost", protocol.Deref(shown.Seed.Continuation.Branch))
 }
