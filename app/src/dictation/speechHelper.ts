@@ -18,11 +18,19 @@ export type SpeechStatus = { cacheBytes: number } & (
 
 export const speechSupported = () => isMacLikePlatform() && isTauri();
 
+let lifecycle: Promise<unknown> = Promise.resolve();
+
+function changeHelper(command: 'speech_enable' | 'speech_disable' | 'speech_remove') {
+  const change = lifecycle.then(() => invoke<SpeechStatus>(command));
+  lifecycle = change.catch(() => undefined);
+  return change;
+}
+
 export function useSpeechHelperLifecycle(settings: Record<string, string>) {
   const enabled = settings[DICTATION_ENABLED_SETTING] === 'true';
   useEffect(() => {
     if (!speechSupported()) return;
-    void invoke(enabled ? 'speech_enable' : 'speech_disable');
+    void changeHelper(enabled ? 'speech_enable' : 'speech_disable');
   }, [enabled]);
 }
 
@@ -37,7 +45,7 @@ export function useSpeechStatus() {
   }, []);
   return {
     status,
-    retry: () => invoke<SpeechStatus>('speech_enable').then(setStatus),
-    remove: () => invoke<SpeechStatus>('speech_remove').then(setStatus),
+    retry: () => changeHelper('speech_enable').then(setStatus),
+    remove: () => changeHelper('speech_remove').then(setStatus),
   };
 }

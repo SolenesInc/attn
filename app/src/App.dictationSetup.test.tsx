@@ -63,6 +63,22 @@ describe('Dictation setup', () => {
     expect(speechCommands().slice(-1)).toEqual(['speech_disable']);
   });
 
+  it('hands the helper each change only after the previous one finished, so the last setting wins', async () => {
+    const daemon = await openSection('experimental');
+    native.commands = [];
+    let finishEnable = () => {};
+    const respond = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation((command: string, args?: unknown) => command === 'speech_enable'
+      ? new Promise(resolve => { native.commands.push(command); finishEnable = () => resolve(native.status); })
+      : respond(command, args as never));
+    await gesture(daemon, () => fireEvent.click(dictation()));
+    await gesture(daemon, () => fireEvent.click(dictation()));
+    expect(savedSettings(daemon)).toEqual([['dictation_enabled', 'true'], ['dictation_enabled', 'false']]);
+    expect(speechCommands()).toEqual(['speech_enable']);
+    await act(async () => finishEnable());
+    expect(speechCommands()).toEqual(['speech_enable', 'speech_disable']);
+  });
+
   it('names a failed preparation and retries it', async () => {
     await openSection('experimental', { settings: { dictation_enabled: 'true' } });
     helperReports({ phase: 'failed', message: 'could not download Parakeet Unified English: connection reset. Downloaded bytes are kept; retry to resume.', cacheBytes: 90_000_000 });

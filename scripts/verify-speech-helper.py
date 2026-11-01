@@ -366,7 +366,7 @@ def check(BINARY, WORK, CLIPS, PREPARED):
     h.cancel(request)
     settled = h.finish(request)
     after = h.finish(h.dictate(clip_pcm(os.path.join(CLIPS, "Daniel", "short.wav"))))
-    report("cancel drops a recording and its queued segments while they transcribe, and the helper keeps serving",
+    report("cancel after a recording started drops it and its queued segments without their text, and the helper keeps serving",
            settled["event"] == "error" and settled["message"] == "recording canceled" and after["event"] == "transcript",
            settle_ms=round((settled["_t"] - canceled_at) * 1000, 1), settled=strip(settled), next=strip(after))
 
@@ -374,7 +374,7 @@ def check(BINARY, WORK, CLIPS, PREPARED):
     closed = time.monotonic()
     h.proc.stdin.close()
     h.proc.wait(timeout=30)
-    report("closing the lease mid-recording stops the inference and exits", h.proc.returncode == 0,
+    report("closing the lease after a recording started exits without waiting for it", h.proc.returncode == 0,
            exit_ms=round((time.monotonic() - closed) * 1000, 1), code=h.proc.returncode)
 
     h = Helper(BINARY, cache)
@@ -385,7 +385,7 @@ def check(BINARY, WORK, CLIPS, PREPARED):
     h = Helper(BINARY, cache)
     ready = h.finish(h.send("prepare"))
     answer = h.finish(h.dictate(clip_pcm(os.path.join(CLIPS, "Samantha", "short.wav"))))
-    report("a helper crash mid-recording is seen as EOF and a new helper serves from the intact cache",
+    report("a helper crash after a recording started is seen as EOF and a new helper serves from the intact cache",
            eof["event"] == "eof" and ready["event"] == "ready" and ready["load_ms"] > 0 and answer["event"] == "transcript",
            ready=strip(ready), answer=strip(answer))
     h.close_lease()
