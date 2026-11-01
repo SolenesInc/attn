@@ -10,11 +10,10 @@ import (
 type Kind string
 
 const (
-	SeedUpdate   Kind = "garden_seed"
-	PeerMessage  Kind = "peer_message"
-	QuickCapture Kind = "quick_capture"
-	AskAnswer    Kind = "ask_answer"
-	// Authorization is a change to a seed's authorization, keyed by the seed id.
+	SeedUpdate    Kind = "garden_seed"
+	PeerMessage   Kind = "peer_message"
+	QuickCapture  Kind = "quick_capture"
+	AskAnswer     Kind = "ask_answer"
 	Authorization Kind = "authorization"
 	Notice        Kind = "maintenance_prompt"
 )

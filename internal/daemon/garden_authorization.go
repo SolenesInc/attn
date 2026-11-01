@@ -80,9 +80,6 @@ func (d *Daemon) saveSeedAuthorization(seedID, text string, setter who.Actor, ca
 	return err
 }
 
-// writeSeedAuthorization sets the seed's authorization to text, or clears it when text is blank.
-// With typeIntoTender, the caller needs standing over a live tender, and a tender other than the
-// caller receives the change as a typed update in the same write.
 func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, cause protocol.SessionID, typeIntoTender bool) (authorizationChange, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -115,18 +112,19 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			case tender.Actor() == setter:
 				change.callerTends = true
 			case standing.Oversees(setter, tender):
-				known := d.authorizationKnownBy(tender.Address(), previous)
-				replaced := known
+				received := d.wordsTenderLastReceived(tender.Address(), previous)
+				replaced := received
 				if text == "" && replaced == "" {
 					replaced = previous.Text
 				}
 				item := inbox.Item{
 					ID: uuid.NewString(), To: tender.Address(), Kind: inbox.Authorization,
-					Source: seed.ID, Key: seed.ID, Hint: known, Text: d.authorizationUpdateText(seed, replaced, text, setter),
+					Source: seed.ID, Key: seed.ID, Text: d.authorizationUpdateText(seed, replaced, text, setter),
 				}
 				change.typed = &item
 				if next.Authorization != nil {
 					next.Authorization.TypedUpdate = item.ID
+					next.Authorization.TenderLastReceived = received
 				}
 			default:
 				return authorizationChange{}, fmt.Errorf(
@@ -153,25 +151,22 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 	return authorizationChange{}, fmt.Errorf("%s was rewritten under all %d attempts to save its authorization; try again", seedID, attempts)
 }
 
-// authorizationKnownBy names the words the tender at to last received: the seed's current words,
-// or, while an earlier update to the same tender is still unread, the words that update replaces.
-// The item's Hint keeps them, because the newer update replaces the unread one.
-func (d *Daemon) authorizationKnownBy(to who.Address, current *garden.Authorization) string {
+func (d *Daemon) wordsTenderLastReceived(tender who.Address, current *garden.Authorization) string {
 	if current == nil {
 		return ""
 	}
 	if current.TypedUpdate != "" {
 		item, found, err := d.store.InboxItem(current.TypedUpdate)
-		if err == nil && found && item.ReadAt == "" && item.To == to {
-			return item.Hint
+		if err == nil && found && item.ReadAt == "" && item.To == tender {
+			return current.TenderLastReceived
 		}
 	}
 	return current.Text
 }
 
-func (d *Daemon) authorizationUpdateText(seed garden.Seed, known, text string, setter who.Actor) string {
+func (d *Daemon) authorizationUpdateText(seed garden.Seed, replaced, text string, setter who.Actor) string {
 	values := prompts.Values{
-		"seed_id": seed.ID, "seed_title": seed.Title, "previous": known,
+		"seed_id": seed.ID, "seed_title": seed.Title, "previous": replaced,
 		"set_by": d.authorizationSetterName(garden.Authorization{SetBy: setter}),
 	}
 	if text == "" {
