@@ -179,7 +179,9 @@ and gets fresh attempts.
   reopened threads are separate items.
 - A change to a seed's authorization replaces the older unread change for the
   same seed, so the tender gets only the newest words. The newer item still
-  names the words the tender last received as the ones it replaces.
+  names the words the tender last received as the ones it replaces. When the
+  tender changes the words itself, attn withdraws the unread change, because
+  the tender already knows its own words.
 - An auto-sleep request replaces the older unread auto-sleep request.
 
 Rings coalesce too. One ring covers every unread item at an address. See

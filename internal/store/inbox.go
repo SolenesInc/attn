@@ -280,6 +280,20 @@ func (s *Store) CommitDocumentWritesWithEventsAndInbox(
 	})
 }
 
+type InboxKey struct {
+	To   who.Address
+	Kind inbox.Kind
+	Key  string
+}
+
+func (s *Store) CommitDocumentWritesWithEventsWithdrawingInbox(
+	commits []DocumentCommit, events []BusEvent, key InboxKey, now time.Time,
+) ([]DocumentWriteResult, []int64, error) {
+	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
+		return true, withdrawInbox(tx, key)
+	})
+}
+
 func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -305,7 +319,7 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 		return nil
 	}
 	if item.Key != "" {
-		if _, err := tx.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", item.To.String(), item.Kind, item.Key); err != nil {
+		if err := withdrawInbox(tx, InboxKey{To: item.To, Kind: item.Kind, Key: item.Key}); err != nil {
 			return err
 		}
 	}
@@ -315,7 +329,19 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 func (s *Store) WithdrawInbox(to who.Address, kind inbox.Kind, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", to.String(), kind, key)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := withdrawInbox(tx, InboxKey{To: to, Kind: kind, Key: key}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func withdrawInbox(tx *sql.Tx, key InboxKey) error {
+	_, err := tx.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", key.To.String(), key.Kind, key.Key)
 	return err
 }
 

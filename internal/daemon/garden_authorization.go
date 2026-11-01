@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -21,6 +22,7 @@ type authorizationChange struct {
 	changed     bool
 	callerTends bool
 	typed       *inbox.Item
+	withdrawn   *store.InboxKey
 }
 
 func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage) {
@@ -73,6 +75,9 @@ func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage
 	result := &protocol.SeedAuthorizationResult{Changed: change.changed}
 	if change.callerTends {
 		result.CallerTends = protocol.Ptr(true)
+	}
+	if change.withdrawn != nil {
+		d.kickInbox(change.withdrawn.To)
 	}
 	if change.typed != nil {
 		d.deliverSavedInbox(change.typed.To, change.typed.ID, savedAt)
@@ -128,6 +133,7 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			case !seed.ClaimHolds(standing.Holds):
 			case tender.Actor() == setter:
 				change.callerTends = true
+				change.withdrawn = &store.InboxKey{To: tender.Address(), Kind: inbox.Authorization, Key: seed.ID}
 			default:
 				received := d.wordsTenderLastReceived(tender.Address(), previous)
 				replaced := received
@@ -150,7 +156,7 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			CausedBySessionID: cause,
 		}
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, typed: change.typed})
+		written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, typed: change.typed, withdrawn: change.withdrawn})
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {
 			continue

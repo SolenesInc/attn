@@ -81,12 +81,26 @@ If this applies to work you delegated, update those seeds with attn seed authori
 			t.Fatalf("the same words again returned %+v; want no change with the last typed update", again)
 		}
 
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if _, err := asDispatcher.SeedAuthorization(seed, "You may release.", false); err != nil {
+			t.Fatal(err)
+		}
 		self, err := cli.WithGardenProfile("", delegated.SessionID).SeedAuthorization(seed, "The user said I may push this branch.", false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !self.Changed || !protocol.Deref(self.CallerTends) || self.Update != nil {
 			t.Fatalf("the tender changing its own seed returned %+v; want a change that types nothing", self)
+		}
+		if err := cli.UpdateStateFromHookEvidence(terminal, protocol.StateWorking, "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if typed := typedAuthorizations(tender); len(typed) != 1 {
+			t.Fatalf("the dispatcher's change was typed after the tender replaced it with its own words: %q", typed)
 		}
 
 		registerSessions(t, w, cli, "outsider")

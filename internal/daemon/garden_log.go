@@ -30,12 +30,13 @@ func plainSeedEvents(occurrences ...seedEvents.Occurrence) []seedEvent {
 }
 
 type seedChange struct {
-	author  who.Actor
-	cause   protocol.SessionID
-	born    []string
-	events  []seedEvent
-	entries []seedMoveNote
-	typed   *inbox.Item
+	author    who.Actor
+	cause     protocol.SessionID
+	born      []string
+	events    []seedEvent
+	entries   []seedMoveNote
+	typed     *inbox.Item
+	withdrawn *store.InboxKey
 }
 
 type seedChangeLog struct {
@@ -173,9 +174,12 @@ func (d *Daemon) writeSeedChangeProtected(
 		now := d.gardenTime()
 		var written []store.DocumentWriteResult
 		var eventSeqs []int64
-		if change.typed != nil {
+		switch {
+		case change.typed != nil:
 			written, eventSeqs, err = d.store.CommitDocumentWritesWithEventsAndInbox(commits, log.events, *change.typed, now)
-		} else {
+		case change.withdrawn != nil:
+			written, eventSeqs, err = d.store.CommitDocumentWritesWithEventsWithdrawingInbox(commits, log.events, *change.withdrawn, now)
+		default:
 			written, eventSeqs, err = d.store.CommitDocumentWritesWithEvents(commits, log.events, now)
 		}
 		if err != nil {
