@@ -13,11 +13,12 @@ cp "$root/rust-toolchain.toml" "$work/repo/"
 cat > "$work/bin/cargo" <<'CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
-crate="$PWD"
-mkdir -p "$crate/target/release"
-cat "$crate/src/main.rs" > "$crate/target/release/attn-speech"
-chmod +x "$crate/target/release/attn-speech"
+release="${CARGO_TARGET_DIR:-$PWD/target}/release"
+mkdir -p "$release"
+cat src/main.rs > "$release/attn-speech"
+chmod +x "$release/attn-speech"
 echo build >> "$SPEECH_TEST_BUILDS"
+printf '{"reason":"compiler-artifact","executable":"%s"}\n' "$release/attn-speech"
 CARGO
 printf '#!/usr/bin/env bash\nprintf "rustc fixture\\nhost: fixture\\n"\n' > "$work/bin/rustc"
 chmod +x "$work/bin/cargo" "$work/bin/rustc"
@@ -64,4 +65,13 @@ printf '[profile.release]\nlto = false\n' > "$work/second/.cargo/config.toml"
 mv "$work/second/.cargo" "$work/second/app/speech/.cargo"
 "$work/second/scripts/build-speech-helper.sh" > /dev/null
 [[ "$(builds)" == 6 ]] || { echo 'a Cargo config moved to another directory reused a binary built before the move' >&2; exit 1; }
+printf 'elsewhere\n' > "$work/second/app/speech/src/main.rs"
+CARGO_TARGET_DIR="$work/elsewhere" "$work/second/scripts/build-speech-helper.sh" > /dev/null
+[[ "$(builds)" == 7 && "$(helper second)" == elsewhere ]] || { echo 'the helper is not the binary cargo built in another target directory' >&2; exit 1; }
+
+mkdir -p "$work/second/app/speech/relative-home"
+CARGO_HOME=relative-home "$work/second/scripts/build-speech-helper.sh" > /dev/null
+printf '[build]\nrustflags = ["-Cdebuginfo=2"]\n' > "$work/second/app/speech/relative-home/config.toml"
+CARGO_HOME=relative-home "$work/second/scripts/build-speech-helper.sh" > /dev/null
+[[ "$(builds)" == 9 ]] || { echo 'a config in a relative CARGO_HOME reused a binary built without it' >&2; exit 1; }
 echo 'speech helper cache: OK'

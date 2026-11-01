@@ -29,16 +29,16 @@ cargo_configs() {
 }
 
 source_key() {
-  cd "$repo"
+  cd "$repo/$crate"
   {
     {
       printf '%s\n' "$crate/Cargo.toml" "$crate/Cargo.lock" rust-toolchain.toml scripts/build-speech-helper.sh
-      find "$crate/src" -type f
-      if [[ -f "$crate/build.rs" ]]; then printf '%s\n' "$crate/build.rs"; fi
+      (cd "$repo" && find "$crate/src" -type f)
+      if [[ -f "$repo/$crate/build.rs" ]]; then printf '%s\n' "$crate/build.rs"; fi
     } | LC_ALL=C sort | while IFS= read -r path; do
-      shasum -a 256 "$path"
+      printf '%s %s\n' "$(shasum -a 256 < "$repo/$path" | awk '{ print $1 }')" "$path"
     done
-    (cd "$crate" && rustc -vV)
+    rustc -vV
     cargo_configs
     env | grep -E '^(CARGO_[A-Z0-9_]*|RUSTFLAGS|CC|CXX|CFLAGS|CXXFLAGS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|CMAKE_ARGS|TRANSCRIBE_CMAKE_ARGS|TRANSCRIBE_DIR)=' | LC_ALL=C sort || true
     if [[ "$(uname -s)" == Darwin ]]; then
@@ -56,11 +56,16 @@ fi
 cached="$(attn_build_cache_root speech-helper)/$key/attn-speech"
 
 if [[ ! -x "$cached" ]]; then
-  (cd "$repo/$crate" && cargo build --release --locked)
+  built="$(cd "$repo/$crate" && cargo build --release --locked --message-format=json-render-diagnostics |
+    sed -n 's/.*"executable":"\([^"]*\/attn-speech\)".*/\1/p' | tail -n1)"
+  if [[ -z "$built" ]]; then
+    echo "error: cargo reported no attn-speech executable" >&2
+    exit 1
+  fi
   staging="$(mktemp -d "${TMPDIR:-/tmp}/attn-speech-helper.XXXXXX")"
   trap 'rm -rf "$staging"' EXIT
   mkdir "$staging/artifact"
-  cp "$binary" "$staging/artifact/attn-speech"
+  cp "$built" "$staging/artifact/attn-speech"
   cached="$(attn_build_cache_publish speech-helper "$key" "$staging/artifact")/attn-speech"
 fi
 
