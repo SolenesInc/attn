@@ -1,8 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 test('queue rows share the tree geometry and reveal actions on hover', async ({ page }) => {
-  await page.goto('/test-harness/?component=QueueSidebarFit');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await openFlow(page, 'queue', 'awake');
 
   const sidebar = page.getByTestId('queue-sidebar');
   const chief = page.getByTestId('queue-crew-chief-member');
@@ -41,8 +40,9 @@ const rowKinds = {
 };
 
 async function openFlow(page: Page, flow: 'desktop' | 'queue', chief: string) {
+  const ready = page.waitForEvent('console', (message) => message.text() === '[Harness] QueueSidebarFit ready');
   await page.goto(`/test-harness/?component=QueueSidebarFit&chief=${chief}${flow === 'desktop' ? '&desktop' : ''}`);
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await ready;
 }
 
 async function crewRuleGapBelowHome(page: Page) {
