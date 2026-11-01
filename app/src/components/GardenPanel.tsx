@@ -23,6 +23,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { SeedAuthorization } from './SeedAuthorization';
 import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
 import { checkTally, hasChecks } from './seedCheckPresentation';
 import { SeedContinuationNotes } from './SeedContinuationNotes';
@@ -1252,6 +1253,12 @@ export function GardenPanel({
           <ContinuationForm draft={continuationDraft} onChange={setContinuationDraft} onCancel={() => setContinuationDraft(null)} onSubmit={() => void submitContinuation()} />
         )}
       </div>
+
+      <SeedAuthorization
+        className="garden-section"
+        seed={documentIsCurrent && seedDoc ? seedDoc.seed : here}
+        sessionLabels={tenderSessionLabels}
+      />
 
       {here.body.trim() ? (
         <div className="garden-body">

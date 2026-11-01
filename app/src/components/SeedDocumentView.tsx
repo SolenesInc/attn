@@ -9,6 +9,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { SeedAuthorization } from './SeedAuthorization';
 import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
 import { checkTally, hasChecks } from './seedCheckPresentation';
 import type { SeedDocumentNote } from './seedArtifacts';
@@ -198,6 +199,8 @@ export function SeedDocumentView({
       )}
 
       {seed.reason && <p className="seed-document__reason">{seed.reason}</p>}
+
+      <SeedAuthorization seed={seed} sessionLabels={sessionLabels} />
 
       {seed.body.trim() ? (
         <MarkdownReader

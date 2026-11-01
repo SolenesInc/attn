@@ -56,6 +56,7 @@ import type {
   SeedArtifactReference as GeneratedSeedArtifactReference,
   DelegateResult as GeneratedDelegateResult,
   SeedArtifactTargetResult,
+  SeedAuthorizationResult,
   SeedArtifactTransferResult,
   SeedDocument as GeneratedSeedDocument,
   CrewApplyResult as GeneratedCrewApplyResult,
@@ -1486,6 +1487,10 @@ export function useDaemonSocket({
             else pending.reject(new Error(data.error || 'The move was refused'));
             break;
           }
+
+          case 'seed_authorization_result':
+            settlePendingRequest(pendingActionsRef.current, 'seed_authorization', data, (event) => event.result, 'The authorization change was refused');
+            break;
 
           case 'seed_check_result':
             settlePendingRequest(pendingActionsRef.current, 'seed_check', data, (event) => event.seed, 'The check move was refused');
@@ -2940,6 +2945,16 @@ export function useDaemonSocket({
         verb,
         ...(summary ? { summary } : {}),
       }, 'The check move timed out');
+    },
+    [sendRequest],
+  );
+
+  const sendSeedAuthorization = useCallback(
+    (seedId: string, text: string | null): Promise<SeedAuthorizationResult> => {
+      return sendRequest('seed_authorization', {
+        seed_id: seedId,
+        ...(text === null ? { clear: true } : { text }),
+      }, 'The authorization change timed out');
     },
     [sendRequest],
   );
@@ -4477,6 +4492,7 @@ export function useDaemonSocket({
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
     sendSeedCheck,
+    sendSeedAuthorization,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,

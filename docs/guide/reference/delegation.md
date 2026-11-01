@@ -68,12 +68,13 @@ the chief or you can set or change them while the seed is claimed. Attn doesn't
 check that the words are yours. The agent that sets them answers for them, and
 the seed's log records who set what.
 
-When you change your mind, tell the agent. It sets your new words with `attn
-seed authorization`, and attn types the change into the delegate's
-conversation as your message, waiting while the delegate needs approval. Only
-the delegate's own seed changes: each agent decides whether the change applies
-to the work it delegated, and passes it on. `attn seed show` says whether the
-last change was typed in and when.
+When you change your mind, change the words yourself on the seed's page in the
+app, with Set, Change or Clear, or tell the agent, which sets them with `attn
+seed authorization`. Attn types the change into the delegate's conversation as
+your message, waiting while the delegate needs approval. Only the delegate's
+own seed changes: each agent decides whether the change applies to the work it
+delegated, and passes it on. The seed's page and `attn seed show` say whether
+the last change was typed in and when.
 
 ## Steering a delegate
 
