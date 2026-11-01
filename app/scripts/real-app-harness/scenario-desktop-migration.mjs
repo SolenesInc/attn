@@ -25,6 +25,14 @@ const AUTOMATION_TABLES = [
 const LAST_SCHEMA_BEFORE_CONVERSION = 158;
 const LAST_SCHEMA_REBUILT_BY_FIXTURE = 1791301168635041;
 
+function disabledMigrationCheckAsOnlyAutomationSql(fixtureDir) {
+  return [
+    ...AUTOMATION_TABLES.map((table) => `DELETE FROM ${table};`),
+    `INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
+      VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
+  ];
+}
+
 function parseArgs(argv) {
   const args = [...argv];
   if (args[0] === '--') args.shift();
@@ -86,10 +94,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'DROP INDEX idx_sessions_member_key;',
     'ALTER TABLE sessions DROP COLUMN member_key;',
     'DELETE FROM schema_migrations WHERE version IN (1793408289794144, 1793417605857679);',
-    // Its only automation is disabled, so the launch step follows placement and conversion's renumbering keeps it id 1.
-    ...AUTOMATION_TABLES.map((table) => `DELETE FROM ${table};`),
-    `INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
-      VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
+    ...disabledMigrationCheckAsOnlyAutomationSql(fixtureDir),
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     'ALTER TABLE sessions RENAME COLUMN user_label TO label;',
     'ALTER TABLE sessions DROP COLUMN harness_title;',
