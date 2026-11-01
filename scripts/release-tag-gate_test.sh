@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gate="$root/scripts/release-tag-gate.sh"
+source "$root/scripts/lib/release-fixture.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-tag-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -55,14 +56,7 @@ export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
 repo="$work/repo"
-git clone -q "$root" "$repo"
-git -C "$repo" config user.name 'Release Tag Gate Test'
-git -C "$repo" config user.email 'release-tag-gate@example.com'
-git -C "$repo" switch -q -C main
-rm -rf "$repo/cmd/release-train"
-cp -R "$root/cmd/release-train" "$repo/cmd/release-train"
-git -C "$repo" add -A cmd/release-train
-git -C "$repo" commit -q --allow-empty -m 'release fixture baseline'
+init_release_fixture "$root" "$repo"
 baseline_sha="$(git -C "$repo" rev-parse HEAD)"
 marker="$(cd "$repo" && go run ./cmd/release-train notes range)"
 printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$repo/CHANGELOG.md"

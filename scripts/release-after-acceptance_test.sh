@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
+source "$root/scripts/lib/release-fixture.sh"
 script="$root/scripts/release-after-acceptance.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-after-acceptance-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -106,6 +107,24 @@ export FAKE_RELEASE_RUN_STATUS=completed
 export FAKE_RELEASE_RUN_CONCLUSION=success
 export FAKE_CREATE_RACE_TAG=0
 
+template="$work/template"
+init_release_fixture "$root" "$template"
+baseline_sha="$(git -C "$template" rev-parse HEAD)"
+marker="$(cd "$template" && go run ./cmd/release-train notes range)"
+printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$template/CHANGELOG.md"
+(cd "$template" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
+version=99.98.97
+cat >"$template/.github/release-candidate.yml" <<EOF
+version: $version
+main_sha: $baseline_sha
+EOF
+git -C "$template" add -A
+git -C "$template" commit -q -m 'chore(release): prepare v99.98.97'
+candidate_sha="$(git -C "$template" rev-parse HEAD)"
+candidate_tag="v$version"
+export FAKE_EXPECTED_SHA="$candidate_sha"
+export FAKE_EXPECTED_TAG="$candidate_tag"
+
 setup_fixture() {
   local name="$1"
   fixture_origin="$work/$name-origin.git"
@@ -121,37 +140,11 @@ setup_fixture() {
   export FAKE_RELEASE_RUN_CONCLUSION=success
   export FAKE_CREATE_RACE_TAG=0
 
-	  git init -q --bare "$fixture_origin"
-	  git --git-dir="$fixture_origin" config receive.shallowUpdate true
-	  git clone -q --depth 1 "file://$root" "$fixture_repo"
-	  git -C "$fixture_repo" config user.name 'Release Test'
-	  git -C "$fixture_repo" config user.email 'release@example.com'
-	  rm -rf "$fixture_repo/cmd/release-train"
-	  cp -R "$root/cmd/release-train" "$fixture_repo/cmd/release-train"
-	  git -C "$fixture_repo" switch -q -C main
-	  git -C "$fixture_repo" add -A cmd/release-train
-	  git -C "$fixture_repo" commit -q --allow-empty -m 'release fixture baseline'
-	  baseline_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-	  marker="$(cd "$fixture_repo" && go run ./cmd/release-train notes range)"
-	  printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$fixture_repo/CHANGELOG.md"
-
-	  (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
-	  version=99.98.97
-  mkdir -p "$fixture_repo/.github"
-  cat >"$fixture_repo/.github/release-candidate.yml" <<EOF
-version: $version
-main_sha: $baseline_sha
-EOF
-  git -C "$fixture_repo" add -A
-  git -C "$fixture_repo" commit -q -m 'chore(release): prepare v99.98.97'
-	  candidate_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-	  candidate_tag="v$version"
-	  export FAKE_EXPECTED_SHA="$candidate_sha"
-	  export FAKE_EXPECTED_TAG="$candidate_tag"
-	  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
-	  git -C "$fixture_repo" push -q -u origin main
-	  git --git-dir="$fixture_origin" symbolic-ref HEAD refs/heads/main
-	  export FAKE_ORIGIN="$fixture_origin"
+  git clone -q --bare "$template" "$fixture_origin"
+  git clone -q "$fixture_origin" "$fixture_repo"
+  git -C "$fixture_repo" config user.name 'Release Test'
+  git -C "$fixture_repo" config user.email 'release@example.com'
+  export FAKE_ORIGIN="$fixture_origin"
 }
 
 run_release_after_acceptance() (

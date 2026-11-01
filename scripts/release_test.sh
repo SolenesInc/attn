@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 release_script="$root/scripts/release.sh"
+source "$root/scripts/lib/release-fixture.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -91,18 +92,7 @@ setup_fixture() {
   fixture_repo="$work/${name}-repo"
 
   git init -q --bare "$fixture_origin"
-  git --git-dir="$fixture_origin" config receive.shallowUpdate true
-  git clone -q "$root" "$fixture_repo"
-  git -C "$fixture_repo" config user.name 'Release Test'
-  git -C "$fixture_repo" config user.email 'release@example.com'
-  git -C "$fixture_repo" switch -q -C main
-  cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
-  rm -rf "$fixture_repo/cmd/release-train"
-  cp -R "$root/cmd/release-train" "$fixture_repo/cmd/release-train"
-  git -C "$fixture_repo" add -A scripts/compile-changelog.sh cmd/release-train
-  if ! git -C "$fixture_repo" diff --cached --quiet; then
-    git -C "$fixture_repo" commit -q -m 'test(release): use current release tools'
-  fi
+  init_release_fixture "$root" "$fixture_repo"
   printf 'version: 99.98.96\nmain_sha: %s\n' "$(git -C "$fixture_repo" rev-parse HEAD)" \
     >"$fixture_repo/.github/release-candidate.yml"
   git -C "$fixture_repo" add .github/release-candidate.yml
@@ -110,7 +100,7 @@ setup_fixture() {
   printf '%s\n' 'candidate fixture' >"$fixture_repo/candidate-fixture.txt"
   git -C "$fixture_repo" add candidate-fixture.txt
   git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture' -m 'Attn-Seed: seed-fixture'
-  git -C "$fixture_repo" remote set-url origin "$fixture_origin"
+  git -C "$fixture_repo" remote add origin "$fixture_origin"
   git -C "$fixture_repo" push -q -u origin main
   git --git-dir="$fixture_origin" update-ref refs/heads/reviewed refs/heads/main
 }
