@@ -48,9 +48,6 @@ func (s *Stack) AwaitTimer(name stepclock.Name) {
 	awaitHubTimer(s.T, s.clock, name)
 }
 
-// FireTimers fires each timer named name, without moving the clock, as soon as the daemon or a process it started
-// arms it, until stop is called. It is for a step that may or may not arm that timer, such as a reconnect whose first
-// redial can succeed or fail.
 func (s *Stack) FireTimers(name stepclock.Name) (stop func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

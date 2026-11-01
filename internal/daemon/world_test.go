@@ -289,8 +289,6 @@ func (w *world) closeWatchWindows() {
 	})
 }
 
-// fireTimers fires each timer named name, without moving the clock, as soon as the daemon arms it, until stop is called
-// or the test ends.
 func (w *world) fireTimers(name stepclock.Name) (stop func()) {
 	w.T.Helper()
 	if w.bubbled {
