@@ -39,6 +39,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.deleteWorktreeHere)
 	runs(parts, false, d.prepareWorktreeRemovalHere)
 	runs(parts, false, d.worktreeRemovedHere)
+	runs(parts, true, d.worktreeSeedOwnersHere)
 	runs(parts, true, d.browseDirectoryHere)
 	runs(parts, true, d.inspectPathHere)
 	runs(parts, true, d.readRepoInfoHere)

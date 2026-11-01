@@ -22,6 +22,8 @@ const (
 	worktreeSweepTimeout = 30 * time.Minute
 )
 
+const gardenUnreadableReason = "the home's Garden could not be read, so nothing here is decided"
+
 const defaultWorktreeSweepIdleDays = 14
 
 const defaultWorktreeSweepInterval = time.Hour
@@ -108,7 +110,18 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			continue
 		}
 		refreshed++
-		facts := d.sweepContext(repo)
+		facts, factsErr := d.sweepContext(ctx, repo)
+		if factsErr != nil {
+			if context.Cause(ctx) != nil {
+				return refreshed, removed, kept, context.Cause(ctx)
+			}
+			d.logf("worktree sweep: %s: %v", repo, factsErr)
+			for _, wt := range d.store.ListWorktreesByRepo(repo) {
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown, gardenUnreadableReason, time.Time{}}, now)
+				kept++
+			}
+			continue
+		}
 		for _, state := range states {
 			if state.Path == repo {
 				continue
@@ -164,7 +177,17 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			}
 			d.store.RecordWorktreeObservation(candidate.state.Path, observation, now)
 			wt := d.store.GetWorktree(candidate.state.Path)
-			verdict := worktreeSweepVerdict(wt, d.sweepContext(repo), now, worktreeSweepIdle())
+			current, currentErr := d.sweepContext(ctx, repo)
+			if currentErr != nil {
+				if context.Cause(ctx) != nil {
+					return refreshed, removed, kept, context.Cause(ctx)
+				}
+				d.logf("worktree sweep: %s: %v", repo, currentErr)
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown, gardenUnreadableReason, time.Time{}}, now)
+				kept++
+				continue
+			}
+			verdict := worktreeSweepVerdict(wt, current, now, worktreeSweepIdle())
 			d.recordSweepVerdict(wt, verdict, now)
 			if verdict.Status != store.WorktreeSweepRemoved {
 				kept++
@@ -181,7 +204,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				if err := d.finalWorktreeSweepGitCheck(protection.Context(), candidate); err != nil {
 					return err
 				}
-				if err := d.finalWorktreeSweepProtectionCheck(candidate); err != nil {
+				if err := d.finalWorktreeSweepProtectionCheck(protection.Context(), candidate); err != nil {
 					return err
 				}
 				if failure := d.removeWorktreeCheckout(protection, wt, removal); failure != nil {
@@ -256,9 +279,13 @@ func (d *Daemon) finalWorktreeSweepGitCheck(ctx context.Context, candidate workt
 	return nil
 }
 
-func (d *Daemon) finalWorktreeSweepProtectionCheck(candidate worktreeSweepCandidate) error {
+func (d *Daemon) finalWorktreeSweepProtectionCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
+	openSeeds, err := d.openSeedsByWorktree(ctx, candidate.repo)
+	if err != nil {
+		return err
+	}
 	wt := d.store.GetWorktree(candidate.state.Path)
-	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || len(d.openSeedsByWorktree(candidate.repo)[wt.Path]) > 0 {
+	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || len(openSeeds[wt.Path]) > 0 {
 		return errors.New("worktree gained protection before deletion")
 	}
 	return nil
@@ -270,12 +297,16 @@ type sweepContext struct {
 	integration  string
 }
 
-func (d *Daemon) sweepContext(repo string) sweepContext {
+func (d *Daemon) sweepContext(ctx context.Context, repo string) (sweepContext, error) {
+	openSeeds, err := d.openSeedsByWorktree(ctx, repo)
+	if err != nil {
+		return sweepContext{}, err
+	}
 	return sweepContext{
 		liveSessions: d.liveSessionsByWorktree(repo),
-		openSeeds:    d.openSeedsByWorktree(repo),
+		openSeeds:    openSeeds,
 		integration:  d.storedIntegrationBranch(repo),
-	}
+	}, nil
 }
 
 func (d *Daemon) storedIntegrationBranch(repo string) string {
@@ -426,26 +457,47 @@ func (d *Daemon) seedsForWorktree(wt *store.Worktree) []string {
 	return seeds
 }
 
-func (d *Daemon) openSeedsByWorktree(repo string) map[string][]string {
+func (d *Daemon) openSeedsByWorktree(ctx context.Context, repo string) (map[string][]string, error) {
 	byPath := make(map[string][]string)
-	if d.store == nil {
-		return byPath
-	}
 	rows := d.store.ListWorktreesByRepo(repo)
 	if len(rows) == 0 {
-		return byPath
+		return byPath, nil
 	}
+	checkouts := make([]protocol.WorktreeCheckout, 0, len(rows))
+	for _, row := range rows {
+		checkouts = append(checkouts, protocol.WorktreeCheckout{Path: row.Path, Branch: row.Branch})
+	}
+	owners, err := Call[protocol.WorktreeSeedOwners](ctx, d.router(), protocol.WorktreeSeedOwnersMessage{
+		Cmd: protocol.CmdWorktreeSeedOwners, MainRepo: repo, Worktrees: checkouts,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading the home's Garden: %w", err)
+	}
+	for _, owner := range owners.Owners {
+		byPath[owner.Path] = owner.Seeds
+	}
+	return byPath, nil
+}
+
+func (d *Daemon) worktreeSeedOwnersHere(_ context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
+	seedsByPath := make(map[string][]string)
 	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
 		if garden.Closed(seed.Status) {
 			return
 		}
-		for _, row := range rows {
-			if worktreeOwnsExecution(row, dispatch) {
-				byPath[row.Path] = append(byPath[row.Path], seed.ID)
+		for _, checkout := range msg.Worktrees {
+			if worktreeOwnsExecution(&store.Worktree{Path: checkout.Path, MainRepo: msg.MainRepo, Branch: checkout.Branch}, dispatch) {
+				seedsByPath[checkout.Path] = append(seedsByPath[checkout.Path], seed.ID)
 			}
 		}
 	})
-	return byPath
+	owners := protocol.WorktreeSeedOwners{Owners: []protocol.WorktreeSeedOwner{}}
+	for _, checkout := range msg.Worktrees {
+		if seeds := seedsByPath[checkout.Path]; len(seeds) > 0 {
+			owners.Owners = append(owners.Owners, protocol.WorktreeSeedOwner{Path: checkout.Path, Seeds: seeds})
+		}
+	}
+	return owners, nil
 }
 
 func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {

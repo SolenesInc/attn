@@ -284,6 +284,7 @@ const (
 	CmdAgentCatalog           = "agent_catalog"
 	CmdWorktreeRemovalPrepare = "worktree_removal_prepare"
 	CmdWorktreeRemoved        = "worktree_removed"
+	CmdWorktreeSeedOwners     = "worktree_seed_owners"
 	CmdCheckoutInspect        = "checkout_inspect"
 	CmdReopenInspect          = "reopen_inspect"
 	CmdReopenWorktree         = "reopen_worktree"

@@ -224,6 +224,7 @@ var Placements = map[string][]Placement{
 	"worktree_refresh":                 {Placement{LocatorHere, ""}},
 	"worktree_removal_prepare":         {Placement{LocatorHome, ""}},
 	"worktree_removed":                 {Placement{LocatorHome, ""}},
+	"worktree_seed_owners":             {Placement{LocatorHome, ""}},
 	"worktree_sweep_log":               {Placement{LocatorHere, ""}},
 }
 
@@ -2656,6 +2657,18 @@ func (m WorktreeRemovedMessage) Placement() Placement {
 }
 
 func (m WorktreeRemovedMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeSeedOwnersMessage) CommandName() string {
+	return "worktree_seed_owners"
+}
+
+func (m WorktreeSeedOwnersMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeSeedOwnersMessage) Locate() string {
 	return ""
 }
 

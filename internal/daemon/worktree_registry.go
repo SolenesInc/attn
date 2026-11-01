@@ -25,7 +25,6 @@ type repositoryFacts struct {
 	stashes           map[string]int
 	mergedBranches    map[string]store.MergedBranch
 	liveSessions      map[string][]string
-	openSeeds         map[string][]string
 	sessionActivity   map[string]time.Time
 }
 
@@ -134,7 +133,6 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 	}
 
 	facts.liveSessions = d.liveSessionsByWorktree(repo)
-	facts.openSeeds = d.openSeedsByWorktree(repo)
 	facts.sessionActivity = d.sessionActivityByWorktree(facts.liveSessions)
 	return facts, nil
 }

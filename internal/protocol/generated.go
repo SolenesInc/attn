@@ -14129,6 +14129,14 @@ type Worktree struct {
 	Unpushed *int `json:"unpushed,omitempty,omitzero"`
 }
 
+type WorktreeCheckout struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
 type WorktreeCreatedEvent struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -14300,6 +14308,30 @@ type WorktreeRepository struct {
 
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo string `json:"main_repo"`
+}
+
+type WorktreeSeedOwner struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []string `json:"seeds"`
+}
+
+type WorktreeSeedOwners struct {
+	// Owners corresponds to the JSON schema field "owners".
+	Owners []WorktreeSeedOwner `json:"owners"`
+}
+
+type WorktreeSeedOwnersMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// MainRepo corresponds to the JSON schema field "main_repo".
+	MainRepo string `json:"main_repo"`
+
+	// Worktrees corresponds to the JSON schema field "worktrees".
+	Worktrees []WorktreeCheckout `json:"worktrees"`
 }
 
 type WorktreeStateChangedEvent struct {

@@ -1744,6 +1744,26 @@ model WorktreeRemovalPlan {
   keep_branch: boolean;
 }
 
+// The worktree sweep on a machine asks the home, which owns the Garden, which
+// open seeds own each of a repository's worktrees on that machine.
+@extension("x-on", #{ home: true })
+model WorktreeSeedOwnersMessage {
+  cmd: "worktree_seed_owners";
+  main_repo: string;
+  worktrees: WorktreeCheckout[];
+}
+model WorktreeCheckout {
+  path: string;
+  branch: string;
+}
+model WorktreeSeedOwner {
+  path: string;
+  seeds: string[];
+}
+model WorktreeSeedOwners {
+  owners: WorktreeSeedOwner[];
+}
+
 // A machine that removed a worktree tells the home, which owns the sessions,
 // to close that machine's sessions under the path and note the removal on
 // the seeds the plan named.
