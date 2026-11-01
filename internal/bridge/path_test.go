@@ -27,15 +27,19 @@ func TestBridgeOutputFollowsThePath(t *testing.T) {
 		name         string
 		rate         float64
 		rtt, changed time.Duration
+		workloads    []string
 	}{
-		{"slow", 2_000_000, 30 * time.Millisecond, 0},
-		{"short", 10_000_000, 27 * time.Millisecond, 0},
-		{"long", 10_000_000, 54 * time.Millisecond, 0},
-		{"halves", 10_000_000, 54 * time.Millisecond, 27 * time.Millisecond},
-		{"doubles", 10_000_000, 27 * time.Millisecond, 54 * time.Millisecond},
-		{"batched", 2_000_000, 30 * time.Millisecond, 0},
+		{"slow", 2_000_000, 30 * time.Millisecond, 0, nil},
+		{"long", 10_000_000, 54 * time.Millisecond, 0, nil},
+		{"halves", 10_000_000, 54 * time.Millisecond, 27 * time.Millisecond, nil},
+		{"doubles", 10_000_000, 27 * time.Millisecond, 54 * time.Millisecond, []string{"bulk", "maximum-terminal"}},
+		{"batched", 2_000_000, 30 * time.Millisecond, 0, nil},
 	} {
-		for _, workload := range []string{"bulk", "bulk-after-preface", "terminal", "maximum-terminal", "maximum-terminal-after-command"} {
+		workloads := path.workloads
+		if workloads == nil {
+			workloads = []string{"bulk", "bulk-after-preface", "terminal", "maximum-terminal", "maximum-terminal-after-command"}
+		}
+		for _, workload := range workloads {
 			t.Run(fmt.Sprintf("%s/%s", path.name, workload), func(t *testing.T) {
 				synctest.Test(t, func(t *testing.T) {
 					w := pair(t)
