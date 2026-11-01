@@ -24,6 +24,12 @@ export function outpostUpdateText(row: OutpostInfo): string {
   }[row.update.phase];
 }
 
+function outpostBannerHeadline(different: OutpostInfo[], updated: OutpostInfo[]): string {
+  if (!different.length && updated.some(outpostIsUpdating)) return "Installing your home's build on outposts.";
+  if (!different.length && updated.every(row => row.update?.phase === 'done')) return 'Outposts are on your home’s build.';
+  return "Outposts need your home's build.";
+}
+
 export function OutpostUpdateBanner() {
   const api = useOptionalDaemonApi();
   const [dismissed, setDismissed] = useState(readDismissedOutpostBuild);
@@ -35,7 +41,7 @@ export function OutpostUpdateBanner() {
   return (
     <div className="update-banner" role="region" aria-label="Outpost updates">
       <span>
-        {different.length ? "Outposts need your home's build." : 'Outposts are on your home’s build.'}
+        {outpostBannerHeadline(different, updated)}
         {updated.map(row => <span key={row.id} className="banner-note"> {row.name}: {outpostUpdateText(row)}</span>)}
         {api.outpostCommandError && <span className="banner-note"> {api.outpostCommandError}</span>}
       </span>

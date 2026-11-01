@@ -62,6 +62,14 @@ describe('outpost build updates', () => {
     expect(daemon.sentOf('update_outpost')).toEqual([{ cmd: 'update_outpost', id: 'studio' }, { cmd: 'update_outpost', id: 'studio' }]);
   });
 
+  it('says a first install is in progress while an outpost with no build is building', async () => {
+    const view = await renderApp({ initialState: { ...initial, outposts: [{ ...old, build: undefined, state: 'connecting', update: { phase: 'building' } }] } });
+    expect(banner()).toHaveTextContent("Installing your home's build on outposts.");
+    expect(banner()).not.toHaveTextContent('are on your home');
+    await gesture(view.daemon, () => view.daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, build: homeBuild, state: 'connected', reach: 'reachable', update: { phase: 'done' } }] }));
+    expect(banner()).toHaveTextContent('Outposts are on your home’s build.');
+  });
+
   it('stays hidden with no known mismatch or with Outposts off', async () => {
     const view = await renderApp({ initialState: { ...initial, outposts: [{ ...old, build: homeBuild }] } });
     expect(banner()).toBeNull();
