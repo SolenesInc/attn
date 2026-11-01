@@ -188,6 +188,9 @@ func (c *Client) EnsurePullRequestRevision(ctx context.Context, repoDir, remote 
 	if err != nil {
 		return fmt.Errorf("read pull request remote: %w", err)
 	}
+	if missingHTTPSAuthorization(string(remoteURL), authorization) {
+		return ErrAuthorizationMissing
+	}
 	authorization, err = authorizationForGitURL(strings.TrimSpace(string(remoteURL)), authorization)
 	if err != nil {
 		return err

@@ -167,7 +167,7 @@ func TestTurningOffACodexAutomationLeavesARunWhoseAgentStartedPendingAcrossARest
 	}
 }
 
-func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsDownStillDeliversItsStartedRun(t *testing.T) {
+func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsSignedOutStillDeliversItsStartedRun(t *testing.T) {
 	for _, turnOffBeforeRestart := range []bool{false, true} {
 		t.Run(fmt.Sprintf("turned off before the restart %v", turnOffBeforeRestart), func(t *testing.T) {
 			github := newAutomationGitHub(t)
@@ -176,7 +176,7 @@ func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsDownStillDel
 			s.Start()
 			clone := newRepo(t, "shop")
 			s.SetCodexFolderTrust(clone, "trusted")
-			runGit(t, clone, "remote", "add", "origin", "git@github.test:acme/shop.git")
+			runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
 			head := commitFile(t, clone, "change.go", "package change\n")
 			spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
 			applyAutomation(t, s.Client(), spec)
@@ -192,11 +192,11 @@ func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsDownStillDel
 			session := string(protocol.Deref(started.SessionID))
 			r.app.AwaitScreen(session, "A new version of Codex")
 
-			github.setDown(true)
 			if turnOffBeforeRestart {
 				setAutomationEnabled(t, r.cli, 1, false)
 			}
 			s.Stop()
+			s.Vars = append(s.Vars, "ATTN_MOCK_GH_TOKEN=")
 			s.Start()
 			r.app, r.cli = s.App(), s.Client()
 			if !turnOffBeforeRestart {

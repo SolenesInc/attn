@@ -686,29 +686,13 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	mainRepo := ""
 	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
 		source = override
-		type overrideInfo struct {
-			mainRepo  string
-			remoteURL string
-		}
-		override, gitErr := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (overrideInfo, error) {
-			mainRepo, runErr := client.ValidateLocalClone(runCtx, source.Path, identity)
-			if runErr != nil {
-				return overrideInfo{}, runErr
-			}
-			remoteURL, runErr := client.Output(runCtx, attngit.OpMetadata, mainRepo, "remote", "get-url", "origin")
-			return overrideInfo{mainRepo: mainRepo, remoteURL: string(remoteURL)}, runErr
+		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+			return client.ValidateLocalClone(runCtx, source.Path, identity)
 		})
-		mainRepo, err = override.mainRepo, gitErr
 		if err != nil {
 			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(override.remoteURL)), "https://") && authorization == "" {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("GitHub host %s is not authenticated", pr.Host)}
-		}
 	} else {
-		if authorization == "" {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("GitHub host %s is not authenticated", pr.Host)}
-		}
 		root := strings.TrimSpace(d.dataRoot)
 		if root == "" {
 			root = filepath.Dir(d.socketPath)
@@ -720,14 +704,14 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return mainRepo, runErr
 		})
 		if err != nil {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("managed repository cache: %w", err)}
+			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("managed repository cache: %w", err))
 		}
 	}
 	d.store.MonitorWorktreeRepository(mainRepo)
 	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
 	}); err != nil {
-		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
+		return automation.PreparedLocation{}, automationRepositoryError(pr.Host, err)
 	}
 	repoName := pr.Repository
 	root := strings.TrimSpace(d.dataRoot)
@@ -770,6 +754,13 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	})
 	return automation.PreparedLocation{Directory: worktree, Revision: pr.HeadSHA, Resolved: resolved}, nil
 }
+func automationRepositoryError(host string, err error) error {
+	if errors.Is(err, attngit.ErrAuthorizationMissing) {
+		err = fmt.Errorf("GitHub host %s is not authenticated", host)
+	}
+	return &retryableAutomationDeliveryError{cause: err}
+}
+
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
 	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
