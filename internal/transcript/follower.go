@@ -29,6 +29,7 @@ type Follower struct {
 	previousEvent    Event
 	hasPreviousEvent bool
 	usage            *UsageExtractor
+	contextRead      bool
 }
 
 func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
@@ -52,23 +53,25 @@ func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 	if err != nil {
 		return nil, err
 	}
-	previous, hasPrevious, err := previousNormalizedEvent(f, agent, startOffset)
-	if err != nil {
-		return nil, err
-	}
-	usage := NewUsageExtractor(agent)
-	if err := usage.seedCodexUsageBefore(f, startOffset); err != nil {
-		return nil, err
-	}
 	return &Follower{
-		path:             path,
-		agent:            agent,
-		offset:           startOffset,
-		fingerprint:      fingerprint,
-		previousEvent:    previous,
-		hasPreviousEvent: hasPrevious,
-		usage:            usage,
+		path:        path,
+		agent:       agent,
+		offset:      startOffset,
+		fingerprint: fingerprint,
+		usage:       NewUsageExtractor(agent),
 	}, nil
+}
+
+func (f *Follower) readContextBefore(file *os.File) error {
+	previous, hasPrevious, err := previousNormalizedEvent(file, f.agent, f.offset)
+	if err != nil {
+		return err
+	}
+	if err := f.usage.seedCodexUsageBefore(file, f.offset); err != nil {
+		return err
+	}
+	f.previousEvent, f.hasPreviousEvent, f.contextRead = previous, hasPrevious, true
+	return nil
 }
 
 func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
@@ -153,6 +156,11 @@ func (f *Follower) Read() (FollowBatch, error) {
 				return FollowBatch{}, readErr
 			}
 			return batch, nil
+		}
+		if !f.contextRead {
+			if err := f.readContextBefore(file); err != nil {
+				return FollowBatch{}, err
+			}
 		}
 
 		lineOffset := f.offset
