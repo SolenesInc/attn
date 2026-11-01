@@ -75,8 +75,9 @@ func TestASnoozeTheMonitorSavedIsStillSnoozedAfterARestart(t *testing.T) {
 	t.Parallel()
 	s, id := waitingAgentStack(t)
 	until := time.Now().Add(time.Hour)
-	snoozeUntil(s.App(), id, until)
-	testworld.AwaitSession(s.App(), id, func(x protocol.Session) bool { return snoozedUntil(x).Equal(until) })
+	app := s.App()
+	snoozeUntil(app, id, until)
+	testworld.AwaitSession(app, id, func(x protocol.Session) bool { return snoozedUntil(x).Equal(until) })
 	s.Stop()
 
 	s.Start()
