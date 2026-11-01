@@ -56,7 +56,9 @@ repository root.
   Pointer input arms its target's webview; keys arm the main webview. Pointer
   actions return the `receipt`; `receipt.matches` says whether the release
   landed on the aimed selector. Input that lands in a browser tile page, starts
-  a native window drag, or replaces the page receiving it has no receipt: pass
+  a native window drag, or replaces the page receiving it has no receipt, and
+  neither does a system-input click on a macOS window that is not key: that
+  click only makes the window key. Pass
   `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers` for
   `pressKey` and `pressKeyCode`. `hover` and `scroll` have no receipt.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`

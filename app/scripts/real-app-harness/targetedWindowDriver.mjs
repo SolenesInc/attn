@@ -44,7 +44,8 @@ export class TargetedWindowDriver {
       return await this.client.request(`${prefix}wait_native_input_witness`, {});
     } catch (error) {
       throw new Error(`${action} was sent but the app did not receive it: ${error?.message || error}. `
-        + 'Input that lands in a browser tile page, or that replaces the page receiving it, has no receipt; '
+        + 'Input that lands in a browser tile page, starts a native window drag, or replaces the page receiving it, '
+        + 'and a system-input click on a macOS window that is not key, have no receipt; '
         + 'pass { withoutReceipt: \'<why>\' } for it.', { cause: error });
     }
   }

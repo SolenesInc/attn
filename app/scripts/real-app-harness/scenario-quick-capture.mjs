@@ -358,7 +358,7 @@ try {
     await driver.parkWindow(Math.ceil(main.width * 0.2), { windowTitle: mainTitle });
     runner.registerCleanup('main-position', () => execFileSync('osascript', ['-e',
       `tell application "System Events" to tell (first application process whose bundle identifier is "${client.bundleId}") to set position of first window to {${main.x}, ${main.y}}`]));
-    await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle });
+    await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle, withoutReceipt: 'the first click on a window that is not key only makes it key; macOS does not deliver it to the page' });
     assert.equal((await state()).nativeFocused, false, 'The deliberate main-window click must transfer native key focus');
     await client.request('capture_dismiss');
     assert.equal(await driver.frontmostBundleId(), driver.bundleId);
