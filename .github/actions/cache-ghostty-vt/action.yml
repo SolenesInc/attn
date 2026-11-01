@@ -17,7 +17,7 @@ runs:
       shell: bash
       run: |
         source scripts/lib/libghostty-vt.sh
-        echo "cache=$(vt_cache_root)" >> "$GITHUB_OUTPUT"
+        echo "cache=$(attn_build_cache_root native-vt)" >> "$GITHUB_OUTPUT"
 
     # actions/cache saves post-job only on success, and these jobs go red often.
     - name: Restore native libghostty-vt

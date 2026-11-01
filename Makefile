@@ -121,7 +121,7 @@ build-pty-host: pty-host/Cargo.toml pty-host/Cargo.lock pty-host/build.rs $(wild
 SPEECH_HELPER_BINARY := app/speech/target/release/attn-speech
 
 build-speech-helper:
-	cargo build --manifest-path app/speech/Cargo.toml --release --locked
+	./scripts/build-speech-helper.sh
 
 # Cross-compile the headless Linux daemon from macOS. Recurse into `build` with
 # the target GOOS/GOARCH + zig as the cgo cross-compiler: passing them on the
