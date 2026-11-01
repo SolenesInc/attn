@@ -2,45 +2,46 @@
 
 The shared Rust PTY host is experimental and off by default. Enable it under
 Settings → Experimental → Shared terminal host. The setting applies to new and
-explicitly reloaded sessions; running sessions stay where they are. If the host is
-unavailable, new launches fall back to Go workers.
+explicitly reloaded sessions. Running sessions keep their current backend. If the
+host is unavailable, new launches fall back to Go workers.
 `ATTN_PTY_BACKEND` overrides the setting.
 
 ## Host builds
 
-A daemon pins the host build it found when it started; replacing the app bundle
+A daemon pins the host build it found when it started. Replacing the app bundle
 changes nothing until the next daemon start. A build becomes last-known-good
 after one throwaway terminal round trip passes in the current environment. The
-result is recorded, so ordinary restarts do not repeat the check.
+daemon records the result, so ordinary restarts do not repeat the check.
 
 At startup the daemon recovers sessions first, then checks a newly installed
-build in the background. Until it passes, new sessions use the last-known-good
-build, or Go when none has passed yet. A failing build produces one in-app
-notification and is not checked again until it changes or the setting is turned
-on again. A check cut short by its time limit or daemon shutdown is not a
-failure.
+build in the background. Until the new build passes, new sessions use the
+last-known-good build, or Go when no build has passed yet. For a failing build,
+a failing build produces one in-app notification and the daemon does not check the build again
+until the build changes or the user turns the setting on again. The daemon does
+not count a check cut short by its time limit or by daemon shutdown as a failure.
 
-Every host process gets its own socket and control token. A host retires 45
-seconds after its last terminal closes, or after starting without one; the next
-launch starts a fresh host.
+Every host process has its own socket and control token. A host retires 45
+seconds after its last terminal closes, or after it starts without a terminal.
+The next launch starts a fresh host.
 
 ## Moving running terminals to a new build
 
 When an update changes the terminal snapshot format, a running host's
-terminals can no longer hand the app a screen it reads. As part of startup
-recovery the daemon moves each such host onto the newest build that passed its
-check. The host stops reading at a chunk boundary, writes each terminal's screen
-as plain VT, and re-execs itself as the new build. Its pid, sockets, PTYs, agent
-processes, screens, scrollback and command blocks all carry over; kitty images
-do not. The app gets its sessions only after every move has finished, so it
-reattaches to the new build and sees the same screen.
+terminals can no longer hand the app a screen the app can read. As part of
+startup recovery, the daemon moves each such host onto the newest build that
+passed its check. The host stops reading at a chunk boundary, writes each
+terminal's screen as plain VT, and re-execs itself as the new build. The host
+keeps its pid, sockets, PTYs, agent processes, screens, scrollback, and command
+blocks. It loses kitty images. The app gets its sessions only after every move
+has finished, so the app reattaches to the new build and sees the same screen.
 
-Before it touches a live host, the daemon rehearses the move on a throwaway
+Before the daemon touches a live host, it rehearses the move on a throwaway
 host running the same old build with a probe terminal. If the rehearsal fails,
-the live host is left alone and its terminals show the reload notice. If the
-new build cannot take the terminals over, it hands them back to the build it
-replaced. A host started before this feature cannot move; its terminals show
-the reload notice until they are reloaded or closed.
+the daemon leaves the live host alone and the host's terminals show the reload
+notice. If the new build cannot take the terminals over, the new build hands
+them back to the build it replaced. A host started before this feature cannot
+move. Its terminals show the reload notice until the user reloads or closes
+them.
 
 ## Upgrade test
 
@@ -48,8 +49,8 @@ the reload notice until they are reloaded or closed.
 bash scripts/test-pty-upgrade.sh
 ```
 
-It builds the last pre-Rust daemon, the current daemon, and the host, then
-checks that sessions survive daemon upgrades, backend toggles, host changes,
+The script builds the last pre-Rust daemon, the current daemon, and the host,
+then checks that sessions survive daemon upgrades, backend toggles, host changes,
 failing host builds, and a missing host, all in temporary data directories. CI
 runs it on macOS and Linux.
 
@@ -67,7 +68,7 @@ make build-pty-host
 bash scripts/measure-pty-host.sh /absolute/path/to/attn-pty-host attempt-name
 ```
 
-It prints `PTY_RESOURCE` JSON records for 1, 8, and 32 terminals, idle and under
+The script prints `PTY_RESOURCE` JSON records for 1, 8, and 32 terminals, idle and under
 8 MiB output floods. On an Apple M5 Max, 32 empty terminals take about 8 MiB,
 roughly 180 KiB per terminal, and idle CPU is near zero. On Linux amd64, 32
 empty terminals take 7.2–7.7 MiB PSS, and an 8 MiB flood costs about 320 ms of

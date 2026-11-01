@@ -12,8 +12,8 @@ gh pr create
 ```
 
 - Open PRs ready for review with a scoped conventional-commit title and a
-  description that says what users observe; the
-  [release notes](making-a-release.md#release-notes) are written from it.
+  description that says what users observe. The
+  [release notes](making-a-release.md#release-notes) come from the description.
 - Meet the [verification requirements](instances.md#verification-requirements).
 - Squash-merge only with green checks, approval, and a mergeable exact head,
   and only with the user's permission.

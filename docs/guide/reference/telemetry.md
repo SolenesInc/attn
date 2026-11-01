@@ -10,7 +10,7 @@ shows every record, exactly as it is stored and sent.
 |---|---|---|
 | `analytics.enabled` | off | Records usage in the local outbox, gives new sessions `attn vent`, and shows Settings › Analytics. Experimental. |
 | `analytics.sharing_enabled` | off | Uploads the outbox to attn's maintainers. Needs `analytics.enabled`. |
-| `analytics.share_vents` | off | While sharing is on, queues each new attn vent, with its text, for the next upload. Without it, a vent leaves only when you press `x` on it. |
+| `analytics.share_vents` | off | While sharing is on, queues each new attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
 | `analytics.tool_vents` | off | Lets new sessions also send tool vents, about the agent's other tools. Tool vents never leave the machine. |
 
 With `analytics.enabled` off, nothing is recorded and nothing is sent, whatever
@@ -36,8 +36,8 @@ Every record is one line of JSON:
 
 `seq` counts records within a stream, so the server stores each record once.
 
-Records on the `bus`, `app`, `cli` and `sample` streams are redacted before
-they are stored:
+attn redacts records on the `bus`, `app`, `cli` and `sample` streams before
+it stores them:
 
 - Numbers, booleans and nulls are kept.
 - A string becomes its length, `{"s": 24}`, unless its field is on the
@@ -46,19 +46,20 @@ they are stored:
 - A subject (a session, path, pull request or other id) becomes a keyed hash,
   `h:` and 12 hex digits, using a secret that never leaves the machine
   (`<data-dir>/analytics-secret`). The same subject hashes the same way, so
-  records about one thing can be grouped without saying what it is.
+  records about one thing can be grouped without saying what the thing is.
 - Session facts carry the harness, model, how the session was launched (user,
   delegation, automation, crew, chief) and its state. Repository facts carry
   three booleans: has an `AGENTS.md`, is a worktree, has a remote. Names and
   paths never leave.
 
-An agent files each vent as one of two kinds. An attn vent is about attn
-itself: its commands, its instructions, or how it works inside the harness. A
-tool vent is about the agent's other tools: a skill, another CLI or MCP server,
-the harness's own permissions and approval review. Agents learn about tool vents only when `analytics.tool_vents`
-was on when their session launched. Only attn vents can be sent. Press `s` on a
-vent to file it under the other kind; filing a queued vent under tools takes
-it out of the queue, and a sent vent stays attn.
+An agent files each vent as one of two kinds. An attn vent is about attn itself:
+its commands, its instructions, or how it works inside the harness. A tool vent
+is about the agent's other tools: a skill, another CLI or MCP server, the
+harness's own permissions and approval review. Agents learn about tool vents
+only when `analytics.tool_vents` was on when their session launched. Only attn
+vents can be sent. Press `s` on a vent to file it under the other kind. Filing a
+queued vent under tools takes the vent out of the queue, and a sent vent stays
+an attn vent.
 
 A vent record carries the vent whole, because a vent without its text says
 nothing:
@@ -90,18 +91,19 @@ The busiest minute measured on a real install held 882 facts, so five minutes
 hold at most 4,410 and one scheduled batch carries them. One batch is half the
 service's limit of 10,000 records a minute, so scheduled uploads never reach it,
 even while catching up after time offline. Turning sharing on uploads right
-away, outside the schedule; turning it on several times within a minute while a
-backlog waits can reach the limit, and attn then waits as the refusal asks.
+away, outside the schedule. Turning sharing on several times within a minute
+while a backlog waits can reach the limit, and attn then waits as the refusal
+asks.
 
-The first upload registers the install and keeps its token in
+The first upload registers the install and keeps the install's token in
 `<data-dir>/analytics-token`. The token identifies the install, not you. The
 server also keeps a keyed hash of the address each batch came from, never the
 address. [attn-ingest](../../internal/attn-ingest.md) describes the service and
 its limits.
 
 When the service refuses a batch, the records stay and Settings › Analytics
-shows the refusal with the limit, its value and what the batch would have
-made it. attn waits as long as the refusal asks before trying again.
+shows the refusal with the limit, the limit's value and the value the batch
+would have reached. attn waits as long as the refusal asks before trying again.
 
 ## Keeping and deleting
 
@@ -109,8 +111,8 @@ Records stay in the local outbox for 7 days, sent or not. While sharing is on,
 records not yet sent may wait up to 30 days for an upload. Vents you dismiss or
 that their agent withdraws are deleted after 30 days.
 
-Turning sharing off, after something was sent, offers Forget this install.
-Forget this install deletes what the server holds, then starts a new install: a new install id, token
-and subject secret. When the service cannot be reached, nothing changes and the
-page says so. Clear the local record deletes the local outbox and dismissed
-vents.
+After attn has sent something, turning sharing off offers Forget this install.
+Forget this install deletes what the server holds, then starts a new install: a
+new install id, token and subject secret. When the service cannot be reached,
+nothing changes and the page says so. Clear the local record deletes the local
+outbox and dismissed vents.

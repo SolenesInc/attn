@@ -1,8 +1,8 @@
 # Test history
 
 attn's test runners record a receipt for every run: what the command was
-asked to run, what each test did, and the source, platform and machine it ran
-on. Shared history and test selection are built from these receipts.
+asked to run, what each test did, and the source, platform and machine of the
+run. attn builds shared history and test selection from these receipts.
 
 ## Recording
 
@@ -18,7 +18,7 @@ These commands record a receipt:
 
 Running `go test`, `vitest` or `playwright` directly records nothing.
 
-Each of them runs through
+Each of these commands runs through
 `go tool test-history capture <runner> [--unit <unit>]... [--shard <shard>] [--receipt-out <file>] -- <command>`.
 The runner is `go`, `vitest`, `playwright` or `native`. For `go`, the command is
 the arguments to `go test`: capture runs `go test -json` and prints the text
@@ -26,18 +26,19 @@ the arguments to `go test`: capture runs `go test -json` and prints the text
 When the spool cannot be written, capture warns that history will not keep
 the run, still writes `--receipt-out`, and the run goes on.
 
-- `--unit` names a requested unit (see [Receipt](#receipt)); one that reports
+- `--unit` names a requested unit (see [Receipt](#receipt)). A unit that reports
   nothing shows as `MISSING` in `summary`.
 - `--shard` labels the receipt. It defaults to a `--shard` argument of the
   command.
 - `--receipt-out` also writes the sealed receipt to a file.
 
-Receipts are kept in the spool, `$ATTN_TEST_HISTORY_DIR` or else
-`attn-test-history` in the Git common directory, which every worktree of the
-checkout shares. `go tool test-history spool` prints its path. It holds:
+attn keeps receipts in the spool: `$ATTN_TEST_HISTORY_DIR`, or else
+`attn-test-history` in the Git common directory. Every worktree of the checkout
+shares that directory. `go tool test-history spool` prints the path of the
+spool. The spool holds:
 
-- `working/<id>/`: a run in progress. Capture and the test command hold its
-  lock while they run.
+- `working/<id>/`: a run in progress. Capture and the test command hold the
+  run's lock while they run.
 - `receipts/<id>.json`: sealed receipts. A sealed receipt is never rewritten.
 - `shared/<id>.json.zst`: this repository's receipts that [sync](#sharing)
   downloaded from the shared history, this machine's own included, each the
@@ -45,13 +46,13 @@ checkout shares. `go tool test-history spool` prints its path. It holds:
 - `uploaded/<id>`: an empty file marking a sealed receipt the service
   acknowledged.
 - `sync.json`: the download cursor with the service, repository and `shared/`
-  layout it was read for, and when sync last ran, last succeeded and why it
-  last failed.
+  layout the cursor was read for, and when sync last ran, last succeeded and why
+  sync last failed.
 
 `go tool test-history recover` seals the working files of runs that ended
-without sealing, such as a capture killed with `SIGKILL`, as incomplete. It
-leaves a run whose command still holds the lock alone. CI runs it before
-uploading; locally it runs only when you run it.
+without sealing, such as a capture killed with `SIGKILL`, as incomplete.
+`recover` leaves alone a run whose command still holds the lock. CI runs
+`recover` before uploading. Locally, `recover` runs only when you run it.
 
 `go tool test-history summary <receipt>` prints one line per requested unit,
 or per reported unit when none was requested, and exits 1 unless each passed
@@ -66,38 +67,40 @@ The CI jobs that run these commands upload their receipts as
 The private service `attn-test-history` (repository
 SolenesInc/attn-test-history, on Oven at
 `https://attn-test-history.int.caketroll.cloud`, tailnet only) keeps every
-machine's receipts. It imports CI's receipt artifacts on its own;
+machine's receipts. The service imports CI's receipt artifacts automatically.
 `go tool test-history sync` exchanges the rest:
 
-- It uploads each sealed receipt the service has not acknowledged and marks
-  it in `uploaded/<id>`. The service can refuse a receipt, and so does sync
-  when the receipt's `repo` is not `host/owner/name`, as for a run captured
+- Sync uploads each sealed receipt the service has not acknowledged and marks
+  the receipt in `uploaded/<id>`. The service can refuse a receipt. Sync also
+  refuses a receipt whose `repo` is not `host/owner/name`, as for a run captured
   outside a checkout with an origin remote (`repo` is `unknown`). Sync reports
-  each refused receipt, offers it again on every sync, and exits 1.
-- It downloads this repository's receipts into `shared/<id>.json.zst`,
-  resuming after the cursor in `sync.json`. It asks for each page as one zstd
-  stream, about a thirtieth of the page's JSON, since receipts repeat the same
+  each refused receipt, offers the receipt again on every sync, and exits 1.
+- Sync downloads this repository's receipts into `shared/<id>.json.zst`,
+  resuming after the cursor in `sync.json`. Sync asks for each page as one zstd
+  stream, about a thirtieth of the page's JSON, because receipts repeat the same
   test names. A cursor read from another service, repository or `shared/`
-  layout empties `shared/` and starts the download over; until that download
+  layout empties `shared/` and starts the download over. Until that download
   finishes, no sync has succeeded. The service treats every spelling of a
   repository as one, so a checkout whose origin is spelled
   `github.com/solenesinc/attn` receives CI's `github.com/SolenesInc/attn`
   receipts.
-- On success it prints how many receipts it uploaded and downloaded and how
-  many wait to upload. On failure it prints how many wait to upload and when a
-  sync last succeeded, keeps every receipt, and exits 1.
-- It prints each warning the service sends with its pages, such as storage
+- On success, sync prints how many receipts it uploaded and downloaded and how
+  many wait to upload. On failure, sync prints how many wait to upload and when
+  a sync last succeeded, keeps every receipt, and exits 1.
+- Sync prints each warning the service sends with the pages, such as storage
   growing past the service's daily tripwire, without failing.
 
-A sync never changes a test's result. `scripts/land.sh` runs it before
-choosing landing tests and after a push; no test command does. `ATTN_TEST_HISTORY_URL` points
-it at another service. Each request has a 2-minute budget, and connecting has
-10 seconds: a connection to the service takes about 0.15 seconds, and off the
-tailnet one never completes.
+A sync never changes a test's result. `scripts/land.sh` runs sync before
+choosing landing tests and after a push. No test command runs sync.
+`ATTN_TEST_HISTORY_URL` points sync at another service. Each request has a
+2-minute budget, and connecting has a 10-second budget. A connection to the
+service takes about 0.15 seconds, and off the tailnet a connection never
+completes.
 
-The service token is read from
-`${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token`. It lives in Proton
-Pass (Personal vault, login `attn-test-history ingestion`); install it with:
+Sync reads the service token from
+`${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token`. The token lives in
+Proton Pass (Personal vault, login `attn-test-history ingestion`). Install the
+token with:
 
 ```sh
 dir="${XDG_CONFIG_HOME:-$HOME/.config}/attn-test-history"
@@ -108,8 +111,9 @@ mkdir -p "$dir"
 
 ## Receipt
 
-The schema is `attn.test-receipt/v1`; `internal/testhistory/receipt.go` holds
-its types. A change to a field's meaning needs a new schema version.
+The schema is `attn.test-receipt/v1`. `internal/testhistory/receipt.go` holds
+the types of the schema. If you change a field's meaning, add a new schema
+version.
 
 - `source`: `local` or `ci`, with the CI run, attempt, job and shard.
 - `revision`: the commit and tree tested. `dirty_fingerprint` is present when
@@ -122,7 +126,7 @@ its types. A change to a field's meaning needs a new schema version.
   wall time, and the signal capture received, if any.
 - `results`: one entry per unit, case and attempt.
 - `complete`: capture saw the command exit and the runner's report reach its
-  end. It does not say that unlisted tests passed.
+  end. A complete receipt does not say that unlisted tests passed.
 
 A unit is what selection can schedule:
 
@@ -142,16 +146,16 @@ unit's own.
 | --- | --- |
 | `pass` | It ran and passed. `cached` marks a Go result replayed from the test cache, not run again. |
 | `fail` | It ran and failed, including a timeout or an unexpected pass of a test declared to fail. |
-| `skip` | It was skipped; `detail` holds the reason when the runner gives one. |
+| `skip` | It was skipped. `detail` holds the reason when the runner gives one. |
 | `expected-failure` | It was declared to fail, and failed. |
 | `interrupted` | A signal or the end of the run stopped it before it finished. |
 | `build-failure` | Its Go package did not compile. |
 
 A test the runner never reported has no result: absence is never a pass. A Go
-test still running when its package ended, as after a test timeout, failed; one
-stopped by a signal was interrupted. Every retry is its own attempt. Vitest
-reports only how many retries a test needed, so its earlier attempts are
-recorded as failed with the detail `retried`.
+test still running when its package ended, as after a test timeout, failed. A
+test stopped by a signal was interrupted. Every retry is its own attempt.
+Vitest reports only how many retries a test needed, so the test's earlier
+attempts are recorded as failed with the detail `retried`.
 
 `internal/testhistory/testdata` holds real output of each runner from small
 fixture projects, and native matrix results from CI and local runs.
@@ -159,40 +163,41 @@ fixture projects, and native matrix results from CI and local runs.
 
 ## Selection
 
-`scripts/land.sh` chooses its landing tests after every rebase, for the commit
-it is about to push, with
-`go tool test-history land --units-out <file> --group <group>...`, naming the
-groups whose path pattern matched the change. It runs:
+After every rebase, `scripts/land.sh` chooses landing tests for the commit it
+is about to push, with
+`go tool test-history land --units-out <file> --group <group>...`. The `--group`
+arguments name the groups whose path pattern matched the change. `land.sh`
+runs:
 
-- the baseline: every unit of those groups in `scripts/landing-tests`;
+- the baseline: every unit of those groups in `scripts/landing-tests`
 - the tests the change touches: top-level Go tests whose function overlaps a
   changed line in a `_test.go` file outside `testdata`, and changed Vitest
   files (those `include` in `app/vite.config.ts` names) and Playwright files
-  (`app/e2e/**/*.spec.ts`);
+  (`app/e2e/**/*.spec.ts`)
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
   its runner. A test still red on `main`, with no pass since its last failure,
-  is listed as `RED` and not run: the sheriff owns it.
+  is listed as `RED` and not run. The sheriff owns it.
 
-It runs them through `scripts/landing-tests.sh --unit`, and any failure stops
-the push.
+`land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
+failure stops the push.
 
-- `land` prints each added test with the commit and lane it failed at, its
-  passes since and how many more passes clear it; each red, missing baseline
-  or unavailable test with the reason; the baseline's size; and how many
-  failures have cleared or are gone from the checkout. A
-  baseline unit missing from the checkout, such as a renamed test, is
-  requested anyway: the run reports it `MISSING` and the landing fails until
-  its line in `scripts/landing-tests` names a test again.
-- Before choosing, `land.sh` runs `sync`, and after a push it runs `sync`
+- `land` prints each added test with the commit and lane where it failed, its
+  passes since, and how many more passes clear it. `land` also prints each red,
+  missing baseline or unavailable test with the reason, the baseline's size,
+  and how many failures have cleared or are gone from the checkout. `land`
+  requests a baseline unit missing from the checkout, such as a renamed test,
+  anyway. The run reports the unit `MISSING`, and the landing fails until the
+  unit's line in `scripts/landing-tests` names a test again.
+- Before choosing, `land.sh` runs `sync`, and after a push `land.sh` runs `sync`
   again, so the landing's own receipt reaches the shared history. When a sync
-  fails, it prints when a sync last succeeded and carries on; the landing
+  fails, `land.sh` prints when a sync last succeeded and continues. The landing
   chooses from the history already in the spool.
 - With no successful sync in the spool, `land` chooses the baseline and says so.
 - When `land` fails or chooses nothing, `land.sh` prints that it is running the
   baseline groups, and runs them.
 - `scripts/land.sh --baseline` runs the baseline groups without syncing or
-  choosing: the way out when history or the choice misbehaves.
+  choosing. Use it when the history or the choice misbehaves.
 
 ```sh
 go tool test-history land --units-out units --group go  # what land.sh would run
@@ -207,12 +212,12 @@ names them.
 
 ### Health evidence
 
-A receipt is health evidence when it ran a clean checkout (no
+A receipt is health evidence when the run it records used a clean checkout (no
 `dirty_fingerprint`) of a commit on the first-parent history of `origin/main`.
 Dirty and unlanded runs count for nothing here, though `explain` and `replay`
-still use them to price tests. A clean local run counts once its exact commit lands. Revisions
-are ordered by their place in main's history, never by when a receipt was
-written or arrived.
+still use them to price tests. A clean local run counts once the run's exact
+commit lands. attn orders revisions by their place in main's history, never by
+when a receipt was written or arrived.
 
 Within one lane (operating system, architecture, race detector), for each unit
 and main revision:
@@ -231,67 +236,72 @@ Tool versions and machine class are not part of the lane.
 
 ### Clearing
 
-A unit's anchor in a lane is its latest failing revision there. Its passes since
-are the main revisions after the anchor that passed in that lane. When the
+A unit's anchor in a lane is the unit's latest failing revision there. The
+unit's passes since are the main revisions after the anchor that passed in that
+lane. When the
 failure named cases, a passing revision must also pass each of them, or be a
 run of the whole unit that no longer reports the case, as after a renamed
 subtest. A run filtered to other cases (Go `-run` with a subtest or `-skip`,
-Vitest `-t`, Playwright `--grep`) does not clear it, nor does a skip of the
-case. A failure in one lane makes the unit a candidate wherever it can run,
-and only passes in the failing lane clear it. The unit stands in its least
-cleared lane: fewest passes, then the newest anchor. With no pass since, it is
-red; it has cleared once that lane has 30 passes since; a failure on a later
-revision starts it again.
+Vitest `-t`, Playwright `--grep`) does not clear the failure, and neither does
+a skip of the case. A failure in one lane makes the unit a candidate wherever
+the unit can run, and only passes in the failing lane clear it. The unit counts
+in its least cleared lane: fewest passes, then the newest anchor. With no pass
+since, the unit is red. The unit has cleared once that lane has 30 passes
+since. A failure on a later revision starts the count again.
 
-30 catches 40 of 50 observed recurrences: over 312 main commits of CI history,
+The 30-pass threshold catches 40 of 50 observed recurrences: over 312 main commits of CI history,
 40 of the 50 tests that failed again after passing on `main` did so within 30
 passing revisions. At 30, a landing added a median of 7 tests and at most 36,
 and the largest set took this Mac's Go landing tests from 20.6s to 38.3s.
-`testhistory.ClearedAfter` keeps the measurement; remeasure it when landings
-miss recurrences, carry too many tests or slow down.
+`testhistory.ClearedAfter` keeps the measurement. Remeasure the threshold when
+recurrences get past the landing tests, or when landings add too many tests or
+run slowly.
 
 A failed test that is no longer in the checkout, such as a renamed or removed
-one, is `MISSING`: `land` only counts it. A baseline unit missing from the
-checkout is `MISSING` too, and requested anyway, as above. A test whose file
-does not build on this platform, such as a `_linux_test.go` test on a Mac, is
-`UNAVAILABLE`, with the reason; so is a native scenario that has not cleared,
-since no group runs native scenarios: broad CI runs them.
+test, is `MISSING`. `land` only counts it. A baseline unit missing from the
+checkout is also `MISSING`, and `land` requests it anyway, as above. A test
+whose file does not build on this platform, such as a `_linux_test.go` test on
+a Mac, is `UNAVAILABLE`, with the reason. A native scenario that has not
+cleared is also `UNAVAILABLE`, because no group runs native scenarios. Broad CI
+runs them.
 
 ### Cost
 
 Selection ignores cost. `explain` and `replay` report it. Costs come from
 receipts on this machine class and lane whose command exited with status 0,
-including dirty and unlanded ones; each figure is the median of its samples.
+including dirty and unlanded receipts. Each figure is the median of its
+samples.
 
 - A Vitest or Playwright file costs the wall time of a command that reported
-  only that file, setup included. A run filtered to some tests (Vitest `-t`,
-  Playwright `--grep`) prices nothing.
+  only that file, setup included. Pricing ignores a run filtered to some tests
+  (Vitest `-t`, Playwright `--grep`).
 - A Go selection runs as one `go test` command, whose packages run in parallel.
-  It costs the command's setup, plus the slowest package: that package's own
-  setup and teardown plus its selected tests' times. A receipt prices the
-  command setup as its wall time less its slowest package, and each package's
-  setup as its time less its tests' times.
-- A Go receipt with a cached result, repeated attempts (`-count` above 1), a
-  `-skip` or a `-run` pattern naming subtests prices nothing.
+  The selection costs the command's setup, plus the slowest package: that
+  package's own setup and teardown plus the times of its selected tests. The
+  command setup costs the receipt's wall time less its slowest package, and
+  each package's setup costs its time less its tests' times.
+- Pricing ignores a Go receipt with a cached result, repeated attempts
+  (`-count` above 1), a `-skip`, or a `-run` pattern naming subtests.
 
 ### Replay
 
-`replay --from <rev>` prints one JSON line per main commit after `<rev>`. It
-selects for that commit with the receipts that had finished by the commit's
-committer time, the history before it, and the commit's own list, tests and
-diff; then compares what the baseline and the rule run (`baseline`,
-`landing`) with the failures later observed on that commit. A receipt
-without a finish time, such as one `recover` sealed, is left out of the
-replay, since when its results existed is unknown; `select` still reads it.
+`replay --from <rev>` prints one JSON line per main commit after `<rev>`. For
+each commit, `replay` selects tests with the receipts that had finished by the
+commit's committer time, the history before the commit, and the commit's own
+list, tests and diff. Then `replay` compares what the baseline and the rule run
+(`baseline`, `landing`) with the failures later observed on that commit.
+`replay` leaves out a receipt without a finish time, such as one `recover`
+sealed, because the time its results existed is unknown. `select` still reads
+that receipt.
 
-Each selection's `estimate_ms` lists the selected units it could not price
-under `unpriced`. `actual_landing` is the measured baseline on this machine at
+Each selection's `estimate_ms` lists under `unpriced` the selected units that
+`replay` could not price. `actual_landing` is the measured baseline on this machine at
 that commit: the median wall time of each run whose requested units are a
 baseline component (the Go baseline units together, or one app unit), summed.
-Components with no run are `missing`; runs with other requested units are
-counted as `unattributed`. A failure a selection included is not proof that the
-selection would have prevented it: a Linux failure, for one, need not fail on
-the machine that lands.
+Components with no run are `missing`. `replay` counts runs with other
+requested units as `unattributed`. A failure that a selection included does not
+prove that the selection would have prevented it. A Linux failure, for one,
+need not fail on the machine that lands.
 
 ## Failure report
 
@@ -306,13 +316,14 @@ in one lane:
   ran again. Its earlier failures do not make it a flake.
 - **Passes since** counts the commits of `main` where the test passed afresh
   in that lane after its last failure, as [Clearing](#clearing) does. A flake
-  with `--dormant-after` (default 60) or more is dormant. That threshold only
-  sorts the report; the 30 passes that clear a landing test are separate.
+  with at least `--dormant-after` passes since (default 60) is dormant. That
+  threshold only sorts the report. The 30 passes that clear a landing test are
+  separate.
 
-It reads the spool, so after `sync` it covers every machine and CI, or every
-receipt under `--receipts`. `scripts/ci-flake-report.sh` reports CI alone: it
-downloads the receipt artifacts of recent `ci.yml` runs with the GitHub token
-and reads those, and names how many artifacts it read, found expired or could
-not read, and how many runs uploaded none. The daily `Flake ledger` workflow
+`report` reads the spool, so after `sync` the report covers every machine and
+CI, or every receipt under `--receipts`. `scripts/ci-flake-report.sh` reports
+CI alone. The script downloads the receipt artifacts of recent `ci.yml` runs
+with the GitHub token, reads those artifacts, and names how many artifacts it
+read, found expired or could not read, and how many runs uploaded none. The daily `Flake ledger` workflow
 publishes its markdown to the `CI flake ledger` issue. An expired or missing
 artifact is a gap in the window, never a pass.

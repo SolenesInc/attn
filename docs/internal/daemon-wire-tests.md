@@ -6,8 +6,8 @@ says which app flow such a test follows.
 
 Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
 can reach the daemon only through the protocol, the CLI client, and the hooks
-`export_test.go` exposes. Those hooks fault the outside; the reach inside is a
-pause point, below.
+`export_test.go` exposes. Those hooks fault the outside. The one reach inside is
+a pause point, below.
 
 ## The world
 
@@ -17,15 +17,15 @@ pause point, below.
   the world's own sockets allow, for promises about socket paths.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
 - `w.PauseAt(name)` holds the daemon the first time each daemon run reaches
-  the pause point `name`, and `w.PauseEvery(name)` every time. Both return the
-  `testworld.Pause` a stack test gets. Any world can arm after it starts;
-  `inBubbleHeldAt(t, points, script)` arms points before a bubbled world's
-  daemon starts, for a step the daemon takes on startup. `Await` fails the
-  test if nothing arrives within `fakeagent.HangGuard` (bubble time inside a
-  bubble), and at once with the step's error when a `Done` point's step
-  failed. Teardown and `w.restart()` release every hold before the daemon
-  stops. Points match by name, so arm one while a single operation of its kind
-  is in flight; one world per test binary can hold points at a time.
+  the pause point `name`, and `w.PauseEvery(name)` holds it every time. Both
+  return the `testworld.Pause` a stack test gets. Any world can arm a point after
+  the world starts. `inBubbleHeldAt(t, points, script)` arms points before a
+  bubbled world's daemon starts, for a step the daemon takes on startup. `Await`
+  fails the test if nothing arrives within `fakeagent.HangGuard` (bubble time
+  inside a bubble). It fails at once with the step's error when a `Done` point's
+  step failed. Teardown and `w.restart()` release every hold before the daemon
+  stops. Points match by name, so arm a point only while a single operation of
+  its kind is in flight. One world per test binary can hold points at a time.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
   the daemon sends.
 
@@ -36,8 +36,8 @@ pause point, below.
 - `w.Spawn` starts a session. `w.Launched` returns the `fakeagent.Run` for its
   agent.
 - `w.RequestSpawn` sends the same requests and returns the spawn result with
-  the workspace and pane it added, so the test can close a refused spawn's
-  pane the way the app does.
+  the desktop and tile it added, so the test can close a refused spawn's
+  tile the way the app does.
 - `w.HoldNextBoot()` keeps the next agent booting, before it paints its
   resting title or reads input, until the test calls the returned function.
 - `w.ExitAtNextBoot(code, screen)` makes the next agent print `screen` and
@@ -54,10 +54,11 @@ pause point, below.
 On a `fakeagent.Run`:
 
 - `Prompted` returns the prompt the agent received and moves `ConversationID`
-  to the agent's current conversation. Claude's `/clear` starts a new one and
-  `/resume <id>` switches to that one; Codex switches on the first prompt after
-  `/new`, `/clear` or `/resume <id>`; Pi's `/new` and `/resume <id>` switch
-  and say hello to the driver again, as a reloaded suite does.
+  to the agent's current conversation. In Claude, `/clear` starts a new
+  conversation and `/resume <id>` switches to the conversation `<id>`. Codex
+  switches on the first prompt after `/new`, `/clear` or `/resume <id>`. In Pi,
+  `/new` and `/resume <id>` switch conversations, and Pi says hello to the
+  driver again, as a reloaded suite does.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.
@@ -82,8 +83,8 @@ On a `fakeagent.Run`:
   once the daemon has recorded the turn's end. Every other write returns once
   written, and the daemon reads the transcript on its own.
 - Either way, await the resulting event on a peer that connected before the
-  call. A peer that connects later sees the result in its initial state, which
-  it cannot await.
+  call. A peer that connects later sees the result in its initial state, and the
+  peer cannot await that state.
 - `testworld.AwaitSession` also accepts an update from before the call that
   the peer has not read yet. To wait for a state that follows one the test
   already saw, use `testworld.AwaitStateAfter`.
@@ -99,30 +100,31 @@ On a `fakeagent.Run`:
   it, such as a terminal's kill escalation, a folder watch's window, the
   background job runner's schedule and the daemon's database backup, fire
   only when the test calls
-  `w.advance(d)`; `w.awaitTimer(name)` first waits until the timer with that
-  `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
-  stepped timer is named by the package that arms it, so a wait never matches
-  another operation's timer of the same duration.
+  `w.advance(d)`. `w.awaitTimer(name)` first waits until the timer with that
+  `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. The package
+  that arms each stepped timer names it, so a wait never matches another
+  operation's timer of the same duration.
   A test that waits for such a timer without advancing fails at the hang
   guard.
 - Transcript watchers, including a driver plugin's usage watcher, poll on
-  that clock too. Each transcript write a fake
-  agent makes fires the poll (`sessionmonitor.TranscriptPoll`) without moving
-  the clock, before the write returns to the agent, so the daemon reads it
-  with no advance. A test that writes a transcript itself calls
-  `w.readTranscripts()`. The discovery grace and the quiet window are time:
-  a test that depends on them advances past them, such as
+  that clock too. Whenever a fake agent writes a transcript, the poll
+  (`sessionmonitor.TranscriptPoll`) fires without moving the clock. The poll
+  fires before the write returns to the agent, so the daemon reads the
+  transcript with no advance. A test that writes a transcript itself calls
+  `w.readTranscripts()`. The discovery grace and the quiet window still depend
+  on time. A test that depends on either advances past it, such as
   `w.advance(sessionmonitor.TranscriptDiscoveryGrace)`.
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,
   which closes each folder watch's window as soon as it opens.
 - A test about scheduled automations calls `w.tickSchedulesUntil(what, done)`.
-  Each tick waits until the job runner is idle, moves the clock one schedule
-  tick and waits until the runner is idle again, so `done` reads settled
-  state. It fails after `scheduleTickLimit` ticks.
+  On each tick, `w.tickSchedulesUntil` waits until the job runner is idle, moves
+  the clock one schedule tick, and waits until the runner is idle again, so
+  `done` reads settled state. It fails after `scheduleTickLimit` ticks.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
-  terminal's `Stall(alive, err)` makes its worker stop answering until the
-  test calls the returned function: recovery waits out its deadline and counts
-  it missing, and the liveness probe answers `alive, err`. Its
-  `HoldRemoval()` stops the next removal halfway until the test calls the
-  returned function: its streams have ended and its worker no longer answers,
-  but the backend has not forgotten the terminal yet.
+  terminal's `Stall(alive, err)` makes the terminal's worker stop answering
+  until the test calls the returned function. Recovery then waits out the
+  worker's deadline and counts the terminal missing, and the liveness probe
+  answers `alive, err`. The terminal's `HoldRemoval()` stops the next removal
+  halfway until the test calls the returned function. At that point the
+  terminal's streams have ended and its worker no longer answers, but the
+  backend has not forgotten the terminal yet.

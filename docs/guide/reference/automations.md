@@ -31,10 +31,10 @@ Ctrl+Alt+K on Linux). Click **New automation** and fill in:
   launch desktop where its agents start. By default that is a new desktop
   named after the automation.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
-  such as the pull request, arrive separately as data and never rewrite it.
+  such as the pull request, arrive separately as data and never rewrite the prompt.
 
 The form ends with a sentence that says what the automation will do, in
-plain words. **Save** creates it, enabled.
+plain words. **Save** creates the automation, enabled.
 
 For a **Manual** or **Scheduled** trigger, **Directory** is the folder the
 agent works in. A scheduled trigger also takes:
@@ -42,59 +42,59 @@ agent works in. A scheduled trigger also takes:
 - **Schedule (cron)**. A standard five-field cron expression. The form reads
   it back in words.
 - **Worker**. **Fresh** starts a new agent for every run. **Singleton** sends
-  every run to the same agent, resuming it if it was closed. When you change
+  every run to the same agent, resuming the agent if it was closed. When you change
   the prompt, harness, model, effort or directory, the next run starts a new
   agent on the same seed, so the new agent picks up where the old one left
-  off. attn leaves the old agent running, and you can still open it.
+  off. Attn leaves the old agent running, and you can still open the old agent.
 - **Missed runs**. What happens to a time that passed while Attn was off or
-  the automation was disabled. **Skip** runs it only if Attn notices within
-  5 minutes. **Latest** runs once for the most recent missed time.
+  the automation was disabled. **Skip** runs the missed time only if Attn
+  notices within 5 minutes. **Latest** runs once for the most recent missed time.
 - **Guard (optional)**. A shell command, such as `git rev-parse HEAD`, that
   runs in the folder when the schedule is due. The agent starts only when the
   command succeeds and prints something different from what the last run
-  saw, and it receives that output.
+  saw, and the agent receives that output.
 
 For **PR review requested**, list repositories to include or exclude as
-`host/owner/repository` (for example `github.com/acme/api`); with no includes,
+`host/owner/repository` (for example `github.com/acme/api`). With no includes,
 every repository you can reach counts. Each review runs in a fresh worktree
 checked out at the pull request's head commit, so your own clone is never
-touched. Each pull request has one agent: when you are asked to review it
-again, the same agent picks it up. When you change the prompt, harness, model
+touched. Each pull request has one agent: when you are asked to review the pull
+request again, the same agent picks it up. When you change the prompt, harness, model
 or effort, the next review starts a new agent on the pull request's seed.
-Requests that already exist when you enable the automation are left alone.
+Attn ignores requests that already exist when you enable the automation.
 
 ## Runs
 
-A run's agent starts on the automation's launch desktop. It works on a seed
-in the garden that Attn plants for the run, so its progress and outcome are
-recorded there. A review run is told the review is local only: it reports
-on the seed and the session and does not post, approve, comment or push on
-GitHub.
+A run's agent starts on the automation's launch desktop. The agent works on a seed
+in the garden that Attn plants for the run, so the run's progress and outcome
+appear there. Attn tells the agent of a review run that the review is local
+only. The agent reports on the seed and the session and does not post, approve,
+comment, or push on GitHub.
 
 In [queue flow](queue.md), runs never join the queue. The sidebar has an
 Automations group under the queue that lists each automation with its runs.
 A run that stopped and owes you a turn shows a count beside its automation,
 and the group's header offers "N runs need you". Click it, or press
-Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you; press
-again for the one after. Settle a run with ✓ on its row or Cmd+Shift+E
+Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
+again to open the one after. Settle a run with ✓ on its row or Cmd+Shift+E
 (Ctrl+Alt+E on Linux), as you would any agent. In desktop flow, runs are
 tiles on their launch desktop like any other agent.
 
 In the drawer, click an automation to see its runs: state (pending,
 delivered, failed or cancelled), when it started, and a click through to its
-agent. A failed run, or a guard that failed, puts **Failed** on the
-automation's row with the error underneath.
+agent. If a run fails or a guard fails, the drawer shows **Failed** on the
+automation's row, with the error underneath.
 
 ## Managing automations
 
 In the drawer, the checkbox on each row enables or disables the automation,
-and **Edit** opens the form again. Disabling cancels runs that have not
-started yet. **Delete** in the form removes the
-automation; its seeds and run history stay.
+and **Edit** opens the form again. When you disable an automation, Attn cancels
+runs that have not started yet. **Delete** in the form removes the
+automation, and its seeds and run history stay.
 
-The same lives in the CLI. Definitions are YAML; `attn automation show <id>`
-prints one, and `--profile <name|id>` picks a profile other than the current
-one.
+The CLI does the same. Definitions are YAML. `attn automation show <id>`
+prints a definition, and `--profile <name|id>` picks a profile other than the
+current profile.
 
 | Command | What it does |
 |---|---|
@@ -106,7 +106,7 @@ one.
 | `attn automation runs <id>` | Lists its runs as JSON. |
 | `attn automation enable <id>`, `disable <id>` | Turns it on or off. |
 | `attn automation set <id> --launch-desktop <own\|digit\|name\|id>` | Moves where its runs start. |
-| `attn automation delete <id>` | Deletes it; seeds and run history stay. |
+| `attn automation delete <id>` | Deletes the automation. Seeds and run history stay. |
 | `attn automation cleanup <id>` | Removes the worktrees of its finished runs, keeping any with uncommitted changes or a live agent. |
 
 A scheduled definition looks like this:
@@ -140,7 +140,7 @@ No. Only manual automations run on demand. For a review on demand, write a manua
 <details>
 <summary>Do runs stop to ask me for permissions?</summary>
 
-Runs start unattended, with an approval reviewer in the loop in place of you, so a routine permission prompt does not wait for you. A run still stops and owes you a turn when it finishes or asks you something.
+Runs start unattended, with an approval reviewer in your place, so a routine permission prompt does not wait for you. A run still stops and owes you a turn when it finishes or asks you something.
 </details>
 
 <details>

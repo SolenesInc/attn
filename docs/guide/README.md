@@ -31,4 +31,5 @@ the app still shows an older word, the page tells you which label to look for.
 | [using-nisse](reference/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
 
 Keyboard shortcuts live in the app: Cmd+/ (Ctrl+Shift+/ on Linux) shows the
-current list and lets you remap any of them. Each page names the keys it needs.
+current list and lets you remap any of them. Each page names the keys for its
+topic.

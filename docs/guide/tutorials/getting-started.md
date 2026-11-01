@@ -24,7 +24,7 @@ brew tap victorarias/attn https://github.com/victorarias/attn
 brew install --cask victorarias/attn/attn
 ```
 
-Or grab the DMG from the
+Or download the DMG from the
 [latest release](https://github.com/victorarias/attn/releases/latest), open it
 and drag Attn to Applications.
 
@@ -54,7 +54,7 @@ sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
   desktop-file-utils xdg-utils
 ```
 
-Then:
+Then clone the repository and build:
 
 ```bash
 git clone https://github.com/victorarias/attn.git && cd attn
@@ -63,8 +63,8 @@ make
 
 `make` builds the app and the daemon, installs them in `~/.local/share/attn`
 (`$XDG_DATA_HOME/attn` if you set it), and launches the app. `make install`
-skips the launch; start the app later with `~/.local/share/attn/bin/attn-app`.
-To update, pull and run `make` again; source builds don't check for releases.
+skips the launch. Start the app later with `~/.local/share/attn/bin/attn-app`.
+To update, pull and run `make` again. Source builds don't check for releases.
 
 ## The home screen
 
@@ -78,19 +78,18 @@ back to it at any time.
 
 ![The home screen, with the sidebar on the left, then your sessions grouped by state, the Chief of Staff card and your pull requests](../images/home-screen.png)
 
-This is where you keep an eye on all your agents and your open PRs:
+This is where you watch all your agents and your open PRs:
 
 - **Sessions** lists every agent, grouped by state. Click one to go to it, or
   click **+ New** to start one.
-- **Chief of Staff** shows your Chief's session once you have one. The Chief
-  is an agent that keeps track of your other agents, delegates work for you and
-  journals your day in the Notebook.
-  Make any agent your Chief with **Make chief of staff** in its ••• menu, and
-  take the role away with **Remove chief role**. [The Chief](../reference/chief.md)
-  says how to set it up, and how the experimental Chief crew member onboards
-  you on its first day.
+- **Chief of Staff** shows your Chief's session once you have one. The Chief is
+  an agent that keeps track of your other agents, delegates work for you and
+  journals your day in the Notebook. Make any agent your Chief with **Make chief
+  of staff** in its ••• menu, and take the role away with **Remove chief role**.
+  Read [The Chief](../reference/chief.md) to set up the Chief and to see how the
+  experimental Chief crew member onboards you on its first day.
 - **Pull Requests** lists your PRs and the ones waiting for your review, with
-  their CI status. It needs `gh`.
+  their CI status. This list needs `gh`.
 
 The gear at the top right opens Settings (Cmd+, or Ctrl+Shift+, on Linux).
 
@@ -100,20 +99,20 @@ The sidebar on the left lists your desktops and the tiles on them. Cmd+B
 ## Start an agent
 
 Cmd+N (Ctrl+Shift+N on Linux) starts an agent: pick a harness or a plain shell,
-pick a directory, go. It opens on the desktop you're on, beside the tile you're
-looking at. Cmd+Shift+N (Ctrl+Alt+N on Linux) opens it below instead. Cmd+T
-(Ctrl+Shift+T on Linux) opens the same picker with a plain shell chosen.
+pick a directory, and start. The agent opens on the desktop you're on, beside
+the tile you're looking at. Cmd+Shift+N (Ctrl+Alt+N on Linux) opens the agent
+below that tile instead. Cmd+T (Ctrl+Shift+T on Linux) opens the same picker
+with a plain shell chosen.
 
 ## Know who needs you
 
-Attn was built to help you run many agents in parallel while keeping the mental
-cost low. It does that by removing every bit of friction it can, so you spend
-your energy on the decisions that matter.
+Attn helps you run many agents in parallel at a low mental cost. It removes
+every bit of friction it can, so you spend your energy on the decisions that
+matter.
 
-The most basic way it helps is using colors to signal state. Instead of jumping
-between agents to find out whether they need you, Attn tracks each agent's state
-and shows it as a colored dot, so you scan for colors instead of reading
-terminals:
+The most basic help is color. Instead of jumping between agents to find out
+whether they need you, you scan for colored dots instead of reading terminals.
+Attn tracks each agent's state and shows the state as a dot:
 
 | Dot                 | State          | What it means                                                       |
 | ------------------- | -------------- | ------------------------------------------------------------------- |
@@ -123,15 +122,15 @@ terminals:
 | 🔵 Blue, slow pulse | Scheduled      | Parked on a schedule it set. It will continue by itself.            |
 | ⚪ Gray             | Idle           | Finished, with nothing to ask you.                                  |
 | ⚪ Gray             | Recoverable    | Stopped, and Attn can bring it back.                                |
-| 🟣 Purple           | Unknown        | Attn can't tell what it's doing; it may be an error. Hover the dot to see why. |
+| 🟣 Purple           | Unknown        | Attn can't tell what the agent is doing, and the state may be an error. Hover the dot to see why. |
 | An emoji            | Launching      | Starting up.                                                        |
 
 The home screen groups your agents by the same states.
 
 The colors work the same in desktop flow, the default, and in queue flow. Queue
-flow goes one step further: it takes "which agent do I go to next?" off your
-plate by bringing you the next one that needs you. Less deciding, more
-throughput. See [queue](../reference/queue.md).
+flow goes one step further. It answers "which agent do I go to next?" by bringing
+you the next agent that needs you, so you decide less and get more done. See
+[queue](../reference/queue.md).
 
 ## Where next
 
@@ -143,4 +142,4 @@ getting a lot more done by orchestrating dozens of agents at the same time.
 - Hand work off to other agents with [delegation](../reference/delegation.md).
 - Get much more done with delegation roles:
   [building with roles](building-with-roles.md).
-- Go hardcore with the agent [queue](../reference/queue.md).
+- Go further with the agent [queue](../reference/queue.md).

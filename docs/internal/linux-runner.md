@@ -3,8 +3,8 @@
 Run Linux sandbox tests and the packaged app from macOS through a dedicated VM.
 The runner supports Lima, OrbStack, and existing SSH machines (including VMs
 created in other tools). Each provider supplies lifecycle operations and an SSH
-connection. Source sync, Ubuntu provisioning, execution and artifact collection
-are shared.
+connection. All providers share source sync, Ubuntu provisioning, execution, and
+artifact collection.
 
 ## Lima
 
@@ -18,10 +18,10 @@ pnpm --dir app real-app:linux test -- --scenario automode-environment
 
 `provision` creates or starts `attn-linux` and installs the tools. The template
 in `app/scripts/real-app-harness/vm/lima.yaml` uses Ubuntu 24.04 with Apple's VZ
-backend, 8 CPUs, 16 GiB RAM, and an 80 GiB disk. It mounts no host directories
-and disables SSH agent forwarding. Edit the template before creating another VM;
-existing machines keep their settings. Use Lima's own configuration editor to
-resize an existing VM.
+backend, 8 CPUs, 16 GiB RAM, and an 80 GiB disk. The template mounts no host
+directories and disables SSH agent forwarding. Edit the template before you
+create another VM. Existing machines keep their settings. Use Lima's own
+configuration editor to resize an existing VM.
 
 An Apple Silicon host runs ARM64 Linux. Keep x86_64 verification in CI.
 
@@ -33,42 +33,46 @@ pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
 pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario automode-environment
 ```
 
-The SSH provider can use `--ssh-config <file>`. It provisions an existing Ubuntu
-24.04 machine with passwordless sudo; it does not create or stop that machine.
-The Lima and OrbStack providers own creation and start/stop. No adapter deletes VMs.
+The SSH provider accepts `--ssh-config <file>`. It provisions an existing Ubuntu
+24.04 machine with passwordless sudo. It does not create or stop that machine.
+The Lima and OrbStack providers create, start, and stop their VMs. No adapter
+deletes VMs.
 
-Set `ATTN_LINUX_PROVIDER`, `ATTN_LINUX_VM`, `ATTN_LINUX_SSH_TARGET`, and
-`ATTN_LINUX_SSH_CONFIG` to avoid repeating options. CLI options take precedence.
+To avoid repeating options, set `ATTN_LINUX_PROVIDER`, `ATTN_LINUX_VM`,
+`ATTN_LINUX_SSH_TARGET`, and `ATTN_LINUX_SSH_CONFIG`. CLI options take
+precedence.
 
 ## Source, instances and results
 
-`sync`, `provision` and `build` copy the current HEAD and staged, unstaged and
-non-ignored new files. Git configuration, hooks, host tool caches and ignored
-files are not copied. Git history travels in a bundle, without host credentials.
-The guest keeps a separate managed checkout per host checkout under
+`sync`, `provision`, and `build` copy the current HEAD and the staged, unstaged,
+and non-ignored new files. These commands do not copy Git configuration, hooks,
+host tool caches, or ignored files. They send Git history in a bundle, without
+host credentials. The guest keeps a separate managed checkout per host checkout
+under
 `~/.local/share/attn-linux-runner/<checkout hash>/source`.
 
 **Sync replaces changes made inside that managed checkout.** Edit on the host.
 Guest build caches excluded by the repository's ignore rules survive sync.
 A lock prevents sync and commands from changing the same checkout concurrently.
 
-`run` uses the last synced source; run `sync` after edits. `build` syncs and
-installs the packaged app. The existing app build fingerprint check rejects stale
-installs. Commands run with a clean environment and the named
-`linux-<checkout hash>` instance; `--instance` selects another non-production name.
-The guest receives no host routing variables or provider credentials.
+`run` uses the last synced source, so run `sync` after you edit. `build` syncs
+and installs the packaged app. The app's existing build fingerprint check
+rejects stale installs. Commands run with a clean environment and the named
+`linux-<checkout hash>` instance. `--instance` selects another non-production
+name. The guest receives no host routing variables or provider credentials.
 
-`test` syncs, removes the guest instance with `attn instance clean`, installs it
-again and runs the existing serial matrix under Xvfb, so every run starts from
-empty instance data, like CI. It copies the artifacts even when a scenario
-fails and preserves the failing command's exit status. Pass
-`--out <directory>` to choose where results land; by default they go under the
-host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
+`test` syncs, removes the guest instance with `attn instance clean`, installs the
+instance again, and runs the existing serial matrix under Xvfb, so every run
+starts from empty instance data, like CI. `test` copies the artifacts even when
+a scenario fails and preserves the failing command's exit status. Pass
+`--out <directory>` to choose where results land. By default, results go under
+the host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
 Xvfb uses `-noreset` so short-lived window probes cannot reset the display while
 GTK initializes the app. CI acceptance and soak runs use the same setting.
-Packaged-app stdout and stderr are saved as `app-launch-<id>.log` in the selected
-artifacts directory (the artifacts root for the serial matrix). An early exit
-reports its code, signal, and log path.
+The runner saves packaged-app stdout and stderr as `app-launch-<id>.log` in the
+selected artifacts directory. For the serial matrix, that directory is the
+artifacts root. If the app exits early, the runner reports the exit code, the
+signal, and the log path.
 `artifacts` repeats collection after an interrupted run. For shell operators,
 use an explicit shell: `run -- bash -c 'command && next-command'`.
 
@@ -79,17 +83,17 @@ pnpm --dir app real-app:linux clean
 pnpm --dir app real-app:linux stop
 ```
 
-`clean` removes only the selected installed instance using the guest CLI.
+`clean` removes only the selected installed instance, using the guest CLI.
 `stop` preserves source and caches. `up` starts the VM again without provisioning.
 
 ## Extending providers
 
 Add an adapter to `app/scripts/real-app-harness/vm/providers.mjs` with `up`,
-`stop`, `status` and `connection`. `connection` returns a target and optional SSH
-config path. Keep provider-specific commands there; scenarios and guest setup
-should not know which VM manager launched the machine.
+`stop`, `status`, and `connection`. `connection` returns a target and an optional
+SSH config path. Keep provider-specific commands in the adapter. Scenarios and
+guest setup must not depend on which VM manager launched the machine.
 
-The shared `scripts/setup-linux-sandbox.sh` is also used by CI. It grants user
+CI also uses the shared `scripts/setup-linux-sandbox.sh`. The script grants user
 namespaces to `/usr/bin/bwrap` through AppArmor while keeping Ubuntu's global
 restriction enabled. Tool versions come from `go.mod`, `rust-toolchain.toml`,
-and `.tool-versions`; Node 26 and pnpm 9 match the CI major versions.
+and `.tool-versions`. Node 26 and pnpm 9 match the CI major versions.

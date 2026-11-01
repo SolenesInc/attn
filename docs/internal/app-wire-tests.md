@@ -2,23 +2,23 @@
 
 An app wire test renders the real app with its real socket client and plays
 the daemon. [Testing](testing.md) is the strategy around it. The harness lives
-in `app/src/test/`; paths below are relative to `app/src`.
+in `app/src/test/`. Paths below are relative to `app/src`.
 
 ## The app and its daemon
 
 - `renderApp({ initialState, script })` installs a scripted daemon, renders
-  `App` and returns once the app has connected and the handshake has settled.
-  `initialState` overrides what `client_hello` answers; `false` leaves the
+  `App`, and returns once the app has connected and the handshake has settled.
+  `initialState` overrides what `client_hello` answers. `false` leaves the
   handshake unanswered. `script` registers the daemon's answers before the
   app connects.
-- `restartApp(running)` unmounts the app, resets its in-memory stores and
-  renders it again, as a relaunch does.
-- Besides the daemon, the app sees only these fakes: the Tauri host, whose
-  modules `test/setup.ts` mocks; the pieces the simulated browser lacks, such
-  as canvas and WebGL contexts, `ResizeObserver` and `matchMedia`; the
-  terminal's WebAssembly, which `renderApp.tsx` stubs; and `WebSocket` and
-  `fetch`, which `installScriptedDaemon` replaces. `fetch` rejects, because
-  app wire tests reach no network.
+- `restartApp(running)` unmounts the app, resets the app's in-memory stores, and
+  renders the app again, as a relaunch does.
+- Besides the daemon, the app sees only these fakes. `test/setup.ts` mocks the
+  modules of the Tauri host. Fakes also stand in for the pieces the simulated
+  browser lacks, such as canvas and WebGL contexts, `ResizeObserver`, and
+  `matchMedia`. `renderApp.tsx` stubs the terminal's WebAssembly.
+  `installScriptedDaemon` replaces `WebSocket` and `fetch`. `fetch` rejects,
+  because app wire tests reach no network.
 - Domain helpers in `test/` script whole features, such as
   `delegationDaemon.ts` for delegation settings. Reuse or extend one before
   scripting the same commands again in a test.
@@ -27,11 +27,12 @@ in `app/src/test/`; paths below are relative to `app/src`.
 
 On the `ScriptedDaemon` that `renderApp` returns:
 
-- `on(cmd, reply)` answers each `cmd` the app sends; the reply gets the
-  request's `request_id`. Returning nothing holds the request unanswered.
+- `on(cmd, reply)` answers each `cmd` the app sends. The reply gets the
+  request's `request_id`. If the reply returns nothing, the request stays
+  unanswered.
 - `answerInTurn(daemon, cmd, answers)` answers successive requests in order.
-  `HOLD` leaves one unanswered, and a request past the last answer fails the
-  test.
+  `HOLD` leaves a request unanswered, and a request past the last answer fails
+  the test.
 - `emit(event)` pushes an event, and `replyTo(command, reply)` answers a
   request the test held.
 - `disconnect()` drops the connection, and `reconnect()` returns once the app
@@ -54,6 +55,6 @@ time.
 
 ## What to assert
 
-- What renders, read through Testing Library's `screen` queries.
-- The exact requests the app sends once render settles, from `daemon.sent`
-  or `daemon.sentOf(cmd)`, to catch fetch loops.
+- Assert what renders, through Testing Library's `screen` queries.
+- Assert the exact requests the app sends once rendering settles, read from
+  `daemon.sent` or `daemon.sentOf(cmd)`, to catch fetch loops.
