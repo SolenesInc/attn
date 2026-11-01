@@ -81,23 +81,40 @@ if [ -n "$app_entries" ]; then
     const net = require("net");
     const listen = () => new Promise(done => { const s = net.createServer().listen(0, "127.0.0.1", () => done(s)); });
     Promise.all([listen(), listen()]).then(servers => { console.log(servers.map(s => s.address().port).join(" ")); servers.forEach(s => s.close()); });')
-  run=0
-  while read -r runner file; do
+  run_app_unit() {
+    local run="$1" runner="$2" file="$3" status=0 command
     case "$runner" in
       vitest) command=(pnpm --dir app exec vitest run "$file") ;;
       playwright) command=(pnpm --dir app exec playwright test "$file") ;;
     esac
     echo "landing tests: ${command[*]}"
-    run=$((run + 1))
-    status=0
     env -u ATTN_DB_PATH -u ATTN_SOCKET_PATH -u ATTN_CONFIG_PATH -u ATTN_PLUGIN_DIR \
       ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" ATTN_E2E_DAEMON_PORT="$daemon_port" ATTN_E2E_VITE_PORT="$vite_port" \
       go tool test-history capture "$runner" --unit "$runner $file" --receipt-out "$work/app-$run.json" -- "${command[@]}" || status=$?
+    echo "$status" >"$work/app-$run.status"
+  }
+  run_app_units() {
+    local runner="$1" run runner_of file
+    while read -r run runner_of file; do
+      if [ "$runner_of" = "$runner" ]; then run_app_unit "$run" "$runner_of" "$file"; fi
+    done <"$work/app-units"
+  }
+  awk '{ print NR, $1, $2 }' <<<"$app_entries" >"$work/app-units"
+  run_app_units vitest >"$work/vitest.log" 2>&1 &
+  vitest_job=$!
+  run_app_units playwright
+  wait "$vitest_job"
+  cat "$work/vitest.log"
+  while read -r run runner file; do
+    status="$(cat "$work/app-$run.status")"
     if ! summarize "$work/app-$run.json" "$status" "$runner $file"; then
       failed=1
-      echo "rerun: ${command[*]}" >>"$work/reruns"
+      case "$runner" in
+        vitest) echo "rerun: pnpm --dir app exec vitest run $file" >>"$work/reruns" ;;
+        playwright) echo "rerun: pnpm --dir app exec playwright test $file" >>"$work/reruns" ;;
+      esac
     fi
-  done <<<"$app_entries"
+  done <"$work/app-units"
 fi
 
 echo
