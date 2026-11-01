@@ -31,7 +31,7 @@ requests and review requests from GitHub, with approve, merge and mute.
 - The sidebar dock's "PRs" chip opens the same drawer (`app/src/components/SidebarChrome.tsx`). The recipe for the dock is in [shortcuts.md](shortcuts.md).
 - Home screen (`app/src/components/Dashboard.tsx`): the "Yours" and "Review requested" sections. Each card opens the pull request on GitHub and carries "New worktree session", Approve, Merge (with a confirmation), Mute and mute-author buttons (`app/src/components/PRActions.tsx`). A review group's ⊘ mutes the repository. The recipe for the home screen is in [home.md](home.md).
 - **Settings → Attention queue**: muted repositories and authors, each with Unmute (`app/src/components/SettingsModalSections.tsx`). **Settings → Files and locations**: the Projects Directory where "New worktree session" finds the repository.
-- Where people see what agents do: the agent's tile header shows `PR`, the repository's name and number with `↗` (`atlas#418 ↗`), and its status. A click opens the pull request's popover with its state, checks, review and merge status, and every pull request the session recorded (`app/src/components/SessionProvenance.tsx`, `app/src/components/SessionPullRequestPopover.tsx`).
+- Where people see what agents do: the agent's tile header shows `PR`, the repository's name and number with `↗` (`atlas#418 ↗`), and its status. A narrow tile shows only the `⎇` mark, then nothing. A click opens the pull request's popover with its state, checks, review and merge status, and every pull request the session recorded (`app/src/components/SessionProvenance.tsx`, `app/src/components/SessionPullRequestPopover.tsx`).
 - Their own shell: `attn pr` with `--session <id>`, below.
 
 ### Agents

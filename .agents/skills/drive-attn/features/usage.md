@@ -21,7 +21,7 @@ the session compacts at a token budget they choose.
 
 ### People
 
-- The tile header's badge, `[data-testid="session-usage-<session>"]`, labelled "Session usage <badge>" (`app/src/components/SessionTerminalDesktop/SessionUsage.tsx`). Hovering or focusing the badge opens the receipt, `.session-usage-popover`. ↓ pins the receipt, and Escape closes it (twice after a ↓ pin).
+- The tile header's badge, `[data-testid="session-usage-<session>"]`, labelled "Session usage <badge>" (`app/src/components/SessionTerminalDesktop/SessionUsage.tsx`). Hovering or focusing the badge opens the receipt, `.session-usage-popover`. ↓ pins the receipt, and Escape closes it (twice after a ↓ pin). A narrow tile hides the badge; the palette's `show-session-usage` brings it back while its receipt is pinned.
 - Palette (`app/src/application/useAppCommands.tsx`): `show-session-usage` ("Show <agent>'s usage"), offered once the agent on screen has measured usage, opens the receipt pinned. `set-session-context-cap` ("Cap <agent>'s context window", or "Change <agent>'s context window cap" once set), offered for Claude Code and Codex agents, opens a prompt with the field "Context window cap in tokens" (`app/src/components/SessionContextCapPrompt.tsx`).
 - The ledger's Sessions list shows the badge for the selected row (`app/src/components/ledger/SessionsTab.tsx`).
 - **Settings → Agents and models**, "Model pricing overrides" (`app/src/components/SessionCostPriceSettings.tsx`). **Settings → Background agents**, the Chief and headless context window caps (`app/src/components/SettingsModalSections.tsx`).

@@ -5,7 +5,7 @@ a Linux machine or a cloud VM, that your home connects to. Your home is the Attn
 on the Mac where you use the app. One home can connect to several outposts.
 
 Claude, Codex and shells on an outpost appear in terminal tiles beside your
-local terminals. The tile header shows the outpost's name after the title.
+local terminals. The tile header shows the outpost's name under the title.
 Input, screen updates and terminal commands pass through your home. Agents
 run on the outpost. The agents' state, turns, cost and PR links reach the Mac.
 File tiles stay on the home's machine.

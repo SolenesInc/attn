@@ -65,7 +65,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
       onClick={(event) => { event.stopPropagation(); trigger.pin(event.currentTarget); }}
     >
       <SessionRoleIcon role={role} />
-      {variant === 'header' && <span>{role?.name ?? 'Delegation chain'}</span>}
+      {variant === 'header' && <span className="delegation-chain-trigger-label">{role?.name ?? 'Delegation chain'}</span>}
     </button>
   );
 }

@@ -189,7 +189,7 @@ function automationLineParts(
   const parts = [
     <span key="automation-kind" className="session-provenance__kind">
       <span aria-hidden="true">⚡</span>
-      Automation
+      <span className="session-provenance__kind-label">Automation</span>
     </span>,
     <span key="automation-definition" className="session-provenance__definition">
       {shortDefinitionName(automation.definition_name)}
@@ -235,7 +235,7 @@ function pullRequestLineParts(
   const parts = [
     <span key="pr-kind" className="session-provenance__kind session-provenance__kind--pr">
       <span aria-hidden="true">⎇</span>
-      PR
+      <span className="session-provenance__kind-label">PR</span>
     </span>,
     <button
       key="pr-target"

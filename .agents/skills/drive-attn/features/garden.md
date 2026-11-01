@@ -43,7 +43,7 @@ checks.
 - Sidebar: the garden icon, labelled "Show the garden" or "Hide the garden" (`app/src/application/useAppSidebarActions.tsx`).
 - In the garden (`app/src/components/GardenPanel.tsx`): the search field, seed and plot rows, the trail back up a plot, the frame button ("Expand the garden" or "Return the garden to the dock"), "Review garden", and a seed's page with its Authorization section ("Set" or "Change", and "Clear"), its checks ("Confirm C1", "Reject…", "Reopen") and the buttons "Open as tile", "Resume", "Handover" and "Send to Chief". Arrow keys walk rows, ← climbs out of a plot, fullscreen → drills into one, and `/` returns to search.
 - Fullscreen, the "Garden view" switch picks list or board (`app/src/components/GardenFrame.tsx`). On the board, drag a card to a column or open the card's menu to park, harvest, wither or replant the seed with a reason (`app/src/components/GardenBoard.tsx`).
-- On an agent's tile header, the chip of the seed it tends opens the seed's popover (`app/src/components/PaneSeedChip.tsx`).
+- On an agent's tile header, the chip of the seed it tends opens the seed's popover (`app/src/components/PaneSeedChip.tsx`). The chip leaves out a seed title that repeats the session title, and a narrow tile cuts the title, then shows only the state icon.
 - **Settings → Background agents**, Garden advisor: the agent that classifies seeds during a review (`app/src/components/GardenAdvisorSettings.tsx`).
 - Where people see what agents do: the tender and state on each row and card, notes on the seed's log, the chip on the agent's tile, and the seed tile `attn open` puts beside the agent.
 - Their own shell: the same `attn seed` verbs agents use, below. Outside attn, `--profile <name|id>` picks the profile when there are several.

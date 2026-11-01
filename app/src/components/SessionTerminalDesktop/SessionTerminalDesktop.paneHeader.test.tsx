@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
 import { SessionTerminalDesktop } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalDesktopState } from '../../types/desktop';
@@ -67,13 +67,23 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
 
 describe('SessionTerminalDesktop pane header', () => {
 
-  it('keeps automation and PR provenance visible below the session name', () => {
-    renderLonePane({
+  it('is not a drag handle on a lone tile, which has nowhere to move to', () => {
+    const { container } = renderLonePane();
+
+    const header = container.querySelector('.desktop-pane-header') as HTMLElement;
+    expect(header.className).toContain('desktop-pane-header--static');
+    expect(header.className).not.toContain('desktop-pane-header--draggable');
+    expect(header).not.toHaveAttribute('title');
+  });
+
+  it('carries the session’s automation, pull request, role and usage in its header', () => {
+    const { container } = renderLonePane({
       desktopSessions: [{
         id: 'sess-1',
         label: 'feed-nexus-web#101 · gpt-5.6-sol',
         agent: 'claude',
         cwd: '/tmp/project',
+        usage: usage(2.61),
         automation: {
           run_id: 'run-1',
           definition_id: 1,
@@ -87,33 +97,6 @@ describe('SessionTerminalDesktop pane header', () => {
             head_sha: '82f1c7a000000000000000000000000000000000',
           },
         },
-      }],
-    });
-
-    const automation = screen.getByText('GPT Sol medium');
-    expect(automation).toBeInTheDocument();
-    expect(automation.closest('.desktop-pane-identity-main')).toBeNull();
-    expect(screen.getByRole('button', { name: 'feed-nexus-web#101 ↗' })).toBeInTheDocument();
-    expect(screen.getByText('Fix validation race')).toBeInTheDocument();
-  });
-
-  it('is not a drag handle on a lone tile, which has nowhere to move to', () => {
-    const { container } = renderLonePane();
-
-    const header = container.querySelector('.desktop-pane-header') as HTMLElement;
-    expect(header.className).toContain('desktop-pane-header--static');
-    expect(header.className).not.toContain('desktop-pane-header--draggable');
-    expect(header).not.toHaveAttribute('title');
-  });
-
-  it('places delegation controls after session usage on the headline', () => {
-    const { container } = renderLonePane({
-      desktopSessions: [{
-        id: 'sess-1',
-        label: GENERATED_NAME,
-        agent: 'claude',
-        cwd: '/tmp/project',
-        usage: usage(2.61),
       }],
       delegationSessions: [
         { id: 'dispatcher', label: 'chief', agent: 'claude', state: 'idle' },
@@ -129,11 +112,13 @@ describe('SessionTerminalDesktop pane header', () => {
       onSelectSession: vi.fn(),
     });
 
-    const headline = container.querySelector('.desktop-pane-identity-main');
-    expect(headline).not.toBeNull();
-    expect(headline).toContainElement(screen.getByLabelText('Session usage $2.61'));
-    expect(headline).toContainElement(screen.getByRole('button', { name: /Builder · Show delegation chain/i }));
-    expect(headline?.textContent).toMatch(/\$2\.61.*Builder/i);
+    const header = within(container.querySelector<HTMLElement>('.desktop-pane-header')!);
+    expect(header.getByText('feed-nexus-web#101 · gpt-5.6-sol')).toBeInTheDocument();
+    expect(header.getByText('GPT Sol medium')).toBeInTheDocument();
+    expect(header.getByRole('button', { name: 'feed-nexus-web#101 ↗' })).toBeInTheDocument();
+    expect(header.getByText('Fix validation race')).toBeInTheDocument();
+    expect(header.getByRole('button', { name: /Builder · Show delegation chain/i })).toBeInTheDocument();
+    expect(header.getByLabelText('Session usage $2.61')).toBeInTheDocument();
   });
 
 });
