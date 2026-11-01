@@ -160,8 +160,12 @@ func (d *Daemon) configureNotebookSync() {
 		d.logf("Notebook sync: %v", err)
 	}
 	if run != nil {
-		d.refreshNotebookConflicts(run)
-		d.refreshNotebookSync(run)
+		select {
+		case <-run.engine.Ready():
+			d.refreshNotebookConflicts(run)
+			d.refreshNotebookSync(run)
+		default:
+		}
 	}
 	d.refreshNotebookRows()
 	d.publishNotebookSyncSettings()
@@ -305,18 +309,6 @@ func notebookSyncDiskEqual(a, b notebookSyncDisk) bool {
 	})
 }
 
-func newOutpostNotebookCopy(root string) (notebookSyncFolderDisk, error) {
-	entry := notebookSyncFolderDisk{Root: root, Completed: map[string]bool{}}
-	entries, err := os.ReadDir(root)
-	if err != nil && !os.IsNotExist(err) {
-		return entry, err
-	}
-	if len(entries) != 0 {
-		entry.PreviousRoot = root + ".before-sync-" + time.Now().UTC().Format("20060102T150405.000000000Z")
-	}
-	return entry, nil
-}
-
 func (d *Daemon) prepareNotebookFolders() (ready, failed, leaving map[string]string) {
 	r := &d.notebookSync
 	r.mu.Lock()
@@ -342,6 +334,18 @@ func (d *Daemon) prepareNotebookFolder(id string, entry notebookSyncFolderDisk) 
 	if entry.Initialized {
 		return nil
 	}
+	if entry.PreviousRoot == "" && d.enrollmentStatus().IsOutpost() {
+		entries, err := os.ReadDir(entry.Root)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if len(entries) != 0 {
+			entry.PreviousRoot = entry.Root + ".before-sync-" + time.Now().UTC().Format("20060102T150405.000000000Z")
+			if err := d.updateNotebookFolderDisk(id, func(current *notebookSyncFolderDisk) { current.PreviousRoot = entry.PreviousRoot }); err != nil {
+				return err
+			}
+		}
+	}
 	if entry.PreviousRoot != "" {
 		if _, err := os.Lstat(entry.PreviousRoot); os.IsNotExist(err) {
 			if err := os.Rename(entry.Root, entry.PreviousRoot); err != nil {
@@ -358,15 +362,19 @@ func (d *Daemon) prepareNotebookFolder(id string, entry notebookSyncFolderDisk) 
 	if err := os.WriteFile(marker, nil, 0600); err != nil {
 		return err
 	}
+	return d.updateNotebookFolderDisk(id, func(current *notebookSyncFolderDisk) { current.Initialized = true })
+}
+
+func (d *Daemon) updateNotebookFolderDisk(id string, update func(*notebookSyncFolderDisk)) error {
 	r := &d.notebookSync
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	disk := r.disk.clone()
 	current, ok := disk.Folders[id]
 	if !ok {
-		return fmt.Errorf("the Notebook folder %s left while it was being prepared", entry.Root)
+		return fmt.Errorf("the Notebook folder %s left while it was being prepared", id)
 	}
-	current.Initialized = true
+	update(&current)
 	disk.Folders[id] = current
 	return d.saveNotebookSyncDiskLocked(disk)
 }
@@ -626,7 +634,7 @@ func (d *Daemon) refreshNotebookSync(run *notebookSyncRun) {
 	d.publishNotebookSyncSettings()
 }
 
-func (d *Daemon) notebookConflictCopies(root string) (map[string]struct{}, error) {
+func (d *Daemon) notebookConflictCopies(folder, root string) (map[string]struct{}, error) {
 	copies := map[string]struct{}{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if os.IsNotExist(err) {
@@ -650,18 +658,24 @@ func (d *Daemon) notebookConflictCopies(root string) (map[string]struct{}, error
 		}
 		rel = norm.NFC.String(filepath.ToSlash(rel))
 		copies[rel] = struct{}{}
-		return d.notifyNotebookConflict(root, rel)
+		return d.notifyNotebookConflict(folder, root, rel)
 	})
 	return copies, err
 }
 
-func (d *Daemon) notifyNotebookConflict(root, rel string) error {
+func (d *Daemon) notifyNotebookConflict(folder, root, rel string) error {
 	path := filepath.Join(root, filepath.FromSlash(rel))
 	sum := sha256.Sum256([]byte(root + "\x00" + rel))
+	body, source := fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path), rel
+	if owners, private, err := d.privateNotebookFolderOwners(folder); err != nil {
+		return err
+	} else if private {
+		body, source = fmt.Sprintf("Both versions were kept in the Notebook folder of %s. Open that Notebook, compare the file with its .sync-conflict- copy, merge what you need, then remove the copy.", strings.Join(owners, ", ")), folder
+	}
 	notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
 		ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
-		Title: "Notebook conflict copy", Body: fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path),
-		SourceKind: "notebook", SourceID: rel,
+		Title: "Notebook conflict copy", Body: body,
+		SourceKind: "notebook", SourceID: source,
 	}, time.Now())
 	if err == nil && inserted {
 		d.publishFact(FactNotificationCreated, notification.ID, nil)
@@ -698,7 +712,7 @@ func (d *Daemon) updateNotebookConflicts(run *notebookSyncRun, folder string, pa
 			continue
 		}
 		if present {
-			if err := d.notifyNotebookConflict(root, rel); err != nil {
+			if err := d.notifyNotebookConflict(folder, root, rel); err != nil {
 				d.logf("Notebook conflict %s: %v", rel, err)
 				continue
 			}
@@ -1138,7 +1152,7 @@ func (d *Daemon) refreshNotebookConflicts(run *notebookSyncRun) {
 	r.mu.Unlock()
 	found := map[string]map[string]struct{}{}
 	for id, root := range folders {
-		copies, err := d.notebookConflictCopies(root)
+		copies, err := d.notebookConflictCopies(id, root)
 		if err != nil {
 			d.logf("Notebook conflicts in %s: %v", root, err)
 			return
@@ -1340,6 +1354,23 @@ func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string
 		root = copied
 	}
 	return filepath.Join(root, "seeds", seed), nil
+}
+
+func (d *Daemon) privateNotebookFolderOwners(folder string) ([]string, bool, error) {
+	d.notebookSync.mu.Lock()
+	users := slices.Clone(d.notebookSync.disk.Folders[folder].Profiles)
+	d.notebookSync.mu.Unlock()
+	live, err := d.store.ListProfiles(false)
+	if err != nil {
+		return nil, false, err
+	}
+	var owners []string
+	for _, profile := range live {
+		if slices.Contains(users, profile.ID) {
+			owners = append(owners, "profile "+profile.Name)
+		}
+	}
+	return owners, len(owners) != len(live), nil
 }
 
 func notebookConflictOriginal(path string) string {

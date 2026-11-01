@@ -218,11 +218,7 @@ func (d *Daemon) storeOutpostNotebookFoldersLocked(home, base string, folders []
 		listed[folder.ID] = true
 		entry, known := disk.Folders[folder.ID]
 		if !known {
-			root := notebook.OutpostCopyRoot(base, folder.Name, folder.Key)
-			var err error
-			if entry, err = newOutpostNotebookCopy(root); err != nil {
-				return err
-			}
+			entry = notebookSyncFolderDisk{Root: notebook.OutpostCopyRoot(base, folder.Name, folder.Key), Completed: map[string]bool{}}
 		}
 		entry.Profiles = slices.Clone(folder.Profiles)
 		disk.Folders[folder.ID] = entry

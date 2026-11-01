@@ -583,3 +583,58 @@ func TestNotebookConflictsUnderDotDirectoriesFollowTheFiles(t *testing.T) {
 		t.Fatalf("deleted directory conflict count=%d, want 0", count)
 	}
 }
+
+func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	outpost.Start()
+	home.Start()
+	app := home.App()
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	side := filepath.Join(home.Dir, "side-notebook")
+	writeFileAt(t, filepath.Join(side, "secret plan.sync-conflict-20261027-120000-device.md"), "a conflict copy")
+	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", side, "--profile", "Side"))
+	blocked := outpostCopyPlacement(outpost, "side-notebook", side)
+	writeFileAt(t, blocked, "a file where the copy belongs")
+	pair.Connect()
+
+	state := awaitNotebookState(t, pair, protocol.OutpostNotebookStateError)
+	if !strings.Contains(protocol.Deref(state.Error), blocked) {
+		t.Fatalf("the error does not name the blocked copy %s: %s", blocked, protocol.Deref(state.Error))
+	}
+	defaultCopy := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
+	writeFileAt(t, filepath.Join(defaultCopy, "from-outpost.md"), "written in Default's copy")
+	awaitHomeFile(t, pair.App, home, notebookPath(home, "from-outpost.md"), "written in Default's copy", false)
+	notifications := testworld.Request(pair.App, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr("conflicts")}, protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == "conflicts" })
+	found := false
+	for _, notification := range notifications.Notifications {
+		if notification.Kind != "notebook_sync_conflict" {
+			continue
+		}
+		found = true
+		if strings.Contains(notification.Body+notification.SourceID, "secret plan") || strings.Contains(notification.Body, side) || !strings.Contains(notification.Body, "profile Side") {
+			t.Fatalf("a conflict in Side's own folder notifies every profile with %+v", notification)
+		}
+	}
+	if !found {
+		t.Fatal("no notification for the conflict copy in Side's folder")
+	}
+	t.Logf("Side's blocked copy failed alone (%s); Default's folder synced; the conflict notification names the profile, not the file", protocol.Deref(state.Error))
+
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	home.Stop()
+	outpost.Stop()
+	outpost.Start()
+	home.Start()
+	pair.App = home.App()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	if !fileHolds(filepath.Join(blocked, "secret plan.sync-conflict-20261027-120000-device.md"), "a conflict copy", false) {
+		t.Fatal("Side's folder did not sync after its copy was cleared")
+	}
+	t.Log("after the blocking file was removed and both daemons restarted, Side's folder synced")
+}
