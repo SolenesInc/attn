@@ -143,3 +143,30 @@ func TestATaskThatFailsForGoodLeavesOneWarningWhoseRetryRequeuesIt(t *testing.T)
 		}
 	})
 }
+
+func TestAGardenReviewFailureWarnsOnlyTheProfileUnderReview(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		defaultApp := w.App()
+		side := createProfile(defaultApp, "Side")
+		scoped := w.Client().WithGardenProfile(side.ID, "")
+		if err := w.InjectSession("side-gardener", "side-gardener", w.Path("side-gardener"), protocol.SessionAgentClaude, side.ID); err != nil {
+			t.Fatal(err)
+		}
+		gardenReviewPlantTended(t, scoped, "side-gardener", "Side checkout work")
+		if err := scoped.Unregister("side-gardener"); err != nil {
+			t.Fatal(err)
+		}
+		gardenReviewStart(t, scoped)
+		w.advance(0)
+		w.advance(time.Minute)
+		w.advance(2 * time.Minute)
+
+		sideFeed := listNotifications(w.AppOn(side.ID))
+		if len(sideFeed.Notifications) != 1 || !strings.Contains(sideFeed.Notifications[0].Title, "Side checkout work") {
+			t.Fatalf("Side's feed = %+v, want one warning naming its review item", sideFeed)
+		}
+		if defaultFeed := listNotifications(defaultApp); len(defaultFeed.Notifications) != 0 {
+			t.Fatalf("a failure in Side's Garden review reached Default: %+v", defaultFeed)
+		}
+	})
+}

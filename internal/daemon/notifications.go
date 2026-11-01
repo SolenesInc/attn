@@ -217,48 +217,68 @@ func openSessionAction(sessionID protocol.SessionID) store.NotificationAction {
 	return store.NotificationAction{Kind: notificationActionOpenSession, Label: "Open session", TargetID: sessionID}
 }
 
-func (d *Daemon) sessionFailureName(sessionID protocol.SessionID) string {
-	if d.store != nil {
-		if session := d.store.Get(sessionID); session != nil && strings.TrimSpace(session.Label) != "" {
-			return fmt.Sprintf("%q", session.Label)
+type failedSession struct {
+	name      string
+	profileID string
+}
+
+func (d *Daemon) failedSession(sessionID protocol.SessionID) failedSession {
+	failed := failedSession{name: string("session " + sessionID)}
+	if d.store == nil {
+		return failed
+	}
+	if session := d.store.Get(sessionID); session != nil {
+		failed.profileID = session.ProfileID
+		if strings.TrimSpace(session.Label) != "" {
+			failed.name = fmt.Sprintf("%q", session.Label)
 		}
 	}
-	return string("session " + sessionID)
+	return failed
 }
 
 func (d *Daemon) renderSessionActivityFailure(t *jobs.Job) store.NotificationRecord {
 	sessionID := protocol.SessionID(jobSubject(t))
-	name := d.sessionFailureName(sessionID)
-	return taskFailureNotification(t,
-		"Couldn’t update activity for "+name,
-		"New output in "+name+" triggered a Home activity summary.",
+	session := d.failedSession(sessionID)
+	record := taskFailureNotification(t,
+		"Couldn’t update activity for "+session.name,
+		"New output in "+session.name+" triggered a Home activity summary.",
 		"Its Home activity summary may be stale. The session itself is still running.",
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
+	record.ProfileID = session.profileID
+	return record
 }
 
 func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord {
 	sessionID := protocol.SessionID(jobSubject(t))
-	name := d.sessionFailureName(sessionID)
-	return taskFailureNotification(t,
-		"Couldn’t name "+name,
+	session := d.failedSession(sessionID)
+	record := taskFailureNotification(t,
+		"Couldn’t name "+session.name,
 		"New conversation content triggered automatic session naming.",
 		"The session keeps its current fallback name.",
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
+	record.ProfileID = session.profileID
+	return record
 }
 
 func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord {
 	name := "a Garden review item"
+	profileID := ""
 	var payload gardenReviewJobPayload
 	if err := t.DecodePayload(&payload); err == nil && d.store != nil {
 		if item, _, found, readErr := d.readGardenReviewItem(payload.ItemID); readErr == nil && found && strings.TrimSpace(item.Title) != "" {
 			name = fmt.Sprintf("%q", item.Title)
 		}
+		if run, _, found, readErr := d.readGardenReviewRun(payload.RunID); readErr == nil && found {
+			profileID = run.ProfileID
+		}
 	}
-	return taskFailureNotification(t,
+	record := taskFailureNotification(t,
 		"Couldn’t classify "+name,
 		"A Garden review asked an agent to classify this item.",
 		"The item remains unresolved in the Garden review.",
 		[]store.NotificationAction{retryTaskAction(t)})
+	record.ProfileID = profileID
+	return record
 }
 
 func (d *Daemon) projectNotificationsUpdated() {

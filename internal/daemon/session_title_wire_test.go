@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -310,4 +311,34 @@ func TestACrewMembersDayKeepsTheMembersName(t *testing.T) {
 	if settled.Label != named.Label {
 		t.Errorf("the member's day is named %q, want %q", settled.Label, named.Label)
 	}
+}
+
+func TestAFailedTitleWarnsOnlyTheProfileThatOwnsTheSession(t *testing.T) {
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			if strings.HasPrefix(task.Prompt, "Classify how this assistant message ends") {
+				task.Answer(`{"verdict":"DONE"}`)
+				return
+			}
+			task.Fail("API Error: 529 overloaded")
+		})
+		defaultApp := w.App()
+		side := createProfile(defaultApp, "Side")
+		sideApp := w.AppOn(side.ID)
+		w.Spawn(sideApp, fakeagent.Claude, w.Path("side-shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("the login form rejects valid passwords")
+		})
+		w.advance(0)
+		w.advance(time.Minute)
+		w.advance(2 * time.Minute)
+
+		sideFeed := listNotifications(sideApp)
+		if len(sideFeed.Notifications) != 1 || sideFeed.UnreadCount != 1 || sideFeed.Notifications[0].Kind != "task_failed" ||
+			!strings.Contains(sideFeed.Notifications[0].Title, "side-shop") {
+			t.Fatalf("Side's feed = %+v, want one unread warning naming its session", sideFeed)
+		}
+		if defaultFeed := listNotifications(defaultApp); len(defaultFeed.Notifications) != 0 || defaultFeed.UnreadCount != 0 {
+			t.Fatalf("a failure for Side's session reached Default: %+v", defaultFeed)
+		}
+	})
 }

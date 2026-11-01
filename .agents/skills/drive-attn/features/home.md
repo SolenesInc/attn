@@ -86,14 +86,14 @@ Preconditions:
 - **Durability across restarts**: home reads the daemon's sessions, turns and snoozes, so it shows the same after any restart. Notifications and what the user read are the daemon's records. The app remembers in its own storage that the user saw What's new and its banner. The follow checkbox is not kept. attn ticks the checkbox only when the user settles or snoozes the last turn, and clears it when the user goes anywhere.
 - **Linux**: `session.goToDashboard` is Ctrl+Alt+H (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent whose outpost is offline is marked offline on home, never sits under "Your turn", and has no unsnooze button.
-- **Profiles**: home lists the selected profile's sessions and asks. Notifications without a profile show in every profile; a Notebook conflict notification shows only in the profiles that use its folder, and the unread count follows the selected profile.
+- **Profiles**: home lists the selected profile's sessions and asks. A notification about something a profile owns shows only in that profile: a failure for a session or a Garden review item shows in the profile that owns it, and a Notebook conflict in the profiles that use its folder. Notifications about the daemon itself, such as a stopped plugin, show in every profile. The unread count follows the selected profile.
 - **Performance and idle cost**: home re-reads the clock for turn ages every 30 seconds, and the GitHub rate-limit banner ticks every second only while the banner shows. Nothing measures home's idle cost. When a change touches home's rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Keyboard and native input**: ⌘⇧H reaches home from anywhere, a text field included. The intro takes ←, →, Enter and Escape. Home's session rows take clicks only (see Gotchas).
 - **Flow**: in desktop flow, the Sessions card groups by state. Queue flow puts "Your turn" first and the rest under "Settled", and shows "All settled" when no agent is owed a turn. The snoozed group shows in both.
 
 ## Tests
 
-- Wire: `internal/daemon/notifications_wire_test.go`.
+- Wire: `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
 - Scenario: `focusless-native` (parked macOS native input), `home-dock`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 - App: `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.
