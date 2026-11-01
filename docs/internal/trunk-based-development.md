@@ -29,7 +29,9 @@ landing changes, and pushes:
   checks all packages.
 - Protocol schema or prompt inputs: check that generated types or catalogs
   are current.
-- `app/`: typecheck and lint.
+- `app/`: lint, and typecheck with tsrs, a Rust port of the TypeScript 7
+  checker. CI on `main` still typechecks with the TypeScript version that
+  `app/package.json` pins.
 - `scripts/`: run the shell script tests.
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
   push, not a suite: the groups of `scripts/landing-tests` that match the

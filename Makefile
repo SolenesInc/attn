@@ -233,7 +233,7 @@ lint-frontend: $(APP_NODE_MODULES)
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
 check-frontend: lint-frontend
-	cd app && pnpm exec tsc --noEmit
+	cd app && pnpm exec tsrs --noEmit
 
 test-e2e: $(APP_NODE_MODULES)
 	cd app && pnpm run e2e
