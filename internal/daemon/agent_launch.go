@@ -36,8 +36,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		Cols: opts.Cols, Rows: opts.Rows, InitialPrompt: initialPrompt,
 		ResumeSessionID: opts.ResumeSessionID, ResumePicker: opts.ResumePicker,
 		YoloMode: opts.YoloMode, AutoApprove: opts.AutoApprove,
-		TrustWorkingDirectory: opts.TrustWorkingDirectory,
-		Model:                 opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
+		Model: opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
 		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents,
@@ -48,7 +47,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		CodexRemote:            opts.CodexRemote,
 	}
 	if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
-		spawn.AutoApprove, spawn.TrustWorkingDirectory = true, true
+		spawn.AutoApprove = true
 		spawn.Model, spawn.Effort = unattended.Model, unattended.Effort
 	}
 	if !caps.HasResume {
@@ -112,16 +111,13 @@ func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOpti
 		opts.AgentArgv = append(opts.AgentArgv, "--initial-prompt", initialPrompt)
 	}
 	executable := configuredLaunchExecutable(driver, opts)
-	autoApprove, trust, model, effort := opts.AutoApprove, opts.TrustWorkingDirectory, opts.Model, opts.Effort
+	autoApprove, model, effort := opts.AutoApprove, opts.Model, opts.Effort
 	if launch := opts.UnattendedLaunch; !launch.IsZero() {
-		autoApprove, trust, model, effort = true, true, launch.Model, launch.Effort
+		autoApprove, model, effort = true, launch.Model, launch.Effort
 	}
 	opts.AgentEnv = []string{"ATTN_DAEMON_MANAGED=1", "ATTN_MODEL=" + model, "ATTN_EFFORT=" + effort, fmt.Sprintf("ATTN_AUTO_COMPACT_WINDOW=%d", opts.ContextWindowCap)}
 	if autoApprove {
 		opts.AgentEnv = append(opts.AgentEnv, "ATTN_AUTO_APPROVE=1")
-	}
-	if trust {
-		opts.AgentEnv = append(opts.AgentEnv, "ATTN_TRUST_WORKING_DIRECTORY=1")
 	}
 	if executable != "" {
 		opts.AgentEnv = append(opts.AgentEnv, driver.ExecutableEnvVar()+"="+executable)

@@ -326,6 +326,20 @@ func TestSharedCodexSkipsTheTrustQuestionOnlyInARepositoryWhereAnAgentSessionSta
 	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, browsedWorktree), "Trust this folder?")
 }
 
+func TestSharedCodexSkipsTheTrustQuestionInAWorktreeOfARepositoryCodexTrusts(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	repo, worktree := newWorktree(t, "shop", "discount")
+	w.LeaveCodexFolderTrustUnanswered(worktree)
+	w.SetCodexFolderTrust(repo, "trusted")
+
+	w.Launched(w.Spawn(app, fakeagent.Codex, worktree))
+	if got := w.CodexFolderTrust(worktree); got != "" {
+		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", worktree, got)
+	}
+}
+
 func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnsweredAtLaunch(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
@@ -350,16 +364,18 @@ func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnswere
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
-	for _, saved := range []string{"", "untrusted"} {
+	for _, saved := range []string{"", "trusted"} {
 		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {
-			w := newWorld(t, fakeagent.Codex)
+			w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "codex_shared_enabled", "true")
 			folder := w.Path("check")
-			if err := os.MkdirAll(folder, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if saved != "" {
+			if saved == "" {
+				w.Launched(w.Spawn(app, fakeagent.Claude, folder))
+			} else {
+				if err := os.MkdirAll(folder, 0o755); err != nil {
+					t.Fatal(err)
+				}
 				w.SetCodexFolderTrust(folder, saved)
 			}
 			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
@@ -406,6 +422,7 @@ func TestWithSharedCodexOnAnAutomationThatNamesItsCodexRunsItPlain(t *testing.T)
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(folder, "trusted")
 	executable := filepath.Join(w.Dir, "bin", string(fakeagent.Codex))
 	applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: Nightly check

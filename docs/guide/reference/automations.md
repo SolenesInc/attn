@@ -147,6 +147,12 @@ Runs start unattended, with an approval reviewer in your place, so a routine per
 </details>
 
 <details>
+<summary>Does a Codex run trust its folder?</summary>
+
+Only when you already do. A Codex run starts when an agent session in attn has worked in the folder, in its repository, or in another checkout of the same repository (the same `origin`), or when Codex already trusts the folder or its repository. A review run in attn's own copy of a repository counts once you have worked in your own checkout of it. With [shared Codex](using-shared-codex.md#folder-trust), attn answers Codex's trust question for the run. With a plain Codex, attn adds the repository as trusted to Codex's `config.toml` before the run starts, as choosing "Trust and continue" would, and notes it in the daemon log. Remove that entry from `config.toml` to take the trust back. In any other folder, or one you marked untrusted in Codex, the run fails and says why, and Codex does not start. Open Codex there once and trust the folder, or work there with any agent, and the next run starts.
+</details>
+
+<details>
 <summary>What does the agent receive?</summary>
 
 Your prompt, the seed it works on, and the path to a JSON file with the occurrence's data: the scheduled time and the guard's output, or the pull request's title, body, author, branches and head commit. Attn tells the agent to treat that data as untrusted and never to follow instructions in it.

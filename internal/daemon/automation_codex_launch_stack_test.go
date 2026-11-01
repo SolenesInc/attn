@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -27,6 +26,7 @@ func applyCodexAutomation(t *testing.T, s *testworld.Stack) {
 	if err := os.MkdirAll(s.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	s.SetCodexFolderTrust(s.Path("check"), "trusted")
 	applyAutomation(t, s.Client(), fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: Manual check
 trigger: {type: manual}
@@ -52,9 +52,7 @@ func TestACodexAutomationStuckBeforeItsFirstTurnStaysPendingAcrossARestartUntilI
 	s := codexAutomationStack(t)
 	app := s.App()
 	s.RequireEnterAtNextBoot(codexStuckOnAModal)
-	graceEnds := s.FireTimers(daemon.CodexLaunchGraceTimer)
 	answered := runAutomationFromApp(app, "stuck")
-	graceEnds()
 	if !answered.Success || answered.Run == nil || answered.Run.State != "pending" {
 		t.Fatalf("a run whose Codex sits on a modal answered %s, want it pending", describeRunAnswer(answered))
 	}
@@ -62,10 +60,8 @@ func TestACodexAutomationStuckBeforeItsFirstTurnStaysPendingAcrossARestartUntilI
 	app.AwaitScreen(session, "A new version of Codex")
 
 	s.Stop()
-	graceEnds = s.FireTimers(daemon.CodexLaunchGraceTimer)
 	s.Start()
 	app = s.App()
-	graceEnds()
 	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
 		t.Fatalf("after the restart recovered its live worker the runs are %+v, want the one run still pending", runs)
 	}
@@ -90,17 +86,13 @@ func TestACodexAutomationStoppedBeforeItsFirstTurnAcrossARestartFailsWithItsScre
 	s := codexAutomationStack(t)
 	app := s.App()
 	s.RequireEnterAtNextBoot(codexStuckOnAModal)
-	graceEnds := s.FireTimers(daemon.CodexLaunchGraceTimer)
 	answered := runAutomationFromApp(app, "stuck")
-	graceEnds()
 	session := protocol.Deref(answered.Run.SessionID)
 	app.AwaitScreen(string(session), "A new version of Codex")
 
 	s.Stop()
-	graceEnds = s.FireTimers(daemon.CodexLaunchGraceTimer)
 	s.Start()
 	app = s.App()
-	graceEnds()
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
 	failed := awaitStackRun(t, s, app, answered.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
 	failure := protocol.Deref(failed.LastError)

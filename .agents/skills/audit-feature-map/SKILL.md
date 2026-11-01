@@ -215,8 +215,9 @@ location:
 ```
 
 Before applying the file, start the harness once in the clone, accept the
-harness's folder trust prompt, and quit. Otherwise an unattended run waits at
-that prompt while attn shows the run as working.
+harness's folder trust prompt, and quit. Otherwise an unattended Claude run
+waits at that prompt while attn shows the run as working, and a Codex run in a
+clone no agent has worked in fails before it starts.
 
 Apply the file with
 `attn automation apply --file <file> --launch-desktop own --desktop-name "Feature map audit"`.

@@ -128,16 +128,9 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 		t.Fatal(err)
 	}
 	id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)).ID
-	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
-		w.tickSchedulesUntil("a new delivered run", func() bool {
-			runs := automationRuns(t, cli, id)
-			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
-				return false
-			}
-			run = runs[0]
-			return true
-		})
+		run := awaitNextDeliveredRun(t, w, app, id, earlier...)
 		setAutomationEnabled(t, cli, id, false)
 		return run
 	}
@@ -195,17 +188,11 @@ func TestEditingASingletonsContractHandsItsSeedToANewSessionAndLeavesTheOldOneWo
 	}
 	claudeSpec := strings.Replace(automationSingletonSpec(w, "Sheriff", "latest", ""), "*/2 * * * *", "@every 3s", 1)
 	codexSpec := strings.Replace(claudeSpec, "launch: {driver: claude}", "launch: {driver: codex}", 1)
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
 	id := applyAutomation(t, cli, codexSpec).ID
-	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
-		w.tickSchedulesUntil("a new delivered run", func() bool {
-			runs := automationRuns(t, cli, id)
-			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
-				return false
-			}
-			run = runs[0]
-			return true
-		})
+		run := awaitNextDeliveredRun(t, w, app, id, earlier...)
 		setAutomationEnabled(t, cli, id, false)
 		return run
 	}
@@ -399,16 +386,9 @@ func TestASingletonRunCancelledBeforeItsHandoverLeavesTheHandoverToTheNextRun(t 
 	}
 	claudeSpec := strings.Replace(automationSingletonSpec(w, "Sheriff", "latest", ""), "*/2 * * * *", "@every 3s", 1)
 	codexSpec := strings.Replace(claudeSpec, "launch: {driver: claude}", "launch: {driver: codex}", 1)
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
 	id := applyAutomation(t, cli, codexSpec).ID
-	var first protocol.AutomationRunSummary
-	w.tickSchedulesUntil("a delivered run", func() bool {
-		runs := automationRuns(t, cli, id)
-		if len(runs) == 0 || runs[0].State != "delivered" {
-			return false
-		}
-		first = runs[0]
-		return true
-	})
+	first := awaitNextDeliveredRun(t, w, w.App(), id)
 	setAutomationEnabled(t, cli, id, false)
 	stake, codexSession := protocol.Deref(first.SeedID), protocol.Deref(first.SessionID)
 	w.Launched(string(codexSession)).Prompted()
@@ -456,4 +436,29 @@ func TestASingletonRunCancelledBeforeItsHandoverLeavesTheHandoverToTheNextRun(t 
 	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != claudeSession {
 		t.Fatalf("after the handover %s is tended by %+v, want %s", stake, tender, claudeSession)
 	}
+}
+
+func awaitNextDeliveredRun(t *testing.T, w *world, app *testworld.Peer, id int, earlier ...string) protocol.AutomationRunSummary {
+	t.Helper()
+	var next protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a new run", func() bool {
+		runs := automationRuns(t, w.Client(), id)
+		if len(runs) == 0 || slices.Contains(earlier, runs[0].ID) {
+			return false
+		}
+		next = runs[0]
+		return true
+	})
+	for next.State == "pending" {
+		awaitAutomationChanged(app, id)
+		for _, run := range automationRuns(t, w.Client(), id) {
+			if run.ID == next.ID {
+				next = run
+			}
+		}
+	}
+	if next.State != "delivered" {
+		t.Fatalf("run %s is %s with %q, want it delivered", next.ID, next.State, protocol.Deref(next.LastError))
+	}
+	return next
 }

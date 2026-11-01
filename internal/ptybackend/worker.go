@@ -668,7 +668,6 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	workerEnv := withoutEnvironmentKeys(os.Environ(),
 		"ATTN_PTY_WORKER",
 		"ATTN_AUTO_APPROVE",
-		"ATTN_TRUST_WORKING_DIRECTORY",
 		"ATTN_MODEL",
 		"ATTN_EFFORT",
 		"ATTN_AUTO_COMPACT_WINDOW",

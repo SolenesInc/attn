@@ -43,7 +43,7 @@ old Codex.
 - When the first shared terminal opens, attn starts the app-server as a terminal of its own. attn stops the app-server when no open session and no shared terminal needs it (`internal/daemon/codex_shared.go`).
 - Once a day attn asks `codex doctor` for the latest Codex, and attn reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/daemon/codex_update.go`).
 - When the installed Codex differs from the one the app-server runs, attn restarts the app-server once no turn runs and every shared terminal has finished starting (`internal/daemon/codex_restart.go`).
-- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, and for every automation (`docs/guide/reference/using-shared-codex.md`).
+- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, or whose repository Codex already trusts (`docs/guide/reference/using-shared-codex.md`).
 
 ## Driving it
 

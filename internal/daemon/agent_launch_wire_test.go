@@ -116,7 +116,7 @@ func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *tes
 				for _, pair := range run.Env {
 					key, _, _ := strings.Cut(pair, "=")
 					switch key {
-					case "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_AUTO_COMPACT_WINDOW":
+					case "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_APPROVE", "ATTN_AUTO_COMPACT_WINDOW":
 						t.Errorf("claude for session %s inherited the one-shot launch variable %s", run.SessionID, pair)
 					}
 				}

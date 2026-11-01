@@ -178,7 +178,6 @@ func runAgentDirectly(requestedAgent string) {
 		os.Exit(1)
 	}
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")
 	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
 	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")

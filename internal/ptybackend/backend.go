@@ -52,9 +52,8 @@ type SpawnOptions struct {
 
 	LoginShellEnv []string
 
-	AutoApprove           bool
-	ApprovalRoute         launchcontract.ApprovalRoute
-	TrustWorkingDirectory bool
+	AutoApprove   bool
+	ApprovalRoute launchcontract.ApprovalRoute
 
 	Model string
 
@@ -84,7 +83,7 @@ func validateUnattendedSpawnOptions(opts SpawnOptions) error {
 	if !strings.EqualFold(strings.TrimSpace(opts.Agent), strings.TrimSpace(launch.Agent)) {
 		return fmt.Errorf("unattended launch agent %q does not match spawn agent %q", launch.Agent, opts.Agent)
 	}
-	if opts.AutoApprove || opts.TrustWorkingDirectory || strings.TrimSpace(opts.Model) != "" ||
+	if opts.AutoApprove || strings.TrimSpace(opts.Model) != "" ||
 		strings.TrimSpace(opts.Effort) != "" || strings.TrimSpace(opts.Executable) != "" {
 		return errors.New("unattended launch policy must not be duplicated in spawn options")
 	}

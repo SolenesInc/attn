@@ -176,6 +176,7 @@ type Daemon struct {
 	delegationCheckoutMu        sync.Mutex
 	delegationWaitsForFirstTurn bool
 	launchWatchMu               sync.Mutex
+	codexTrustMu                sync.Mutex
 	launchWatches               map[protocol.SessionID]*launchWatch
 	recoveredLaunches           map[protocol.SessionID]*launchWatch
 	terminalExitIntentMu        sync.Mutex

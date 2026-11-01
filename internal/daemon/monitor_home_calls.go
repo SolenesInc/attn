@@ -254,11 +254,6 @@ func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
 	}
 }
 
-func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
-	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: string(data), Source: strings.TrimSpace(source)})
-	return err
-}
-
 func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
 	sessionID, shown := d.shownIn(terminal)
 	if !shown {

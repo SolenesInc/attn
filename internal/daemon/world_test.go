@@ -289,30 +289,6 @@ func (w *world) closeWatchWindows() {
 	})
 }
 
-func (w *world) fireTimers(name stepclock.Name) (stop func()) {
-	w.T.Helper()
-	if w.bubbled {
-		w.T.Fatal("fireTimers reads the stepped clock, which a world inBubble does not have")
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for {
-			if _, ok := w.clock.AwaitTimer(ctx, name); !ok {
-				return
-			}
-			w.clock.Fire(name)
-		}
-	}()
-	stop = sync.OnceFunc(func() {
-		cancel()
-		<-done
-	})
-	w.T.Cleanup(stop)
-	return stop
-}
-
 // scheduleTickLimit is past the most schedule ticks any automation test waits for one outcome.
 const scheduleTickLimit = 10
 

@@ -44,9 +44,11 @@ attn answers yes to the trust question in these cases:
   started a conversation at the top of any other worktree of the same
   repository that still exists. The repository's main checkout counts as one of
   those worktrees.
-- The question comes from an automation.
+- Your Codex config saves the folder's repository as trusted.
 
-Any other folder still asks. attn writes nothing to your Codex config when it
+Any other folder still asks. An automation never stops at the question: attn
+decides before it starts Codex, as [Automations](automations.md) describes
+under "Does a Codex run trust its folder?". attn writes nothing to your Codex config when it
 answers. A folder you marked untrusted stays untrusted. Codex itself saves a
 folder you never answered for as trusted when a conversation that can write
 there starts. If the folder is inside a repository, Codex saves the whole

@@ -20,7 +20,7 @@ group go \.go$|^go\.(mod|sum)$
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
 go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
 go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
-go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
+go ./internal/daemon TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts
 go ./internal/daemon TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunching
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose

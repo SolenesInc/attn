@@ -124,7 +124,11 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	if opts.LaunchExecutable == "" && configuredLaunchExecutable(driver, opts) == "" {
 		opts.LaunchExecutable = strings.TrimSpace(d.machineSetting(MachineSetting(executableSettingKey(opts.Agent))))
 	}
-	if l := d.linkNamed(launch.Link); l != nil {
+	l := d.linkNamed(launch.Link)
+	if err := d.trustUnattendedCodexFolder(opts, l != nil && l.kind() == codexLinkKind); err != nil {
+		return nil, err
+	}
+	if l != nil {
 		if err := l.admit(launch.Profile, opts.ResumeSessionID); err != nil {
 			return nil, err
 		}

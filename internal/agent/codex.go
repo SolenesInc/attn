@@ -300,9 +300,6 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	if opts.CodexRemote == "" {
 		overrides = append(overrides, hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())...)
 	}
-	if opts.TrustWorkingDirectory {
-		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))
-	}
 	return overrides
 }
 

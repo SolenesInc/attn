@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/who"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -25,7 +24,6 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -768,15 +766,12 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return d.ensureConfirmedAutomationSession(req, directory, inputPath)
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
-		if !d.sessionMonitor(req.IDs.SessionID).Snapshot().FirstReportAt.V.IsZero() {
-			return nil, nil
-		}
-		return nil, d.verifyUnattendedLaunch(req)
+		return nil, nil
 	}
 	if !opening {
 		return nil, d.continueAutomationSession(ctx, req, directory)
 	}
-	return nil, d.startAutomationSession(req, directory, inputPath, nil)
+	return nil, d.startAutomationSession(req, directory, inputPath)
 }
 
 func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, directory, inputPath string) (*launchWatch, error) {
@@ -791,8 +786,6 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, di
 	case d.automationSessionIsLive(sessionID):
 		if d.launchReported(sessionID) {
 			d.noteLaunchStarted(sessionID)
-		} else {
-			d.passGateBeforeFirstTurn(req, launch)
 		}
 	case exit != nil && !protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt):
 		if d.launchReported(sessionID) {
@@ -801,7 +794,7 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, di
 			d.resolveLaunchWatch(sessionID, launchOutcome{exit: exit})
 		}
 	default:
-		if err := d.startAutomationSession(req, directory, inputPath, launch); err != nil {
+		if err := d.startAutomationSession(req, directory, inputPath); err != nil {
 			d.forgetLaunchWatch(sessionID, launch)
 			return nil, err
 		}
@@ -834,9 +827,6 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 		ProfileID: req.IDs.ProfileID,
 	})
 	if err != nil {
-		return err
-	}
-	if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err
 	}
 	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
@@ -873,7 +863,7 @@ func automationSessionLabel(req automation.WorkRequest, directory string) string
 	return label
 }
 
-func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string, launch *launchWatch) error {
+func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
 	label, prompt, err := d.automationSessionLaunch(req, directory, inputPath)
 	if err != nil {
 		return err
@@ -882,11 +872,6 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	_, rejection := d.runSpawnPipelineReporting(message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
 	if rejection != nil {
 		return rejection.reason()
-	}
-	if launch != nil {
-		d.passGateBeforeFirstTurn(req, launch)
-	} else if err := d.verifyUnattendedLaunch(req); err != nil {
-		return err
 	}
 	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
 	return nil
@@ -914,18 +899,6 @@ func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*stor
 		return nil, errors.New("continuity origin run missing")
 	}
 	return origin, nil
-}
-func (d *Daemon) verifyUnattendedLaunch(req automation.WorkRequest) error {
-	if err := d.passUnattendedLaunchGate(req, nil); err != nil {
-		return &retryableAutomationDeliveryError{cause: err}
-	}
-	return nil
-}
-
-func (d *Daemon) passGateBeforeFirstTurn(req automation.WorkRequest, launch *launchWatch) {
-	if err := d.passUnattendedLaunchGate(req, launch); err != nil {
-		d.logf("automation launch of session %s: %v; its first turn or exit decides the run", req.IDs.SessionID, err)
-	}
 }
 func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (string, error) {
 	if filepath.Base(req.RunID) != req.RunID || strings.TrimSpace(req.RunID) == "" {
@@ -990,125 +963,6 @@ func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, che
 	return prompts.RenderText("automation", "opening", values)
 }
 
-const codexDirectoryTrustPrompt = "Do you trust the contents of this directory?"
-
-func stripANSIForPromptMatch(data []byte) string {
-	out := make([]byte, 0, len(data))
-	for i := 0; i < len(data); {
-		if data[i] != 0x1b {
-			out = append(out, data[i])
-			i++
-			continue
-		}
-		if i+1 >= len(data) {
-			break
-		}
-		switch data[i+1] {
-		case '[':
-			i += 2
-			for i < len(data) {
-				if data[i] >= 0x40 && data[i] <= 0x7e {
-					i++
-					break
-				}
-				i++
-			}
-		case ']':
-			i += 2
-			for i < len(data) {
-				if data[i] == 0x07 {
-					i++
-					break
-				}
-				if data[i] == 0x1b && i+1 < len(data) && data[i+1] == '\\' {
-					i += 2
-					break
-				}
-				i++
-			}
-		default:
-			i += 2
-		}
-	}
-	return string(out)
-}
-
-const (
-	codexLaunchGateWithin = 10 * time.Second
-	codexLaunchGraceAfter = 5 * time.Second
-)
-
-const (
-	CodexLaunchGateTimer  stepclock.Name = "codex-launch-gate"
-	CodexLaunchGraceTimer stepclock.Name = "codex-launch-grace"
-)
-
-func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest, launch *launchWatch) error {
-	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
-		return nil
-	}
-	snapshots, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
-	if !ok {
-		return errors.New("automation launch cannot verify Codex directory trust gate")
-	}
-	terminal := d.primaryTerminal(req.IDs.SessionID)
-	_, stream, err := d.ptyBackend.Attach(d.life.Context(), terminal, "codex-launch-gate:"+string(req.IDs.SessionID), ptybackend.AttachOptions{OmitReplay: true})
-	if err != nil {
-		return fmt.Errorf("automation launch cannot watch the Codex screen: %w", err)
-	}
-	defer stream.Close()
-	output := stream.Events()
-	deadline := d.clock.NewTimer(CodexLaunchGateTimer, codexLaunchGateWithin)
-	defer deadline.Stop()
-	grace := d.clock.NewTimer(CodexLaunchGraceTimer, codexLaunchGraceAfter)
-	defer grace.Stop()
-	var launched <-chan struct{}
-	if launch != nil {
-		launched = launch.done
-	}
-	acknowledged, graceOver := false, false
-	for {
-		if launch != nil && launch.settled() {
-			return nil
-		}
-		info, err := snapshots.ScreenSnapshot(d.life.Context(), terminal)
-		if err == nil {
-			var payload []byte
-			if info.Screen != nil {
-				payload = info.Screen.Payload
-			}
-			switch {
-			case strings.Contains(stripANSIForPromptMatch(payload), codexDirectoryTrustPrompt):
-				if !acknowledged {
-					if err := d.writeSessionPTY(req.IDs.SessionID, []byte("\r"), "automation"); err != nil {
-						return fmt.Errorf("accept Codex directory trust: %w", err)
-					}
-					acknowledged = true
-				}
-			case acknowledged:
-				return nil
-			case graceOver && len(payload) > 0:
-				return nil
-			}
-		}
-		select {
-		case _, open := <-output:
-			if !open {
-				output = nil
-			}
-		case <-grace.C():
-			graceOver = true
-		case <-launched:
-		case <-deadline.C():
-			if acknowledged {
-				return errors.New("automation launch: Codex directory trust prompt did not clear")
-			}
-			return errors.New("automation launch did not produce a verifiable Codex screen")
-		case <-d.life.Context().Done():
-			return errors.New("automation launch: the daemon stopped before the Codex screen was verified")
-		}
-	}
-}
 func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.WorkRequest, directory string) error {
 	seed, _, err := d.readSeed(req.IDs.SeedID)
 	if err != nil {

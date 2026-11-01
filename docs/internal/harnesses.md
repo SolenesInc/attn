@@ -586,6 +586,22 @@ Read in the source at openai/codex rust-v0.164.0:
   main repository for a worktree), or on the folder outside git
   (`app-server/src/request_processors/thread_processor.rs`).
 
+Probed on 0.166.0, a plain TUI in a PTY with its own `CODEX_HOME`, and read in
+the source at rust-v0.166.0:
+
+- The folder trust question reads "Trust this folder?", with "1. Trust and
+  continue" selected.
+- A plain TUI asks its app-server about trust too, with or without
+  `--no-daemon`, so `-c projects."<folder>".trust_level="trusted"` does not
+  stop the question (`tui/src/onboarding/directory_trust.rs`).
+- Trust saved on a repository's root covers its worktrees and subfolders: the
+  TUI does not ask there.
+- In a folder saved untrusted, the TUI asks a different question, "Open
+  restricted" or "Quit".
+- The TUI sends no OSC 7501 while the question is open. It reports
+  `state=idle` once its chat starts, 3.6 s after Enter in one probe, because
+  only the chat widget reports status (`tui/src/chatwidget.rs`).
+
 Read in the source at openai/codex 1ffa95e:
 
 - `active` carries `waitingOnUserInput` while a turn waits on the user's

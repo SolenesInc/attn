@@ -681,6 +681,29 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	return result
 }
 
+func (s *Store) StartedConversationDirectories() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`
+		SELECT DISTINCT s.directory FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
+		WHERE s.agent != ? AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, protocol.AgentShellValue)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var directories []string
+	for rows.Next() {
+		var directory string
+		if rows.Scan(&directory) == nil {
+			directories = append(directories, directory)
+		}
+	}
+	return directories
+}
+
 func (s *Store) HasStartedConversationIn(directories []string) bool {
 	if len(directories) == 0 {
 		return false
