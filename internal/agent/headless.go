@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/launchenv"
@@ -52,6 +54,9 @@ func (b *boundedHeadlessOutput) Write(p []byte) (int, error) {
 
 const headlessFailureOutputLimit = 4 << 10
 
+// A cancelled real Claude run returned 50 ms after its kill. Receipt: seed s-jvn7nq, production-launcher-receipts.txt (2026-11-01).
+const headlessPipeDrainLimit = 5 * time.Second
+
 func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
@@ -64,6 +69,9 @@ func runHeadlessCommand(
 		return HeadlessTaskResult{}, nil, headless.Refusal(provider + " headless task")
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = headlessPipeDrainLimit
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		cmd.Dir = dir
 	}

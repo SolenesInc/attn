@@ -254,3 +254,33 @@ func TestRefinementFailuresNameTheirCause(t *testing.T) {
 		t.Errorf("an empty answer gave %+v", got)
 	}
 }
+
+func TestCancellingStopsTheHarnessALauncherStarted(t *testing.T) {
+	w := newDictationWorld(t)
+	app := w.TrustedApp()
+	launcher := w.Path("tools", "codex")
+	if err := os.MkdirAll(w.Path("tools"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nexec 3<&0\n\"" + os.Getenv("ATTN_CODEX_EXECUTABLE") + "\" \"$@\" <&3 3<&- &\nwait $!\n"
+	if err := os.WriteFile(launcher, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setSetting(t, app, "codex_executable", launcher)
+	setSetting(t, app, "dictation.refinement_agent", "codex")
+
+	cancelled := dictationRefine(app, "first thought", 2*time.Second)
+	held := w.HeadlessTask()
+	app.Send(protocol.DictationRefineCancelMessage{Cmd: protocol.CmdDictationRefineCancel, RequestID: cancelled.RequestID})
+	held.AwaitExited()
+	held.Answer("First thought.")
+
+	next := dictationRefine(app, "second thought", 2*time.Second)
+	w.HeadlessTask().Answer("Second thought.")
+	if got := dictationResult(app, next.RequestID); protocol.Deref(got.RefinedText) != "Second thought." {
+		t.Fatalf("a refinement through the launcher answered %+v", got)
+	}
+	if n := dictationResultsFor(app, cancelled.RequestID); n != 0 {
+		t.Errorf("the cancelled refinement answered %d times", n)
+	}
+}
