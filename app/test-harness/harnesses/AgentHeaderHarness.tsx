@@ -129,11 +129,14 @@ export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps
   const usageRequest = options.get('usage') ?? undefined;
   const tileWidth = options.get('width');
   const selection = options.get('selection') as DesktopSelectionStyle | null;
+  const asksShown = useAsksStore((state) => state.asks.length === asks.length);
   useEffect(() => {
     useAsksStore.getState().setAsks(asks);
-    onReady();
     setTriggerRerender(() => noop);
-  }, [onReady, setTriggerRerender]);
+  }, [setTriggerRerender]);
+  useEffect(() => {
+    if (asksShown) onReady();
+  }, [asksShown, onReady]);
   return (
     <DaemonApiProvider api={api}>
       <div

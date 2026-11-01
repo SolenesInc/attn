@@ -33,6 +33,9 @@ const initHarnessAPI = (componentName: string): HarnessAPI => ({
   },
 });
 
+let markHarnessReady: () => void = () => {};
+window.__HARNESS_READY__ = new Promise<void>((resolve) => { markHarnessReady = resolve; });
+
 function HarnessApp() {
   const params = new URLSearchParams(window.location.search);
   const componentName = params.get('component');
@@ -73,6 +76,7 @@ function HarnessApp() {
 
   const handleReady = () => {
     window.__HARNESS__.ready = true;
+    markHarnessReady();
     console.log(`[Harness] ${componentName} ready`);
   };
 

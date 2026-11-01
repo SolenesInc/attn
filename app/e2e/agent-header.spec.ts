@@ -64,7 +64,7 @@ function readHeaders(page: Page): Promise<HeaderReceipt[]> {
 test('agent headers keep the dot, title and signals from 180px to 1200px, in one height, inside their rows', async ({ page }) => {
   await page.setViewportSize({ width: 1200 * TILES + 200, height: 360 });
   await page.goto('/test-harness/?component=AgentHeader');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await expect(page.locator('.desktop-pane-header')).toHaveCount(TILES);
 
   const customRoleLevels = new Set<string | null>();
@@ -98,7 +98,7 @@ test('agent headers keep the dot, title and signals from 180px to 1200px, in one
 test('a usage receipt requested for a narrow tile shows the badge and opens beneath it', async ({ page }) => {
   await page.setViewportSize({ width: 180 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=180&usage=release');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const badge = page.getByTestId('session-usage-release');
   const receipt = page.locator('.session-usage-popover');
   await expect(badge).toBeVisible();
@@ -120,7 +120,7 @@ for (const selection of ['rail', 'spotlight'] as const) {
   test(`inactive agent tiles dim the body and subline and keep signals lit under ${selection}`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`/test-harness/?component=AgentHeader&selection=${selection}`);
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await expect(page.locator(`.session-terminal-desktop.desktop-selection--${selection}.multi-leaf`)).toHaveCount(1);
     await expect(page.locator('.desktop-pane[data-pane-kind="agent"]')).toHaveCount(TILES);
     await expect(page.locator('.desktop-pane.active')).toHaveAttribute('data-pane-id', 'pane-release');
@@ -162,18 +162,18 @@ for (const selection of ['rail', 'spotlight'] as const) {
       };
     });
 
-    await expect.poll(() => look('pane-release')).toMatchObject({
+    const active = await look('pane-release');
+    expect(active).toMatchObject({
       dot: 1, askOpacity: 1, settling: 1, body: 1, subline: 1, titleIsSecondary: false,
     });
-    const active = await look('pane-release');
-    for (const paneId of ['pane-sync', 'pane-bare', 'pane-proto']) {
-      await expect.poll(() => look(paneId), paneId).toMatchObject({ dot: 1, body: 0.58, subline: 0.7, titleIsSecondary: true });
+    const inactive = Object.fromEntries(await Promise.all(['pane-sync', 'pane-bare', 'pane-proto'].map(async (paneId) => [paneId, await look(paneId)] as const)));
+    for (const [paneId, tile] of Object.entries(inactive)) {
+      expect(tile, paneId).toMatchObject({ dot: 1, body: 0.58, subline: 0.7, titleIsSecondary: true });
     }
-    const sync = await look('pane-sync');
-    expect(sync.askOpacity).toBe(1);
-    expect(sync.askBox).toEqual(active.askBox);
+    expect(inactive['pane-sync'].askOpacity).toBe(1);
+    expect(inactive['pane-sync'].askBox).toEqual(active.askBox);
     for (const paneId of ['pane-sync', 'pane-bare']) {
-      expect((await look(paneId)).geometry, paneId).toEqual(active.geometry);
+      expect(inactive[paneId].geometry, paneId).toEqual(active.geometry);
     }
   });
 }

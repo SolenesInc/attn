@@ -25,6 +25,7 @@ export interface HarnessAPI {
 declare global {
   interface Window {
     __HARNESS__: HarnessAPI;
+    __HARNESS_READY__: Promise<void>;
   }
 }
 
