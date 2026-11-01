@@ -6,8 +6,10 @@ import { deflateSync } from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync, spawn } from 'node:child_process';
-import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp, createSessionAndWaitForInitialPane } from './common.mjs';
+import http from 'node:http';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -76,6 +78,7 @@ const testBinding = 'Control+Alt+B';
 const instance = instanceForAppPath(options.appPath);
 assert.ok(instance, 'Quick Capture scenarios require a named instance');
 const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
+const runAttnAsync = args => promisify(execFile)(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 const mailbox = `cap-${crypto.randomUUID()}`;
 const home = path.join(dataDirForInstance(instance), 'crew', mailbox);
 function saveNativeTrace(name) {
@@ -707,11 +710,34 @@ try {
     await key('d', ['control', 'option']);
     const mainPress = await waitForPress(1);
 
+    let pageFocused;
+    const focused = new Promise(resolve => { pageFocused = resolve; });
+    const page = http.createServer((request, response) => {
+      if (request.url === '/focused') { response.end(); pageFocused(); return; }
+      response.setHeader('content-type', 'text/html');
+      response.end('<title>Dictation browser</title><body><textarea style="width:100%;height:95vh"></textarea><script>document.querySelector("textarea").addEventListener("focus",()=>fetch("/focused"))</script>');
+    });
+    runner.registerCleanup('dictation-page', () => new Promise(resolve => page.close(resolve)));
+    await new Promise(resolve => page.listen(0, '127.0.0.1', resolve));
+    const sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd: runner.runDir, label: 'Dictation browser', agent: 'shell' });
+    await runAttnAsync(['browser', 'open', `http://127.0.0.1:${page.address().port}/`, '--session', sessionId]);
+    await runAttnAsync(['browser', 'wait', '--using', 'css', '--value', 'textarea', '--state', 'visible', '--timeout', '15000', '--session', sessionId]);
+    const browserDesktop = observer.desktopOf(sessionId);
+    await observer.setCurrentDesktop(browserDesktop.id);
+    const hostSelector = `[data-session-terminal-desktop="${browserDesktop.id}"] .browser-tile-host`;
+    await client.request('dom_wait', { selector: hostSelector, timeoutMs: 15_000 });
+    await driver.click({ selector: hostSelector, at: { x: 0.5, y: 0.5 } }, { withoutReceipt: 'the browser page takes it' });
+    await focused;
+    const { label: browserLabel } = await client.request('get_browser_focus_state');
+    assert.ok(browserLabel, 'Clicking the page focuses the browser webview');
+    await key('d', ['control', 'option']);
+    const browserPress = await waitForPress(2);
+
     await fixture.activateApp();
     await fixture.runInputDriver(['wait_frontmost']);
     await openCapture();
     await key('d', ['control', 'option']);
-    const capturePress = await waitForPress(2);
+    const capturePress = await waitForPress(3);
     assert.equal(await driver.frontmostBundleId(), fixtureId, 'Dictation inside Quick Capture does not activate attn');
     await key('escape');
     await hidden();
@@ -723,9 +749,10 @@ try {
     await openCapture('Quick Capture after dictation unbind');
     await key('escape');
     await hidden();
-    runner.writeJson('dictation-routing.json', { bareRightOption, outside, fixtureKey, inside, mainPress, capturePress });
+    runner.writeJson('dictation-routing.json', { bareRightOption, outside, fixtureKey, inside, mainPress, browserPress, capturePress });
     assert.deepEqual(mainPress, { action: 'dictation', window: 'main', browser: null });
-    assert.deepEqual(capturePress, { action: 'dictation', window: 'capture', browser: null });
+    assert.deepEqual(browserPress, { action: 'dictation', window: 'main', browser: browserLabel });
+    assert.deepEqual(capturePress, { action: 'dictation', window: 'capture', browser: null }, 'A browser focused in main does not follow the press into Quick Capture');
   });
   await runner.step('dismiss_after_user_changed_apps', async () => {
     await openCapture();

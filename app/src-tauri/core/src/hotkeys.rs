@@ -332,10 +332,15 @@ fn dispatch(app: &AppHandle, action: Action) {
     match action {
         Action::QuickCapture => crate::quick_capture::show(app),
         Action::Dictation => {
+            let window = key_window_label(app);
+            let browser = crate::browser_host::focused_browser_label().filter(|label| {
+                app.get_webview(label)
+                    .is_some_and(|webview| Some(webview.window().label()) == window.as_deref())
+            });
             let press = Press {
                 action,
-                window: key_window_label(app),
-                browser: crate::browser_host::focused_browser_label(),
+                window,
+                browser,
             };
             if crate::instance::automation_enabled() {
                 app.state::<Mutex<Hotkeys>>()
