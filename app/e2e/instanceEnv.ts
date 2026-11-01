@@ -35,6 +35,11 @@ export interface E2EPorts {
 // at config-load time; a named instance gets a disjoint band so agents can't collide.
 export function e2ePorts(): E2EPorts {
   const instance = (process.env.ATTN_INSTANCE ?? '').trim();
+  const daemonPort = process.env.ATTN_E2E_DAEMON_PORT?.trim();
+  const vitePort = process.env.ATTN_E2E_VITE_PORT?.trim();
+  if (daemonPort && vitePort) {
+    return { instance, daemonPort, vitePort };
+  }
   if (instance === '') {
     return { instance: '', daemonPort: '19849', vitePort: '1421' };
   }

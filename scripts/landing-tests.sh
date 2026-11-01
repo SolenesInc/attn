@@ -78,6 +78,10 @@ if [ -n "$app_entries" ]; then
   make -s app/node_modules/.attn-installed
   pnpm --dir app run --silent verify:ghostty-vt
   mkdir -p "$work/data"
+  read -r daemon_port vite_port < <(node -e '
+    const net = require("net");
+    const listen = () => new Promise(done => { const s = net.createServer().listen(0, "127.0.0.1", () => done(s)); });
+    Promise.all([listen(), listen()]).then(servers => { console.log(servers.map(s => s.address().port).join(" ")); servers.forEach(s => s.close()); });')
   run=0
   while read -r runner file; do
     case "$runner" in
@@ -88,7 +92,7 @@ if [ -n "$app_entries" ]; then
     run=$((run + 1))
     status=0
     env -u ATTN_DB_PATH -u ATTN_SOCKET_PATH -u ATTN_CONFIG_PATH -u ATTN_PLUGIN_DIR \
-      ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" \
+      ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" ATTN_E2E_DAEMON_PORT="$daemon_port" ATTN_E2E_VITE_PORT="$vite_port" \
       go tool test-history capture "$runner" --unit "$runner $file" --receipt-out "$work/app-$run.json" -- "${command[@]}" || status=$?
     if ! summarize "$work/app-$run.json" "$status" "$runner $file"; then
       failed=1
