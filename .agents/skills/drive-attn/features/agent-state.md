@@ -1,8 +1,8 @@
 # Agent state
 
-What each agent is doing right now, like a presence status, and why attn
-thinks so: launching, working, waiting for the user, needs approval,
-scheduled, idle, recoverable or unknown. attn reads the state from what the
+What each agent is doing right now, and why attn gives it that state. The
+states are launching, working, waiting for the user, needs approval,
+scheduled, idle, recoverable and unknown. attn reads the state from what the
 harness reports and, when a turn ends, from the last message. People see the
 state beside every agent in the sidebar, the home screen and the palette.
 Agents read the state of every session with `attn agent list` and
@@ -14,7 +14,7 @@ Agents read the state of every session with `attn agent list` and
 - `state-shown`: the state beside each agent in the sidebar, the home screen's groups and the palette.
 - `agent-list`: every session on the daemon with its harness, profile, state and whether a turn is owed.
 - `agent-peek`: a session's state, last reply and screen, read without interrupting it.
-- `state-explain`: the claims behind a state, which source made each, and whether attn applied it.
+- `state-explain`: the claims behind a state, the source of each claim, and whether attn applied the claim.
 - `approval`: a permission prompt puts the agent in needs approval until someone answers it.
 - `stop-verdict`: when a turn ends, attn decides waiting or idle from the turn's last message.
 - `activity-line`: a one-line summary of what each agent is doing, written by a background agent.
@@ -26,7 +26,7 @@ Agents read the state of every session with `attn agent list` and
 - Sidebar, in desktop flow (`app/src/components/SidebarRows.tsx`): each agent's row, `[data-testid="sidebar-session-<session>"]`, carries the state in `.session-lead[data-state]`, and its harness logo is labelled "<Harness> · <state>", such as "Claude · working". With harness logos off, a state dot takes its place ([harnesses.md](harnesses.md)).
 - Home screen, ⌘⇧H (`session.goToDashboard`, `app/src/shortcuts/registry.ts`): sessions grouped by state, "Waiting for input", "Pending approval", "Launching", "Working", "Scheduled", "Idle", "Recoverable" and "Unknown / error", each group with a `data-testid` such as `session-group-waiting` and `session-group-pending`, and each agent's activity line (`app/src/components/Dashboard.tsx`). The home screen itself is [home.md](home.md).
 - The palette's agent rows show whether an agent waits or needs approval (`app/src/components/palette/agentPaletteRows.ts`).
-- Settings, Background agents: "Generate activity lines" (`[data-testid="settings-activity-toggle"]`, setting `activity.enabled`), which stays disabled until the user chooses an agent in "Session activity model" (setting `activity.config`), and when lines are written (`app/src/components/SessionActivitySettings.tsx`).
+- Settings, Background agents (`app/src/components/SessionActivitySettings.tsx`): the "Generate activity lines" switch (`[data-testid="settings-activity-toggle"]`, setting `activity.enabled`) stays disabled until the user chooses an agent in "Session activity model" (setting `activity.config`). Two refresh fields, "Refresh on home (seconds)" and "Refresh elsewhere in the app (seconds)", set how often lines are written.
 - Their own shell: the verbs below.
 
 ### Agents
@@ -40,7 +40,7 @@ Agents read the state of every session with `attn agent list` and
 
 - The harness reports through hidden verbs its hooks call: `attn _hook-session-start`, `_hook-state`, `_hook-notification`, `_hook-stop`, `_hook-stop-failure`, `_hook-compact` and `_hook-tool-use` (`cmd/attn/main.go`, and Claude Code's hook settings in `internal/hooks/hooks.go`). Codex under shared Codex reports through its app-server.
 - Each session's monitor watches the agent on the machine where the agent runs and keeps the agent's state (`internal/daemon/monitors.go`, `internal/daemon/session_state.go`).
-- When a turn ends, a background model judges whether the last message waits for the user (`internal/daemon/turn.go`, prompt `internal/prompts/content/turn-classifier/classify.md`, run by `internal/daemon/headless_tasks.go`).
+- When a turn ends, a background model judges from the last message whether the agent waits for the user (`internal/daemon/turn.go`, prompt `internal/prompts/content/turn-classifier/classify.md`, run by `internal/daemon/headless_tasks.go`).
 - With activity lines on, a background model writes each agent's line while someone can see it (`internal/daemon/activity.go`, prompts in `internal/prompts/content/activity/`).
 
 ## Driving it
@@ -70,7 +70,7 @@ Preconditions:
   - Press ⌘⇧H with `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`: `bridge dom_text '{"selector":"[data-testid=\"session-group-pending\"]"}'` reads `Pending approval` and `state-agent`.
   - Open the agent palette with ⌘K (`bridge native_key '{"key":"k","modifiers":["command"]}'`): `bridge dom_wait '{"selector":"[data-testid=\"palette-agent-state-agent\"] .unified-palette-pill.is-approval","timeoutMs":5000}'` matches and the row reads `approval`.
   - Press Escape.
-  - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, `session-group-waiting` holds the row, and in the agent palette, opened again with ⌘K, the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
+  - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, and `session-group-waiting` holds the row. Open the agent palette again with ⌘K: the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
 - **Why.** Run `./attn state explain state-agent`. It prints `state:   waiting_input`, then a table with the columns OBSERVED, SOURCE, CLAIM, OUTCOME and WHY, holding a `hook_notify` row whose claim is `permission_prompt`, a `resolver` row applying `pending_approval`, and the rows that followed. `--json` prints the same facts.
 - **Peek is passive.** Run `./attn agent peek state-agent` twice. The `since` time on the state line does not move, and the agent's screen shows no input.
 - **Stopped.** Run `wsctl kill-session --id state-agent`. `./attn agent list` shows `idle`, peek shows `process exited with code`, `./attn state explain state-agent --json` holds an observation with source `resolver`, claim `idle` and detail `process_exited`, and the sidebar row's `data-state` follows. See [agent-launch.md](agent-launch.md) for resuming the agent.
@@ -84,7 +84,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: after an app or daemon restart, each live agent's monitor picks its state up again from where the agent runs. A machine restart leaves agents attn can bring back as `recoverable`. An agent on the embedded backend stops when the daemon restarts.
+- **Durability across restarts**: after an app or daemon restart, each live agent's monitor reads the agent's state again on the machine where the agent runs. A machine restart leaves agents attn can bring back as `recoverable`. An agent on the embedded backend stops when the daemon restarts.
 - **Outposts**: an agent on an outpost is watched by a monitor on that machine. While the agent's host is offline, the agent's row stays and attn marks it offline.
 - **Profiles**: `attn agent list` names every session on the daemon, across profiles, with a PROFILE column. The sidebar and home screen show the current profile's agents.
 - **Performance and idle cost**: the needs-approval dot flashes and the scheduled dot pulses, both opacity animations that run while an agent stays in that state. `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading transcripts. A change to the state indicator needs the repaint check in `docs/internal/perf-testing.md`.
@@ -103,9 +103,9 @@ Preconditions:
 
 - The CLI prints the wire names `waiting_input` and `pending_approval`. The home screen says "Waiting for input" and "Pending approval". The glossary says waiting and needs approval. Match the name each view prints.
 - The baseline refuses background model tasks, so the turn classifier never runs. The mock decides instead: a turn with a reply ends `waiting_input`, a turn with no action ends `idle`. A real harness on the baseline can sit in a state the classifier would have changed.
-- The needs-approval step stands in for Claude Code's permission dialog through the same hook it calls. Report it while the agent is idle: the mock repeats its busy title every half second during a turn, and busy evidence newer than the prompt outranks the prompt. A real dialog, and the Guardian answering one, need a real harness ([auto-mode.md](auto-mode.md)).
-- `wsctl input` counts as the user typing, which opens and settles turns as typing would. The turn itself is [queue-flow.md](queue-flow.md).
+- The needs-approval step stands in for Claude Code's permission dialog through the same hook it calls. Report the prompt while the agent is idle: the mock repeats its busy title every half second during a turn, and busy evidence newer than the prompt outranks the prompt. A real dialog, and the Guardian answering one, need a real harness ([auto-mode.md](auto-mode.md)).
+- `wsctl input` counts as the user typing, so it opens and settles turns as typing does. The turn itself is [queue-flow.md](queue-flow.md).
 - The activity switch is disabled until an agent is chosen, so a native click on the baseline does nothing. You can set `activity.enabled` from the shell without an agent, and then `attn activity` reports that no agent is selected. With an agent chosen the status reads `activity: on`, and no line is ever written while background tasks are off. `presence: away` means nobody is looking, and nothing is generated then either.
 - `attn state explain` on a session whose state predates the daemon's start prints `No state observations recorded.`. Send the agent a prompt to get rows.
 - A stopped agent reads `idle`, not `recoverable`, as [agent-launch.md](agent-launch.md) explains.
-- Working but wrong: `attn agent list` crosses profiles, though everything else keeps to one.
+- Working but wrong: `attn agent list` lists sessions from every profile, while everything else shows one profile.

@@ -33,8 +33,8 @@ Your work ends when the landing step pushes. Report the seed's checks with the
 landed commits, and harvest.
 
 An Orchestrator reviews a Builder's work after the work lands. When a
-check is rejected with `--ring`, attn rings the Builder through the Builder's
-delegation watch, as [Orchestration](orchestration.md) describes for harvested
+reviewer rejects a check with `--ring`, attn rings the Builder through the
+Builder's delegation watch, as [Orchestration](orchestration.md) describes for harvested
 seeds. Land each fix as a new landing.
 
 ## A trunk declaration

@@ -32,14 +32,15 @@ When `reviewed` does not contain the head yet, the script stops. Run the
 Otherwise the script cuts `release/vX.Y.Z` from that commit, compiles the
 commits since the last release into `CHANGELOG.md`, bumps every version, and
 opens a PR to `main`. Merge the PR once `PR gate` and `App acceptance` are
-green. The merged commit is the release commit. CI tags and publishes it once
-its Acceptance is green and `reviewed` contains it, whichever comes last: CI
-finishing on the release commit, or a review moving `reviewed` to contain it.
+green. The merged commit is the release commit. CI tags and publishes the
+release commit once both hold: its Acceptance is green and `reviewed` contains
+it. Whichever happens last triggers the publish: CI finishing on the release
+commit, or a review moving `reviewed` to contain it.
 
 `main` may keep moving while the release PR is open. Changes that land after
 the release was cut ship in the release, but this release's notes do not list
-them. The next release's notes do. They are reviewed with the release commit
-before it ships.
+them. The next release's notes do. The review automation reviews these changes
+together with the release commit before the release ships.
 
 If the automated app acceptance cannot cover the release PR or the merged
 release commit, record a manual receipt for that exact commit with the command

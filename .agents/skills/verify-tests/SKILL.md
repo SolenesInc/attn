@@ -23,7 +23,7 @@ does not repeat them.
 3. Read the code change, so you know which promises the change touches.
 4. For each new or changed test, search the suite for tests of the same
    behavior: the same commands, events, CLI verbs and world helpers. Read
-   them. Duplication usually sits across the edge of the diff.
+   them. The duplicates are usually in tests outside the diff.
 
 ## Run
 

@@ -10,10 +10,11 @@ conversation. Write it that way even when you plan to do the work yourself.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
   Point to shared context and say what the reader needs from it.
 - Define scope. Say what the work covers, what the tender may change, and what
-  the tender must leave alone. Say which decisions need the user. What the tender
-  may do without asking, and which actions wait for the user, is the seed's
-  authorization, which `attn delegate --authorization` sets from the user's
-  words, so leave it out of the body. Follow the
+  the tender must leave alone. Say which decisions need the user. Leave the seed's
+  authorization out of the body. The authorization lists what the tender may do
+  without asking and which actions wait for the user, and
+  `attn delegate --authorization` sets the authorization from the user's words.
+  Follow the
   `attn-workflow` skill's Delivery reference for repository delivery.
 - Specify completion. Define the checks that verify the result on the seed, as
   CHECKS below describes, and cite each check in the body by id. Say where to
@@ -78,7 +79,7 @@ before the app child starts.
 ```json
 {
   "title": "Search moves to the daemon",
-  "body": "Move session search from the app to the daemon, so every client gets the same results from one ranking. Out of scope: changing what matches or how results rank.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nD1. Ranking moves to the daemon with matching, so the app renders results in the order it receives them. Open: whether search also covers ended sessions. The endpoint tender may decide, and nothing waits on it.\n\n## Tradeoffs accepted\nWe accept two search implementations between the two delivery steps, in exchange for each child landing on its own. The client index stays until the app uses daemon results.\n\n## Findings\nRead at a1b2c3d.\nF1. The app breaks match ties by recency (app/src/search/rank.ts). An experiment that ranked by match score alone reordered equal matches. The endpoint keeps recency as the tie-breaker. Dropping recency looks harmless and changes results.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message and its generated types\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message needs an edit to main.tsp and a run of make generate-types. Commit the generated types and the protocol schema hash.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query, and the keyboard moves the selection\n      on reply:    the app drops a reply for an older query_id\n      on failure:  the query and selection stay, and the results show the error until the next query\n      on restart:  starts empty and persists nothing\n    daemon: none added, and each query reads the live session set\n\n## Execution\nLand the endpoint child first, and record the contract on its seed. Land the app child afterwards, in its own delivery step.\n\n## Completion\nThe checks are on the seeds. Attach the recording for C2 to the app child, and cite it in that child's report.\n\n## Alternatives rejected\nFor D1: the daemon matches and the app keeps ranking: each client would rank on its own, and removing per-client ranking is the point of this plot.",
+  "body": "Move session search from the app to the daemon, so every client gets the same results from one ranking. Out of scope: changing what matches or how results rank.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nD1. Ranking moves to the daemon with matching, so the app renders results in the order it receives them. Open: whether search also covers ended sessions. The endpoint tender may decide, and nothing waits on it.\n\n## Tradeoffs accepted\nWe accept two search implementations between the two delivery steps, in exchange for each child landing on its own. The client index stays until the app uses daemon results.\n\n## Findings\nRead at a1b2c3d.\nF1. The app breaks match ties by recency (app/src/search/rank.ts). An experiment that ranked by match score alone reordered equal matches. The endpoint keeps recency as the tie-breaker. Dropping recency looks harmless and changes results.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message and its generated types\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message needs an edit to main.tsp and a run of make generate-types. Commit the generated types and the protocol schema hash.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query, and the keyboard moves the selection\n      on reply:    the app drops a reply for an older query_id\n      on failure:  the query and selection stay, and the results show the error until the next query\n      on restart:  starts empty and persists nothing\n    daemon: none added, and each query reads the live session set\n\n## Execution\nLand the endpoint child first, and record the contract on its seed. Land the app child afterwards, in its own delivery step.\n\n## Completion\nThe checks are on the seeds. Attach the recording for C2 to the app child, and cite it in that child's report.\n\n## Alternatives rejected\nFor D1: the daemon matches and the app keeps ranking. Each client would rank on its own, and removing per-client ranking is the point of this plot.",
   "checks": [
     {"id": "C3", "shared": true, "text": "The child is delivered through the repository's own delivery process, and that step's own checks pass. The report links the pull request or the landed commits."}
   ],
@@ -132,21 +133,21 @@ unique across a plot tree and never reused. A removed check keeps its id, and
 
 On a plot, `"shared": true` puts a check on every leaf seed below the plot,
 meaning every seed with no children. The tender of each leaf proves the check
-with that leaf's own report, and the plot shows how many are confirmed. Put a check that only one child needs on
-that child. A plot check without `shared` is the plot's own.
+with that leaf's own report, and the plot shows how many are confirmed. Put a
+check that only one child needs on that child. A plot check without `shared` is the plot's own.
 
     attn seed check report <id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
 If you do the work, report each check with its own `attn seed check report`
-call as soon as you prove it. The first
-line of `-m` is the summary line that `attn seed show` prints. The summary line
-is at most 400 characters, and attn refuses a longer one. The lines after it are
-detail, and attn keeps them in the report's check note. `--evidence` takes a
-local file, which attn copies onto the seed, an artifact already on the seed, or
-an http(s) URL. Reporting again creates a new report. The new report replaces the last
-report and clears the verdict. Citing a changed file under the same name
+call as soon as you prove it. The first line of `-m` is the summary line that
+`attn seed show` prints. The summary line is at most 400 characters, and attn
+refuses a longer one. The lines after it are detail, and attn keeps them in the
+report's check note. `--evidence` takes a local file, which attn copies onto the
+seed, an artifact already on the seed, or an http(s) URL. Reporting again
+creates a new report. The new report replaces the last report and clears the
+verdict. Citing a changed file under the same name
 replaces the old file. `attn seed show` marks a report whose cited file changed
 after the report, until the next report. For a check that does not apply, report
 why and cite what shows it.
@@ -209,8 +210,8 @@ file. Copy leaves the source alone. attn refuses Move for a tracked Git file, so
 attach a name the seed already has, attn replaces that file, whether the new
 file comes from the same source or another one, and does not keep the old
 bytes. Re-attaching an unchanged file changes nothing. Detach never overwrites
-its destination. The seed-owned file stays after the source worktree, the
-session, or the seed closes.
+its destination. The seed keeps its owned file after the source worktree goes
+away, the session ends, or the seed closes.
 Every visible regular file directly under the seed's artifact directory belongs
 to the seed, so ordinary filesystem edits and renames appear in the Garden.
 
@@ -222,8 +223,8 @@ Repository, Notebook and URL documents remain linked where they already live:
     attn seed detach <id> --path <file.md> --reference
 
 The Garden labels old path associations as linked files. To bring a linked file
-into seed ownership, use the Garden's Move or Copy action on that file. The link disappears only after
-the transfer succeeds.
+into seed ownership, use the Garden's Move or Copy action on that file. The
+link disappears only after the transfer succeeds.
 
 HANDOFFS AND STEERING
 

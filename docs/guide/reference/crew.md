@@ -119,9 +119,9 @@ A member files its letter with `attn handoff -m "<letter>"` (or `-m -` to
 read it from stdin). Attn saves the letter as a new file in `handoffs/` in the
 member's home and never edits the file. A correction is a new letter. When the
 member files a letter, the session ends and the member sleeps until something
-wakes the member. The exception is a letter that a harness change you
-applied asked for. That letter ends the session and starts the next session on
-the new harness. See [Applying changed settings](#applying-changed-settings).
+wakes the member. The exception is the letter Attn asks for when you
+apply a harness change. Filing that letter ends the session and starts the next
+session on the new harness. See [Applying changed settings](#applying-changed-settings).
 
 If the session cannot end or the next one cannot start, the letter stays filed
 and the session keeps running. `attn handoff --retry` tries again with that letter. To give up on a harness switch instead, ask the member to sleep first. The retry then ends the session and leaves the member asleep.

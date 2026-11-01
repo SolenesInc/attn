@@ -104,7 +104,7 @@ The moves are tend, park, harvest, wither and replant. A move needs no `--force`
 
 A move also needs no `--force` after the tender's session ends, because a session's claim lapses when the session ends. The claim holds again if the session resumes. A crew member's claim lasts across the member's sessions.
 
-Everyone else needs `--force`, which the log also records. A call without a live session has no standing. A move records who acted and whose claim ended, and prints the audit note and who the move rang. A delegate hears the move through the delegate's delegation watch.
+Everyone else needs `--force`, and the log records that they used it. A call without a live session has no standing. A move records who acted and whose claim ended, and prints the audit note and the sessions attn rang. A delegate hears the move through the delegate's delegation watch.
 
 ## Closing a plot
 
@@ -125,7 +125,7 @@ let attn close it:
 
 With no url, the command takes this session's single open pull request, and
 names the pull requests when there is more than one. A seed you were growing
-goes dormant, and attn releases your claim. Every surface then reads
+goes dormant, and attn releases your claim. Every surface then shows
 `harvests when owner/repo#n merges`. The command merges nothing. When the merge
 lands, attn harvests the seed as the member `attn`, with your reason. Without
 `-m`, attn uses `PR #n merged: <title>`. If a pull request closes without
@@ -147,7 +147,7 @@ A plot's tender hears updates from every seed under the plot, including
 grandchildren, without a watch. When the claim ends, that coverage ends and
 attn withdraws unread updates unless a watch still covers them. Lifecycle moves
 ring current and covering tenders and watching sessions, and print who they
-rang. Harvesting or withering a blocker also rings the parties of each seed that the blocker was blocking and that no other open blocker still holds. Notes stay quiet unless you add `--ring`. A successful
+rang. Harvesting or withering a blocker also rings the parties of each seed it was blocking, unless another open blocker still holds that seed. Notes stay quiet unless you add `--ring`. A successful
 action never rings the session that caused it. Automation acceptance is quiet,
 and its bell waits until the work is ready or the attempt needs attention.
 `attn seed watch <id>` subscribes this session to the seed and its descendants,
@@ -173,7 +173,7 @@ an agent.
 ## Artifacts
 
 To bring a local file into durable seed ownership, choose Move or Copy
-explicitly. Move is recommended. Tracked Git files must use Copy. Attaching a
+explicitly. Prefer Move. Tracked Git files must use Copy. Attaching a
 file replaces any file of the same name on the seed, and `attn seed show` marks
 check evidence replaced after its report. Detaching moves the owned file back
 out and never overwrites:

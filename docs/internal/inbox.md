@@ -2,12 +2,12 @@
 
 ## What the inbox is
 
-The inbox is how attn puts something in front of an agent: messages from other
+The inbox is how attn delivers information to an agent: messages from other
 agents, seed updates, the user's answers and Quick Captures, and attn's own
 notices. A sender saves an item for an address. attn then decides when to ring
-the agent, when to wake an asleep crew member first, and when to stop. A ring
-types what the user wrote into the conversation as the user's message. The
-agent reads everything else with `attn agent inbox`.
+the agent, when to wake an asleep crew member first, and when to stop. In a
+ring, attn types what the user wrote into the conversation as the user's
+message. The agent reads everything else with `attn agent inbox`.
 
 Items are durable. They survive app, daemon and machine restarts. An item stays
 unread until an agent reads it, a ring types it, or attn withdraws or replaces
@@ -116,8 +116,9 @@ tending the seed.
 ### User messages
 
 A user message is text the user wrote or picked in attn: an answer to an ask,
-a Quick Capture, or a change to a seed's authorization. It stands for the user typing into the agent, so a ring
-types it into the agent's conversation as the user's message (see
+a Quick Capture, or a change to a seed's authorization. It stands for the user
+typing into the agent, so attn types it into the agent's conversation as the
+user's message in a ring (see
 [Rings](#rings)), and harness auto-mode reviewers count an approval in the
 message as the user's. A user message does not wait for the agent to finish its
 turn, for the 5 minutes between rings, or for a crew member's wake limit.
@@ -152,8 +153,8 @@ when monitoring recovers.
 
 Notices are attn's own messages to an agent:
 
-- a seed sent to the chief;
-- crew sleep and auto-sleep requests.
+- a seed sent to the chief
+- crew sleep and auto-sleep requests
 
 ## Coalescing
 
@@ -163,9 +164,9 @@ key depends on the kind of item.
 Seed updates merge. The key is the seed, so an address has at most one unread
 update per seed. A later event on that seed adds no new update, no new attempt,
 and no new ring. The merged update keeps the first event's kind and bookmark,
-so the read command returns the later events too. When the first event was a check
-move, the update keeps the move and who made it. An `unblocked` event is the exception: it
-replaces the kind and drops a check move's description. Once a seed update has
+so the read command returns the later events too. When the first event was a
+check move, the update keeps the move and who made it. An `unblocked` event is
+the exception: it replaces the kind and drops a check move's description. Once a seed update has
 used its 3 attempts, later events on that seed stay silent until the agent
 reads the update. The seed's log still has every event.
 
@@ -273,7 +274,7 @@ wakes the member before it rings.
   member like any member.
 - A manual wake does not ring for items that have no attempts left. The agent
   still finds those items with `attn agent inbox`. attn types user messages
-  whatever their attempts.
+  regardless of their attempts.
 
 ## Reading and receipts
 
@@ -282,8 +283,8 @@ oldest first. It leaves out user messages, which only a ring delivers. It
 returns 20 items by default, and `--limit` allows up to 50. The command marks
 the items read, records which session read them, and says how many unread items
 remain. The command ends the outstanding ring of every address it read, even
-when `--limit` left items unread. Those items ring again at the next safe
-prompt.
+when `--limit` left items unread. attn rings again for those items at the next
+safe prompt.
 
 `attn agent inbox <message-id>` reads one peer message once attn has rung it,
 whether or not the session read the message before.
@@ -343,8 +344,8 @@ rings at 10:40, 10:45 and 10:50, and each ring covers both messages.
 
 **A busy agent.** An agent works for an hour and gets 30 messages. Nothing
 rings during the work. When the agent reaches a safe prompt, one ring covers
-all 30, and `attn agent inbox` returns the oldest 20. The other 10 ring again
-at the next safe prompt.
+all 30, and `attn agent inbox` returns the oldest 20. attn rings again for the
+other 10 at the next safe prompt.
 
 **An answer reaches a busy agent.** An agent asks the user, keeps working, and
 gets two peer messages. The user answers. attn types the answer into the agent
@@ -354,7 +355,8 @@ the two messages.
 **The tender changes.** A seed has an unread update for its tender, and then
 another session tends it. attn withdraws the old tender's update, unless the
 old tender also tends a plot above it or watches the seed. The new tender gets
-no update for the earlier event. A message sent to the seed's id goes to the new tender.
+no update for the earlier event. A message sent to the seed's id goes to the
+new tender.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
 member's 8th wake in 12 hours. The reply to the sender names `crew.wake_limit`.

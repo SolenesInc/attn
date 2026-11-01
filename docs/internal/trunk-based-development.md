@@ -1,16 +1,16 @@
 # Trunk-based development
 
 attn is developed trunk-based. Maintainers and their agents commit straight to
-`main`. No pull request stands between a change and `main`. Review comes twice:
-before the change lands, scaled to its risk, and again on `main` afterwards. A
-release ships only commits that have passed both CI and review on `main`.
+`main`. No pull request stands between a change and `main`. Reviewers read each
+change twice: before it lands, scaled to its risk, and again on `main`
+afterwards. A release ships only commits that have passed both CI and review on `main`.
 Contributors working from a fork use [pull requests](pull-requests.md).
 
 ## Landing
 
 A landing is one push of finished commits to `main` through `scripts/land.sh`.
-Work lands in slices, each as soon as it works, so no branch sits waiting and
-turns into conflicts. Unfinished work lands unwired, or behind an experimental
+Work lands in slices, each as soon as it works, so no branch waits and collects
+conflicts. Unfinished work lands unwired, or behind an experimental
 setting that is off by default. The `land-on-main` skill is the
 procedure, from the working branch to the report after the push.
 
@@ -56,12 +56,12 @@ specification.
   landing changes the test. `land.sh` lists a red test and leaves it to the
   sheriff. Once the test has passed on `main` again, it joins every landing that
   runs landing tests.
-- The test stops joining landings once it has passed afresh on 30 later commits
-  of `main`, in the lane where it failed. A commit where the test did not run
+- A formerly red test stops joining landings once it has passed afresh on 30
+  later commits of `main`, in the lane where it failed. A commit where the test did not run
   does not count, and a new failure starts the count over.
 - Runs of unlanded or uncommitted work never count as `main`'s health.
-- `land.sh` counts a failed test that is gone from the checkout and does not run
-  it. Native scenarios have no landing recipe and stay with CI. `land.sh` lists a
+- `land.sh` prints only the number of failed tests that are gone from the
+  checkout and runs none of them. Native scenarios have no landing recipe and stay with CI. `land.sh` lists a
   native scenario that has not cleared as unavailable.
 - The baseline still grows from red `main`. When the test that caught the
   failure runs in seconds, the sheriff's repair adds the test to its group in
@@ -121,8 +121,7 @@ the failure's owner and the repair that landed, so the sheriff does not fix a
 failure that already has an owner or a repair. Every revert gets an owner who
 will land the change again: the commit's live session, or a seed that the chief
 receives. When neither fixing forward nor reverting is clearly right, the sheriff asks the
-user. The
-`sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
+user. The `sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
 release waits for green.
 
 ## Releases

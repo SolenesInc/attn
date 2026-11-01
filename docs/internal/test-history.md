@@ -299,7 +299,11 @@ samples.
 ### Replay
 
 `replay --from <rev>` prints one JSON line per main commit after `<rev>`. For
-each commit, `replay` selects tests from the history before the commit, which is the receipts that had finished by the commit's committer time, and from the commit's own list, tests and diff. Then `replay` compares what the baseline and the landing selection (`baseline`, `landing`) would run with the failures later observed on that commit.
+each commit, `replay` selects tests from two sources. The first is the history
+before the commit: the receipts that had finished by the commit's committer
+time. The second is the commit's own list, tests and diff. Then `replay`
+compares what the baseline and the landing selection (`baseline`, `landing`)
+would run with the failures later observed on that commit.
 `replay` leaves out a receipt without a finish time, such as one `recover`
 sealed, because the time its results existed is unknown. `select` still reads
 that receipt.

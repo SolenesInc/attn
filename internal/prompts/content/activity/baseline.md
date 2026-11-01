@@ -20,9 +20,9 @@ line that contradicts the state is wrong.
 ## The events win over the previous line
 
 Use the previous line for continuity and for what the events do not cover. Where
-the previous line and the events disagree, the events are newer. If the agent has
-moved on, move the line on too. Do not repeat the previous line when something
-new has happened.
+the previous line and the events disagree, the events are newer. If what the
+agent is doing has changed, rewrite the line to describe what the events show.
+Do not repeat the previous line when something new has happened.
 
 `thinking` is the agent's own reasoning about what it is trying to do.
 `assistant` is what it said to the user. The events may end slightly before the

@@ -3,13 +3,13 @@
 What attn records about its own use, kept in an outbox and uploaded only when
 the user turns it on. With usage analytics on, attn writes redacted records of
 its event bus, app actions, `attn` command outcomes and resource samples to an
-outbox on the machine and keeps them 7 days, or 30 days for records not yet sent while
-sharing is on. **Settings → Analytics** shows every
+outbox on the machine. It keeps the records 7 days, or 30 days for records not
+yet sent while sharing is on. **Settings → Analytics** shows every
 record exactly as it is stored. Sharing uploads the outbox to attn's
 maintainers. Usage analytics and sharing are both off by default.
 `docs/guide/reference/telemetry.md` says what each record holds and what leaves
-the machine. For vents, which live in the same section, see
-[vents.md](vents.md).
+the machine. Vents live in the same section. See
+[vents.md](vents.md) for them.
 
 ## Sub-features
 
@@ -36,8 +36,8 @@ None. Agents do not read or change telemetry. attn records their `attn` commands
 
 ### Triggers
 
-- While recording, the daemon mirrors every event bus fact except `vent.*` into the outbox (`internal/daemon/analytics_mirror.go`). It records app actions (`internal/daemon/analytics_records.go`). Each `attn` command sends one `cli` record as it exits (`cmd/attn/analytics.go`), named by its command path, and the daemon adds who ran it; socket requests themselves write no record. It takes a resource sample of the daemon every 5 minutes (`internal/daemon/analytics_samples.go`).
-- While sharing, the daemon uploads every 5 minutes and once when sharing turns on (`internal/daemon/analytics_ship.go`). It uploads to the URL in `ATTN_ANALYTICS_INGEST_URL` from the daemon's environment. Without that variable, the default instance on the default data folder uploads to `https://attn-telemetry.caketroll.cloud`, and every other instance to `http://127.0.0.1:1`, where nothing listens (`config.AnalyticsIngestURL`). The Share row in Machine settings says where uploads go, and why nowhere on an instance other than production. `wsctl request --json '{"cmd":"get_analytics_status","request_id":"s"}' --event get_analytics_status_result` prints the same from the daemon (`ingest_url`, `ingest_off_reason`), with the last refusal.
+- While recording, the daemon mirrors every event bus fact except `vent.*` into the outbox (`internal/daemon/analytics_mirror.go`). The daemon also records app actions (`internal/daemon/analytics_records.go`). Each `attn` command sends one `cli` record as the command exits (`cmd/attn/analytics.go`). The record is named by the command path, and the daemon adds who ran the command. Socket requests write no record. The daemon takes a resource sample of itself every 5 minutes (`internal/daemon/analytics_samples.go`).
+- While sharing, the daemon uploads every 5 minutes and once when sharing turns on (`internal/daemon/analytics_ship.go`). It uploads to the URL in `ATTN_ANALYTICS_INGEST_URL` from the daemon's environment. Without that variable, the default instance on the default data folder uploads to `https://attn-telemetry.caketroll.cloud`, and every other instance to `http://127.0.0.1:1`, where nothing listens (`config.AnalyticsIngestURL`). The Share row in Machine settings says where uploads go, and why an instance other than production uploads nowhere. `wsctl request --json '{"cmd":"get_analytics_status","request_id":"s"}' --event get_analytics_status_result` prints the same from the daemon (`ingest_url`, `ingest_off_reason`), with the last refusal.
 - Records older than 7 days leave the outbox. While sharing is on, records not yet sent wait up to 30 days.
 
 ## Driving it
@@ -46,7 +46,7 @@ Preconditions:
 
 - Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- For the sharing steps only, start a local attn-ingest on `127.0.0.1:8080` as the "Running locally" section of `docs/internal/attn-ingest.md` describes (`make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), then append `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` to the env file and start the daemon again in the instance shell. Without both of these, skip the sharing step and report it skipped.
+- For the sharing steps only, start a local attn-ingest on `127.0.0.1:8080`, as the "Running locally" section of `docs/internal/attn-ingest.md` describes. `make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`. Then append `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` to the env file and start the daemon again in the instance shell. If you cannot do both, skip the sharing step and report it skipped.
 
 - **Turn recording on in the app.** Press ⌘, (`ui.openSettings`) with `bridge native_key '{"key":",","modifiers":["command"]}'`. `bridge settings_get_state` shows `open: true`. Click `[data-testid="settings-nav-experimental"]` natively, then `[data-testid="settings-analytics-toggle"]`. `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","timeoutMs":5000}'` matches, and `./attn settings get analytics.enabled` prints `true`.
 - **Off and on from the shell.** Run `./attn settings set analytics.enabled false`. It prints `analytics.enabled = false`, and `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","absent":true,"timeoutMs":5000}'` matches. Run `./attn settings set analytics.enabled true` to bring the section back.

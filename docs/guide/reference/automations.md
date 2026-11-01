@@ -31,7 +31,7 @@ Ctrl+Alt+K on Linux). Click **New automation** and fill in:
   launch desktop where its agents start. By default that is a new desktop
   named after the automation.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
-  such as the pull request, arrive separately as data and never rewrite the prompt.
+  such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
 
 The form ends with a sentence that says what the automation will do, in
 plain words. **Save** creates the automation, enabled.

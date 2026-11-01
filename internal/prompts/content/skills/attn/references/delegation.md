@@ -2,13 +2,13 @@
 
 Use Attn delegation only when the user or the assigned task authorizes it. Read the requested object this way: "dispatch an agent" means Attn, and "use a subagent" means a native subagent.
 
-The seed holds the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work and selects the agent's role, model, effort, and checkout at launch. The agent reads the seed and keeps the plan and progress current. A later handover can assign a different agent to the same seed, with a note that explains the next step. The user's authorization for the task is stored on the seed and delivered in each opening. The agent does not receive your conversation automatically.
+The seed holds the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work and selects the agent's role, model, effort, and checkout at launch. The agent reads the seed and keeps the plan and progress current. A later handover can assign a different agent to the same seed, with a note that explains the next step. Attn stores the user's authorization for the task on the seed and delivers it in each opening. The agent does not receive your conversation automatically.
 
 Use `attn delegate --help` for the installed command syntax. Write the brief as `attn seed guide` describes under WRITING A BODY, and read the brief back as that guide says before dispatching.
 
 ## Choose the assignment
 
-For new work, pass a brief. Attn creates the seed for the brief. Start the brief with a `#` heading to name the seed and the agent. If you have a stake (the seed a delegation assigned you), the new seed becomes a child of the stake.
+For new work, pass a brief. Attn creates the seed for the brief. Start the brief with a `#` heading to name the seed and the agent. If you have a stake, meaning the seed a delegation assigned you, the new seed becomes a child of the stake.
 
 ```sh
 attn delegate --brief-file question.md --role pathfinder --cwd /notes
@@ -60,7 +60,7 @@ attn delegate --seed s-example --handover --role orchestrator \
 
 Attn saves the note and transfers ownership before it starts the successor. The previous agent keeps running. Handover is the explicit transfer choice, so it has no extra force or confirm flag. A handover does not widen what the user authorized for the task. An ordinary progress note does not cancel a handover. If the tender changes during preparation, or the seed closes, reconsider the request.
 
-For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise recommend a Builder. Follow the planning process's checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Skip the checkpoint only when the user explicitly said to dispatch without reviewing the plan, as that process describes.
+For a completed design, recommend an Orchestrator when the plan needs coordinated or reviewed Builder work, or when mixing harnesses or models between the coordinating agent and its Builders would help. Otherwise recommend a Builder. Follow the planning process's checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Skip the checkpoint only when the user explicitly said to dispatch without reviewing the plan, as that process describes.
 
 ## Choose the machine, folder and checkout
 

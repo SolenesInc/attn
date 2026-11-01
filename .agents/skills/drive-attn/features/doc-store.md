@@ -12,9 +12,9 @@ Only `attn seed` reaches the garden.
 
 - `doc-collections`: declare a collection with its queryable fields, redeclare it to add or drop one, remove it with every document, and list them.
 - `doc-crud`: put, get and delete a document. Every read and write reports its revision and log position.
-- `doc-conditional`: `--expect <rev>` or `--expect absent` makes a write or delete conditional. attn refuses the write or delete when the document moved.
+- `doc-conditional`: `--expect <rev>` or `--expect absent` makes a write or delete conditional. attn refuses the write or delete when the document is not at the expected revision.
 - `doc-query`: filter, sort, page with `--after` and count. Each answer is true at the position it reports.
-- `doc-watch`: a live query that prints its window again on every write that changes the window, and resumes after a daemon restart with `--resume`.
+- `doc-watch`: a live query. `attn doc watch` prints the query's window again after every write that changes the window, and resumes after a daemon restart with `--resume`.
 
 ## How to get to it
 
@@ -77,6 +77,6 @@ Preconditions:
 - Quote `--where` expressions with `<` or `>`: unquoted, `--where attempts>=1` makes the shell write to a file named `=1`.
 - A `--where` value is read as JSON when it parses as JSON: `--where status=5` sends the number 5, and `--where 'status="5"'` sends the string.
 - attn refuses to read or write an undeclared collection. Declare the collection first. Redeclaring a collection without a field that a live query uses ends that watch.
-- `watch` runs until interrupted. Run it in the background with its PID kept from `$!`, and end it by removing the collection or by that PID, never by name.
+- `watch` runs until interrupted. Run it in the background and keep its PID from `$!`. End it by removing the collection or by killing that PID, never by name.
 - A watch prints the whole window on every delivery. `--json` adds `changed`, the bodies that delivery actually sent.
 - `get` and `query` print the position on stderr. A script that reads stdout gets only the body. Every `attn doc` call also prints the `[attn instance=...]` banner on stderr, so keep a watch's stderr out of the file that holds its deliveries.

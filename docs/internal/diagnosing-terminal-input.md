@@ -2,7 +2,8 @@
 
 While the problem is happening, try a few keys in the affected terminal, then
 run **Create diagnostic report** from the command palette (Cmd+Shift+K, or
-Ctrl+Alt+K on Linux). Choose whether to include recent output from affected panes. attn then saves the report in Downloads as a file whose name ends in `.attn-report.json`.
+Ctrl+Alt+K on Linux). Choose whether to include recent output from affected panes. attn then saves
+the report in Downloads as a file whose name ends in `.attn-report.json`.
 
 Without the app, export the input log from another terminal, with
 `ATTN_INSTANCE` set to the affected app's instance:

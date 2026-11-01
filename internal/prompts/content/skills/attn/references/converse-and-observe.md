@@ -1,9 +1,10 @@
 # Reaching another agent
 
-Other sessions are running beside you. `attn agent list` lists them,
-`attn agent peek` shows what one is doing, `attn agent msg` sends a message to one,
-`attn agent reload` restarts one in place, and `attn agent close` ends one.
-Run `attn agent --help` for the exact flags. This file gives the rules.
+Other sessions are running beside you. `attn agent list` lists them.
+`attn agent peek` shows what a session is doing, and `attn agent msg` sends it
+a message. `attn agent reload` restarts a session in place, and
+`attn agent close` ends it. Run `attn agent --help` for the exact flags. This
+file gives the rules.
 
 ## Who else is here
 
@@ -15,8 +16,8 @@ address for `peek`, `msg` and `reload`.
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed or snoozed turns, and seed slugs. Use
 it to see which agents belong to the same delegation chain before you act on
-them. A delegate whose dispatcher is closed or absent appears at the root and
-says so. Shells stay at the root with their split provenance labeled. A crew
+them. A delegate whose dispatcher is closed or absent appears at the root, with a
+label that says so. Shells stay at the root with their split provenance labeled. A crew
 dispatcher follows the member's current session. Inside attn, the tree is
 limited to your session's profile. Outside attn, the tree includes all
 profiles. `--profile <id>` narrows either view. Ledger filters and paging do
@@ -90,7 +91,7 @@ sleeping member stays asleep. A session may reload itself and the agents below
 it in the delegation chain, including delegates of delegates.
 The profile's chief may reload any agent in that profile. These rules apply to
 chief and crew sessions too, even though they are protected from closing.
-Shells are excluded.
+The command does not reload shells.
 
 `attn agent reload --all` is chief-only and selects every agent in the chief's
 profile, including the chief and crew sessions. Each target is authorized

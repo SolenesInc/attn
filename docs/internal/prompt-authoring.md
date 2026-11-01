@@ -16,7 +16,7 @@ go run ./cmd/prompt-editor context --scenario chief-with-handoff --json
 go run ./cmd/prompt-editor context --draft DRAFT_ID --json
 ```
 
-Use the tool to understand the full scope of a change before you make it.
+Use `context` to understand the full scope of a change before you make it.
 
 Use `list --json` to discover events, `inspect RECIPIENT/EVENT --json` for one
 definition and its Go declarations, and `uses FRAGMENT_OR_PATH --json` to explore

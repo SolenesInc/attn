@@ -44,8 +44,9 @@ update at any time.
 The Linux app is still in progress, and releases don't package it yet, so build
 it from source. We test on Ubuntu 24.04.
 
-You need Go 1.27.1 or newer, Rust through rustup (the repository pins the Rust version to use), Node.js 26 or newer, pnpm 9 or newer, bun 1.3.14 or
-newer, and these packages:
+You need Go 1.27.1 or newer, Rust through rustup (the repository pins the Rust
+version to use), Node.js 26 or newer, pnpm 9 or newer, bun 1.3.14 or newer, and
+these packages:
 
 ```bash
 sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
@@ -108,9 +109,9 @@ Attn helps you run many agents in parallel at a low mental cost. It removes
 every bit of friction it can, so you spend your energy on the decisions that
 matter.
 
-The most basic help is color. Instead of jumping between agents to find out
-whether they need you, you scan for colored dots instead of reading terminals.
-Attn tracks each agent's state and shows the state as a dot:
+The most basic help is color. You don't need to jump between
+agents to find out whether they need you. Scan the colored dots instead of
+reading terminals. Attn tracks each agent's state and shows the state as a dot:
 
 | Dot                 | State          | What it means                                                       |
 | ------------------- | -------------- | ------------------------------------------------------------------- |
@@ -125,10 +126,10 @@ Attn tracks each agent's state and shows the state as a dot:
 
 The home screen groups your agents by the same states.
 
-The colors work the same in desktop flow, the default, and in queue flow. Queue
-flow goes one step further. It answers "which agent do I go to next?" by bringing
-you the next agent that needs you, so you decide less and get more done. See
-[queue](../reference/queue.md).
+The colors work the same in desktop flow, which is the default, and in queue
+flow. Queue flow adds one thing. It brings you the next agent that needs you, so
+you don't have to decide which agent to go to next. You decide less and get more
+done. See [queue](../reference/queue.md).
 
 ## Where next
 

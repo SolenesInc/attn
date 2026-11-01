@@ -40,9 +40,9 @@ In the index, "both" means people and agents.
 ### The instance shell
 
 - "The instance shell" is a command that starts with
-  `. /tmp/drive-attn-<name>.env &&`, which sources the env file
-  [../SKILL.md](../SKILL.md)'s Launch writes. Every command in these files
-  runs there, written without the prefix, unless a step says otherwise.
+  `. /tmp/drive-attn-<name>.env &&`. The prefix sources the env file that the
+  Launch section of [../SKILL.md](../SKILL.md) writes. Every command in these
+  files runs there, written without the prefix, unless a step says otherwise.
 - Each command starts in a fresh shell, so a variable, shell function or
   background PID that one command sets is gone by the next command. To keep a
   variable, append it to the env file through `$DRIVE_ENV`, which holds the
@@ -73,13 +73,13 @@ In the index, "both" means people and agents.
   own and a way to set up, never proof of what an agent can do.
 - Triggers: cause the real event (an agent stops, a note rings, a pull
   request changes on the mock GitHub) and observe what follows. Where the
-  mock cannot raise a harness's event, the step may call the hidden hook
-  verb the harness would (`./attn _hook-<event>`) and says so.
+  mock cannot raise a harness's event, you may call the hidden hook verb that
+  the harness would call (`./attn _hook-<event>`). Say so in the step.
 - Protocol reads, sessions and terminal input: `wsctl`.
 - System-wide keys, which `bridge` cannot send because `bridge` reaches only
   the app's own windows: the repository's input driver, as
   [quick-capture.md](quick-capture.md) sets it up.
-- Plain shell tools set up and read: files, `git`, `jq`, `curl` against the
+- Plain shell tools set up state and read it: files, `git`, `jq`, `curl` against the
   mock GitHub, `file`, `stat`, `pbpaste`, `python3 -m http.server` for a
   local page, and the repository's own scripts a file names. A recipe that
   starts a process in the background keeps the PID from `$!` in the env file
@@ -109,12 +109,13 @@ In the index, "both" means people and agents.
   its entry with `"agent": "shell"` in `wsctl list`. Files call the id
   `<shell-id>`.
 - The mock reads `.attn-mock-agent.json` from the session's folder at launch.
-  A fixture is literal JSON: the mock expands no environment variables, so a
-  path in a fixture is written out (`<A> written out`). The mock tries turns in
-  order, and the first turn whose `includes` matches runs.
+  A fixture is literal JSON: the mock expands no environment variables, so
+  write each path in the fixture in full, such as the path that `<A>` stands
+  for. The mock tries turns in order, and the first turn whose `includes`
+  matches runs.
 - A mock turn stays `working` for at least 1.5 seconds, so a reply on screen
   does not mean the turn ended. Before the next prompt, re-read
-  `./attn agent peek <session>` until the `state:` line stops reading
+  `./attn agent peek <session>` until the `state:` line no longer shows
   `working`.
 - The mock prints at the terminal's width, 80 columns by default, so a long
   line wraps anywhere. Match a line's first words. A refused `attn` action
@@ -146,15 +147,15 @@ In the index, "both" means people and agents.
   for the element and its ancestors to stop moving. It scrolls the element
   into view when the element's point is offscreen or covered, then returns `x`
   and `y` for the center of the element's box, with `bounds` in page pixels.
-  `at` picks another point as fractions of the box, such as
-  `{"x":0.9,"y":0.5}`, and `offset` adds page pixels to that point. A terminal
+  Pass `at` to use another point as fractions of the box, such as
+  `{"x":0.9,"y":0.5}`, and `offset` to add page pixels to that point. A terminal
   cell's `get_pane_cell_rect` result carries a `target` to pass as the
   payload. `dom_native_point` refuses, and names the cause, when the element
   has an empty box (hidden on a retained desktop, for example) or when the
   point stays offscreen or covered after scrolling.
 - Resolve the point right before each native action, and resolve the point
-  again after anything that can move the element, because a stored point goes
-  stale.
+  again after anything that can move the element, because a stored point no
+  longer matches the element once the element moves.
 - `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
@@ -208,8 +209,8 @@ In the index, "both" means people and agents.
   stands for the path of that folder.
 - Drive each way in once, in the file that documents the way in. Other files
   link to that file. If the harnesses cannot reach a way in, keep the way in's
-  step in that file. The step states that the harnesses cannot reach the way
-  in, and fails. Put the reason in that file's Gotchas.
+  step in that file. In the step, state that the harnesses cannot reach the
+  way in, and make the step fail. Put the reason in that file's Gotchas.
 
 ## Proof and skip reporting
 
@@ -225,9 +226,9 @@ Follow [Evidence](../SKILL.md#evidence) for what to capture, and add these:
 - Report a way in you could not reach with the command you tried and the
   precondition that failed. Never report a skipped way in as verified
   through another.
-- When a precondition the baseline lacks blocks a recipe, the recipe fails
-  and the reason goes in that feature's Gotchas. Never weaken the recipe to
-  make it pass.
+- When a precondition the baseline lacks blocks a recipe, the recipe fails.
+  Put the reason in that feature's Gotchas. Never weaken the recipe to make it
+  pass.
 
 ## Feature entry contract
 
@@ -281,15 +282,15 @@ Every feature file has these sections, in this order:
    wrong" looks like for the feature.
 
 Write from the user's point of view. Name user paths, stable handles, required
-state, commands and observable results, never how the code works inside. A
-source path appears only to anchor a way in, a test, or a prompt whose text a
+state, commands and observable results, never how the code works inside.
+Include a source path only to anchor a way in, a test, or a prompt whose text a
 gotcha quotes. Link another feature as `[<id>.md](<id>.md)`. Use the terms in
 `docs/internal/glossary.md` and none of the glossary's legacy names in prose.
-Exact handles and output are literal: a command, flag, id, selector, JSON key,
-CLI output or UI label is written as the product has it, in backticks or
+Exact handles and output are literal. Write a command, flag, id, selector,
+JSON key, CLI output or UI label as the product has it, in backticks or
 quotes, even when the item carries an older name the glossary lists
 (`waiting_input`, `activeLeaf`, `panes`, `runtime_id`, "Close Pane", "Reopen",
-"Wake"). The file's Gotchas name such a label as working but wrong. Every
+"Wake"). In the file's Gotchas, name such a label as working but wrong. Every
 command, shortcut id, palette id, verb, path and scenario id must exist at
 HEAD.
 
@@ -329,7 +330,7 @@ instance. A file whose recipe ran live says so here.
 ### Agents and sessions
 
 - [Agent launch](agent-launch.md) (both): Start an agent in a terminal tile, reload it, and close it.
-- [Agent state](agent-state.md) (both): What each agent is doing right now (working, waiting, needs approval…), like a presence status, and why attn thinks so.
+- [Agent state](agent-state.md) (both): What each agent is doing right now (working, waiting, needs approval…), like a presence status, and why attn shows that state.
 - [Ledger](ledger.md) (both): Every session, live and closed, like a chat history. Resume a closed session as itself, and keep or forget the session's conversation.
 - [Usage and cost](usage.md) (people): Tokens, cost and context window for each session.
 - [Harnesses](harnesses.md) (people): Bring your own harness: attn wraps Claude Code, Codex and Pi as they are, and plugins add more.
@@ -339,7 +340,7 @@ instance. A file whose recipe ran live says so here.
 ### Attention
 
 - [Queue flow](queue-flow.md) (both): attn brings the user the next agent that needs them and moves them on after every prompt, like working an inbox to zero.
-- [Sidebar](sidebar.md) (people): The window's sidebar. Its shape follows the profile's flow.
+- [Sidebar](sidebar.md) (people): The window's sidebar. The sidebar's shape depends on the profile's flow.
 - [Home screen](home.md) (people): The dashboard of what asks for the user's attention across agents, with notifications.
 - [Palette](palette.md) (people): Search and run commands, agents and tiles from the keyboard, like the VS Code command palette. The palette learns what the user picks.
 
@@ -362,7 +363,7 @@ instance. A file whose recipe ran live says so here.
 - [Crew](crew.md) (both): Permanent agents with charters, who leave letters for their next session. The chief coordinates the profile.
 - [Automations](automations.md) (both): attn starts a steerable agent on a schedule or an event.
 - [Quick capture](quick-capture.md) (people): Send a message with attachments to the chief or crew from anywhere, with a global shortcut, like macOS Quick Note.
-- [Dictation](dictation.md) (people): Speak instead of typing, with a speech model that runs on the Mac. Experimental; setup only so far.
+- [Dictation](dictation.md) (people): Speak instead of typing, with a speech model that runs on the Mac. Experimental, with setup only so far.
 
 ### Code
 

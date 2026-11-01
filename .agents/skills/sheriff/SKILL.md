@@ -25,8 +25,8 @@ main's single CI queue for as long as a new run does.
 
 ## Principles
 
-These principles from `attn-workflow` matter most to a Sheriff. Each one names
-the moment it applies.
+These principles from `attn-workflow` matter most to a Sheriff. Each entry
+says when it applies.
 
 - [Guard the context window](../../../internal/prompts/content/skills/attn-workflow/principles/guard-the-context-window.md):
   keep your own work to the reads that choose the path, so you stay free for
@@ -42,7 +42,7 @@ the moment it applies.
   for a third patch. Write down the assumption the repairs share, check it
   against the code or the evidence, and bring the owner a redesign. If the
   owner disagrees, escalate. QUICK-CAPTURE's 14785f5dc moved the Dictation
-  step and 14558b89d cleared its draft. Both repairs assumed the step could
+  step and 14558b89d cleared QUICK-CAPTURE's draft. Both repairs assumed the step could
   share the scenario's serial state.
 - [Encode lessons in structure](../../../internal/prompts/content/skills/attn-workflow/principles/encode-lessons-in-structure.md):
   when the same class of failure comes back, plant a
@@ -166,8 +166,9 @@ Use `--role pathfinder` to investigate. Link the delegation's seed with
 `attn seed link <new-seed> discovered-from <seed>` for each of the culprit's
 `Attn-Seed:` trailers. In every brief, name the failing run, the failing jobs
 and tests with their log lines, the culprit commit and its trailers, and the
-path you chose and why, and ask for the first wrong decision, not the place
-where the failure surfaced. In a Builder's brief, also tell the Builder to:
+path you chose and why, and also ask for the first wrong decision, not the
+place where the failure surfaced. In a Builder's brief, also tell the Builder
+to:
 
 - Reproduce the failure before the fix, and show the test passing after the
   fix. Run the failing test on its own, on the platform where it failed (the
@@ -221,7 +222,7 @@ session or the re-land seed.
   concludes `cancelled` with no jobs. A red run therefore covers every commit
   since the last green run.
 - A landing lists a test that is still red on `main` and does not run the
-  test. The test is yours. Once the test passes on `main`, it runs in every
+  test. You own that test. Once the test passes on `main`, it runs in every
   landing that runs landing tests, until it has passed on 30 later `main`
   commits.
 - "is not on this daemon" from `attn agent msg` means the session is gone:

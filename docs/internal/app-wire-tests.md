@@ -37,7 +37,7 @@ On the `ScriptedDaemon` that `renderApp` returns:
   request the test held.
 - `disconnect()` drops the connection, and `reconnect()` returns once the app
   has connected again and settled its handshake.
-- The test fails at its end when the app broke the daemon's script, such as
+- The test fails at its end if the app broke the daemon's script, for example
   by sending a command before `client_hello`.
 
 ## Waiting and time
@@ -47,7 +47,7 @@ time.
 
 - `gesture(daemon, action)` runs a user action and returns once the app and
   the daemon have stopped exchanging messages. `daemon.idle()` waits for the
-  same without an action.
+  same quiet without running an action.
 - `daemon.received(cmd, matches)` returns the first request that matches,
   including one already sent.
 - `await act(() => vi.advanceTimersByTimeAsync(ms))` moves time for the

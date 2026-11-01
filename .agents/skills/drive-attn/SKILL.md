@@ -41,27 +41,27 @@ file ends with a guard that fails unless `ATTN_INSTANCE` is `<name>`. In a
 shell that keeps its state, such as a person's terminal, source the file once
 in a terminal of its own instead, so your own `attn` keeps pointing at the
 attn you run inside. Code blocks here show the prefix. Inline commands, here
-and in the feature map, leave the prefix out.
+and in the feature map, are written without it.
 
 Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`, because `dev`
 is shared with other work and installs the attn skill into your harness
 homes. Keep a list of every name you start. Clean each name as
 [Cleanup](#cleanup) says, including when you abandon the run.
 
-Sourcing the env file does two things. It runs `attn instance-env <name>`,
-which selects the instance and clears inherited routing. It also changes the
-directory to this checkout. The file's
-`unset` line drops the identity of the session you run in, so the instance
-does not mistake your shell for one of its terminals. It also drops an
-inherited `ATTN_ANALYTICS_INGEST_URL`, so analytics uploads go nowhere. With the exports in
-the file, the daemon launches the mock agent for `claude` and `codex`,
-refuses headless model tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME`
-gives the instance a scratch harness home, so a mock conversation that a
-fixture makes resumable lands there and not in your `~/.claude` or
-`~/.codex`. The file also defines `wsctl`,
-`bridge` and `DRIVE_ENV`, the path of the file itself, which recipes append
-their variables to ([features/README.md](features/README.md)). Running
-`write-env.sh` again starts the file over.
+Sourcing the env file runs `attn instance-env <name>`, which selects the
+instance and clears inherited routing. Sourcing also changes the directory to
+this checkout. The file's `unset` line drops the identity of the session you
+run in, so the instance does not mistake your shell for one of its terminals.
+The `unset` line also drops an inherited `ATTN_ANALYTICS_INGEST_URL`, so
+analytics uploads go nowhere. With the exports in the file, the daemon
+launches the mock agent for `claude` and `codex`, refuses headless model
+tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a
+scratch harness home, so a mock conversation that a fixture makes resumable
+lands there and not in your `~/.claude` or `~/.codex`. The file also defines
+`wsctl`, `bridge` and `DRIVE_ENV`. `DRIVE_ENV` holds the path of the file
+itself, which recipes append their variables to
+([features/README.md](features/README.md)). Running `write-env.sh` again
+starts the file over.
 
 Daemon only, for CLI and protocol work:
 
@@ -80,8 +80,9 @@ shell's environment:
 `--launch` starts the app with the instance shell's environment and parks
 the app window at the screen's edge. Keep that default on a shared Mac. Never
 activate or unpark the window, set the parking or always-on-top variables
-yourself, or send physical input. That includes `open`, `make run`, `activateApp`,
-`osascript ... activate`, `cliclick` and the driver's `menu`.
+yourself, or send physical input. The forbidden actions include `open`,
+`make run`, `activateApp`, `osascript ... activate`, `cliclick` and the
+driver's `menu`.
 Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
 input failure is a bridge or harness bug to diagnose, not permission to take
 focus. A scenario that requires activation or system input needs a dedicated
@@ -100,9 +101,9 @@ the daemon's environment, do these steps in order:
 
 ## Doctor
 
-One read-only check. With the app installed, through the instance's own
-binary (`appDaemon` is a file inside the installed app, so this fails with
-`no such file or directory` on a daemon-only instance):
+The doctor is one read-only check. With the app installed, run it through the
+instance's own binary. `appDaemon` is a file inside the installed app, so the
+command fails with `no such file or directory` on a daemon-only instance.
 
 ```bash
 . /tmp/drive-attn-<name>.env && "$(./attn instance resolve --field appDaemon)" preflight --agent claude
@@ -118,8 +119,7 @@ instance is selected. `./attn instance` shows the selection instead. To check
 the build, run `version --json` on the same binary and compare its
 `sourceFingerprint` with the output of `bash scripts/source-fingerprint.sh`
 for your tree. The two must match. `bridge --wait-ready` refuses an app built
-from other source. For a
-daemon-only instance, run the check through `./attn`:
+from other source. For a daemon-only instance, run the check through `./attn`:
 
 ```bash
 . /tmp/drive-attn-<name>.env && ./attn preflight --agent claude
@@ -241,7 +241,7 @@ there after cleaning.
 
 Read `features/README.md`, which holds the driving conventions, then
 `features/<id>.md` for the feature you changed. Each feature file lists the
-feature's ways in, a recipe that drives the ways in, the contexts that the
-feature answers, and where the feature's tests live. Drive every way in that
+feature's ways in, a recipe that drives the ways in, the contexts that apply
+to the feature, and where the feature's tests live. Drive every way in that
 the file lists before you call a change done. When you find a way in, a trap
 or a test that the file lacks, fix the file in the same change.

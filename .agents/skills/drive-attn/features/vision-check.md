@@ -52,7 +52,7 @@ printf 'PNG pixels' > $P/shot.png
 - **Linux**: works the same where the CLI runs on Linux. The verb finds `claude` on `PATH`, in `~/.npm-global/bin`, or in `~/.local/bin`.
 - **Outposts**: the verb runs on the machine where you call it and reads the image from that machine's disk. Neither the home daemon nor the outpost's daemon takes part.
 - **Performance and idle cost**: one model call of one turn. The image may be at most 4,500,000 bytes once base64-encoded, about 3.37 million bytes on disk.
-- **Harnesses**: the verb always calls Claude Code, whatever harness the agent runs in, so a Codex or Pi agent needs Claude Code installed and signed in. The call runs one turn with no allowed tools, `--strict-mcp-config` and empty `--setting-sources`.
+- **Harnesses**: the verb always calls Claude Code, whatever harness the agent runs in, so an agent on any other harness needs Claude Code installed and signed in. The call runs one turn with no allowed tools, `--strict-mcp-config` and empty `--setting-sources`.
 
 ## Tests
 
@@ -62,5 +62,5 @@ printf 'PNG pixels' > $P/shot.png
 
 - The verb runs the `claude` it finds, not the instance's mock agent. Neither `ATTN_CLAUDE_EXECUTABLE` nor the baseline's refusal of headless model tasks affects the verb. Without the stand-in, the verb sends the image to a real model and costs money.
 - `./attn vision-check --help` prints `vision-check: flag: help requested` and exits 2. Run the verb with no arguments to see the usage line.
-- The extension decides the image type, not the bytes: a JPEG named `.png` is sent as `image/png`.
+- The verb reads the image type from the file extension, not the bytes: a JPEG named `.png` goes out as `image/png`.
 - Working but wrong: over the size limit, the verb says to "capture with --crop/--max-dim first". Those flags belong to the maintainers' `app/scripts/real-app-harness/capture-app-screenshot.mjs`. The agents that attn runs have no such tool.

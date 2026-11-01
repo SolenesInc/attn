@@ -29,7 +29,7 @@ Apply each check to the call sites. Skip a check that does not fit the interface
 
 ## Check the structure behind it
 
-A boundary is judged from outside, by its call sites. The structure behind it is judged by the next person to change it, often an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles. Prefer the structure in which a change that looks right from one file is right for the whole system.
+A boundary is judged from outside, by its call sites. The structure behind a boundary is judged by the next person to change the structure. That person is often an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles. Prefer the structure in which a change that looks right from one file is right for the whole system.
 
 - **Data structures first.** Trace each common access pattern through the proposed types. If a pattern needs a map, index, or cache added later to be fast or correct, the structure is wrong now.
 - **One writer per piece of state.** When two modules write the same state, or each keeps its own copy, someone who edits one writer cannot see the others, and the writers' rules drift apart. Give the state one owner. Other modules read the state or ask the owner to change it. When two actors genuinely write at the same time, give each its own state and combine them where they are read.

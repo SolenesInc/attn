@@ -23,9 +23,9 @@ the service answers `200`, duplicates included. The deployment has an alert on
 this volume.
 
 The token identifies an install, not a person. The service stores only the
-token's SHA-256, and the service finds the install from the token on every
-`/v1/installs/me` request, so no request can name another install. After a delete the token no
-longer works.
+token's SHA-256. On every `/v1/installs/me` request, the service finds the
+install from the token, so no request can name another install. After a delete,
+the token no longer works.
 
 A batch body is gzip of newline-delimited JSON. The first line is
 `{"build": {...}}`, the build that sent the batch. Every following line is one
@@ -34,7 +34,7 @@ and streams it has never seen, so a newer build never loses data. The service
 enforces the shape and sizes, and a malformed line gets a `400` that names the
 line and the field.
 
-A record is stored once per install, stream and seq. The service answers a
+A record is stored once per install, stream, and seq. The service answers a
 retried batch with its records counted as `duplicates` and adds no rows.
 
 ## Limits
@@ -63,7 +63,7 @@ Records and bytes count against the event and byte limits whether or not they
 turn out to be duplicates. A refused batch counts nothing. The service handles the
 batches and the delete of one install one at a time, so concurrent retries count as
 duplicates and a delete leaves nothing behind. The service decodes at most 2
-batches at once across all installs, and the rest wait their turn. A batch at
+batches at once across all installs, and the other batches wait. A batch at
 the 16 MiB limit took the service to 130 MiB resident (measured 2026-10-24),
 while a real batch of 10,000 records is about 1.25 MB. The counts live in memory
 and reset when the service restarts. Read and write timeouts are 2 minutes,
@@ -74,9 +74,9 @@ Every stored row keeps a keyed hash of the address that sent it
 
 ## Quarantine
 
-To refuse an install or an address, insert its install id or address hash into
-the `quarantine` table. The service then refuses it with `403` and the reason,
-on registration and on every batch. To remove the stored events of a
+To refuse an install or an address, insert the install id or the address hash
+into the `quarantine` table. The service then refuses that install or address
+with `403` and the reason, on registration and on every batch. To remove the stored events of a
 quarantined install, run the `DELETE`:
 
 ```sql
@@ -138,8 +138,8 @@ ingest code.
 ## ClickHouse memory
 
 Measured on 2026-10-24 with ClickHouse 25.8.33.6 in Docker under a 1 GiB
-limit, loading 87,414 redacted rows built from the busiest day of a copy of a
-production database (2026-09-27, 87,413 facts), then running per-hour and
+limit. The load was 87,414 redacted rows built from the busiest day of a copy
+of a production database (2026-09-27, 87,413 facts), followed by per-hour and
 per-subject aggregates:
 
 | | Resident | cgroup peak |

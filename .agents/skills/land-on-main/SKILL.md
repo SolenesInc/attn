@@ -141,7 +141,7 @@ A failing landing test stops the push like any other check, whether you
 touched the test or not. If the test passes on `origin/main` and on a second
 run of `scripts/land.sh`, it is a flake. Land, and name the test in your
 report. Run `scripts/land.sh --baseline`, which runs the baseline groups
-alone, only when the history or the choice misbehaves. Never use it to skip a
+alone, only when the shared test history or the test selection misbehaves. Never use it to skip a
 failing test.
 
 ## Report

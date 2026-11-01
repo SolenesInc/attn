@@ -26,8 +26,8 @@ depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 
 `agent:<who>` accepts a session id, short id or crew name.
 `desktop:<which>` accepts a slot digit, name or id. Both address only the
-profile of the pointing session. When the app can reveal the target, it does.
-Otherwise it shows the step with the target's name. Put the agent or desktop
+profile of the pointing session. The app reveals the target when it can.
+Otherwise the app shows the step with the target's name. Put the agent or desktop
 the user should go to on the last step, because Enter and → go there only from
 the last step.
 

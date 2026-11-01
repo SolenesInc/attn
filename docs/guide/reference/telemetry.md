@@ -29,7 +29,7 @@ Every record is one line of JSON:
 |---|---|
 | `bus` | Every fact on Attn's event bus, except `vent.*` facts |
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
-| `cli` | One record per `attn` command, named by its command path as typed (`seed check report`; a harness hook as `_hook-state`): whether it succeeded, its exit code, what kind of error ended it (`refused`, `failed`, `usage`, `unknown_command`, `unknown_flag`, `missing_value`, `invalid_value`), why the daemon refused it (`invalid_input`, `limit`, `not_found`, `wrong_state`, `not_tender`, `conflict`, `unclassified`), whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
+| `cli` | One record per `attn` command, named by its command path as typed (`seed check report`, or `_hook-state` for a harness hook): whether it succeeded, its exit code, what kind of error ended it (`refused`, `failed`, `usage`, `unknown_command`, `unknown_flag`, `missing_value`, `invalid_value`), why the daemon refused it (`invalid_input`, `limit`, `not_found`, `wrong_state`, `not_tender`, `conflict`, `unclassified`), whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
 | `vent` | An Attn vent you chose to send |
 
@@ -44,7 +44,7 @@ it stores them:
   whose values come from a fixed set, such as a status or a kind.
 - A subject (a session, path, pull request or other id) becomes a keyed hash,
   `h:` and 12 hex digits, with a secret that never leaves the machine
-  (`<data-dir>/analytics-secret`). The same subject hashes the same way, so records about one thing can be grouped without revealing what the thing is.
+  (`<data-dir>/analytics-secret`). The same subject always gives the same hash, so records about one thing group together without revealing what the thing is.
 - Session facts carry the harness, model, how the session was launched (user,
   delegation, automation, crew, chief) and its state. Repository facts carry
   three booleans: has an `AGENTS.md`, is a worktree, has a remote. Names and paths never leave the machine.
@@ -58,8 +58,8 @@ vents can be sent. Press `s` on a vent to file it under the other kind. Filing a
 queued vent under tools takes the vent out of the queue, and a sent vent stays
 an Attn vent.
 
-A vent record carries the vent whole, because a vent without its text says
-nothing:
+A vent record contains the whole vent, because a vent without its text has
+no content:
 
 ```json
 {"stream":"vent","seq":4,"name":"vent","at":"2026-10-24T14:02:11Z",
@@ -78,7 +78,7 @@ every 5 minutes, and once right away when you turn sharing on. Only the default
 instance on the default data folder uploads there. Any other instance uploads
 to `http://127.0.0.1:1`, where nothing listens, unless its daemon starts with
 `ATTN_ANALYTICS_INGEST_URL` naming another service. The Share row in
-**Settings → Analytics** says where uploads go. Each upload is one batch of at
+**Settings → Analytics** shows where uploads go. Each upload is one batch of at
 most 5,000 unsent records, oldest first, preceded by the details of the build
 that sent it:
 
@@ -91,9 +91,9 @@ that sent it:
 The busiest minute measured on a real install held 882 facts, so five minutes
 hold at most 4,410 and one scheduled batch carries them. One batch is half the
 service's limit of 10,000 records a minute, so scheduled uploads never reach it,
-even while catching up after time offline. Turning sharing on uploads right
-away, outside the schedule. Turning sharing on several times within a minute
-while a backlog waits can reach the limit, and Attn then waits for the retry delay that the refusal names.
+even while catching up after time offline. When you turn sharing on, Attn uploads right
+away, outside the schedule. If you turn sharing on several times within a minute
+while a backlog waits, the uploads can reach the limit, and Attn then waits for the retry delay that the refusal names.
 
 The first upload registers the install and keeps the install's token in
 `<data-dir>/analytics-token`. The token identifies the install, not you. The
@@ -109,12 +109,12 @@ would have reached. Attn waits for the retry delay that the refusal names before
 
 Attn deletes records from the local outbox 7 days after it writes them. One
 exception: while sharing is on, a record not yet sent stays up to 30 days, so
-Attn can still upload it. Vents you dismiss or that their agent withdraws are
-deleted after 30 days.
+Attn can still upload it. Attn deletes vents that you dismiss, or that their agent withdraws,
+after 30 days.
 
 After Attn has sent something, **Settings → Analytics** offers **Forget this
 install** when you turn sharing off. **Forget this install** deletes what the
 server holds, then starts a new install with a new install id, token and subject
 secret. When Attn cannot reach the service, nothing changes and **Settings →
-Analytics** says so. **Clear the local record** deletes the local outbox and
+Analytics** reports the failure. **Clear the local record** deletes the local outbox and
 dismissed vents.

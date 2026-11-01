@@ -71,7 +71,7 @@ bash scripts/measure-pty-host.sh /absolute/path/to/attn-pty-host attempt-name
 
 The script prints `PTY_RESOURCE` JSON records for 1, 8, and 32 terminals, idle and under
 8 MiB output floods. On an Apple M5, 32 empty terminals take about 4.4 MiB of
-physical memory (9.9 MiB resident), which is about 72 KiB for each terminal after
-the first, and idle CPU is near zero. On Linux amd64, 32
+physical memory (9.9 MiB resident). Each terminal after the first costs about
+72 KiB, and idle CPU is near zero. On Linux amd64, 32
 empty terminals take 7.2–7.7 MiB PSS, and an 8 MiB flood costs about 320 ms of
 host CPU detached and 390 ms attached.

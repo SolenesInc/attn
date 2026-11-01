@@ -37,7 +37,7 @@ Clips get titles, zooms and captions in a later editing pass. The harness
 records the full window at a steady 30 fps with nothing cropped or drawn on,
 and writes `<clip>.events.jsonl` next to each clip. Every line is one scripted
 action with `t`, its time in seconds from the start of the recording, so an
-edit can line a zoom or a caption up with the moment something happens.
+editor can place a zoom or a caption at the moment something happens.
 
 ## Write a scene
 

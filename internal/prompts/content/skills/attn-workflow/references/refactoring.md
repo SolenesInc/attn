@@ -14,7 +14,7 @@ State what the module layout, types, and call graph should be if the code were w
 
 ## Subtract, then move in small steps
 
-Before you introduce the new shape, delete dead code, collapse one-caller wrappers, and remove orphan references, so the move starts from the simplest base. Then move in behavior-preserving steps that each keep the pin green. When an interface changes, follow [Migrate callers, then delete the old way](../principles/migrate-callers-then-delete-the-old-way.md). Check each rename against the files, because a rename can miss uses in strings, prose, and generated files. A test that the move itself breaks depended on the old shape. Delete the test when the pin already covers the behavior, or replace it at the stable boundary, as the repository's testing guidance says. Do not repair the test to fit the new internals.
+Before you introduce the new shape, delete dead code, collapse one-caller wrappers, and remove orphan references, so the move starts from the simplest base. Then move in behavior-preserving steps that each keep the pin green. When an interface changes, follow [Migrate callers, then delete the old way](../principles/migrate-callers-then-delete-the-old-way.md). Search the files for the old name after each rename, because uses in strings, prose, and generated files are easy to miss. A test that the move itself breaks depended on the old shape. Delete the test when the pin already covers the behavior, or replace it at the stable boundary, as the repository's testing guidance says. Do not repair the test to fit the new internals.
 
 ## Prove behavior is unchanged
 

@@ -17,12 +17,12 @@ resumes from the Sessions ledger included.
 
 - A Nisse session is a terminal tile running the Nisse TUI on one conversation.
   Attn names a new session's conversation after the session's terminal and
-  launches `nisse --conversation <id>`, with the initial prompt, model, effort and YOLO setting that you chose at launch. A model written as `provider/model`, such as `openai/gpt-5.5`, also picks the provider. With YOLO, the conversation starts without asking before calls that change things.
+  launches `nisse --conversation <id>`, with the initial prompt, model, effort and YOLO setting that you chose at launch. When you write a model as `provider/model`, such as `openai/gpt-5.5`, you also pick the provider. With YOLO, the conversation starts in a mode where calls that change things run without asking you first.
 - A new conversation starts with Attn's instructions, as other harnesses get
-  them at launch. Nisse keeps them with the conversation, so a resumed session
+  them at launch. Nisse stores those instructions in the conversation, so a resumed session
   keeps the instructions it started with.
 - The model pickers list the models of every provider the Nisse server has, as
-  `provider/model`. Listing the models starts the server if none runs, and Attn stops using the server when no Nisse session is open.
+  `provider/model`. To list the models, Attn starts the server if none runs. Attn stops using the server when no Nisse session is open.
 - Attn starts the Nisse server with `nisse serve` in a terminal of its own the
   first time a session needs the server, so the server keeps running through app
   and daemon restarts. If a server already serves the home, for example one your
@@ -46,15 +46,15 @@ The session's state comes from the server, not from the terminal:
   session to **waiting** and shows the reason.
 - If a run is interrupted, Attn sets the session to **idle**.
 
-If a run ends while Attn is down, Attn sets the session's state when it is back, using what the server reports about how the conversation's last run ended. A session that was
+If a run ends while Attn is down, Attn sets the session's state when Attn is back. Attn uses what the server reports about how the conversation's last run ended. A session that was
 already waiting or idle keeps its state through the restart.
 
 ## Messages
 
 Annotations, messages from other agents and inbox notifications reach the
 conversation as follow-ups through the server, never typed into the terminal.
-A message sent while a run works waits in the conversation's queue and runs
-next. A retried delivery is one follow-up.
+A message sent while a run works waits in the conversation's queue until the
+current run ends, then becomes the next run. A retried delivery is one follow-up.
 
 ## Closing and resuming
 

@@ -42,7 +42,7 @@ large. Split the range into units, and give each unit a context of its own.
 
 ## Gotchas
 
-- Your seed persists across passes. A pass that died left notes there. Skip
+- Your seed persists across passes. A pass that stopped before it finished left notes there. Skip
   the units that pass already sent.
 - If `attn agent msg` says "is not on this daemon", the session is gone.
   Dispatch a fixer.
@@ -51,7 +51,7 @@ large. Split the range into units, and give each unit a context of its own.
   `git log --grep 'Attn-Seed: <seed>' origin/main`.
 - A later unit may already fix what an earlier unit broke. Judge the code at
   `<head>`.
-- If the push to `reviewed` is rejected, another pass got there first. Stop.
+- If the push to `reviewed` is rejected, another pass pushed first. Stop.
 - This clone holds no work. Subagents check claims in throwaway worktrees.
 
 ## Never

@@ -26,7 +26,7 @@ the seed. Asks are an experimental setting, off by default.
 
 ### People
 
-- ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`) opens and closes the asks drawer, offered while asks are on or any ask exists.
+- ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`) opens and closes the asks drawer. The shortcut exists only while asks are on or any ask exists.
 - Palette (`app/src/application/useAppCommands.tsx`): `asks` ("Open asks").
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
@@ -37,7 +37,7 @@ the seed. Asks are an experimental setting, off by default.
 
 ### Agents
 
-- `attn ask` (`cmd/attn/ask.go`): with no command, opens an ask from stdin or `--file`, with `--subject` and `--seed`, then the subcommands `list` and `close <id>`, and the flags `--session` and `--json`.
+- `attn ask` (`cmd/attn/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
 - Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`), and the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
 
 ### Triggers
@@ -82,7 +82,7 @@ Preconditions:
 - **An agent launched before is refused.** Run `wsctl input --id <early> --text "open an ask" --enter`. `./attn agent peek ask-early` shows `mock agent error:` with `asks are off for this session because it launched without them; ask in the conversation instead`.
 - **An agent asks.** Run `wsctl add-session --cwd $A --agent claude --label ask-agent --id ask-agent --place`, then `wsctl input --id <terminal> --text "open an ask" --enter`. Peek shows `Asked <ask>: "Cache store". attn types the answer into this conversation as the user's message.` The sidebar icon's label starts with `1 open ask`: `bridge dom_wait '{"selector":"[aria-label^=\"1 open ask\"]","timeoutMs":5000}'` matches.
 - **Open the drawer with the shortcut.** Run `bridge native_key '{"key":"r","modifiers":["command","shift"]}'`. `bridge dom_wait '{"selector":"[role=\"region\"][aria-label=\"Asks\"]","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":"[data-testid=\"ask-<ask>\"]"}'` reads `Cache store`, the question, `Postgres`, `recommended` and `Redis`.
-- **Answer from the keyboard.** `bridge dom_wait '{"selector":"[data-testid=\"ask-<ask>\"] input","focused":true,"timeoutMs":5000}'` matches: the first choice has focus. Run `bridge native_key '{"key":"space"}'`, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. The drawer shows its empty state, `.asks-empty`. Thirty seconds after the last `wsctl input` to ask-agent, re-read `./attn agent peek ask-agent` until its screen shows the typed answer and `got the answer` after it. The `last assistant message:` line shows the mock's hidden `<!-- attn:state=waiting_input -->` instead. The typed answer contains `🙋 The user answered the ask "Cache store" (<ask>).`
+- **Answer from the keyboard.** `bridge dom_wait '{"selector":"[data-testid=\"ask-<ask>\"] input","focused":true,"timeoutMs":5000}'` matches: the first choice has focus. Run `bridge native_key '{"key":"space"}'`, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. The drawer shows its empty state, `.asks-empty`. Thirty seconds after the last `wsctl input` to ask-agent, re-read `./attn agent peek ask-agent` until the agent's screen shows the typed answer and `got the answer` after it. The `last assistant message:` line shows the mock's hidden `<!-- attn:state=waiting_input -->` instead. The typed answer contains `🙋 The user answered the ask "Cache store" (<ask>).`
 - **Replied asks.** With the drawer open, run `bridge native_key '{"key":"r"}'`. `bridge dom_text '{"selector":".asks-list"}'` reads `Replied in the last day` and `Cache store` with `replied`. Press Escape to close the drawer.
 - **Step through asks with the drawer's keys.**
   - Plant a second seed and run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "ask about <seed2>" --enter`, so two asks are open.
@@ -92,7 +92,7 @@ Preconditions:
   - Click `.asks-ask .asks-ask-subject` natively to move focus to the drawer, then press `k`: it reads `Cache store`.
   - Press `j`, click the subject again and press `g`: `bridge garden_get_state` shows `here` naming the seed.
   - Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`.
-  - Withdraw the `Release note` ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, its id from `list asks`, so only `Cache store` stays open for the queue bar.
+  - Run `wsctl input --id <terminal> --text "list asks" --enter` to read the id of the `Release note` ask. Withdraw that ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, so only `Cache store` stays open for the queue bar.
 - **The queue bar.** With an ask open and ask-agent owed a turn (`./attn agent list` shows `owed`), run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"queue-bar-asks\"]"}'` reads `1 ask· 1 waiting on you`. Move the pointer over it natively: `[data-testid="queue-bar-asks-peek"]` lists the ask, with `[aria-label="Waiting on you"]` on its row. Click the chip natively: the drawer opens on the ask. Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
 - **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.
 - **An ask about a seed, from the tile chip.** Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".` Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus. Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
@@ -106,7 +106,7 @@ Preconditions:
 - **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The drawer shows answered asks for a day.
 - **Linux**: `attn ask` works the same where the daemon and CLI run on Linux. `dock.asks` is Ctrl+Alt+R there, and Ctrl+Enter sends from the drawer.
 - **Performance and idle cost**: an ask's markdown is at most 64 KiB. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.
-- **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep its own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
+- **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep the harness's own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
 - **Flow**: in queue flow, the queue bar counts open asks and shows them on hover. Clicking the queue bar or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
@@ -120,12 +120,12 @@ Preconditions:
 
 ## Gotchas
 
-- The Asks switch lies below the visible Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
+- The Asks switch is below the visible Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
 - The bridge keeps the app in the background, where CSS `:focus` can match nothing even when `document.activeElement` is the answer input. Use `dom_wait` with `"focused":true`.
 - An answer is a user message, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
-- `attn ask --seed <id>` needs the asker to tend the seed. Without a claim it is refused with `nobody is tending <seed> ... tend it first`.
+- `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
-- The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed the letter reaches the agent's terminal and restarts the 30-second quiet wait.
+- The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
 - The queue bar exists only in queue flow with the sidebar collapsed.
 - The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. A fresh instance with asks off shows none of them. Their absence there is not a missing way in.
 - Working but wrong: after sending, the drawer moves to the next open ask, or to its empty state, with no confirmation that the answer reached the agent. The proof is the agent's screen, not the drawer.

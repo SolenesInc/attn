@@ -65,7 +65,7 @@ The tile header has **Overall note** for feedback on the whole document, and
 file, in order. If the file changes and a passage moves, its note is marked
 "⚠ moved" and still goes with the batch.
 
-The send button in the tile header names where the batch goes. A markdown
+The send button in the tile header shows where the batch goes. A markdown
 tile sends to its agent, the session that opened the file. **To** and ▾ pick
 another agent on the same desktop. A seed tile sends to the agent tending the
 seed, and ▾ offers **Note on seed**, which adds the batch to the seed's log

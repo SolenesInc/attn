@@ -25,7 +25,7 @@ switch.
    wake.
 3. Set up delegation roles. Read the delegation-roles reference, the
    `<harness>_available` lines of `attn settings list --all`, and
-   `attn delegate roles show`. If only one harness is found, ask whether the
+   `attn delegate roles show`. If those lines show only one harness, ask whether the
    user expects another to work too. If attn's maintained roles (Pathfinder,
    Builder, Reviewer, Orchestrator, Prototyper) aren't in the table, explain
    them and the `attn-workflow` skill they follow, and offer to add them. If

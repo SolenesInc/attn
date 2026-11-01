@@ -65,7 +65,7 @@ who set them and when.
 
 Only the seed's tender, the sessions above the tender in the delegation chain,
 the chief or you can set or change them while the seed is claimed. Attn doesn't
-check that the words are yours. The agent that sets them answers for them, and
+check that the words are yours. The agent that sets them is responsible for them, and
 the seed's log records who set what.
 
 When you change your mind, change the words yourself on the seed's page in the
@@ -140,7 +140,7 @@ Delegation** turns the whole table off, and then agents pick harness and model o
 their own.
 
 Attn bundles its own delegation roles. Add them with **Add Attn roles** in
-**Settings → Delegation**, or with `attn delegate roles install`. Each role arrives
+**Settings → Delegation**, or with `attn delegate roles install`. Attn adds each role
 without a model, and agents can't pick a role until it has one, so pick a model
 for each role you want agents to use. Adding the
 roles also installs the attn-workflow skill for your harnesses. The
@@ -233,7 +233,7 @@ The delegate keeps running with its seed, and you can still open, steer, and clo
 <details>
 <summary>How does the agent that started a delegate hear how it's going?</summary>
 
-Through the garden. Each new delegation starts a watch on the delegate's seed. The watch covers every seed under that seed, including seeds planted later. The agent that delegated hears when any of those seeds moves, when a note on any of them is marked to ring, and when blocked work among them becomes ready. Plain notes do not notify the agent, and an agent never hears about its own moves. Attn merges several updates on one seed into one update until the agent reads it. `attn seed unwatch <id>` removes a watch. Restarting or resuming the delegation does not bring a removed watch back, but `attn seed watch <id>` does.
+Through the garden. For each new delegation, Attn starts a watch on the delegate's seed. The watch covers every seed under that seed, including seeds planted later. The agent that delegated hears when any of those seeds moves, when a note on any of them is marked to ring, and when blocked work among them becomes ready. Plain notes do not notify the agent, and an agent never hears about its own moves. Attn merges several updates on one seed into one update until the agent reads it. `attn seed unwatch <id>` removes a watch. Restarting or resuming the delegation does not bring a removed watch back, but `attn seed watch <id>` does.
 </details>
 
 <details>
@@ -257,13 +257,13 @@ A role or model you ask for applies to that one delegation, because the table gu
 <details>
 <summary>What does "Add Attn roles" install, and what happens to the roles I already have?</summary>
 
-It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick a role until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code) and `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so Attn replaces or removes anything you change or add inside them. Your own roles stay. When the name of one of your roles starts with an Attn role's name, Attn asks whether to add the Attn role beside yours or replace yours (replacing keeps your row's models and on/off state). `attn delegate roles install` doesn't ask. The command adds each missing Attn role beside yours, as `builder-2` when one of your roles already has the id `builder`.
+It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick a role until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code) and `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so Attn replaces or removes anything you change or add inside them. Your own roles stay. When the name of one of your roles starts with an Attn role's name, Attn asks whether to add the Attn role beside yours or replace yours (replacing keeps your row's models and whether the role is on). `attn delegate roles install` doesn't ask. The command adds each missing Attn role beside yours, as `builder-2` when one of your roles already has the id `builder`.
 </details>
 
 <details>
 <summary>Do Attn's roles change when Attn updates, and what does an editable copy change?</summary>
 
-Attn maintains the text of its own roles and updates the text with releases, while the models and alternatives you set stay yours. **Make an editable copy** adds a custom role right below the original, named like the original with "(custom)" at the end, starting from the current text, models, alternatives, and on/off state. Attn never changes the copy after that. The original stays in your table, so turn off or delete the original if the copy should replace it.
+Attn maintains the text of its own roles and updates the text with releases, while the models and alternatives you set stay yours. **Make an editable copy** adds a custom role right below the original, named like the original with "(custom)" at the end, starting from the current text, models, alternatives, and whether the role is on. Attn never changes the copy after that. The original stays in your table, so turn off or delete the original if the copy should replace it.
 </details>
 
 <details>
@@ -281,7 +281,7 @@ Yes. An agent can close itself and any agent below it in its delegation chain, d
 <details>
 <summary>What do the seed states mean, and who can move a seed?</summary>
 
-A planted seed is open and nobody tends it. A seed is growing while an agent or crew member tends it. A parked seed is on hold and has no tender. The app labels it Dormant in some places. A harvested seed (done, with a summary of what got done) and a withered seed (dropped) stay closed until someone replants them. The garden board shows planted, growing, parked and closed seeds as Ready, In progress, Parked and Closed. Any agent can move a seed with `attn seed`. To take a seed that another agent tends, an agent needs `--force`, unless it sits above that agent in the delegation chain or is the profile's Chief. In the garden, you can park, harvest, wither or replant any seed, even one an agent tends.
+A planted seed is open and nobody tends it. A seed is growing while an agent or crew member tends it. A parked seed is on hold and has no tender. The app labels it Dormant in some places. A harvested seed (done, with a summary of what got done) and a withered seed (dropped) stay closed until someone replants them. The garden board shows planted, growing, parked and closed seeds as Ready, In progress, Parked and Closed. Any agent can move a seed with `attn seed`. To take a seed that another agent tends, an agent needs `--force`, unless the agent taking it sits above the tender in the delegation chain or is the profile's Chief. In the garden, you can park, harvest, wither or replant any seed, even one an agent tends.
 </details>
 
 <details>

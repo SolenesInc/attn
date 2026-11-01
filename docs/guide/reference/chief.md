@@ -46,7 +46,7 @@ act as my thinking partner.
 
 ## Delegation
 
-- I decide every delegation; a goal is not approval to run it end to end.
+- I decide every delegation. A goal is not approval to run it end to end.
 - Propose a delegation, harness, and model when a separate specialist would
   help.
 - Give each agent a clear outcome, context, constraints, and handoff.
@@ -87,10 +87,10 @@ a [crew member](crew.md) instead of a session you mark, and every profile has
 one, named Chief:
 
 - `chief` always names the Chief in `attn agent msg`, `attn crew` and the other commands that take a member, even after you rename the Chief. You can rename the Chief like any member.
-- It can sleep, but it can't be closed or retired, and Attn never sends it
-  heartbeats or puts it to sleep on its own. Deleting a profile needs its Chief
+- The Chief can sleep, but it can't be closed or retired, and Attn never sends
+  it heartbeats or puts it to sleep on its own. Deleting a profile needs its Chief
   asleep, and retires the Chief.
-- It has its own row at the top of the sidebar's Crew section. A Chief with
+- The Chief has its own row at the top of the sidebar's Crew section. A Chief with
   nothing to start from has no harness and stays asleep, keeping its mail.
   Until you set up the Chief, its row opens the setup: pick Claude Code or Codex,
   the model and effort, and the profile's Notebook folder, then press Enter to
@@ -101,7 +101,7 @@ one, named Chief:
 - The Chief's menus offer "Harness and model…" to change what it runs on for
   its next wake, "Edit charter", and Sleep in place of Close. The Chief wakes
   with one click. The command palette has the same actions.
-- It runs on its own launch settings (`attn crew set chief`). The Chief's
+- The Chief runs on its own launch settings (`attn crew set chief`). The Chief's
   model, effort and context budget in **Settings → Background agents**, and
   the Chief of Staff card on the home screen, apply only to a Chief session with Crew v2
   off.
@@ -124,9 +124,9 @@ you, and onboards you, one question at a time. Skip anything you don't want.
   Chief took over from your previous Chief session, the Chief says so and can
   ask that session for its open work.
 
-Helping Attn's maintainers means publishing usage analytics to them. No
-personal information is sent. See [telemetry](telemetry.md) for what is recorded.
-Vents are separate, short reports that agents file when Attn gets in their way. You choose them separately and can send only the ones you pick. You can
+Helping Attn's maintainers means publishing usage analytics to them. Attn sends no
+personal information. See [telemetry](telemetry.md) for what is recorded.
+Vents are short reports that agents file when Attn gets in their way. You choose them separately from analytics and can send only the ones you pick. You can
 also let agents vent about your own tools and environment. Those vents never
 leave your machine. Nothing turns on unless you say yes.
 

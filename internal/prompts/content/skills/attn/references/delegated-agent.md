@@ -54,6 +54,6 @@ attn seed harvest <seed-id> -m "<outcome and verification>"
 
 When only the merge of someone else's pull request remains, release your claim with `--when-merged`, as [Harvesting on a merge](garden.md#harvesting-on-a-merge) describes. Keep tending while work remains. Follow the [Delivery](../../attn-workflow/references/delivery.md) reference in `attn-workflow` for the repository's flow and stopping point.
 
-Harvest only when the assigned outcome and required verification are complete. The harvest command lists the checks that are still open or rejected. Leave a seed open when its plan awaits a user decision. Do not treat a finished plan as a finished seed when the assigned outcome includes implementation. To abandon the assignment, record why and wither the seed. A temporary blocker is not abandonment.
+Harvest only when the assigned outcome and required verification are complete. The harvest command lists the checks that are still open or rejected. Leave a seed open when its plan still needs a decision from the user. Do not treat a finished plan as a finished seed when the assigned outcome includes implementation. To abandon the assignment, record why and wither the seed. A temporary blocker is not abandonment.
 
 Use `attn seed guide` for body structure, artifacts, and completion rules.

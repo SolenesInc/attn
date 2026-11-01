@@ -19,7 +19,7 @@ gh pr create
 - Squash-merge only with green checks, approval, and a mergeable exact head,
   and only with the user's permission.
 - Treat the slopradar comment as information for the reviewer, not as a gate.
-- After you open the PR, run `attn pr watch <url> --mode codex` (see
-  [PR watch](../guide/reference/delegation.md#watching-pull-requests)).
+- After you open the PR, run `attn pr watch <url> --mode codex`. See
+  [PR watch](../guide/reference/delegation.md#watching-pull-requests).
 - Do not target `next`. It is a read-only mirror of `main`, described in
   [Making a release](making-a-release.md#the-next-branch).

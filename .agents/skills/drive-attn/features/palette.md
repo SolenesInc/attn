@@ -3,7 +3,7 @@
 The palette searches and runs commands, agents and tiles from the keyboard,
 like the VS Code command palette, and it learns what the user picks. ⌘K opens
 the palette on agents: the chief and crew, the turns in queue order, the other
-agents, and the tiles of the profile. Enter goes to the highlighted one. ⌘⇧K,
+agents, and the tiles of the profile. Press Enter to go to the highlighted one. ⌘⇧K,
 or `>` typed in the search, switches the palette to commands: everything attn
 can do, with its shortcut, and the commands about the agent on screen pinned on
 top. Commands the user picks often rise in the list.

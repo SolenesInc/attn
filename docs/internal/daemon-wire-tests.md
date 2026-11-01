@@ -88,13 +88,13 @@ On a `fakeagent.Run`:
 
 - With a Stop hook (Claude and Codex), `Reply` and `ReplyAfterStop` return
   once the daemon has recorded the turn's end. Every other write returns once
-  written, and the daemon reads the transcript on its own.
+  written, and the daemon reads the transcript independently.
 - Either way, await the resulting event on a peer that connected before the
   call. A peer that connects later sees the result in its initial state, and the
   peer cannot await that state.
 - `testworld.AwaitSession` also accepts an update from before the call that
-  the peer has not read yet. To wait for a state that follows one the test
-  already saw, use `testworld.AwaitStateAfter`.
+  the peer has not read yet. To wait for a state that follows a state the
+  test already saw, use `testworld.AwaitStateAfter`.
 
 ## Timers
 
@@ -104,10 +104,9 @@ On a `fakeagent.Run`:
 - A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
-  it, such as a terminal's kill escalation, a folder watch's window, the
-  background job runner's schedule and the daemon's database backup, fire
-  only when the test calls
-  `w.advance(d)`. `w.awaitTimer(name)` waits until the timer with that
+  that clock fire only when the test calls `w.advance(d)`. Examples are a
+  terminal's kill escalation, a folder watch's window, the background job
+  runner's schedule, and the daemon's database backup. `w.awaitTimer(name)` waits until the timer with that
   `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
   package that arms a stepped timer gives the timer a `stepclock.Name`, so a
   wait never matches another operation's timer of the same duration.
@@ -123,17 +122,18 @@ On a `fakeagent.Run`:
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,
   which closes each folder watch's window as soon as it opens.
 - A test about scheduled automations calls `w.tickSchedulesUntil(what, done)`.
-  On each tick, `w.tickSchedulesUntil` waits until the job runner is idle, moves
-  the clock one schedule tick, and waits until the runner is idle again, so
-  `done` reads settled state. It fails after `scheduleTickLimit` ticks.
+  `w.tickSchedulesUntil` repeats a tick until `done` returns true. Each tick
+  waits until the job runner is idle, moves the clock one schedule tick, and
+  waits until the runner is idle again, so `done` reads settled state. It fails
+  after `scheduleTickLimit` ticks.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. Each hold on
   a terminal returns a `testworld.Pause`. `Await` returns once the daemon has
   reached the hold, and `Release` lets the daemon go on. A hold the daemon
   never reaches fails the test at teardown.
   - `Stall(alive, err)` makes the terminal's worker stop answering. Recovery
     then waits out the worker's deadline and counts the terminal missing, and
-    the liveness probe answers `alive, err`. The pause arrives at the first
-    liveness probe, and releasing the pause makes the worker answer again.
+    the liveness probe answers `alive, err`. The daemon reaches the hold at the
+    first liveness probe, and releasing the hold makes the worker answer again.
   - `HoldRemoval()` stops the next removal halfway. At that point the
     terminal's streams have ended and its worker no longer answers, but the
     backend has not forgotten the terminal yet.

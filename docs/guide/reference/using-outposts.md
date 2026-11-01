@@ -14,7 +14,7 @@ File tiles stay on the home's machine.
 
 An outpost is a Linux amd64 or arm64 machine that you can reach with your own
 `ssh` command. Use the same destination in Attn, such as `ai-sandbox`,
-`user@host`, or `ssh://host:2222`. Your OpenSSH configuration chooses the route,
+`user@host`, or `ssh://host:2222`. Your OpenSSH configuration sets the route,
 keys and known hosts.
 
 Add installs your home's Linux build at the install path:
@@ -40,7 +40,7 @@ Attn starts the daemon over ssh and keeps it running when ssh disconnects.
 The machine must have logind's `KillUserProcesses` off, or Attn refuses and
 names the setting. No systemd service or root access is needed.
 
-Adding an outpost finishes when the two daemons pair for the first time. After ssh authentication succeeds, Attn finishes the installation on the next connection attempt. If a home restart interrupts the Add, it continues when the home starts again. If the installation fails, the row shows the reason, and Attn waits for you to choose **Update to home build** or **Re-pair** before it tries another install.
+Adding an outpost finishes when the two daemons pair for the first time. After ssh authentication succeeds, Attn finishes the installation on the next connection attempt. If a home restart interrupts the Add, the Add continues when the home starts again. If the installation fails, the row shows the reason, and Attn waits for you to choose **Update to home build** or **Re-pair** before it tries another install.
 
 The first connection pairs the daemons. The home remembers the outpost's
 identity, and the outpost accepts only that home until you release it.
@@ -50,7 +50,7 @@ identity, and the outpost accepts only that home until you release it.
 Home settings, such as model defaults and automatic settlement, apply on every
 outpost. Each outpost keeps a read-only copy and reads it locally, including
 while the home is unreachable. `attn settings set` on an outpost changes a home
-setting at the home. The copy follows when the bridge delivers the change.
+setting at the home. The copy updates when the bridge delivers the change.
 `attn settings list --all` marks the outpost's home settings read-only.
 
 Machine settings describe one computer: harness executables, the terminal
@@ -73,12 +73,12 @@ install when nothing is installed yet.
 The home builds or downloads its matching Linux binary, sends it over ssh,
 verifies it, and reconnects. A home built from source cross-compiles the Linux
 binary, for Add as well as Update. The first build takes about a minute. Later builds reuse the build cache and take seconds. Running shells keep their
-processes. The old binary stays at `<install path>.previous`. Installation
-refuses if the outpost has `pty_shared_host_enabled` on or its database needs a
+processes. The old binary stays at `<install path>.previous`. Attn
+refuses the installation if the outpost has `pty_shared_host_enabled` on or the outpost's database needs a
 newer build.
 
 After pairing, a reconnect never installs a build. If the installed build
-differs or is missing, the row says why and offers Update.
+differs or is missing, the row shows why and offers Update.
 
 Keep the data folders, because they hold the pairing identities and work. To return to an older build after a build migrated the database, you may need to restore a backup with `attn db restore`.
 
@@ -94,8 +94,8 @@ attn terminal open --host ai-sandbox --cwd /home/user/project
 The first command starts in the outpost's home directory. An outpost agent's
 `attn terminal open` defaults to its own machine and directory. Use `--host home`
 to open a shell at the home. `--cwd` names a directory on the target machine.
-The shell opens beside your agent and preserves
-focus. Read it and type into it with `attn terminal read`, `run`, and `send`,
+The shell opens beside your agent, and focus stays
+where it was. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 
 In an outpost shell, Cmd+D opens another shell on the same outpost, in the
@@ -110,7 +110,7 @@ An `attn` command in an outpost shell or a plain SSH shell reaches the home
 through the outpost. [Garden](../../internal/glossary.md) commands and document
 subscriptions use the home's records. Hooks run on the outpost, and the command reads and changes machine settings there. If the home is unreachable, the command fails
 immediately and names the home. If the bridge is lost during a command, the
-error says that the command may have run.
+error reports that the command may have run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
 Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing
@@ -143,7 +143,7 @@ On the Mac, you can settle, snooze and unsnooze the agent's turn, read the
 agent's assistant messages and transcript, and reload the agent's current
 conversation. Harness commands such as `/clear`, `/new` and `/resume` keep the
 conversation chain and each session's cost. The agent's `attn` commands reach
-the home through its outpost daemon.
+the home through the outpost's daemon.
 
 A closed session's ledger row shows its outpost. **Reopen** in the Sessions
 ledger, or `attn session reopen <id>`, resumes the session's conversation on
@@ -168,25 +168,25 @@ shells on any machine.
 
 Recent projects from every machine share one list. Each row shows its machine,
 This Mac included. **Enter** starts on the row's machine. For an agent, **Tab**
-on a repository opens its worktree choices there. **Tab** on any other row, and
-on every row in a terminal launcher, puts its address in the input.
+on a repository opens the repository's worktree choices on the row's machine. **Tab** on any other row, and
+on every row in a terminal launcher, puts the row's address in the input.
 
 An address names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means This Mac, and `home:` names
 This Mac too. Machine names match whole and ignore case, so names that contain
 `@` or `:`, such as `user@host`, work as typed. An outpost's id works too. When
-two outposts share a name, the launcher lists both under that name, and the one
-you pick goes into the input by its id.
+two outposts share a name, the launcher lists both under that name, and the launcher puts the id of the one
+you pick into the input.
 
-- `ai-sandbox:~/projects/` lists folders on ai-sandbox. Anything that starts
-  with `~` or `/` browses.
-- `ai-sandbox:attn` searches recent projects and starts the result on
-  ai-sandbox. ai-sandbox's own recents come first. Recents from other machines
+- With `ai-sandbox:~/projects/`, the launcher lists folders on ai-sandbox. It
+  browses for anything that starts with `~` or `/`.
+- With `ai-sandbox:attn`, the launcher searches recent projects and starts the
+  result on ai-sandbox. ai-sandbox's own recents come first. Recents from other machines
   follow once ai-sandbox confirms it has the same folder, relative to its home.
-- Typing the start of a machine's name, such as `ai`, offers that machine. **Tab**
-  completes `ai-sandbox:~/`.
+- If you type the start of a machine's name, such as `ai`, the launcher offers
+  that machine. **Tab** completes `ai-sandbox:~/`.
 
-While you browse an outpost, a line under the input says what the outpost is
+While you browse an outpost, a line under the input shows what the outpost is
 doing: `asking ai-sandbox for ~/projects/ · 120 ms`, `~/scratch is not on
 ai-sandbox`, `ai-sandbox unreachable · folders as of 3m ago`, or
 `ai-sandbox unreachable · no folders cached for ~/projects`. When a folder you
@@ -194,12 +194,12 @@ browse is missing on that machine, the launcher asks your other reachable
 machines and adds a row such as `~/scratch/ is on This Mac`. **Enter** on it
 changes the address to that machine.
 
-When the launcher opens, it asks each reachable outpost for its home folder and
-the parent folders of its recent projects, so browsing them usually shows
-folders at once. The launcher keeps these listings until it closes.
+When the launcher opens, it asks each reachable outpost for the outpost's home folder and
+the parent folders of the outpost's recent projects, so the launcher usually lists
+those folders at once when you browse them. The launcher keeps these listings until it closes.
 
-A start on an unreachable machine, or with a harness that machine lacks, is
-refused in the launcher with the reason. A start on a stalled outpost waits.
+The launcher refuses a start on an unreachable machine, or with a harness that machine lacks, and shows
+the reason. A start on a stalled outpost waits.
 **Esc** closes the launcher and leaves the start to finish in the background.
 
 ## Notebook sync
@@ -207,7 +207,7 @@ refused in the launcher with the reason. A start on a stalled outpost waits.
 Pairing an outpost starts two-way sync of the shared Notebook. Each machine has
 its own folder, selected by its machine setting `notebook.root`. Read the
 resolved path with `attn settings get notebook.root.effective` on that machine.
-A profile that sets its own folder with `notebook.profile_root` keeps that folder at the home and does not sync it. That profile's agents on an outpost see the shared Notebook. For that profile's seeds, `attn seed attach`, `detach` and `check report --evidence` refuse to run on an outpost and name the folder. Run the commands from a shell at the home. Files edited, created or deleted on either machine reach the
+A profile that sets its own folder with `notebook.profile_root` keeps that folder at the home and does not sync it. That profile's agents on an outpost see the shared Notebook. For that profile's seeds, `attn seed attach`, `detach` and `check report --evidence` refuse to run on an outpost and name the folder. Run the commands from a shell at the home. Files edited, created or deleted on one machine reach the
 others. Knowledge notes and seed artifacts stay ordinary files you can read and
 edit with native tools. Append journal entries with
 `attn journal append --entry '<text>'`, so concurrent appends share the home's
@@ -223,12 +223,12 @@ On an outpost, run `attn enrollment leave` before changing the outpost's root.
 **Settings → Outposts** shows first sync, syncing with the bytes and items left,
 in sync, or the error and its reason. Byte and item counts appear once the
 remaining work is known. The row also shows a count of conflict copies.
-Concurrent edits keep both versions as an original and a
-`*.sync-conflict-*` copy. Each new conflict copy produces one notification at
-the home. Compare the files, merge the content you need, and remove the copy to
+Sync keeps both versions of concurrent edits, as the original and a
+`*.sync-conflict-*` copy. Attn sends one notification at
+the home for each new conflict copy. Compare the files, merge the content you need, and remove the copy to
 clear the count. Attn moves a file that a sync deletes or
 replaces on the receiving machine to `<data-dir>/notebook-trash/` and keeps it
-there for 30 days. For each path, the trash keeps the latest received
+there for 30 days. For each path, the trash holds only the latest received
 replacement.
 
 From an outpost shell, `attn seed attach <seed> --path <file> --move` or
@@ -239,7 +239,7 @@ to the destination on that outpost. Each command waits for the matching change
 at the home before returning, so a following check report can name the artifact
 as evidence. `attn seed check report <seed> <C#> --evidence <file>` from an
 outpost shell copies that outpost's file the same way before it records the
-report. A sync failure names what is left. After you fix the failure, retry the
+report. If the sync fails, the error names what is left to sync. After you fix the failure, retry the
 same command. `attn seed show <seed>` prints the artifact folder for the machine
 you called from.
 
@@ -248,19 +248,19 @@ and `.DS_Store` do not sync. Other dotfiles remain content. Attn writes its
 marker under `.attn` and adds no `.stfolder` or `.stignore`. If the marker or root
 is removed later, sync stops with an error instead of spreading deletions.
 
-The engine runs at the home while Outposts is on and a paired outpost remains.
+The sync engine runs at the home while Outposts is on and a paired outpost remains.
 On an outpost it runs while enrolled, including while disconnected. Turning the
 home switch off stops the home's engine and keeps the home's index. Removing an
 outpost drops that device from the home. `attn enrollment leave` stops the
 outpost's engine and drops the outpost's index, and keeps the outpost's Notebook
-files. The next pairing treats that folder as a first sync again. On the
+files. At the next pairing, Attn treats that folder as a first sync again. On the
 outpost, `attn settings list --all` includes `notebook_sync_state` and
 `notebook_sync_last_error`.
 
 ## Show the host in your prompt
 
-Outpost shells have `ATTN_HOST` set to the outpost's name. Home shells leave
-it unset. Add `$ATTN_HOST` to your prompt, or use this Starship configuration:
+Outpost shells have `ATTN_HOST` set to the outpost's name. In home shells, `ATTN_HOST` is
+unset. Add `$ATTN_HOST` to your prompt, or use this Starship configuration:
 
 ```toml
 [hostname]
@@ -276,13 +276,13 @@ hidden in a local shell. `ssh_only = true` does not detect `ATTN_HOST`.
 A terminal is offline when its outpost's connection is lost or refused, or when
 Outposts is off. Each offline terminal stays in place. Its state dot becomes
 hollow and crossed, and its sidebar and home screen rows have a faint red tint.
-A strip over the terminal says "<name> unreachable · typing is not sent" without
+A strip over the terminal shows "<name> unreachable · typing is not sent" without
 changing the terminal's size. Attn does not send typing or resizes, and refuses
 immediately to close, split, kill or reload a live terminal, naming the outpost.
-A stopped, recoverable agent still supports record-only close, rename and
+A stopped, recoverable agent still allows record-only close, rename and
 priority changes.
 
-Offline agents keep their queue rows, marked, but Next, automatic advance, Cmd+J and waiting counts skip them. Attn hides the actions Settle, snooze, unsnooze,
+Offline agents keep their queue rows, marked, but Next, automatic advance and Cmd+J skip them, and the waiting counts leave them out. Attn hides the actions Settle, snooze, unsnooze,
 cancel countdown and submit annotation. A running auto-settle countdown shows
 frozen, and the assistant window names the unreachable outpost. Rename and
 priority remain available.
@@ -291,19 +291,19 @@ Messages and rings to an offline agent queue durably at the home. The sender
 gets a receipt naming the outpost. When the outpost reconnects, delivery resumes
 at a safe prompt, with the usual protection for a recently typed draft.
 
-While the home is connecting to an outpost, each tile says
-"Connecting to <name> · typing is not sent". The tiles say this after the home
+While the home is connecting to an outpost, each tile shows
+"Connecting to <name> · typing is not sent". The tiles show this message after the home
 starts, when you turn Outposts on, and when you add or re-pair an outpost. The
 terminal's sidebar, queue and home screen rows keep their usual appearance.
 
-A stalled outpost's tiles say "<name> not responding". The connection stays open and still sends typing, without waiting for earlier keys to be answered. If the connection ends before a key's answer arrives, Attn cannot tell whether that key ran, and the tile does not flash for it. Attn may have handed that key to the bridge, so the key can still reach the outpost when the outpost comes back. Look at the shell before you retype.
+A stalled outpost's tiles show "<name> not responding". The connection stays open and still sends typing, without waiting for earlier keys to be answered. If the connection ends before a key's answer arrives, Attn cannot tell whether that key ran, and the tile does not flash for it. Attn may have handed that key to the bridge, so the key can still reach the outpost when the outpost comes back. Look at the shell before you retype.
 
 A tile flashes red for a key only when Attn refuses the key before handing it to
-the bridge, or the outpost answers with an error. The tile says how many keys
-may not have been sent, and clears that message when a key you type goes out
+the bridge, or the outpost answers with an error. The tile shows how many keys
+may not have been sent, and clears that message when a key you type is sent
 again. Attn never retries a key.
 
-While a terminal is offline, an open tile keeps its last screen. If you switch desktops or restart the app, the tile instead shows an empty terminal and says that the screen is on the outpost. When the connection returns, the tile attaches and shows the current screen.
+While a terminal is offline, an open tile keeps its last screen. If you switch desktops or restart the app, the tile instead shows an empty terminal with a note that the screen is on the outpost. When the connection returns, the tile attaches and shows the current screen.
 
 ## Connection states
 
@@ -335,23 +335,23 @@ The row shows ssh's error verbatim. **Connect in a terminal** opens a focused
 terminal beside your active tile on the home. Background connection attempts
 pause while you answer. The terminal stays open so you can read the result.
 If ssh failed, **Resume** on that terminal runs ssh again in the same tile.
-Once the outpost connects, there is nothing left to answer, and **Resume**
-says so.
+Once the outpost connects, nothing is left to answer, and **Resume**
+reports that.
 
 ## Remove an outpost
 
 **Remove** closes the outpost's terminals across all profiles. Over ssh, Remove
 releases the outpost's enrollment to this home, stops the outpost's daemon for
 the home's instance, then exits that outpost's ssh master and removes the row.
-An outpost enrolled to another home keeps its enrollment and its running daemon. That includes an outpost for which this home's Add was refused. Remove keeps the binary,
+An outpost enrolled to another home keeps its enrollment and its running daemon. The same holds for an outpost for which this home's Add was refused. Remove keeps the binary,
 `<install path>.previous`, the data folder, and the Notebook folder on the
 outpost.
 
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
 With none, Attn removes the outpost immediately. If ssh cannot reach the
 outpost, **Remove and forget N terminals** closes only their tiles at the home.
-To stop what remains there, set the matching `ATTN_INSTANCE` and run these with
-the outpost's binary: `enrollment leave`, then `daemon stop`.
+To stop what remains there, set the matching `ATTN_INSTANCE` and run `enrollment leave`, then `daemon stop`, with
+the outpost's binary.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.
@@ -371,6 +371,6 @@ its named instance, records upload time, verifies a shell survives Update,
 and checks that Remove keeps the instance's files and stops its daemon.
 
 `scripts/verify-ssh-outposts/transport.mjs` measures typing echo beside a plain
-echo on the same master. Add installs the matching binary. Use `--mode bulk`
+echo on the same master. The script adds the outpost, and Add installs the matching binary. Use `--mode bulk`
 with a copied Notebook to measure a first sync. The harness removes the
 instances and scratch files it starts.

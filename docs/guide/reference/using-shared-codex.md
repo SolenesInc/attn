@@ -57,15 +57,15 @@ whole repository.
 ## One conversation, one session
 
 - Attn starts the app-server in a terminal of its own the first time a shared
-  terminal needs the server, so the app-server keeps running through app and
+  terminal needs it, so the app-server keeps running through app and
   daemon restarts. The terminals reconnect and resume the conversations they
   show.
 - Each conversation is one session, with its own name, queue state, inbox and
   usage. A Codex terminal shows one conversation at a time. Launching Codex on
   a conversation an open session holds opens that session in a new tile
   rather than a second session.
-- When no open shared session and no shared terminal needs the server, the
-  server stops. The next shared Codex terminal starts the server again.
+- When no open shared session and no shared terminal need the app-server, the
+  app-server stops. The next shared Codex terminal starts it again.
 
 ## Codex updates
 
@@ -74,10 +74,16 @@ Codex is out, a banner at the top of Attn offers it with **Install**. Close the
 banner and the same offer stays under the bell in the sidebar. Install opens a
 terminal tile running Codex's own update, so whatever the update prints, a
 failure included, stays in that tile. Shared Codex terminals don't show Codex's
-own update prompt, since Codex's Update now would exit the terminal, and exiting the terminal closes the session and archives the session's conversation.
+own update prompt. Codex's Update now would exit the terminal, and exiting the
+terminal closes the session and archives the session's conversation.
 
 Attn reads which Codex is installed when a shared terminal opens, when the
-app-server starts, once a day, and when an update it ran finishes. If the installed Codex is not the Codex the app-server runs, Attn restarts the app-server on the installed Codex. Attn restarts it when no conversation is running a turn, including a turn that waits on an approval or on your answer to a question, and every shared terminal has finished starting. The banner names the sessions Attn waits on, and you can jump to each one.
+app-server starts, once a day, and when an update it ran finishes. If the
+installed Codex is not the Codex the app-server runs, Attn restarts the
+app-server on the installed Codex. Attn waits to restart until no conversation
+is running a turn, including a turn that waits on an approval or on your answer
+to a question, and every shared terminal has finished starting. The banner names
+the sessions Attn waits on, and you can jump to each one.
 
 - First Attn starts the installed Codex separately for a moment. If that Codex
   refuses to start, for example over a setting in your Codex config that the new
@@ -116,8 +122,11 @@ tiles**. From a terminal:
   latest ones, a restart and what the restart waits on, and the tiles still on
   an older Codex.
 - `attn codex update` runs Codex's own update in your terminal, then has Attn
-  read the installed Codex. After a plain `codex update`, Attn notices the new Codex at its next read.
-- `attn codex restart` reads the installed Codex at once, then restarts the app-server once no turn runs, even if the installed Codex is the one the app-server already runs.
+  read the installed Codex. After a plain `codex update`, Attn notices the new
+  Codex at its next read.
+- `attn codex restart` reads the installed Codex at once, then restarts the
+  app-server once no turn runs. The command restarts even if the installed Codex
+  is the one the app-server already runs.
   `attn codex restart --now` does what Restart now does, without first listing
   what each session would lose.
 
@@ -127,7 +136,9 @@ tiles**. From a terminal:
 The session you left stays open and **hidden**:
 
 - The hidden session keeps its state, so a session that was waiting for you
-  still waits. From then on the app-server tells Attn when the session's turn starts, when the turn waits on an approval or asks you a question, and when the turn ends.
+  still waits. From then on the app-server tells Attn when the session's turn starts, when the
+  turn waits on an approval, when the agent asks you a question, and when the
+  turn ends.
   Switch a terminal back to the session with `/resume` or `/agents` and the
   terminal takes over again. An approval the session was waiting on shows in the
   terminal, and you answer it as usual.
@@ -171,8 +182,8 @@ The session's name in Attn and the conversation's name in Codex stay in sync: re
 ## Closing and resuming
 
 Closing a tile ends only its terminal when another tile shows the same
-session. Closing the last tile of a session archives its conversation in Codex,
-settles its usage and closes the session into the ledger. A hidden session
+session. Closing the last tile of a session archives the session's conversation in
+Codex, settles the session's usage and closes the session into the ledger. A hidden session
 closes the same way.
 
 To pick the session up again, resume the session from the Sessions ledger. Attn

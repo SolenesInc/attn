@@ -2,11 +2,12 @@
 
 Messages, seed updates and quick captures addressed to an agent or a mailbox.
 A ring prompts the agent to read them, like a push notification. A sender saves
-an item for an address. An address is either a session or a mailbox. A mailbox is a crew member,
-the chief or a seed's tender, and whichever session holds that job reads it. attn
-then decides when to ring. A ring types what the user wrote into the
-conversation as the user's message. It ends with a 📬 line for the other items. The agent reads those items with `attn agent inbox`. Items are durable
-and stay unread until read, typed, withdrawn or replaced.
+an item for an address. An address is either a session or a mailbox. A mailbox
+is a crew member, the chief or a seed's tender, and whichever session holds that
+job reads it. attn then decides when to ring. When attn rings, it types what the
+user wrote into the conversation as the user's message, followed by a 📬 line
+for the other items. The agent reads those items with `attn agent inbox`. Items
+are durable and stay unread until read, typed, withdrawn or replaced.
 `docs/internal/inbox.md` holds the rules. This file shows how to drive them.
 See [agent-state.md](agent-state.md) for reading another agent's screen with
 `attn agent peek`, and see [queue-flow.md](queue-flow.md) for what a ring's run
@@ -69,23 +70,23 @@ Preconditions:
 - Settle inbox-b once: run `wsctl input --id <b> --text "ready" --enter`, wait until the `state:` line of `./attn agent peek inbox-b` stops reading `working`, and start the first step 30 seconds after the input. Wait for the same state before each later send to inbox-b, because a turn still running holds the ring back.
 
 - **Message an agent.** Run `wsctl input --id <a> --text "tell inbox-b" --enter`. `./attn agent peek inbox-a` shows the receipt `notified: notified inbox-b (id <message>)`. The ring types the 📬 line into inbox-b, which reads its inbox: `./attn agent peek inbox-b` shows `📨 from inbox-a: hello from the sender` and the note that the message is from another agent, not the user.
-- **The sender checks.** Re-read `./attn agent msg-status <message> --session inbox-a` until it prints `read: message <message> to session inbox-b`. It reads `notified` until inbox-b has run `attn agent inbox`. Once inbox-a has settled, run `wsctl input --id <a> --text "status <message>" --enter`: peek on inbox-a shows the same `read:` line, asked as the agent.
+- **The sender checks.** Re-read `./attn agent msg-status <message> --session inbox-a` until it prints `read: message <message> to session inbox-b`. Until inbox-b runs `attn agent inbox`, the command prints `notified`. Once inbox-a has settled, run `wsctl input --id <a> --text "status <message>" --enter`: peek on inbox-a shows the same `read:` line, asked as the agent.
 - **Read again and read empty.** `./attn agent inbox <message> --session inbox-b` prints the same 📨 message again. `./attn agent inbox --session inbox-b` prints `inbox empty`, and with `--json` an empty `items` list and `remaining: 0`.
 - **From the person's shell.** Run `./attn agent msg inbox-b "from the shell"`. It exits 2 with `no sender: this shell is not an attn session, so pass --source-session <id>`. Run `./attn agent msg inbox-b "from the shell" --source-session inbox-a`: the receipt says `notified`, and peek on inbox-b shows the 📨 line with that text.
 - **Refusals.** Run `./attn agent msg inbox-b "from the shell" --source-session inbox-a` again within 10 seconds: it prints `refused: you already sent that exact text to this session within the last 10s; say something new, or wait for a reply` and exits 1. `./attn agent msg inbox-a "me" --source-session inbox-a` prints `refused: that is this session; a message to yourself is not a conversation` and exits 1.
 - **A seed's mailbox.** Plant a seed: `./attn seed plant "Inbox drive"` prints `<seed>  <slug>  Inbox drive`. Run `wsctl input --id <a> --text "tell <seed>" --enter`: peek on inbox-a shows `queued: queued (seed has no reachable tender; waits for its next tender)`. Run `wsctl input --id <b> --text "tend <seed>" --enter`. Thirty seconds after that input, peek on inbox-b shows the 📨 line from inbox-a: the item followed the seed to its new tender.
 - **Typing holds the ring.** Type into inbox-b without submitting: `wsctl input --id <b> --text "hold on"`, then at once `./attn agent msg inbox-b "after typing" --source-session inbox-a`. The receipt is `queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)`. Thirty seconds after the input, peek on inbox-b shows the 📬 line typed after `hold on` on the same prompt, then the 📨 line.
-- **Read a few at a time.** Type into inbox-a without submitting, as above, so no ring reads for it. Run `./attn agent msg inbox-a "first" --source-session inbox-b --json`: the JSON has `status` `queued` and a `message_id`. Send `"second"` the same way without `--json`. `./attn agent inbox --session inbox-a --limit 1` prints the first 📨 item, then a line starting `1 more unread`. Every read marks what it returns as read, so `./attn agent inbox --session inbox-a --limit 1 --json` returns `second` in `items` with `remaining: 0`, and a plain `./attn agent inbox --session inbox-a` prints `inbox empty`. Submit inbox-a's prompt with `wsctl input --id <a> --text "" --enter`.
+- **Read a few at a time.** Type into inbox-a without submitting, as above, so no ring prompts it to read. Run `./attn agent msg inbox-a "first" --source-session inbox-b --json`: the JSON has `status` `queued` and a `message_id`. Send `"second"` the same way without `--json`. `./attn agent inbox --session inbox-a --limit 1` prints the first 📨 item, then a line starting `1 more unread`. Every read marks what it returns as read, so `./attn agent inbox --session inbox-a --limit 1 --json` returns `second` in `items` with `remaining: 0`, and a plain `./attn agent inbox --session inbox-a` prints `inbox empty`. Submit inbox-a's prompt with `wsctl input --id <a> --text "" --enter`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek inbox-a` after each send and `./attn agent peek inbox-b` after each ring, and `./attn agent msg-status <message> --session inbox-a --json`. Name each file for its way in, such as `inbox-seed-mailbox-peek.txt`.
 
 ## Contexts
 
-- **Durability across restarts**: items, attempts and outstanding rings are the daemon's records. After a daemon restart, delivery resumes for every address with unread items once recovery finishes. A restart gives no item new attempts. A message sent during recovery is `queued until daemon recovery completes`.
+- **Durability across restarts**: items, attempts and outstanding rings are the daemon's records. After a daemon restart, delivery resumes for every address with unread items once recovery finishes. A restart does not reset an item's attempts. A message sent during recovery is `queued until daemon recovery completes`.
 - **Linux**: `attn agent msg`, `msg-status` and `inbox` work the same where the daemon and CLI run on Linux.
 - **Outposts**: an item for an agent on an outpost whose host is unreachable waits, and the receipt's detail reads `queued: <agent> is on <host>, which is unreachable; it rings when <host> is back`.
-- **Profiles**: a message reaches only sessions, members and seeds of the sender's profile. A session or member in another profile answers as if it did not exist: `no session or crew member matches`. A seed of another profile is refused by name.
+- **Profiles**: a message reaches only sessions, members and seeds of the sender's profile. attn answers for a session or member in another profile as if it did not exist: `no session or crew member matches`. A seed of another profile is refused by name.
 - **Performance and idle cost**: limits a sender can hit, each named in its refusal: 32 KiB per message, the same text to one address once per 10 seconds, 8 messages from one sender to one address per 30 seconds, and 50 unread peer messages per address. `attn agent inbox` returns 20 items by default and 50 with `--limit`. The rest wait for the next read.
-- **Harnesses**: every harness gets the same rings and reads with the same verbs. Plugin harnesses get them through their driver. A shell never gets a ring: the receipt says it waits for `attn agent inbox` there.
+- **Harnesses**: every harness gets the same rings and reads with the same verbs. Plugin harnesses get them through their driver. A shell never gets a ring: the receipt says the message waits there for `attn agent inbox`.
 - **Compatibility across versions**: items written by an earlier version stay readable. The store's inbox and mailbox migrations carry them forward.
 - **Flow**: with queue flow and quiet notifications on, a run a ring started opens no turn when it stops, unless the agent needs approval or attn cannot tell its state ([queue-flow.md](queue-flow.md)). With queue flow off, quiet notifications change nothing.
 
@@ -98,7 +99,7 @@ Preconditions:
 ## Gotchas
 
 - Text typed through `wsctl input` counts as the user typing: attn types nothing into that terminal for 30 seconds after it. Type into the sender, not the recipient, and wait 30 seconds after any input to the recipient before expecting its ring.
-- Typing with `--enter` starts the agent's turn, so the receipt for a send right after it reads `queued (target is not taking input right now — lands when it is running again; don't wait for a reply)`, not the typing receipt. Only unsubmitted text gives the typing receipt, and the ring is typed after that text 30 seconds later.
+- Typing with `--enter` starts the agent's turn, so the receipt for a send right after it reads `queued (target is not taking input right now — lands when it is running again; don't wait for a reply)`, not the typing receipt. Only unsubmitted text gives the typing receipt, and attn types the ring after that text 30 seconds later.
 - The mock echoes a ring with its bracketed-paste markers, as `^[[200~📬 You have unread items …^[[201~`. The mock still matches the line. A real harness shows the text alone.
 - The mock reads its inbox only because its fixture matches `unread items` in the 📬 line. A fixture without that turn leaves the item unread, and the next ring comes 5 minutes later.
 - A ring lands only at a safe prompt. An agent that has not settled after launch gets `queued (target is not taking input right now ...)`. The ring follows when the agent settles, at no cost in attempts.

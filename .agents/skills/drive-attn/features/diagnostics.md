@@ -18,7 +18,7 @@ state ([agent-state.md](agent-state.md)).
 - `event-bus`: the log's window, producers, consumers, lag and pin alarm. The CLI and **Settings → Event bus** can trim the log and disable and enable a consumer.
 - `task-runner`: **Settings → Task runner** lists background tasks and offers Retry on a failed or dead one.
 - `db-backup`: the daemon writes a rotating backup when it starts and every 6 hours, keeps the newest 12, and takes a snapshot before each migration.
-- `db-restore`: swap a backup in while the daemon is stopped. The replaced database stays beside it.
+- `db-restore`: swap a backup in while the daemon is stopped. The replaced database stays beside the restored `attn.db`.
 - `migration-failure`: the app's screen after a data migration failed at startup, with the details to copy.
 - `diag-endpoint`: the daemon opens a loopback pprof and `/debug/vars` endpoint when `ATTN_PPROF` is set, for `docs/internal/perf-testing.md`.
 
@@ -26,7 +26,7 @@ state ([agent-state.md](agent-state.md)).
 
 ### People
 
-- Palette (`app/src/application/useAppCommands.tsx`): `create-diagnostic-report` ("Create diagnostic report") opens the report dialog (`app/src/components/DiagnosticReportPrompt.tsx`), which saves `attn-<time>.attn-report.json` into Downloads and shows it in Finder.
+- Palette (`app/src/application/useAppCommands.tsx`): `create-diagnostic-report` ("Create diagnostic report") opens the report dialog (`app/src/components/DiagnosticReportPrompt.tsx`). In the dialog, Save report writes `attn-<time>.attn-report.json` into Downloads and shows the file in Finder.
 - **Settings → Task runner** (`backgroundTasks`, `app/src/components/BackgroundTasksSettings.tsx`): background tasks, most recently updated first, each with its state, `kind:subject`, attempts and last error. A failed or dead task has Retry, and "Try again" shows when the list cannot load.
 - **Settings → Event bus** (`eventBus`, `app/src/components/EventBusSettings.tsx`): the log's size, producers, consumers with Disable or Enable (`[data-testid="bus-consumer-toggle-<consumer>"]`) and health. See [settings.md](settings.md) for opening the settings dialog.
 - The migration failure screen (`app/src/components/MigrationFailureScreen.tsx`): "attn seems broken after migration", the failure's facts and "Copy details".
@@ -68,7 +68,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: the daemon takes a backup at every start and every 6 hours and keeps the newest 12, along with the pre-migration snapshots. A restore keeps the database it replaces. It also pins again each conversation archive that the restored backup records. A consumer's cursor and enabled bit are stored, so a disabled consumer stays disabled across restarts. `daemon.log` carries across restarts, and the daemon trims it once it grows past 20 MiB.
+- **Durability across restarts**: the daemon takes a backup at every start and every 6 hours and keeps the newest 12 backups, and keeps the pre-migration snapshots as well. A restore keeps the database it replaces. A restore also pins again each conversation archive that the restored backup records. The daemon stores a consumer's cursor and enabled bit, so a disabled consumer stays disabled across restarts. `daemon.log` is kept across restarts, and the daemon trims it once it grows past 20 MiB.
 - **Linux**: `attn preflight`, `attn debug`, `attn bus` and `attn db` work the same where the daemon and CLI run on Linux. The report and the settings sections are in the app. On Linux, `ui.commandPalette` is Ctrl+Alt+K and `ui.openSettings` is Ctrl+Shift+,.
 - **Outposts**: `attn debug`, `attn bus` and `attn db` act on the machine they run on: an outpost's own log, event bus and database, never the home's.
 - **Profiles**: logs, the event bus, tasks and backups belong to the daemon and cover every profile.

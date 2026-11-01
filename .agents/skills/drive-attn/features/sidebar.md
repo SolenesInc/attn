@@ -1,13 +1,14 @@
 # Sidebar
 
-The sidebar is the window's list of what the user works with, and its shape
-follows the profile's flow. In desktop flow it is the desktop sidebar, which shows each
-desktop with its agents and tiles. Collapsed, it becomes a thin column of desktop
-chips. In queue flow it is the queue sidebar, which shows Home, the crew, the agents that
-are owed a turn, the rest of the agents, automation runs and desktop chips. Collapsed, it
-becomes the queue bar across the top. The sidebar's header holds the profile,
-Commands, the flow switch and the buttons for the garden, the notebook, the
-ledger, automations, notifications and asks.
+The sidebar is the window's list of what the user works with. Its shape depends
+on the profile's flow. In desktop flow, the sidebar is the desktop sidebar. It
+shows each desktop with its agents and tiles, and collapses to a thin column of
+desktop chips. In queue flow, the sidebar is the queue sidebar. It shows Home,
+the crew, the agents that are owed a turn, the rest of the agents, automation
+runs and desktop chips, and collapses to the queue bar across the top. The
+header of the sidebar holds the profile, Commands, the flow switch and the
+buttons for the garden, the notebook, the ledger, automations, notifications and
+asks.
 
 ## Sub-features
 
@@ -35,7 +36,7 @@ ledger, automations, notifications and asks.
 
 ### Agents
 
-None. Agents change what the sidebar shows without driving it: `attn session rename` sets the name a row shows ([ledger.md](ledger.md)), and `attn callout` can point at its `sidebar`, `home`, `commands`, `garden`, `desktops`, `queue` and `crew` anchors ([callouts.md](callouts.md)).
+None. Agents change what the sidebar shows without driving it: `attn session rename` sets the name a row shows ([ledger.md](ledger.md)), and `attn callout` can point at the `sidebar`, `home`, `commands`, `garden`, `desktops`, `queue` and `crew` anchors ([callouts.md](callouts.md)).
 
 ## Driving it
 
@@ -45,10 +46,10 @@ Preconditions:
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX) && echo "export P=$P" >> $DRIVE_ENV` and an empty agent folder with `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Start two agents with `wsctl add-session --cwd $A --agent claude --label side-a --id side-a`, then the same with `side-b`. With no session the sidebar starts collapsed. The first agent expands it.
 
-- **Open an agent from its row.** Run `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-side-a\"]","timeoutMs":5000}'`, then click `[aria-label="Open side-a"]` natively, its point from `bridge dom_native_point`. `bridge get_state` shows `activeLeaf.sessionId: "side-a"`.
+- **Open an agent from its row.** Run `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-side-a\"]","timeoutMs":5000}'`, then click `[aria-label="Open side-a"]` natively, using the point from `bridge dom_native_point`. `bridge get_state` shows `activeLeaf.sessionId: "side-a"`.
 - **Collapse with the key.** Run `bridge native_key '{"key":"b","modifiers":["command"]}'`. `bridge dom_wait '{"selector":".sidebar.collapsed","timeoutMs":5000}'` matches, and the rail still has `[aria-label="Home"]` and `button[aria-label="Commands"]`. Press ⌘B again: `[data-testid="sidebar-home"]` is back.
 - **Collapse from the palette and the header.** Open the palette with ⌘⇧K, type `Hide the sidebar` and press Enter: `.sidebar.collapsed` matches. Click `button[title="Expand sidebar"]` natively: it expands. Click `[aria-label="Collapse sidebar"]` natively: it collapses again, and ⌘B brings it back.
-- **The header buttons.** Click `button[aria-label="Commands"]` natively: `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'` matches. Press Escape. Click `[aria-label="Show Notifications"]` natively: `bridge notifications_get_state` shows `present: true`. Click `[aria-label="Hide Notifications"]` natively: the popover stays open and `present` stays true, because the popover's backdrop covers the bell (see Gotchas). Open the palette, type `Hide notifications` and press Enter: `present` is false. `[aria-label="New agent"]`, the garden, notebook, ledger, automations and asks buttons and the profile pill open features of their own. [agent-launch.md](agent-launch.md), [garden.md](garden.md), [notebook.md](notebook.md), [ledger.md](ledger.md), [automations.md](automations.md), [asks.md](asks.md) and [profiles.md](profiles.md) drive them.
+- **The header buttons.** Click `button[aria-label="Commands"]` natively: `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'` matches. Press Escape. Click `[aria-label="Show Notifications"]` natively: `bridge notifications_get_state` shows `present: true`. Click `[aria-label="Hide Notifications"]` natively: the popover stays open and `present` stays true, because the popover's backdrop covers the bell (see Gotchas). Open the palette, type `Hide notifications` and press Enter: `present` is false. `[aria-label="New agent"]`, the garden, notebook, ledger, automations and asks buttons and the profile pill open features of their own. To drive them, see [agent-launch.md](agent-launch.md), [garden.md](garden.md), [notebook.md](notebook.md), [ledger.md](ledger.md), [automations.md](automations.md), [asks.md](asks.md) and [profiles.md](profiles.md).
 - **The queue sidebar.** Run `./attn settings set queue_mode_enabled true`. `bridge dom_wait '{"selector":"[data-testid=\"sidebar-queue\"]","timeoutMs":5000}'` matches, and `bridge queue_get_state` shows `present: true` and `turns` naming `side-a` and `side-b`, which are owed a turn since they booted. Settle `side-b` for setup: select it with `bridge select_session '{"sessionId":"side-b"}'` and press ⌘⇧E ([queue-flow.md](queue-flow.md)). `turns` now names only `side-a`.
 - **The agent list.** Run `bridge native_key '{"key":"a","modifiers":["command","shift"]}'`. `bridge queue_get_state` shows `agentList.expanded: true` and `settled` naming `side-b`, and `bridge dom_wait '{"selector":"[data-testid=\"queue-agent-filter\"]","focused":true,"timeoutMs":5000}'` matches. Run `bridge native_text '{"text":"zzz"}'`: `settled` is empty and the list reads `Nobody else.`. Press Escape: the filter clears. Run `bridge native_key '{"key":"arrowdown"}'`: `bridge dom_focus_state` shows focus on the first row, `BUTTON` labelled `Open side-a`. Press `arrowdown` again for `Open side-b` and `arrowup` for `Open side-a`. Press Escape: `agentList.expanded` is false. Press Escape again: focus returns to the agent on screen, the `Terminal input` of `side-a`.
 - **The queue bar.** Press ⌘B. `bridge queue_get_state` shows `present: false` and `bar.present: true`, with `bar.waiting: 1` and `bar.crumbs` naming `side-a`. Move over `[data-testid="queue-bar-pill"]` with `bridge native_mouse` `move`: `bridge queue_get_state` shows `bar.waitingPeek` naming `agent:side-a` and `agent:side-b`. Click the pill natively: `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Agents\"]","focused":true,"timeoutMs":5000}'` matches. Press Escape. Press ⌘⇧A: the agent palette opens again, since the queue sidebar is not showing. Press Escape. Click `[aria-label="Show sidebar"]` natively: `present` is true again.
@@ -61,9 +62,9 @@ Preconditions:
 - **Linux**: `session.toggleSidebar` is Ctrl+Alt+B and `sidebar.agentList` is Ctrl+Alt+A (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent whose outpost is offline keeps its row, marked offline, and the waiting count leaves it out.
 - **Profiles**: the sidebar shows the selected profile's desktops, agents and crew only. The profile pill switches profiles ([profiles.md](profiles.md)). Flow is one setting for every profile today, so switching profiles keeps the shape.
-- **Performance and idle cost**: turn ages re-read the clock every 30 seconds, and a row's settling bar animates only while a countdown runs. Nothing measures the sidebar's idle cost. When a change touches the sidebar's rendering, check for repaints with `docs/internal/perf-testing.md`.
+- **Performance and idle cost**: turn ages refresh from the clock every 30 seconds, and a row's settling bar animates only while a countdown runs. Nothing measures the sidebar's idle cost. When a change touches the sidebar's rendering, check for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: each row carries its harness's mark. With logos off, the queue sidebar still names the harness in the row's hover text.
-- **Keyboard and native input**: ⌘B and ⌘⇧A reach the sidebar from a terminal or the window. In an input, a textarea or an editor outside a terminal, ⌘B stays with that field, while ⌘⇧A still fires. In the queue sidebar, ↑ and ↓ walk rows and Escape steps back.
+- **Keyboard and native input**: ⌘B and ⌘⇧A reach the sidebar from a terminal or the window. In an input, a textarea or an editor outside a terminal, ⌘B stays with that field, while ⌘⇧A still fires. In the queue sidebar, ↑ and ↓ walk rows, and Escape clears the filter, then closes the list, then returns to the agent on screen.
 - **Flow**: queue flow shows the queue sidebar and the queue bar, and desktop flow shows the desktop sidebar and the rail. ⌘⇧A opens the agent list only where the queue sidebar shows.
 
 ## Tests

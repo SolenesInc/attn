@@ -82,7 +82,7 @@ Create a file under the right PARA directory, such as
       - /journal/2026-06-18.md
     ---
 
-    The Notebook's markdown files are canonical; edits are plain file writes.
+    The Notebook's markdown files are canonical. Edits are plain file writes.
 
 To edit, Read the file, then Edit it. These are ordinary on-disk edits. The
 daemon watches the Notebook folder and refreshes any open Notebook view in the

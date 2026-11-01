@@ -21,9 +21,10 @@ Follow [production safety](../../AGENTS.md#you-are-probably-running-inside-attn)
 | Go only | `make install-daemon-dev` | `make install-daemon INSTANCE=<name>` |
 | Anything else | `make dev` | `make install INSTANCE=<name>` |
 
-Open a named app with `make run INSTANCE=<name>`. Named instances build a faster,
-less optimized shell. Set `ATTN_APP_CARGO_PROFILE=release` to build the shipping
-profile. Full macOS installs need to run outside the sandbox, so signing keeps permissions. For a Linux VM, see [Local Linux runner](linux-runner.md).
+Open a named app with `make run INSTANCE=<name>`. Named instances build a
+faster, less optimized shell. Set `ATTN_APP_CARGO_PROFILE=release` to build the
+shipping profile. Run full macOS installs outside the sandbox, so signing keeps
+permissions. For a Linux VM, see [Local Linux runner](linux-runner.md).
 
 ## GitHub polling
 
@@ -46,14 +47,16 @@ the daemon. `attn plugin install-bundled attn-pi` restores the bundled copy.
 Cover lifecycle, protocol, PTY, background-runner, timing, and other
 app-observable changes with scenarios. A pull request needs green packaged-app
 CI on its head. Report missing coverage and ask before merging. Verify a landing
-locally. After the landing, `main`'s full scenario matrix verifies it again. See
+locally. After the landing, CI verifies it again with `main`'s full scenario
+matrix. See
 [Verifying before landing](trunk-based-development.md#verifying-before-landing).
 
 CI runs the scenario matrix. Run scenarios locally, in a non-production
 instance, to reproduce a CI failure or develop a scenario. When the machine has
 the capacity, you may also run them to check an app-observable change before
 landing.
-Check the installed build first, not whatever `attn` is on `PATH`:
+
+Check the installed build first, not the `attn` on `PATH`:
 
 ```bash
 "$(./attn instance resolve --field appDaemon)" preflight

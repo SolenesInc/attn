@@ -1,8 +1,8 @@
 # Harness behavior
 
-How each harness behaves where attn meets it: which hooks fire, when, and
-which conversation id they carry, what its app-server and TUI do, and how it
-updates itself. Designs that react to a harness depend on these facts.
+How each harness behaves where attn meets it: which hooks fire and when, which
+conversation id the hooks carry, what the harness's app-server and TUI do, and
+how the harness updates itself. Designs that react to a harness depend on these facts.
 
 Every entry was checked against the harness's source or a probe, and names
 the version it was checked on. Do not add or rely on a claim from memory:
@@ -25,7 +25,7 @@ shows one session at a time, and a session can show in any number of
 terminals. Removing a placement keeps the terminal addressable, including
 after daemon restart. Closing a session ends its terminal associations. When a
 terminal resumes the conversation of a session whose agent no longer runs, the
-session moves into that terminal and its old tile goes away.
+session moves into that terminal and the session's old tile goes away.
 
 Showing one session in many terminals needs the session to run over a link
 whose server every terminal of the conversation joins, like shared Codex's
@@ -108,7 +108,7 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   mock provider recorded four auxiliary Haiku title requests across a crew
   wake, two inputs, and a sleep. With `--name Member` and suggestions
   disabled, the same real-binary lifecycle made only the six expected Opus
-  member requests (2.1.310). Attn's `ATTN_HEADLESS_TASKS=off` does not disable
+  member requests (2.1.310). attn's `ATTN_HEADLESS_TASKS=off` does not disable
   Claude's native title generation.
 - `-p --output-format json --json-schema ...` returns a result object by
   default and an array of events with `--verbose`. The array's last
@@ -207,12 +207,13 @@ Claude's daemon lets several terminals show one conversation, as a link does,
 but nothing tells attn which terminal shows which worker. attn launches Claude
 with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` instead. Without the variable, a
 conversation moved into the daemon no longer runs in the terminal attn
-launched: attn would open one session for the draft and another for the fork,
-the agent's attn commands would name another terminal, and Reload session could
-not resume the conversation. The variable also reaches `claude` run from the
+launched. attn would open one session for the draft and another for the fork.
+The agent's attn commands would name another terminal. Reload session could not
+resume the conversation. The variable also reaches `claude` run from the
 agent's tools, so a `claude` that the agent runs cannot start conversations in
-the daemon. Such conversations would carry the agent's attn identity. Claude that the user starts by hand in a
-terminal running a shell keeps its agent view. That terminal has no
+the daemon. Such conversations would carry the agent's attn identity. Claude
+that the user starts by hand in a terminal running a shell keeps its agent
+view. That terminal has no
 `ATTN_TERMINAL_ID`, so the conversation carries no attn identity.
 
 ### Auto memory
@@ -303,7 +304,7 @@ Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
 - `f` starts a new conversation whose `session_meta` has `forked_from_id` and
   which carries the old history. Its SessionStart `fork` fires on the first
   prompt. attn's SessionStart matcher leaves `fork` out, so under attn's hooks
-  the fork first reports itself through UserPromptSubmit.
+  attn first learns of the fork from UserPromptSubmit.
 - Esc on the lock screen exits the whole process with status 0 and prints "To
   continue this session, run: codex resume <id>", even when that process never
   held the conversation.
@@ -482,8 +483,8 @@ these.
 - At the end the server stops listening, removes its socket and drops every
   connection without a WebSocket close frame, so clients see EOF before the
   process exits. The server then drains its background tasks and shuts all its
-  conversations down at once, giving each up to 10 s, and reads no signals
-  while it does so (`app-server/src/lib.rs`, `shutdown_all_threads_bounded` in
+  conversations down at once, giving each up to 10 s. The server reads no
+  signals during that shutdown (`app-server/src/lib.rs`, `shutdown_all_threads_bounded` in
   `core/src/thread_manager.rs`, called from
   `request_processors/thread_processor.rs`).
 - While a server answers on `PATH`, a second server there exits 1 with
@@ -519,8 +520,9 @@ plugins and MCP servers, and with a 0.162.1 `--remote` TUI:
 Probed on 0.163.0 with a `--remote` TUI, and read in the source at
 rust-v0.163.0:
 
-- When its server goes away, the TUI shows `Reconnecting to server…` and retries
-  after 0, 1, 2 and 4 s, then every 8 s, until 120 s after the disconnect. Then the TUI stays open offline and never retries (`tui/src/app/reconnect.rs`).
+- When its server stops, the TUI shows `Reconnecting to server…` and retries
+  after 0, 1, 2 and 4 s, then every 8 s, until 120 s after the disconnect. Then
+  the TUI stays open offline and never retries (`tui/src/app/reconnect.rs`).
 - What the user typed survives the reconnect. Offline, typing works and Enter
   does nothing.
 - Against a draining server, a prompt sent into a running turn (`turn/steer`)
@@ -684,7 +686,7 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   releases otherwise.
 - `codex doctor --json` prints one JSON object after 10–14 s, of which
   2–3.5 s is CPU, probed on 0.162.1. When any check fails, `codex doctor` still
-  prints the whole report, then exits 1, so read stdout whatever the exit
+  prints the whole report, then exits 1, so read stdout regardless of the exit
   status. `codexVersion` is the binary's own version. `checks` is keyed by
   check id, and `checks["updates.status"].details["latest version"]` holds the
   newest release, checked live against the same source as a TUI's refresh,

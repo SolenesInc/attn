@@ -29,7 +29,7 @@ or restore a backup taken before the upgrade with `attn db restore`.
   go run ./cmd/db-migrations new --go backfill_seed_profiles
   ```
 
-  This creates `internal/store/migration_<timestamp>_<slug>.go` with its
+  The command creates `internal/store/migration_<timestamp>_<slug>.go` with its
   registration. Implement the generated function. The placeholder returns an
   error until you replace it.
 - Never edit or rename a merged migration. Never change the frozen legacy
@@ -41,7 +41,7 @@ or restore a backup taken before the upgrade with `attn db restore`.
   migration. CI runs `make check-schema` to check that the file is current.
 - A `schema.sql` conflict on rebase means another PR touched the same table.
   Read both migrations and make yours correct on top of theirs. Give your
-  file a fresh timestamp if it must run after theirs, then regenerate the dump.
+  file a fresh timestamp if it must run after theirs, then regenerate `internal/store/schema.sql`.
 - Prefer `ALTER TABLE` to rebuilding a table. When you rebuild a table, copy
   the columns from the live table rather than from a hard-coded list.
 - Delete and recreate a dev database that behaves oddly after you switch branches.

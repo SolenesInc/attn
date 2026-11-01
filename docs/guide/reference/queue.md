@@ -89,7 +89,7 @@ An agent is owed a turn as soon as its state becomes waiting, needs approval, id
 <details>
 <summary>Why is a working agent still in my queue?</summary>
 
-Prompting an agent doesn't settle its turn, so the turn stays owed while the agent works on what you asked. The turn closes when you settle or snooze the agent, or when auto-settle settles the turn for you. Until then the turn keeps the place it got when it opened, even if the agent stops and starts again.
+Prompting an agent doesn't settle its turn, so the turn stays owed while the agent works on what you asked. The turn closes when you settle or snooze the agent, or when auto-settle settles the turn for you. Until then the turn stays at the position it took when it opened, even if the agent stops and starts again.
 </details>
 
 <details>
@@ -113,7 +113,7 @@ The sidebar lists as many waiting agents as fit, at least three, and a row below
 <details>
 <summary>When exactly does auto-settle settle a turn?</summary>
 
-Auto-settle starts when an agent that is owed a turn goes back to work on a prompt you typed or annotations you sent (work that starts from a message in the agent's inbox doesn't count). By default auto-settle waits through 30 seconds of work, then counts down for 15 seconds and settles the turn. You can set the wait from 5 to 3600 seconds and the countdown from 3 to 600, in **Settings → Attention queue**. Typing in the agent's terminal or moving the mouse over the terminal pauses auto-settle until you've been still for 5 seconds, then the wait or countdown starts over. Auto-settle cancels as soon as the agent is no longer working.
+Auto-settle starts when an agent that is owed a turn goes back to work on a prompt you typed or annotations you sent. Work that starts from a message in the agent's inbox doesn't count. By default auto-settle waits through 30 seconds of work, then counts down for 15 seconds and settles the turn. You can set the wait from 5 to 3600 seconds and the countdown from 3 to 600, in **Settings → Attention queue**. Typing in the agent's terminal or moving the mouse over the terminal pauses auto-settle until you've been still for 5 seconds. Then the wait or countdown starts over. Auto-settle cancels as soon as the agent is no longer working.
 </details>
 
 <details>
@@ -137,7 +137,7 @@ The agent stays snoozed, and it has no turn until the snooze ends. If the agent 
 <details>
 <summary>Can the Chief or my agents snooze or prioritize agents for me?</summary>
 
-Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>` yourself. `<when>` is a duration such as `2h`, one of `tomorrow`, `saturday` or `monday` (9:00 unless you add a time, as in `"tomorrow 14:00"`), or an exact RFC 3339 time. An agent can snooze itself and the agents below it in its delegation chain, the Chief can snooze any agent in its profile, and from a terminal outside Attn you can snooze any agent. `attn session unsnooze <id>` follows the same rules. `attn session priority on|off --session <id>` sets or clears the flag on any agent. Without `--session`, the command acts on the agent running it. Snoozing settles the agent's turn until the snooze ends. Unsnoozing and changing priority settle nothing. An agent can put itself in your queue with `attn turn open` and take itself out with `attn turn settle`, but only for a turn it opened that way. A turn that opened when the agent stopped is yours to settle.
+Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>` yourself. `<when>` is a duration such as `2h`, one of `tomorrow`, `saturday` or `monday` (9:00 unless you add a time, as in `"tomorrow 14:00"`), or an exact RFC 3339 time. An agent can snooze itself and the agents below it in its delegation chain. The Chief can snooze any agent in the Chief's profile. From a terminal outside Attn, you can snooze any agent. `attn session unsnooze <id>` follows the same rules. `attn session priority on|off --session <id>` sets or clears the flag on any agent. Without `--session`, the command acts on the agent running it. Snoozing settles the agent's turn until the snooze ends. Unsnoozing and changing priority settle nothing. An agent can put itself in your queue with `attn turn open` and take itself out with `attn turn settle`, but only for a turn it opened that way. A turn that opened when the agent stopped is yours to settle.
 </details>
 
 <details>

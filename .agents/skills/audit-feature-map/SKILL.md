@@ -9,8 +9,8 @@ description:
 
 The drive-attn skill (`.agents/skills/drive-attn`) and its feature map tell
 agents how to reach and drive each attn feature. Whoever changes a feature
-should update its map file, but some changes slip through. This audit finds
-and fixes what those changes missed.
+should update its map file, but not every change comes with that update. This
+audit finds the places where the map is out of date and fixes them.
 
 Each run of the audit is a pass. In a pass, you read every feature's source,
 drive every feature on a live instance, and land the map fixes you proved.
@@ -33,9 +33,9 @@ user asks for the audit directly, plant one. At the end, harvest it with
 
 The next pass scans for new ways in from the last audited revision. That is
 the revision recorded by the newest pass that ended clean or changed. A
-blocked pass does not move the last audited revision, because the blocked pass
-may have stopped before its scan for new ways in finished, or before its fixes
-landed. The next pass scans the interval that the blocked pass covered again.
+blocked pass does not move the last audited revision. The blocked pass may
+have stopped before its scan for new ways in finished, or before its fixes
+landed, so the next pass scans that interval again.
 
 ## What you may change
 
@@ -52,19 +52,18 @@ the map describing what attn should do.
 
 Run `git pull --ff-only`. If this file changed, read it again.
 
-Then check that no other pass is in the way. A pass might still be running, or
-might have died halfway. Signs of either are uncommitted changes in the
-checkout, or an instance named `audit-*` in `attn instance list`. If you see
-either, don't touch what you found, because it might belong to a pass that is
-still running. Ask the user with `attn ask` what to do, naming what you
-found. Then end your turn and
-leave your stake open, because closing the stake closes the ask. Start over
-when they answer.
+Then check whether another pass is running or stopped halfway. Signs of either
+are uncommitted changes in the checkout, or an instance named `audit-*` in
+`attn instance list`. If you see either, don't touch what you found, because
+it might belong to a pass that is still running. Ask the user with `attn ask`
+what to do, naming what you found. Then end your turn and leave your stake
+open, because closing the stake closes the ask. Start over when the user
+answers.
 
 ### 1. Check the index
 
 Read `features/README.md` and list the feature files next to it. Fix the
-index where it lists a file that doesn't exist, misses a file, or lists one
+index where it lists a file that doesn't exist, misses a file, or lists a file
 twice.
 
 ### 2. Read each feature's source
@@ -89,13 +88,14 @@ the same setup, combine the recipes so you set up once. Check the out-of-date
 claims the subagents raised, but don't re-check the parts they found correct.
 
 Then look for ways into features that no map file lists yet. Find the
-last audited revision: run `attn seed search "feature map audit" --limit 50`, read the
-harvest messages of the audit stakes, and take the newest revision among those
-that don't start with `blocked`. Passes from before these outcomes harvested
-only when they finished, so their revisions count. Read the commits from the
-last audited revision to your revision in `cmd/attn`, `app/src/shortcuts`,
-`app/src/application` and `internal/prompts/content`. Only count a way in as missing when you can
-point at the source that adds it.
+last audited revision: run
+`attn seed search "feature map audit" --limit 50`, read the harvest messages of
+the audit stakes, and take the newest revision among those that don't start
+with `blocked`. Passes from before these outcomes harvested only when they
+finished, so their revisions count. Read the commits that touch `cmd/attn`,
+`app/src/shortcuts`, `app/src/application` or `internal/prompts/content`, from
+the last audited revision to your revision. Count a way in as missing only when
+you can point at the source that adds the way in.
 
 ### 4. Drive every feature
 
@@ -108,7 +108,8 @@ Three rules hold for the whole step:
 - **Check the instance before trusting it.** Run drive-attn's doctor before
   the first drive and after any drive that fails. Some failures don't show up
   in the doctor, such as an app that stopped responding while the daemon is
-  fine. After you run the doctor, go back to the baseline, or clean the instance and launch a new one.
+  fine. After you run the doctor, go back to the baseline, or clean the
+  instance and launch a new one.
 - **Keep the evidence safe.** Save the evidence in a folder made with
   `mktemp -d /tmp/drive-attn-audit.XXXX`. After each cleanup, check that the
   folder is still there.
@@ -151,8 +152,8 @@ Before you change anything, find out what attn is meant to do: read the
 commit that changed the behavior, its seed, `docs/guide` and the glossary.
 Then sort each finding:
 
-- **The map is wrong**: the map describes the feature wrongly or misses a way
-  in. Fix the feature file.
+- **The map is wrong**: the map describes the feature wrongly or leaves out a
+  way in. Fix the feature file.
 - **drive-attn can't drive it**: attn works, but the instructions or scripts
   can't reach the feature. Fix the instructions or scripts, and when you add a
   script, say in `SKILL.md` how to run the script.

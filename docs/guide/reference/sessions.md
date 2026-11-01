@@ -57,7 +57,7 @@ opening a session restarts its agent with the conversation resumed.
 Cmd+Shift+L (Ctrl+Alt+L on Linux), or the Ledger icon at the top of the
 sidebar, opens the ledger: every session, live and closed, plus the worktrees
 and conversations they used, in the Sessions, Worktrees and Conversations tabs.
-When you close an agent, it waits here.
+When you close an agent, its session waits here.
 
 ![The ledger icon is the third one in the row of icons at the top of the sidebar](../images/ledger-button.png)
 
@@ -84,7 +84,7 @@ interrupts running work, and non-persistent state may be lost.
 Agents can do the same with `attn agent reload <session-or-member>...`. An
 agent may reload itself and the agents it delegated to, including delegates
 of delegates, and the Chief may reload any agent in its profile, or
-every agent there with `--all`. A crew member's name reaches the member's
+every agent there with `--all`. A crew member's name resolves to the member's
 current session, and a sleeping member stays asleep. Attn never reloads shells. Run
 `attn agent reload --help` for the details.
 
@@ -93,19 +93,19 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 <details>
 <summary>Why did my worktree disappear?</summary>
 
-The sweep removed it once it had gone 14 days without activity with nothing left to lose. The sweep runs every hour and covers every worktree of a repository where Attn has made one, including worktrees you added with git yourself. Removing a worktree also deletes its local branch, unless an open seed can still continue from the branch, and leaves a note on the seeds that worked there. The Worktrees tab's Removed list shows when the worktree went and why. For a session that ran there, see the FAQ "Why can't I resume a closed session?".
+The sweep removes a worktree after 14 days without activity, when removing it loses nothing. The sweep runs every hour and covers every worktree of a repository where Attn has made one, including worktrees you added with git yourself. Removing a worktree also deletes its local branch, unless an open seed can still continue from the branch, and leaves a note on the seeds that worked there. The Worktrees tab's Removed list shows when the worktree went and why. For a session that ran there, see the FAQ "Why can't I resume a closed session?".
 </details>
 
 <details>
 <summary>Does closing an agent's tile stop the agent?</summary>
 
-Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session until you remove its chief role (see [the Chief](chief.md)), and refuses to close a crew member's session until you put the member to sleep. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and says "Agent stopped", with Resume to continue the conversation and Close to close the session.
+Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session until you remove its chief role (see [the Chief](chief.md)), and refuses to close a crew member's session until you put the member to sleep. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and shows "Agent stopped", with Resume to continue the conversation and Close to close the session.
 </details>
 
 <details>
 <summary>Why can't I resume a closed session?</summary>
 
-Resume starts the session's own harness with the model and effort it launched with, in its saved directory. Attn warns you when that directory is now on a different branch.
+Resume starts the session's own harness in the session's saved directory, with the model and effort the session launched with. Attn warns you when that directory is now on a different branch.
 
 The ledger refuses to resume, and says why, when:
 
@@ -136,7 +136,7 @@ A branch counts as merged when GitHub shows its pull request merged, or when its
 <details>
 <summary>What happens to my agents when the daemon restarts or my machine reboots?</summary>
 
-Your agents run outside the daemon, so a daemon restart leaves them running. If the daemon can't start its terminal workers, it falls back to running terminals inside itself and the app shows a warning that says "Falling back to embedded". In that mode a daemon restart stops every agent. After a reboot, or after an embedded daemon restarts, each session stays on its desktop marked recoverable, and opening it starts its harness again with the conversation resumed.
+Your agents run outside the daemon, so a daemon restart leaves them running. If the daemon can't start its terminal workers, the daemon runs terminals inside itself instead, and the app shows the warning "Falling back to embedded". In that mode a daemon restart stops every agent. After a reboot, or after an embedded daemon restarts, each session stays on its desktop marked recoverable, and when you open a session, Attn starts its harness again with the conversation resumed.
 </details>
 
 <details>
@@ -145,24 +145,24 @@ Your agents run outside the daemon, so a daemon restart leaves them running. If 
 Only Claude Code's, since Claude Code prunes its conversations after 30 days and the other harnesses keep their own. Attn copies a conversation in any of these cases:
 
 - The conversation belongs to the latest delegation of an open seed.
-- A crew member's letter points at the conversation's session. Only letters filed with Crew v2 on record their session.
+- A crew member's letter points at the conversation's session. Only a letter filed while Crew v2 was on stores its session.
 - You keep the conversation with Keep conversation on its row in the Sessions tab, Keep forever in the Conversations tab, or `attn conversation keep <session-id>`.
 
 Attn waits until a live conversation has been idle for a day before it copies the conversation. It stores the copies compressed in `~/.attn/conversations/`. When you resume a conversation that Claude Code no longer has, Attn restores the copy first. When no seed, crew letter or keep needs a copy any longer, Attn deletes the copy 14 days later. The Conversations tab shows the date. Forget deletes a copy right away and leaves Claude Code's files alone. Attn refuses to forget a copy while an open seed needs it, and names the crew letters that point at it. `attn conversation forget <id> --unlink-crew-letters` forgets the copy anyway and leaves the letters in place.
 
-If a crew member's home or letters cannot be read, Attn keeps copying and listing other conversations and pauses expiry, and Forget refuses until they are back. A warning names the unavailable paths. Expiry resumes once they are readable again.
+If a crew member's home or letters cannot be read, Attn keeps copying and listing other conversations, pauses expiry, and refuses Forget until Attn can read the home and letters again. A warning names the unavailable paths. Expiry resumes once they are readable again.
 </details>
 
 <details>
 <summary>How do I keep a worktree forever, or let it go again?</summary>
 
-Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it. Unpin (`attn worktree unkeep <path>`) removes the pin, and the next sweep applies its usual rules to the worktree again. Turning off Worktree sweep in **Settings → Files and locations** stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then say "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a sweep now instead of waiting for the hourly one.
+Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it. Unpin (`attn worktree unkeep <path>`) removes the pin, and the next sweep applies its usual rules to the worktree again. Turning off Worktree sweep in **Settings → Files and locations** stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then show "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a sweep now instead of waiting for the hourly one.
 </details>
 
 <details>
 <summary>How do I find an old session in the ledger?</summary>
 
-The Sessions tab shows Live, Closed or All, and the filter narrows it with `repo:name`, `profile:name`, `today`, `yesterday`, `7d`, `30d`, `from:2026-09-01 to:2026-09-05`, `dir:path` or plain words. Words and `dir:` search only the rows already loaded, so load older rows from the "older" link in the status bar first. Your Live, Closed or All choice, repository, profile and dates stay set the next time you open the ledger, and `attn session list --closed --last 7d` reads the same ledger from the terminal.
+The Sessions tab shows Live, Closed or All, and the filter narrows it with `repo:name`, `profile:name`, `today`, `yesterday`, `7d`, `30d`, `from:2026-09-01 to:2026-09-05`, `dir:path` or plain words. Words and `dir:` search only the rows already loaded, so load older rows from the "older" link in the status bar first. Your Live, Closed or All choice, repository, profile and dates stay set the next time you open the ledger. `attn session list --closed --last 7d` reads the same ledger from the terminal.
 
 Keys in the ledger:
 

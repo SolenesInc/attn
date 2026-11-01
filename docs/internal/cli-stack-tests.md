@@ -8,15 +8,19 @@ returns `testworld.Main(m)`.
 
 - `testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, ...))`
   prepares a data directory for the built `attn` binary.
-- `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
-  ends it. A `Start` after `Stop` restarts over the same data.
-  The stack holds its WebSocket listener until cleanup, including while the
-  daemon is stopped, so another process cannot take its address.
+- `s.Start()` runs `attn daemon` and returns once the daemon signals ready.
+  `s.Stop()` ends the daemon. A `Start` after `Stop` restarts the daemon over
+  the same data. The stack holds its WebSocket listener until cleanup,
+  including while the daemon is stopped, so no other process can take the
+  listener's address.
 - The historical PTY upgrade test uses port `0`. Older binaries cannot inherit
-  that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured PID to read the assigned port. It does not release a reservation or retry startup.
+  that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured
+  PID to read the assigned port. The test does not release a reservation or
+  retry startup.
 - For a promise about a moment between two steps of one operation, call
-  `s.PauseAt(point)` to hold the daemon or a worker the first time it reaches a
-  pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`).
+  `s.PauseAt(point)` to hold the daemon or a worker the first time that process
+  reaches a pause point named in the process's code (`internal/pausepoint`,
+  `ATTN_PAUSE_AT`).
   `s.PauseEvery` holds the process each time. Arm the pause before `Start`, or
   start with `s.StartHeldAt(pause)`. `s.PauseAt` and `s.PauseEvery` return the
   same `testworld.Pause` that a daemon wire test gets, except that `Await`
@@ -28,8 +32,8 @@ returns `testworld.Main(m)`.
   crashed, and a later `Start` recovers from the state the real daemon left
   behind. The crash is immediate. To delay it, arm `s.PauseAt(point)` with the
   same name before starting. The daemon then holds at the crash point and dies
-  only when the test releases it, so a request still in flight, such as a hook
-  waiting for its reply, can first get its answer. `AwaitCrash` never releases
+  only when the test releases it. A request still in flight, such as a hook
+  waiting for its reply, can get its answer first. `AwaitCrash` never releases
   that hold. A later `Start` without the crash does not stop at that point.
 - The world helpers from daemon wire tests work here too.
 - `s.Attn(args...)` runs a CLI command to completion. `s.Run` takes an
@@ -50,7 +54,7 @@ returns `testworld.Main(m)`.
   - the daemon's periodic loops: database backup, GitHub hosts refresh, PR
     poll, and branch monitor
 
-  Transcript writes by a fake agent fire the transcript poll without an
+  When a fake agent writes a transcript, the transcript poll fires without an
   advance, as [Daemon wire tests](daemon-wire-tests.md#timers) describe. The
   shared PTY host is not Go and keeps real time.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still

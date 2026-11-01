@@ -14,7 +14,7 @@ delegation roles to your own needs. Attn keeps the attn-workflow skill itself up
 to date, so change the roles, not the skill's files.
 
 You can also use attn-workflow without delegations: ask the agent you're talking
-to to work as a Pathfinder, and it takes the role right there.
+with to work as a Pathfinder, and it takes the role in the current conversation.
 
 ## Before you start
 
@@ -29,23 +29,24 @@ Pick a harness and model for each role you want to use, in the **Runs on** colum
 
 ## Plan with a Pathfinder
 
-Ask the agent you're talking to to delegate a Pathfinder on your idea, or to
+Ask the agent you're talking with to delegate a Pathfinder on your idea, or to
 work as one itself. Delegating gives the Pathfinder its own session, next to
 the agent that started it.
 
 The Pathfinder reads the code first, and then interviews you about the idea. As
-the idea takes shape, it works through the open decisions with you in short
-rounds, at most three questions at a time, each with its recommendation.
+the idea takes shape, the Pathfinder works through the open decisions with you
+in short rounds, at most three questions at a time, each with a recommendation.
 
 When something is risky or not clearly known, such as how a library behaves or
 what a refactor would cost, the Pathfinder suggests a spike: a quick throwaway
 build to find out. When a choice is easier to make by comparing options, such as
-a screen or the shape of an interface, it suggests a Prototyper to build them
+a screen or the shape of an interface, the Pathfinder suggests a Prototyper to build them
 side by side. When the choice is costly to reverse and the Prototyper role has
-more than one model, the Pathfinder can instead suggest one independent candidate per model.
+more than one model, the Pathfinder can instead suggest one independent
+candidate per model.
 
 When the interview ends, the Pathfinder puts the plan in the garden: one seed
-for a single task, or a plot with a child per piece of work, saying which pieces
+for a single task, or a plot with a child per piece of work. The plan says which pieces
 become which pull requests (or landings, in a repository that pushes straight to
 its main branch). Before building starts, the Pathfinder tells you how it
 understood the work and what it assumed, so you can correct the Pathfinder. It

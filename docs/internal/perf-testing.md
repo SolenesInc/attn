@@ -26,7 +26,8 @@ failing the exit code.
 | Cold and warm | RSS fresh and after a workload | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
 | Leak soak | Retained-RSS slope across session cycles | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-leak-soak -- --cycles 12` |
 
-Cold/warm and leak soak wipe their data, so they need a dedicated instance
+The cold and warm scenario and the leak soak scenario wipe their data, so they
+need a dedicated instance
 (`make install INSTANCE=perf`). Add `--record-baseline` only after an intended
 footprint change, never to silence a regression you don't understand.
 
