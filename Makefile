@@ -218,8 +218,7 @@ GO_PACKAGES ?= ./...
 
 .PHONY: check-go check-frontend
 check-go: lint-go
-	go test -exec=true -vet=off ./...
-	go vet $(GO_PACKAGES)
+	go vet ./...
 
 lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck $(GO_PACKAGES)

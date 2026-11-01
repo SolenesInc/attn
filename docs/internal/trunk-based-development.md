@@ -24,9 +24,10 @@ dispatches a fixer. The release process writes release notes from the commits.
 `scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the paths the
 landing changes, and pushes:
 
-- Go: compile all packages and tests, run vet and staticcheck on changed
-  packages, and check daemon lifetimes and import boundaries. A module change
-  checks all packages.
+- Go: vet all packages and their tests, which type-checks everything without
+  linking test binaries; run staticcheck on changed packages; and check daemon
+  lifetimes and import boundaries. A module change checks all packages. Link
+  failures surface in the landing tests and in CI.
 - Protocol schema or prompt inputs: check that generated types or catalogs
   are current.
 - `app/`: lint, and typecheck with tsrs, a Rust port of the TypeScript 7
