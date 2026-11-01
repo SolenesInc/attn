@@ -29,7 +29,8 @@ const usage = `usage: go tool test-history <command>
       and how many wait to upload, and each warning the service sends, such
       as storage past its daily tripwire. When the sync fails, it also prints
       when a sync last succeeded. Exits 1 when the sync fails or a receipt is
-      refused.
+      refused. A sync waits, and says so, while another sync of the same
+      spool runs.
       The service is $ATTN_TEST_HISTORY_URL, or the default history service;
       its token is in ${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token.
   spool

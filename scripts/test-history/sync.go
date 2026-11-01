@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/testhistory"
@@ -62,6 +63,12 @@ func syncHistory(args []string) int {
 		warn("%v", err)
 		return 1
 	}
+	turn, err := waitForSyncTurn(spool)
+	if err != nil {
+		warn("%v", err)
+		return 1
+	}
+	defer turn.Close()
 	state, err := readSyncState(spool)
 	if err != nil {
 		warn("%v", err)
@@ -96,6 +103,23 @@ func syncHistory(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func waitForSyncTurn(spool testhistory.Spool) (*os.File, error) {
+	turn, err := os.OpenFile(spool.SyncLockPath(), os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	err = syscall.Flock(int(turn.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		warn("waiting for another sync of %s to finish", spool.Dir)
+		err = syscall.Flock(int(turn.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
+		_ = turn.Close()
+		return nil, err
+	}
+	return turn, nil
 }
 
 func lastSyncSummary(state syncState) string {

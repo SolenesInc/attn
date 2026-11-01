@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -38,7 +40,10 @@ type fakeHistoryService struct {
 	plain bool
 	// pageEncodings records the Accept-Encoding of each page request.
 	pageEncodings []string
-	server        *httptest.Server
+	// hold, when set, runs before each request is served, as a slow network
+	// would; a request accepted before the service went down is still answered.
+	hold   func(*http.Request)
+	server *httptest.Server
 }
 
 func newFakeHistoryService(t *testing.T) *fakeHistoryService {
@@ -56,8 +61,14 @@ func (s *fakeHistoryService) add(repo, id string, body []byte) {
 
 func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
+	hold, down := s.hold, s.down
+	s.mu.Unlock()
+	if hold != nil {
+		hold(r)
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.down {
+	if down {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -180,10 +191,16 @@ func (w *syncWorld) captureReceipt() string {
 	return ""
 }
 
-func (w *syncWorld) sync() (stdout, stderr string, code int) {
+func (w *syncWorld) syncCommand() *exec.Cmd {
 	w.t.Helper()
 	cmd := historyCommand(w.t, w.spool, fixtureModule(w.t), "sync")
 	cmd.Env = append(cmd.Env, "ATTN_TEST_HISTORY_URL="+w.service.server.URL, "XDG_CONFIG_HOME="+w.config, "GITHUB_REPOSITORY="+checkoutRepository)
+	return cmd
+}
+
+func (w *syncWorld) sync() (stdout, stderr string, code int) {
+	w.t.Helper()
+	cmd := w.syncCommand()
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	code = exitCode(cmd.Run())
@@ -415,24 +432,29 @@ func TestSyncFromAServiceThatSendsPlainJSONKeepsTheSameCompressedMirror(t *testi
 	}
 }
 
-func TestAMirrorInTheUncompressedLayoutDownloadsAgainAsCompressed(t *testing.T) {
-	w := newSyncWorld(t)
-	for i := range 3 {
-		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)))
-	}
+func (w *syncWorld) mirrorInTheUncompressedLayout(receipts int) {
+	w.t.Helper()
 	shared := filepath.Join(w.spool, "shared")
 	if err := os.MkdirAll(shared, 0o755); err != nil {
-		t.Fatal(err)
+		w.t.Fatal(err)
 	}
-	for i := range 3 {
-		if err := os.WriteFile(filepath.Join(shared, fmt.Sprintf("ci-%d.json", i)), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)), 0o644); err != nil {
-			t.Fatal(err)
+	for i := range receipts {
+		body := []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i))
+		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), body)
+		if err := os.WriteFile(filepath.Join(shared, fmt.Sprintf("ci-%d.json", i)), body, 0o644); err != nil {
+			w.t.Fatal(err)
 		}
 	}
-	state := fmt.Sprintf(`{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":3,"cursor_of":"%s github.com/%s"}`, w.service.server.URL, checkoutRepository)
+	state := fmt.Sprintf(`{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":%d,"cursor_of":"%s github.com/%s"}`, receipts, w.service.server.URL, checkoutRepository)
 	if err := os.WriteFile(filepath.Join(w.spool, "sync.json"), []byte(state), 0o644); err != nil {
-		t.Fatal(err)
+		w.t.Fatal(err)
 	}
+}
+
+func TestAMirrorInTheUncompressedLayoutDownloadsAgainAsCompressed(t *testing.T) {
+	w := newSyncWorld(t)
+	w.mirrorInTheUncompressedLayout(3)
+	shared := filepath.Join(w.spool, "shared")
 
 	w.service.mu.Lock()
 	w.service.down = true
@@ -455,4 +477,138 @@ func TestAMirrorInTheUncompressedLayoutDownloadsAgainAsCompressed(t *testing.T) 
 			t.Errorf("ci-%d missing from the compressed mirror", i)
 		}
 	}
+}
+
+type heldRequest struct {
+	method  string
+	after   string
+	release chan struct{}
+}
+
+func (w *syncWorld) holdRequests(hold func(method, after string) bool) <-chan heldRequest {
+	held := make(chan heldRequest)
+	w.service.mu.Lock()
+	w.service.hold = func(r *http.Request) {
+		if !hold(r.Method, r.URL.Query().Get("after")) {
+			return
+		}
+		h := heldRequest{r.Method, r.URL.Query().Get("after"), make(chan struct{})}
+		held <- h
+		<-h.release
+	}
+	w.service.mu.Unlock()
+	return held
+}
+
+func (w *syncWorld) setDown(down bool) {
+	w.service.mu.Lock()
+	w.service.down = down
+	w.service.mu.Unlock()
+}
+
+type runningSync struct {
+	cmd            *exec.Cmd
+	stdout, stderr bytes.Buffer
+	exited         chan int
+}
+
+func (w *syncWorld) startSync(stderrLine string) (r *runningSync, printed <-chan struct{}) {
+	w.t.Helper()
+	r = &runningSync{cmd: w.syncCommand(), exited: make(chan int, 1)}
+	r.cmd.Stdout = &r.stdout
+	pipe, err := r.cmd.StderrPipe()
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	if err := r.cmd.Start(); err != nil {
+		w.t.Fatal(err)
+	}
+	seen := make(chan struct{})
+	go func() {
+		lines := bufio.NewScanner(pipe)
+		for lines.Scan() {
+			r.stderr.WriteString(lines.Text() + "\n")
+			if stderrLine != "" && strings.Contains(lines.Text(), stderrLine) {
+				close(seen)
+				stderrLine = ""
+			}
+		}
+		r.exited <- exitCode(r.cmd.Wait())
+	}()
+	return r, seen
+}
+
+func (w *syncWorld) assertCompleteCompressedMirror(receipts int) {
+	w.t.Helper()
+	for i := range receipts {
+		if w.shared(fmt.Sprintf("ci-%d", i)) == nil {
+			w.t.Errorf("ci-%d missing from the compressed mirror", i)
+		}
+	}
+}
+
+func TestOverlappingSyncsOfAnUncompressedMirrorKeepEveryReceipt(t *testing.T) {
+	w := newSyncWorld(t)
+	w.captureReceipt()
+	w.mirrorInTheUncompressedLayout(3)
+	held := w.holdRequests(func(method, after string) bool { return method == http.MethodPut || after == "2" })
+
+	first, _ := w.startSync("")
+	firstUpload := <-held
+	second, waiting := w.startSync("waiting for another sync of " + w.spool + " to finish")
+	var secondUpload *heldRequest
+	select {
+	case <-waiting:
+	case h := <-held:
+		secondUpload = &h
+	}
+	close(firstUpload.release)
+	firstLastPage := <-held
+	w.setDown(true)
+	if secondUpload != nil {
+		close(secondUpload.release)
+		<-second.exited
+	}
+	close(firstLastPage.release)
+	if code := <-first.exited; code != 0 {
+		t.Fatalf("first sync exited %d\nstdout: %s\nstderr: %s", code, first.stdout.String(), first.stderr.String())
+	}
+	if secondUpload == nil {
+		if code := <-second.exited; code != 1 || !strings.Contains(second.stderr.String(), "last successful sync ") {
+			t.Fatalf("second sync against the unavailable service exited %d and must report the first sync's success\nstderr: %s", code, second.stderr.String())
+		}
+	}
+	w.assertCompleteCompressedMirror(3)
+
+	w.setDown(false)
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 0;") {
+		t.Fatalf("the next sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	w.assertCompleteCompressedMirror(3)
+}
+
+func TestASyncKilledMidDownloadLeavesTheNextSyncToFinishTheMirror(t *testing.T) {
+	w := newSyncWorld(t)
+	w.mirrorInTheUncompressedLayout(3)
+	var once sync.Once
+	held := w.holdRequests(func(method, after string) bool {
+		first := false
+		if after == "2" {
+			once.Do(func() { first = true })
+		}
+		return first
+	})
+
+	killed, _ := w.startSync("")
+	lastPage := <-held
+	defer close(lastPage.release)
+	if err := killed.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	<-killed.exited
+
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 1;") {
+		t.Fatalf("sync after a killed sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	w.assertCompleteCompressedMirror(3)
 }

@@ -48,6 +48,8 @@ spool. The spool holds:
 - `sync.json`: the download cursor with the service, repository and `shared/`
   layout the cursor was read for, and when sync last ran, last succeeded and why
   sync last failed.
+- `sync.lock`: the lock a sync holds from reading `sync.json` until writing it
+  back.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete.
@@ -89,6 +91,11 @@ machine's receipts. The service imports CI's receipt artifacts automatically.
   a sync last succeeded, keeps every receipt, and exits 1.
 - Sync prints each warning the service sends with the pages, such as storage
   growing past the service's daily tripwire, without failing.
+
+Syncs of one spool take turns, because every worktree shares `shared/` and
+`sync.json`. A sync that starts while another runs prints that it is waiting
+and starts when the other ends, from the cursor the other saved. A sync killed
+midway releases its turn, and the next sync resumes from the last page it saved.
 
 A sync never changes a test's result. `scripts/land.sh` runs sync before
 choosing landing tests and after a push. No test command runs sync.
