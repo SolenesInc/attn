@@ -7,14 +7,57 @@ description: Use when main's CI is red, or when asked to check whether main is g
 
 `main` goes red when a landing breaks it. Get it green by the path that fits
 the break: a small fix forward, a clean revert, or the user's decision. You
-dispatch, and the delegated agents make the fixes and reverts. Keep your
-own work to the reads that choose the path, so your context stays small and
-you stay free for the next red. Never make a revert that nobody notices.
+dispatch, and the delegated agents make the fixes and reverts. Never make a
+revert that nobody notices.
+
+Load the `attn-workflow` skill. Follow its
+[Orchestration](../../../internal/prompts/content/skills/attn-workflow/references/orchestration.md)
+process to dispatch, advise, review and judge, and its
+[Debugging](../../../internal/prompts/content/skills/attn-workflow/references/debugging.md)
+process for the reads that choose a path. Where they differ, follow this
+skill: a Sheriff makes no change itself, however small, and leaves
+reproduction and experiments to the delegate it dispatches.
 
 Diagnose a failure as soon as one job has failed. Never re-run CI, a failed
 job or a whole run, to classify a failure or to clear it. A re-run that passes
 shows only that the failure is intermittent, not why. A re-run also holds
 main's single CI queue for as long as a new run does.
+
+## Principles
+
+These principles from `attn-workflow` matter most to a Sheriff. Each one names
+the moment it applies.
+
+- [Guard the context window](../../../internal/prompts/content/skills/attn-workflow/principles/guard-the-context-window.md):
+  keep your own work to the reads that choose the path, so you stay free for
+  the next red. Hand a long investigation to a Pathfinder. Keep each failure's
+  record in the issue and the seed, not in the conversation.
+- [Fix root causes](../../../internal/prompts/content/skills/attn-workflow/principles/fix-root-causes.md):
+  when you choose the path and write the brief, aim at the first wrong
+  decision, not the place where the failure surfaced. A test bug is the
+  cause when the test's premise is wrong, not only when its timing is.
+- [Attack the premise](../../../internal/prompts/content/skills/attn-workflow/principles/attack-the-premise.md):
+  when a second landed repair fails, as
+  [Before you diagnose](#before-you-diagnose) says, do not return the failure
+  for a third patch. Write down the assumption the repairs share, check it
+  against the code or the evidence, and bring the owner a redesign. If the
+  owner disagrees, escalate. QUICK-CAPTURE's 14785f5dc moved the Dictation
+  step and 14558b89d cleared its draft. Both repairs assumed the step could
+  share the scenario's serial state.
+- [Encode lessons in structure](../../../internal/prompts/content/skills/attn-workflow/principles/encode-lessons-in-structure.md):
+  when the same class of failure comes back, plant a
+  [Correction](../../../internal/prompts/content/skills/attn-workflow/references/correction.md)
+  seed with `--discovered-from` the failure's seed instead of dispatching
+  another one-off fix. Scenario state that leaks into later steps is one such
+  class: delegation-chain's leftover desktops (b76ed7928) and QUICK-CAPTURE's
+  draft.
+- [Prove it works](../../../internal/prompts/content/skills/attn-workflow/principles/prove-it-works.md):
+  report main's CI outcome from the first completed run that contains the
+  repair, separately from the repair checks. Label each claim measured,
+  inferred or guessed.
+- [Never block on the user](../../../internal/prompts/content/skills/attn-workflow/principles/never-block-on-the-user.md):
+  ask with `attn ask` and keep working. Run `attn turn open` only for the
+  escalations that [Choose the path](#choose-the-path) lists.
 
 ## Find the failure
 
@@ -62,8 +105,11 @@ error, not by its run: the same failure in a newer run is the same failure.
   whose `headSha` does not contain the repair
   (`git merge-base --is-ancestor <repair-sha> <head-sha>` fails) is expected to
   fail the same way. Record the run and dispatch nothing.
-- A run that contains the repair and fails the same way means the repair did
-  not fix the failure. Return the failure to the owner with that run.
+- A run that contains the repair and fails in the same job and scenario or
+  test, even at a different step or with a different error, means the repair
+  did not fix the failure. Return the failure to the owner with that run. When
+  a second landed repair for the same failure record fails this way,
+  [Attack the premise](#principles) instead.
 - `main` may have moved on. A commit since the run's `headSha` that the record
   does not name, such as a fix that the culprit's author landed, may already
   revert or fix the culprit. When the diff of the commit shows that it does,
@@ -103,14 +149,8 @@ error, not by its run: the same failure in a newer run is the same failure.
     revert a migration (`docs/internal/db-migrations.md`).
   - the culprit is a release commit.
   - the runner, the network or another service failed, not a commit.
-
-Start every fix by reproducing the failure. Run the failing test on its own, on
-the platform where it failed (the
-[Local Linux runner](../../../docs/internal/linux-runner.md) for a Linux job),
-and control the schedule where timing matters, such as with `synctest`,
-`-race`, `-count` or CPU pressure. A local pass, or a later CI pass, does not
-explain an intermittent failure. When the failure will not reproduce,
-investigate instead of guessing at a fix.
+  - the owner disagrees with a redesign that
+    [Attack the premise](#principles) brought.
 
 ## Dispatch
 
@@ -125,14 +165,19 @@ Use `--role pathfinder` to investigate. Link the delegation's seed with
 `attn seed link <new-seed> discovered-from <seed>` for each of the culprit's
 `Attn-Seed:` trailers. In every brief, name the failing run, the failing jobs
 and tests with their log lines, the culprit commit and its trailers, and the
-path you chose and why. In a Builder's brief, also tell the Builder to:
+path you chose and why, and ask for the first wrong decision, not the place
+where the failure surfaced. In a Builder's brief, also tell the Builder to:
 
-- Reproduce the failure before the fix and show the test passing after the
-  fix. Run the test through `scripts/test-go.sh --packages`,
-  `scripts/landing-tests.sh --unit` or the app's test commands, so each run is
-  recorded. Report these repair checks on the seed. They are not main's CI
-  outcome. When the failure will not reproduce, stop and report that on the
-  seed instead of guessing.
+- Reproduce the failure before the fix, and show the test passing after the
+  fix. Run the failing test on its own, on the platform where it failed (the
+  [Local Linux runner](../../../docs/internal/linux-runner.md) for a Linux
+  job), and control the schedule where timing matters, such as with
+  `synctest`, `-race`, `-count` or CPU pressure. A local pass, or a later CI
+  pass, does not explain an intermittent failure. Run the test through
+  `scripts/test-go.sh --packages`, `scripts/landing-tests.sh --unit` or the
+  app's test commands, so each run is recorded. Report these repair checks on
+  the seed. When the failure will not reproduce, stop and report that on the
+  seed instead of guessing at a fix.
 - When the test that caught the failure runs in seconds, add the test to
   `scripts/landing-tests` in the same landing, in the group whose paths can
   break it, so `scripts/land.sh` always runs it.
@@ -142,9 +187,13 @@ path you chose and why. In a Builder's brief, also tell the Builder to:
   commit message, and put the revert's landed SHA in the harvest message.
 
 Comment the dispatch on the issue, with the delegation's seed as the failure's
-owner. When the repair lands, add the repair's SHA and repair checks to the
-record. Report main's CI outcome separately from the repair checks, from the
-first completed run that contains the repair.
+owner. Redirect, advise and reassess a stalled delegation as Orchestration
+describes. A stalled Sheriff delegation can also need a different role.
+
+When the repair lands, review it against its brief and record the check
+verdicts as Orchestration describes. Report only P0 and P1 findings, and say
+when you and the Builder ran on the same model. Then add the repair's SHA and
+repair checks to the failure's record.
 
 ## No silent reverts
 
