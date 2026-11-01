@@ -3,7 +3,7 @@
 The notebook is the user's notebook and daily journal. The user edits it in a
 tile or fullscreen, and the chief keeps it too. The notebook is a folder of
 plain markdown files on disk: a journal of dated entries and a knowledge base of
-notes. Profiles share one folder per instance unless a profile sets its own.
+notes. Each profile has its own folder setting, and profiles that leave it blank use the default folder.
 People read and edit the notebook in attn's editor. Agents read and edit the
 files with their own tools and append to the journal through attn, so concurrent
 writers never collide. The chief treats the notebook as its home.
