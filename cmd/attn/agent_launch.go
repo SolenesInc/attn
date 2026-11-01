@@ -85,6 +85,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 }
 
 func runAgentDirectly(requestedAgent string) {
+	leaveInvocationUnrecorded()
 	parsed, err := parseDirectLaunchArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn: %v\n\n", err)
