@@ -68,8 +68,8 @@ func TestTheSweepOnAnOutpostKeepsWhatTheHomesOpenSeedsOwn(t *testing.T) {
 	kept := testworld.Await(onTheOutpost, protocol.EventWorktreeStateChanged, func(e protocol.WebSocketEvent) bool {
 		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == owned && e.Worktrees[0].SweepStatus != nil
 	}).Worktrees[0]
-	if protocol.Deref(kept.SweepStatus) != "kept_open_seed" || !strings.Contains(protocol.Deref(kept.SweepReason), planted.Seed.ID) {
-		t.Errorf("the outpost's sweep decided the seed's worktree is %s (%s); want kept_open_seed naming %s",
+	if protocol.Deref(kept.SweepStatus) != "kept_open_seed" || strings.Contains(protocol.Deref(kept.SweepReason), planted.Seed.ID) {
+		t.Errorf("the outpost's sweep decided the seed's worktree is %s (%s); want kept_open_seed, without naming %s to every profile",
 			protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), planted.Seed.ID)
 	}
 	if _, err := os.Stat(owned); err != nil {

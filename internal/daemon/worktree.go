@@ -278,8 +278,12 @@ func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt
 
 func (d *Daemon) prepareWorktreeRemovalHere(ctx context.Context, msg protocol.WorktreeRemovalPrepareMessage) (protocol.WorktreeRemovalPlan, error) {
 	d.captureGardenExecutionsInDirectory(removingMachine(ctx), msg.Path)
+	seeds, err := d.seedsForWorktree(&store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch})
+	if err != nil {
+		return protocol.WorktreeRemovalPlan{}, err
+	}
 	return protocol.WorktreeRemovalPlan{
-		Seeds:      d.seedsForWorktree(&store.Worktree{Path: msg.Path, MainRepo: msg.MainRepo, Branch: msg.Branch}),
+		Seeds:      seeds,
 		KeepBranch: d.gardenKeepsBranch(msg.MainRepo, msg.Branch),
 	}, nil
 }

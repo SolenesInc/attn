@@ -14329,17 +14329,9 @@ type WorktreeRepository struct {
 	MainRepo string `json:"main_repo"`
 }
 
-type WorktreeSeedOwner struct {
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// Seeds corresponds to the JSON schema field "seeds".
-	Seeds []string `json:"seeds"`
-}
-
 type WorktreeSeedOwners struct {
-	// Owners corresponds to the JSON schema field "owners".
-	Owners []WorktreeSeedOwner `json:"owners"`
+	// OwnedPaths corresponds to the JSON schema field "owned_paths".
+	OwnedPaths []string `json:"owned_paths"`
 }
 
 type WorktreeSeedOwnersMessage struct {

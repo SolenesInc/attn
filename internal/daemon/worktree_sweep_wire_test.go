@@ -407,8 +407,8 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 	if swept := sweepAwaitSwept(app, finished.Directory); swept.Action != "removed" {
 		t.Errorf("the sweep recorded %s for the harvested seed's worktree; want it removed", swept.Action)
 	}
-	if kept := sweepAwaitState(app, open.Directory, func(wt protocol.Worktree) bool { return wt.SweepStatus != nil }); protocol.Deref(kept.SweepStatus) != "kept_open_seed" || !strings.Contains(protocol.Deref(kept.SweepReason), open.SeedID) {
-		t.Errorf("the open seed's worktree reads %s (%s); want it kept for %s", protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), open.SeedID)
+	if kept := sweepAwaitState(app, open.Directory, func(wt protocol.Worktree) bool { return wt.SweepStatus != nil }); protocol.Deref(kept.SweepStatus) != "kept_open_seed" || strings.Contains(protocol.Deref(kept.SweepReason), open.SeedID) {
+		t.Errorf("the open seed's worktree reads %s (%s); want it kept for an open seed, without naming %s to every profile", protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), open.SeedID)
 	}
 
 	if err := cli.DeleteWorktree(open.Directory, false); err != nil {

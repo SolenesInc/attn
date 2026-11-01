@@ -1762,7 +1762,8 @@ model WorktreeRemovalPlan {
 }
 
 // The worktree sweep on a machine asks the home, which owns the Garden, which
-// open seeds own each of a repository's worktrees on that machine.
+// of a repository's worktrees on that machine an open seed owns. The answer
+// names no seed, because the sweep's verdicts are shown to every profile.
 @extension("x-on", #{ home: true })
 model WorktreeSeedOwnersMessage {
   cmd: "worktree_seed_owners";
@@ -1773,12 +1774,8 @@ model WorktreeCheckout {
   path: string;
   branch: string;
 }
-model WorktreeSeedOwner {
-  path: string;
-  seeds: string[];
-}
 model WorktreeSeedOwners {
-  owners: WorktreeSeedOwner[];
+  owned_paths: string[];
 }
 
 // A machine that removed a worktree tells the home, which owns the sessions,
