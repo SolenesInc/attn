@@ -166,3 +166,54 @@ func TestTurningOffACodexAutomationLeavesARunWhoseAgentStartedPendingAcrossARest
 		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
 	}
 }
+
+func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsDownStillDeliversItsStartedRun(t *testing.T) {
+	for _, turnOffBeforeRestart := range []bool{false, true} {
+		t.Run(fmt.Sprintf("turned off before the restart %v", turnOffBeforeRestart), func(t *testing.T) {
+			github := newAutomationGitHub(t)
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			s.Vars = append(s.Vars, "ATTN_MOCK_GH_URL="+github.url, "ATTN_MOCK_GH_TOKEN=test-token", "ATTN_MOCK_GH_HOST=github.test")
+			s.Start()
+			clone := newRepo(t, "shop")
+			s.SetCodexFolderTrust(clone, "trusted")
+			runGit(t, clone, "remote", "add", "origin", "git@github.test:acme/shop.git")
+			head := commitFile(t, clone, "change.go", "package change\n")
+			spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
+			applyAutomation(t, s.Client(), spec)
+			r := &automationReviewWorld{t: t, app: s.App(), cli: s.Client(), github: github}
+			r.refresh()
+
+			s.RequireEnterAtNextBoot(codexStuckOnAModal)
+			github.request(42, head, false)
+			r.refresh()
+			started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+				return len(runs) == 1 && runs[0].State == "pending" && protocol.Deref(runs[0].SessionID) != ""
+			})[0]
+			session := string(protocol.Deref(started.SessionID))
+			r.app.AwaitScreen(session, "A new version of Codex")
+
+			github.setDown(true)
+			if turnOffBeforeRestart {
+				setAutomationEnabled(t, r.cli, 1, false)
+			}
+			s.Stop()
+			s.Start()
+			r.app, r.cli = s.App(), s.Client()
+			if !turnOffBeforeRestart {
+				setAutomationEnabled(t, r.cli, 1, false)
+			}
+			if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
+				t.Fatalf("with the review automation off across the restart the runs are %+v, want the started run still pending", runs)
+			}
+
+			r.app.TypeLine(session, "")
+			if opening := s.Launched(session).Prompted(); !strings.Contains(opening, "Review this pull request.") {
+				t.Fatalf("once past the modal the reviewer was prompted %q, want its opening prompt", opening)
+			}
+			delivered := awaitStackRun(t, s, r.app, started.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+			if delivered.State != "delivered" {
+				t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
+			}
+		})
+	}
+}

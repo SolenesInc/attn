@@ -491,6 +491,8 @@ type automationGitHub struct {
 	mu        sync.Mutex
 	requested map[int]automationPull
 	approved  map[int]automationPull
+	url       string
+	down      bool
 }
 
 func newAutomationGitHub(t *testing.T) *automationGitHub {
@@ -498,6 +500,7 @@ func newAutomationGitHub(t *testing.T) *automationGitHub {
 	g := &automationGitHub{requested: map[int]automationPull{}, approved: map[int]automationPull{}}
 	server := httptest.NewServer(http.HandlerFunc(g.serve))
 	t.Cleanup(server.Close)
+	g.url = server.URL
 	t.Setenv("ATTN_MOCK_GH_URL", server.URL)
 	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
 	t.Setenv("ATTN_MOCK_GH_HOST", "github.test")
@@ -522,6 +525,12 @@ func (g *automationGitHub) withdraw(number int) {
 	delete(g.requested, number)
 }
 
+func (g *automationGitHub) setDown(down bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.down = down
+}
+
 func (g *automationGitHub) pull(number int) automationPull {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -531,6 +540,10 @@ func (g *automationGitHub) pull(number int) automationPull {
 func (g *automationGitHub) serve(rw http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.down {
+		http.Error(rw, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	rw.Header().Set("Content-Type", "application/json")
 	var number int
 	switch query := r.URL.Query().Get("q"); {
