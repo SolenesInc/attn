@@ -226,6 +226,26 @@ describe('launcher with outposts attached', () => {
     expect(spawns(daemon)).toEqual([{ cwd: REPO, agent: 'codex', host: sandbox.id }]);
   });
 
+  it('lets a harness installed only on the outpost be picked there and refuses it on This Mac', async () => {
+    const { daemon } = await open({ pi_available: 'false' }, [sandbox, piLab], ['claude', 'pi']);
+    const pi = screen.getByRole('radio', { name: /Pi/ });
+    expect(pi).toBeEnabled();
+    expect(pi).not.toHaveClass('agent-option--missing');
+    await press(daemon, '3', { altKey: true, code: 'Digit3' });
+    expect(pi).toHaveAttribute('aria-checked', 'true');
+    await highlight(daemon, 1);
+    expect(pi).toHaveClass('agent-option--missing');
+    expect(pi).toHaveAttribute('aria-checked', 'true');
+    await press(daemon, 'Enter');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Pi is not installed on This Mac. Pick another harness (⌥1–⌥9) or machine.',
+    );
+    expect(spawns(daemon)).toEqual([]);
+    await press(daemon, 'ArrowUp');
+    await press(daemon, 'Enter');
+    expect(spawns(daemon)).toEqual([{ cwd: REPO, agent: 'pi', host: sandbox.id }]);
+  });
+
   it('waits on a stalled machine and lets Esc finish the start in the background', async () => {
     const { daemon } = await open();
     answerInTurn(daemon, 'spawn_session', [HOLD]);

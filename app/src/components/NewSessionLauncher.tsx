@@ -125,10 +125,25 @@ export function NewSessionLauncher({
   const outpostsAtOpen = useRef(outposts);
   outpostsAtOpen.current = outposts;
   const sendAgentCatalog = api?.sendAgentCatalog;
+  const [catalogs, setCatalogs] = useState<Record<string, ReadonlySet<string>>>({});
+  const installedHere = useMemo(
+    () =>
+      new Set(
+        Object.entries(agentAvailability ?? {}).flatMap(([id, available]) =>
+          available ? [id] : [],
+        ),
+      ),
+    [agentAvailability],
+  );
+  const anyMachineAvailability = useMemo(() => {
+    const remote = Object.values(catalogs).flatMap((installed) => [...installed]);
+    if (!agentAvailability || !remote.length) return agentAvailability;
+    return { ...agentAvailability, ...Object.fromEntries(remote.map((id) => [id, true])) };
+  }, [agentAvailability, catalogs]);
   const controls = useSessionControls({
     isOpen,
     initialAgent,
-    agentAvailability,
+    agentAvailability: anyMachineAvailability,
     chiefExists,
     resetAgentOnOpen: true,
   });
@@ -142,7 +157,6 @@ export function NewSessionLauncher({
   const [error, setError] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
   const [starting, setStarting] = useState<{ host?: string; at: number } | null>(null);
-  const [catalogs, setCatalogs] = useState<Record<string, ReadonlySet<string>>>({});
   const run = useRef<{ background: boolean } | null>(null);
   const [, tick] = useState(0);
   const [deletion, setDeletion] = useState<{
@@ -164,13 +178,20 @@ export function NewSessionLauncher({
   const onMachine = (repo: string, host?: string) => (host ? `${host}:${repo}` : repo);
   const fail = (reason: unknown) =>
     setError({ message: reason instanceof Error ? reason.message : String(reason) });
+  const installedOn = (host?: string): ReadonlySet<string> | undefined =>
+    host ? catalogs[host] : Object.keys(catalogs).length ? installedHere : undefined;
   const refusal = (host: string | undefined, agent: SessionAgent): Problem | null => {
-    if (!host) return null;
-    const outpost = outpostOf(host);
     const name = machineName(host);
-    if (outpost?.reach !== 'reachable')
-      return { message: `${name} is unreachable; this needs it now`, reason: unreachableReason(outpost) };
-    if (agent !== 'shell' && catalogs[host] && !catalogs[host].has(agent))
+    if (host) {
+      const outpost = outpostOf(host);
+      if (outpost?.reach !== 'reachable')
+        return {
+          message: `${name} is unreachable; this needs it now`,
+          reason: unreachableReason(outpost),
+        };
+    }
+    const installed = installedOn(host);
+    if (agent !== 'shell' && installed && !installed.has(agent))
       return {
         message: `${agentLabel(agent)} is not installed on ${name}. Pick another harness (${keyCombo('alt', '1')}–${keyCombo('alt', '9')}) or machine.`,
       };
@@ -319,7 +340,7 @@ export function NewSessionLauncher({
   }, [where, branch]);
   const memory = where ? remember(where.repo, where.host) : 'main_repo';
   const targetHost = where ? where.host : rows[highlight]?.host;
-  const targetCatalog = targetHost ? catalogs[targetHost] : undefined;
+  const targetCatalog = installedOn(targetHost);
   const missing: MissingHarnesses | undefined = targetCatalog && {
     machine: machineName(targetHost),
     harnesses: new Set(
