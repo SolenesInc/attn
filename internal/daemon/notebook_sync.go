@@ -178,9 +178,7 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	isHome := err == nil && home == d.daemonInstanceID
 	var listed []notebookFolder
 	if isHome {
-		if listed, err = d.notebookFolders(); err == nil && len(peers) != 0 {
-			err = d.refuseNestedNotebooksAtHome()
-		}
+		listed, err = d.notebookFolders()
 	}
 	r.mu.Lock()
 	old := r.run
@@ -210,6 +208,14 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 		return nil, err
 	}
 	prepared, unprepared, leaving := d.notebookFolderStates()
+	nested := map[string]string{}
+	for _, folder := range listed {
+		if folder.Nested != "" {
+			nested[folder.ID] = folder.Nested
+			delete(prepared, folder.ID)
+			delete(unprepared, folder.ID)
+		}
+	}
 	unindexed := maps.Clone(leaving)
 	for id, entry := range unprepared {
 		unindexed[id] = entry.Root
@@ -229,6 +235,7 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 		r.mu.Unlock()
 	}
 	ready, failed := d.prepareNotebookFolders(prepared, unprepared)
+	maps.Copy(failed, nested)
 	if !slices.Equal(old.peers, peers) || !maps.Equal(old.folders, ready) {
 		if err := old.engine.Configure(d.notebookEngineConfig(peers, ready, nil)); err != nil {
 			return nil, err
@@ -806,6 +813,9 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) protocol.OutpostNote
 		if folder.Error != nil {
 			errs = append(errs, r.disk.Folders[id].Root+": "+*folder.Error)
 		}
+		if _, leftOut := run.failed[id]; leftOut {
+			continue
+		}
 		if folder.NeedBytes == nil || folder.NeedItems == nil {
 			measured = false
 		} else {
@@ -1148,6 +1158,11 @@ func (d *Daemon) NotebookReady(host, profileID string) error {
 	r := &d.notebookSync
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if run := r.run; run != nil {
+		if reason, leftOut := run.failed[id]; leftOut {
+			return fmt.Errorf("the Notebook folder %s does not sync with %s: %s", root, row.Name, reason)
+		}
+	}
 	if d.loadedNotebookSyncDiskLocked(d.daemonInstanceID).Folders[id].Completed[row.DaemonID] {
 		return nil
 	}

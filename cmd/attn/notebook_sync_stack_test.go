@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -397,39 +398,77 @@ func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletio
 	t.Logf("the returning folder synced %s fresh, kept the stale copy at %s, and deleted-offline.md stayed deleted on both sides", first, aside)
 }
 
-func TestNestedNotebookFoldersAreRefusedWhilePaired(t *testing.T) {
+func awaitNotebookError(t *testing.T, pair *testworld.OutpostPair, want ...string) string {
+	t.Helper()
+	names := func(row protocol.OutpostInfo) bool {
+		if row.ID != pair.Host || row.Notebook == nil || row.Notebook.State != protocol.OutpostNotebookStateError {
+			return false
+		}
+		for _, w := range want {
+			if !strings.Contains(protocol.Deref(row.Notebook.Error), w) {
+				return false
+			}
+		}
+		return true
+	}
+	for _, row := range pair.App.Initial.Outposts {
+		if names(row) {
+			return protocol.Deref(row.Notebook.Error)
+		}
+	}
+	message := testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return slices.ContainsFunc(m.Outposts, names)
+	})
+	i := slices.IndexFunc(message.Outposts, names)
+	return protocol.Deref(message.Outposts[i].Notebook.Error)
+}
+
+func TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	outpost.Start()
 	home.Start()
 	app := home.App()
-	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
-	if !created.Success {
-		t.Fatalf("create Side: %+v", created)
-	}
-	inner := notebookPath(home, "inner")
-	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
-	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
-	pair.SSH.Route(pair.Destination, outpost)
-	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
-	refused := testworld.Refused(app)
-	for _, want := range []string{"Side", inner, "Default", notebookPath(home)} {
-		if !strings.Contains(protocol.Deref(refused.Error), want) {
-			t.Fatalf("pairing with nested folders = %q, want it to name %q", protocol.Deref(refused.Error), want)
+	createProfile := func(name string) string {
+		t.Helper()
+		created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: name, Name: name}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == name })
+		if !created.Success {
+			t.Fatalf("create %s: %+v", name, created)
 		}
+		return created.Profile.ID
 	}
-	t.Logf("pairing refused: %s", protocol.Deref(refused.Error))
-
-	requireStdout(t, home.Attn("settings", "set", "notebook.root", notebookPath(home), "--profile", "Side"))
+	sideID := createProfile("Side")
+	defaultFolder, inner := notebookPath(home), notebookPath(home, "inner")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
 	pair.Connect()
+	pairing := awaitNotebookError(t, pair, "Side", inner, "Default", defaultFolder)
+	writeFileAt(t, filepath.Join(defaultFolder, "outer.md"), "the outer folder syncs")
+	awaitOutpostFile(t, pair, filepath.Join(outpostCopyPlacement(outpost, "notebook", defaultFolder), "outer.md"), "the outer folder syncs", false)
+	launch, _, _ := home.RequestSpawn(pair.App, fakeagent.Claude, outpost.Path("side"), func(m *protocol.SpawnSessionMessage) {
+		m.Host, m.ProfileID = protocol.Ptr(pair.Host), sideID
+	})
+	if launch.Success || !strings.Contains(protocol.Deref(launch.Error), "does not sync with outpost") || !strings.Contains(protocol.Deref(launch.Error), inner) {
+		t.Fatalf("launching Side's agent on the outpost: success=%v error=%q, want a refusal naming its left-out folder", launch.Success, protocol.Deref(launch.Error))
+	}
+
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", defaultFolder, "--profile", "Side"))
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	copies, err := filepath.Glob(notebookPath(outpost) + "-*-*")
-	if err != nil || len(copies) != 1 {
-		t.Fatalf("two profiles on one folder made copies %v (%v), want one", copies, err)
+	if want := []string{outpostCopyPlacement(outpost, "inner", inner), outpostCopyPlacement(outpost, "notebook", defaultFolder)}; err != nil || !slices.Equal(copies, want) {
+		t.Fatalf("two profiles on one folder left copies %v (%v), want the old inner copy and one shared copy %v", copies, err, want)
 	}
-	nested := home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side")
-	requireFailure(t, nested, "settings: ", "Side", inner, "Default", notebookPath(home))
-	t.Logf("an equal folder synced once into %s; nesting while paired refused: %s", copies[0], strings.TrimSpace(nested.Stderr))
+	refused := home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side")
+	requireFailure(t, refused, "settings: ", "Side", inner, "Default", defaultFolder)
+
+	side, child := filepath.Join(home.Dir, "side-notebook"), notebookPath(home, "child")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", side, "--profile", "Side"))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", child, "--profile", "Default"))
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	createProfile("Fresh")
+	fresh := awaitNotebookError(t, pair, "Default", child, "Fresh", defaultFolder)
+	writeFileAt(t, filepath.Join(side, "side.md"), "another folder keeps syncing")
+	awaitOutpostFile(t, pair, filepath.Join(outpostCopyPlacement(outpost, "side-notebook", side), "side.md"), "another folder keeps syncing", false)
+	t.Logf("pairing with a nested folder synced the outer one and reported: %s; an equal folder synced once into %s; nesting by a setting write while paired was refused: %s; a new profile on the default folder left only the inner folder out: %s", pairing, copies[1], strings.TrimSpace(refused.Stderr), fresh)
 }
 
 func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {

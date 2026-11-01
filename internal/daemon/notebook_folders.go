@@ -20,6 +20,7 @@ type notebookFolder struct {
 	Epoch    string
 	HomePath string
 	Profiles []string
+	Nested   string
 }
 
 type profileNotebook struct {
@@ -64,6 +65,11 @@ func notebookFoldersOf(home string, notebooks []profileNotebook) []notebookFolde
 		}
 		folder.Profiles = append(folder.Profiles, nb.profileID)
 	}
+	for _, n := range notebookNestings(notebooks) {
+		if folder := byPath[n.inner.path]; folder.Nested == "" {
+			folder.Nested = n.String() + "; it stays out of outpost sync until one of them moves"
+		}
+	}
 	folders := make([]notebookFolder, 0, len(byPath))
 	for _, folder := range byPath {
 		slices.Sort(folder.Profiles)
@@ -73,23 +79,24 @@ func notebookFoldersOf(home string, notebooks []profileNotebook) []notebookFolde
 	return folders
 }
 
-func refuseNestedNotebooks(notebooks []profileNotebook) error {
+type notebookNesting struct {
+	inner, outer profileNotebook
+}
+
+func (n notebookNesting) String() string {
+	return fmt.Sprintf("profile %s's Notebook folder %s is inside profile %s's Notebook folder %s", n.inner.profileName, n.inner.path, n.outer.profileName, n.outer.path)
+}
+
+func notebookNestings(notebooks []profileNotebook) []notebookNesting {
+	var nestings []notebookNesting
 	for _, inner := range notebooks {
 		for _, outer := range notebooks {
 			if rel, err := filepath.Rel(outer.path, inner.path); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("profile %s's Notebook folder %s is inside profile %s's Notebook folder %s; outposts sync each Notebook folder on its own, so one cannot hold another while outposts are paired", inner.profileName, inner.path, outer.profileName, outer.path)
+				nestings = append(nestings, notebookNesting{inner: inner, outer: outer})
 			}
 		}
 	}
-	return nil
-}
-
-func (d *Daemon) refuseNestedNotebooksAtHome() error {
-	notebooks, err := d.profileNotebooks(d.notebookRoot)
-	if err != nil {
-		return err
-	}
-	return refuseNestedNotebooks(notebooks)
+	return nestings
 }
 
 func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) error {
@@ -113,7 +120,12 @@ func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) err
 	if err != nil {
 		return err
 	}
-	return refuseNestedNotebooks(notebooks)
+	for _, n := range notebookNestings(notebooks) {
+		if n.inner.profileID == target.ID || n.outer.profileID == target.ID {
+			return fmt.Errorf("%s; outposts sync each Notebook folder on its own, so one cannot hold another while outposts are paired", n)
+		}
+	}
+	return nil
 }
 
 func notebookFoldersWire(folders []notebookFolder) []protocol.NotebookSyncFolder {
