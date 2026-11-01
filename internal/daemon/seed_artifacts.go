@@ -249,8 +249,9 @@ type observedSeedArtifact struct {
 	Filename       string `json:"filename"`
 	RelativeTarget string `json:"relative_target"`
 	Size           int64  `json:"size"`
-	ModifiedAt     string `json:"modified_at"`
-	ContentSHA256  string `json:"content_sha256"`
+	ModifiedNS     int64  `json:"modified_ns"`
+	ChangedNS      int64  `json:"changed_ns"`
+	Inode          uint64 `json:"inode"`
 }
 
 func (d *Daemon) observedSeedArtifacts(seedID string) ([]observedSeedArtifact, error) {
@@ -264,29 +265,21 @@ func (d *Daemon) observedSeedArtifacts(seedID string) ([]observedSeedArtifact, e
 	}
 	observed := make([]observedSeedArtifact, 0, len(artifacts))
 	for _, artifact := range artifacts {
-		path := filepath.Join(dir, artifact.Filename)
-		fd, openErr := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		if errors.Is(openErr, unix.ENOENT) || errors.Is(openErr, unix.ELOOP) {
+		var stat unix.Stat_t
+		statErr := unix.Lstat(filepath.Join(dir, artifact.Filename), &stat)
+		if errors.Is(statErr, unix.ENOENT) {
 			continue
 		}
-		if openErr != nil {
-			return nil, fmt.Errorf("read seed artifact %q for observation: %w", artifact.Filename, openErr)
+		if statErr != nil {
+			return nil, fmt.Errorf("stat seed artifact %q for observation: %w", artifact.Filename, statErr)
 		}
-		file := os.NewFile(uintptr(fd), path)
-		info, statErr := file.Stat()
-		hash := sha256.New()
-		_, hashErr := io.Copy(hash, file)
-		closeErr := file.Close()
-		if statErr != nil || hashErr != nil || closeErr != nil {
-			return nil, fmt.Errorf("hash seed artifact %q: %w", artifact.Filename, errors.Join(statErr, hashErr, closeErr))
-		}
-		if !info.Mode().IsRegular() {
+		if stat.Mode&unix.S_IFMT != unix.S_IFREG {
 			continue
 		}
 		observed = append(observed, observedSeedArtifact{
 			Filename: artifact.Filename, RelativeTarget: artifact.RelativeTarget,
-			Size: info.Size(), ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
-			ContentSHA256: hex.EncodeToString(hash.Sum(nil)),
+			Size: stat.Size, ModifiedNS: stat.Mtim.Nano(), ChangedNS: stat.Ctim.Nano(),
+			Inode: uint64(stat.Ino),
 		})
 	}
 	return observed, nil
