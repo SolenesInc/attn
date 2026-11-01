@@ -1,0 +1,37 @@
+:root { color-scheme: dark; --bg: #141414; --panel: #1e1e1e; --line: #2c2c2c; --fg: #e6e6e6; --muted: #8a8a8a; --accent: #4f9cf9; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px -apple-system, system-ui, Roboto, sans-serif; overscroll-behavior: none; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+#root { height: 100%; }
+.app { display: flex; flex-direction: column; overflow: hidden; }
+button { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; touch-action: manipulation; }
+button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+input, textarea { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: inherit; width: 100%; }
+.muted { color: var(--muted); font-size: 12px; }
+.error { color: #f37; }
+.connect { padding: 24px 16px; display: flex; flex-direction: column; gap: 8px; }
+.sessions { display: flex; flex-direction: column; height: 100%; }
+.sessions header, .terminal-screen header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.sessions h1 { font-size: 20px; margin: 4px 0; flex: 1; }
+.sessions ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.sessions li { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.session-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-text { min-width: 0; }
+.state { font-size: 11px; padding: 3px 7px; border-radius: 10px; background: #333; white-space: nowrap; }
+.state-waiting_input, .state-pending_approval { background: #b8860b; color: #000; }
+.state-working { background: #2e6b3a; }
+.modes { display: flex; gap: 6px; padding: 6px 8px; overflow-x: auto; }
+.modes button { font-size: 12px; padding: 5px 8px; white-space: nowrap; }
+.terminal-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.terminal-screen header .title { flex: 1; min-width: 0; }
+.terminal-screen header .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.terminal-host { flex: 1; min-height: 0; position: relative; background: #1e1e1e; }
+.term-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.term-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.term-stage canvas { display: block; }
+.term-input { position: absolute; inset: 0; color: transparent; caret-color: transparent; outline: none; background: transparent; white-space: pre; overflow: hidden; font-size: 16px; }
+.keys { display: flex; gap: 4px; padding: 6px; overflow-x: auto; border-top: 1px solid var(--line); background: var(--panel); flex: none; }
+.keys button { min-width: 34px; padding: 9px 5px; font: 13px ui-monospace, monospace; flex: none; }
+.composer { display: flex; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: var(--panel); flex: none; }
+.composer textarea { resize: none; min-height: 40px; max-height: 120px; font-size: 16px; }
+.input-log { margin: 0; max-height: 140px; overflow: auto; font-size: 10px; background: #000; color: #9f9; padding: 4px 6px; flex: none; }
