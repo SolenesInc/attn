@@ -342,8 +342,9 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 		return
 	}
 	defer d.setOutpostConn(id, run, nil)
-	d.life.Go("notebookStream:"+id, func() { d.openNotebookSync(conn) })
-	d.life.Go("notebookFolders:"+id, func() { d.pushNotebookFolders(conn) })
+	d.life.Go("notebookFolders:"+id, func() {
+		d.pushNotebookFolders(conn, func() { d.life.Go("notebookStream:"+id, func() { d.openNotebookSync(conn) }) })
+	})
 	sending := make(chan struct{})
 	if !d.life.Go("outpostCopy:"+id, func() {
 		defer close(sending)

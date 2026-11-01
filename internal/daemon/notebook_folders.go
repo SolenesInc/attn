@@ -143,7 +143,7 @@ func (d *Daemon) notebookFoldersChanges() <-chan struct{} {
 
 func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 	r := &d.notebookSync
-	if slices.EqualFunc(r.folders, folders, func(a, b notebookFolder) bool {
+	if r.folders != nil && slices.EqualFunc(r.folders, folders, func(a, b notebookFolder) bool {
 		return a.ID == b.ID && a.Epoch == b.Epoch && a.HomePath == b.HomePath && slices.Equal(a.Profiles, b.Profiles)
 	}) {
 		return
@@ -155,19 +155,23 @@ func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 	}
 }
 
-func (d *Daemon) pushNotebookFolders(conn *bridge.Conn) {
+func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 	var sent []protocol.NotebookSyncFolder
 	pushed := false
 	for conn.Context().Err() == nil {
 		changed := d.notebookFoldersChanges()
 		d.notebookSync.mu.Lock()
+		listed := d.notebookSync.folders != nil
 		folders := notebookFoldersWire(d.notebookSync.folders)
 		d.notebookSync.mu.Unlock()
-		if !pushed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
+		if listed && (!pushed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
 			return a.ID == b.ID && a.Epoch == b.Epoch && slices.Equal(a.Profiles, b.Profiles)
-		}) {
+		})) {
 			err := conn.Call(conn.Context(), bridgeCall, protocol.NotebookFoldersMessage{Cmd: protocol.CmdNotebookFolders, Folders: folders}, nil)
 			if err == nil {
+				if !pushed {
+					openStream()
+				}
 				sent, pushed = folders, true
 			} else if conn.Context().Err() == nil {
 				d.logf("Notebook folders for %s: %v", conn.Peer().Name, err)
