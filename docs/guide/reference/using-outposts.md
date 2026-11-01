@@ -71,10 +71,13 @@ when the home is reachable.
 
 When an outpost runs another build, choose **Update to home build** on its
 row or **Update outposts** in the banner. Update also retries a failed first
-install when nothing is installed yet.
+install when nothing is installed yet. The banner and the row show each step
+from the moment you choose Update until the outpost runs the home build or the
+update fails with its reason. While an update runs, choosing Update again joins
+it instead of starting another.
 
-The home builds or downloads its matching Linux binary, sends it over ssh,
-verifies it, and reconnects. A home built from source cross-compiles the Linux
+The home connects over ssh, builds or downloads its matching Linux binary,
+sends it, verifies it, and reconnects. A home built from source cross-compiles the Linux
 binary, for Add as well as Update. The first build takes about a minute. Later builds reuse the build cache and take seconds. Running shells keep their
 processes. The old binary stays at `<install path>.previous`. Attn
 refuses the installation if the outpost has `pty_shared_host_enabled` on or the outpost's database needs a

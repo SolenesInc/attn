@@ -34,6 +34,25 @@ describe('outpost build updates', () => {
     expect(daemon.sentOf('update_outpost')).toHaveLength(1);
   });
 
+  it('shows the update started on the first click and sends no second update from repeated clicks', async () => {
+    const view = await renderApp({ initialState: initial });
+    view.daemon.on('update_outpost', () => ({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'connecting' } }] }));
+    await gesture(view.daemon, () => fireEvent.click(within(banner()!).getByRole('button', { name: 'Update outposts' })));
+    expect(banner()).toHaveTextContent('Updating outposts. Studio: Connecting.');
+    const button = within(banner()!).getByRole('button', { name: 'Updating…' });
+    expect(button).toBeDisabled();
+    await gesture(view.daemon, () => { fireEvent.click(button); fireEvent.click(button); });
+    expect(view.daemon.sentOf('update_outpost')).toHaveLength(1);
+  });
+
+  it('says so in the banner when the daemon refuses the update', async () => {
+    const view = await renderApp({ initialState: initial });
+    view.daemon.on('update_outpost', () => ({ event: 'command_error', cmd: 'update_outpost', success: false, error: 'outpost studio not found' }));
+    await gesture(view.daemon, () => fireEvent.click(within(banner()!).getByRole('button', { name: 'Update outposts' })));
+    expect(banner()).toHaveTextContent('Studio runs a different build than home. outpost studio not found');
+    expect(within(banner()!).getByRole('button', { name: 'Update outposts' })).toBeEnabled();
+  });
+
   it('keeps dismissal through app restarts until the home build changes', async () => {
     const view = await renderApp({ initialState: initial });
     await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss outpost updates' })));

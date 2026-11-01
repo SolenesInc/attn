@@ -5924,6 +5924,7 @@ export interface OutpostUpdateObject {
 
 export enum OutpostUpdatePhase {
     Building = "building",
+    Connecting = "connecting",
     Done = "done",
     Downloading = "downloading",
     Failed = "failed",
@@ -28112,6 +28113,7 @@ const typeMap: any = {
     ],
     "OutpostUpdatePhase": [
         "building",
+        "connecting",
         "done",
         "downloading",
         "failed",

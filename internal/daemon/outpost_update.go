@@ -21,6 +21,7 @@ type outpostPush struct {
 	cancel        context.CancelFunc
 	done          chan struct{}
 	state         protocol.OutpostUpdate
+	started       time.Time
 	running       bool
 	installFailed bool
 }
@@ -39,9 +40,19 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 		return
 	}
 	r.mu.Lock()
-	busy := r.pushes[row.ID] != nil && r.pushes[row.ID].running
+	running := r.pushes[row.ID]
+	if running != nil && !running.running {
+		running = nil
+	}
+	joined := running != nil && (running.state.Phase == "" || running.state.Phase == protocol.OutpostUpdatePhaseDone || running.state.Phase == protocol.OutpostUpdatePhaseFailed)
+	if joined {
+		running.state = protocol.OutpostUpdate{Phase: protocol.OutpostUpdatePhaseConnecting}
+	}
 	r.mu.Unlock()
-	if busy {
+	if joined {
+		d.publishFact(FactOutpostChanged, row.ID, nil)
+	}
+	if running != nil {
 		return
 	}
 	if row.HostKey == "" {
@@ -66,9 +77,10 @@ func (d *Daemon) startOutpostInstall(row store.Outpost) {
 		return
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
-	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true}
+	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true, started: time.Now()}
 	r.pushes[row.ID] = push
 	r.mu.Unlock()
+	d.setOutpostUpdate(row.ID, push, string(protocol.OutpostUpdatePhaseConnecting), "")
 	if !d.life.Go("installOutpost:"+row.ID, func() {
 		defer cancel()
 		d.finishOutpostPush(row.ID, push, d.pushOutpost(ctx, row, push))
@@ -89,6 +101,11 @@ func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase, outcome s
 	}
 	r.mu.Unlock()
 	if current && changed {
+		reached := phase
+		if outcome != "" {
+			reached += ": " + outcome
+		}
+		d.logf("outpost %s update: %s after %s", id, reached, time.Since(push.started).Round(time.Millisecond))
 		d.publishFact(FactOutpostChanged, id, nil)
 	}
 }
@@ -104,7 +121,7 @@ func (d *Daemon) beginOutpostAdd(row store.Outpost, cancel context.CancelFunc) *
 	if current != nil && (current.running || current.installFailed) {
 		return nil
 	}
-	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true}
+	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true, started: time.Now()}
 	if current != nil {
 		push.state = current.state
 	}

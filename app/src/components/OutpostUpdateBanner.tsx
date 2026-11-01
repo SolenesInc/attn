@@ -16,6 +16,7 @@ export function outpostIsUpdating(row: OutpostInfo): boolean {
 export function outpostUpdateText(row: OutpostInfo): string {
   if (!row.update) return '';
   return row.update.outcome || {
+    connecting: 'Connecting.',
     building: 'Building attn for Linux. The first build takes about a minute.',
     downloading: 'Downloading attn for Linux.',
     sending: 'Copying it over.',

@@ -359,7 +359,7 @@ model CopyRow {
   columns?: Record<unknown>;
 }
 
-enum OutpostUpdatePhase { building, downloading, sending, verifying, restarting, done, failed }
+enum OutpostUpdatePhase { connecting, building, downloading, sending, verifying, restarting, done, failed }
 
 model OutpostUpdate {
   phase: OutpostUpdatePhase;

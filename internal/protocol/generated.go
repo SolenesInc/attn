@@ -7502,6 +7502,7 @@ type OutpostUpdate struct {
 type OutpostUpdatePhase string
 
 const OutpostUpdatePhaseBuilding OutpostUpdatePhase = "building"
+const OutpostUpdatePhaseConnecting OutpostUpdatePhase = "connecting"
 const OutpostUpdatePhaseDone OutpostUpdatePhase = "done"
 const OutpostUpdatePhaseDownloading OutpostUpdatePhase = "downloading"
 const OutpostUpdatePhaseFailed OutpostUpdatePhase = "failed"
