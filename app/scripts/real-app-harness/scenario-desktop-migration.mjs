@@ -18,6 +18,10 @@ const LEGACY_WORKSPACES = [
   'Side project', 'Plugin runtime', 'Research', 'Docs sweep', 'CLI polish', 'Browser control',
 ];
 const PAIRED = new Set([1, 5, 9]);
+const AUTOMATION_TABLES = [
+  'automation_guard_checks', 'automation_continuity_bindings', 'automation_review_request_edges', 'automation_provider_cursors',
+  'automation_runs', 'automation_occurrences', 'automation_definitions',
+];
 const LAST_SCHEMA_BEFORE_CONVERSION = 158;
 const LAST_SCHEMA_REBUILT_BY_FIXTURE = 1791301168635041;
 
@@ -82,9 +86,9 @@ function legacyWorkspacesSql(fixtureDir) {
     'DROP INDEX idx_sessions_member_key;',
     'ALTER TABLE sessions DROP COLUMN member_key;',
     'DELETE FROM schema_migrations WHERE version IN (1793408289794144, 1793417605857679);',
-    "UPDATE automation_definitions SET profile_id = '';",
-    // A disabled automation makes the launch step follow placement on every run.
-    `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
+    // Its only automation is disabled, so the launch step follows placement and conversion's renumbering keeps it id 1.
+    ...AUTOMATION_TABLES.map((table) => `DELETE FROM ${table};`),
+    `INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
       VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
     'ALTER TABLE sessions RENAME COLUMN user_label TO label;',
