@@ -398,6 +398,16 @@ try {
     await key('a', ['command']);
     await driver.runInputDriver(['global_text', '--text', before.text]);
   });
+  await runner.step('native_undo_and_redo_restore_typing', async () => {
+    const before = (await state()).text;
+    await key('arrowleft'); await key('arrowright');
+    await driver.runInputDriver(['global_text', '--text', ' undo me']);
+    assert.equal((await state()).text, before + ' undo me');
+    await key('z', ['command']);
+    assert.equal((await state()).text, before, 'Command-Z undoes the typing');
+    await key('z', ['command', 'shift']);
+    assert.equal((await state()).text, before + ' undo me', 'Shift-Command-Z redoes it');
+  });
   await runner.step('panel_surface_drags_the_panel', async () => {
     await driver.click(captureEditor, { windowTitle: 'Quick Capture' });
     const before = await captureStack();

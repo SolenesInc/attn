@@ -1,4 +1,5 @@
 import { installVerbatimTextEntryGuard } from './utils/verbatimTextEntry';
+import { installNativeTextUndo } from './utils/nativeTextUndo';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { installUiDiagnostics, recordUiDiag } from './utils/uiDiagnosticsLog';
 
@@ -7,6 +8,7 @@ const dbg = (msg: string) => window.__dbg?.(msg);
 
 dbg('main.tsx: imports resolved');
 installVerbatimTextEntryGuard(document);
+installNativeTextUndo(document);
 installUiDiagnostics();
 
 async function boot() {
