@@ -16,13 +16,21 @@ final class SpikeUITests: XCTestCase {
 
     func button(_ label: String) -> XCUIElement { app.buttons[label].firstMatch }
 
+    /// The mode row scrolls sideways once it holds more buttons than fit; swipe it until the button is on screen.
+    func tapScrolled(_ label: String) {
+        let b = button(label)
+        let row = button("(a) direct")
+        for _ in 0..<3 where b.frame.maxX > app.frame.maxX { row.swipeLeft(); sleep(1) }
+        b.tap()
+    }
+
     func openSession(input: String, size: String) {
         if button("‹").exists { button("‹").tap() }
         let row = app.staticTexts["fizzbuzz demo"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10), "session list did not show fizzbuzz demo")
         // WKWebView drops a tap that lands within the double-tap window of the previous one, so space them out.
-        button(input).tap(); sleep(1)
-        button(size).tap(); sleep(1)
+        tapScrolled(input); sleep(1)
+        tapScrolled(size); sleep(1)
         row.tap()
         let opened = app.staticTexts.containing(NSPredicate(format: "label CONTAINS ' kb '")).firstMatch
         if !opened.waitForExistence(timeout: 5) { row.tap(); _ = opened.waitForExistence(timeout: 5) }
