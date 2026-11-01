@@ -168,6 +168,7 @@ func usageObservations(source transcript.UsageSource, usages []transcript.TokenU
 		}
 		observations = append(observations, sessioncost.Observation{
 			ObservationID: observationID,
+			Final:         usage.Final,
 			Model:         model,
 			Purpose:       purpose,
 			FastMode:      usage.FastMode,

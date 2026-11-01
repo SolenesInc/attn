@@ -91,6 +91,11 @@ func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []
 		if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
 			continue
 		}
+		if observation.Final {
+			addObservedUsage(observed, observation)
+			changed = true
+			continue
+		}
 		owner, exists := m.costOwners[observation.ObservationID]
 		if owner.Finalized {
 			continue
@@ -105,20 +110,15 @@ func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []
 			continue
 		}
 		source = edit(owner.Source)
-		if source.Ledger == nil {
-			source.Ledger = make(sessioncost.Ledger)
-		}
-		if source.Observations == nil {
-			source.Observations = make(map[string]sessioncost.Observation)
-		}
 		if seen {
 			key := sessioncost.RequestLedgerKey(prior.Model, prior.Purpose, prior.Usage)
 			key.FastMode = prior.FastMode
 			source.Ledger[key] = source.Ledger[key].Subtract(prior.Usage)
 		}
-		key := sessioncost.RequestLedgerKey(observation.Model, observation.Purpose, observation.Usage)
-		key.FastMode = observation.FastMode
-		source.Ledger[key] = source.Ledger[key].Add(observation.Usage)
+		addObservedUsage(source, observation)
+		if source.Observations == nil {
+			source.Observations = make(map[string]sessioncost.Observation)
+		}
 		source.Observations[observation.ObservationID] = observation
 		changed = true
 	}
@@ -128,6 +128,15 @@ func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []
 	}
 	m.mu.Unlock()
 	return changed
+}
+
+func addObservedUsage(source *sessioncost.Source, observation sessioncost.Observation) {
+	if source.Ledger == nil {
+		source.Ledger = make(sessioncost.Ledger)
+	}
+	key := sessioncost.RequestLedgerKey(observation.Model, observation.Purpose, observation.Usage)
+	key.FastMode = observation.FastMode
+	source.Ledger[key] = source.Ledger[key].Add(observation.Usage)
 }
 
 func (m *Monitor) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {

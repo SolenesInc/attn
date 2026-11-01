@@ -9,6 +9,7 @@ import (
 
 type TokenUsage struct {
 	Key                          string
+	Final                        bool
 	Model                        string
 	Purpose                      string
 	FastMode                     bool
@@ -276,6 +277,7 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 	e.codexUsageStarted = true
 	return TokenUsage{
 		Key:                "codex:" + strings.TrimSpace(sourceKey),
+		Final:              true,
 		Model:              e.codexModel,
 		FastMode:           e.codexTurnFastMode,
 		InputTokens:        last.InputTokens - last.CachedInputTokens - last.CacheWriteInputTokens,
