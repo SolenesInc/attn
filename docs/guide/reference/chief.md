@@ -123,11 +123,18 @@ you, and onboards you, one question at a time. Skip anything you don't want.
   Chief took over from your previous Chief session, the Chief says so and can
   ask that session for its open work.
 
-Helping Attn's maintainers means publishing usage analytics to them. Attn sends no
-personal information. See [telemetry](telemetry.md) for what is recorded.
-Vents are short reports that agents file when Attn gets in their way. You choose them separately from analytics and can send only the ones you pick. You can
-also let agents vent about your own tools and environment. Those vents never
-leave your machine. Nothing turns on unless you say yes.
+Helping Attn's maintainers means sharing up to two things, and you choose each
+separately:
+
+- Usage analytics. They contain no personal information.
+  [Telemetry](telemetry.md) lists what is recorded.
+- Vents, which are short reports that agents file when Attn gets in their way.
+  A vent's text can mention things from your work, such as a project name.
+  Read a vent before you send it, and send only the ones you pick. Or turn on
+  automatic sending.
+
+You can also let agents vent about your own tools and environment. Those vents
+never leave your machine. Nothing turns on unless you say yes.
 
 The Chief changes Attn for you with its commands, and tells you what each one
 did. During onboarding the Chief can point at the app even when Agent callouts is off.
