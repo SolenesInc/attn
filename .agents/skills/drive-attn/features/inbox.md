@@ -27,7 +27,7 @@ does to the queue.
 
 - No control of its own opens the inbox. People see a ring as the 📬 line in the agent's terminal, and the typed text of their own answers and quick captures there.
 - Settings, Experimental: "Quiet notifications in the queue" keeps a ring's run out of the queue. [queue-flow.md](queue-flow.md) has the recipe that drives it.
-- Items people put in come through other features: an answer to an ask ([asks.md](asks.md)) and a quick capture ([quick-capture.md](quick-capture.md)).
+- Items people put in come through other features: an answer to an ask ([asks.md](asks.md)), a quick capture ([quick-capture.md](quick-capture.md)) and a change to a seed's authorization ([delegation.md](delegation.md)).
 - Their own shell: `attn agent msg <target> "text" --source-session <id>` sends as that session, and `attn agent inbox --session <id>` reads as it.
 
 ### Agents
@@ -39,7 +39,7 @@ does to the queue.
 
 - An item lands, an outstanding ring ends, or the agent reaches a safe prompt: attn rings the address, retrying every 5 minutes up to 3 attempts per item (`internal/daemon/inbox_delivery.go`, `internal/daemon/inbox.go`).
 - An item for an asleep crew member wakes the member first. [crew.md](crew.md) has the recipe that drives it.
-- Seed updates ([garden.md](garden.md)), PR watch updates ([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures ([quick-capture.md](quick-capture.md)) and crew notices ([crew.md](crew.md)) arrive through this inbox. Drive the events that cause them in each feature's file.
+- Seed updates ([garden.md](garden.md)), PR watch updates ([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures ([quick-capture.md](quick-capture.md)), authorization changes ([delegation.md](delegation.md)) and crew notices ([crew.md](crew.md)) arrive through this inbox. Drive the events that cause them in each feature's file.
 
 ## Driving it
 
@@ -103,5 +103,5 @@ Preconditions:
 - The mock reads its inbox only because its fixture matches `unread items` in the 📬 line. A fixture without that turn leaves the item unread, and the next ring comes 5 minutes later.
 - A ring lands only at a safe prompt. An agent that has not settled after launch gets `queued (target is not taking input right now ...)`. The ring follows when the agent settles, at no cost in attempts.
 - After 3 unanswered rings attn stops ringing for an item and only the daemon log says so. A new item brings fresh attempts, and the ring for the new item covers the old items too.
-- `attn agent inbox` never returns answers or quick captures: a ring types them. Reading an empty inbox after a ring is not a lost item.
+- `attn agent inbox` never returns answers, quick captures or authorization changes: a ring types them. Reading an empty inbox after a ring is not a lost item.
 - Working but wrong: a receipt repeats its status, as in `queued: queued (seed has no reachable tender; waits for its next tender)` and `notified: notified inbox-b`. A `notified` receipt says the ring was placed, not that the agent read it. The proof is the 📬 line in that agent's terminal and `msg-status` reading `read`.

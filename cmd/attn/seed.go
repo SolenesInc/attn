@@ -195,8 +195,8 @@ Edit entries in notes show the versions and size changes.`, []string{"json"}, fa
 without asking and where they stop. Set only words the user gave you.
 Delegation openings deliver them. When someone other than the seed's
 tender changes them, attn types the change into the tender's conversation
-as the user's message, waiting while the tender needs approval. With no
-words or --clear, prints them and the state of the last typed update.
+as the user's message, waiting while the tender needs approval. With
+neither words nor --clear, prints them and the state of the last typed update.
 Who may change them follows seed moves: the tender, sessions above it in
 the delegation chain, and the profile's chief; anyone in the profile while
 nobody holds the seed.`, []string{"clear", "json"}, false},

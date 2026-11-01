@@ -117,6 +117,7 @@ bridge --launch --wait-ready ping
 - The shared mock switches only on `/resume <id>` and `/agents <id>`. A bare `/agents` prints nothing and leaves the terminal on its conversation.
 - `latest` comes from the daily `codex doctor` check, so writing `$X/latest` mid-run does not change the latest version. `./attn codex update` installs the new version anyway. To make the banner and palette offer an update again, the palette install step lowers `$X/version` instead.
 - The mock never asks Codex's folder trust question, so you cannot drive the trust answer on the baseline. It needs a real Codex.
+- The shared mock app-server imports `ws` from `app/node_modules`. In a fresh worktree run `pnpm --dir app install` first: without it the app-server exits at once, and every shared launch fails with `exited before answering`.
 - Under shared Codex the mock plays only `reply` and `delay` actions. A fixture turn with any other action fails, such as `the shared Codex mock does not play attn actions`. Drive an agent's attn verbs through a plain Codex or Claude mock. `attn codex` needs no session, so `./attn` stands in for the agent here.
 - The switch decides how new terminals and ledger resumes launch. A Codex session already running stays plain until the session closes.
 - attn captures Auto-approve when a terminal launches. Turning it off after launch leaves the running Codex on automatic review, and `pending_approval` can lag by about a minute. Disable it before starting the shared terminal, as the recipe and `codex-shared` scenario do.

@@ -130,12 +130,12 @@ item.
   note does not ring.
 - A Quick Capture goes to the chief or the crew member the user picked.
 - A change to a seed's authorization goes to the seed's tender, addressed as a
-  seed update is: the session, or the crew member when a member tends it. A
-  successor after a handover reads the current words in its opening instead.
-  attn writes the item only when someone other than the tender changes the
-  words while the claim holds, in the same write as the words and their log
-  entry. The words came through an agent, so the agent that set them answers
-  for them, and the seed's log records who set what.
+  seed update is: the session, or the crew member when a member tends it. attn
+  writes the item only when someone other than the tender changes the words
+  while the claim holds, in the same write as the words and their log entry.
+  A successor after a handover reads the current words in its opening instead.
+  attn does not check where the words came from. The agent that set them
+  answers for them.
 
 ### PR watch updates
 
