@@ -678,7 +678,10 @@ func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protoco
 }
 
 func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.delegationStatus(msg, "")
+	operation, err := d.delegationStatus(msg, "", peerClosed(conn))
+	if errors.Is(err, errCallerGone) {
+		return
+	}
 	if err != nil {
 		d.sendError(conn, "delegate status: "+err.Error())
 		return
@@ -689,7 +692,10 @@ func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatu
 func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessage) {
 	operation, err := d.startDelegation(context.Background(), msg)
 	if err == nil {
-		operation, err = d.awaitDelegationSettled(operation.OperationID)
+		operation, err = d.awaitDelegationSettled(operation.OperationID, client.gone)
+		if errors.Is(err, errCallerGone) {
+			return
+		}
 		if errors.Is(err, errDaemonStopping) {
 			d.sendCommandError(client, protocol.CmdDelegate, err.Error())
 			return

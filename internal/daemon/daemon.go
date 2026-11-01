@@ -1685,6 +1685,17 @@ func (d *Daemon) stop() {
 
 var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
 
+var errCallerGone = errors.New("the caller disconnected")
+
+func peerClosed(conn net.Conn) <-chan struct{} {
+	closed := make(chan struct{})
+	goTransport(func() {
+		_, _ = io.Copy(io.Discard, conn)
+		close(closed)
+	})
+	return closed
+}
+
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	release, held := d.life.Hold("handlePTYExit")
 	if !held {

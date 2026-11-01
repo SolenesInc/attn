@@ -29,6 +29,7 @@ type wsClient struct {
 	streamSlots  chan struct{}
 	controlSlots chan struct{}
 	recv         chan []byte
+	gone         chan struct{}
 	writing      atomic.Bool
 	sendMu       sync.RWMutex
 	sendClosed   bool
@@ -538,6 +539,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		streamSlots:        make(chan struct{}, streamQueueSlots),
 		controlSlots:       make(chan struct{}, controlQueueSlots),
 		recv:               make(chan []byte, 256),
+		gone:               make(chan struct{}),
 		connectedAt:        time.Now(),
 		trustedTauriOrigin: isTrustedTauriOrigin(origin),
 		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
@@ -555,13 +557,12 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	d.logf("WebSocket connection accepted, awaiting client_hello")
 
-	done := make(chan struct{})
-	d.life.Go("wsPingLoop", func() { d.wsPingLoop(client, done) })
+	d.life.Go("wsPingLoop", func() { d.wsPingLoop(client, client.gone) })
 	d.life.Go("wsWritePump", func() { d.wsWritePump(client) })
 	d.life.Go("wsMsgPump", func() { d.wsMsgPump(client) })
 	d.wsReadPump(client)
 
-	close(done)
+	close(client.gone)
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {

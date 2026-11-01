@@ -405,7 +405,7 @@ func delegationSettled(operation *protocol.DelegationOperation) bool {
 	return operation.State != protocol.DelegationOperationStateAccepted && operation.State != protocol.DelegationOperationStatePreparing
 }
 
-func (d *Daemon) awaitDelegationSettled(id string) (*protocol.DelegationOperation, error) {
+func (d *Daemon) awaitDelegationSettled(id string, callerGone <-chan struct{}) (*protocol.DelegationOperation, error) {
 	for {
 		changed := d.store.DelegationOperationsChanged()
 		operation, err := d.delegationOperation(id)
@@ -414,6 +414,11 @@ func (d *Daemon) awaitDelegationSettled(id string) (*protocol.DelegationOperatio
 		}
 		select {
 		case <-changed:
+		case <-callerGone:
+			if d.stopping() {
+				return nil, errDaemonStopping
+			}
+			return nil, errCallerGone
 		case <-d.life.Done():
 			return nil, errDaemonStopping
 		}
@@ -512,7 +517,7 @@ func (d *Daemon) resumePendingDelegations() {
 	}
 }
 
-func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected string) (*protocol.DelegationOperation, error) {
+func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected string, callerGone <-chan struct{}) (*protocol.DelegationOperation, error) {
 	seen := strings.TrimSpace(protocol.Deref(msg.WaitPast))
 	for {
 		changed := d.store.DelegationOperationsChanged()
@@ -522,6 +527,11 @@ func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected 
 		}
 		select {
 		case <-changed:
+		case <-callerGone:
+			if d.stopping() {
+				return nil, errDaemonStopping
+			}
+			return nil, errCallerGone
 		case <-d.life.Done():
 			return nil, errDaemonStopping
 		}
@@ -529,7 +539,10 @@ func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected 
 }
 
 func (d *Daemon) handleDelegateStatusWS(client *wsClient, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.delegationStatus(msg, client.selectedProfile())
+	operation, err := d.delegationStatus(msg, client.selectedProfile(), client.gone)
+	if errors.Is(err, errCallerGone) {
+		return
+	}
 	response := protocol.DelegationOperationMessage{
 		Event:     protocol.EventDelegationOperation,
 		Success:   err == nil,
