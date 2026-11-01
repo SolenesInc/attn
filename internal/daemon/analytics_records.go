@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) recordAnalytics(stream analytics.Stream, name, subject string, props map[string]any) {
+func (d *Daemon) recordAnalytics(stream analytics.Stream, name, subject string, props any) {
 	if !d.analyticsEnabled() {
 		return
 	}
@@ -46,6 +46,8 @@ func analyticsFields(stream analytics.Stream, name string) analytics.Fields {
 		return analytics.AppFields[name]
 	case analytics.StreamCLI:
 		return analytics.CLIFields
+	case analytics.StreamSample:
+		return analytics.SampleFields[name]
 	default:
 		return nil
 	}

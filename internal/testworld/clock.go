@@ -31,6 +31,17 @@ func (s *Stack) Advance(d time.Duration) {
 	advanceHub(s.T, s.clock, d)
 }
 
+// AwaitJobsSettled waits until the job runners of the daemon and every process it started have no work in hand, such as
+// a cron run that the last Advance made due.
+func (s *Stack) AwaitJobsSettled() {
+	s.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if busy, ok := s.clock.AwaitIdle(ctx); !ok {
+		s.T.Fatalf("AwaitJobsSettled: processes %v still had jobs in hand after %s", busy, fakeagent.HangGuard)
+	}
+}
+
 // readTranscripts fires every pending transcript poll of the daemon without moving the clock and returns when their
 // callbacks return. A poll another fire already took reads later, so tests assert what the read shows, not that it
 // finished.

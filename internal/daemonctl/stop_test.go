@@ -37,7 +37,7 @@ func TestStop_NonContentionFlockErrorFailsClosed(t *testing.T) {
 	}
 	t.Cleanup(func() { flockFn = originalFlockFn })
 
-	result, err := Stop(pidPath)
+	result, err := Stop(pidPath, "stop")
 	if err == nil {
 		t.Fatalf("Stop() = %+v, err = nil, want an indeterminate-state error", result)
 	}

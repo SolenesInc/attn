@@ -602,10 +602,13 @@ func runDaemonEnsure() {
 }
 
 func runDaemonStop() {
-	result, err := daemonctl.Stop(config.PIDPath())
+	result, err := daemonctl.Stop(config.PIDPath(), "stop")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon stop error: %v\n", err)
 		exit(1)
+	}
+	if result.StopNoteErr != nil {
+		fmt.Fprintf(os.Stderr, "daemon stop: %v; the next daemon start will record this stop as an unexpected exit\n", result.StopNoteErr)
 	}
 	if result.Stopped {
 		if result.Forced {

@@ -130,7 +130,7 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	}
 
 	reason := mismatchReason(health)
-	if err := stopRunningDaemon(ctx); err != nil {
+	if err := stopRunningDaemon(ctx, reason); err != nil {
 		return EnsureResult{}, err
 	}
 	if err := removeStaleSocketFiles(); err != nil {
@@ -476,8 +476,9 @@ func removeStaleSocketFiles() error {
 	return nil
 }
 
-func stopRunningDaemon(ctx context.Context) error {
-	pidBytes, err := os.ReadFile(config.PIDPath())
+func stopRunningDaemon(ctx context.Context, reason string) error {
+	pidPath := config.PIDPath()
+	pidBytes, err := os.ReadFile(pidPath)
 	if err != nil {
 		return fmt.Errorf("read daemon pid file: %w", err)
 	}
@@ -492,7 +493,14 @@ func stopRunningDaemon(ctx context.Context) error {
 	if pid == os.Getpid() || pid == os.Getppid() {
 		return fmt.Errorf("refusing to stop daemon pid %d because it matches the current process tree", pid)
 	}
-	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && err != syscall.ESRCH {
+	if err := WriteStopNote(pidPath, pid, reason); err != nil {
+		fmt.Fprintf(os.Stderr, "attn daemon ensure: %v; the next daemon start will record this replacement as an unexpected exit\n", err)
+	}
+	if err := syscall.Kill(pid, syscall.SIGTERM); err == syscall.ESRCH {
+		if err := RemoveStopNote(pidPath); err != nil {
+			return err
+		}
+	} else if err != nil {
 		return fmt.Errorf("stop daemon pid %d: %w", pid, err)
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, stopTimeout)

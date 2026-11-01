@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/classifier"
@@ -107,6 +108,7 @@ type Daemon struct {
 	recentFilePruneGate chan struct{}
 	socketPath          string
 	pidPath             string
+	run                 daemonRun
 	pidFile             *os.File
 	dataRoot            string
 	daemonInstanceID    string
@@ -651,7 +653,13 @@ func (d *Daemon) Start() error {
 	if d.outpostsEnabled() {
 		d.configureOutposts()
 	}
+	run, previous, err := d.beginRun(time.Now())
+	if err != nil {
+		d.logf("daemon run: %v", err)
+	}
+	d.run = run
 	d.configureAnalytics()
+	d.recordAnalytics(analytics.StreamSample, "daemon_start", d.run.ID, previous)
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()

@@ -62,4 +62,8 @@ var AppFields = map[string]Fields{
 	"react_error":      {"kind": Safe},
 }
 
+var SampleFields = map[string]Fields{
+	"daemon_start": {"previous_end": Safe, "stop_reason": Safe, "previous_run": ID},
+}
+
 var CLIFields = Fields{"error_kind": Safe, "refusal": Safe, "caller": Safe, "harness": Safe}

@@ -589,7 +589,7 @@ func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 
 func stopInstanceDaemon(r instanceResolved) string {
 	pidPath := filepath.Join(r.DataDir, "attn.pid")
-	result, err := daemonctl.Stop(pidPath)
+	result, err := daemonctl.Stop(pidPath, "instance_stop")
 	if err != nil {
 		if strings.Contains(err.Error(), "own process tree") {
 			return fmt.Sprintf("skipped (%v)", err)

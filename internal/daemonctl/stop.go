@@ -20,13 +20,14 @@ const NonDaemonHolderSentinel = "non-daemon-holder"
 var flockFn = syscall.Flock
 
 type StopResult struct {
-	Stopped bool
-	Forced  bool
-	PID     int
-	Note    string
+	Stopped     bool
+	Forced      bool
+	PID         int
+	Note        string
+	StopNoteErr error
 }
 
-func Stop(pidPath string) (StopResult, error) {
+func Stop(pidPath, reason string) (StopResult, error) {
 	lockFile, err := os.OpenFile(pidPath, os.O_RDWR, 0)
 	if os.IsNotExist(err) {
 		return StopResult{Note: "not running (no pid file)"}, nil
@@ -66,18 +67,19 @@ func Stop(pidPath string) (StopResult, error) {
 	if !holds {
 		return StopResult{Note: fmt.Sprintf("not running (pid %d does not hold the daemon lock — if a daemon is starting up right now, retry in a moment)", pid)}, nil
 	}
+	noteErr := WriteStopNote(pidPath, pid, reason)
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 		if err == syscall.ESRCH {
-			return StopResult{Note: "not running (stale pid file)"}, nil
+			return StopResult{Note: "not running (stale pid file)"}, RemoveStopNote(pidPath)
 		}
 		return StopResult{}, fmt.Errorf("SIGTERM pid %d failed: %w", pid, err)
 	}
 	if processGoneWithin(pid, stopSigtermWait) {
-		return StopResult{Stopped: true, PID: pid}, nil
+		return StopResult{Stopped: true, PID: pid, StopNoteErr: noteErr}, nil
 	}
 	_ = syscall.Kill(pid, syscall.SIGKILL)
 	if processGoneWithin(pid, stopSigkillWait) {
-		return StopResult{Stopped: true, Forced: true, PID: pid}, nil
+		return StopResult{Stopped: true, Forced: true, PID: pid, StopNoteErr: noteErr}, nil
 	}
 	return StopResult{}, fmt.Errorf("pid %d did not exit after SIGKILL", pid)
 }
