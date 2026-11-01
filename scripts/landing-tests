@@ -38,6 +38,7 @@ go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRu
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
+go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
