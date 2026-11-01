@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Runtime};
@@ -18,10 +18,36 @@ use crate::native_input;
 const REQUEST_EVENT: &str = "attn://ui-automation/request";
 const RESPONSE_EVENT: &str = "attn://ui-automation/response";
 const READY_EVENT: &str = "attn://ui-automation/ready";
+const CAPTURE_READY_EVENT: &str = "attn://capture/automation-ready";
+const CAPTURE_READY_TRIPWIRE: Duration = Duration::from_secs(30);
 // The perf harness can intentionally keep the frontend busy for tens of seconds.
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 const MANIFEST_RELATIVE_PATH: &str = "debug/ui-automation.json";
 const LOG_RELATIVE_PATH: &str = "debug/ui-automation-server.log";
+
+#[derive(Default)]
+struct CaptureBridge {
+    ready: Mutex<bool>,
+    changed: Condvar,
+}
+
+impl CaptureBridge {
+    fn wait_ready(&self) -> Result<(), String> {
+        let ready = self.ready.lock().unwrap();
+        let (ready, _) = self
+            .changed
+            .wait_timeout_while(ready, CAPTURE_READY_TRIPWIRE, |ready| !*ready)
+            .unwrap();
+        if *ready {
+            Ok(())
+        } else {
+            Err(format!(
+                "Quick Capture automation bridge did not report ready within {}s; enable Quick Capture before sending capture_* requests",
+                CAPTURE_READY_TRIPWIRE.as_secs()
+            ))
+        }
+    }
+}
 
 #[derive(Clone)]
 struct PendingAutomationResponses {
@@ -482,10 +508,7 @@ fn handle_request<R: Runtime>(
         payload,
     };
 
-    let (sender, receiver) = mpsc::channel();
-    pending.insert(request_id.clone(), sender);
-
-    let delivery = if matches!(
+    let to_capture = matches!(
         bridge_request.action.as_str(),
         "capture_state"
             | "capture_binding"
@@ -493,7 +516,29 @@ fn handle_request<R: Runtime>(
             | "capture_native_point"
             | "capture_arm_native_input_witness"
             | "capture_wait_native_input_witness"
-    ) {
+    );
+    if to_capture {
+        if let Err(error) = app.state::<CaptureBridge>().wait_ready() {
+            append_log(
+                app,
+                &format!(
+                    "request err id={} action={} {}",
+                    request_id, bridge_request.action, error
+                ),
+            );
+            return AutomationSocketResponse {
+                id: request_id,
+                ok: false,
+                result: None,
+                error: Some(error),
+            };
+        }
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    pending.insert(request_id.clone(), sender);
+
+    let delivery = if to_capture {
         app.emit_to("capture", "attn://capture/automation", &bridge_request)
     } else {
         app.emit(REQUEST_EVENT, &bridge_request)
@@ -885,6 +930,15 @@ pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
     let _ready_event_id = app.listen_any(READY_EVENT, move |_event| {
         ready_state.store(true, Ordering::Relaxed);
         append_log(&app_for_ready, "frontend ready");
+    });
+
+    app.manage(CaptureBridge::default());
+    let app_for_capture = app.clone();
+    let _capture_ready_event_id = app.listen_any(CAPTURE_READY_EVENT, move |_event| {
+        let bridge = app_for_capture.state::<CaptureBridge>();
+        *bridge.ready.lock().unwrap() = true;
+        bridge.changed.notify_all();
+        append_log(&app_for_capture, "capture bridge ready");
     });
 
     let app_handle = app.clone();

@@ -48,6 +48,7 @@ export function installQuickCaptureAutomationBridge(options: QuickCaptureAutomat
       } catch (e) { error = String(e); }
       await emit('attn://ui-automation/response', { request_id: payload.request_id, ok: !error, result, error });
     });
+    void automation.then(() => emit('attn://capture/automation-ready'));
  return () => {
   ['keydown', 'beforeinput', 'input'].forEach(type => document.removeEventListener(type, traceInput, true));
   disarmNativeInputWitness();
