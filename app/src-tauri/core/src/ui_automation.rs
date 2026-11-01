@@ -345,7 +345,7 @@ fn handle_request<R: Runtime>(
     #[cfg(target_os = "macos")]
     if matches!(
         request.action.as_str(),
-        "hotkey_bind" | "hotkey_status" | "hotkey_wait"
+        "hotkey_bind" | "hotkey_status" | "hotkey_wait" | "hotkey_press" | "dictation_clip"
     ) {
         let payload = request.payload.clone().unwrap_or(Value::Null);
         let outcome = hotkey_request(app, &request.action, payload);
@@ -1068,6 +1068,26 @@ fn hotkey_request<R: Runtime>(
     payload: Value,
 ) -> Result<Value, String> {
     use crate::hotkeys;
+    if action == "dictation_clip" {
+        crate::dictation::use_clip(
+            app,
+            payload["path"].as_str().map(|path| crate::dictation::Clip {
+                path: path.into(),
+                stop_at_end: payload["stopAtEnd"].as_bool().unwrap_or(false),
+            }),
+        );
+        return Ok(serde_json::json!({ "clip": payload["path"] }));
+    }
+    if action == "hotkey_press" {
+        let window = payload["window"]
+            .as_str()
+            .ok_or("hotkey_press needs the window whose Dictation press to simulate")?
+            .to_string();
+        hotkeys::on_main(app, move |app| {
+            crate::dictation::press(app, Some(window), None);
+            Ok(())
+        })?;
+    }
     if action == "hotkey_bind" {
         let target: hotkeys::Action = serde_json::from_value(payload["action"].clone())
             .map_err(|error| format!("hotkey_bind action: {error}"))?;

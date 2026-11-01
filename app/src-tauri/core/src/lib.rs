@@ -1,6 +1,8 @@
 mod browser_alerts;
 mod browser_host;
 #[cfg(target_os = "macos")]
+mod dictation;
+#[cfg(target_os = "macos")]
 mod hotkeys;
 mod instance;
 mod migration_failure;
@@ -1097,6 +1099,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(speech::Speech::default());
+    #[cfg(target_os = "macos")]
+    let builder = builder.manage(dictation::Dictation::default());
     // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
     // so only macOS gets a menu.
     #[cfg(target_os = "macos")]
@@ -1160,6 +1164,14 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             speech::speech_disable,
             speech::speech_status,
             speech::speech_remove,
+            #[cfg(target_os = "macos")]
+            dictation::dictation_start,
+            #[cfg(target_os = "macos")]
+            dictation::dictation_stop,
+            #[cfg(target_os = "macos")]
+            dictation::dictation_cancel,
+            #[cfg(target_os = "macos")]
+            dictation::dictation_bind,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
@@ -1246,7 +1258,18 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             std::process::exit(1);
         })
         .run(|_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Focused(false),
+                ..
+            } = &event
+            {
+                dictation::left_window(_handle, label);
+            }
             if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(target_os = "macos")]
+                dictation::release(_handle, "attn is quitting.");
                 speech::shutdown(_handle);
                 #[cfg(target_os = "macos")]
                 hotkeys::shutdown(_handle);

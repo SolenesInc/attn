@@ -337,6 +337,7 @@ fn dispatch(app: &AppHandle, action: Action) {
                 app.get_webview(label)
                     .is_some_and(|webview| Some(webview.window().label()) == window.as_deref())
             });
+            crate::dictation::press(app, window.clone(), browser.clone());
             let press = Press {
                 action,
                 window,

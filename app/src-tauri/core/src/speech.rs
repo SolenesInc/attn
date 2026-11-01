@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::mpsc::Sender;
 use std::sync::{Mutex, MutexGuard};
 use std::thread;
 
@@ -57,6 +59,7 @@ struct Helper {
     generation: u64,
     next_id: u64,
     prepare: Option<u64>,
+    answers: HashMap<u64, Sender<Value>>,
 }
 
 impl Helper {
@@ -64,10 +67,16 @@ impl Helper {
         self.next_id += 1;
         let mut request = request;
         request["id"] = json!(self.next_id);
-        writeln!(self.stdin, "{request}")
-            .and_then(|()| self.stdin.flush())
-            .map_err(|error| format!("could not reach the speech helper: {error}"))?;
+        self.write(format!("{request}\n").as_bytes(), &[])?;
         Ok(self.next_id)
+    }
+
+    fn write(&mut self, header: &[u8], body: &[u8]) -> Result<(), String> {
+        self.stdin
+            .write_all(header)
+            .and_then(|()| self.stdin.write_all(body))
+            .and_then(|()| self.stdin.flush())
+            .map_err(|error| format!("could not reach the speech helper: {error}"))
     }
 
     fn stop(self) {
@@ -158,6 +167,7 @@ fn spawn<R: Runtime>(app: &AppHandle<R>, state: &mut State) -> Result<(), String
         generation,
         next_id: 0,
         prepare: None,
+        answers: HashMap::new(),
     });
     let app = app.clone();
     thread::spawn(move || read_events(&app, stdout, generation));
@@ -174,12 +184,19 @@ fn read_events<R: Runtime>(app: &AppHandle<R>, stdout: ChildStdout, generation: 
         let mut state = speech.lock();
         let Some(helper) = state
             .helper
-            .as_ref()
+            .as_mut()
             .filter(|helper| helper.generation == generation)
         else {
             return;
         };
-        if helper.prepare.is_none() || event["id"].as_u64() != helper.prepare {
+        let id = event["id"].as_u64();
+        if let Some(answer) = id.and_then(|id| helper.answers.get(&id)) {
+            if answer.send(event.clone()).is_err() {
+                helper.answers.remove(&id.expect("answered id"));
+            }
+            continue;
+        }
+        if helper.prepare.is_none() || id != helper.prepare {
             continue;
         }
         if let Some(phase) = phase_after(&event) {
@@ -205,6 +222,9 @@ fn read_events<R: Runtime>(app: &AppHandle<R>, stdout: ChildStdout, generation: 
         ),
     };
     publish(app, &state);
+    drop(state);
+    #[cfg(target_os = "macos")]
+    crate::dictation::release(app, "The speech helper stopped while recording.");
 }
 
 fn phase_after(event: &Value) -> Option<Phase> {
@@ -261,6 +281,8 @@ pub async fn speech_enable<R: Runtime>(app: AppHandle<R>) -> Status {
 
 #[tauri::command]
 pub async fn speech_disable<R: Runtime>(app: AppHandle<R>) -> Status {
+    #[cfg(target_os = "macos")]
+    crate::dictation::release(&app, "Dictation turned off while recording.");
     let speech = app.state::<Speech>();
     let mut state = speech.lock();
     release(&mut state);
@@ -287,6 +309,69 @@ pub async fn speech_remove<R: Runtime>(app: AppHandle<R>) -> Result<Status, Stri
         _ => {}
     }
     Ok(publish(&app, &state))
+}
+
+#[cfg(target_os = "macos")]
+pub fn ready<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let speech = app.state::<Speech>();
+    let state = speech.lock();
+    match (&state.phase, state.helper.is_some()) {
+        (Phase::Ready, true) => Ok(()),
+        (Phase::Off, _) => Err("Dictation is off. Turn it on in Settings.".into()),
+        (Phase::Failed { message }, _) => {
+            Err(format!("The speech model is not available: {message}"))
+        }
+        _ => Err(
+            "The speech model is still preparing. Try again when Settings shows it ready.".into(),
+        ),
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn request<R: Runtime>(
+    app: &AppHandle<R>,
+    request: Value,
+) -> Result<(u64, std::sync::mpsc::Receiver<Value>), String> {
+    let speech = app.state::<Speech>();
+    let mut state = speech.lock();
+    let helper = state
+        .helper
+        .as_mut()
+        .ok_or_else(|| "The speech helper is not running.".to_string())?;
+    let id = helper.send(request)?;
+    let (answer, answers) = std::sync::mpsc::channel();
+    helper.answers.insert(id, answer);
+    Ok((id, answers))
+}
+
+#[cfg(target_os = "macos")]
+pub fn notify<R: Runtime>(app: &AppHandle<R>, request: Value) -> Result<(), String> {
+    let speech = app.state::<Speech>();
+    let mut state = speech.lock();
+    let helper = state
+        .helper
+        .as_mut()
+        .ok_or_else(|| "The speech helper is not running.".to_string())?;
+    helper.write(format!("{request}\n").as_bytes(), &[])
+}
+
+#[cfg(target_os = "macos")]
+pub fn audio<R: Runtime>(app: &AppHandle<R>, target: u64, samples: &[f32]) -> Result<(), String> {
+    let body: Vec<u8> = samples
+        .iter()
+        .flat_map(|sample| sample.to_le_bytes())
+        .collect();
+    let header = format!(
+        "{}\n",
+        json!({"op": "audio", "target": target, "bytes": body.len()})
+    );
+    let speech = app.state::<Speech>();
+    let mut state = speech.lock();
+    let helper = state
+        .helper
+        .as_mut()
+        .ok_or_else(|| "The speech helper is not running.".to_string())?;
+    helper.write(header.as_bytes(), &body)
 }
 
 pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
