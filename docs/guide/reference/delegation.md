@@ -64,9 +64,16 @@ anyone passing them again. `attn seed show` prints them under the header, with
 who set them and when.
 
 Only the seed's tender, the sessions above the tender in the delegation chain,
-the chief or you can set them while the seed is claimed. Attn doesn't check
-that the words are yours. The agent that sets them answers for them, and the
-seed's log records who set what.
+the chief or you can set or change them while the seed is claimed. Attn doesn't
+check that the words are yours. The agent that sets them answers for them, and
+the seed's log records who set what.
+
+When you change your mind, tell the agent. It sets your new words with `attn
+seed authorization`, and attn types the change into the delegate's
+conversation as your message, waiting while the delegate needs approval. Only
+the delegate's own seed changes: each agent decides whether the change applies
+to the work it delegated, and passes it on. `attn seed show` says whether the
+last change was typed in and when.
 
 ## Steering a delegate
 

@@ -237,6 +237,24 @@ func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.
 	return resp.SeedEditResult, nil
 }
 
+func (c *Client) SeedAuthorization(seedID, text string, clear bool) (*protocol.SeedAuthorizationResult, error) {
+	msg := protocol.SeedAuthorizationMessage{Cmd: protocol.CmdSeedAuthorization, SeedID: seedID}
+	if text != "" {
+		msg.Text = protocol.Ptr(text)
+	}
+	if clear {
+		msg.Clear = protocol.Ptr(true)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedAuthorizationResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the authorization but returned no seed")
+	}
+	return resp.SeedAuthorizationResult, nil
+}
+
 func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
 	resp, err := c.send(protocol.SeedRollbackMessage{Cmd: protocol.CmdSeedRollback, SeedID: seedID, Version: version})
 	if err != nil {

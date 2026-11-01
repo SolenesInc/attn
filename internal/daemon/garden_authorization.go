@@ -2,47 +2,234 @@ package daemon
 
 import (
 	"fmt"
+	"net"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
+
+type authorizationChange struct {
+	seed        garden.Seed
+	doc         docstore.Document
+	changed     bool
+	callerTends bool
+	typed       *inbox.Item
+}
+
+func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthorizationMessage) {
+	result, err := d.seedAuthorizationRequest(msg)
+	if err != nil {
+		d.sendGardenError(conn, "authorization", err)
+		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedAuthorizationResult: result})
+}
+
+func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage) (*protocol.SeedAuthorizationResult, error) {
+	text := strings.TrimSpace(protocol.Deref(msg.Text))
+	clear := protocol.Deref(msg.Clear)
+	if text != "" && clear {
+		return nil, fmt.Errorf("pass the new words or --clear, not both: attn seed authorization %s \"…\" | --clear", msg.SeedID)
+	}
+	if text == "" && !clear {
+		seed, doc, err := d.readSeed(msg.SeedID)
+		if err != nil {
+			return nil, err
+		}
+		wire := d.seedWire(seed, doc)
+		result := &protocol.SeedAuthorizationResult{Seed: wire}
+		if wire.Authorization != nil {
+			result.Update = wire.Authorization.Update
+		}
+		return result, nil
+	}
+	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	savedAt := time.Now()
+	change, err := d.writeSeedAuthorization(msg.SeedID, text, d.actorOfSession(source), source, true)
+	if err != nil {
+		return nil, err
+	}
+	result := &protocol.SeedAuthorizationResult{Changed: change.changed}
+	if change.callerTends {
+		result.CallerTends = protocol.Ptr(true)
+	}
+	if change.typed != nil {
+		d.deliverSavedInbox(change.typed.To, change.typed.ID, savedAt)
+		result.Update = d.authorizationUpdateView(change.typed.ID)
+	}
+	result.Seed = d.seedWire(change.seed, change.doc)
+	if !change.changed && result.Seed.Authorization != nil {
+		result.Update = result.Seed.Authorization.Update
+	}
+	return result, nil
+}
 
 func (d *Daemon) saveSeedAuthorization(seedID, text string, setter who.Actor, cause protocol.SessionID) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
 	}
+	_, err := d.writeSeedAuthorization(seedID, text, setter, cause, false)
+	return err
+}
+
+// writeSeedAuthorization sets the seed's authorization to text, or clears it when text is blank.
+// With typeIntoTender, the caller needs standing over a live tender, and a tender other than the
+// caller receives the change as a typed update in the same write.
+func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, cause protocol.SessionID, typeIntoTender bool) (authorizationChange, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
-		return err
+		return authorizationChange{}, err
 	}
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(seedID)
 		if err != nil {
-			return err
+			return authorizationChange{}, err
 		}
-		if seed.Authorization != nil && seed.Authorization.Text == text {
-			return nil
+		previous := seed.Authorization
+		if (previous == nil && text == "") || (previous != nil && previous.Text == text) {
+			return authorizationChange{seed: seed, doc: doc}, nil
 		}
+		change := authorizationChange{changed: true}
 		next := seed
-		next.Authorization = &garden.Authorization{Text: text, SetBy: setter, SetAt: formatGardenTime(d.gardenTime())}
+		next.Authorization = nil
+		entryBody := text
+		if text != "" {
+			next.Authorization = &garden.Authorization{Text: text, SetBy: setter, SetAt: formatGardenTime(d.gardenTime())}
+		} else {
+			entryBody = fmt.Sprintf("Cleared the authorization. These words no longer apply: %q", previous.Text)
+		}
+		if typeIntoTender {
+			standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
+			tender := seed.Tender
+			switch {
+			case !seed.ClaimHolds(standing.Holds):
+			case tender.Actor() == setter:
+				change.callerTends = true
+			case standing.Oversees(setter, tender):
+				known := d.authorizationKnownBy(tender.Address(), previous)
+				replaced := known
+				if text == "" && replaced == "" {
+					replaced = previous.Text
+				}
+				item := inbox.Item{
+					ID: uuid.NewString(), To: tender.Address(), Kind: inbox.Authorization,
+					Source: seed.ID, Key: seed.ID, Hint: known, Text: d.authorizationUpdateText(seed, replaced, text, setter),
+				}
+				change.typed = &item
+				if next.Authorization != nil {
+					next.Authorization.TypedUpdate = item.ID
+				}
+			default:
+				return authorizationChange{}, fmt.Errorf(
+					"%s tends %s and is outside your delegation chain. The tender, the sessions above it in the delegation chain, and the chief can change a seed's authorization",
+					d.partyLabel(tender), seed.ID)
+			}
+		}
 		entry := seedMoveNote{
-			Note:              garden.Note{Seed: seed.ID, Kind: garden.NoteKindAuthorization, Body: text, Author: setter},
+			Note:              garden.Note{Seed: seed.ID, Kind: garden.NoteKindAuthorization, Body: entryBody, Author: setter},
 			CausedBySessionID: cause,
 		}
 		d.lockGardenRoles()
-		_, _, err = d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}})
+		written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, typed: change.typed})
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {
 			continue
 		}
-		return err
+		if err != nil {
+			return authorizationChange{}, err
+		}
+		change.seed, change.doc = next, written
+		return change, nil
 	}
-	return fmt.Errorf("%s was rewritten under all %d attempts to save its authorization; delegate again", seedID, attempts)
+	return authorizationChange{}, fmt.Errorf("%s was rewritten under all %d attempts to save its authorization; try again", seedID, attempts)
+}
+
+// authorizationKnownBy names the words the tender at to last received: the seed's current words,
+// or, while an earlier update to the same tender is still unread, the words that update replaces.
+// The item's Hint keeps them, because the newer update replaces the unread one.
+func (d *Daemon) authorizationKnownBy(to who.Address, current *garden.Authorization) string {
+	if current == nil {
+		return ""
+	}
+	if current.TypedUpdate != "" {
+		item, found, err := d.store.InboxItem(current.TypedUpdate)
+		if err == nil && found && item.ReadAt == "" && item.To == to {
+			return item.Hint
+		}
+	}
+	return current.Text
+}
+
+func (d *Daemon) authorizationUpdateText(seed garden.Seed, known, text string, setter who.Actor) string {
+	values := prompts.Values{
+		"seed_id": seed.ID, "seed_title": seed.Title, "previous": known,
+		"set_by": d.authorizationSetterName(garden.Authorization{SetBy: setter}),
+	}
+	if text == "" {
+		return prompts.RenderText("delegation", "authorization-cleared", values)
+	}
+	values["authorization"] = text
+	return prompts.RenderText("delegation", "authorization-update", values)
+}
+
+func (d *Daemon) authorizationUpdateView(itemID string) *protocol.SeedAuthorizationUpdate {
+	if itemID == "" {
+		return nil
+	}
+	item, found, err := d.store.InboxItem(itemID)
+	if err != nil || !found {
+		return nil
+	}
+	tender, ok := partyAt(item.To)
+	if !ok {
+		return nil
+	}
+	view := &protocol.SeedAuthorizationUpdate{Recipient: d.partyView(tender)}
+	if item.ReadAt != "" {
+		view.TypedAt = protocol.Ptr(item.ReadAt)
+		if item.ReadBy != "" {
+			view.Recipient.SessionID = protocol.Ptr(protocol.SessionID(item.ReadBy))
+		}
+		return view
+	}
+	if holder := d.inboxHolder(item.To); holder != nil {
+		view.Recipient.SessionID = protocol.Ptr(holder.ID)
+		if holder.State == protocol.SessionStatePendingApproval {
+			view.NeedsApproval = protocol.Ptr(true)
+		}
+	}
+	return view
+}
+
+func partyAt(a who.Address) (who.Party, bool) {
+	if id, ok := a.Session(); ok {
+		return who.Session(id), true
+	}
+	if key, ok := a.Member(); ok {
+		return who.Member(key), true
+	}
+	return who.Party{}, false
+}
+
+func (d *Daemon) partyLabel(p who.Party) string {
+	view := d.partyView(p)
+	id, _ := p.Session()
+	if live := protocol.Deref(view.SessionID); live != "" {
+		id = live
+	}
+	if id == "" || view.Name == shortSessionID(id) {
+		return view.Name
+	}
+	return fmt.Sprintf("%s (%s)", view.Name, shortSessionID(id))
 }
 
 func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) error {
@@ -62,7 +249,7 @@ func (d *Daemon) seedAuthorizationView(a *garden.Authorization) *protocol.SeedAu
 	if a == nil {
 		return nil
 	}
-	return &protocol.SeedAuthorization{Text: a.Text, SetBy: d.actorView(a.SetBy), SetAt: a.SetAt}
+	return &protocol.SeedAuthorization{Text: a.Text, SetBy: d.actorView(a.SetBy), SetAt: a.SetAt, Update: d.authorizationUpdateView(a.TypedUpdate)}
 }
 
 func (d *Daemon) authorizationSetterName(a garden.Authorization) string {

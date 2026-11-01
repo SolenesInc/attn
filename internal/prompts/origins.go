@@ -18,6 +18,17 @@ var (
 	authorizationLine   = Choose(Present(authorizationSetter),
 		Use("delegation.authorization", "content/delegation/authorization.md", Bind("set_by", Input(authorizationSetter)), Bind("authorization", Input(authorization))),
 		Use("delegation.authorization-from-user", "content/delegation/authorization-from-user.md", Bind("authorization", Input(authorization))))
+	previousAuthorization  = TextField("previous", "The words the change replaces or removes.")
+	authorizationChangedBy = When(Present(authorizationSetter),
+		Use("delegation.authorization-set-by", "content/delegation/authorization-set-by.md", Bind("set_by", Input(authorizationSetter))))
+	authorizationUpdate = Use("delegation.authorization-update", "content/delegation/authorization-update.md",
+		Bind("seed_id", Input(seedID)), Bind("seed_title", Quoted(seedTitle)), Bind("set_by", authorizationChangedBy),
+		Bind("authorization", Quoted(authorization)),
+		Bind("replaces", When(Present(previousAuthorization),
+			Exact(Use("delegation.authorization-replaces", "content/delegation/authorization-replaces.md", Bind("previous", Quoted(previousAuthorization)))))))
+	authorizationCleared = Use("delegation.authorization-cleared", "content/delegation/authorization-cleared.md",
+		Bind("seed_id", Input(seedID)), Bind("seed_title", Quoted(seedTitle)), Bind("set_by", authorizationChangedBy),
+		Bind("previous", Quoted(previousAuthorization)))
 	automationTarget = template("automation.target", "content/automation/target.md",
 		TextField("definition", "Quoted automation name."),
 		TextField("repository", "Repository identity."), TextField("number", "Pull request number."),
@@ -50,6 +61,8 @@ func originRecipients() []Recipient {
 			On("brief", "message_fragment", "Seed reference for the delegated opening.", seedContract),
 			On("authorization", "message_fragment", "The seed's authorization, after the role block of a delegation or handover opening.", authorizationLine),
 			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
+			On("authorization-update", "inbox_content", "A change to a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.", authorizationUpdate),
+			On("authorization-cleared", "inbox_content", "The removal of a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.", authorizationCleared),
 		}},
 		{ID: "automation", Description: "Scheduled or event-triggered visible session.", Events: []Event{
 			On("opening", "opening_message", "Configured task, local-review restriction, stake and occurrence input.",

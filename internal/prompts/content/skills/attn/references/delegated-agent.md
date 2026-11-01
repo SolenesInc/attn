@@ -7,7 +7,7 @@ This reference covers an assigned delegation: how you start, report, and finish.
 Your opening names the seed you tend. You do not inherit the delegator's conversation, so start from the seed:
 
 1. Before you start, read the seed with `attn seed show <seed-id>`. The output shows a bookmark and the newest log entries under the seed's header. When the freshest handoff is older than those entries, the output also points to it.
-2. When your opening has an authorization line, that line is the task's authorization: the user's words for what you may do without asking and where you stop. `attn seed show` prints the current words. Follow any handoff for the next step.
+2. When your opening has an authorization line, that line is the task's authorization: the user's words for what you may do without asking and where you stop. `attn seed show` prints the current words. When someone changes them, attn types the change into your conversation as the user's message. When the user gives you new words directly, record them with `attn seed authorization <seed-id> "<the user's words>"`. When a change applies to work you delegated, update those seeds the same way. Follow any handoff for the next step.
 3. Read the parent sections, sibling results, and artifacts your task needs. `show` does not include the body of a parent or sibling. It does list the parent plot's outline. To read one part of the parent, run `attn seed show <parent> --section <heading|id>`.
 
 After a resume, read what changed while you were away with `attn seed show <seed-id> --since <bookmark>`. When you no longer have the bookmark, read the whole seed. An `edit` entry means the brief changed, so read the body again.

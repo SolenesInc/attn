@@ -9499,6 +9499,10 @@ type Response struct {
 	// "seed_artifact_transfer_result".
 	SeedArtifactTransferResult *SeedArtifactTransferResult `json:"seed_artifact_transfer_result,omitempty,omitzero"`
 
+	// SeedAuthorizationResult corresponds to the JSON schema field
+	// "seed_authorization_result".
+	SeedAuthorizationResult *SeedAuthorizationResult `json:"seed_authorization_result,omitempty,omitzero"`
+
 	// SeedCheckResult corresponds to the JSON schema field "seed_check_result".
 	SeedCheckResult *SeedCheckResult `json:"seed_check_result,omitempty,omitzero"`
 
@@ -9922,6 +9926,54 @@ type SeedAuthorization struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// Update corresponds to the JSON schema field "update".
+	Update *SeedAuthorizationUpdate `json:"update,omitempty,omitzero"`
+}
+
+type SeedAuthorizationMessage struct {
+	// Clear corresponds to the JSON schema field "clear".
+	Clear *bool `json:"clear,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type SeedAuthorizationResult struct {
+	// CallerTends corresponds to the JSON schema field "caller_tends".
+	CallerTends *bool `json:"caller_tends,omitempty,omitzero"`
+
+	// Changed corresponds to the JSON schema field "changed".
+	Changed bool `json:"changed"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+
+	// Update corresponds to the JSON schema field "update".
+	Update *SeedAuthorizationUpdate `json:"update,omitempty,omitzero"`
+}
+
+type SeedAuthorizationUpdate struct {
+	// NeedsApproval corresponds to the JSON schema field "needs_approval".
+	NeedsApproval *bool `json:"needs_approval,omitempty,omitzero"`
+
+	// Recipient corresponds to the JSON schema field "recipient".
+	Recipient PartyView `json:"recipient"`
+
+	// TypedAt corresponds to the JSON schema field "typed_at".
+	TypedAt *string `json:"typed_at,omitempty,omitzero"`
 }
 
 type SeedBoardRow struct {

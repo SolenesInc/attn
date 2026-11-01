@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -34,6 +35,7 @@ type seedChange struct {
 	born    []string
 	events  []seedEvent
 	entries []seedMoveNote
+	typed   *inbox.Item
 }
 
 type seedChangeLog struct {
@@ -169,7 +171,13 @@ func (d *Daemon) writeSeedChangeProtected(
 			Fact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false),
 		}}, log.commits...)
 		now := d.gardenTime()
-		written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, log.events, now)
+		var written []store.DocumentWriteResult
+		var eventSeqs []int64
+		if change.typed != nil {
+			written, eventSeqs, err = d.store.CommitDocumentWritesWithEventsAndInbox(commits, log.events, *change.typed, now)
+		} else {
+			written, eventSeqs, err = d.store.CommitDocumentWritesWithEvents(commits, log.events, now)
+		}
 		if err != nil {
 			var conflict *docstore.ConflictError
 			if errors.As(err, &conflict) && conflict.Namespace == garden.Namespace &&

@@ -14,10 +14,12 @@ const (
 	PeerMessage  Kind = "peer_message"
 	QuickCapture Kind = "quick_capture"
 	AskAnswer    Kind = "ask_answer"
-	Notice       Kind = "maintenance_prompt"
+	// Authorization is a change to a seed's authorization, keyed by the seed id.
+	Authorization Kind = "authorization"
+	Notice        Kind = "maintenance_prompt"
 )
 
-func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture} }
+func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture, Authorization} }
 
 func (k Kind) Typed() bool { return slices.Contains(TypedKinds(), k) }
 

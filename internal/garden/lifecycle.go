@@ -252,7 +252,7 @@ func ParseNoteKind(raw string) (string, error) {
 		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an answer entry is written when the user answers an ask; a plain note keeps kind note")
 	}
 	if kind == NoteKindAuthorization {
-		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an authorization entry is written when a delegation sets the seed's authorization; a plain note keeps kind note")
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "an authorization entry is written when attn delegate --authorization or attn seed authorization changes the seed's authorization; a plain note keeps kind note")
 	}
 	return "", protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }

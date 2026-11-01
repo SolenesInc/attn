@@ -40,6 +40,13 @@ attn delegate --seed s-example --role builder \
 
 A delegation or handover without the flag keeps the seed's current words. Do not write the authorization in the brief or a handoff note.
 
+When the user changes what a delegate may do, set the new words on the delegate's seed. Attn saves them and types the change into the seed's tender as the user's message, waiting while the tender needs approval. `--clear` removes them. The tender, the sessions above it in the delegation chain, and the profile's chief may change them. The change reaches only that seed. Each agent decides whether it applies to the seeds it delegated, and updates those itself.
+
+```sh
+attn seed authorization s-example "Ask me before pushing."
+attn seed authorization s-example --clear
+```
+
 ## Hand work to another agent
 
 Use handover to give the same seed to a fresh agent. Record what comes next in a short handoff message. The plan stays in the body, and the successor's opening delivers the seed's authorization. Pass `--authorization` only when the user's words changed.

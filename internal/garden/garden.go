@@ -74,6 +74,8 @@ type Authorization struct {
 	Text  string    `json:"text"`
 	SetBy who.Actor `json:"set_by,omitzero"`
 	SetAt string    `json:"set_at"`
+	// TypedUpdate is the inbox item that types these words into the seed's tender.
+	TypedUpdate string `json:"typed_update,omitempty"`
 }
 
 type HarvestCondition struct {

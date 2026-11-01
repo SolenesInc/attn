@@ -5478,6 +5478,21 @@ model SeedAuthorization {
   "text": string;
   "set_by": ActorView;
   "set_at": string;
+  // The last typed update of this seed's authorization, absent when no
+  // change has been typed into a tender.
+  "update"?: SeedAuthorizationUpdate;
+}
+
+// A change to a seed's authorization that attn types into the seed's tender
+// as a user message.
+model SeedAuthorizationUpdate {
+  // The tender it was addressed to, with the session it was typed into or
+  // waits for.
+  "recipient": PartyView;
+  // Absent while it waits.
+  "typed_at"?: string;
+  // It waits because the recipient needs approval.
+  "needs_approval"?: boolean;
 }
 
 model KeptConversationSeed {
@@ -6000,6 +6015,28 @@ model SeedEditMessage {
   "body": string;
   "base_body_sha256": string;
   "note"?: string;
+}
+
+// Set, clear or read a seed's authorization. With text it sets it, with
+// clear it removes it, and with neither it reads it. A change by someone
+// other than a live tender is typed into the tender as a user message.
+@extension("x-on", #{ home: true })
+model SeedAuthorizationMessage {
+  "profile_id"?: string;
+  "source_session_id"?: SessionID;
+  "cmd": "seed_authorization";
+  "seed_id": string;
+  "text"?: string;
+  "clear"?: boolean;
+}
+
+model SeedAuthorizationResult {
+  "seed": Seed;
+  "changed": boolean;
+  // The typed update this change queued, or the last one when nothing changed.
+  "update"?: SeedAuthorizationUpdate;
+  // The caller tends the seed, so nothing is typed.
+  "caller_tends"?: boolean;
 }
 
 model SeedEditResult {
@@ -7105,6 +7142,7 @@ model Response {
   seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
+  seed_authorization_result?: SeedAuthorizationResult;
   seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;

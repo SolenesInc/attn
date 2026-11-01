@@ -1,0 +1,157 @@
+package daemon_test
+
+import (
+	"strings"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
+)
+
+const authorizationTyped = "authorization for seed"
+
+func TestADispatchersAuthorizationChangeIsTypedIntoTheTenderOnceItCanTakeInput(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_approve_enabled", "false")
+		dispatcher := w.Spawn(app, fakeagent.Claude, w.Path("dispatcher"))
+		seed := plantDelegationSeed(t, cli, dispatcher, "Search endpoint")
+		request := delegateAtSeed(dispatcher, w.Path("dispatcher"), seed)
+		request.Agent, request.Authorization = protocol.Ptr("claude"), protocol.Ptr("You may land on main.")
+		delegated, err := cli.Delegate(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tender := w.bootBubbleClaude(t, string(delegated.SessionID))
+		tender.reply("Started on the endpoint. <!-- attn:state=waiting_input -->")
+		terminal := protocol.TerminalID(w.Terminal(tender.id))
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+
+		asDispatcher := cli.WithGardenProfile("", protocol.SessionID(dispatcher))
+		first, err := asDispatcher.SeedAuthorization(seed, "Ask me before pushing.", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if u := first.Update; !first.Changed || u == nil || u.TypedAt != nil || !protocol.Deref(u.NeedsApproval) || protocol.Deref(u.Recipient.SessionID) != delegated.SessionID {
+			t.Fatalf("setting the words while the tender needs approval returned %+v; want a change waiting for %s, which needs approval", first, delegated.SessionID)
+		}
+		if _, err := asDispatcher.SeedAuthorization(seed, "Ask me before landing.", false); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(15 * time.Minute)
+		if got := tender.promptsContaining(authorizationTyped); got != 0 {
+			t.Fatalf("the update was typed over a pending approval: %q", tender.prompts())
+		}
+
+		w.restart()
+		cli = w.Client()
+		tender.cli = cli
+		asDispatcher = cli.WithGardenProfile("", protocol.SessionID(dispatcher))
+		w.advance(0)
+		if err := cli.UpdateStateFromHookEvidence(terminal, protocol.StateWorking, "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		want := `The user changed the authorization for seed ` + seed + ` "Search endpoint", set by dispatcher:
+"Ask me before landing."
+It replaces: "You may land on main."
+If this applies to work you delegated, update those seeds with attn seed authorization.`
+		if typed := typedAuthorizations(tender); len(typed) != 1 || typed[0] != want {
+			t.Fatalf("after the restart and the approval the tender was typed %q; want only the newer words:\n%s", typed, want)
+		}
+		shown, err := cli.SeedShow("", seed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a := shown.Seed.Authorization; a == nil || a.Text != "Ask me before landing." || a.Update == nil || a.Update.TypedAt == nil || protocol.Deref(a.Update.Recipient.SessionID) != delegated.SessionID {
+			t.Fatalf("the seed shows authorization %+v; want the newer words typed into %s", a, delegated.SessionID)
+		}
+
+		again, err := asDispatcher.SeedAuthorization(seed, "Ask me before landing.", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.Changed || again.Update == nil || again.Update.TypedAt == nil {
+			t.Fatalf("the same words again returned %+v; want no change with the last typed update", again)
+		}
+
+		self, err := cli.WithGardenProfile("", delegated.SessionID).SeedAuthorization(seed, "The user said I may push this branch.", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !self.Changed || !protocol.Deref(self.CallerTends) || self.Update != nil {
+			t.Fatalf("the tender changing its own seed returned %+v; want a change that types nothing", self)
+		}
+
+		registerSessions(t, w, cli, "outsider")
+		_, err = cli.WithGardenProfile("", "outsider").SeedAuthorization(seed, "You may release.", false)
+		if err == nil || !strings.Contains(err.Error(), "outside your delegation chain") || !strings.Contains(err.Error(), "the chief can change a seed's authorization") {
+			t.Fatalf("a session outside the delegation chain got %v; want the refusal with the rule", err)
+		}
+
+		cleared, err := asDispatcher.SeedAuthorization(seed, "", true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cleared.Changed || cleared.Seed.Authorization != nil || cleared.Update == nil || cleared.Update.TypedAt == nil {
+			t.Fatalf("clearing returned %+v; want the words gone and the cleared form typed", cleared)
+		}
+		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint", set by dispatcher. These words no longer apply: "The user said I may push this branch."
+If this applies to work you delegated, update those seeds with attn seed authorization.`
+		w.advance(time.Hour)
+		if typed := typedAuthorizations(tender); len(typed) != 2 || typed[1] != wantCleared {
+			t.Fatalf("the tender was typed %q; want the earlier update, then the cleared form:\n%s", typed, wantCleared)
+		}
+	})
+}
+
+func TestASharedCodexDelegateReceivesItsDispatchersAuthorizationChange(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	w.SetCodexFolderTrust(cwd, "trusted")
+	seed := plantDelegationSeed(t, cli, "caller", "Search endpoint")
+	delegated, err := cli.Delegate(delegateAtSeed("caller", cwd, seed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	codex := w.Launched(string(delegated.SessionID))
+	codex.Prompted()
+	codex.Reply("Started on the endpoint. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(delegated.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	if _, err := cli.WithGardenProfile("", "caller").SeedAuthorization(seed, "Ask me before pushing.", false); err != nil {
+		t.Fatal(err)
+	}
+	want := `The user changed the authorization for seed ` + seed + ` "Search endpoint", set by caller:
+"Ask me before pushing."
+If this applies to work you delegated, update those seeds with attn seed authorization.`
+	if got := w.CodexServer().Prompted(codex.ConversationID); got != want {
+		t.Fatalf("the shared Codex delegate was typed %q; want\n%s", got, want)
+	}
+	shown, err := cli.SeedShow("", seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := shown.Seed.Authorization; a == nil || a.Update == nil || a.Update.TypedAt == nil {
+		t.Fatalf("the seed shows authorization %+v; want the update typed", a)
+	}
+}
+
+func typedAuthorizations(agent *bubbleClaude) []string {
+	synctest.Wait()
+	var typed []string
+	for _, prompt := range agent.prompts() {
+		if strings.Contains(prompt, authorizationTyped) {
+			typed = append(typed, prompt)
+		}
+	}
+	return typed
+}

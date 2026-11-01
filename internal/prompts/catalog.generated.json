@@ -2618,6 +2618,204 @@
               }
             ]
           }
+        },
+        {
+          "id": "authorization-update",
+          "delivery": "inbox_content",
+          "description": "A change to a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.authorization-update",
+            "source": "content/delegation/authorization-update.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "The session's stake, if it has one."
+                  }
+                }
+              },
+              {
+                "name": "seed_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_title",
+                    "kind": "text",
+                    "description": "Title of the session's stake."
+                  },
+                  "quote": true
+                }
+              },
+              {
+                "name": "set_by",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "set_by",
+                      "kind": "text",
+                      "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-set-by",
+                      "source": "content/delegation/authorization-set-by.md",
+                      "bindings": [
+                        {
+                          "name": "set_by",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "set_by",
+                              "kind": "text",
+                              "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "authorization",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "authorization",
+                    "kind": "text",
+                    "description": "The user's words for the task, stored on the seed."
+                  },
+                  "quote": true
+                }
+              },
+              {
+                "name": "replaces",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "previous",
+                      "kind": "text",
+                      "description": "The words the change replaces or removes."
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-replaces",
+                      "source": "content/delegation/authorization-replaces.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "previous",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "previous",
+                              "kind": "text",
+                              "description": "The words the change replaces or removes."
+                            },
+                            "quote": true
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "authorization-cleared",
+          "delivery": "inbox_content",
+          "description": "The removal of a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.authorization-cleared",
+            "source": "content/delegation/authorization-cleared.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "The session's stake, if it has one."
+                  }
+                }
+              },
+              {
+                "name": "seed_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_title",
+                    "kind": "text",
+                    "description": "Title of the session's stake."
+                  },
+                  "quote": true
+                }
+              },
+              {
+                "name": "set_by",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "set_by",
+                      "kind": "text",
+                      "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.authorization-set-by",
+                      "source": "content/delegation/authorization-set-by.md",
+                      "bindings": [
+                        {
+                          "name": "set_by",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "set_by",
+                              "kind": "text",
+                              "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "previous",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "previous",
+                    "kind": "text",
+                    "description": "The words the change replaces or removes."
+                  },
+                  "quote": true
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -6367,5 +6565,5 @@
       ]
     }
   ],
-  "definitions_hash": "89d369688b82a459766052e6916bd335befbb639f048541e4ee0a184c8417345"
+  "definitions_hash": "d22e3a9c639856fcdd6ce62de1a34d4db55af8ecd8665cc3ad223189a18d1c68"
 }

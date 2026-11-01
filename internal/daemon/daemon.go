@@ -2934,6 +2934,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedRollback:
 		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage))
+	case protocol.CmdSeedAuthorization:
+		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage))
 	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:

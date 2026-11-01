@@ -116,7 +116,7 @@ tending the seed.
 ### User messages
 
 A user message is text the user wrote or picked in attn: an answer to an ask,
-or a Quick Capture. It stands for the user typing into the agent, so a ring
+a Quick Capture, or a change to a seed's authorization. It stands for the user typing into the agent, so a ring
 types it into the agent's conversation as the user's message (see
 [Rings](#rings)), and harness auto-mode reviewers count an approval in the
 message as the user's. A user message does not wait for the agent to finish its
@@ -129,6 +129,13 @@ item.
   then. An answer to an ask about a seed is also a note on the seed, and that
   note does not ring.
 - A Quick Capture goes to the chief or the crew member the user picked.
+- A change to a seed's authorization goes to the seed's tender, addressed as a
+  seed update is: the session, or the crew member when a member tends it. A
+  successor after a handover reads the current words in its opening instead.
+  attn writes the item only when someone other than the tender changes the
+  words while the claim holds, in the same write as the words and their log
+  entry. The words came through an agent, so the agent that set them answers
+  for them, and the seed's log records who set what.
 
 ### PR watch updates
 
@@ -167,6 +174,9 @@ and gets fresh attempts.
   closed) replaces the older unread status update for the same pull request. A
   delay update replaces the older unread delay update. New review feedback and
   reopened threads are separate items.
+- A change to a seed's authorization replaces the older unread change for the
+  same seed, so the tender gets only the newest words. The newer item still
+  names the words the tender last received as the ones it replaces.
 - An auto-sleep request replaces the older unread auto-sleep request.
 
 Rings coalesce too. One ring covers every unread item at an address. See

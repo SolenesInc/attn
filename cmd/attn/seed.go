@@ -54,6 +54,8 @@ func runSeed() {
 	case "rollback":
 		setCommandPath("seed rollback")
 		runSeedRollback(args)
+	case "authorization":
+		runSeedAuthorization(args)
 	case "send-to-chief":
 		setCommandPath("seed send-to-chief")
 		runSeedSendToChief(args)
@@ -189,6 +191,15 @@ Empty bodies are refused. Each edit saves a numbered version and a log entry;
 	{`rollback`, `rollback <id> [<version>] [--json]`, `restore the body before the newest version, or the numbered version.
 The restored body becomes a new version, so rollback can itself be rolled back.
 Edit entries in notes show the versions and size changes.`, []string{"json"}, false},
+	{`authorization`, `authorization <id> ["<words>" | --clear] [--json]`, `set, clear or print the user's words for this task: what agents may do
+without asking and where they stop. Set only words the user gave you.
+Delegation openings deliver them. When someone other than the seed's
+tender changes them, attn types the change into the tender's conversation
+as the user's message, waiting while the tender needs approval. With no
+words or --clear, prints them and the state of the last typed update.
+Who may change them follows seed moves: the tender, sessions above it in
+the delegation chain, and the profile's chief; anyone in the profile while
+nobody holds the seed.`, []string{"clear", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -287,7 +298,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`note`, `<text>`, `what changed, saved on the edit entry`, func(f *seedFlags) { f.fs.StringVar(&f.editNote, "note", "", "") }},
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
-	{`clear`, ``, `remove the harvest condition (with --when-merged)`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`clear`, ``, `remove the harvest condition (with --when-merged), or the authorization`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
 	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
 	{`plot`, `<plot>`, `a plot: ready keeps to it, ls lists all its children`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
 	{`all`, ``, `the whole garden, overriding a dispatched session's plot`, func(f *seedFlags) { f.fs.BoolVar(&f.all, "all", false, "") }},
@@ -1210,6 +1221,110 @@ func runSeedRollback(args []string) {
 	fmt.Printf("rolled %s back to v%d as v%d: %d → %d bytes\n", result.Seed.ID, result.RestoredVersion, result.BodyVersion, result.PreviousBytes, result.NewBytes)
 }
 
+func runSeedAuthorization(args []string) {
+	f := newSeedFlags("authorization")
+	positionals := f.parse("authorization", args)
+	if len(positionals) < 1 || len(positionals) > 2 {
+		seedUsageError("authorization", fmt.Errorf("needs a seed id and optional words: attn seed authorization s-7k3f9m \"Ask me before pushing.\""))
+	}
+	text := ""
+	if len(positionals) == 2 {
+		text = strings.TrimSpace(positionals[1])
+		if text == "" {
+			seedUsageError("authorization", fmt.Errorf("the words are empty; --clear removes the authorization"))
+		}
+	}
+	if text != "" && f.clear {
+		seedUsageError("authorization", fmt.Errorf("pass the new words or --clear, not both"))
+	}
+	id := f.seedID("authorization", positionals[0])
+	result, err := f.client().SeedAuthorization(id, text, f.clear)
+	if err != nil {
+		seedFail("authorization", err)
+	}
+	if f.json {
+		writeJSON(result)
+		return
+	}
+	fmt.Println(seedAuthorizationReply(result, text != "" || f.clear, f.clear))
+}
+
+func seedAuthorizationReply(result *protocol.SeedAuthorizationResult, changing, clear bool) string {
+	seed := result.Seed
+	if !changing {
+		if seed.Authorization == nil {
+			return seed.ID + " has no authorization."
+		}
+		return fmt.Sprintf("%s authorization %s", seed.ID, authorizationSummary(*seed.Authorization))
+	}
+	if !result.Changed {
+		if clear {
+			return seed.ID + " has no authorization."
+		}
+		reply := seed.ID + " already has this authorization."
+		if u := result.Update; u != nil {
+			reply += " " + capitalized(authorizationUpdateState(*u)) + "."
+		}
+		return reply
+	}
+	reply := seed.ID + " authorization set."
+	if clear {
+		reply = seed.ID + " authorization cleared."
+	}
+	switch u := result.Update; {
+	case u != nil && u.TypedAt != nil:
+		return fmt.Sprintf("%s Typed into %s.", reply, updateRecipientLabel(u.Recipient))
+	case u != nil && protocol.Deref(u.NeedsApproval):
+		return fmt.Sprintf("%s Waiting for %s, which needs approval. attn types it in when it can take input.", reply, updateRecipientLabel(u.Recipient))
+	case u != nil:
+		return fmt.Sprintf("%s Waiting for %s. attn types it in when it can take input.", reply, updateRecipientLabel(u.Recipient))
+	case protocol.Deref(result.CallerTends):
+		return fmt.Sprintf("%s You tend %s, so nothing is typed.", reply, seed.ID)
+	case clear:
+		return fmt.Sprintf("%s Nobody tends %s.", reply, seed.ID)
+	default:
+		return fmt.Sprintf("%s Nobody tends %s; the next delegation's opening includes it.", reply, seed.ID)
+	}
+}
+
+func authorizationSummary(a protocol.SeedAuthorization) string {
+	summary := fmt.Sprintf("%q  set by %s at %s", a.Text, actorLabel(a.SetBy), shortStamp(a.SetAt))
+	if a.Update != nil {
+		summary += " · " + authorizationUpdateState(*a.Update)
+	}
+	return summary
+}
+
+func authorizationUpdateState(u protocol.SeedAuthorizationUpdate) string {
+	recipient := updateRecipientLabel(u.Recipient)
+	switch {
+	case u.TypedAt != nil:
+		return fmt.Sprintf("typed into %s at %s", recipient, shortStamp(*u.TypedAt))
+	case protocol.Deref(u.NeedsApproval):
+		return fmt.Sprintf("waiting for %s, which needs approval", recipient)
+	default:
+		return "waiting for " + recipient
+	}
+}
+
+func updateRecipientLabel(p protocol.PartyView) string {
+	id := string(protocol.Deref(p.SessionID))
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	if id == "" || strings.HasPrefix(p.Name, id) {
+		return p.Name
+	}
+	return fmt.Sprintf("%s (%s)", p.Name, id)
+}
+
+func capitalized(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
 func runSeedSendToChief(args []string) {
 	f := newSeedFlags("send-to-chief")
 	positionals := f.parse("send-to-chief", args)
@@ -1594,7 +1709,7 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 		fmt.Fprintf(w, "PR last checked\t%s\n", checkedAt)
 	}
 	if a := seed.Authorization; a != nil {
-		fmt.Fprintf(w, "authorization\t%q  set by %s at %s\n", a.Text, actorLabel(a.SetBy), shortStamp(a.SetAt))
+		fmt.Fprintf(w, "authorization\t%s\n", authorizationSummary(*a))
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
