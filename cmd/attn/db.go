@@ -23,6 +23,7 @@ func runDB() {
 	}
 	switch os.Args[2] {
 	case "restore":
+		setCommandPath("db restore")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDBHelp(os.Stdout)
 			return

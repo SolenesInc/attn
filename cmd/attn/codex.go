@@ -85,6 +85,7 @@ func executeCodex(args []string, stdout, stderr io.Writer) int {
 	}
 	switch action {
 	case "status":
+		setCommandPath("codex status")
 		result, ok := status(false)
 		if !ok {
 			return 1
@@ -98,6 +99,7 @@ func executeCodex(args []string, stdout, stderr io.Writer) int {
 		writeCodexStatus(stdout, result, sessionNames(c))
 		return 0
 	case "update":
+		setCommandPath("codex update")
 		before, ok := status(false)
 		if !ok {
 			return 1
@@ -121,6 +123,7 @@ func executeCodex(args []string, stdout, stderr io.Writer) int {
 		writeCodexStatus(stdout, after, sessionNames(c))
 		return code
 	case "restart":
+		setCommandPath("codex restart")
 		result, ok := status(false)
 		if !ok {
 			return 1

@@ -21,8 +21,10 @@ func runEnrollment() {
 	case "-h", "--help", "help":
 		writeEnrollmentHelp(os.Stdout)
 	case "status":
+		setCommandPath("enrollment status")
 		runEnrollmentStatus(os.Args[3:])
 	case "leave":
+		setCommandPath("enrollment leave")
 		runEnrollmentLeave(os.Args[3:])
 	case "--json":
 		runEnrollmentStatus(os.Args[2:])

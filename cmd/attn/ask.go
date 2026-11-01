@@ -28,6 +28,7 @@ func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	command := ""
 	if len(args) > 0 && (args[0] == "list" || args[0] == "close") {
 		command, args = args[0], args[1:]
+		setCommandPath("ask " + command)
 	}
 	fs := flag.NewFlagSet("ask", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

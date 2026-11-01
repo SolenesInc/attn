@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/client"
@@ -84,8 +85,20 @@ func invocationError(code int) (kind, refusal string) {
 	return cliErrorFailed, ""
 }
 
+func setCommandPathIn(group, word string, known ...string) {
+	if slices.Contains(known, word) {
+		setCommandPath(group + " " + word)
+	}
+}
+
+func refineCommandPath(leaf string) {
+	if strings.HasPrefix(leaf, invocation.path+" ") {
+		invocation.path = leaf
+	}
+}
+
 func parseFlags(fs *flag.FlagSet, args []string) error {
-	setCommandPath(fs.Name())
+	refineCommandPath(fs.Name())
 	handling := fs.ErrorHandling()
 	fs.Init(fs.Name(), flag.ContinueOnError)
 	err := fs.Parse(args)
@@ -94,7 +107,7 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 		return nil
 	}
 	if !errors.Is(err, flag.ErrHelp) {
-		recordUsageError(fs.Name(), flagErrorKind(err))
+		recordUsageError(invocation.path, flagErrorKind(err))
 	}
 	if handling == flag.ExitOnError {
 		if errors.Is(err, flag.ErrHelp) {

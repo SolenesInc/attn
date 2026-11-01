@@ -46,16 +46,22 @@ func delegateRoles(w io.Writer, args []string) error {
 		writeDelegateRolesHelp(w)
 		return nil
 	case "show":
+		setCommandPath("delegate roles show")
 		return delegateRolesShow(w, rest)
 	case "history":
+		setCommandPath("delegate roles history")
 		return delegateRolesHistory(w, rest)
 	case "rollback":
+		setCommandPath("delegate roles rollback")
 		return delegateRolesRollback(w, rest)
 	case "apply":
+		setCommandPath("delegate roles apply")
 		return delegateRolesApply(w, rest)
 	case "install":
+		setCommandPath("delegate roles install")
 		return delegateRolesInstall(w, rest)
 	case "add", "set", "copy", "rm", "enable", "disable":
+		setCommandPath("delegate roles " + command)
 		return delegateRolesEdit(w, command, rest)
 	}
 	recordUsageError("delegate roles", usageErrorUnknownCommand)

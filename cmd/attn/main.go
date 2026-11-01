@@ -485,9 +485,11 @@ func runDaemonCommand() {
 	}
 	switch os.Args[2] {
 	case "ensure":
+		setCommandPath("daemon ensure")
 		refuseDaemonCommandArgs("ensure", os.Args[3:])
 		runDaemonEnsure()
 	case "stop":
+		setCommandPath("daemon stop")
 		refuseDaemonCommandArgs("stop", os.Args[3:])
 		runDaemonStop()
 	case "help", "-h", "--help":
@@ -959,6 +961,7 @@ func runJournal() {
 	warnIfDaemonVersionMismatch()
 	switch os.Args[2] {
 	case "append":
+		setCommandPath("journal append")
 		if hasHelpFlag(os.Args[3:]) {
 			writeJournalHelp(os.Stdout)
 			return
@@ -1484,6 +1487,7 @@ func runBrowser() {
 	})
 	switch subcommand {
 	case "open":
+		setCommandPath("browser open")
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "attn browser open: expected exactly one <url>")
 			exit(1)
@@ -1494,6 +1498,7 @@ func runBrowser() {
 		}
 		fmt.Printf("opened %s\n", positionals[0])
 	case "snapshot":
+		setCommandPath("browser snapshot")
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser snapshot: unexpected arguments")
 			exit(1)
@@ -1505,6 +1510,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "find":
+		setCommandPath("browser find")
 		if len(positionals) != 0 || strings.TrimSpace(*using) == "" || strings.TrimSpace(*value) == "" {
 			fmt.Fprintln(os.Stderr, "attn browser find: --using and --value are required")
 			exit(1)
@@ -1524,6 +1530,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "wait":
+		setCommandPath("browser wait")
 		if len(positionals) != 0 || strings.TrimSpace(*using) == "" || strings.TrimSpace(*value) == "" {
 			fmt.Fprintln(os.Stderr, "attn browser wait: --using and --value are required")
 			exit(1)
@@ -1539,6 +1546,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "click":
+		setCommandPath("browser click")
 		if len(positionals) != 0 || (strings.TrimSpace(*selector) == "" && strings.TrimSpace(*element) == "") {
 			fmt.Fprintln(os.Stderr, "attn browser click: --selector <css> or --element <id> is required")
 			exit(1)
@@ -1555,6 +1563,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "type":
+		setCommandPath("browser type")
 		if len(positionals) != 0 || (strings.TrimSpace(*selector) == "" && strings.TrimSpace(*element) == "") || !textSet {
 			fmt.Fprintln(os.Stderr, "attn browser type: --selector <css> or --element <id>, plus --text, are required")
 			exit(1)
@@ -1574,6 +1583,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "reload", "back", "forward":
+		setCommandPath("browser " + subcommand)
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser reload: unexpected arguments")
 			exit(1)
@@ -1585,6 +1595,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "press":
+		setCommandPath("browser press")
 		if len(positionals) != 0 || !textSet || *text == "" {
 			fmt.Fprintln(os.Stderr, "attn browser press: --text <key> is required")
 			exit(1)
@@ -1597,6 +1608,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "scroll":
+		setCommandPath("browser scroll")
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser scroll: unexpected arguments")
 			exit(1)
@@ -1609,6 +1621,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "cookies":
+		setCommandPath("browser cookies")
 		data, err := c.BrowserCommand("get_all_cookies", "{}", "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser cookies: %v\n", err)
@@ -1616,6 +1629,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "command":
+		setCommandPath("browser command")
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "attn browser command: expected exactly one <action>")
 			exit(1)
@@ -1632,6 +1646,7 @@ func runBrowser() {
 		}
 		fmt.Println(data)
 	case "screenshot":
+		setCommandPath("browser screenshot")
 		if len(positionals) > 1 {
 			fmt.Fprintln(os.Stderr, "attn browser screenshot: expected at most one [path]")
 			exit(1)
@@ -1661,6 +1676,7 @@ func runBrowser() {
 		}
 		fmt.Println(absPath)
 	case "pdf":
+		setCommandPath("browser pdf")
 		if len(positionals) > 1 {
 			fmt.Fprintln(os.Stderr, "attn browser pdf: expected at most one [path]")
 			exit(1)

@@ -24,22 +24,31 @@ func runDoc() {
 	args := os.Args[3:]
 	switch os.Args[2] {
 	case "define":
+		setCommandPath("doc define")
 		runDocDefine(args)
 	case "undefine":
+		setCommandPath("doc undefine")
 		runDocUndefine(args)
 	case "collections":
+		setCommandPath("doc collections")
 		runDocCollections(args)
 	case "put":
+		setCommandPath("doc put")
 		runDocPut(args)
 	case "get":
+		setCommandPath("doc get")
 		runDocGet(args)
 	case "delete":
+		setCommandPath("doc delete")
 		runDocDelete(args)
 	case "query":
+		setCommandPath("doc query")
 		runDocQuery(args)
 	case "count":
+		setCommandPath("doc count")
 		runDocCount(args)
 	case "watch":
+		setCommandPath("doc watch")
 		runDocWatch(args)
 	default:
 		recordUsageError("doc", usageErrorUnknownCommand)

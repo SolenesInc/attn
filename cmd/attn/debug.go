@@ -24,30 +24,35 @@ func runDebug() {
 	}
 	switch os.Args[2] {
 	case "ls":
+		setCommandPath("debug ls")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return
 		}
 		runDebugLs(os.Args[3:])
 	case "incidents":
+		setCommandPath("debug incidents")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return
 		}
 		runDebugJSONL(debugIncidentsFile, "debug incidents", "", os.Args[3:])
 	case "diagnostics":
+		setCommandPath("debug diagnostics")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return
 		}
 		runDebugJSONL(debugDiagnosticsFile, "debug diagnostics", "", os.Args[3:])
 	case "input":
+		setCommandPath("debug input")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return
 		}
 		runDebugJSONL(debugDiagnosticsFile, "debug input", "input", os.Args[3:])
 	case "daemon-log":
+		setCommandPath("debug daemon-log")
 		if hasHelpFlag(os.Args[3:]) {
 			writeDebugHelp(os.Stdout)
 			return

@@ -39,10 +39,13 @@ func runConversation() {
 	}
 	switch args[0] {
 	case "list":
+		setCommandPath("conversation list")
 		conversationList(args[1:])
 	case "forget":
+		setCommandPath("conversation forget")
 		conversationForget(args[1:])
 	case "keep", "unkeep":
+		setCommandPath("conversation " + args[0])
 		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
 			fmt.Fprint(os.Stderr, conversationUsage)
 			exit(1)

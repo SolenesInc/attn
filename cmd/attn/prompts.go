@@ -22,6 +22,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 		return 0
 	}
 	command := args[0]
+	setCommandPathIn("prompts", command, "list", "show", "render", "explain")
 	var positional []string
 	values := prompts.Values{}
 	asJSON := false
@@ -47,7 +48,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 			return 0
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				recordUsageError("prompts", usageErrorUnknownFlag)
+				recordUsageError(invocation.path, usageErrorUnknownFlag)
 				return fail(fmt.Errorf("unknown option %q", args[i]))
 			}
 			positional = append(positional, args[i])

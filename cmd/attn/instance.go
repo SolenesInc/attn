@@ -35,22 +35,31 @@ func runInstance() {
 	}
 	switch os.Args[2] {
 	case "status":
+		setCommandPath("instance status")
 		runInstanceStatus()
 	case "resolve":
+		setCommandPath("instance resolve")
 		runInstanceResolve(os.Args[3:])
 	case "tauri-config":
+		setCommandPath("instance tauri-config")
 		runInstanceTauriConfig(os.Args[3:])
 	case "clean":
+		setCommandPath("instance clean")
 		runInstanceClean(os.Args[3:])
 	case "stop-app":
+		setCommandPath("instance stop-app")
 		runInstanceStopApp(os.Args[3:])
 	case "register-scheme":
+		setCommandPath("instance register-scheme")
 		runInstanceRegisterScheme(os.Args[3:])
 	case "set-origin":
+		setCommandPath("instance set-origin")
 		runInstanceSetOrigin(os.Args[3:])
 	case "list":
+		setCommandPath("instance list")
 		runInstanceList(os.Args[3:])
 	case "env":
+		setCommandPath("instance env")
 		runInstanceEnvArgs(os.Args[3:])
 	case "help", "-h", "--help":
 		printInstanceHelp(os.Stdout)

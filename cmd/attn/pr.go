@@ -186,6 +186,7 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "record", "forget", "ls", "watch", "unwatch", "status":
+			setCommandPath("pr " + args[0])
 			return executeSessionPRCommand(args[0], args[1:], stdout, stderr)
 		}
 	}

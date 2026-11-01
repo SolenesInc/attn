@@ -88,6 +88,9 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 		return parsed, errors.New("a terminal command is required")
 	}
 	parsed.action = args[0]
+	if _, known := terminalActionFlags[parsed.action]; known {
+		setCommandPath("terminal " + parsed.action)
+	}
 	flags := map[string]bool{}
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
@@ -170,14 +173,11 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 				return parsed, errors.New("--keys needs at least one key")
 			}
 		default:
-			recordUsageError("terminal", usageErrorUnknownFlag)
+			recordUsageError(invocation.path, usageErrorUnknownFlag)
 			return parsed, fmt.Errorf("unknown flag %s", arg)
 		}
 	}
-	allowed := map[string]string{
-		"ls": "--desktop --all --json", "open": "--host --down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop", "move": "--json",
-	}
-	valid, ok := allowed[parsed.action]
+	valid, ok := terminalActionFlags[parsed.action]
 	if !ok {
 		recordUsageError("terminal", usageErrorUnknownCommand)
 		return parsed, fmt.Errorf("unknown terminal command %q", parsed.action)
@@ -283,6 +283,10 @@ func runTerminal() {
 	if code != 0 {
 		exit(code)
 	}
+}
+
+var terminalActionFlags = map[string]string{
+	"ls": "--desktop --all --json", "open": "--host --down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop", "move": "--json",
 }
 
 func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.SessionID, args terminalArgs) (int, error) {

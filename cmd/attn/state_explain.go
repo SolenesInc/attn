@@ -25,6 +25,7 @@ func runState() {
 	}
 	switch os.Args[2] {
 	case "explain":
+		setCommandPath("state explain")
 		if hasHelpFlag(os.Args[3:]) {
 			writeStateHelp(os.Stdout)
 			return

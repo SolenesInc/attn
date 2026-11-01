@@ -31,44 +31,64 @@ func runSeed() {
 	args := os.Args[3:]
 	switch os.Args[2] {
 	case "plant":
+		setCommandPath("seed plant")
 		runSeedPlant(args)
 	case "plot":
+		setCommandPath("seed plot")
 		runSeedPlot(args)
 	case "ls":
+		setCommandPath("seed ls")
 		runSeedList(args)
 	case "search":
+		setCommandPath("seed search")
 		runSeedSearch(args)
 	case "show":
+		setCommandPath("seed show")
 		runSeedShow(args)
 	case "review":
+		setCommandPath("seed review")
 		runSeedReview(args)
 	case "edit":
+		setCommandPath("seed edit")
 		runSeedEdit(args)
 	case "rollback":
+		setCommandPath("seed rollback")
 		runSeedRollback(args)
 	case "send-to-chief":
+		setCommandPath("seed send-to-chief")
 		runSeedSendToChief(args)
 	case "export":
+		setCommandPath("seed export")
 		runSeedExport(args)
 	case "tend", "park", "harvest", "wither", "replant":
+		setCommandPath("seed " + os.Args[2])
 		runSeedTransition(os.Args[2], args)
 	case "note":
+		setCommandPath("seed note")
 		runSeedNote(args)
 	case "check":
+		setCommandPath("seed check")
 		runSeedCheck(args)
 	case "watch", "unwatch":
+		setCommandPath("seed " + os.Args[2])
 		runSeedWatch(os.Args[2], args)
 	case "attach", "detach":
+		setCommandPath("seed " + os.Args[2])
 		runSeedArtifact(os.Args[2], args)
 	case "notes":
+		setCommandPath("seed notes")
 		runSeedNotes(args)
 	case "link", "unlink":
+		setCommandPath("seed " + os.Args[2])
 		runSeedLink(os.Args[2] == "unlink", args)
 	case "ready":
+		setCommandPath("seed ready")
 		runSeedReady(args)
 	case "prime":
+		setCommandPath("seed prime")
 		runSeedPrime(args)
 	case "guide":
+		setCommandPath("seed guide")
 		runSeedGuide(args)
 	default:
 		recordUsageError("seed", usageErrorUnknownCommand)
@@ -760,6 +780,7 @@ func runSeedReview(args []string) {
 	verb := args[0]
 	switch verb {
 	case "start", "show", "cancel", "retry", "keep":
+		setCommandPath("seed review " + verb)
 	default:
 		recordUsageError("seed review", usageErrorUnknownCommand)
 		seedUsageError("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
@@ -772,11 +793,13 @@ func runSeedReview(args []string) {
 	var result *protocol.SeedReviewResult
 	switch verb {
 	case "start":
+		setCommandPath("seed review start")
 		if len(positionals) != 0 {
 			seedUsageError("review start", fmt.Errorf("takes no arguments"))
 		}
 		result, err = f.client().SeedReviewStart()
 	case "show":
+		setCommandPath("seed review show")
 		if len(positionals) > 1 {
 			seedUsageError("review show", fmt.Errorf("takes at most one review id"))
 		}
@@ -786,16 +809,19 @@ func runSeedReview(args []string) {
 		}
 		result, err = f.client().SeedReviewShow(reviewID)
 	case "cancel":
+		setCommandPath("seed review cancel")
 		if len(positionals) != 1 {
 			seedUsageError("review cancel", fmt.Errorf("needs exactly one review id"))
 		}
 		result, err = f.client().SeedReviewCancel(positionals[0])
 	case "retry":
+		setCommandPath("seed review retry")
 		if len(positionals) != 2 {
 			seedUsageError("review retry", fmt.Errorf("needs a review id and seed id"))
 		}
 		result, err = f.client().SeedReviewRetry(positionals[0], positionals[1])
 	case "keep":
+		setCommandPath("seed review keep")
 		if len(positionals) != 2 {
 			seedUsageError("review keep", fmt.Errorf("needs a review id and seed id"))
 		}

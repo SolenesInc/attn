@@ -36,6 +36,7 @@ func runSettings() {
 		return
 	}
 	verb := args[0]
+	setCommandPathIn("settings", verb, "list", "get", "set")
 	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	profile := fs.String("profile", "", "profile name or id outside an attn session")
@@ -76,7 +77,6 @@ func runSettings() {
 		recordUsageError("settings", usageErrorUnknownCommand)
 		usage(fmt.Sprintf("unknown command %q", verb))
 	}
-	setCommandPath("settings " + verb)
 	c := client.New("")
 	refusal := func(err error) { fmt.Fprintln(os.Stderr, "settings: "+err.Error()); exit(1) }
 	session, err := currentSession(c)

@@ -22,12 +22,16 @@ func runBus() {
 	}
 	switch os.Args[2] {
 	case "status":
+		setCommandPath("bus status")
 		runBusStatus(os.Args[3:])
 	case "trim":
+		setCommandPath("bus trim")
 		runBusTrim(os.Args[3:])
 	case "enable":
+		setCommandPath("bus enable")
 		runBusSetEnabled(os.Args[3:], true)
 	case "disable":
+		setCommandPath("bus disable")
 		runBusSetEnabled(os.Args[3:], false)
 	default:
 		recordUsageError("bus", usageErrorUnknownCommand)

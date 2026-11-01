@@ -25,6 +25,7 @@ func executeVent(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	withdraw := len(args) > 0 && args[0] == "withdraw"
 	if withdraw {
+		setCommandPath("vent withdraw")
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet("vent", flag.ContinueOnError)

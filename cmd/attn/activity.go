@@ -21,6 +21,7 @@ func runActivity() {
 	case "--json":
 		activityStatus(true)
 	case "clear":
+		setCommandPath("activity clear")
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
 			fmt.Fprintln(os.Stderr, "usage: attn activity clear <session-id>")
 			exit(1)

@@ -22,16 +22,22 @@ func runAutoMode() {
 	args := os.Args[3:]
 	switch os.Args[2] {
 	case "show":
+		setCommandPath("automode show")
 		runAutoModeShow(args)
 	case "env":
+		setCommandPath("automode env")
 		runAutoModeEnv(args)
 	case "rule":
+		setCommandPath("automode rule")
 		runAutoModeRule(args)
 	case "host":
+		setCommandPath("automode host")
 		runAutoModeHost(args)
 	case "policy":
+		setCommandPath("automode policy")
 		runAutoModePolicy(args)
 	case "denials":
+		setCommandPath("automode denials")
 		runAutoModeDenials(args)
 	default:
 		recordUsageError("automode", usageErrorUnknownCommand)
@@ -209,10 +215,13 @@ func runAutoModeEnv(args []string) {
 	}
 	switch args[0] {
 	case "set":
+		setCommandPath("automode env set")
 		runAutoModeEnvSlot(args[1:], false)
 	case "clear":
+		setCommandPath("automode env clear")
 		runAutoModeEnvSlot(args[1:], true)
 	case "notes":
+		setCommandPath("automode env notes")
 		runAutoModeEnvNotes(args[1:])
 	default:
 		recordUsageError("automode env", usageErrorUnknownCommand)
@@ -348,8 +357,10 @@ func runAutoModeRule(args []string) {
 	rest := stripFlags(args[1:])
 	switch args[0] {
 	case "add":
+		setCommandPath("automode rule add")
 		runAutoModeRuleAdd(rest, args)
 	case "remove":
+		setCommandPath("automode rule remove")
 		runAutoModeRuleRemove(rest, args)
 	default:
 		recordUsageError("automode rule", usageErrorUnknownCommand)
@@ -401,6 +412,7 @@ func runAutoModeHost(args []string) {
 		fmt.Fprintln(os.Stderr, "automode host: want `host add <host>` or `host remove <host>`")
 		exit(2)
 	}
+	setCommandPathIn("automode host", args[0], "add", "remove")
 	rest := stripFlags(args[1:])
 	if len(rest) != 1 {
 		fmt.Fprintf(os.Stderr, "automode host %s: name exactly one host\n", args[0])

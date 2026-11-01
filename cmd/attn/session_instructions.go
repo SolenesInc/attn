@@ -38,48 +38,56 @@ func runSession() {
 	}
 	switch os.Args[2] {
 	case "instructions":
+		setCommandPath("session instructions")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionInstructions(os.Args[3:])
 	case "transcript":
+		setCommandPath("session transcript")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionTranscript(os.Args[3:])
 	case "list":
+		setCommandPath("session list")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionList(os.Args[3:])
 	case "show":
+		setCommandPath("session show")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionShow(os.Args[3:])
 	case "reopen":
+		setCommandPath("session reopen")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionReopen(os.Args[3:])
 	case "priority":
+		setCommandPath("session priority")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionPriority(os.Args[3:])
 	case "rename":
+		setCommandPath("session rename")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionRename(os.Args[3:])
 	case "snooze", "unsnooze":
+		setCommandPath("session " + os.Args[2])
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return

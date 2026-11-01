@@ -39,16 +39,22 @@ func runWorktree() {
 	}
 	switch args[0] {
 	case "list":
+		setCommandPath("worktree list")
 		worktreeList(args[1:])
 	case "keep":
+		setCommandPath("worktree keep")
 		worktreeKeep(args[1:], true)
 	case "unkeep":
+		setCommandPath("worktree unkeep")
 		worktreeKeep(args[1:], false)
 	case "delete":
+		setCommandPath("worktree delete")
 		worktreeDelete(args[1:])
 	case "log":
+		setCommandPath("worktree log")
 		worktreeLog(args[1:])
 	case "refresh":
+		setCommandPath("worktree refresh")
 		worktreeRefresh()
 	case "-h", "--help", "help":
 		fmt.Print(worktreeUsage)

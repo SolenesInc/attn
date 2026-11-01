@@ -26,44 +26,52 @@ func runAgent() {
 	}
 	switch os.Args[2] {
 	case "list":
+		setCommandPath("agent list")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentList(os.Args[3:])
 	case "peek":
+		setCommandPath("agent peek")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentPeek(os.Args[3:])
 	case "msg":
+		setCommandPath("agent msg")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentMsg(os.Args[3:])
 	case "close":
+		setCommandPath("agent close")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentClose(os.Args[3:])
 	case "reload":
+		setCommandPath("agent reload")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentReload(os.Args[3:])
 	case "attachment":
+		setCommandPath("agent attachment")
 		runAgentAttachment(os.Args[3:])
 	case "inbox":
+		setCommandPath("agent inbox")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentInbox(os.Args[3:])
 	case "msg-status":
+		setCommandPath("agent msg-status")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return

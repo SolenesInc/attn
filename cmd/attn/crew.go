@@ -21,26 +21,37 @@ func runCrew() {
 	}
 	switch os.Args[2] {
 	case "list", "ls":
+		setCommandPath("crew " + os.Args[2])
 		runCrewList(os.Args[3:])
 	case "wake":
+		setCommandPath("crew wake")
 		runCrewWake(os.Args[3:])
 	case "sleep":
+		setCommandPath("crew sleep")
 		runCrewSleep(os.Args[3:])
 	case "apply":
+		setCommandPath("crew apply")
 		runCrewApply(os.Args[3:])
 	case "set":
+		setCommandPath("crew set")
 		runCrewSet(os.Args[3:])
 	case "rename":
+		setCommandPath("crew rename")
 		runCrewRename(os.Args[3:])
 	case "create":
+		setCommandPath("crew create")
 		runCrewCreate(os.Args[3:])
 	case "retire":
+		setCommandPath("crew retire")
 		runCrewRetire(os.Args[3:])
 	case "restore":
+		setCommandPath("crew restore")
 		runCrewRestore(os.Args[3:])
 	case "move-home":
+		setCommandPath("crew move-home")
 		runCrewMoveHome(os.Args[3:])
 	case "prime":
+		setCommandPath("crew prime")
 		runCrewPrime(os.Args[3:])
 	default:
 		recordUsageError("crew", usageErrorUnknownCommand)

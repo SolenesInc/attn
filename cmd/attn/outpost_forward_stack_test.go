@@ -53,7 +53,17 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
 		return len(s.PullRequests) == 1 && s.PullRequests[0].Number == 1
 	})
-	t.Log("plain shell and outpost shell use the home garden; the outpost names its own caller; the monitor's PR report reaches the home through Call")
+	pair.Disconnect()
+	if offline := outpost.Attn("seed", "ls"); offline.Code == 0 {
+		t.Fatalf("seed ls from the outpost succeeded with the home unreachable: %+v", offline)
+	}
+	if err := outpost.Client().UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatalf("state hook with the home unreachable: %v; hooks run on the outpost", err)
+	}
+	if err := outpost.Client().OpenSentFilesFromTerminal(terminal, nil); err != nil {
+		t.Fatalf("open_sent_files hook with the home unreachable: %v; hooks run on the outpost", err)
+	}
+	t.Log("plain shell and outpost shell use the home garden; the outpost names its own caller; hooks run on the outpost with the home unreachable; the monitor's PR report reaches the home through Call")
 }
 
 func TestOutpostForwardsDocumentSubscriptions(t *testing.T) {

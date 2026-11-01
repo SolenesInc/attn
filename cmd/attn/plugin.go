@@ -39,16 +39,22 @@ func runPluginCommand() {
 
 	switch os.Args[2] {
 	case "install":
+		setCommandPath("plugin install")
 		runPluginInstall()
 	case "link":
+		setCommandPath("plugin link")
 		runPluginLink()
 	case "install-bundled":
+		setCommandPath("plugin install-bundled")
 		runPluginInstallBundled()
 	case "list":
+		setCommandPath("plugin list")
 		runPluginList()
 	case "uninstall":
+		setCommandPath("plugin uninstall")
 		runPluginUninstall()
 	case "remove":
+		setCommandPath("plugin remove")
 		runPluginRemove()
 	default:
 		recordUsageError("plugin", usageErrorUnknownCommand)
