@@ -180,8 +180,9 @@ ingest-clickhouse:
 ingest-clickhouse-stop:
 	@./scripts/ingest-clickhouse.sh stop
 
+SCRIPT_TESTS ?= $(sort $(wildcard scripts/*_test.sh))
 test-scripts:
-	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
+	@set -e; for script_test in $(SCRIPT_TESTS); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm

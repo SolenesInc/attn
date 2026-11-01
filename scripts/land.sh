@@ -91,8 +91,47 @@ Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
   git merge-base --is-ancestor origin/main HEAD || fail "could not rebase onto origin/main; run git rebase origin/main to see why"
 }
 
+script_test_words() {
+  local files=("$1") seen=$'\n' i=0 file word path
+  while [ "$i" -lt "${#files[@]}" ]; do
+    file="${files[$i]}"
+    i=$((i + 1))
+    for word in $(grep -oE '[A-Za-z0-9_.-]+' "$file" | sort -u); do
+      echo "$word"
+      for path in "scripts/$word" "scripts/lib/$word"; do
+        case "$path" in *_test.sh) continue ;; esac
+        [ -f "$path" ] || continue
+        case "$seen" in *$'\n'"$path"$'\n'*) continue ;; esac
+        seen+="$path"$'\n'
+        files+=("$path")
+      done
+    done
+  done
+}
+
+script_tests_for() {
+  local script_test file name words covered_by selected=()
+  for script_test in scripts/*_test.sh; do
+    words="$(script_test_words "$script_test")"
+    covered_by=""
+    while IFS= read -r file; do
+      name="${file#scripts/}"
+      name="${name#lib/}"
+      name="${name%%/*}"
+      if [ "$file" = "$script_test" ] || grep -qxF -- "$name" <<<"$words"; then
+        covered_by+=" $file"
+      fi
+    done <<<"$1"
+    if [ -n "$covered_by" ]; then
+      selected+=("$script_test")
+      echo "land: script test $script_test, for$covered_by" >&2
+    fi
+  done
+  if [ "${#selected[@]}" -gt 0 ]; then echo "${selected[*]}"; fi
+}
+
 run_checks() {
-  local changed file dir packages group pattern targets=() landing_groups=()
+  local changed file dir packages group pattern script_tests targets=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
   if touches '\.go$|^go\.(mod|sum)$'; then
@@ -115,7 +154,14 @@ run_checks() {
   touches '^internal/protocol/schema/' && targets+=(check-types)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
-  touches '^scripts/' && targets+=(test-scripts)
+  if touches '^scripts/'; then
+    script_tests="$(script_tests_for "$(grep '^scripts/' <<<"$changed")")"
+    if [ -n "$script_tests" ]; then
+      targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
+    else
+      echo "land: no script test covers the changed scripts"
+    fi
+  fi
   while read -r _ group pattern; do
     touches "$pattern" && landing_groups+=("$group")
   done < <(awk '$1 == "group"' scripts/landing-tests)

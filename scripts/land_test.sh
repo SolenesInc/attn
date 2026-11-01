@@ -110,7 +110,25 @@ printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks check-types check-prompts test-scripts land --group prompts "${selected_tests[@]}" sync
+expect_checks check-types check-prompts land --group prompts "${selected_tests[@]}" sync
+expect_output 'no script test covers the changed scripts'
+
+mkdir -p scripts/lib
+printf 'true\n' >scripts/lib/shared.sh
+printf 'bash scripts/example.sh\nsource scripts/lib/shared.sh\n' >scripts/example_test.sh
+printf 'source scripts/lib/shared.sh\n' >scripts/other_test.sh
+printf 'true\n' >scripts/unrelated_test.sh
+land 'Script tests arrive'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
+
+printf '\n' >>scripts/example.sh
+land 'Script change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh' sync
+expect_output 'script test scripts/example_test.sh, for scripts/example.sh'
+
+printf '\n' >>scripts/lib/shared.sh
+land 'Shared script change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
 
 printf '\n' >>README.md
 land 'Documentation change'
