@@ -16,8 +16,8 @@ transcribe-cpp = "=0.4.1"
 ureq = { version = "3.5.0", default-features = false, features = ["native-tls"] }
 
 [patch.crates-io]
-transcribe-cpp = { git = "https://github.com/anomalyco/transcribe.cpp", rev = "7045d1c0fe7cee37747b2792977421d435e75fca" }
-transcribe-cpp-sys = { git = "https://github.com/anomalyco/transcribe.cpp", rev = "7045d1c0fe7cee37747b2792977421d435e75fca" }
+transcribe-cpp = { git = "https://github.com/victorarias/transcribe.cpp", rev = "4a30e9bdc27cb5ff35bd1c3d7ea314f628459e12" }
+transcribe-cpp-sys = { git = "https://github.com/victorarias/transcribe.cpp", rev = "4a30e9bdc27cb5ff35bd1c3d7ea314f628459e12" }
 
 [profile.release]
 strip = true
