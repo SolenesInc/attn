@@ -61,7 +61,7 @@ func TestATakeoverCountsARequestCopiedAcrossClaudeTranscriptsOnlyOnce(t *testing
 	if err := cli.ObserveAgentConversation(terminal, a.ConversationID, originalPath); err != nil {
 		t.Fatal(err)
 	}
-	_, caller, err := cli.QueryAs(terminal)
+	caller, err := cli.CallerSession(terminal)
 	if err != nil || caller != protocol.SessionID(forked) {
 		t.Fatalf("takeover replaced session %s with %s: %v", forked, caller, err)
 	}

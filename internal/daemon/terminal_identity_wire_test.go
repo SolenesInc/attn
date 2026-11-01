@@ -110,7 +110,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 			desktop, pane := view.paneOf(t, session)
 			request := uuid.NewString()
 			mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: request, DesktopID: desktop.ID, LeafID: pane}, request)
-			_, caller, err := s.Client().QueryAs(terminal)
+			caller, err := s.Client().CallerSession(terminal)
 			if err != nil || caller != protocol.SessionID(session) {
 				t.Fatalf("unplaced caller %s: %v", caller, err)
 			}
@@ -125,7 +125,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 			s.Stop()
 			s.Start()
 			app = s.App()
-			_, caller, err = s.Client().QueryAs(terminal)
+			caller, err = s.Client().CallerSession(terminal)
 			if err != nil || caller != successor.ID {
 				t.Fatalf("recovered caller %s: %v", caller, err)
 			}
@@ -164,7 +164,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 			})
 			s.Stop()
 			s.Start()
-			_, caller, err = s.Client().QueryAs(terminal)
+			caller, err = s.Client().CallerSession(terminal)
 			if err != nil || caller != "" {
 				t.Fatalf("closed terminal still maps to %s: %v", caller, err)
 			}
@@ -186,5 +186,31 @@ func TestAnExplicitTerminalIdentityKeepsHooksIndependentOfAnOuterSharedCodex(t *
 		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 		agent.Reply("Review ready. Change the rounding? <!-- attn:state=waiting_input -->")
 		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	}
+}
+
+func TestADelegatesTerminalNamesTheDelegateAndATerminalShowingNoSessionNamesNone(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	cwd := w.Path("api")
+	source, _, _ := w.RequestSpawn(app, fakeagent.Codex, cwd)
+	request := delegateFrom(string(source.ID), cwd, "Name the delegate from its own terminal", fakeagent.Claude)
+	request.RequestID = "identity"
+	reply := testworld.Request(app, request, protocol.EventDelegateResult,
+		func(m protocol.DelegateResultMessage) bool { return protocol.Deref(m.RequestID) == "identity" })
+	if !reply.Success {
+		t.Fatalf("delegating: %s", protocol.Deref(reply.Error))
+	}
+	delegate := reply.Result.SessionID
+	w.Launched(string(delegate)).Prompted()
+
+	for _, want := range []protocol.SessionID{source.ID, delegate} {
+		terminal := protocol.TerminalID(app.Terminal(string(want)))
+		if caller, err := cli.CallerSession(terminal); err != nil || caller != want {
+			t.Errorf("terminal %s names %q, %v; want %s", terminal, caller, err, want)
+		}
+	}
+	if caller, err := cli.CallerSession("t-shows-nothing"); err != nil || caller != "" {
+		t.Errorf("a terminal showing no session names %q, %v; want none", caller, err)
 	}
 }

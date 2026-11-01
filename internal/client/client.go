@@ -946,13 +946,13 @@ func (c *Client) queryResponse(filter string) (*protocol.Response, error) {
 	return resp, nil
 }
 
-// QueryAs lists sessions and names the one the caller's terminal shows.
-func (c *Client) QueryAs(callerID protocol.TerminalID) ([]protocol.Session, protocol.SessionID, error) {
-	resp, err := c.send(protocol.QueryMessage{Cmd: protocol.CmdQuery, CallerID: &callerID})
+// CallerSession names the session the terminal shows, or "" when it shows none.
+func (c *Client) CallerSession(terminal protocol.TerminalID) (protocol.SessionID, error) {
+	resp, err := c.send(protocol.CallerSessionMessage{Cmd: protocol.CmdCallerSession, CallerID: &terminal})
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return resp.Sessions, protocol.Deref(resp.CallerSessionID), nil
+	return protocol.Deref(resp.CallerSessionID), nil
 }
 
 func (c *Client) Query(filter string) ([]protocol.Session, error) {

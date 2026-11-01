@@ -37,9 +37,9 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 	pair.App.AwaitScreen(id, "__garden_done")
 	requireStdout(t, home.Attn("seed", "ls"), "A seed from the outpost shell")
 	terminal := protocol.TerminalID(pair.App.Terminal(id))
-	_, caller, err := outpost.Client().QueryAs(terminal)
+	caller, err := outpost.Client().CallerSession(terminal)
 	if err != nil || caller != protocol.SessionID(id) {
-		t.Fatalf("forwarded caller: %+v, %v", caller, err)
+		t.Fatalf("outpost caller: %+v, %v", caller, err)
 	}
 	if err := outpost.Client().UpdateState(terminal, protocol.StateWorking); err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 			t.Fatalf("%s hook was not dispatched at the outpost", name)
 		}
 	}
-	t.Log("plain shell and outpost shell use the home garden; query preserves caller; hooks stay on the outpost and the monitor's PR report reaches the home through Call")
+	t.Log("plain shell and outpost shell use the home garden; the outpost names its own caller; hooks stay on the outpost and the monitor's PR report reaches the home through Call")
 }
 
 func TestOutpostForwardsDocumentSubscriptions(t *testing.T) {

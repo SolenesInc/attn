@@ -57,6 +57,7 @@ var Placements = map[string][]Placement{
 	"automode_show":                    {Placement{LocatorHome, ""}},
 	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"browser_control":                  {Placement{LocatorHome, ""}},
+	"caller_session":                   {Placement{LocatorHere, ""}},
 	"callout_anchors":                  {Placement{LocatorHome, ""}},
 	"callout_show":                     {Placement{LocatorHome, ""}},
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
@@ -609,6 +610,18 @@ func (m BrowserControlMessage) Placement() Placement {
 }
 
 func (m BrowserControlMessage) Locate() string {
+	return ""
+}
+
+func (CallerSessionMessage) CommandName() string {
+	return "caller_session"
+}
+
+func (m CallerSessionMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m CallerSessionMessage) Locate() string {
 	return ""
 }
 

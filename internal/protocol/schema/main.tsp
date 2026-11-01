@@ -1405,7 +1405,7 @@ model RecordAnalyticsMessage {
 }
 
 // Fields the CLI adds to every frame it writes to the daemon socket.
-// caller_id is the caller's ATTN_TERMINAL_ID, the same field query carries.
+// caller_id is the caller's ATTN_TERMINAL_ID.
 model SocketCaller {
   caller_id?: TerminalID;
 }
@@ -1546,7 +1546,14 @@ model DelegateWorktreeRequest {
 model QueryMessage {
   cmd: "query";
   filter?: string;
-  caller_id?: TerminalID; // The caller's ATTN_TERMINAL_ID; the response's caller_session_id names the session its terminal shows.
+}
+
+// Names the session the caller's terminal shows in the response's
+// caller_session_id, which the reply omits when that terminal shows no session.
+@extension("x-on", #{ here: true })
+model CallerSessionMessage {
+  cmd: "caller_session";
+  ...SocketCaller;
 }
 
 // SettleTurnMessage is the user closing the turn a session opened. No state

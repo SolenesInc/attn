@@ -2206,6 +2206,14 @@ type BusStatusResultMessage struct {
 	SurgeRatePerHour float64 `json:"surge_rate_per_hour"`
 }
 
+type CallerSessionMessage struct {
+	// CallerID corresponds to the JSON schema field "caller_id".
+	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
 type CalloutAnchor string
 
 const CalloutAnchorAgent CalloutAnchor = "agent"
@@ -8564,9 +8572,6 @@ type QueryAuthorsMessage struct {
 }
 
 type QueryMessage struct {
-	// CallerID corresponds to the JSON schema field "caller_id".
-	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

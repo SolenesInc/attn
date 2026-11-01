@@ -3011,7 +3011,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdQuery:
-		d.handleQuery(conn, msg.(*protocol.QueryMessage), caller)
+		d.handleQuery(conn, msg.(*protocol.QueryMessage))
+	case protocol.CmdCallerSession:
+		d.handleCallerSession(conn, caller)
 	case protocol.CmdQueryPRs:
 		d.handleQueryPRs(conn, msg.(*protocol.QueryPRsMessage))
 	case protocol.CmdMutePR:
@@ -3440,7 +3442,15 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage, caller protocol.SessionID) {
+func (d *Daemon) handleCallerSession(conn net.Conn, caller protocol.SessionID) {
+	resp := protocol.Response{Ok: true}
+	if caller != "" {
+		resp.CallerSessionID = protocol.Ptr(caller)
+	}
+	json.NewEncoder(conn).Encode(resp)
+}
+
+func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 	sessions := d.store.List(protocol.Deref(msg.Filter))
 	profiles, err := d.liveProtocolProfiles()
 	if err != nil {
@@ -3451,9 +3461,6 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage, caller p
 		Ok:       true,
 		Sessions: d.sessionsForBroadcast(sessions),
 		Profiles: profiles,
-	}
-	if msg.CallerID != nil {
-		resp.CallerSessionID = protocol.Ptr(caller)
 	}
 	json.NewEncoder(conn).Encode(resp)
 }

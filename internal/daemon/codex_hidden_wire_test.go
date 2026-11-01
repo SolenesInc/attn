@@ -1056,7 +1056,7 @@ func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *
 	server := w.CodexServer()
 	child := server.SpawnSubagent(codex.ConversationID)
 	terminal := protocol.TerminalID(harness.CodexThreadTerminal(app.SelectedProfile(), child))
-	if _, caller, err := cli.QueryAs(terminal); err != nil || string(caller) != parent {
+	if caller, err := cli.CallerSession(terminal); err != nil || string(caller) != parent {
 		t.Fatalf("loaded subagent caller = %s, %v; want %s", caller, err, parent)
 	}
 	server.CloseThread(child)
@@ -1069,7 +1069,7 @@ func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *
 				t.Fatal(err)
 			}
 		}
-		if _, caller, err := cli.QueryAs(terminal); err != nil || caller != "" {
+		if caller, err := cli.CallerSession(terminal); err != nil || caller != "" {
 			t.Errorf("closed subagent caller after late hook=%t: %s, %v; want no session", hook, caller, err)
 		}
 	}
