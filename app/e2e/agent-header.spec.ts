@@ -1,6 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const TILES = 4;
+
+async function settled(page: Page) {
+  await page.evaluate(() => window.__HARNESS_READY__);
+  await nextFrames(page);
+}
+
+async function nextFrames(page: Page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 const WIDTHS = [180, 200, 240, 299, 340, 400, 480, 560, 640, 760, 900, 1050, 1200];
 
 async function setTileWidth(page: Page, width: number) {
@@ -64,8 +74,8 @@ function readHeaders(page: Page): Promise<HeaderReceipt[]> {
 test('agent headers keep the dot, title and signals from 180px to 1200px, in one height, inside their rows', async ({ page }) => {
   await page.setViewportSize({ width: 1200 * TILES + 200, height: 360 });
   await page.goto('/test-harness/?component=AgentHeader');
-  await page.evaluate(() => window.__HARNESS_READY__);
-  await expect(page.locator('.desktop-pane-header')).toHaveCount(TILES);
+  await settled(page);
+  expect(await page.locator('.desktop-pane-header').count()).toBe(TILES);
 
   const customRoleLevels = new Set<string | null>();
   for (const width of WIDTHS) {
@@ -98,11 +108,11 @@ test('agent headers keep the dot, title and signals from 180px to 1200px, in one
 test('a usage receipt requested for a narrow tile shows the badge and opens beneath it', async ({ page }) => {
   await page.setViewportSize({ width: 180 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=180&usage=release');
-  await page.evaluate(() => window.__HARNESS_READY__);
+  await settled(page);
   const badge = page.getByTestId('session-usage-release');
   const receipt = page.locator('.session-usage-popover');
-  await expect(badge).toBeVisible();
-  await expect(receipt).toBeVisible();
+  expect(await badge.isVisible()).toBe(true);
+  expect(await receipt.isVisible()).toBe(true);
   const badgeBox = (await badge.boundingBox())!;
   const receiptBox = (await receipt.boundingBox())!;
   expect(receiptBox.y).toBeGreaterThanOrEqual(badgeBox.y + badgeBox.height);
@@ -121,9 +131,9 @@ for (const selection of ['rail', 'spotlight'] as const) {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`/test-harness/?component=AgentHeader&selection=${selection}`);
     await page.evaluate(() => window.__HARNESS_READY__);
-    await expect(page.locator(`.session-terminal-desktop.desktop-selection--${selection}.multi-leaf`)).toHaveCount(1);
-    await expect(page.locator('.desktop-pane[data-pane-kind="agent"]')).toHaveCount(TILES);
-    await expect(page.locator('.desktop-pane.active')).toHaveAttribute('data-pane-id', 'pane-release');
+    expect(await page.locator(`.session-terminal-desktop.desktop-selection--${selection}.multi-leaf`).count()).toBe(1);
+    expect(await page.locator('.desktop-pane[data-pane-kind="agent"]').count()).toBe(TILES);
+    expect(await page.locator('.desktop-pane.active').getAttribute('data-pane-id')).toBe('pane-release');
 
     const look = (paneId: string) => page.locator(`[data-pane-id="${paneId}"]`).evaluate((pane) => {
       const opacity = (element: Element | null) => {
@@ -178,28 +188,23 @@ for (const selection of ['rail', 'spotlight'] as const) {
   });
 }
 
-async function nextFrames(page: Page) {
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-}
-
 test('a pull request collapsed to its icon still opens its details from the keyboard', async ({ page }) => {
   await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=480');
-  await page.evaluate(() => window.__HARNESS_READY__);
+  await settled(page);
   const pane = page.locator('[data-pane-id="pane-release"]');
-  await expect(pane.locator('.desktop-pane-piece[data-fit-piece="provenance"]')).toHaveAttribute('data-level', 'icon');
+  expect(await pane.locator('.desktop-pane-piece[data-fit-piece="provenance"]').getAttribute('data-level')).toBe('icon');
   const details = pane.getByRole('button', { name: 'Pull request attn#412 details' });
-  await expect(details).toBeVisible();
+  expect(await details.isVisible()).toBe(true);
   await details.focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('.session-pr-popover')).toBeVisible();
+  expect(await page.locator('.session-pr-popover').isVisible()).toBe(true);
 });
 
 test('agent headers refit when the app text size changes', async ({ page }) => {
   await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=480');
-  await page.evaluate(() => window.__HARNESS_READY__);
-  await nextFrames(page);
+  await settled(page);
   await page.evaluate(() => document.documentElement.style.setProperty('--ui-scale', '1.5'));
   await nextFrames(page);
   const headers = await readHeaders(page);
