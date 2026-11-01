@@ -1706,9 +1706,10 @@ model CreateWorktreeMessage {
   request_id?: string;
 }
 
-@extension("x-on", #{ here: true })
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
+  host?: string;
   path: string;
   force?: boolean;
   request_id?: string;
@@ -1921,15 +1922,19 @@ model RecentFilesMessage {
 // files with those extensions (no dots, e.g. ["md"]) to the listing. Asking for
 // files exposes document names rather than just tree shape, so that variant is
 // restricted to the authenticated app client.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model BrowseDirectoryMessage {
   cmd: "browse_directory";
+  host?: string;
   input_path: string;
   extensions?: string[];
   request_id?: string;
 }
 
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model InspectPathMessage {
   cmd: "inspect_path";
+  host?: string;
   path: string;
   request_id?: string;
 }
@@ -1981,8 +1986,10 @@ model EnsureRepoMessage {
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
 }
 
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
+  host?: string;
   repo: string;
   request_id?: string;
 }
@@ -3193,11 +3200,21 @@ model AgentCatalogMessage {
   cmd: "agent_catalog";
   host: string;
   models_for?: string;
+  request_id?: string;
 }
 model AgentCatalogResult {
   machine: string;
   harnesses: Harness[];
   models?: HarnessModel[];
+}
+
+model AgentCatalogResultMessage {
+  event: "agent_catalog_result";
+  request_id?: string;
+  host: string;
+  catalog?: AgentCatalogResult;
+  success: boolean;
+  error?: string;
 }
 
 model ReopenTarget {
@@ -8560,6 +8577,7 @@ alias DaemonEvent =
   | DelegationPreferencesResultMessage
   | DelegationPreferencesChangedMessage
   | HarnessModelsResultMessage
+  | AgentCatalogResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage

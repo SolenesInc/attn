@@ -51,6 +51,8 @@ func main() {
 		err = seedContinuation(args)
 	case "seed-resume":
 		err = seedResume(args)
+	case "request":
+		err = request(args)
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -80,6 +82,7 @@ Commands:
   refresh-prs
   seed-continuation --seed S   (what a seed's page offers: Resume, Handover)
   seed-resume --seed S         (the seed page's Resume)
+  request --json PAYLOAD --event EVENT [--timeout 30s]   (prints the EVENT reply carrying PAYLOAD's request_id)
   outposts [--add NAME --destination SSH_DESTINATION | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
@@ -357,6 +360,32 @@ func refreshPRs(args []string) error {
 		return fmt.Errorf("refresh PRs failed: %s", message)
 	}
 	fmt.Println("PR refresh completed")
+	return nil
+}
+
+func request(args []string) error {
+	fs := flag.NewFlagSet("request", flag.ExitOnError)
+	raw := fs.String("json", "", "the command as JSON, with a request_id (required)")
+	event := fs.String("event", "", "the reply event to wait for (required)")
+	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for the reply")
+	fs.Parse(args)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return fmt.Errorf("--json: %w", err)
+	}
+	id, _ := payload["request_id"].(string)
+	if id == "" || *event == "" {
+		return errors.New("--json needs a request_id, and --event is required")
+	}
+	response, err := sendAndWaitMatch(payload, *event, func(ev map[string]any) bool { return ev["request_id"] == id }, *timeout)
+	if err != nil {
+		return err
+	}
+	pretty, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(pretty))
 	return nil
 }
 

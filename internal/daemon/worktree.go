@@ -449,30 +449,36 @@ func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWo
 	d.life.Go("handleDeleteWorktreeWS", func() {
 		defer d.publishFact(FactWorktreeSessionsRemoved, msg.Path, nil)
 
-		err := d.doDeleteWorktree(msg.Path, deleteWorktreeOptions{
-			Force: protocol.Deref(msg.Force),
-		})
-		result := protocol.DeleteWorktreeResultMessage{
-			Event:     protocol.EventDeleteWorktreeResult,
-			RequestID: msg.RequestID,
-			Path:      msg.Path,
-			Success:   err == nil,
-		}
+		result, err := Call[protocol.DeleteWorktreeResultMessage](context.Background(), d.router(), *msg)
 		if err != nil {
-			result.Error = protocol.Ptr(err.Error())
-			var deleteErr *deleteWorktreeError
-			if errors.As(err, &deleteErr) {
-				if deleteErr.kind != "" {
-					result.ReasonKind = string(deleteErr.kind)
-				}
-				result.Forceable = protocol.Ptr(deleteErr.forceable)
-			}
-			d.logf("Delete worktree failed for %s: %v", msg.Path, err)
-		} else {
+			result = protocol.DeleteWorktreeResultMessage{Event: protocol.EventDeleteWorktreeResult, Path: msg.Path, Error: protocol.Ptr(err.Error())}
+		}
+		result.RequestID = msg.RequestID
+		if result.Success {
 			d.logf("Delete worktree succeeded: %s", msg.Path)
+		} else {
+			d.logf("Delete worktree failed for %s: %s", msg.Path, protocol.Deref(result.Error))
 		}
 		d.sendToClient(client, result)
 	})
+}
+
+func (d *Daemon) deleteWorktreeHere(_ context.Context, msg protocol.DeleteWorktreeMessage) (protocol.DeleteWorktreeResultMessage, error) {
+	result := protocol.DeleteWorktreeResultMessage{Event: protocol.EventDeleteWorktreeResult, Path: msg.Path, Success: true}
+	err := d.doDeleteWorktree(msg.Path, deleteWorktreeOptions{Force: protocol.Deref(msg.Force)})
+	if err == nil {
+		return result, nil
+	}
+	result.Success = false
+	result.Error = protocol.Ptr(err.Error())
+	var deleteErr *deleteWorktreeError
+	if errors.As(err, &deleteErr) {
+		if deleteErr.kind != "" {
+			result.ReasonKind = string(deleteErr.kind)
+		}
+		result.Forceable = protocol.Ptr(deleteErr.forceable)
+	}
+	return result, nil
 }
 
 func (d *Daemon) projectWorktreeCreated(ev bus.Event) {

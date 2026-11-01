@@ -70,6 +70,9 @@ type AgentCatalogMessage struct {
 
 	// ModelsFor corresponds to the JSON schema field "models_for".
 	ModelsFor *string `json:"models_for,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
 
 type AgentCatalogResult struct {
@@ -81,6 +84,26 @@ type AgentCatalogResult struct {
 
 	// Models corresponds to the JSON schema field "models".
 	Models []HarnessModel `json:"models,omitempty,omitzero"`
+}
+
+type AgentCatalogResultMessage struct {
+	// Catalog corresponds to the JSON schema field "catalog".
+	Catalog *AgentCatalogResult `json:"catalog,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type AgentCloseMessage struct {
@@ -1887,6 +1910,9 @@ type BrowseDirectoryMessage struct {
 
 	// Extensions corresponds to the JSON schema field "extensions".
 	Extensions []string `json:"extensions,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// InputPath corresponds to the JSON schema field "input_path".
 	InputPath string `json:"input_path"`
@@ -4054,6 +4080,9 @@ type DeleteWorktreeMessage struct {
 	// Force corresponds to the JSON schema field "force".
 	Force *bool `json:"force,omitempty,omitzero"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
 
@@ -5624,6 +5653,9 @@ type GetRepoInfoMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Repo corresponds to the JSON schema field "repo".
 	Repo string `json:"repo"`
 
@@ -6029,6 +6061,9 @@ type InjectTestSessionMessage struct {
 type InspectPathMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`

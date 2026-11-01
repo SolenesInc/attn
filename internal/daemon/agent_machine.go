@@ -283,6 +283,19 @@ func (d *Daemon) readAgentCatalog(ctx context.Context, msg protocol.AgentCatalog
 	return result, nil
 }
 
+func (d *Daemon) handleAgentCatalogWS(client *wsClient, msg *protocol.AgentCatalogMessage) {
+	d.life.Go("handleAgentCatalogWS", func() {
+		result := protocol.AgentCatalogResultMessage{Event: protocol.EventAgentCatalogResult, RequestID: msg.RequestID, Host: msg.Host}
+		catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), *msg)
+		if err != nil {
+			result.Error = protocol.Ptr(err.Error())
+		} else {
+			result.Catalog, result.Success = &catalog, true
+		}
+		d.sendToClient(client, result)
+	})
+}
+
 func (d *Daemon) requireCatalogAgent(host, agent, explicit string) error {
 	catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog, Host: host})
 	if err != nil {

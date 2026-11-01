@@ -180,6 +180,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPRVisited:                     decodeInto[PRVisitedMessage],
 	CmdListWorktrees:                 decodeInto[ListWorktreesMessage],
 	CmdCreateWorktree:                decodeInto[CreateWorktreeMessage],
+	CmdAgentCatalog:                  decodeInto[AgentCatalogMessage],
 	CmdDeleteWorktree:                decodeInto[DeleteWorktreeMessage],
 	CmdKeptConversationList:          decodeInto[KeptConversationListMessage],
 	CmdKeptConversationKeep:          decodeInto[KeptConversationKeepMessage],

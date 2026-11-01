@@ -1193,6 +1193,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
+	case protocol.CmdAgentCatalog:
+		d.handleAgentCatalogWS(client, msg.(*protocol.AgentCatalogMessage))
 	case protocol.CmdAskAnswer:
 		answer := msg.(*protocol.AskAnswerMessage)
 		if stored, err := d.store.GetOpenAsk(strings.TrimSpace(answer.AskID)); err == nil {

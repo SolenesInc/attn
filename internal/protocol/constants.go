@@ -581,6 +581,7 @@ const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
 	EventHarnessModelsResult          = "harness_models_result"
+	EventAgentCatalogResult           = "agent_catalog_result"
 )
 
 const (

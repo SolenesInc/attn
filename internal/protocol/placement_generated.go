@@ -55,6 +55,7 @@ var Placements = map[string][]Placement{
 	"automode_env_slot":                {Placement{LocatorHome, ""}},
 	"automode_propose":                 {Placement{LocatorHome, ""}},
 	"automode_show":                    {Placement{LocatorHome, ""}},
+	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"browser_control":                  {Placement{LocatorHome, ""}},
 	"callout_anchors":                  {Placement{LocatorHome, ""}},
 	"callout_show":                     {Placement{LocatorHome, ""}},
@@ -89,7 +90,7 @@ var Placements = map[string][]Placement{
 	"delegation_preferences_rollback":  {Placement{LocatorHome, ""}},
 	"delegation_preferences_show":      {Placement{LocatorHome, ""}},
 	"delegation_roles":                 {Placement{LocatorHome, ""}},
-	"delete_worktree":                  {Placement{LocatorHere, ""}},
+	"delete_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"doc_collections":                  {Placement{LocatorHome, ""}},
 	"doc_count":                        {Placement{LocatorHome, ""}},
 	"doc_define":                       {Placement{LocatorHome, ""}},
@@ -103,6 +104,7 @@ var Placements = map[string][]Placement{
 	"fetch_pr_details":                 {Placement{LocatorHome, ""}},
 	"files_edited":                     {Placement{LocatorHere, ""}},
 	"get_kitty_image":                  {Placement{LocatorTerminal, "id"}},
+	"get_repo_info":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
 	"get_settings":                     {Placement{LocatorHere, ""}},
 	"hook_compaction":                  {Placement{LocatorHere, ""}},
@@ -110,6 +112,7 @@ var Placements = map[string][]Placement{
 	"hook_stop_failure":                {Placement{LocatorHere, ""}},
 	"inject_test_pr":                   {Placement{LocatorHere, ""}},
 	"inject_test_session":              {Placement{LocatorHere, ""}},
+	"inspect_path":                     {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"journal_append":                   {Placement{LocatorHome, ""}},
 	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
 	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
@@ -577,6 +580,24 @@ func (m AutoModeShowMessage) Locate() string {
 	return ""
 }
 
+func (BrowseDirectoryMessage) CommandName() string {
+	return "browse_directory"
+}
+
+func (m BrowseDirectoryMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m BrowseDirectoryMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
 func (BrowserControlMessage) CommandName() string {
 	return "browser_control"
 }
@@ -1002,10 +1023,16 @@ func (DeleteWorktreeMessage) CommandName() string {
 }
 
 func (m DeleteWorktreeMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
 	return Placement{LocatorHere, ""}
 }
 
 func (m DeleteWorktreeMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 
@@ -1165,6 +1192,24 @@ func (m GetKittyImageMessage) Locate() string {
 	return string(m.ID)
 }
 
+func (GetRepoInfoMessage) CommandName() string {
+	return "get_repo_info"
+}
+
+func (m GetRepoInfoMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m GetRepoInfoMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
 func (GetScreenSnapshotMessage) CommandName() string {
 	return "get_screen_snapshot"
 }
@@ -1246,6 +1291,24 @@ func (m InjectTestSessionMessage) Placement() Placement {
 }
 
 func (m InjectTestSessionMessage) Locate() string {
+	return ""
+}
+
+func (InspectPathMessage) CommandName() string {
+	return "inspect_path"
+}
+
+func (m InspectPathMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m InspectPathMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

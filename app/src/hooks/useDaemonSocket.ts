@@ -27,7 +27,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences, OutpostInfo } from '../types/generated';
+import type { AgentCatalogResult, DelegationPreferences, OutpostInfo } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -2670,6 +2670,8 @@ export function useDaemonSocket({
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
+  const sendAgentCatalog = useCallback((host: string): Promise<AgentCatalogResult> =>
+    sendRequest('agent_catalog', { host }, 'Reading the harness catalog timed out'), [sendRequest]);
   const sendHarnessModels = useCallback((harness: string, refresh = false): Promise<HarnessModelCatalog> =>
     sendRequest('harness_models', { harness, ...(refresh ? { refresh: true } : {}) }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
 
@@ -3253,16 +3255,17 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'list_worktrees', main_repo: mainRepo }));
   }, []);
 
-  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => (
+  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string, host?: string): Promise<WorktreeActionResult> => (
     sendRequest('create_worktree', {
       main_repo: mainRepo, branch,
       ...(path && { path }),
       ...(startingFrom && { starting_from: startingFrom }),
+      ...(host && { host }),
     }, 'Create worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
   ), [sendRequest]);
 
-  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => (
-    sendRequest('delete_worktree', { path, ...(options.force && { force: true }) },
+  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}, host?: string): Promise<WorktreeActionResult> => (
+    sendRequest('delete_worktree', { path, ...(options.force && { force: true }), ...(host && { host }) },
       'Delete worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
   ), [sendRequest]);
 
@@ -3729,23 +3732,25 @@ export function useDaemonSocket({
     }, 'Get recent locations timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
+  const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[], host?: string): Promise<BrowseDirectoryResult> => {
     const requestId = nextRequestID('browse_directory');
     const key = `browse_directory_${requestId}`;
     return sendKeyedRequest<BrowseDirectoryResult>(key, {
       cmd: 'browse_directory',
       input_path: inputPath,
       ...(extensions && extensions.length > 0 ? { extensions } : {}),
+      ...(host && { host }),
       request_id: requestId,
     }, 'Browse directory timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendInspectPath = useCallback((path: string): Promise<InspectPathResult> => {
+  const sendInspectPath = useCallback((path: string, host?: string): Promise<InspectPathResult> => {
     const requestId = nextRequestID('inspect_path');
     const key = `inspect_path_${requestId}`;
     return sendKeyedRequest<InspectPathResult>(key, {
       cmd: 'inspect_path',
       path,
+      ...(host && { host }),
       request_id: requestId,
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
@@ -3799,8 +3804,8 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => (
-    sendRequest('get_repo_info', { repo }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
+  const getRepoInfo = useCallback((repo: string, host?: string): Promise<RepoInfoResult> => (
+    sendRequest('get_repo_info', { repo, ...(host && { host }) }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
   ), [sendRequest]);
 
   const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
@@ -4444,6 +4449,7 @@ export function useDaemonSocket({
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
     sendHarnessModels,
+    sendAgentCatalog,
     sendAutoModeGet,
     sendAutoModePromote,
     sendAutoModeDiscard,

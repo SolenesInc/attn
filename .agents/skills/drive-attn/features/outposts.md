@@ -22,6 +22,7 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 - `remote-terminals`: shells and agents on an outpost in tiles beside local ones. Their attn commands reach the home.
 - `offline`: a terminal whose outpost is unreachable stays in place, marked, and sends no typing.
 - `ledger-resume`: a closed outpost session's ledger row names the outpost, and resume brings the session back on that outpost with its conversation and cost. For the ledger itself, see [ledger.md](ledger.md).
+- `launcher-reads`: `browse_directory`, `inspect_path`, `get_repo_info`, `create_worktree` and `delete_worktree` with `host` run on that outpost, and `agent_catalog` returns its harnesses. The app does not send `host` with them yet.
 - `notebook-sync`: the home and its outposts keep one notebook in sync, and the outpost's row shows the sync. For the notebook itself, see [notebook.md](notebook.md).
 
 ## How to get to it
@@ -102,6 +103,7 @@ Preconditions:
   - Re-pair while that outpost cannot answer: its tiles read `Connecting to <name> · typing is not sent`. Restore it and check that this notice clears too.
   - With a different build, the "Update outposts" banner and the row's "Update to home build" install the home's build and reconnect. The shell keeps its PID.
   - The baseline cannot do this, as Gotchas says.
+- **Launcher reads on an outpost.** Run `./scripts/test-go.sh --packages -run TestLauncherReadsRunOnTheNamedOutpost -v ./cmd/attn`. Through the app protocol, each read with `host` answers from the outpost's registry and harnesses, and with the outpost lost each fails at once with `outpost is unreachable; this needs it now`. On a Linux box, `wsctl request --event browse_directory_result --json '{"cmd":"browse_directory","host":"<name>","input_path":"~/","request_id":"b1"}'` lists that machine's home with its `home_path`, and `--json '{"cmd":"agent_catalog","host":"<name>","request_id":"c1"}' --event agent_catalog_result` lists the harnesses installed there.
 - **Resume an outpost session from the ledger.** On the same Linux box, with Claude Code installed and signed in there:
   - Run `wsctl add-session --host <name> --agent claude --cwd <dir> --label op-claude --id op-claude`, send it `wsctl input --id <terminal> --text "hello" --enter`, and wait for `waiting_input` in `./attn agent list`.
   - Close it with `./attn agent close op-claude -m "outpost drive" --source-session op-claude`.
@@ -134,7 +136,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/bridge/*_test.go`, `internal/daemon/outposts_wire_test.go`, `internal/daemon/outpost_forward_transcript_wire_test.go`.
-- Stack: `cmd/attn/outposts_stack_test.go`, `cmd/attn/outpost_connect_terminal_stack_test.go`, `cmd/attn/outpost_*_stack_test.go`, `cmd/attn/remote_*_stack_test.go`, `cmd/attn/enrollment_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `cmd/attn/delegate_outpost_stack_test.go`, `cmd/attn/session_reopen_outpost_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
+- Stack: `cmd/attn/outposts_stack_test.go`, `cmd/attn/outpost_connect_terminal_stack_test.go`, `cmd/attn/outpost_*_stack_test.go`, `cmd/attn/remote_*_stack_test.go`, `cmd/attn/enrollment_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `cmd/attn/delegate_outpost_stack_test.go`, `cmd/attn/session_reopen_outpost_stack_test.go`, `cmd/attn/launcher_reads_stack_test.go`, `scripts/verify-outpost-ledger-resume.sh`, `app/e2e/outpost-terminal-links.spec.ts`.
 - Scenario: `outposts-settings`, `outpost-update`, `notebook-sync`.
 - Kernel: `internal/enrollment/*_test.go`, `internal/outpostbuild/*_test.go`.
 - App: `app/src/App.outpostsSettings.test.tsx`, `app/src/App.outpostUpdates.test.tsx`, `app/src/App.remoteAgents.test.tsx`, `app/src/App.remoteShell.test.tsx`, `app/src/App.outpostPaths.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/components/ledger/SessionsTab.outposts.test.tsx`.
