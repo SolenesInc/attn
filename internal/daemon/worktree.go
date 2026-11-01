@@ -409,13 +409,20 @@ func (d *Daemon) handleCreateWorktree(conn net.Conn, msg *protocol.CreateWorktre
 }
 
 func (d *Daemon) handleDeleteWorktree(conn net.Conn, msg *protocol.DeleteWorktreeMessage) {
-	if err := d.doDeleteWorktree(msg.Path, deleteWorktreeOptions{
-		Force: protocol.Deref(msg.Force),
-	}); err != nil {
-		d.sendError(conn, err.Error())
+	if result := d.deleteWorktree(msg); !result.Success {
+		d.sendError(conn, protocol.Deref(result.Error))
 		return
 	}
 	d.sendOK(conn)
+}
+
+func (d *Daemon) deleteWorktree(msg *protocol.DeleteWorktreeMessage) protocol.DeleteWorktreeResultMessage {
+	result, err := Call[protocol.DeleteWorktreeResultMessage](context.Background(), d.router(), *msg)
+	if err != nil {
+		result = protocol.DeleteWorktreeResultMessage{Event: protocol.EventDeleteWorktreeResult, Path: msg.Path, Error: protocol.Ptr(err.Error())}
+	}
+	result.RequestID = msg.RequestID
+	return result
 }
 
 func (d *Daemon) handleListWorktreesWS(client *wsClient, msg *protocol.ListWorktreesMessage) {
@@ -449,11 +456,7 @@ func (d *Daemon) handleDeleteWorktreeWS(client *wsClient, msg *protocol.DeleteWo
 	d.life.Go("handleDeleteWorktreeWS", func() {
 		defer d.publishFact(FactWorktreeSessionsRemoved, msg.Path, nil)
 
-		result, err := Call[protocol.DeleteWorktreeResultMessage](context.Background(), d.router(), *msg)
-		if err != nil {
-			result = protocol.DeleteWorktreeResultMessage{Event: protocol.EventDeleteWorktreeResult, Path: msg.Path, Error: protocol.Ptr(err.Error())}
-		}
-		result.RequestID = msg.RequestID
+		result := d.deleteWorktree(msg)
 		if result.Success {
 			d.logf("Delete worktree succeeded: %s", msg.Path)
 		} else {
