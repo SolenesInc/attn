@@ -47,9 +47,9 @@ Agents read the state of every session with `attn agent list` and
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow, the default.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-state.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX) && echo "export S=$S" >> $DRIVE_ENV`, holding this fixture as `$S/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, and stay in desktop flow, the default.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-state.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX) && echo "export S=$S" >> $DRIVE_ENV`, and save this fixture as `$S/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -65,11 +65,21 @@ Preconditions:
 - **Working, then waiting.** Run `wsctl input --id <terminal> --text "hello" --enter`. For at least 1.5 seconds `./attn agent list` shows `working`. Then `./attn agent list` shows `waiting_input` with TURN `owed`. `./attn agent peek state-agent` shows `state: waiting_input` and `turn: owed to this session`. In the app, `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-state-agent\"] .session-lead[data-state=\"waiting_input\"]","timeoutMs":5000}'` matches.
 - **A silent turn ends idle.** Run `wsctl input --id <terminal> --text "quiet" --enter`. The state goes `working`, then `idle`, and the sidebar row's `data-state` follows.
 - **An agent reads the list.** Run `wsctl input --id <terminal> --text "who" --enter`. `./attn agent peek state-agent` shows a table with the columns ID, NAME, AGENT, MEMBER, PROFILE, STATE and TURN, with `state-agent` as `working` while it ran the command.
-- **Needs approval.** With the agent idle at its prompt, report a permission prompt the way Claude Code's Notification hook does: run `echo '{"notification_type":"permission_prompt","message":"Allow edit?"}' | ./attn _hook-notification <terminal>`. It exits 0 and prints nothing. `./attn agent list` shows `pending_approval`. Press ⌘⇧H with `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`: `bridge dom_text '{"selector":"[data-testid=\"session-group-pending\"]"}'` reads `Pending approval` and `state-agent`. Open the agent palette with ⌘K (`bridge native_key '{"key":"k","modifiers":["command"]}'`): `bridge dom_wait '{"selector":"[data-testid=\"palette-agent-state-agent\"] .unified-palette-pill.is-approval","timeoutMs":5000}'` matches and the row reads `approval`. Press Escape. Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, `session-group-waiting` holds the row, and in the agent palette, opened again with ⌘K, the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
+- **Needs approval.**
+  - With the agent idle at its prompt, report a permission prompt the way Claude Code's Notification hook does: run `echo '{"notification_type":"permission_prompt","message":"Allow edit?"}' | ./attn _hook-notification <terminal>`. It exits 0 and prints nothing. `./attn agent list` shows `pending_approval`.
+  - Press ⌘⇧H with `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`: `bridge dom_text '{"selector":"[data-testid=\"session-group-pending\"]"}'` reads `Pending approval` and `state-agent`.
+  - Open the agent palette with ⌘K (`bridge native_key '{"key":"k","modifiers":["command"]}'`): `bridge dom_wait '{"selector":"[data-testid=\"palette-agent-state-agent\"] .unified-palette-pill.is-approval","timeoutMs":5000}'` matches and the row reads `approval`.
+  - Press Escape.
+  - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, `session-group-waiting` holds the row, and in the agent palette, opened again with ⌘K, the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
 - **Why.** Run `./attn state explain state-agent`. It prints `state:   waiting_input`, then a table with the columns OBSERVED, SOURCE, CLAIM, OUTCOME and WHY, holding a `hook_notify` row whose claim is `permission_prompt`, a `resolver` row applying `pending_approval`, and the rows that followed. `--json` prints the same facts.
 - **Peek is passive.** Run `./attn agent peek state-agent` twice. The `since` time on the state line does not move, and the agent's screen shows no input.
 - **Stopped.** Run `wsctl kill-session --id state-agent`. `./attn agent list` shows `idle`, peek shows `process exited with code`, `./attn state explain state-agent --json` holds an observation with source `resolver`, claim `idle` and detail `process_exited`, and the sidebar row's `data-state` follows. See [agent-launch.md](agent-launch.md) for resuming the agent.
-- **Activity lines.** Run `./attn activity`. It prints `presence:` and a tier, then `activity: off (Settings › Background agents › Session activity)`. Open Settings with ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-backgroundAgents"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"settings-activity-toggle\"][disabled]","timeoutMs":5000}'` matches: the switch cannot be clicked until an agent is chosen. Run `./attn settings set activity.enabled true`. `./attn activity` prints `activity: on, but not runnable: session activity has no agent selected: choose claude or codex`, and `bridge dom_text '{"selector":"[data-testid=\"settings-activity-toggle\"]"}'` reads `Disable`. `./attn activity clear state-agent` prints `cleared the activity line for state-agent`. Put the setting back with `./attn settings set activity.enabled false`.
+- **Activity lines.**
+  - Run `./attn activity`. It prints `presence:` and a tier, then `activity: off (Settings › Background agents › Session activity)`.
+  - Open Settings with ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-backgroundAgents"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"settings-activity-toggle\"][disabled]","timeoutMs":5000}'` matches: the switch cannot be clicked until an agent is chosen.
+  - Run `./attn settings set activity.enabled true`. `./attn activity` prints `activity: on, but not runnable: session activity has no agent selected: choose claude or codex`, and `bridge dom_text '{"selector":"[data-testid=\"settings-activity-toggle\"]"}'` reads `Disable`.
+  - Run `./attn activity clear state-agent`: it prints `cleared the activity line for state-agent`.
+  - Put the setting back with `./attn settings set activity.enabled false`.
 - **Proof.** In `$P`, keep `./attn agent list --json` after each step, `./attn agent peek state-agent` after the reply, the approval and the stop, `./attn state explain state-agent --json`, `./attn activity` before and after the setting, and `bridge capture_screenshot '{"path":"<P>/state-home.png"}'` with the home screen showing the pending group, where `<P>` is the folder's path written out. Name each file for its way in, such as `state-approval-list.json`.
 
 ## Contexts
@@ -93,10 +103,9 @@ Preconditions:
 
 - The CLI prints the wire names `waiting_input` and `pending_approval`. The home screen says "Waiting for input" and "Pending approval". The glossary says waiting and needs approval. Match the name each view prints.
 - The baseline refuses background model tasks, so the turn classifier never runs. The mock decides instead: a turn with a reply ends `waiting_input`, a turn with no action ends `idle`. A real harness on the baseline can sit in a state the classifier would have changed.
-- The mock stays `working` for at least 1.5 seconds per turn. A read right after `wsctl input` sees `working`, not the end state.
 - The needs-approval step stands in for Claude Code's permission dialog through the same hook it calls. Report it while the agent is idle: the mock repeats its busy title every half second during a turn, and busy evidence newer than the prompt outranks the prompt. A real dialog, and the Guardian answering one, need a real harness ([auto-mode.md](auto-mode.md)).
 - `wsctl input` counts as the user typing, which opens and settles turns as typing would. The turn itself is [queue-flow.md](queue-flow.md).
 - The activity switch is disabled until an agent is chosen, so a native click on the baseline does nothing. You can set `activity.enabled` from the shell without an agent, and then `attn activity` reports that no agent is selected. With an agent chosen the status reads `activity: on`, and no line is ever written while background tasks are off. `presence: away` means nobody is looking, and nothing is generated then either.
 - `attn state explain` on a session whose state predates the daemon's start prints `No state observations recorded.`. Send the agent a prompt to get rows.
-- A stopped agent reads `idle`, not `recoverable`: `recoverable` is what a restart marks a session it found without its terminal.
-- Working but wrong: `attn agent list` crosses profiles, though everything else keeps to one. The home screen's group says "Pending approval" where the glossary says needs approval.
+- A stopped agent reads `idle`, not `recoverable`, as [agent-launch.md](agent-launch.md) explains.
+- Working but wrong: `attn agent list` crosses profiles, though everything else keeps to one.

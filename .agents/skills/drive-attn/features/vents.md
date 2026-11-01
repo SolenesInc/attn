@@ -3,7 +3,7 @@
 Agents report what got in their way, for the user to review later, like a bug
 report. An agent that meets a broken attn command, instructions that
 contradict each other or a capability it had to work around sends a vent and
-keeps working. Nobody replies. The user reads vents in Settings › Analytics,
+keeps working. Nobody replies. The user reads vents in **Settings → Analytics**,
 opens the session or transcript behind a vent, dismisses the vent or plants a
 seed from the vent, and can send attn vents to attn's maintainers. Vents need usage analytics
 on when the session launched.
@@ -23,7 +23,7 @@ on when the session launched.
 
 ### People
 
-- Settings › Analytics, the Vents list (`app/src/components/Analytics/AnalyticsSettings.tsx`). [telemetry.md](telemetry.md) says how to reach the section. The section exists only while usage analytics is on.
+- **Settings → Analytics**, the Vents list (`app/src/components/Analytics/AnalyticsSettings.tsx`). [telemetry.md](telemetry.md) says how to reach the section. The section exists only while usage analytics is on.
 - Keys on the list (`app/src/components/Analytics/useVentTriage.tsx`): `j`, `k` or the arrows move, `o` opens the vent's live session, `t` opens its transcript, `g` its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, `x` sends or keeps it while sharing is on. A row click selects a vent, and the inspector's buttons (Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, Send or Keep here) do what the keys do.
 - Machine settings (`m`, `app/src/components/Analytics/AnalyticsMachine.tsx`): "Send vents", listed while sharing or `analytics.share_vents` is on, and "Tool vents". They are the settings `analytics.share_vents` and `analytics.tool_vents` in `attn settings`, respectively.
 - Where people see what agents do: the count of new vents on the Vents tab, each row's session label, `tools` mark and age, and the inspector's context.
@@ -43,10 +43,10 @@ on when the session launched.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline's `ATTN_ANALYTICS_INGEST_URL` keeps a stray click on a sharing control away from the real service ([telemetry.md](telemetry.md)).
-- Usage analytics and tool vents on before the agent launches: `./attn settings set analytics.enabled true` prints `analytics.enabled = true`, and `./attn settings set analytics.tool_vents true` prints `analytics.tool_vents = true`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-vents.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-vents-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new. The baseline's `ATTN_ANALYTICS_INGEST_URL` keeps a stray click on a sharing control away from the real service ([telemetry.md](telemetry.md)).
+- Turn usage analytics and tool vents on before the agent launches: `./attn settings set analytics.enabled true` prints `analytics.enabled = true`, and `./attn settings set analytics.tool_vents true` prints `analytics.tool_vents = true`.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-vents.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-vents-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -79,16 +79,16 @@ Preconditions:
 - **Refile.** Click `ol[aria-label="Vents"] li:nth-child(2) button` natively, the tool vent, and run `bridge native_key '{"key":"s"}'`. `[role="status"]` reads `Filed “vent-agent” under attn.`. Press `s` again to file it back under tools.
 - **Tool vents from Machine settings.** Run `bridge native_key '{"key":"m"}'`, then click `[data-testid="analytics-machine"] .settings-row-card:nth-child(3) button` natively, the "Tool vents" row while sharing and `analytics.share_vents` are both off: `./attn settings get analytics.tool_vents` prints `false`. Click it again: `true`. Run `./attn settings set analytics.share_vents true`, select a row and press `m` again: a "Send vents" row appears above "Tool vents". Click its button natively: `./attn settings get analytics.share_vents` prints `false` and the row goes. Press `m` to close the panel.
 - **Open the session.** Closing Machine settings takes focus out of the page, so click `ol[aria-label="Vents"] li:first-child button` natively first, then run `bridge native_key '{"key":"o"}'`. The settings dialog closes (`bridge settings_get_state` shows `open: false`) and the app opens `vent-agent`, placing it on the current desktop: `bridge get_state` shows `activeLeaf.sessionId` set to `vent-agent`.
-- **From a file and from stdin.** After the steps that read the first agent's vents at the top of the list, start a second agent in its own folder, `A2`, launched the same way as `vent-agent2`, with a fixture of two turns: `{"includes": "from a file", "actions": [{"type": "attn", "args": ["vent", "--about", "tools", "--file", "<A2>/vent.txt"]}]}` and `{"includes": "from stdin", "actions": [{"type": "attn", "args": ["vent", "--about", "attn"], "input": "attn seed ready listed a parked seed."}]}`, with one line of text in `<A2>/vent.txt`. Send `vent from a file`, wait for the turn to end, then `vent from stdin`: peek shows a `recorded` line with a new id after each, and open Settings › Analytics again as "Review in the app" does: the list shows both texts under `vent-agent2`, the file's marked `tools`.
+- **From a file and from stdin.** After the steps that read the first agent's vents at the top of the list, start a second agent in its own folder, `A2`, launched the same way as `vent-agent2`, with a fixture of two turns: `{"includes": "from a file", "actions": [{"type": "attn", "args": ["vent", "--about", "tools", "--file", "<A2>/vent.txt"]}]}` and `{"includes": "from stdin", "actions": [{"type": "attn", "args": ["vent", "--about", "attn"], "input": "attn seed ready listed a parked seed."}]}`, with one line of text in `<A2>/vent.txt`. Send `vent from a file`, wait for the turn to end, then `vent from stdin`: peek shows a `recorded` line with a new id after each, and open **Settings → Analytics** again as "Review in the app" does: the list shows both texts under `vent-agent2`, the file's marked `tools`.
 - **Guidance without tool vents, and without analytics.** Run `./attn settings set analytics.tool_vents false` and launch a third agent with an empty fixture: its launch file holds `attn vent --about attn` once and `attn vent --about tools` not at all. Run `./attn settings set analytics.enabled false` and launch a fourth: its launch file never mentions `attn vent`.
 - **Proof.** In `$P`, keep the output of each `./attn` command with its exit code, `./attn agent peek vent-agent` after each prompt, `bridge dom_text` of the list and of `[data-testid="analytics-inspector"]` after each key, `./attn seed show <seed> --json` after the plant and the undo, and `bridge capture_screenshot '{"path":"<P>/vents.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `vents-agent-send-peek.txt`.
 
 ## Contexts
 
 - **Durability across restarts**: vents are the daemon's records and come back after any restart, and a session can still vent after a daemon restart. Dismissed and withdrawn vents are deleted after 30 days.
-- **Linux**: `attn vent` works the same where the CLI runs on Linux. Settings › Analytics is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
+- **Linux**: `attn vent` works the same where the CLI runs on Linux. **Settings → Analytics** is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
 - **Outposts**: an agent's `attn vent` and `attn vent withdraw` on an outpost are recorded by the home, and the agent's vents show in the home's app.
-- **Profiles**: a vent belongs to its session's profile. Settings › Analytics lists, triages and clears only the current profile's vents.
+- **Profiles**: a vent belongs to its session's profile. **Settings → Analytics** lists, triages and clears only the current profile's vents.
 - **Harnesses**: every harness vents with the same `attn vent`. Each vent records the harness, its version and the model. A tool vent may be about the harness's own permissions or approval review.
 - **Keyboard and native input**: every triage action is one key, listed at the foot of the page. The page takes keys once the page has focus. The page takes focus when the section opens and after a row click. A key typed into a text field does nothing to the list.
 
@@ -107,5 +107,5 @@ Preconditions:
 - A refused `attn` action in the mock agent shows as a `mock agent error:` block: `failed:`, the `[attn instance=...]` banner from the command's stderr, then the refusal. The refusal line is the proof. The refusal line wraps at the session's width. `--cols 200` sets the size at launch, but the tile that `wsctl add-session` places the session in resizes the session, so match the refusal's first words.
 - The baseline cannot reach three keys. `g` needs a vent from a delegated session with a stake ([delegation.md](delegation.md)). `x` needs sharing on, which needs a local attn-ingest ([telemetry.md](telemetry.md)). `t` opens the transcript in the default app for its file type, outside attn.
 - `--session <id>` lets any shell vent as any live session. Scenarios use the flag to set up. The flag is not the agents' way in.
-- Settings › Analytics disappears when `analytics.enabled` is off, and the vents with it, though they are kept.
+- **Settings → Analytics** disappears when `analytics.enabled` is off, and the vents with it, though they are kept.
 - Working but wrong: the launch instructions are fixed at launch, the refusals are not. Turn `analytics.tool_vents` or `analytics.enabled` off after a session launched, and the agent still reads that it can vent, then is refused when it tries.

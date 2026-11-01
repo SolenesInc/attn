@@ -18,7 +18,7 @@ and jumps to the next run that stopped with a question.
 - `automation-review-request`: a `github_review_requested` trigger that starts a run in a worktree at the pull request's head, one per pull request.
 - `automation-continuity`: `fresh` or `singleton` for schedules. Review requests always get one session per subject. A singleton automation reuses its session after you edit its name, schedule, guard or catch-up, and replants its seed after a harvest or wither. If you change the prompt, the launch contract (harness, model or effort) or the location, the next occurrence starts a replacement session, and the replacement takes over the old session's seed. The seed's log records the forced move, and attn tells the old session about the move when that session watches the seed. The old session keeps running. The replacement keeps taking the seed until one of its runs is delivered; after that, when the old session tends the seed again, later occurrences fail and name its tender instead of taking the seed back. A pull request's reviewer follows the same rules. Closing the session of a singleton or of a pull request's reviewer keeps that session, and the next occurrence reopens that session on its conversation. When the session has stopped and attn cannot resume its conversation, the next occurrence starts a fresh session and seed.
 - `automation-runs`: each occurrence's run, the run's state (`pending`, `delivered`, `failed`, `cancelled`) and its session. A run that starts a Codex session stays `pending` until that agent starts its first turn. If Codex exits first, the run fails with the screen Codex left.
-- `next-run`: go to the next run that stopped and owes the user a turn.
+- `next-run`: go to the next run that stopped and is owed a turn.
 - `automation-enable`: turn an automation off and on. attn cancels an automation's pending runs when you turn it off.
 - `automation-cleanup`: remove the worktrees of finished runs, keeping dirty and active ones. Delete an automation, keeping its seeds and run history.
 - `automation-guidance`: the opening attn sends a run's agent.
@@ -51,9 +51,9 @@ and jumps to the next run that stopped with a question.
 
 Preconditions:
 
-- The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`). The other steps need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automations.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, holding this fixture as `$R/.attn-mock-agent.json`:
+- Use the baseline instance. The steps that run `bridge` also need its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-automations.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make a run folder with `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, and save this fixture as `$R/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [
@@ -62,7 +62,7 @@ Preconditions:
 ]}
 ```
 
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -72,7 +72,7 @@ Preconditions:
 ]}
 ```
 
-- A manual definition, written with the folder's paths filled in. The `executable` line points the run at the mock agent the instance shell already exports:
+- Write a manual definition with the folder's paths filled in. Point its `executable` line at the mock agent the instance shell already exports.
 
 ```bash
 cat > $P/manual.yaml <<EOF
@@ -100,7 +100,7 @@ EOF
 - **An agent runs it.** Run `wsctl add-session --cwd $A --agent claude --label auto-agent --id auto-agent --place`, find its terminal in `wsctl list`, and run `wsctl input --id <terminal> --text "run-automation <id>" --enter`. `./attn agent peek auto-agent` shows the run as JSON, and `./attn automation runs <id>` lists one run more than before.
 - **Open the drawer from the palette.** Open the palette as the README says, type `Show automations` and press Enter. `bridge automations_get_state` shows `present: true` and a definition named `Drive automation` with `trigger: "Manual"`, `enabled: true` and `canRunNow: true`.
 - **Run from the drawer.** Click `[data-testid="automation-definition-select-<id>"]` natively, then `[data-testid="automation-run-now-<id>"]` natively. `bridge automations_get_state` lists the earlier runs and the new one, which is `delivered` once its agent starts its first turn. `./attn automation runs <id>` agrees.
-- **Next run needing you.** Press ⌘⇧J: `bridge native_key '{"key":"j","modifiers":["command","shift"]}'`. `bridge get_state` shows `activeLeaf.sessionId` set to the session of one run that owes a turn. Press it again: it moves to the next run, and the order repeats once every run has been visited. Open the palette, type `Next run`, and press Enter on "Next run needing you": it moves on in the same order.
+- **Next run needing you.** Press ⌘⇧J: `bridge native_key '{"key":"j","modifiers":["command","shift"]}'`. `bridge get_state` shows `activeLeaf.sessionId` set to the session of one run that is owed a turn. Press it again: it moves to the next run, and the order repeats once every run has been visited. Open the palette, type `Next run`, and press Enter on "Next run needing you": it moves on in the same order.
 - **Open from the sidebar.** Close the drawer by clicking `[aria-label="Close automations"]` natively, then click `[aria-label="Show Automations"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"automations-panel\"]","timeoutMs":5000}'` matches.
 - **Turn it off and on.** Run `./attn automation disable <id>`: the definition prints with `"enabled": false`, and `./attn automation run <id>` exits 1 with `automation <id> is disabled`. In the drawer, click `[data-testid="automation-toggle-<id>"]` natively: `bridge automations_get_state` shows `enabled: true`, and so does `./attn automation list`. Click it again for `enabled: false`, then run `./attn automation enable <id>`: the definition prints with `"enabled": true`, and the drawer follows.
 - **Edit in the form.** Click `[data-testid="automation-edit-<id>"]` natively. `bridge automation_form_get_state` shows `present: true` and `status: "ready"`. Click `[data-testid="automation-form-name"]` natively, run `bridge native_key '{"key":"a","modifiers":["command"]}'` and `bridge native_text '{"text":"Drive automation edited"}'`, then click `[data-testid="automation-form-save"]` natively. `./attn automation show <id>` prints `name: Drive automation edited`, with the same `launch` model.
@@ -133,8 +133,19 @@ EOF
 ```
 
   `<schedule-id>` is the `id` that `apply` prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
-- **Edit a singleton with previous sessions.** On an enabled schedule, rename it and change the guard or catch-up setting, keeping the same `id`. The schedule's next run keeps the session. Have that agent harvest its seed. The next occurrence replants the seed and reuses the session. Change the prompt and apply again. `./attn automation show <schedule-id>` labels the last run's session as superseded until the next occurrence starts its replacement. `runs <schedule-id>` keeps all occurrences and marks the old session's `automation.superseded` as `true`. The drawer's run history labels that session "Superseded session" and still opens it. In queue flow the automation group and queue bar count only the current session, including when the old sessions are recoverable. An old session that still owes a turn remains reachable through the next-run button, palette and ⌘⇧J. Editing the prompt does not stop the old session's agent. Repeat the prompt edit to check that two previous sessions still leave one current run, then disable the schedule.
-- **Change a singleton's harness or prompt.** Apply `scheduled.yaml` with `schedule: {cron: "@every 3s", time_zone: UTC}`, with `ATTN_AUTOMATION_SCHEDULE_INTERVAL=1s` in the instance shell before the daemon starts. When a run is `delivered`, disable the schedule and note its `seed_id` and `session_id`. Change `driver: codex` to `driver: claude`, apply it with the same `id`, and enable it again. The next `delivered` run in `./attn automation runs <schedule-id>` has a new `session_id` and the same `seed_id`, and the old run reads `automation.superseded: true`. `./attn seed show <seed>` names the new session as tender, with a move note saying it forced `attn seed tend` while the old session held the seed. `wsctl list` still lists the old Codex session. Change the prompt and apply again: the next run has a new `session_id` and the same `seed_id` again. Disable the schedule when done.
+- **Edit a singleton with previous sessions.**
+  - On an enabled schedule, rename it and change the guard or catch-up setting, keeping the same `id`. The schedule's next run keeps the session.
+  - Have that agent harvest its seed. The next occurrence replants the seed and reuses the session.
+  - Change the prompt and apply again. `./attn automation show <schedule-id>` labels the last run's session as superseded until the next occurrence starts its replacement. `runs <schedule-id>` keeps all occurrences and marks the old session's `automation.superseded` as `true`. The drawer's run history labels that session "Superseded session" and still opens it.
+  - In queue flow the automation group and queue bar count only the current session, including when the old sessions are recoverable. An old session that is still owed a turn remains reachable through the next-run button, palette and ⌘⇧J.
+  - Editing the prompt does not stop the old session's agent.
+  - Repeat the prompt edit to check that two previous sessions still leave one current run, then disable the schedule.
+- **Change a singleton's harness or prompt.**
+  - Apply `scheduled.yaml` with `schedule: {cron: "@every 3s", time_zone: UTC}`, with `ATTN_AUTOMATION_SCHEDULE_INTERVAL=1s` in the instance shell before the daemon starts.
+  - When a run is `delivered`, disable the schedule and note its `seed_id` and `session_id`.
+  - Change `driver: codex` to `driver: claude`, apply it with the same `id`, and enable it again. The next `delivered` run in `./attn automation runs <schedule-id>` has a new `session_id` and the same `seed_id`, and the old run reads `automation.superseded: true`. `./attn seed show <seed>` names the new session as tender, with a move note saying it forced `attn seed tend` while the old session held the seed. `wsctl list` still lists the old Codex session.
+  - Change the prompt and apply again: the next run has a new `session_id` and the same `seed_id` again.
+  - Disable the schedule when done.
 - **Close a singleton's session.** On the enabled schedule, after a second run reuses the first run's session, disable it and close that session from its tile or with `wsctl rm-session --id <session>`. `./attn automation show <schedule-id>` still shows the session as current. Enable it again: the next occurrence reopens the same session on its conversation and seed. Disable it when done.
 - **A guarded schedule.** Use `scheduled.yaml` with `schedule: {cron: "@every 3s", time_zone: UTC}`, `continuity: singleton` and `guard: cat state.txt`. Before starting the daemon, set `ATTN_AUTOMATION_SCHEDULE_INTERVAL=1s` in the instance shell. Write `red` to `$R/state.txt`, validate and apply the definition, and capture `./attn automation show <guard-id>`, `list` and `runs <guard-id>` at each step. Wait on an `automations_changed` broadcast, then read `list` for the expected `guard_check`.
   - The first check reads `launched`. The run's opening names an occurrence input file containing `"guard_output":"red"`. Read it from the run's agent to prove the input arrived.
@@ -183,7 +194,11 @@ EOF
 ```
 
   `<review-id>` is the `id` that `apply` prints. Run `wsctl refresh-prs`. It prints `PR refresh completed` and establishes the automation's initial observation. Existing review requests do not start runs. Withdraw the mock request with `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/requested" -H 'content-type: application/json' -d '{"active":false}'`, then run `wsctl refresh-prs`. Request review again with the same command carrying `'{"active":true}'`, then run `wsctl refresh-prs`. Re-read `./attn automation runs <review-id>` for up to 45 seconds until a run is `delivered`. `./attn agent list --json` gives the run's session's `directory`, and `git -C <directory> rev-parse HEAD` equals `git -C $G rev-parse HEAD`.
-- **A Codex run that exits before its first turn.** Write a stand-in Codex that leaves a screen and exits, `printf '#!/bin/sh\necho "thread/start failed during TUI bootstrap: drive refusal"\nexit 1\n' > $P/codex-exits && chmod +x $P/codex-exits`, and apply `manual.yaml` again with `name: Drive failing launch` and `executable: $P/codex-exits`. Run `./attn automation run <failing-id>`. If Codex has already exited, the command exits 1 and names `codex exited with code 1 before its first turn` and the screen. Otherwise the command prints the run `pending`. Re-read `./attn automation runs <failing-id>` until the run is `failed` with that `last_error`. The run is never `delivered`, and `./attn seed show <seed>` shows the run's seed withered with a note carrying the screen. The drawer marks the automation with its failure badge. Delete it when done.
+- **A Codex run that exits before its first turn.**
+  - Write a stand-in Codex that leaves a screen and exits, `printf '#!/bin/sh\necho "thread/start failed during TUI bootstrap: drive refusal"\nexit 1\n' > $P/codex-exits && chmod +x $P/codex-exits`, and apply `manual.yaml` again with `name: Drive failing launch` and `executable: $P/codex-exits`.
+  - Run `./attn automation run <failing-id>`. If Codex has already exited, the command exits 1 and names `codex exited with code 1 before its first turn` and the screen. Otherwise the command prints the run `pending`.
+  - Re-read `./attn automation runs <failing-id>` until the run is `failed` with that `last_error`. The run is never `delivered`, and `./attn seed show <seed>` shows the run's seed withered with a note carrying the screen. The drawer marks the automation with its failure badge.
+  - Delete the automation when done.
 - **Run one pull request by hand.** A manual automation with a repository location takes a pull request URL. Write `$P/pull-request.yaml` like `review.yaml` with `name: Drive pull request` and `trigger: {type: manual}` in place of the review trigger, apply it, and run `./attn automation run <pull-request-id> --pr-url https://mock.github.local/owner/repo/pull/42`. It prints the run as JSON, and `./attn automation runs <pull-request-id>` shows it `delivered`.
 - **Clean up and delete.** Run `./attn automation cleanup <id>`: it prints `cleaned`, `kept_dirty` and `kept_active` lists. Click `[data-testid="automation-edit-<id>"]` natively, then `[data-testid="automation-form-delete"]` natively: it reads `Confirm delete`. Click it again: `./attn automation list` no longer lists `<id>`. Run `./attn automation delete <schedule-id>`: it prints `{"deleted": <schedule-id>}`. Do the same for `<review-id>` and `<pull-request-id>`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn automation runs <id>` after each run, `./attn agent peek <session>`, `bridge automations_get_state` after each drawer action, `bridge get_state` after each ⌘⇧J, and `bridge capture_screenshot '{"path":"<P>/automations-drawer.png"}'` with the drawer open, where `<P>` is the folder's path written out. Name each file for its way in, such as `automations-drawer-run-now-state.json`.
@@ -213,7 +228,7 @@ EOF
 - `attn automation` has no help: `--help` exits 1 with `unknown automation command "--help"`, after resolving the current session. Read `cmd/attn/automation.go` or the form for the fields.
 - `location.path` must be an absolute folder that exists. Write the definition with the path filled in, as the heredoc above does. attn refuses `~` and relative paths.
 - The run's agent reads its fixture from `location.path`. For a review request the worktree is the folder, so a fixture has to be committed in the repository for the mock to say anything. Without a committed fixture, the run still delivers, silently.
-- A run needs the user only while it owes a turn: its agent has stopped and the turn is not snoozed. ⌘⇧J skips a run that is still working and a run the user snoozed.
+- A run needs the user only while it is owed a turn: its agent has stopped and the turn is not snoozed. ⌘⇧J skips a run that is still working and a run the user snoozed.
 - Schedules fire on the minute tick. A run within seconds is not expected. `ATTN_AUTOMATION_SCHEDULE_INTERVAL`, set before the daemon starts, shortens the tick.
 - Allow for the tick and launch when waiting for another occurrence. A live baseline created consecutive occurrences 66 seconds apart. A one-minute deadline expired just before the second appeared. The recipe allows two minutes for each occurrence.
 - A review run fires on the next pull request refresh (`wsctl refresh-prs`), not when the mock GitHub changes. The mock lists `owner/repo#42` only after `/__control/head` names a commit.

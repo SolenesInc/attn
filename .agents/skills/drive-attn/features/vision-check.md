@@ -26,8 +26,8 @@ Claude Code, whatever harness the agent runs in, and never touches the daemon.
 
 Preconditions:
 
-- The baseline instance. Vision check needs no daemon and no session, so `./attn` in the instance shell stands in for the agent.
-- A proof folder holding a stand-in `claude` and an image, so no real model is called:
+- Use the baseline instance. Vision check needs no daemon and no session, so `./attn` in the instance shell stands in for the agent.
+- Make a proof folder holding a stand-in `claude` and an image, so no real model is called:
 
 ```bash
 P=$(mktemp -d /tmp/drive-attn-vision-check.XXXX) && echo "export P=$P" >> $DRIVE_ENV && mkdir -p $P/bin

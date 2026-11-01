@@ -317,15 +317,15 @@ HEAD.
 ## Features
 
 How the recipes were checked: the Driving it section of
-[garden.md](garden.md) ran live on a named instance, for the daemon and the
-CLI only, at commit `b3d0df90a`. Every step that ran used the instance shell and the agents' entrypoints. In those steps the mock agent tended, watched, armed a
-harvest on merge and harvested. Three groups of steps come from reading the
-source and the CLI's help and have not run yet: the garden.md steps that arm
-a harvest without a url and take the arming back, the garden.md `bridge`
-steps, and the Driving it section of every other file. The env file and its
-prefix replaced the shell that the run used. The check of the env file and its
-prefix used a stand-in `attn`, not an instance. A file whose recipe runs live says so
-here.
+[garden.md](garden.md) ran live on a named instance at commit `b3d0df90a`, for
+the daemon and the CLI only. Those steps used the instance shell and the
+agents' entrypoints. In them the mock agent tended, watched, armed a harvest on
+merge, and harvested. Three groups of steps come from reading the source and the
+CLI's help and have not run: the garden.md steps that arm a harvest without a
+url and take the arming back, the garden.md `bridge` steps, and the Driving it
+section of every other file. The live run used its own shell, not the env file
+and its prefix. Those were checked only against a stand-in `attn`, not an
+instance. A file whose recipe ran live says so here.
 
 ### Agents and sessions
 

@@ -41,11 +41,11 @@ compacts at a budget they choose.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- For pixel proof of the receipt and terminal, use `bridge capture_native_window_screenshot`: it captures the parked window without bringing it forward.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX) && echo "export U=$U" >> $DRIVE_ENV`, holding `{"version": 1, "resumable": true, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
-- The agent, started and on screen: `wsctl add-session --cwd $U --agent claude --label usage-agent --id usage-agent --place`, then `bridge select_session '{"sessionId":"usage-agent"}'` for setup.
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- For pixel proof of the receipt and terminal, run `bridge capture_native_window_screenshot`. It captures the main window by its window number with `screencapture -l` and does not bring the window forward.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-usage.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX) && echo "export U=$U" >> $DRIVE_ENV`, and save `{"version": 1, "resumable": true, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
+- Start the agent and put it on screen: run `wsctl add-session --cwd $U --agent claude --label usage-agent --id usage-agent --place`, then `bridge select_session '{"sessionId":"usage-agent"}'` for setup.
 
 `<terminal>` is the agent's terminal id from `wsctl list`. `<P>` is the proof folder's path written out.
 
@@ -87,7 +87,7 @@ Preconditions:
 - A price override needs all five rates. attn refuses an override with a rate missing and names the five.
 - Use `"resumable": true` in the fixture so the relaunch can find the prior conversation in scratch harness storage. Without it the cap reload starts fresh and has no `Measured.` reply to replay.
 - A reload keeps the terminal id and can keep `state_since` when the state stays waiting. Change the fixture banner before a cap action, then read the new banner and replay to prove the process restarted.
-- A parked-window `capture_screenshot` can miss the receipt and terminal layers even when DOM reads find them. The screenshot precondition uses an on-screen app and `capture_native_window_screenshot`. That command showed the receipt and instance marker on `drive-1`.
+- A parked-window `capture_screenshot` can miss the receipt and terminal layers even when DOM reads find them. The screenshot precondition uses `capture_native_window_screenshot` for that reason. That command showed the receipt and instance marker on `drive-1`.
 - Background-cap fields can be below the settings viewport. `dom_native_point` scrolls each into view before returning its point.
 - Setting or clearing a cap relaunches the agent at once.
 - A native click on the badge pins the receipt but leaves keyboard focus off the badge, on the terminal input, so ↓ after a click reaches the agent, not the badge.

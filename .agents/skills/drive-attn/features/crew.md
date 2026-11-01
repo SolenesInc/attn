@@ -32,7 +32,7 @@ marks. With crew v2 on, the chief is a crew member that every profile has.
 - `chief-member`: with crew v2 on, the Chief is a crew member that every profile has. attn creates the Chief when the switch turns on, at daemon start and with each new profile, prefilled from the session that was chief. `chief` reaches the Chief under any name. The Chief can't be closed or retired and gets no heartbeat or auto-sleep. The chief's powers follow the Chief's current session.
 - `chief-slot`: with crew v2 on, the Chief's row at the top of the sidebar's Crew section, in queue and desktop flow. While the Chief has no harness, the row opens a setup popover (harness, model, effort, Notebook folder), where Enter saves and then wakes. Otherwise the row is the Chief's crew row with one-click wake, Sleep, "Harness and model…" and "Edit charter".
 - `send-to-chief`: hand a seed to the chief, who decides how the seed continues.
-- `crew-queue`: whether crew members owing a turn wait in the queue.
+- `crew-queue`: whether crew members that are owed a turn wait in the queue.
 - `crew-guidance`: what attn tells members and the chief.
 
 ## How to get to it
@@ -71,10 +71,10 @@ marks. With crew v2 on, the chief is a crew member that every profile has.
 
 Preconditions:
 
-- The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`). The rest need only the daemon.
-- A member home made before the daemon starts, since a daemon reads new homes only at start: `M="$(./attn instance resolve --field dataDir)/crew/fern" && printf 'export M=%q\n' "$M" >> "$DRIVE_ENV"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-crew.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- A member folder, `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, holding this fixture as `$C/.attn-mock-agent.json`:
+- Use the baseline instance. The steps that run `bridge` also need its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a member home before the daemon starts, since a daemon reads new homes only at start. Run `M="$(./attn instance resolve --field dataDir)/crew/fern" && printf 'export M=%q\n' "$M" >> "$DRIVE_ENV"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-crew.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make a member folder with `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, and save this fixture as `$C/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -92,7 +92,7 @@ Preconditions:
 ]}
 ```
 
-- A sender for mailbox messages: `wsctl add-session --cwd $C --agent shell --label crew-caller --id crew-caller`.
+- Start a sender for mailbox messages with `wsctl add-session --cwd $C --agent shell --label crew-caller --id crew-caller`.
 
 `<fern>` is the terminal of Fern's current session: the `runtime_id` of the tile in `wsctl list` whose `session_id` is the session `./attn crew list` names. Each wake, harness switch and mailbox wake starts a session in a new terminal, so read it again after each. Before each send to Fern, re-read `./attn agent peek fern` until its `state:` line stops reading `working`. A turn that is still running delays the ring.
 
@@ -139,7 +139,7 @@ Preconditions:
 - **Harnesses**: `attn crew set --agent` picks claude, codex or an installed plugin driver, and `attn crew wake --agent` overrides that choice for one session. With `crew_v2_enabled`, the v2 prompts under Agents and harness memory settings apply at the next launch: Claude Code gets "How you work" in its appended system instructions, and Codex, plain or shared, in its developer instructions.
 - **Keyboard and native input**: the palette opens the panel, Escape closes it, and the wake sun is a button that Enter or Space arms and then confirms.
 - **Compatibility across versions**: crew memory was removed. With `crew_v2_enabled` on, attn records the session that filed a letter, so attn keeps that session's transcript. The store's crew migrations carry older member records forward. `attn handoff --sleep` and `--nap` are retired and exit 2 with `flag provided but not defined: -sleep` or `-nap`. A member session an earlier build started was told to file with `attn handoff --sleep` to sleep. Plain `attn handoff` now also sleeps the member. A session started by an earlier build therefore sleeps on plain `attn handoff` even when its instructions promised a successor while the user is present.
-- **Flow**: in desktop flow, the sidebar lists asleep members above the desktops. In queue flow, the queue sidebar has a crew block with awake and asleep members, and "Put the crew in the queue" lets a member owing a turn wait in the queue.
+- **Flow**: in desktop flow, the sidebar lists asleep members above the desktops. In queue flow, the queue sidebar has a crew block with awake and asleep members, and "Put the crew in the queue" lets a member that is owed a turn wait in the queue.
 
 ## Tests
 

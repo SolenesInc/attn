@@ -6,7 +6,7 @@ the user is in. They write a note, attach files or screenshots, pick the chief
 or a crew member, and press Enter. attn types the message into that agent's
 conversation as the user's message, waking an asleep member first. The
 panel keeps a draft between openings and lists recent messages with whether
-each message's agent has read it. Quick capture is an experimental setting, off by
+each message's agent has retrieved it from its inbox. Quick capture is an experimental setting, off by
 default, and the panel is macOS only.
 
 ## Sub-features
@@ -16,7 +16,7 @@ default, and the panel is macOS only.
 - `capture-mailbox`: send to the chief or one of the profile's crew members.
 - `capture-files`: attach files and images by paste or drop. The agent saves each file with `attn agent attachment`.
 - `capture-draft`: the unsent text and files survive hiding the panel and restarting the app.
-- `capture-history`: recent messages, each marked once its agent retrieved it.
+- `capture-history`: recent messages, each marked "Read" once its agent retrieved the message from its inbox, and "Sent" before.
 - `capture-delivery`: the message lands as a user message in the mailbox's session, waking an asleep member.
 - `capture-guidance`: what attn tells agents about messages from quick capture.
 
@@ -28,7 +28,7 @@ default, and the panel is macOS only.
 - Native menu: File, Quick Capture (`app/src-tauri/core/src/lib.rs`), enabled while quick capture is on. It has no key equivalent.
 - The panel (`app/src/components/QuickCapture.tsx`): the "Message" field, "To: <mailbox>" (`[aria-label="Send to"]`, ⌘K) with its list, ⌘1 to ⌘4 for the first four mailboxes, Enter to send, Shift+Enter for a new line, Escape closes the list first, then the history, then the panel. Dragging the panel's surface outside the message field and its controls moves the panel. In history, only the heading drags. Each time the panel opens, it centers on the screen that has the pointer. "Recent messages" shows the history (`app/src/components/QuickCaptureHistory.tsx`), and attached files show as previews (`app/src/components/QuickCaptureAttachmentPreview.tsx`).
 - Settings, Experimental: the "Quick Capture" switch (`[role="switch"][aria-label="Quick Capture"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do with it: the message appears in the chief's or member's terminal as typed text, and the history marks it once the agent retrieved it.
+- Where people see what agents do with it: the message appears in the chief's or member's terminal as typed text, and the history marks it "Read" once the agent retrieved it.
 
 ### Agents
 
@@ -43,9 +43,9 @@ default, and the panel is macOS only.
 
 Preconditions:
 
-- macOS. The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- A crew member, Fern, made as [crew.md](crew.md)'s preconditions say, with `./attn crew set fern --cwd $C --agent claude`, where `$C` holds this fixture as `$C/.attn-mock-agent.json`:
+- Run on macOS. Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make a crew member, Fern, as [crew.md](crew.md)'s preconditions say, with `./attn crew set fern --cwd $C --agent claude`, where `$C` holds this fixture as `$C/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -117,4 +117,4 @@ EOF
 - `bridge capture_state` waits for the expectations you pass, such as `{"visible":true}` or `{"mailbox":"fern"}`, and fails when they never hold. Call it without them for a plain read.
 - The chief and crew members launched before quick capture turned on lack its guidance, but still get the typed messages.
 - attn types a capture only after 30 seconds of quiet in the agent's terminal. `wsctl input` to that agent restarts the wait.
-- Working but wrong: "Saved for <mailbox>" means attn stored the message, not that the agent saw it, and the history's retrieved mark says "not necessarily understood or acted upon". The proof is the typed text on the agent's screen.
+- Working but wrong: "Saved for <mailbox>" means attn stored the message, not that the agent saw it, and the history's "Read" mark has the tooltip "Retrieved from the inbox; not necessarily understood or acted upon." The proof is the typed text on the agent's screen.

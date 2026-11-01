@@ -40,8 +40,8 @@ None. An agent's attn commands act in its session's profile and cannot name anot
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-profiles.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-profiles.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 `<default>` and `<drive>` below are the profile ids `bridge get_state` prints under `arrangement.profiles`. `<seed>` is the id `seed plant` prints.
 

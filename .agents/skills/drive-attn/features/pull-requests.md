@@ -50,10 +50,10 @@ and mute.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The daemon started with the mock GitHub exports of the env file ([../SKILL.md](../SKILL.md)), so the home screen lists the fixture's pull requests instead of "GitHub polling is off for instance <name>".
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-pull-requests.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new. Start the daemon with the mock GitHub exports of the env file ([../SKILL.md](../SKILL.md)), so the home screen lists the fixture's pull requests instead of "GitHub polling is off for instance <name>".
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-pull-requests.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Home-screen actions appear only while their row is hovered or focused. Before each action, resolve the point of its `[data-testid="pr-card"]` row with `bridge dom_native_point` and move over it with `bridge native_mouse '{"action":"move","x":<x>,"y":<y>}'`. Then resolve the action button's point and click it. Use `[data-testid="pr-section-yours"] [data-testid="pr-card"]` for the first own pull request, and `[data-testid="pr-section-review"] [data-testid="pr-card"]` for the first review request.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-pr-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. `unwatch` comes before `watch` because the first turn whose `includes` matches wins:
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-pr-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`. `unwatch` comes before `watch` because the first turn whose `includes` matches wins:
 
 ```json
 {"version": 1, "turns": [

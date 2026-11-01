@@ -1,7 +1,7 @@
 # Shared PTY host
 
 The shared Rust PTY host is experimental and off by default. Enable it under
-Settings → Experimental → Shared terminal host. The setting applies to new and
+**Settings → Experimental → Shared terminal host**. The setting applies to new and
 explicitly reloaded sessions. Running sessions keep their current backend. If the
 host is unavailable, new launches fall back to Go workers.
 `ATTN_PTY_BACKEND` overrides the setting.
@@ -70,7 +70,8 @@ bash scripts/measure-pty-host.sh /absolute/path/to/attn-pty-host attempt-name
 ```
 
 The script prints `PTY_RESOURCE` JSON records for 1, 8, and 32 terminals, idle and under
-8 MiB output floods. On an Apple M5 Max, 32 empty terminals take about 8 MiB,
-roughly 180 KiB per terminal, and idle CPU is near zero. On Linux amd64, 32
+8 MiB output floods. On an Apple M5, 32 empty terminals take about 4.4 MiB of
+physical memory (9.9 MiB resident), which is about 72 KiB for each terminal after
+the first, and idle CPU is near zero. On Linux amd64, 32
 empty terminals take 7.2–7.7 MiB PSS, and an 8 MiB flood costs about 320 ms of
 host CPU detached and 390 ms attached.

@@ -18,15 +18,15 @@ to to work as a Pathfinder, and it takes the role right there.
 
 ## Before you start
 
-Open Settings > Delegation and click "Add Attn roles", or run
+Open **Settings → Delegation** and click "Add Attn roles", or run
 `attn delegate roles install`. Either action adds the five roles and installs
 the attn-workflow skill. Each role reads the skill to learn how to work.
 See [delegation](../reference/delegation.md#roles) for what each role is.
 
-The roles arrive without a model, and agents can't pick a role until it has one.
-Pick a harness and model for each role you want to use, in the "Runs on" column.
-You can also ask any agent to set them for you. The agent changes the table with
-`attn delegate roles`.
+The roles arrive without a model, and
+[agents can't pick a role until it has one](../reference/delegation.md#roles).
+Pick a harness and model for each role you want to use, in the "Runs on"
+column. You can also ask any agent to set them for you.
 
 ## Plan with a Pathfinder
 
@@ -71,7 +71,7 @@ changes what you agreed. You may need to adjust your project's autonomy
 settings, and your local skills, so the Orchestrator can move on its own.
 
 When the Orchestrator has questions, it waits for you like any agent. With Asks
-turned on in Settings > Experimental, it sends you an ask instead and keeps
+turned on in **Settings → Experimental**, it sends you an ask instead and keeps
 working on everything else. Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks
 drawer to answer the ask. You can still open any Builder and talk to it at any
 time. The chain button on an agent's sidebar row shows everyone in the chain.

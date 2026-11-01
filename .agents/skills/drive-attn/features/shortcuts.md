@@ -16,7 +16,7 @@ restarts.
 - `protected`: Settings, Keyboard shortcuts and Quit can be rebound but never unbound.
 - `chords`: a leader combination, then one key, within 600 ms.
 - `dock`: the shortcuts the sidebar dock shows, in order, and the dock hidden or shown.
-- `linux-bindings`: Linux defaults, which use Ctrl where macOS uses ⌘.
+- `linux-bindings`: Linux defaults, which use Ctrl+Shift where macOS uses ⌘, or Ctrl+Alt where the macOS binding already has Shift.
 - `keybindings-setting`: rebinds and the dock as the home setting `keybindings_config`, read and reset from a shell.
 
 ## How to get to it
@@ -39,9 +39,9 @@ None. An agent can only read or reset `keybindings_config` as a setting. See [se
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), except where a step replays it.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- The sidebar expanded, so `.sidebar-dock-items` is in the page: if `bridge dom_wait '{"selector":".sidebar-dock-items","timeoutMs":2000}'` times out, press ⌘B (`bridge native_key '{"key":"b","modifiers":["command"]}'`).
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, except where a step replays it.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Expand the sidebar so `.sidebar-dock-items` is in the page: if `bridge dom_wait '{"selector":".sidebar-dock-items","timeoutMs":2000}'` times out, press ⌘B (`bridge native_key '{"key":"b","modifiers":["command"]}'`).
 
 - **Read a binding.** Run `bridge shortcut_binding '{"shortcutId":"ui.showShortcuts"}'`. It returns `binding` with `key: "/"` and `meta: true`. `./attn settings get keybindings_config` prints an empty line on a fresh instance.
 - **The cheat sheet with its shortcut.** Press ⌘/: `bridge native_key '{"key":"/","modifiers":["command"]}'`, then `bridge dom_wait '{"selector":"#shortcuts-modal-title","timeoutMs":5000}'`. `bridge dom_text '{"selector":".shortcuts-body"}'` lists the categories, "App" among them, and their rows with keys, "Settings" and "Keyboard shortcuts" among the rows. Press ⌘/ again: `bridge dom_wait '{"selector":"#shortcuts-modal-title","absent":true,"timeoutMs":5000}'` matches.
@@ -64,7 +64,7 @@ Preconditions:
 - **Durability across restarts**: rebinds and the dock live in the daemon's `keybindings_config` and come back after any restart, in every window.
 - **Linux**: `LINUX_SHORTCUTS` holds the Linux defaults. Plain Ctrl and a letter belong to the shell, so app actions use Ctrl+Shift, or Ctrl+Alt where the macOS binding already has Shift: `ui.showShortcuts` is Ctrl+Shift+/ there. The editor stores a recorded ⌘ as the accelerator. On Linux the accelerator is Ctrl.
 - **Profiles**: one set of shortcuts and one dock serve every profile.
-- **Keyboard and native input**: macOS menu items take some keys before the app sees them. ⌘. belongs to the File menu's Stop Countdown, so `session.cancelCountdown` shows the Menu bar badge and cannot be rebound. ⌘W belongs to the File menu's item for closing the active tile. That item closes the tile whatever `session.close` is bound to. Quit (⌘Q), Hide (⌘H) and Minimize (⌘M) stay with the menu. While a row records, every app shortcut pauses, so ⌘, records instead of opening Settings. A focused editor or input keeps ⌘F, ⌘↑, ⌘↓, ⌘B, ⌘⇧Z and ⌘Enter for itself. On macOS the editor refuses Control as a modifier.
+- **Keyboard and native input**: macOS menu items take some keys before the app sees them. ⌘. belongs to the File menu's Stop Countdown, so `session.cancelCountdown` shows the Menu bar badge and cannot be rebound. ⌘W belongs to the File menu's item for closing the active tile. That item closes the tile whatever `session.close` is bound to. Quit (⌘Q), Hide (⌘H) and Minimize (⌘M) stay with the menu. While a row records, every app shortcut pauses, so ⌘, records instead of opening Settings. A focused editor or input keeps ⌘F, ⌘↑, ⌘↓, ⌘B, ⌘⇧Z and ⌘Enter for itself. On macOS the editor's shortcut rows refuse Control as a modifier, but its "Global Quick Capture shortcut" section accepts Control, and the default is ⌃⌥⌘Space ([quick-capture.md](quick-capture.md)).
 - **Compatibility across versions**: `board.open` keeps its id, so saved rebinds of the garden's key still apply. Rebinds saved under the desktop switch keys' earlier ids load under `desktop.select1` to `desktop.select9`, and the app drops ids that no longer exist.
 - **Flow**: ⌘↑ and ⌘↓ (`session.prev`, `session.next`) move between desktops in desktop flow and between agents in the queue in queue flow. The cheat sheet notes both.
 

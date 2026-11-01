@@ -19,5 +19,5 @@ gh pr create
   and only with the user's permission.
 - The slopradar comment is information for the reviewer, never a gate.
 - Watch with a [PR watch](../guide/reference/delegation.md#watching-pull-requests) in `--mode codex`.
-- `next` is a read-only mirror of `main` for older checkouts. Nothing merges
-  into it.
+- Do not target `next`. It is a read-only mirror of `main`, described in
+  [Making a release](making-a-release.md#the-next-branch).

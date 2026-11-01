@@ -55,9 +55,9 @@ sessions on a launch desktop.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `check.yaml`: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and save `check.yaml` in it: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
 
 ```json
 {"version": 1, "turns": [
@@ -73,7 +73,7 @@ Preconditions:
 ]}
 ```
 
-- A shell and an agent on the current desktop: `wsctl add-session --cwd $P --agent shell --label desk-shell --id desk-shell --place` and `wsctl add-session --cwd $A --agent claude --label desk-agent --id desk-agent --place`. In `wsctl list`, `<shell>` and `<agent>` are their `runtime_id` values. `<desktop>` is `arrangement.currentDesktopId` in `bridge get_state`, and `<n>` is that desktop's `slot` there (its `shortcut_slot` in `wsctl list`), 1 on a fresh instance. The steps below use slots 2 and 3 for the other desktops.
+- Start a shell and an agent on the current desktop with `wsctl add-session --cwd $P --agent shell --label desk-shell --id desk-shell --place` and `wsctl add-session --cwd $A --agent claude --label desk-agent --id desk-agent --place`. In `wsctl list`, `<shell>` and `<agent>` are their `runtime_id` values. `<desktop>` is `arrangement.currentDesktopId` in `bridge get_state`, and `<n>` is that desktop's `slot` there (its `shortcut_slot` in `wsctl list`), 1 on a fresh instance. The steps below use slots 2 and 3 for the other desktops.
 
 - **Split with the keyboard.** Select the shell for setup with `bridge select_session '{"sessionId":"desk-shell"}'`. Run `bridge native_key '{"key":"d","modifiers":["command"]}'`. `bridge get_desktop '{"sessionId":"desk-shell"}'` lists one more entry in `panes`, and `wsctl list` shows a new `"agent": "shell"` entry on `<desktop>`. Run `bridge native_key '{"key":"d","modifiers":["command","shift"]}'` with the new shell active: a third shell opens, and `bridge get_session_ui_state '{"sessionId":"desk-shell"}'` lists splits of both kinds in `desktop.splits`, one with `direction: "vertical"` and one with `direction: "horizontal"`. The ids of the two new shells are `sessions[].id` in `wsctl list`, selecting entries whose `agent` is `shell` other than `desk-shell`: call them `<split-1>` and `<split-2>`.
 - **Move focus, zoom and focus.** Run `bridge native_key '{"key":"ArrowLeft","modifiers":["command","option"]}'`: `desktop.view.activeLeafId` in `get_session_ui_state` names another tile. Run `bridge native_key '{"key":"z","modifiers":["command","shift"]}'`: `desktop.view.zoomedPaneId` names the active tile. Press the key again, and `zoomedPaneId` is null. Run `bridge native_key '{"key":"Enter","modifiers":["command","shift"]}'`: `desktop.view.maximizedPaneId` names the active tile. Press the key again, and `maximizedPaneId` is null.

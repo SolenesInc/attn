@@ -107,8 +107,6 @@ On a `fakeagent.Run`:
   `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. The package
   that arms each stepped timer names it, so a wait never matches another
   operation's timer of the same duration.
-  A test that waits for such a timer without advancing fails at the hang
-  guard.
 - Transcript watchers, including a driver plugin's usage watcher, poll on
   that clock too. Whenever a fake agent writes a transcript, the poll
   (`sessionmonitor.TranscriptPoll`) fires without moving the clock. The poll

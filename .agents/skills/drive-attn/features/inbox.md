@@ -45,9 +45,9 @@ does to the queue.
 
 Preconditions:
 
-- The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
+- Use the baseline instance with the daemon only.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
 
 ```json
 {"version": 1, "turns": [
@@ -65,7 +65,7 @@ Preconditions:
 ]}
 ```
 
-- Two agents: `wsctl add-session --cwd $A --agent claude --label inbox-a --id inbox-a` and the same with `inbox-b`. `<a>` and `<b>` are their terminal ids from `wsctl list`. `<message>` is the id a receipt prints.
+- Start two agents with `wsctl add-session --cwd $A --agent claude --label inbox-a --id inbox-a` and the same with `inbox-b`. `<a>` and `<b>` are their terminal ids from `wsctl list`. `<message>` is the id a receipt prints.
 - Settle inbox-b once: run `wsctl input --id <b> --text "ready" --enter`, wait until the `state:` line of `./attn agent peek inbox-b` stops reading `working`, and start the first step 30 seconds after the input. Wait for the same state before each later send to inbox-b, because a turn still running holds the ring back.
 
 - **Message an agent.** Run `wsctl input --id <a> --text "tell inbox-b" --enter`. `./attn agent peek inbox-a` shows the receipt `notified: notified inbox-b (id <message>)`. The ring types the 📬 line into inbox-b, which reads its inbox: `./attn agent peek inbox-b` shows `📨 from inbox-a: hello from the sender` and the note that the message is from another agent, not the user.

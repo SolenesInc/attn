@@ -85,8 +85,6 @@ Probed on 2.1.288 with a mock API.
 
 Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 
-- `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` turns auto-memory off. A new working
-  directory alone does not turn it off.
 - A fresh `CLAUDE_CONFIG_DIR` uses a separate configuration and projects
   directory. On macOS, `auth status` reported `loggedIn: false` there while
   the default configuration was authenticated. An isolated run needs its own
@@ -221,7 +219,8 @@ terminal running a shell keeps its agent view. That terminal has no
 The [Claude memory documentation](https://code.claude.com/docs/en/memory)
 defines `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` to disable auto memory for one
 process. The switch is present in the installed 2.1.310 binary. The switch
-leaves the user's stored memory files in place.
+leaves the user's stored memory files in place. A new working directory alone
+does not turn auto memory off (checked with unpaid CLI probes on 2.1.310).
 
 ### Program status (OSC 7501)
 

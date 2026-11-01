@@ -36,10 +36,10 @@ None. The agent palette's rows show what agents do: their state, turn and priori
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-palette.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-palette-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
-- Two agents: `wsctl add-session --cwd $A --agent claude --label pal-a --id pal-a`, then the same with `pal-b`. Both owe a turn once they finish booting.
-- A tile that is not an agent: `./attn seed plant "Palette tile"` prints a line of the seed's id, slug and title, and `<seed>` is that id. `./attn open <seed>` prints `opened <seed>` and puts the seed's tile on the current desktop ([garden.md](garden.md)).
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-palette.XXXX) && echo "export P=$P" >> $DRIVE_ENV` and an empty agent folder with `A=$(mktemp -d /tmp/drive-attn-palette-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
+- Start two agents with `wsctl add-session --cwd $A --agent claude --label pal-a --id pal-a`, then the same with `pal-b`. Both are owed a turn once they finish booting.
+- Make a tile that is not an agent. Run `./attn seed plant "Palette tile"`: it prints a line of the seed's id, slug and title, and `<seed>` is that id. Run `./attn open <seed>`: it prints `opened <seed>` and puts the seed's tile on the current desktop ([garden.md](garden.md)).
 
 - **Open the agent palette.** Run `bridge native_key '{"key":"k","modifiers":["command"]}'` and `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Agents\"]","focused":true,"timeoutMs":5000}'`. `bridge dom_text '{"selector":".unified-palette-count"}'` reads `3 of 3`, and `[data-testid="palette-agent-pal-a"]`, `[data-testid="palette-agent-pal-b"]` and `[data-testid^="palette-tile-"]` all match.
 - **Search and go to an agent.** Run `bridge native_text '{"text":"pal-b"}'`: the count reads `1 of 3`. Run `bridge native_key '{"key":"Enter"}'`: `bridge dom_wait '{"selector":"[role=\"dialog\"][aria-label=\"Agents\"]","absent":true,"timeoutMs":5000}'` matches, and `bridge get_state` shows `activeLeaf.sessionId: "pal-b"`.
@@ -63,7 +63,7 @@ Preconditions:
 - **Harnesses**: the context-cap command shows only for Claude Code and Codex agents. Shared Codex adds commands of its own ([shared-codex.md](shared-codex.md)).
 - **Keyboard and native input**: everything in the palette is a key. ↑ and ↓ step over the divider and headings, and Escape closes it and gives focus back to where it was. ⌘K and ⌘⇧K do nothing while Settings, the shortcut sheet, the location picker, What's new, the ledger, the fullscreen notebook, crew management, the fullscreen garden, another dialog waiting for an answer, or a snooze menu is open. The palette's settle, snooze and priority keys need a single-key binding. If one is bound to a chord, the footer says it needs a single-key shortcut.
 - **Compatibility across versions**: history is kept by command id. A renamed id starts with no history.
-- **Flow**: agent rows follow queue order in both flows. In queue flow the command palette adds snooze and unsnooze for the agent on screen, and settle for any agent that owes a turn. In desktop flow settle shows only for an automation run ([queue-flow.md](queue-flow.md)). The agent palette's ⌘⇧I works in both flows. The agent palette's ⌘⇧E and ⌘⇧S follow the command palette's rules. ⌘⇧E settles an agent in the queue that owes a turn, or an automation run that owes one in either flow. ⌘⇧S snoozes only an agent in the queue, so in desktop flow it does nothing. The footer hints show only when a key applies.
+- **Flow**: agent rows follow queue order in both flows. In queue flow the command palette adds snooze and unsnooze for the agent on screen, and settle for any agent that is owed a turn. In desktop flow settle shows only for an automation run ([queue-flow.md](queue-flow.md)). The agent palette's ⌘⇧I works in both flows. The agent palette's ⌘⇧E and ⌘⇧S follow the command palette's rules. ⌘⇧E settles an agent in the queue that is owed a turn, or an automation run that is owed one in either flow. ⌘⇧S snoozes only an agent in the queue, so in desktop flow it does nothing. The footer hints show only when a key applies.
 
 ## Tests
 
@@ -79,7 +79,7 @@ Preconditions:
 - The palette learns only picks in command mode. Going to an agent or a tile, and pressing a command's shortcut directly, teach it nothing.
 - Every typed word must appear in a command's title, description or keywords. A word such as `queue` or `new` matches several commands, so type the whole title and check the highlighted row before Enter.
 - While the history loads, the list reads "Loading command history…" and Enter does nothing. Wait for `.unified-palette-option`.
-- A command missing from the list is usually conditional: the pinned ones need an agent on screen, snooze and unsnooze need queue flow, settle needs an agent that owes a turn the user can settle, and others need their feature to be available.
+- A command missing from the list is usually conditional: the pinned ones need an agent on screen, snooze and unsnooze need queue flow, settle needs an agent that is owed a turn the user can settle, and others need their feature to be available.
 - Snoozing from the agent palette opens choices inside the palette: Escape returns to the agents instead of closing.
 - Settling or snoozing from the agent palette leaves the palette open. The change shows on the row.
 - Working but wrong: the attn skill's callouts reference has an example `callout show` on `commands` that says "Everything attn can do, searchable (⌘K)", but ⌘K opens the agent palette. The Commands button and ⌘⇧K open the command palette (`internal/prompts/content/skills/attn/references/callouts.md`).

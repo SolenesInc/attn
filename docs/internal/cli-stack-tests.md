@@ -19,10 +19,10 @@ returns `testworld.Main(m)`.
   `s.PauseAt(point)` to hold the daemon or a worker the first time it reaches a
   pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`).
   `s.PauseEvery` holds the process each time. Arm the pause before `Start`, or
-  start with `s.StartHeldAt(pause)`. `s.PauseAt` and `s.PauseEvery` return the same `testworld.Pause` that a daemon wire test gets. `Await` returns the held
-  process's pid, and fails at once with the step's error when the step of a
-  `Done` point failed. `Release` lets the process go. `s.Stop()` releases every
-  hold before the daemon stops, and the next start holds again.
+  start with `s.StartHeldAt(pause)`. `s.PauseAt` and `s.PauseEvery` return the
+  same `testworld.Pause` that a daemon wire test gets, except that `Await`
+  returns the held process's pid. `s.Stop()` releases every hold before the
+  daemon stops, and the next start holds again.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once the daemon has
@@ -51,12 +51,12 @@ returns `testworld.Main(m)`.
   - the daemon's periodic loops: database backup, GitHub hosts refresh, PR
     poll, and branch monitor
 
-  Each transcript write a fake agent makes fires the transcript poll without
-  moving the clock, so the daemon reads the write with no advance. The shared
-  PTY host is not Go and keeps real time. A test that waits for one of those
-  timers without advancing fails at the hang guard. Heartbeats and kernel
-  socket deadlines keep real time, so a dial may still fail without an advance.
-  Await the connected or stalled row before you advance the liveness timers.
+  Transcript writes by a fake agent fire the transcript poll without an
+  advance, as [Daemon wire tests](daemon-wire-tests.md#timers) describe. The
+  shared PTY host is not Go and keeps real time.
+  Heartbeats and kernel socket deadlines keep real time, so a dial may still
+  fail without an advance. Await the connected or stalled row before you
+  advance the liveness timers.
 - `s.AwaitTimer(name)` waits until the timer with that `stepclock.Name`, such
   as `bridge.RetryTimer` or `pty.KillDeadlineTimer`, is pending in the daemon or
   one of its workers. The timer must have been armed or reset after the last

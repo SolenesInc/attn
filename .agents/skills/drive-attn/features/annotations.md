@@ -35,9 +35,9 @@ marked passage with what the user said about it.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) and this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX) && echo "export A=$A" >> $DRIVE_ENV`. Save `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) in it, and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -52,7 +52,7 @@ Preconditions:
 ]}
 ```
 
-- The agent on the current desktop: `wsctl add-session --cwd $A --agent codex --label anno-agent --id anno-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`. Select the agent for setup with `bridge select_session '{"sessionId":"anno-agent"}'`.
+- Start the agent on the current desktop with `wsctl add-session --cwd $A --agent codex --label anno-agent --id anno-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`. Select the agent for setup with `bridge select_session '{"sessionId":"anno-agent"}'`.
 
 - **Mark an agent's message.** Run `wsctl input --id <agent> --text "say-prose" --enter`, and wait until `./attn agent peek anno-agent` shows the sentence. In `bridge read_pane_text '{"sessionId":"anno-agent"}'`, find the row and columns of `retry wrapper`. For the first and last cells of that phrase, pass the `target` from `bridge get_pane_cell_rect '{"sessionId":"anno-agent","cell":{"col":<c>,"row":<row>}}'` to `bridge dom_native_point`, and with the two points run `bridge native_mouse '{"action":"drag","x":<x1>,"y":<y1>,"toX":<x2>,"toY":<y2>,"modifiers":["option"]}'`. `bridge get_annotation_state` shows `popupOpen: true`, the quick labels in `labels`, and `annotations` holding one entry whose `quote` reads `retry wrapper`. The popup shows the quote only once you write a comment.
 - **Comment on it.** Click `[aria-label="Write a comment"]` natively: `get_annotation_state` shows `commentFocused: true` and `popupQuote` reading `retry wrapper`. Run `bridge native_text '{"text":"Which operations are idempotent?"}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `annotations` holds one entry whose `quote` is `retry wrapper` and whose `comment` is the question.

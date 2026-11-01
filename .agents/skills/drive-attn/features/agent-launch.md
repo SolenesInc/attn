@@ -55,10 +55,10 @@ closes the session.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), on the home screen.
-- `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` in the instance shell, at the repository root.
-- A proof folder written with its physical path, `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P) && echo "export P=$P" >> $DRIVE_ENV`, and two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
-- An agent folder, `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, and stay on the home screen.
+- At the repository root in the instance shell, run `R=$PWD && echo "export R=$R" >> $DRIVE_ENV`.
+- Make a proof folder with its physical path: run `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P) && echo "export P=$P" >> $DRIVE_ENV`. Then make two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
+- Make an agent folder with `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [
@@ -119,7 +119,7 @@ Preconditions:
 ## Gotchas
 
 - `bridge` cannot click the macOS menu bar. ⌘W exercised the File menu accelerator (`handledBy: ["menu"]`), but a pointer click on File → Close Pane remains unreachable here. That pointer path needs a packaged scenario that uses `createWindowDriver().menu`. No such proof ran here.
-- Reload proof needs `"resumable": true`: the mock then writes its conversation under the scratch harness home where attn can discover it. A changed `banner` proves that a new process read the fixture. The restored reply proves the conversation survived. `state_since` can stay unchanged across a reload because it dates the state, not the process.
+- Reload proof needs `"resumable": true`: the mock then writes its conversation under the scratch harness home where attn can discover it. attn checks that storage before resuming, so a fixture without `resumable` keeps its transcript only in its own folder, and reload or Resume starts fresh. A changed `banner` proves that a new process read the fixture. The restored reply proves the conversation survived. The terminal keeps its `runtime_id`, and `state_since` can stay unchanged across a reload, because it dates the state, not the process.
 - Hover the sidebar row before clicking its actions button. The button's bounds exist even while the row hides it.
 - On an empty desktop ⌘N opens no dialog: it focuses the launcher on the desktop, `[data-testid="empty-desktop-launcher"]`. Wait for the overlay only from the home screen or a desktop with tiles.
 - The picker starts its path field empty on a fresh instance. When Settings names a projects folder, the path field starts with that path and typed text lands after the path. Press ⌘A first to replace the path.
@@ -127,8 +127,7 @@ Preconditions:
 - The auto mode switch is absent for Claude and Codex, so ⌥A has nothing to toggle on the baseline. Driving it needs Pi with the `attn-pi` plugin installed ([auto-mode.md](auto-mode.md)).
 - The spawn link selects a live session already in that folder in the selected profile, and the app ignores a link it handled before. Give each deep-link step a folder no session uses, and a label no earlier link used.
 - On macOS the spawn link goes through Launch Services. With the instance's app not running, the app it starts drops the instance shell's environment. Launch the app with `bridge --launch` first.
-- `agent reload` and `agent close` need a caller. From a plain shell they exit 2 unless `--source-session` names one, so drive them through the mock agent. A self reload can cut the command off before the command's reply, so read the result from `agent peek` and `agent list`, not from the agent's screen. The changed fixture banner and replayed conversation prove the process restarted. The terminal keeps its `runtime_id`, and `state_since` can stay unchanged when the state stays waiting. The splash looks the same before and after, so reload an agent that has already answered a prompt.
-- Use `"resumable": true` when reload or Resume must restore prior replies: attn checks the scratch harness storage before resuming. A fixture without it keeps its transcript only in its own folder, and reload starts fresh.
+- `agent reload` and `agent close` need a caller. From a plain shell they exit 2 unless `--source-session` names one, so drive them through the mock agent. A self reload can cut the command off before the command's reply, so read the result from `agent peek` and `agent list`, not from the agent's screen. The splash looks the same before and after, so reload an agent that has already answered a prompt, and read the changed fixture banner and the replayed conversation as the proof of a restart.
 - Product finding on `drive-1`: after the mock reloads itself, its restored screen shows the prior reply and a prompt, but `agent peek` stays `working (bracket_open)` past the state deadline. The next-prompt precondition does not settle.
 - A close is immediate and needs `-m`. attn refuses to close the chief and crew members, from the app and from `attn agent close`. The recipe for that is in [crew.md](crew.md).
 - The mock never quits on its own, so drive a clean quit with a shell. `wsctl kill-session` is an explicit stop: the tile stays stopped even when the process exits 0, and the session reads `idle`, not `recoverable`. `recoverable` marks a session a restart found without its terminal.

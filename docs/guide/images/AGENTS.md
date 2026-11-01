@@ -70,8 +70,9 @@ export default {
   idle) or `hold` after a `read`, `edit` or `run` (it keeps working until
   the scene ends). `prompt` returns
   once the session reaches that state.
-- `demo.ui(action, payload)` calls the app's automation bridge
-  (`app/src/hooks/useUiAutomationBridge.ts`).
+- `demo.ui(action, payload)` sends an action to the instance's UI automation
+  endpoint on localhost, which lets a script click, type and read the running
+  app (`app/src/hooks/useUiAutomationBridge.ts`).
 - `demo.still(name, { crop, highlight })` captures the window. `crop` takes a
   selector, `highlight` draws a box around one.
 - `demo.clip(name, async () => { ... })` records whatever the callback does.

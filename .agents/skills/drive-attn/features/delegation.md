@@ -49,9 +49,9 @@ the roles, and agents choose among them. A handover gives a seed and its claim t
 
 Preconditions:
 
-- The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`). The other steps need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- A delegate folder, `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX) && echo "export D=$D" >> $DRIVE_ENV`, outside Git, holding this fixture as `$D/.attn-mock-agent.json`:
+- Use the baseline instance. The steps that run `bridge` also need its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make a delegate folder outside Git with `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX) && echo "export D=$D" >> $DRIVE_ENV`, and save this fixture as `$D/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -61,7 +61,7 @@ Preconditions:
 ]}
 ```
 
-- A dispatcher folder, `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
+- Make a dispatcher folder with `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
 
 ```json
 {"version": 1, "turns": [

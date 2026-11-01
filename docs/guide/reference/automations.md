@@ -76,7 +76,7 @@ comment, or push on GitHub.
 
 In [queue flow](queue.md), runs never join the queue. The sidebar has an
 Automations group under the queue that lists each automation with its runs.
-A run that stopped and owes you a turn shows a count beside its automation,
+A run that stopped and is owed a turn shows a count beside its automation,
 and the group's header offers "N runs need you". Click it, or press
 Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
 again to open the one after. Settle a run with ✓ on its row or Cmd+Shift+E
@@ -143,7 +143,7 @@ No. Only manual automations run on demand. For a review on demand, write a manua
 <details>
 <summary>Do runs stop to ask me for permissions?</summary>
 
-Runs start unattended, with an approval reviewer in your place, so a routine permission prompt does not wait for you. A run still stops and owes you a turn when it finishes or asks you something.
+Runs start unattended, with an approval reviewer in your place, so a routine permission prompt does not wait for you. A run still stops and is owed a turn when it finishes or asks you something.
 </details>
 
 <details>

@@ -33,9 +33,9 @@ them on.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-callouts-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-callouts.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, and stay in desktop flow.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-callouts-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-callouts.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -52,7 +52,7 @@ Preconditions:
 ]}
 ```
 
-- The agent and a shell on the current desktop: `wsctl add-session --cwd $A --agent claude --label co-agent --id co-agent --place` and `wsctl add-session --cwd $A --agent shell --label co-shell --id co-shell --place`. `<agent>` is the agent's `runtime_id` in `wsctl list`.
+- Start the agent and a shell on the current desktop with `wsctl add-session --cwd $A --agent claude --label co-agent --id co-agent --place` and `wsctl add-session --cwd $A --agent shell --label co-shell --id co-shell --place`. `<agent>` is the agent's `runtime_id` in `wsctl list`.
 
 - **Off by default.** Run `wsctl input --id <agent> --text "point-garden" --enter`. `./attn agent peek co-agent` shows the command failing with `callout show: callouts are off: the user can turn them on in Settings > Experimental > Agent callouts`.
 - **The person turns them on.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-experimental"]` natively, then click `[aria-label="Search settings"]` and press ⌘A (`bridge native_key '{"key":"a","modifiers":["command"]}'`) so typing replaces any earlier search. Type `Experimental` with `bridge native_text '{"text":"Experimental"}'`. Press Tab with `bridge native_key '{"key":"Tab"}'` until `bridge dom_focus_state` shows `activeElement.ariaLabel: "Agent callouts"`. Click `[aria-label="Agent callouts"]` natively after focus has scrolled it into view. `./attn settings get callouts_enabled` prints `true`. Close settings with Escape. From the person's shell, run `./attn settings set callouts_enabled true` to do the same.

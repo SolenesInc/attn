@@ -64,10 +64,10 @@ checks.
 
 Preconditions:
 
-- The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`). The rest need only the daemon.
-- The instance's notebook folder exists: `./attn journal append --entry "drive-attn setup"` prints `appended to journal/<date>.md`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-garden.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `plot.json`: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step"},{"title":"Check step","after":["draft-step"]}]}`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-garden-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance. The steps that run `bridge` also need its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make the instance's notebook folder exist. Run `./attn journal append --entry "drive-attn setup"`: it prints `appended to journal/<date>.md`.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-garden.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and save `plot.json` in it: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step"},{"title":"Check step","after":["draft-step"]}]}`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-garden-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

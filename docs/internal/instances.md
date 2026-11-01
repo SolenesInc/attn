@@ -83,5 +83,5 @@ for diagnosis.
 
 ## UI automation
 
-Named instances expose a localhost automation bridge. Production needs
-`ATTN_AUTOMATION=1`.
+Named instances run a localhost server in the app that scripts use to drive the
+UI. Production runs it only when `ATTN_AUTOMATION=1`.

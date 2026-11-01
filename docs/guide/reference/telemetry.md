@@ -1,16 +1,16 @@
 # Telemetry
 
-attn can record how it is used on your machine and, if you choose, share that
-record with attn's maintainers. Both are off by default. Settings › Analytics
+Attn can record how it is used on your machine and, if you choose, share that
+record with Attn's maintainers. Both are off by default. **Settings → Analytics**
 shows every record, exactly as it is stored and sent.
 
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `analytics.enabled` | off | Records usage in the local outbox, gives new sessions `attn vent`, and shows Settings › Analytics. Experimental. |
-| `analytics.sharing_enabled` | off | Uploads the outbox to attn's maintainers. Needs `analytics.enabled`. |
-| `analytics.share_vents` | off | While sharing is on, queues each new attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
+| `analytics.enabled` | off | Records usage in the local outbox, gives new sessions `attn vent`, and shows **Settings → Analytics**. Experimental. |
+| `analytics.sharing_enabled` | off | Uploads the outbox to Attn's maintainers. Needs `analytics.enabled`. |
+| `analytics.share_vents` | off | While sharing is on, queues each new Attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
 | `analytics.tool_vents` | off | Lets new sessions also send tool vents, about the agent's other tools. Tool vents never leave the machine. |
 
 With `analytics.enabled` off, nothing is recorded and nothing is sent, whatever
@@ -28,15 +28,15 @@ Every record is one line of JSON:
 
 | Stream | Records |
 |---|---|
-| `bus` | Every fact on attn's event bus, except `vent.*` facts |
+| `bus` | Every fact on Attn's event bus, except `vent.*` facts |
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
 | `cli` | The outcome of each `attn` command, whether an agent or a person ran it, and the agent's harness. An agent's command, including the hooks its harness runs, carries its hashed session as the subject, matching that session's facts. A command from a person's shell has no subject. |
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
-| `vent` | An attn vent you chose to send |
+| `vent` | An Attn vent you chose to send |
 
 `seq` counts records within a stream. The server uses it to store each record once.
 
-attn redacts records on the `bus`, `app`, `cli` and `sample` streams before
+Attn redacts records on the `bus`, `app`, `cli` and `sample` streams before
 it stores them:
 
 - Numbers, booleans and nulls are kept.
@@ -52,14 +52,14 @@ it stores them:
   three booleans: has an `AGENTS.md`, is a worktree, has a remote. Names and
   paths never leave.
 
-An agent files each vent as one of two kinds. An attn vent is about attn itself:
+An agent files each vent as one of two kinds. An Attn vent is about Attn itself:
 its commands, its instructions, or how it works inside the harness. A tool vent
 is about the agent's other tools: a skill, another CLI or MCP server, the
 harness's own permissions and approval review. Agents learn about tool vents
-only when `analytics.tool_vents` was on when their session launched. Only attn
+only when `analytics.tool_vents` was on when their session launched. Only Attn
 vents can be sent. Press `s` on a vent to file it under the other kind. Filing a
 queued vent under tools takes the vent out of the queue, and a sent vent stays
-an attn vent.
+an Attn vent.
 
 A vent record carries the vent whole, because a vent without its text says
 nothing:
@@ -71,12 +71,12 @@ nothing:
 ```
 
 The session title, machine, repository, worktree, stake seed and transcript
-stay on the machine. Settings › Analytics lists a vent record only in the
+stay on the machine. **Settings → Analytics** lists a vent record only in the
 profile the vent belongs to.
 
 ## What is sent
 
-While sharing is on, attn uploads to `https://attn-telemetry.caketroll.cloud`
+While sharing is on, Attn uploads to `https://attn-telemetry.caketroll.cloud`
 every 5 minutes, and once right away when you turn sharing on. Each upload is
 one batch of at most 5,000 unsent records, oldest first, preceded by the build
 that sent it:
@@ -92,7 +92,7 @@ hold at most 4,410 and one scheduled batch carries them. One batch is half the
 service's limit of 10,000 records a minute, so scheduled uploads never reach it,
 even while catching up after time offline. Turning sharing on uploads right
 away, outside the schedule. Turning sharing on several times within a minute
-while a backlog waits can reach the limit, and attn then waits as the refusal
+while a backlog waits can reach the limit, and Attn then waits as the refusal
 asks.
 
 The first upload registers the install and keeps the install's token in
@@ -101,17 +101,17 @@ server also keeps a keyed hash of the address each batch came from, never the
 address. [attn-ingest](../../internal/attn-ingest.md) describes the service and
 its limits.
 
-When the service refuses a batch, the records stay and Settings › Analytics
+When the service refuses a batch, the records stay and **Settings → Analytics**
 shows the refusal with the limit, the limit's value and the value the batch
-would have reached. attn waits as long as the refusal asks before trying again.
+would have reached. Attn waits as long as the refusal asks before trying again.
 
 ## Keeping and deleting
 
-Records stay in the local outbox for 7 days, sent or not. While sharing is on,
-records not yet sent may wait up to 30 days for an upload. Vents you dismiss or
-that their agent withdraws are deleted after 30 days.
+Attn deletes records from the local outbox after 7 days, sent or not. While
+sharing is on, records not yet sent stay up to 30 days for an upload. Vents you
+dismiss or that their agent withdraws are deleted after 30 days.
 
-After attn has sent something, turning sharing off offers Forget this install.
+After Attn has sent something, turning sharing off offers Forget this install.
 Forget this install deletes what the server holds, then starts a new install: a
 new install id, token and subject secret. When the service cannot be reached,
 nothing changes and the page says so. Clear the local record deletes the local

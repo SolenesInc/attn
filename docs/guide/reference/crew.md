@@ -168,7 +168,7 @@ running harness back, or ask the member to sleep, the switch is cancelled.
 <details>
 <summary>Do crew members wait in my queue?</summary>
 
-Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Run "Put the crew in the queue" from the command palette to make a member that owes you a turn wait in the queue too. The member's row stays in the Crew section. "Take the crew out of the queue" turns the setting off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. The Chief never waits in the queue. With Crew v2 on, the Chief is a crew member (see [the Chief](chief.md)).
+Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Run "Put the crew in the queue" from the command palette to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. "Take the crew out of the queue" turns the setting off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. The Chief never waits in the queue. With Crew v2 on, the Chief is a crew member (see [the Chief](chief.md)).
 </details>
 
 <details>

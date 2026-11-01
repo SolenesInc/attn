@@ -48,10 +48,10 @@ came back and close the shells. Terminals keep running when the app or the daemo
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A shell on your machine with OSC 133 shell integration (fish, zsh or bash). `run --wait`, `read --last` and `wait --until prompt` need that integration.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and a link fixture inside the checkout: `L=$PWD/README.md && echo "export L=$L" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Use a shell on your machine with OSC 133 shell integration (fish, zsh or bash). `run --wait`, `read --last` and `wait --until prompt` need that integration.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and a link fixture inside the checkout with `L=$PWD/README.md && echo "export L=$L" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -77,7 +77,7 @@ Preconditions:
 ]}
 ```
 
-- The agent on the current desktop: `wsctl add-session --cwd $A --agent claude --label term-agent --id term-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`.
+- Start the agent on the current desktop with `wsctl add-session --cwd $A --agent claude --label term-agent --id term-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`.
 
 - **A shell from the keyboard.** Select the agent for setup with `bridge select_session '{"sessionId":"term-agent"}'`. Run `bridge native_key '{"key":"t","modifiers":["command"]}'` and `bridge dom_wait '{"selector":"[data-testid=\"location-picker-overlay\"]","timeoutMs":5000}'`: the location picker opens with `selectedAgent` reading the shell in `bridge location_picker_get_state`. Run `bridge native_text '{"text":"<A>/"}'`, `<A>` written out, and `bridge native_key '{"key":"Enter"}'`. `bridge dom_wait '{"selector":"[data-testid=\"location-picker-overlay\"]","absent":true,"timeoutMs":10000}'` matches. `wsctl list` shows a new entry with `"agent": "shell"` on the current desktop, and `bridge get_state` names its id in `activeLeaf.sessionId`. Call that id `<shell-id>`, and its terminal `<shell>`, the `runtime_id` in `wsctl list`.
 - **Type and read.** Run `bridge native_text '{"text":"cd <P>\n"}'`, `<P>` written out, then `bridge native_text '{"text":"echo drive-attn-typed\n"}'`. `bridge read_pane_text '{"sessionId":"<shell-id>"}'` holds `drive-attn-typed` on the command line and again as output. `wsctl screen --id <shell>` shows the same screen from the protocol.

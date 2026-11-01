@@ -64,18 +64,20 @@ When you close an agent, it waits here.
 
 Resume brings a closed session back as itself, in a tile, with its
 conversation. The ledger labels this action **Reopen**. The session opens on
-its last desktop, or on the current one.
+the desktop it was last on. When that desktop is gone, the FAQ "Where does an
+agent open when I resume it?" in [Desktop flow](desktops.md) says where it
+opens.
 
-Attn keeps its own copy of conversations a harness would delete. To keep a
-copy forever, click Keep conversation on the session in the ledger. To forget a
-copy, use the Conversations tab.
+Attn keeps its own copy of conversations a harness would delete. To keep a copy
+forever, click Keep conversation on the session in the ledger. To forget a copy,
+open the Conversations tab.
 
 ## Reload
 
-To restart an agent in place with its saved conversation, run "Reload this
-agent" in the command palette (Cmd+Shift+K, or Ctrl+Alt+K on Linux), or choose
-Reload session in the ••• menu on its sidebar row. Reload interrupts running
-work, and non-persistent state may be lost.
+Reload restarts an agent in place with its saved conversation. "Reload this
+agent" in the command palette (Cmd+Shift+K, or Ctrl+Alt+K on Linux), and Reload
+session in the ••• menu on the agent's sidebar row, both run it. Reload
+interrupts running work, and non-persistent state may be lost.
 
 Agents can do the same with `attn agent reload <session-or-member>...`. A
 session may reload itself and the agents it delegated to, including delegates
@@ -95,7 +97,7 @@ The sweep removed it once it had gone 14 days without activity with nothing left
 <details>
 <summary>Does closing an agent's tile stop the agent?</summary>
 
-Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session until you remove its chief role (Remove chief role in its ••• menu), and refuses to close a crew member's session until you put the member to sleep. With [Crew v2](crew.md#crew-v2-experimental) on, the Chief is a crew member and sleeps like one. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and says "Agent stopped", with Resume to continue the conversation and Close to close the session.
+Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session until you remove its chief role (see [the Chief](chief.md)), and refuses to close a crew member's session until you put the member to sleep. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and says "Agent stopped", with Resume to continue the conversation and Close to close the session.
 </details>
 
 <details>
@@ -137,7 +139,7 @@ If a crew member's home or letters cannot be read, Attn keeps copying and listin
 <details>
 <summary>How do I keep a worktree forever, or let it go again?</summary>
 
-Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it, and Unpin (`attn worktree unkeep <path>`) lets the next sweep decide again. Turning off Worktree sweep in Settings > Files and locations stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then say "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a sweep now instead of waiting for the hourly one.
+Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it, and Unpin (`attn worktree unkeep <path>`) lets the next sweep decide again. Turning off Worktree sweep in **Settings → Files and locations** stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then say "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a sweep now instead of waiting for the hourly one.
 </details>
 
 <details>

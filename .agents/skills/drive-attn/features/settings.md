@@ -45,9 +45,9 @@ Appearance.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The shell steps need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-settings.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-settings-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new. The shell steps need only the daemon.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-settings.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-settings-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -58,7 +58,7 @@ Preconditions:
 ]}
 ```
 
-- **List from the shell.** Run `./attn settings list`. It prints one row per key with its scope, `all profiles`, its value or `-`, and its description, such as `theme` with `App color theme: dark, light or system.`. Read-only keys are left out. `./attn settings list --all` adds them, such as `pty_backend_mode` with `all profiles, read-only`.
+- **List from the shell.** Run `./attn settings list`. It prints one row per key with its scope, its value or `-`, and its description, such as `theme` with `App color theme: dark, light or system.`. The scope reads `all profiles`, except for `notebook.profile_root`, which reads `profile <name>`. Read-only keys are left out. `./attn settings list --all` adds them, such as `pty_backend_mode` with `all profiles, read-only`.
 - **Set and get.** Run `./attn settings set theme light`: it prints `theme = light`. `./attn settings get theme` prints `light`, and `./attn settings get theme --json` prints the entry with `"key": "theme"` and `"value": "light"`.
 - **Refusals.** Each of these commands exits 1 with `settings: ` and the reason: `./attn settings set theme purple` (`invalid theme: purple (must be dark, light, or system)`), `./attn settings set pty_backend_mode embedded` (`setting pty_backend_mode is read-only`), `./attn settings set unknown.key value` (`unknown setting: unknown.key`) and `./attn settings set "default_model_<harness>" x` (`requires a concrete key; replace its placeholders`). `./attn settings set theme` exits 2 with the usage.
 - **Open with the shortcut.** Press ⌘,: `bridge native_key '{"key":",","modifiers":["command"]}'`. `bridge settings_get_state` shows `open: true`, and on the first open `activeSection: "connectivity"`. Press ⌘, again: `open` is false.
@@ -81,7 +81,7 @@ Preconditions:
 - **Durability across restarts**: settings are daemon records and come back after any restart. The dialog says "Saved" only once the daemon has kept the value, and a refused change leaves the old value in place. An outpost reads its copy of the home settings while the home is unreachable.
 - **Linux**: `attn settings` works the same where the daemon and CLI run on Linux. `ui.openSettings` is Ctrl+Shift+, there, and the text size keys are Ctrl+Shift+=, Ctrl+Shift+- and Ctrl+Shift+0 (`LINUX_SHORTCUTS`).
 - **Outposts**: home settings are decided at the home. Each outpost keeps a read-only copy, and `attn settings set` on an outpost changes a home setting at the home. Machine settings (harness executables, the terminal backend, the worktree sweep, analytics recording, `notebook.root`, `outposts_enabled`) stay on the machine that sets them. Profile settings (`notebook.profile_root`) live at the home. `attn settings` acts on the session's profile inside attn and takes `--profile <name|id>` outside it when several profiles exist. After `attn enrollment leave`, the outpost uses the values it had before pairing.
-- **Profiles**: every setting applies across all profiles, and `attn settings list` says `all profiles` for each. Flow is one of them today (`queue_mode_enabled`), though the glossary keeps it per profile.
+- **Profiles**: every setting applies across all profiles except `notebook.profile_root` and its read-only companion `notebook.root.effective`, which belong to one profile, and `attn settings list` says `all profiles` for the rest. Flow is one of the shared settings today (`queue_mode_enabled`), though the glossary keeps it per profile.
 - **Harnesses**: each harness has its own machine setting for its executable (`<harness>_executable`) and home families for its defaults (`default_model_<harness>`, `default_effort_<harness>`). See [harnesses.md](harnesses.md) for them.
 - **Keyboard and native input**: ⌘, opens and closes the dialog, Escape closes it, and ⌘= ⌘- ⌘0 resize text from anywhere. No macOS menu item claims ⌘,.
 
@@ -98,6 +98,6 @@ Preconditions:
 - The dialog shows the shell's `theme light` only because a fresh instance has no theme yet, and the app takes the first value it sees. On an instance that already had a theme, run the theme steps from the dialog first.
 - The Outposts and Analytics sections exist only while `outposts_enabled` or `analytics.enabled` is true. `bridge settings_select_section` refuses an unknown id and needs the dialog open. Like `set_setting`, it skips native input and serves only as setup.
 - `""` restores a default only where the key's description says so. `attn settings set theme ""` is refused as an invalid theme.
-- `attn settings list` prints `all profiles` as every key's scope. It never says home or machine. The difference shows only on an outpost, as `read-only`.
+- `attn settings list` prints `all profiles` as the scope of every key except `notebook.profile_root` and `notebook.root.effective` (under `--all`), which print `profile <name>`. It never says home or machine. The difference shows only on an outpost, as `read-only`.
 - The home and machine step needs a paired outpost, which the baseline lacks. `cmd/attn/settings_outpost_stack_test.go` covers it.
 - Working but wrong: the app takes `theme` and `uiScale` from the daemon once. After that, `attn settings set theme` or `uiScale` from a shell or an agent changes the daemon but not the open app, and Appearance still shows the old choice until the app relaunches. The daemon accepts `uiScale` from 0.5 to 2.0, while the app uses only 0.7 to 1.5 and ignores the rest.

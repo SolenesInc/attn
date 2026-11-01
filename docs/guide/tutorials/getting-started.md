@@ -84,10 +84,9 @@ This is where you watch all your agents and your open PRs:
   click **+ New** to start one.
 - **Chief of Staff** shows your Chief's session once you have one. The Chief is
   an agent that keeps track of your other agents, delegates work for you and
-  journals your day in the Notebook. Make any agent your Chief with **Make chief
-  of staff** in its ••• menu, and take the role away with **Remove chief role**.
-  Read [The Chief](../reference/chief.md) to set up the Chief and to see how the
-  experimental Chief crew member onboards you on its first day.
+  journals your day in the Notebook. Read [The Chief](../reference/chief.md) to
+  make an agent your Chief, set up the Chief and see how the experimental Chief
+  crew member onboards you on its first day.
 - **Pull Requests** lists your PRs and the ones waiting for your review, with
   their CI status. This list needs `gh`.
 

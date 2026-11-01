@@ -3,7 +3,8 @@
 What attn records about its own use, kept in an outbox and uploaded only when
 the user turns it on. With usage analytics on, attn writes redacted records of
 its event bus, app actions, `attn` command outcomes and resource samples to an
-outbox on the machine and keeps them 7 days. Settings › Analytics shows every
+outbox on the machine and keeps them 7 days, or 30 days for records not yet sent while
+sharing is on. **Settings → Analytics** shows every
 record exactly as it is stored. Sharing uploads the outbox to attn's
 maintainers. Usage analytics and sharing are both off by default.
 `docs/guide/reference/telemetry.md` says what each record holds and what leaves
@@ -14,7 +15,7 @@ the machine. For vents, which live in the same section, see
 
 - `recording`: `analytics.enabled` turns recording on for this machine. It is experimental and off by default.
 - `streams`: `bus`, `app`, `cli` and `sample` records, redacted before they are stored, and `vent` records the user sends.
-- `outbox`: the records kept 7 days, listed newest first by stream in Settings › Analytics, exactly as stored.
+- `outbox`: the records kept 7 days (30 days for unsent records while sharing is on), listed newest first by stream in **Settings → Analytics**, exactly as stored.
 - `sharing`: an upload every 5 minutes, and once when sharing turns on. A refusal shows with its limit.
 - `forget-install`: delete what the server holds and start a new install.
 - `clear-record`: delete the local outbox and dismissed vents.
@@ -24,8 +25,8 @@ the machine. For vents, which live in the same section, see
 
 ### People
 
-- Settings › Experimental, the "Usage analytics" switch (`[data-testid="settings-analytics-toggle"]`, `app/src/components/SettingsModalSections.tsx`). Turning it on adds Settings › Analytics (`[data-testid="settings-nav-analytics"]`). Opening the settings dialog is in [settings.md](settings.md).
-- Settings › Analytics (`app/src/components/Analytics/AnalyticsSettings.tsx`): the strip (Recording, Sharing, Vents, Kept here), the lists Vents, All records, `bus`, `app`, `cli` and `sample`, and the inspector, which shows a record's JSON under "Exactly as stored". Keys: `[` and `]` switch lists, `j` and `k` or the arrows move, Enter expands a burst of records from the same second, `c` copies a record's JSON, `r` refreshes, `m` opens Machine settings.
+- **Settings → Experimental**, the "Usage analytics" switch (`[data-testid="settings-analytics-toggle"]`, `app/src/components/SettingsModalSections.tsx`). Turning it on adds **Settings → Analytics** (`[data-testid="settings-nav-analytics"]`). Opening the settings dialog is in [settings.md](settings.md).
+- **Settings → Analytics** (`app/src/components/Analytics/AnalyticsSettings.tsx`): the strip (Recording, Sharing, Vents, Kept here), the lists Vents, All records, `bus`, `app`, `cli` and `sample`, and the inspector, which shows a record's JSON under "Exactly as stored". Keys: `[` and `]` switch lists, `j` and `k` or the arrows move, Enter expands a burst of records from the same second, `c` copies a record's JSON, `r` refreshes, `m` opens Machine settings.
 - Machine settings (`app/src/components/Analytics/AnalyticsMachine.tsx`): "Record on this machine" (Disable), "Share with attn's maintainers" (Enable or Disable, then "Delete from server" after sharing ran), "Send vents", "Tool vents", "Forget this install…" and "Clear the local record…".
 - Their own shell: `attn settings set analytics.enabled|analytics.sharing_enabled|analytics.share_vents|analytics.tool_vents true|false` and `attn settings get` (`cmd/attn/settings.go`).
 
@@ -43,10 +44,10 @@ None. Agents do not read or change telemetry. attn records their `attn` commands
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- The baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started without the env file lacks the variable. Stop the daemon and start it again in the instance shell.
-- Sharing only: a local attn-ingest on `127.0.0.1:8080`, started as the "Running locally" section of `docs/internal/attn-ingest.md` describes (`make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and the daemon started with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both of these, skip the sharing step and report it skipped.
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Keep the baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started without the env file lacks the variable. Stop the daemon and start it again in the instance shell.
+- For the sharing steps only, start a local attn-ingest on `127.0.0.1:8080` as the "Running locally" section of `docs/internal/attn-ingest.md` describes (`make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and start the daemon with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both of these, skip the sharing step and report it skipped.
 
 - **Turn recording on in the app.** Press ⌘, (`ui.openSettings`) with `bridge native_key '{"key":",","modifiers":["command"]}'`. `bridge settings_get_state` shows `open: true`. Click `[data-testid="settings-nav-experimental"]` natively, then `[data-testid="settings-analytics-toggle"]`. `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","timeoutMs":5000}'` matches, and `./attn settings get analytics.enabled` prints `true`.
 - **Off and on from the shell.** Run `./attn settings set analytics.enabled false`. It prints `analytics.enabled = false`, and `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","absent":true,"timeoutMs":5000}'` matches. Run `./attn settings set analytics.enabled true` to bring the section back.
@@ -61,7 +62,7 @@ Preconditions:
 ## Contexts
 
 - **Durability across restarts**: the outbox, the install token (`<data-dir>/analytics-token`) and the subject secret (`<data-dir>/analytics-secret`) live in the data folder and survive restarts. A fact delivered again after a crash is stored once.
-- **Linux**: the daemon records and uploads the same where it runs on Linux. Settings › Analytics is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
+- **Linux**: the daemon records and uploads the same where it runs on Linux. **Settings → Analytics** is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
 - **Outposts**: `analytics.enabled` is a machine setting, so each machine decides whether it records and keeps its own outbox. `analytics.sharing_enabled`, `analytics.share_vents` and `analytics.tool_vents` are home settings that outposts copy read-only. An `attn` usage error, such as an unknown command, is recorded on the machine that ran the command.
 - **Profiles**: records are the daemon's, across every profile. A vent record is listed only in the profile its vent belongs to.
 - **Performance and idle cost**: one resource sample every 5 minutes, and an upload carries at most 5,000 records. The open Analytics page does not animate or change while idle (scenario `analytics-settings`). The outbox mirror is an event bus consumer, so a stalled mirror pins the log. `attn bus status` shows the mirror ([diagnostics.md](diagnostics.md)).
@@ -80,8 +81,8 @@ Preconditions:
 ## Gotchas
 
 - A named instance has no guard of its own against the real service. Turning sharing on, "Forget this install…" and "Delete from server" all reach `https://attn-telemetry.caketroll.cloud` unless the daemon was started with `ATTN_ANALYTICS_INGEST_URL`, which the baseline exports. `make install` and `./attn daemon ensure` start the daemon with the instance shell's environment, so a daemon started without the env file lacks the variable.
-- With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and Settings › Analytics is absent.
-- The "Usage analytics" switch sits low in Settings › Experimental. `dom_native_point` scrolls it into view before returning its point.
+- With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and **Settings → Analytics** is absent.
+- The "Usage analytics" switch sits low in **Settings → Experimental**. `dom_native_point` scrolls it into view before returning its point.
 - A click that removes the focused control, such as a "Clear…" or "Forget…" confirm, or `m` pressed on a Machine settings button, leaves the page without focus. The page's keys do nothing until you click a row or button inside the page.
 - The record lists load when a list opens. A record made while the list is open shows only after `r` or the Refresh button.
 - Turning recording off and on again starts the mirror at the head of the bus: facts from the gap are never recorded.

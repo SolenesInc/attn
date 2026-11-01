@@ -79,7 +79,7 @@ Builder: the plan stays in the seed, and the new agent reads it from there.
 
 ### Asks (experimental)
 
-Asks are off by default. Turn them on in Settings > Experimental > Asks
+Asks are off by default. Turn them on in **Settings → Experimental → Asks**
 (`asks_enabled`). Agents launched after that can send you questions with
 `attn ask` instead of stopping to wait for you.
 
@@ -98,7 +98,7 @@ When making a delegation, the agent picks:
 - A reasoning effort level.
 - A way of working.
 
-In Settings > Delegation, you define delegation roles, each a combination of
+In **Settings → Delegation**, you define delegation roles, each a combination of
 those choices. For each role you set:
 
 - When to choose this role. The agent reads this to pick a role, so describe
@@ -108,13 +108,14 @@ those choices. For each role you set:
 
 A role can have alternatives: another model for a condition you describe, such
 as frontend work, or consequential work that needs a stronger model. "Anything
-else" covers delegations no role fits. The switch at the top of Settings >
-Delegation turns the whole table off, and then agents pick harness and model on
+else" covers delegations no role fits. The switch at the top of **Settings →
+Delegation** turns the whole table off, and then agents pick harness and model on
 their own.
 
 Attn bundles its own delegation roles. Add them with "Add Attn roles" in
-Settings > Delegation, or with `attn delegate roles install`. Each role arrives
-without a model, so pick a model for each role you want agents to use. Adding the
+**Settings → Delegation**, or with `attn delegate roles install`. Each role arrives
+without a model, and agents can't pick a role until it has one, so pick a model
+for each role you want agents to use. Adding the
 roles also installs the attn-workflow skill for your harnesses. The
 bundled roles need the skill. Any agent on your computer can use the skill,
 although the skill is built for use inside Attn. To change how a bundled role works, use "Make

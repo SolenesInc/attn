@@ -15,8 +15,8 @@ state ([agent-state.md](agent-state.md)).
 - `daemon-log`: the instance's `daemon.log`, filtered by time and pattern.
 - `frontend-logs`: the app's terminal incidents, lifecycle diagnostics and input decisions. `attn debug ls` lists the files.
 - `diagnostic-report`: a private report file saved from the palette, with optional recent terminal output.
-- `event-bus`: the log's window, producers, consumers, lag and pin alarm. The CLI and Settings › Event bus can trim the log and disable and enable a consumer.
-- `task-runner`: Settings › Task runner lists background tasks and offers Retry on a failed or dead one.
+- `event-bus`: the log's window, producers, consumers, lag and pin alarm. The CLI and **Settings → Event bus** can trim the log and disable and enable a consumer.
+- `task-runner`: **Settings → Task runner** lists background tasks and offers Retry on a failed or dead one.
 - `db-backup`: the daemon writes a rotating backup when it starts and every 6 hours, keeps the newest 12, and takes a snapshot before each migration.
 - `db-restore`: swap a backup in while the daemon is stopped. The replaced database stays beside it.
 - `migration-failure`: the app's screen after a data migration failed at startup, with the details to copy.
@@ -27,8 +27,8 @@ state ([agent-state.md](agent-state.md)).
 ### People
 
 - Palette (`app/src/application/useAppCommands.tsx`): `create-diagnostic-report` ("Create diagnostic report") opens the report dialog (`app/src/components/DiagnosticReportPrompt.tsx`), which saves `attn-<time>.attn-report.json` into Downloads and shows it in Finder.
-- Settings › Task runner (`backgroundTasks`, `app/src/components/BackgroundTasksSettings.tsx`): background tasks, most recently updated first, each with its state, `kind:subject`, attempts and last error. A failed or dead task has Retry, and "Try again" shows when the list cannot load.
-- Settings › Event bus (`eventBus`, `app/src/components/EventBusSettings.tsx`): the log's size, producers, consumers with Disable or Enable (`[data-testid="bus-consumer-toggle-<consumer>"]`) and health. See [settings.md](settings.md) for opening the settings dialog.
+- **Settings → Task runner** (`backgroundTasks`, `app/src/components/BackgroundTasksSettings.tsx`): background tasks, most recently updated first, each with its state, `kind:subject`, attempts and last error. A failed or dead task has Retry, and "Try again" shows when the list cannot load.
+- **Settings → Event bus** (`eventBus`, `app/src/components/EventBusSettings.tsx`): the log's size, producers, consumers with Disable or Enable (`[data-testid="bus-consumer-toggle-<consumer>"]`) and health. See [settings.md](settings.md) for opening the settings dialog.
 - The migration failure screen (`app/src/components/MigrationFailureScreen.tsx`): "attn seems broken after migration", the failure's facts and "Copy details".
 - A maintainer's shell: the verbs below, and `ATTN_PPROF=1` (or a port) in the environment of a daemon the run starts. The daemon then opens the loopback endpoint (`internal/config/config.go`, `internal/diag/diag.go`).
 
@@ -51,8 +51,8 @@ state ([agent-state.md](agent-state.md)).
 
 Preconditions:
 
-- The baseline instance. The CLI steps need only the daemon. The palette and settings steps need the instance's app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Use the baseline instance. The CLI steps need only the daemon. For the palette and settings steps, also use the instance's app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Before native Settings clicks, scroll the nav button or consumer toggle fully into view with `bridge dom_scroll_into_view '{"selector":"<selector>"}'`, then resolve its point. A partly clipped toggle can put the click on the backdrop and close Settings. Scrolling is setup. The click stays native.
 
 - **Preflight.** With the daemon only, `./attn preflight --agent claude` prints the checks and `attn preflight: FAIL (2 failed, 0 warnings)`, then exits 1. The two `protocol.` checks fail because they need an installed app. With the app installed, `"$(./attn instance resolve --field appDaemon)" preflight --agent claude` reports `PASS`. `--json` prints the stable report.
@@ -64,7 +64,7 @@ Preconditions:
 - **Diagnostic report.** Close settings with Escape. Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'` and `bridge native_text '{"text":"Create diagnostic report"}'`, then `bridge native_key '{"key":"Enter"}'`. `bridge dom_wait '{"selector":"#diagnostic-report-title","timeoutMs":5000}'` matches. "Save report" has focus: run `bridge native_key '{"key":"Enter"}'`. The dialog closes, `ls -t ~/Downloads/attn-*.attn-report.json | head -1` names the new file, and Finder shows it. Move only that file into `$P`, and leave the other files in Downloads.
 - **Restore the database.** Once `./attn debug daemon-log --grep "database backup written"` names the backup taken at start, plant a seed: `./attn seed plant "Restore drive"` prints `<seed>`. `./attn db restore` exits 1 with `attn db restore: the attn daemon is running; stop it first`. Quit the app with `./attn instance stop-app` if it runs, then `./attn daemon stop` prints `stopped daemon (pid <n>)`. `./attn db restore` prints `restored attn.db from:` with a path under `<data-dir>/backups/`, `previous attn.db preserved as:` with `attn.db.pre-restore-<time>`, and how to start the daemon. `./attn daemon ensure` prints JSON with `"status": "started"`, and `./attn seed ls` no longer lists `Restore drive`.
 - **The diagnostics endpoint.** Quit the app if it runs (`./attn instance stop-app`), run `./attn daemon stop`, then start the daemon again with a port of your own that nothing else holds: `ATTN_PPROF=<port> ./attn daemon ensure` prints `"status": "started"`. `./attn debug daemon-log --grep "diagnostics endpoint listening"` shows `diagnostics endpoint listening on http://127.0.0.1:<port>/ (pprof + /debug/vars)`, `curl -s http://127.0.0.1:<port>/debug/vars` prints JSON that includes `worker_pids`, and `curl -s http://127.0.0.1:<port>/` lists the endpoints. Stop that daemon and run `./attn daemon ensure` without the variable to close the port.
-- **Proof.** In `$P`, keep each `./attn` command with its stdout, stderr and exit code. Also keep `./attn bus status --json` from before and after each toggle, `bridge dom_text` of `[data-testid="bus-consumers"]` after each click, `bridge capture_screenshot '{"path":"<P>/event-bus.png"}'` with Settings › Event bus open (where `<P>` is the folder's path written out), the report file, and `./attn seed ls` from before and after the restore. Name each file for its way in, such as `diagnostics-bus-cli-disable.txt`.
+- **Proof.** In `$P`, keep each `./attn` command with its stdout, stderr and exit code. Also keep `./attn bus status --json` from before and after each toggle, `bridge dom_text` of `[data-testid="bus-consumers"]` after each click, `bridge capture_screenshot '{"path":"<P>/event-bus.png"}'` with **Settings → Event bus** open (where `<P>` is the folder's path written out), the report file, and `./attn seed ls` from before and after the restore. Name each file for its way in, such as `diagnostics-bus-cli-disable.txt`.
 
 ## Contexts
 
@@ -72,7 +72,7 @@ Preconditions:
 - **Linux**: `attn preflight`, `attn debug`, `attn bus` and `attn db` work the same where the daemon and CLI run on Linux. The report and the settings sections are in the app. On Linux, `ui.commandPalette` is Ctrl+Alt+K and `ui.openSettings` is Ctrl+Shift+,.
 - **Outposts**: `attn debug`, `attn bus` and `attn db` act on the machine they run on: an outpost's own log, event bus and database, never the home's.
 - **Profiles**: logs, the event bus, tasks and backups belong to the daemon and cover every profile.
-- **Performance and idle cost**: `attn bus status` names the loudest producers, the consumer at the retention floor and the consumer that pins the log, and Settings › Event bus shows the same facts. `ATTN_PPROF` and `docs/internal/perf-testing.md` cover memory and CPU.
+- **Performance and idle cost**: `attn bus status` names the loudest producers, the consumer at the retention floor and the consumer that pins the log, and **Settings → Event bus** shows the same facts. `ATTN_PPROF` and `docs/internal/perf-testing.md` cover memory and CPU.
 - **Keyboard and native input**: the palette opens the report dialog, the "Save report" button has focus so Enter saves, and Escape closes the dialog.
 - **Compatibility across versions**: `attn db restore <path>` accepts a pre-migration snapshot, `attn-premigration-<version>-<timestamp>.db`, to go back to the data before a migration.
 
@@ -93,4 +93,4 @@ Preconditions:
 - `ATTN_BUS_PIN_ALARM_AGE` and `ATTN_BUS_RETENTION` change the daemon and `attn bus` separately. Set them for both, or the table and the notification disagree. On a young instance a trim removes little, since the default window is 30 days.
 - The diagnostic report goes to the real Downloads folder and Finder opens on it. The report may contain terminal output the user ticked. Check it for private text before sharing.
 - `attn debug incidents`, `diagnostics` and `input` read the app's files: on a daemon-only instance they exit 1 with `no such file:`.
-- The migration failure screen cannot be driven on the baseline: it needs a migration that really failed. You reach Retry and the failed-task notification only when a task has failed or died. If Settings › Task runner shows none, report them as not reached.
+- The migration failure screen cannot be driven on the baseline: it needs a migration that really failed. You reach Retry and the failed-task notification only when a task has failed or died. If **Settings → Task runner** shows none, report them as not reached.

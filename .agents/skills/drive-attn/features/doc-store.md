@@ -32,9 +32,9 @@ Only `attn seed` reaches the garden.
 
 Preconditions:
 
-- The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with the daemon only.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

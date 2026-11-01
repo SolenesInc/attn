@@ -43,7 +43,7 @@ You can settle an agent:
 - Directly, with Cmd+Shift+E (Ctrl+Alt+E on Linux), the ✓ on its row in the
   sidebar, or "Settle this agent" in the command palette.
 - Automatically, with auto-settle. Auto-settle is off by default. Turn it on in
-  Settings → Attention queue ("Settle a turn once you have steered the agent"),
+  **Settings → Attention queue** ("Settle a turn once you have steered the agent"),
   or run "Turn on auto-settle" from the command palette. You set how long the
   agent must keep working before the countdown starts, and how long the
   countdown runs. The agent's tile header shows the countdown, and the agent's
@@ -83,7 +83,7 @@ mark it.
 <details>
 <summary>Why is an idle agent in my queue?</summary>
 
-An agent owes you a turn as soon as its state becomes waiting, needs approval, idle or unknown. An idle agent has nothing left to do, so the next move is yours. An unknown agent may need you because Attn can't tell what it's doing. Becoming working, launching, scheduled or recoverable never opens a turn.
+An agent is owed a turn as soon as its state becomes waiting, needs approval, idle or unknown. An idle agent has nothing left to do, so the next move is yours. An unknown agent may need you because Attn can't tell what it's doing. Becoming working, launching, scheduled or recoverable never opens a turn.
 </details>
 
 <details>
@@ -101,7 +101,7 @@ Settling takes you to the agent after the one you settled, in queue order, and w
 <details>
 <summary>What stays out of the queue?</summary>
 
-Shells and the Chief never owe you a turn, and the Chief keeps its own slot in the Crew section of the sidebar. Crew members also stay in the Crew section until you run "Put the crew in the queue" from the command palette. "Take the crew out of the queue" undoes that. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that owes you a turn. Delegates are full agents, so they queue like any other.
+Shells and the Chief are never owed a turn, and the Chief keeps its own slot in the Crew section of the sidebar. Crew members also stay in the Crew section until you run "Put the crew in the queue" from the command palette. "Take the crew out of the queue" undoes that. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that is owed a turn. Delegates are full agents, so they queue like any other.
 </details>
 
 <details>
@@ -113,7 +113,7 @@ The sidebar lists as many waiting agents as fit, at least three, and a row below
 <details>
 <summary>When exactly does auto-settle settle a turn?</summary>
 
-Auto-settle starts when an agent that owes you a turn goes back to work on a prompt you typed or annotations you sent (work that starts from a message in the agent's inbox doesn't count). By default auto-settle waits through 30 seconds of work, then counts down for 15 seconds and settles the turn. You can set the wait from 5 to 3600 seconds and the countdown from 3 to 600, in Settings → Attention queue. Typing in the agent's terminal or moving the mouse over the terminal pauses auto-settle until you've been still for 5 seconds, then the wait or countdown starts over. Auto-settle cancels as soon as the agent is no longer working.
+Auto-settle starts when an agent that is owed a turn goes back to work on a prompt you typed or annotations you sent (work that starts from a message in the agent's inbox doesn't count). By default auto-settle waits through 30 seconds of work, then counts down for 15 seconds and settles the turn. You can set the wait from 5 to 3600 seconds and the countdown from 3 to 600, in **Settings → Attention queue**. Typing in the agent's terminal or moving the mouse over the terminal pauses auto-settle until you've been still for 5 seconds, then the wait or countdown starts over. Auto-settle cancels as soon as the agent is no longer working.
 </details>
 
 <details>
@@ -131,7 +131,7 @@ When settling leaves nobody waiting, you land on Home with "All settled" and "Ta
 <details>
 <summary>What happens when a snoozed agent finishes or asks for approval?</summary>
 
-It stays snoozed, and its turn waits until the snooze ends. If the agent is waiting, needs approval, is idle or is unknown by then, the agent gets a turn dated to when the snooze ended, so the turn lines up behind turns that opened earlier. If the agent is still working, it goes back under Working and owes you a turn the next time it waits for you.
+It stays snoozed, and its turn waits until the snooze ends. If the agent is waiting, needs approval, is idle or is unknown by then, the agent gets a turn dated to when the snooze ended, so the turn lines up behind turns that opened earlier. If the agent is still working, it goes back under Working and is owed a turn the next time it waits for you.
 </details>
 
 <details>

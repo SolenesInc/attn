@@ -32,7 +32,7 @@ the seed. Asks are an experimental setting, off by default.
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
 - Settings, Experimental: the "Asks" switch (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent also owes a turn.
+- Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 
 ### Agents
@@ -48,9 +48,9 @@ the seed. Asks are an experimental setting, off by default.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-asks.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-asks-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `ask.md` (`:::question-text`, `Which day ships it?`, `:::`, one per line) and this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-asks.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-asks-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`. Save `ask.md` (`:::question-text`, `Which day ships it?`, `:::`, one per line) in it, and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -74,7 +74,7 @@ Preconditions:
 ]}
 ```
 
-- An agent launched while asks are still off: `wsctl add-session --cwd $A --agent claude --label ask-early --id ask-early`.
+- While asks are still off, launch an agent with `wsctl add-session --cwd $A --agent claude --label ask-early --id ask-early`.
 
 `<early>` and `<terminal>` are the terminal ids of ask-early and ask-agent from `wsctl list`. `<ask>` is the id an `Asked` reply prints.
 
@@ -84,8 +84,16 @@ Preconditions:
 - **Open the drawer with the shortcut.** Run `bridge native_key '{"key":"r","modifiers":["command","shift"]}'`. `bridge dom_wait '{"selector":"[role=\"region\"][aria-label=\"Asks\"]","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":"[data-testid=\"ask-<ask>\"]"}'` reads `Cache store`, the question, `Postgres`, `recommended` and `Redis`.
 - **Answer from the keyboard.** `bridge dom_wait '{"selector":"[data-testid=\"ask-<ask>\"] input","focused":true,"timeoutMs":5000}'` matches: the first choice has focus. Run `bridge native_key '{"key":"space"}'`, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. The drawer shows its empty state, `.asks-empty`. Thirty seconds after the last `wsctl input` to ask-agent, re-read `./attn agent peek ask-agent` until its screen shows the typed answer and `got the answer` after it. The `last assistant message:` line shows the mock's hidden `<!-- attn:state=waiting_input -->` instead. The typed answer contains `🙋 The user answered the ask "Cache store" (<ask>).`
 - **Replied asks.** With the drawer open, run `bridge native_key '{"key":"r"}'`. `bridge dom_text '{"selector":".asks-list"}'` reads `Replied in the last day` and `Cache store` with `replied`. Press Escape to close the drawer.
-- **Step through asks with the drawer's keys.** Plant a second seed and run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "ask about <seed2>" --enter`, so two asks are open. Select ask-early for setup with `bridge select_session '{"sessionId":"ask-early"}'`. Press ⌘⇧R: the first ask, `Cache store`, has focus, and `bridge dom_text '{"selector":".asks-ask .asks-ask-subject"}'` reads it. Press `j`: it reads `Release note`, and focus is in its text field. Click `.asks-ask .asks-ask-subject` natively to move focus to the drawer, then press `k`: it reads `Cache store`. Press `j`, click the subject again and press `g`: `bridge garden_get_state` shows `here` naming the seed. Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`. Withdraw the `Release note` ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, its id from `list asks`, so only `Cache store` stays open for the queue bar.
-- **The queue bar.** With an ask open and ask-agent owing a turn (`./attn agent list` shows `owed`), run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"queue-bar-asks\"]"}'` reads `1 ask· 1 waiting on you`. Move the pointer over it natively: `[data-testid="queue-bar-asks-peek"]` lists the ask, with `[aria-label="Waiting on you"]` on its row. Click the chip natively: the drawer opens on the ask. Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
+- **Step through asks with the drawer's keys.**
+  - Plant a second seed and run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "ask about <seed2>" --enter`, so two asks are open.
+  - Select ask-early for setup with `bridge select_session '{"sessionId":"ask-early"}'`.
+  - Press ⌘⇧R: the first ask, `Cache store`, has focus, and `bridge dom_text '{"selector":".asks-ask .asks-ask-subject"}'` reads it.
+  - Press `j`: it reads `Release note`, and focus is in its text field.
+  - Click `.asks-ask .asks-ask-subject` natively to move focus to the drawer, then press `k`: it reads `Cache store`.
+  - Press `j`, click the subject again and press `g`: `bridge garden_get_state` shows `here` naming the seed.
+  - Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`.
+  - Withdraw the `Release note` ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, its id from `list asks`, so only `Cache store` stays open for the queue bar.
+- **The queue bar.** With an ask open and ask-agent owed a turn (`./attn agent list` shows `owed`), run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"queue-bar-asks\"]"}'` reads `1 ask· 1 waiting on you`. Move the pointer over it natively: `[data-testid="queue-bar-asks-peek"]` lists the ask, with `[aria-label="Waiting on you"]` on its row. Click the chip natively: the drawer opens on the ask. Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
 - **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.
 - **An ask about a seed, from the tile chip.** Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".` Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus. Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
 - **List and withdraw from the agent.** Run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "list asks" --enter`: peek shows `<ask>  Cache store`. Run `wsctl input --id <terminal> --text "withdraw <ask>" --enter`: peek shows `Withdrew <ask>.`, and the drawer shows `.asks-empty`. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
@@ -101,7 +109,7 @@ Preconditions:
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep its own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. Earlier agents refuse `attn ask` until they relaunch.
-- **Flow**: in queue flow, the queue bar counts open asks and shows them on hover. Clicking the queue bar or pressing ⌘⇧R opens the drawer. An ask row whose agent owes a turn says "Waiting on you".
+- **Flow**: in queue flow, the queue bar counts open asks and shows them on hover. Clicking the queue bar or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
 
 ## Tests
 

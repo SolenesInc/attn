@@ -44,8 +44,8 @@ plugin. The sidebar can mark each agent with its harness's logo.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow, the default.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-harnesses.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder `$P/codex`.
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new, and stay in desktop flow, the default.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-harnesses.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder `$P/codex`.
 
 `<P>` is the proof folder's path written out.
 

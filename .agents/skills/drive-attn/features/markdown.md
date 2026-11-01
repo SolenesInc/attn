@@ -44,9 +44,9 @@ current while the user reads it. For review notes on a markdown tile, see
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-markdown-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-markdown.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `notes.md` (`# Drive notes` and a line of text), `second.md` (`# Second file`), `rich.md` (frontmatter with `type: note`, a `# Rich drive` heading, a `> [!NOTE]` alert and a fenced `mermaid` block holding `graph LR; A-->B`), and this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-markdown-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-markdown.XXXX) && echo "export A=$A" >> $DRIVE_ENV`. Save `notes.md` (`# Drive notes` and a line of text), `second.md` (`# Second file`), `rich.md` (frontmatter with `type: note`, a `# Rich drive` heading, a `> [!NOTE]` alert and a fenced `mermaid` block holding `graph LR; A-->B`) in it, and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -55,7 +55,7 @@ Preconditions:
 ]}
 ```
 
-- The agent on the current desktop: `wsctl add-session --cwd $A --agent claude --label md-agent --id md-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`.
+- Start the agent on the current desktop with `wsctl add-session --cwd $A --agent claude --label md-agent --id md-agent --place`. `<agent>` is its `runtime_id` in `wsctl list`.
 
 - **An agent shows a file.** Run `wsctl input --id <agent> --text "show-notes" --enter`. `./attn agent peek md-agent` shows `opened ` and an absolute path ending in `/notes.md`. In `wsctl list`, the current desktop's `tree_json` holds a tile whose `tile_kind` is `markdown` and whose `tile_params` is that path, beside the agent. `bridge dom_wait '{"selector":"[data-tile-kind=\"markdown\"] .md-reader-doc","textIncludes":"Drive notes","timeoutMs":5000}'` matches.
 - **It follows the file.** Run `printf '\nA new line.\n' >> $A/notes.md`. `bridge dom_wait '{"selector":"[data-tile-kind=\"markdown\"] .md-reader-doc","textIncludes":"A new line","timeoutMs":5000}'` matches.
@@ -92,18 +92,13 @@ Preconditions:
 
 ## Gotchas
 
-- In that run, `/tmp` and `/private/tmp` paths to the same inode opened distinct tiles. Until path-alias reuse is fixed, a second tile can be an alias of the first file.
-
-- With several documents docked, inactive tiles can collapse into strips and their document bodies are absent from the DOM. Expand the target tile before clicking its body or header controls.
+- With several documents docked, inactive tiles can collapse into strips, and their document bodies are absent from the DOM. Expand the target tile before clicking its body or header controls. A collapsed strip's `[data-pane-id]` holds only the file name, so reading the tile's document text or error shows only `second.md`. Scope focus and close controls to the intended `tile_id`, because a broad `[data-tile-kind="markdown"]` selector can pick a collapsed tile whose controls are not visible. Sidebar tile test ids include both the desktop id and the tile id.
 - `attn open` reads a bare name starting with `s-` as a seed id, so `attn open s-notes.md` is refused as `"s-notes.md" is not a seed id`. Pass `./s-notes.md`.
-- Opening the same file twice returns to the file's tile instead of docking a copy. A recipe that counts tiles after a second open sees one.
+- Opening the same file twice returns to the file's tile instead of docking a copy. A recipe that counts tiles after a second open sees one. Opening the same file through `/tmp` and `/private/tmp` still creates two tiles, because path-alias reuse is not fixed yet. Keep the path spelling consistent when checking reuse.
 - A path the agent resolves from a relative name comes from the folder it runs in. On macOS `/tmp` is `/private/tmp`, so compare file names, or resolve both sides with `realpath`.
 - On an empty query the opener lists only files opened before. A fresh instance shows none until something is opened. Fuzzy search covers the active agent's folder, so select the agent whose folder holds the file.
 - Without the app, `attn open` still places the tile in `tree_json`. Only the app renders it. Prove rendering with `bridge`, not the CLI.
 - `bridge capture_screenshot` shows the rendered document, but Mermaid renders after the text. Wait for `.markdown-mermaid` before capturing.
 - "Open in editor" starts a real program. Point `editor_executable` at a harmless command for a recipe, and restore it after.
-- A collapsed strip's `[data-pane-id]` holds only the file name, so reading the tile's document text or error shows only `second.md`. Expand the strip first.
 - The app checks a path and reads a local image through a file scope limited to the home folder. A `.md` path under `/tmp` printed in a terminal is plain text to ⌘-click, and an image beside a document under `/tmp` renders as an empty 1×1 box. `attn open` itself opens a document anywhere. Drive the terminal link and images with files under the home folder, such as the instance's `~/attn-notebook-<name>`.
 - Working but wrong: a file that grows past 1 MiB, or is deleted, turns the open tile into an error, and the tile recovers on its own once the file is back under the limit. "Open in editor" opens the agent's folder, not the document in the active tile.
-- With several markdown tiles open, scope focus and close controls to the intended `tile_id`. A broad `[data-tile-kind="markdown"]` selector can pick a collapsed tile whose controls are not visible. Sidebar tile test ids include both the desktop id and the tile id.
-- Opening the same file through `/tmp` and `/private/tmp` creates two tiles. Keep the path spelling consistent when checking reuse.

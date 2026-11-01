@@ -63,9 +63,9 @@ knows about this machine.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` at the repository root.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automode.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, outside any git repository.
-- An agent folder, `M=$(mktemp -d /tmp/drive-attn-automode-agent.XXXX) && echo "export M=$M" >> $DRIVE_ENV`, holding this fixture as `$M/.attn-mock-agent.json`:
+- Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new. At the repository root, run `R=$PWD && echo "export R=$R" >> $DRIVE_ENV`.
+- Make a proof folder outside any git repository with `P=$(mktemp -d /tmp/drive-attn-automode.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `M=$(mktemp -d /tmp/drive-attn-automode-agent.XXXX) && echo "export M=$M" >> $DRIVE_ENV`, and save this fixture as `$M/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

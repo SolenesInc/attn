@@ -46,11 +46,11 @@ sweep never takes it, delete a worktree now, and read what the sweep removed.
 
 Preconditions:
 
-- The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
-- The daemon started with `export ATTN_WORKTREE_SWEEP_IDLE_DAYS=0` appended to the env file, so a merged, clean worktree is eligible at once. Without it, the removal steps see "too young for deep inspection".
-- A repository on its real path, so the paths you type match the ones attn prints: `W=$(cd "$(mktemp -d /tmp/drive-attn-worktrees.XXXX)" && pwd -P) && echo "export W=$W" >> $DRIVE_ENV`, `git init -q -b main $W/repo` and `git -C $W/repo commit -q --allow-empty -m seed`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-worktrees-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent in that repository to delegate from, with this fixture as `$W/repo/.attn-mock-agent.json`. The fixture stays untracked in the main checkout, which the sweep never touches:
+- Use the baseline instance. The steps that run `bridge` also need its app. Check that `bridge --launch --wait-ready ping` answers. Run `bridge dismiss_whats_new` to dismiss What's new.
+- Start the daemon with `export ATTN_WORKTREE_SWEEP_IDLE_DAYS=0` appended to the env file, so a merged, clean worktree is eligible at once. Without it, the removal steps see "too young for deep inspection".
+- Make a repository on its real path, so the paths you type match the ones attn prints: run `W=$(cd "$(mktemp -d /tmp/drive-attn-worktrees.XXXX)" && pwd -P) && echo "export W=$W" >> $DRIVE_ENV`, `git init -q -b main $W/repo` and `git -C $W/repo commit -q --allow-empty -m seed`.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-worktrees-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Save this fixture as `$W/repo/.attn-mock-agent.json` for an agent in that repository to delegate from. The fixture stays untracked in the main checkout, which the sweep never touches:
 
 ```json
 {"version": 1, "turns": [

@@ -11,6 +11,11 @@ of staff** in its ••• menu, or turn **Chief of Staff** on when you start o
 **Remove chief role** takes the role away. The home screen's Chief of Staff
 card shows the Chief.
 
+Attn refuses to close the Chief's session, or a desktop that holds it, until you
+run **Remove chief role** from the Chief's ••• menu. With
+[Crew v2](#the-chief-as-a-crew-member-experimental) on, put the Chief to sleep
+instead.
+
 ## Give the Chief a folder
 
 Start the Chief in a folder of its own, where you describe how you work and
