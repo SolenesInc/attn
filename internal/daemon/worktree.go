@@ -383,7 +383,6 @@ func (d *Daemon) closeWorktreeSessions(machine, path string) {
 			d.logf("close deleted worktree session %s: %v", session.ID, err)
 			continue
 		}
-		d.publishSessionUnregistered(session)
 	}
 }
 

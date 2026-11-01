@@ -54,6 +54,10 @@ it stores them:
   names the reason from a fixed set, such as `missing_directory`, `timeout` or
   `exited`, and `exit_code` gives git's exit code when git itself exited
   non-zero. The error text becomes its length.
+- A session that leaves (`session.unregistered`) says how it ended:
+  `state_reason` names why it was in its last state, such as `process_exited`
+  or `stuck`, and `terminal_exit.signal` names the signal that ended its
+  terminal, such as `killed`.
 - `setting.changed` names the setting in plain text, because setting names come
   from a fixed set. A setting whose name carries a value, such as
   `new_session_destination_<repository>`, is named by that pattern, never by

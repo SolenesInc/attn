@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -353,4 +354,79 @@ func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *tes
 			}
 		}
 	})
+}
+
+func TestAMirroredSessionUnregisteredCarriesWhyItsStateAndTerminalEnded(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		w.terminal(agent.id).ExitBySignal(syscall.SIGKILL)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == agent.id })
+		desktop, tile := tileOf(t, w, app, w.Terminal(agent.id))
+		if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+			t.Fatalf("close the killed agent's tile: %s", protocol.Deref(closed.Error))
+		}
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := analytics.HashSubject(secret, agent.id)
+		records := mirroredRecords(t, app, "session.unregistered")
+		at := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Subject == subject })
+		if at < 0 {
+			t.Fatalf("no session.unregistered record for the killed agent among %d", len(records))
+		}
+		props := records[at].Props
+		var got struct {
+			StateReason  string `json:"state_reason"`
+			TerminalExit struct {
+				Code   int    `json:"code"`
+				Signal string `json:"signal"`
+			} `json:"terminal_exit"`
+		}
+		if err := json.Unmarshal(props, &got); err != nil {
+			t.Fatalf("props %s: %v", props, err)
+		}
+		if got.StateReason != "process_exited" || got.TerminalExit.Signal != "killed" || got.TerminalExit.Code != -1 {
+			t.Errorf("session.unregistered carries %s, want state_reason process_exited and terminal_exit signal killed", props)
+		}
+		var shape map[string]any
+		if err := json.Unmarshal(props, &shape); err != nil {
+			t.Fatal(err)
+		}
+		delete(shape, "session")
+		delete(shape, "repo")
+		texts := map[string]bool{}
+		collectTextPaths("", shape, texts)
+		for path := range texts {
+			if _, classified := analytics.BusFields["session.unregistered"][path]; !classified {
+				t.Errorf("session.unregistered ships %s as text, want its length: %s", path, props)
+			}
+		}
+		if strings.Contains(string(props), w.Dir) {
+			t.Errorf("session.unregistered carries the session's directory: %s", props)
+		}
+	})
+}
+
+func collectTextPaths(prefix string, value any, into map[string]bool) {
+	switch v := value.(type) {
+	case string:
+		into[prefix] = true
+	case []any:
+		for _, item := range v {
+			collectTextPaths(prefix, item, into)
+		}
+	case map[string]any:
+		for key, item := range v {
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			collectTextPaths(path, item, into)
+		}
+	}
 }

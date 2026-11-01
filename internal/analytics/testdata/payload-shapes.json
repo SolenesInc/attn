@@ -99,9 +99,6 @@
   },
   "github.host.added": null,
   "github.host.removed": null,
-  "notebook.file.changed": {
-    "origin": "string"
-  },
   "notification.created": null,
   "notification.read": null,
   "plugin.connected": null,
@@ -259,12 +256,14 @@
     "repository": "string",
     "seed_id": "string",
     "state": "string",
+    "state_reason": "string",
     "state_since": "string",
     "state_updated_at": "string",
     "succeeds": "string",
     "terminal_exit": {
       "at": "string",
-      "code": 0
+      "code": 0,
+      "signal": "string"
     },
     "turn_by_agent": false,
     "turn_opened_at": "string",
@@ -300,36 +299,10 @@
   "tailscale.serve.changed": null,
   "task.changed": null,
   "ticket.commented": null,
-  "workspace.layout.changed": {
-    "active_pane_id": "string",
-    "layout_json": "string",
-    "panes": [
-      {
-        "kind": "string",
-        "pane_id": "string",
-        "runtime_id": "string",
-        "session_id": "string",
-        "status": "string",
-        "title": "string",
-        "workspace_id": "string"
-      }
-    ],
-    "updated_at": "string",
-    "workspace_id": "string"
-  },
   "workspace.registered": null,
   "workspace.session.associated": null,
   "workspace.session.dissociated": null,
   "workspace.status.changed": null,
-  "workspace.unregistered": {
-    "directory": "string",
-    "id": "string",
-    "muted": false,
-    "pinned": false,
-    "rank": "string",
-    "status": "string",
-    "title": "string"
-  },
   "worktree.created": {
     "branch": "string",
     "created_at": "string",

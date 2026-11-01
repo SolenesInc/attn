@@ -459,6 +459,14 @@ func (t *Terminal) HoldExitDelivery() *Pause {
 }
 
 func (t *Terminal) Exit(code int) {
+	t.exit(code, "")
+}
+
+func (t *Terminal) ExitBySignal(sig syscall.Signal) {
+	t.exit(-1, sig.String())
+}
+
+func (t *Terminal) exit(code int, signal string) {
 	t.owner.mu.Lock()
 	if !t.running {
 		t.owner.mu.Unlock()
@@ -467,7 +475,7 @@ func (t *Terminal) Exit(code int) {
 	t.running = false
 	report := t.owner.onExit
 	hold := t.exitHold
-	info := ptybackend.ExitInfo{ID: t.Options.ID, ExitCode: code, LifecycleID: t.Options.LifecycleID}
+	info := ptybackend.ExitInfo{ID: t.Options.ID, ExitCode: code, Signal: signal, LifecycleID: t.Options.LifecycleID}
 	for _, events := range t.streams {
 		select {
 		case events <- ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindExit}:

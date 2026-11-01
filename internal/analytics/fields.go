@@ -18,7 +18,6 @@ var BusFields = map[string]Fields{
 	"garden.seed.work.ready":              {"caused_by_session_id": ID, "automation_run_id": ID},
 	"git.operation.started":               {"kind": Safe, "status": Safe, "id": ID},
 	"git.operation.finished":              {"kind": Safe, "status": Safe, "failure": Safe, "id": ID},
-	"notebook.file.changed":               {"origin": Safe},
 	"profile.arrangement.changed": {
 		"from_desktop_id": ID, "from_leaf_id": ID, "to_desktop_id": ID, "to_leaf_id": ID,
 	},
@@ -35,7 +34,7 @@ var BusFields = map[string]Fields{
 	"session.pty.exited": {"signal": Safe, "terminal": ID},
 	"session.respawned":  {"terminal": ID},
 	"session.unregistered": {
-		"agent": Safe, "state": Safe,
+		"agent": Safe, "state": Safe, "state_reason": Safe, "terminal_exit.signal": Safe,
 		"automation.trigger_type": Safe,
 		"pull_requests.state":     Safe, "pull_requests.ci_status": Safe, "pull_requests.review_status": Safe,
 		"pull_requests.mergeable_state": Safe, "pull_requests.readiness_state": Safe, "pull_requests.readiness_reason": Safe,
@@ -44,12 +43,6 @@ var BusFields = map[string]Fields{
 		"id": ID, "profile_id": ID, "workspace_id": ID, "parent_session_id": ID, "dispatcher_session_id": ID,
 		"succeeds": ID, "seed_id": ID, "automation.run_id": ID,
 	},
-	"workspace.layout.changed": {
-		"panes.kind": Safe, "panes.status": Safe,
-		"workspace_id": ID, "active_pane_id": ID,
-		"panes.pane_id": ID, "panes.runtime_id": ID, "panes.session_id": ID, "panes.workspace_id": ID,
-	},
-	"workspace.unregistered": {"status": Safe, "id": ID},
 	"worktree.state.changed": {"origin": Safe, "merged_signal": Safe, "sweep_status": Safe},
 	"worktree.swept":         {"action": Safe},
 }

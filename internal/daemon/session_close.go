@@ -36,7 +36,6 @@ func (d *Daemon) beginSessionClose(
 		}
 	}
 	if teardown != nil && teardown.session != nil {
-		d.publishSessionUnregistered(teardown.session)
 		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)
 	}
 	return sessionCloseInFlight{teardown: teardown}, nil

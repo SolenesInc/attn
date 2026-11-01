@@ -311,7 +311,6 @@ func (d *Daemon) closeCrewDay(sessionID protocol.SessionID, teardown *sessionTea
 		return err
 	}
 	if teardown.session != nil {
-		d.publishSessionUnregistered(teardown.session)
 		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)

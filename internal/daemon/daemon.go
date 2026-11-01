@@ -2193,14 +2193,13 @@ func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.S
 			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
-	return d.recordSessionClose(sessionID, func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
+	return d.recordSessionClose(sessionID, d.store.Get(sessionID), func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) error {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) error {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
-	session := d.store.Get(sessionID)
-	if session != nil {
+	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
@@ -2212,6 +2211,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 		return err
 	}
+	unregistered := d.sessionForBroadcast(closing)
 	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
 		d.forgetMonitor(sessionID)
 	}
@@ -2222,13 +2222,13 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		}
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
-		entry := d.store.SessionLedgerEntry(sessionID)
-		if entry == nil {
-			d.publishSessionUnregistered(session)
-		} else {
+		if entry := d.store.SessionLedgerEntry(sessionID); entry != nil {
 			d.decorateLedgerEntryWithUsage(entry)
 			d.publishFact(FactSessionClosed, string(sessionID), entry)
 		}
+	}
+	if unregistered != nil {
+		d.publishFact(FactSessionUnregistered, string(sessionID), unregistered)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -3089,14 +3089,6 @@ func (d *Daemon) projectSessionUnregistered(ev bus.Event) {
 	})
 }
 
-func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
-	if session == nil {
-		return
-	}
-	d.invalidateGardenSeedParties("session unregister")
-	d.publishFact(FactSessionUnregistered, string(session.ID), d.sessionForBroadcast(session))
-}
-
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
 	teardown, err := d.prepareSessionTeardown(msg.ID)
 	if err != nil {
@@ -3110,9 +3102,6 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 	}
 	d.sendOK(conn)
 
-	if teardown != nil && teardown.session != nil {
-		d.publishSessionUnregistered(teardown.session)
-	}
 	if teardown != nil {
 		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
 	}
