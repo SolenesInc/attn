@@ -56,15 +56,23 @@ export function OutpostUpdateBanner() {
   const api = useOptionalDaemonApi();
   const [closed, setClosed] = useState(readClosedOutpostBanner);
   const [paused, setPaused] = useState(false);
-  if (!api || !api.homeBuild || api.settings.outposts_enabled !== 'true' || closed === api.homeBuild) return null;
-  const different = api.outposts.filter(row => outpostNeedsUpdate(row, api.homeBuild));
-  const updated = api.outposts.filter(row => row.update);
-  if (!different.length && !updated.length) return null;
-  const done = !different.length && updated.every(row => row.update?.phase === 'done');
-  const key = done ? [api.homeBuild, ...updated.map(row => row.id)].join('\n') : api.homeBuild;
-  if (closed === key) return null;
+  const enabled = !!api?.homeBuild && api.settings.outposts_enabled === 'true';
+  const homeBuild = api?.homeBuild ?? '';
+  const different = enabled ? api.outposts.filter(row => outpostNeedsUpdate(row, homeBuild)) : [];
+  const updated = enabled ? api.outposts.filter(row => row.update) : [];
+  const done = !different.length && updated.length > 0 && updated.every(row => row.update?.phase === 'done');
+  const pending = different.length > 0 || (updated.length > 0 && !done);
+  const key = done ? [homeBuild, ...updated.map(row => row.id)].join('\n') : homeBuild;
+  const closedSuccess = closed !== null && closed !== homeBuild;
+  useEffect(() => {
+    if (pending && closedSuccess) {
+      persistClosedOutpostBanner(null);
+      setClosed(null);
+    }
+  }, [pending, closedSuccess]);
+  if (!api || !enabled || closed === homeBuild || closed === key || (!done && !pending)) return null;
   const busy = updated.some(outpostIsUpdating);
-  const close = () => { persistClosedOutpostBanner(key); setClosed(key); };
+  const close = () => { persistClosedOutpostBanner(key); setClosed(key); setPaused(false); };
   return (
     <div
       className="update-banner"

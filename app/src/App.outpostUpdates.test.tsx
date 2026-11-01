@@ -99,15 +99,21 @@ describe('outpost build updates', () => {
     expect(banner()).toBeNull();
     const restarted = await restartApp(view, { initialState: { ...initial, outposts: [done] } });
     expect(banner()).toBeNull();
-    await gesture(restarted.daemon, () => restarted.daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'building' } }] }));
-    expect(banner()).toHaveTextContent('Updating outposts.');
     await gesture(restarted.daemon, () => restarted.daemon.emit({ event: 'outposts_updated', outposts: [done, { ...done, id: 'lab', name: 'Lab' }] }));
     expect(banner()).toHaveTextContent('Updated Studio and Lab.Closing in 5s');
   });
 
-  it('closes the success at once from its dismiss button', async () => {
+  it('closes the success at once from its dismiss button and shows the next update of the same outpost', async () => {
     const view = await renderApp({ initialState: { ...initial, outposts: [done] } });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    fireEvent.mouseEnter(banner()!);
     await gesture(view.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss outpost updates' })));
+    expect(banner()).toBeNull();
+    await gesture(view.daemon, () => view.daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'building' } }] }));
+    expect(banner()).toHaveTextContent('Updating outposts.');
+    await gesture(view.daemon, () => view.daemon.emit({ event: 'outposts_updated', outposts: [done] }));
+    expect(banner()).toHaveTextContent('Updated Studio.Closing in 5s');
+    await advance(5000);
     expect(banner()).toBeNull();
   });
 
