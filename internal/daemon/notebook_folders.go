@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 type notebookFolder struct {
@@ -167,36 +169,83 @@ func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 	}
 }
 
+const NotebookFoldersRetryTimer stepclock.Name = "notebook-folders-retry"
+
 func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
+	defer d.setNotebookFoldersRejection(conn, "")
 	var sent []protocol.NotebookSyncFolder
 	pushed := false
+	backoff := bridge.ReconnectInterval
 	for conn.Context().Err() == nil {
 		changed := d.notebookFoldersChanges()
 		d.notebookSync.mu.Lock()
 		listed := d.notebookSync.folders != nil
 		folders := notebookFoldersWire(d.notebookSync.folders)
 		d.notebookSync.mu.Unlock()
+		var retry stepclock.Timer
 		if listed && (!pushed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
 			return a.ID == b.ID && a.Epoch == b.Epoch && slices.Equal(a.Profiles, b.Profiles)
 		})) {
 			err := conn.Call(conn.Context(), bridgeCall, protocol.NotebookFoldersMessage{Cmd: protocol.CmdNotebookFolders, Folders: folders}, nil)
-			if err == nil {
+			switch {
+			case err == nil:
+				d.setNotebookFoldersRejection(conn, "")
 				if !pushed {
 					openStream()
 				}
-				sent, pushed = folders, true
-			} else if conn.Context().Err() == nil {
+				sent, pushed, backoff = folders, true, bridge.ReconnectInterval
+			case conn.Context().Err() == nil:
 				d.logf("Notebook folders for %s: %v", conn.Peer().Name, err)
+				d.setNotebookFoldersRejection(conn, err.Error())
+				retry = d.clock.NewTimer(NotebookFoldersRetryTimer, backoff)
+				backoff = min(2*backoff, bridge.RefusedRetryInterval)
 			}
 		}
-		select {
-		case <-changed:
-		case <-conn.Done():
-			return
-		case <-d.life.Done():
+		if !d.awaitNotebookFoldersPush(conn, changed, retry) {
 			return
 		}
 	}
+}
+
+func (d *Daemon) awaitNotebookFoldersPush(conn *bridge.Conn, changed <-chan struct{}, retry stepclock.Timer) bool {
+	var retried <-chan time.Time
+	if retry != nil {
+		retried = retry.C()
+		defer retry.Stop()
+	}
+	select {
+	case <-changed:
+		return true
+	case <-retried:
+		return true
+	case <-conn.Done():
+		return false
+	case <-d.life.Done():
+		return false
+	}
+}
+
+func (d *Daemon) setNotebookFoldersRejection(conn *bridge.Conn, reason string) {
+	r := &d.notebookSync
+	peer := conn.Peer().DaemonID
+	r.mu.Lock()
+	current, known := r.rejections[peer]
+	owned := known && current.conn == conn
+	if reason == "" && !owned || reason != "" && owned && current.error == reason {
+		r.mu.Unlock()
+		return
+	}
+	if reason == "" {
+		delete(r.rejections, peer)
+	} else {
+		if r.rejections == nil {
+			r.rejections = map[string]notebookSyncStream{}
+		}
+		r.rejections[peer] = notebookSyncStream{conn: conn, error: reason}
+	}
+	d.notebookSyncChangedLocked()
+	r.mu.Unlock()
+	d.refreshNotebookRows()
 }
 
 func (d *Daemon) receiveNotebookFolders(_ context.Context, msg protocol.NotebookFoldersMessage) (struct{}, error) {

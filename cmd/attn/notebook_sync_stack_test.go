@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -396,6 +397,37 @@ func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletio
 		t.Fatalf("the outpost's stale copy was not moved aside: %+v", state)
 	}
 	t.Logf("the returning folder synced %s fresh, kept the stale copy at %s, and deleted-offline.md stayed deleted on both sides", first, aside)
+}
+
+func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	streamOpens := home.PauseAt(pausepoint.NotebookStreamOpen)
+	state := filepath.Join(outpost.Dir, "notebook-sync")
+	if err := os.MkdirAll(state, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(state, 0700) })
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	rejected := awaitNotebookError(t, pair, "outpost rejected the Notebook folder list", "permission denied")
+	writeNotebookFile(t, home, "before-recovery.md", "written while the outpost rejected the list")
+
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	home.AwaitTimer(daemon.NotebookFoldersRetryTimer)
+	home.Advance(bridge.ReconnectInterval)
+	streamOpens.Await()
+	installed, err := os.ReadFile(filepath.Join(state, "state.json"))
+	if err != nil || !strings.Contains(string(installed), notebookPath(outpost)) {
+		t.Fatalf("the Notebook stream opened before the outpost installed the folder list: %q (%v)", installed, err)
+	}
+	streamOpens.Release()
+	pair.App = home.App()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	copied := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
+	awaitOutpostFile(t, pair, filepath.Join(copied, "before-recovery.md"), "written while the outpost rejected the list", false)
+	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list before the stream opened, and before-recovery.md reached %s", rejected, copied)
 }
 
 func awaitNotebookError(t *testing.T, pair *testworld.OutpostPair, want ...string) string {

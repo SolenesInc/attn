@@ -107,6 +107,7 @@ type notebookSyncRuntime struct {
 	loaded         bool
 	folders        []notebookFolder
 	foldersChanged chan struct{}
+	rejections     map[string]notebookSyncStream
 	run            *notebookSyncRun
 	error          string
 	changed        chan struct{}
@@ -791,6 +792,10 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) protocol.OutpostNote
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr(r.error)
 		return info
 	}
+	if reason := r.rejections[peer].error; reason != "" {
+		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr(name+" rejected the Notebook folder list: "+reason)
+		return info
+	}
 	run := r.run
 	if run == nil {
 		return info
@@ -879,7 +884,7 @@ func (d *Daemon) notebookFolderStateLocked(run *notebookSyncRun, id, peer, name 
 func (d *Daemon) recordNotebookCompletionLocked(peer, name string) error {
 	r := &d.notebookSync
 	run := r.run
-	if run == nil || r.error != "" || run.streams[peer].error != "" || run.remote[peer].Error != "" {
+	if run == nil || r.error != "" || r.rejections[peer].error != "" || run.streams[peer].error != "" || run.remote[peer].Error != "" {
 		return nil
 	}
 	var done []string
