@@ -30,20 +30,16 @@ type storedReceipt struct {
 }
 
 type fakeHistoryService struct {
-	mu       sync.Mutex
-	receipts []storedReceipt
-	puts     int
-	down     bool
-	refuse   map[string]bool
-	warnings []string
-	// plain models the service before it answered Accept-Encoding: zstd.
-	plain bool
-	// pageEncodings records the Accept-Encoding of each page request.
-	pageEncodings []string
-	// hold, when set, runs before each request is served, as a slow network
-	// would; a request accepted before the service went down is still answered.
-	hold   func(*http.Request)
-	server *httptest.Server
+	mu                      sync.Mutex
+	receipts                []storedReceipt
+	puts                    int
+	down                    bool
+	refuse                  map[string]bool
+	warnings                []string
+	ignoresAcceptEncoding   bool
+	pageAcceptEncodings     []string
+	slowNetworkBeforeAnswer func(*http.Request)
+	server                  *httptest.Server
 }
 
 func newFakeHistoryService(t *testing.T) *fakeHistoryService {
@@ -61,7 +57,7 @@ func (s *fakeHistoryService) add(repo, id string, body []byte) {
 
 func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	hold, down := s.hold, s.down
+	hold, down := s.slowNetworkBeforeAnswer, s.down
 	s.mu.Unlock()
 	if hold != nil {
 		hold(r)
@@ -100,7 +96,7 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 		s.receipts = append(s.receipts, storedReceipt{repo, id, body})
 		w.WriteHeader(http.StatusCreated)
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/receipts":
-		s.pageEncodings = append(s.pageEncodings, r.Header.Get("Accept-Encoding"))
+		s.pageAcceptEncodings = append(s.pageAcceptEncodings, r.Header.Get("Accept-Encoding"))
 		var after int
 		fmt.Sscan(r.URL.Query().Get("after"), &after)
 		repo := strings.ToLower(r.URL.Query().Get("repo"))
@@ -125,7 +121,7 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		warnings, _ := json.Marshal(s.warnings)
 		fmt.Fprintf(&page, `],"next":%d,"more":%t,"warnings":%s}`, next, more, warnings)
-		if !s.plain && r.Header.Get("Accept-Encoding") == "zstd" {
+		if !s.ignoresAcceptEncoding && r.Header.Get("Accept-Encoding") == "zstd" {
 			w.Header().Set("Content-Encoding", "zstd")
 			w.Write(testhistory.Compress(page.Bytes()))
 			return
@@ -404,7 +400,7 @@ func TestSyncAsksForCompressedPagesAndPrintsEachServiceWarningOnce(t *testing.T)
 		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
 	}
 	w.service.mu.Lock()
-	encodings := w.service.pageEncodings
+	encodings := w.service.pageAcceptEncodings
 	w.service.mu.Unlock()
 	if len(encodings) < 2 || slices.ContainsFunc(encodings, func(e string) bool { return e != "zstd" }) {
 		t.Fatalf("page requests sent Accept-Encoding %q, want zstd on every page", encodings)
@@ -422,7 +418,7 @@ func TestSyncAsksForCompressedPagesAndPrintsEachServiceWarningOnce(t *testing.T)
 
 func TestSyncFromAServiceThatSendsPlainJSONKeepsTheSameCompressedMirror(t *testing.T) {
 	w := newSyncWorld(t)
-	w.service.plain = true
+	w.service.ignoresAcceptEncoding = true
 	w.service.add("github.com/"+checkoutRepository, "ci-0", repetitiveReceipt("ci-0"))
 	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 1;") {
 		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
@@ -488,7 +484,7 @@ type heldRequest struct {
 func (w *syncWorld) holdRequests(hold func(method, after string) bool) <-chan heldRequest {
 	held := make(chan heldRequest)
 	w.service.mu.Lock()
-	w.service.hold = func(r *http.Request) {
+	w.service.slowNetworkBeforeAnswer = func(r *http.Request) {
 		if !hold(r.Method, r.URL.Query().Get("after")) {
 			return
 		}
