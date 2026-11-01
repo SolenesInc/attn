@@ -96,14 +96,7 @@ func setCommandPathIn(group, word string, known ...string) {
 	}
 }
 
-func refineCommandPath(leaf string) {
-	if strings.HasPrefix(leaf, invocation.path+" ") {
-		invocation.path = leaf
-	}
-}
-
 func parseFlags(fs *flag.FlagSet, args []string) error {
-	refineCommandPath(fs.Name())
 	handling := fs.ErrorHandling()
 	fs.Init(fs.Name(), flag.ContinueOnError)
 	err := fs.Parse(args)

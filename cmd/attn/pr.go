@@ -194,6 +194,7 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 		writePRHelp(stderr)
 		return prWaitExitUsage
 	}
+	setCommandPath("pr wait-ready")
 	opts, err := parsePRWaitArgs(args[1:])
 	if err != nil {
 		fmt.Fprintf(stderr, "pr wait-ready: %v\n", err)

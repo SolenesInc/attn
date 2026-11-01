@@ -37,6 +37,7 @@ type usageError struct{ error }
 func usagef(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
 
 func delegateRoles(w io.Writer, args []string) error {
+	setCommandPath("delegate roles")
 	if len(args) == 0 || args[0] == "--json" {
 		return delegateRolesCatalog(w, args)
 	}

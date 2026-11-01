@@ -37,6 +37,7 @@ func executeCallout(args []string, stdout, stderr io.Writer) int {
 		recordUsageError("callout", usageErrorUnknownCommand)
 		return fail(fmt.Errorf("unknown command %q; use show or anchors", command))
 	}
+	setCommandPath("callout " + command)
 	fs := flag.NewFlagSet("callout "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	session := fs.String("session", "", "session id (defaults to the current session)")

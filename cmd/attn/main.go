@@ -790,6 +790,7 @@ func runDelegate() {
 		return
 	}
 	if len(os.Args) >= 3 && os.Args[2] == "status" {
+		setCommandPath("delegate status")
 		fs := flag.NewFlagSet("delegate status", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)
 		profile := fs.String("profile", "", "")

@@ -33,6 +33,7 @@ func runSeedCheck(args []string) {
 		seedUsageError("check", err)
 	}
 	name := "check " + string(verb)
+	setCommandPath("seed " + name)
 	f := newSeedFlags(name)
 	positionals := f.parse(name, args[1:])
 	msg, err := seedCheckMessage(verb, f, positionals)

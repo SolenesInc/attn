@@ -37,6 +37,8 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		fromAgent("seed", "ls", "--bogus")
 		fromAgent("terminal", "read", "t-missing")
 		s.Attn("frobnicate")
+		s.Attn("codex", "/private/project-sentinel")
+		s.Attn("delegate", "roles", "--json")
 	}
 
 	commands()
@@ -82,6 +84,8 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		`seed ls {"caller":"agent","error_kind":"unknown_flag","exit_code":2,"harness":"claude","ok":false}`,
 		`terminal read {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"unclassified"}`,
 		`attn {"caller":"human","error_kind":"unknown_command","exit_code":1,"ok":false}`,
+		`codex {"caller":"human","error_kind":"usage","exit_code":2,"ok":false}`,
+		`delegate roles {"caller":"human","exit_code":0,"ok":true}`,
 		`agent close {"caller":"agent","exit_code":0,"harness":"claude","ok":true}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
