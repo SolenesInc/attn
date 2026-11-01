@@ -111,7 +111,7 @@ setup_fixture() {
   git -C "$fixture_repo" add candidate-fixture.txt
   git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture' -m 'Attn-Seed: seed-fixture'
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
-  git -C "$fixture_repo" push -q -u origin main
+  git -C "$fixture_repo" push -q -u origin main main:reviewed
 }
 
 export PATH="$work/bin:$PATH"
@@ -191,6 +191,9 @@ expect_failure 'local main is not origin/main' run_release v99.98.97
 git -C "$fixture_repo" merge -q --ff-only origin/main
 
 main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
+expect_failure "wait until reviewed reaches $main_sha" run_release v99.98.97
+grep -Fq "reviewed: $(git --git-dir="$fixture_origin" rev-parse reviewed)" "$work/failure.out"
+git --git-dir="$fixture_origin" update-ref refs/heads/reviewed "$main_sha"
 
 # Historical tag drift must not block an unrelated candidate. Release
 # preparation reads the requested remote tag and leaves local history alone.

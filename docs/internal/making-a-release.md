@@ -20,17 +20,20 @@ them, and the next release deletes the fragments.
 
 ## Release
 
-Run this from a clean, current `main` with green Acceptance:
+Run this from a clean, current `main` whose head has green Acceptance and is
+contained in `reviewed`:
 
 ```bash
 ./scripts/release.sh vX.Y.Z
 ```
 
-The script cuts `release/vX.Y.Z` from that commit, compiles the commits since
-the last release into `CHANGELOG.md`, bumps every version, and opens a PR to
-`main`. Merge the PR once `PR gate` and `App acceptance` are green. The merged
-commit is the release commit. When its Acceptance is green, CI tags and
-publishes it.
+When `reviewed` does not contain the head yet, the script stops. Run the
+`review-main` skill, or wait for the review automation to move `reviewed`.
+Otherwise the script cuts `release/vX.Y.Z` from that commit, compiles the
+commits since the last release into `CHANGELOG.md`, bumps every version, and
+opens a PR to `main`. Merge the PR once `PR gate` and `App acceptance` are
+green. The merged commit is the release commit. When its Acceptance is green,
+CI tags and publishes it.
 
 `main` may keep moving while the release PR is open. Changes that land after
 the release was cut ship with it, and the next release's notes cover them.
