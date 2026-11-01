@@ -2,14 +2,13 @@ use tauri::AppHandle;
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use global_hotkey::{hotkey::HotKey, GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
     use objc2_app_kit::{
         NSApplication, NSApplicationActivationOptions, NSEvent, NSRunningApplication, NSScreen,
         NSWindow, NSWindowCollectionBehavior, NSWorkspace,
     };
     use objc2_foundation::{MainThreadMarker, NSPoint};
     use panel::QuickCapturePanel;
-    use std::sync::{mpsc, Mutex};
+    use std::sync::Mutex;
     use tauri::{Emitter, Manager};
     use tauri_nspanel::{ManagerExt as PanelManagerExt, WebviewWindowExt};
 
@@ -27,11 +26,9 @@ mod mac {
     }
 
     pub struct QuickCaptureState {
-        manager: Option<GlobalHotKeyManager>,
         preference: Option<String>,
         diagnostics: Vec<String>,
         origin: Option<i32>,
-        binding: Option<HotKey>,
         was_hidden: bool,
     }
 
@@ -97,7 +94,7 @@ mod mac {
         let _ = webview.set_focus();
     }
 
-    fn record_trace(app: &tauri::AppHandle, message: String) {
+    pub fn record_trace(app: &tauri::AppHandle, message: String) {
         if crate::instance::automation_enabled() {
             let at = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -133,23 +130,7 @@ mod mac {
     }
 
     pub fn hide(app: &tauri::AppHandle) -> Result<(), String> {
-        on_main(app, hide_on_main)
-    }
-
-    fn on_main(
-        app: &tauri::AppHandle,
-        action: impl FnOnce(&tauri::AppHandle) -> Result<(), String> + Send + 'static,
-    ) -> Result<(), String> {
-        if MainThreadMarker::new().is_some() {
-            return action(app);
-        }
-        let (sender, receiver) = mpsc::channel();
-        let handle = app.clone();
-        app.run_on_main_thread(move || {
-            let _ = sender.send(action(&handle));
-        })
-        .map_err(|error| error.to_string())?;
-        receiver.recv().map_err(|error| error.to_string())?
+        crate::hotkeys::on_main(app, hide_on_main)
     }
 
     fn hide_on_main(app: &tauri::AppHandle) -> Result<(), String> {
@@ -184,57 +165,7 @@ mod mac {
     }
 
     pub fn bind(app: &tauri::AppHandle, binding: Option<String>) -> Result<(), String> {
-        on_main(app, move |app| bind_on_main(app, binding))
-    }
-
-    fn bind_on_main(app: &tauri::AppHandle, binding: Option<String>) -> Result<(), String> {
-        let state = app.state::<Mutex<QuickCaptureState>>();
-        let mut state = state.lock().unwrap();
-        let next = binding
-            .map(|s| s.parse::<HotKey>().map_err(|e| e.to_string()))
-            .transpose()?;
-        if next.is_some_and(|key| {
-            !key.mods.intersects(
-                global_hotkey::hotkey::Modifiers::CONTROL
-                    | global_hotkey::hotkey::Modifiers::ALT
-                    | global_hotkey::hotkey::Modifiers::SUPER
-                    | global_hotkey::hotkey::Modifiers::META,
-            )
-        }) {
-            return Err(
-                "Use Command, Control or Option with another key for a system-wide shortcut."
-                    .into(),
-            );
-        }
-        if next == state.binding {
-            return Ok(());
-        }
-        if let Some(next) = next {
-            state
-                .manager
-                .as_ref()
-                .ok_or("Capture is shutting down")?
-                .register_exclusive(next)
-                .map_err(|e| {
-                    format!("Cannot register {next}: {e}. Previous shortcut remains active.")
-                })?;
-        }
-        if let Some(previous) = state.binding {
-            if let Err(error) = state
-                .manager
-                .as_ref()
-                .ok_or("Capture is shutting down")?
-                .unregister(previous)
-            {
-                if let Some(next) = next {
-                    state.manager.as_ref().ok_or("Capture is shutting down")?.unregister(next)
-                        .map_err(|rollback| format!("Cannot unregister {previous}: {error}. Replacement rollback also failed: {rollback}"))?;
-                }
-                return Err(format!("Cannot unregister {previous}: {error}"));
-            }
-        }
-        state.binding = next;
-        Ok(())
+        crate::hotkeys::bind(app, crate::hotkeys::Action::QuickCapture, binding)
     }
 
     pub fn status(app: &tauri::AppHandle) -> super::QuickCaptureStatus {
@@ -242,7 +173,8 @@ mod mac {
         let state = state.lock().unwrap();
         super::QuickCaptureStatus {
             binding: state.preference.clone(),
-            active: state.binding.map(|binding| binding.to_string()),
+            active: crate::hotkeys::bound(app, crate::hotkeys::Action::QuickCapture)
+                .map(|binding| binding.to_string()),
             diagnostics: state.diagnostics.clone(),
         }
     }
@@ -256,61 +188,21 @@ mod mac {
         Ok(())
     }
 
-    pub fn shutdown(app: &tauri::AppHandle) {
-        let manager = {
-            let state = app.state::<Mutex<QuickCaptureState>>();
-            let mut state = state.lock().unwrap();
-            state.binding = None;
-            state.manager.take()
-        };
-        drop(manager);
-    }
-
     pub fn install(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         super::forget_downloads();
         let cached = super::load_preference();
         app.manage(Mutex::new(QuickCaptureState {
-            manager: Some(GlobalHotKeyManager::new()?),
             preference: cached.clone(),
-            binding: None,
             origin: None,
             was_hidden: false,
             diagnostics: Vec::new(),
         }));
         app.handle().plugin(tauri_nspanel::init())?;
-        let handle = app.handle().clone();
-        GlobalHotKeyEvent::set_event_handler(Some(move |event: GlobalHotKeyEvent| {
-            record_trace(
-                &handle,
-                format!(
-                    "[QuickCapture] hotkey id={} state={:?} main_thread={}",
-                    event.id,
-                    event.state,
-                    MainThreadMarker::new().is_some()
-                ),
-            );
-            if event.state != HotKeyState::Pressed {
-                return;
-            }
-            let current = handle
-                .state::<Mutex<QuickCaptureState>>()
-                .lock()
-                .unwrap()
-                .binding
-                .map(|binding| binding.id());
-            if current != Some(event.id) {
-                return;
-            }
-            let app = handle.clone();
-            let _ = handle.run_on_main_thread(move || {
-                show(&app);
-            });
-        }));
         Ok(())
     }
 
     pub fn enable(app: &tauri::AppHandle) -> Result<(), String> {
-        on_main(app, |app| {
+        crate::hotkeys::on_main(app, |app| {
             if app.get_webview_window("capture").is_none() {
                 create_panel(app).map_err(|error| error.to_string())?;
             }
@@ -319,7 +211,7 @@ mod mac {
     }
 
     pub fn disable(app: &tauri::AppHandle) -> Result<(), String> {
-        on_main(app, |app| {
+        crate::hotkeys::on_main(app, |app| {
             if app.get_webview_window("capture").is_some() {
                 hide_on_main(app)?;
             }
@@ -456,7 +348,7 @@ pub fn capture_bind(app: AppHandle, binding: Option<String>) -> Result<(), Strin
 }
 
 #[cfg(target_os = "macos")]
-pub use mac::{install, show, shutdown};
+pub use mac::{install, record_trace, show};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct QuickCaptureStatus {

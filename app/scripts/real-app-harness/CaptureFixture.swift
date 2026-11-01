@@ -28,8 +28,13 @@ final class Fixture: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let directory = URL(fileURLWithPath: ProcessInfo.processInfo.environment["CAPTURE_FIXTURE_DIR"]!)
     func applicationDidFinishLaunching(_ notification: Notification) {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            self?.keyReceipts.append(["at": Int64(Date().timeIntervalSince1970 * 1000), "type": event.type.rawValue,
-                "keyCode": event.keyCode, "characters": event.characters ?? "", "flags": event.modifierFlags.rawValue])
+            guard let self else { return event }
+            let receipt: [String: Any] = ["at": Int64(Date().timeIntervalSince1970 * 1000), "type": event.type.rawValue,
+                "keyCode": event.keyCode, "characters": event.characters ?? "", "flags": event.modifierFlags.rawValue]
+            self.keyReceipts.append(receipt)
+            if event.type == .keyDown {
+                try! JSONSerialization.data(withJSONObject: receipt).write(to: self.directory.appendingPathComponent("key-down.json"), options: .atomic)
+            }
             return event
         }
         originalClipboard = (NSPasteboard.general.pasteboardItems ?? []).map { original in

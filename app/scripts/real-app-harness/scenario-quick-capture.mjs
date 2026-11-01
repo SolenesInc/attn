@@ -132,6 +132,11 @@ async function openCapture(text = "") {
   await captureStack();
   return actual;
 }
+async function waitForPress(count) {
+  const { presses } = await client.request('hotkey_wait', { presses: count });
+  assert.equal(presses.length, count, 'Each dictation chord routes exactly one toggle press');
+  return presses[count - 1];
+}
 async function recordHostedStep(name, action, windowTitle = 'Quick Capture') {
   if (process.env.CI !== 'true') return action();
   const windowId = await driver.mainWindowId({ windowTitle });
@@ -673,6 +678,54 @@ try {
     await key('k', ['control', 'option']);
     assert.equal((await hidden()).visible, false);
     await client.request('capture_binding', { binding: testBinding });
+  });
+  await runner.step('dictation_toggle_routes_only_inside_attn', async () => {
+    const dictation = 'Control+Alt+D';
+    const hotkeys = (payload = {}) => client.request(payload.binding === undefined ? 'hotkey_status' : 'hotkey_bind', payload);
+    const route = status => status.routes.find(route => route.action === 'dictation');
+    runner.registerCleanup('dictation-binding', () => hotkeys({ action: 'dictation', binding: '' }));
+    await assert.rejects(hotkeys({ action: 'dictation', binding: testBinding }), /already bound to Quick Capture. Previous shortcut remains active/);
+    let bareRightOption;
+    try { await hotkeys({ action: 'dictation', binding: 'AltRight' }); } catch (error) { bareRightOption = String(error); }
+    assert.ok(bareRightOption, 'A bare right-Option key is not a native chord the dispatcher accepts');
+    await hotkeys({ action: 'dictation', binding: dictation });
+
+    await fixture.activateApp();
+    await fixture.runInputDriver(['wait_frontmost']);
+    const outside = await client.request('hotkey_wait', { dictationRegistered: false });
+    assert.equal(route(outside).registered, false, 'Dictation stays unregistered while another app owns focus');
+    const passedThrough = path.join(runner.runDir, 'key-down.json');
+    await fixtureSignal('key-down.json', () => key('d', ['control', 'option']));
+    const fixtureKey = JSON.parse(fs.readFileSync(passedThrough, 'utf8'));
+    assert.equal(fixtureKey.keyCode, 2, 'The external app receives the dictation chord');
+    assert.deepEqual((await hotkeys()).presses, [], 'No dictation press is routed while another app owns focus');
+
+    await driver.activateApp();
+    await driver.runInputDriver(['wait_frontmost']);
+    const inside = await client.request('hotkey_wait', { dictationRegistered: true });
+    assert.equal(route(inside).registered, true, 'Dictation registers while an attn window is key');
+    await key('d', ['control', 'option']);
+    const mainPress = await waitForPress(1);
+
+    await fixture.activateApp();
+    await fixture.runInputDriver(['wait_frontmost']);
+    await openCapture();
+    await key('d', ['control', 'option']);
+    const capturePress = await waitForPress(2);
+    assert.equal(await driver.frontmostBundleId(), fixtureId, 'Dictation inside Quick Capture does not activate attn');
+    await key('escape');
+    await hidden();
+    await fixture.runInputDriver(['wait_frontmost']);
+    assert.equal(route(await client.request('hotkey_wait', { dictationRegistered: false })).registered, false, 'Dictation unregisters when focus returns to the external app');
+
+    await hotkeys({ action: 'dictation', binding: '' });
+    assert.equal(route(await hotkeys()), undefined);
+    await openCapture('Quick Capture after dictation unbind');
+    await key('escape');
+    await hidden();
+    runner.writeJson('dictation-routing.json', { bareRightOption, outside, fixtureKey, inside, mainPress, capturePress });
+    assert.deepEqual(mainPress, { action: 'dictation', window: 'main', browser: null });
+    assert.deepEqual(capturePress, { action: 'dictation', window: 'capture', browser: null });
   });
   await runner.step('dismiss_after_user_changed_apps', async () => {
     await openCapture();

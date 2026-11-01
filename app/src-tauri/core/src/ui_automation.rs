@@ -316,6 +316,30 @@ fn handle_request<R: Runtime>(
         };
     }
 
+    #[cfg(target_os = "macos")]
+    if matches!(
+        request.action.as_str(),
+        "hotkey_bind" | "hotkey_status" | "hotkey_wait"
+    ) {
+        let payload = request.payload.clone().unwrap_or(Value::Null);
+        let outcome = hotkey_request(app, &request.action, payload);
+        append_log(
+            app,
+            &format!(
+                "request {} id={} action={}",
+                if outcome.is_ok() { "ok" } else { "err" },
+                request_id,
+                request.action
+            ),
+        );
+        return AutomationSocketResponse {
+            id: request_id,
+            ok: outcome.is_ok(),
+            error: outcome.as_ref().err().cloned(),
+            result: outcome.ok(),
+        };
+    }
+
     if request.action == "set_window_bounds" {
         let payload = request.payload.clone().unwrap_or(Value::Null);
         return match set_window_bounds(app, &payload) {
@@ -981,6 +1005,47 @@ fn native_windows<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
         .recv_timeout(Duration::from_secs(5))
         .map_err(|_| "timed out resolving native windows".to_string())??;
     Ok(serde_json::json!({ "pid": std::process::id(), "windows": windows }))
+}
+
+#[cfg(target_os = "macos")]
+fn hotkey_request<R: Runtime>(
+    app: &AppHandle<R>,
+    action: &str,
+    payload: Value,
+) -> Result<Value, String> {
+    use crate::hotkeys;
+    if action == "hotkey_bind" {
+        let target: hotkeys::Action = serde_json::from_value(payload["action"].clone())
+            .map_err(|error| format!("hotkey_bind action: {error}"))?;
+        let binding = payload["binding"]
+            .as_str()
+            .filter(|binding| !binding.is_empty())
+            .map(str::to_owned);
+        hotkeys::bind(app, target, binding)?;
+    }
+    let status = if action == "hotkey_wait" {
+        if let Some(count) = payload["presses"].as_u64() {
+            hotkeys::wait(app, &format!("{count} presses"), |status| {
+                status.presses.len() as u64 >= count
+            })?
+        } else {
+            let registered = payload["dictationRegistered"]
+                .as_bool()
+                .ok_or("hotkey_wait needs presses or dictationRegistered")?;
+            hotkeys::wait(
+                app,
+                &format!("dictation registered={registered}"),
+                |status| {
+                    status.routes.iter().any(|route| {
+                        route.action == hotkeys::Action::Dictation && route.registered == registered
+                    })
+                },
+            )?
+        }
+    } else {
+        hotkeys::status(app)
+    };
+    serde_json::to_value(status).map_err(|error| error.to_string())
 }
 
 #[cfg(not(target_os = "linux"))]
