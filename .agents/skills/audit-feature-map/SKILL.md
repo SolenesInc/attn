@@ -29,8 +29,13 @@ Each pass ends with one of these:
 
 Your stake is the seed named in the automation's opening message. When the
 user asks for the audit directly, plant one. At the end, harvest it with
-`attn seed harvest <stake> -m "<outcome> at <revision>: <summary>"`. The next
-pass reads the revision from that message.
+`attn seed harvest <stake> -m "<outcome> at <revision>: <summary>"`.
+
+The next pass looks for new ways in from a baseline: the revision of the
+newest pass that ended clean or changed. A blocked pass never moves the
+baseline, because it may have stopped before its scan for new ways in
+finished or before its fixes landed. The interval it covered stays in the
+next pass's scan.
 
 ## What you may change
 
@@ -83,9 +88,12 @@ Check that every feature file got a summary back. Where several recipes need
 the same setup, combine the recipes so you set up once. Check the out-of-date
 claims the subagents raised, but don't re-check the parts they found correct.
 
-Then look for ways into features that no map file lists yet. Find the previous
-pass's revision with `attn seed search feature map audit`, and read the
-commits since then in `cmd/attn`, `app/src/shortcuts`, `app/src/application`
+Then look for ways into features that no map file lists yet. Find the
+baseline: run `attn seed search "feature map audit" --limit 50`, read the
+harvest messages of the audit stakes, and take the newest revision among those
+that start with `clean` or `changed`. If none does, take the newest revision
+any harvested audit stake names. Read the commits from the baseline to your
+revision in `cmd/attn`, `app/src/shortcuts`, `app/src/application`
 and `internal/prompts/content`. Only count a way in as missing when you can
 point at the source that adds it.
 
@@ -150,8 +158,10 @@ Then sort each finding:
   existing seed with `attn seed search <words>`. Add a note to the existing
   seed, or plant a new seed with `--discovered-from <stake>`. Use one seed per
   cause. Don't fix the bug in this pass.
-- **You can't tell what attn is meant to do**: ask the user with `attn ask`,
-  and leave the map as it is.
+- **You can't tell what attn is meant to do**: leave the map as it is, and
+  ask the user with `attn ask`. If an audit stake that is still open already
+  asks the same question, name that stake in your note instead of asking
+  again. Carry on with the other findings while the ask is open.
 
 Never make a recipe weaker so that the recipe passes.
 
@@ -163,8 +173,12 @@ with the `land-on-main` skill. Otherwise land nothing.
 Pack the evidence folder into a `.tar.gz` and attach it to your stake with
 `attn seed attach <stake> --path <file> --move`. Add one note to the stake
 with the features you covered, the unreachable ones and what they need, the
-map fixes, the seeds you planted or noted, and the outcome. Then harvest the
-stake.
+map fixes, the seeds you planted or noted, the open asks, and the outcome.
+
+If no ask is open, harvest the stake. If one is, end your turn and leave the
+stake open, because closing the stake closes the ask. When the user answers,
+act on the answer: fix the map and land the fix, or report the bug. Then
+note what you did and harvest the stake.
 
 Use the `attn` on your `PATH` only for your stake, seeds and asks. Run it in a
 shell without drive-attn's prefix, because the prefix points `attn` at the
