@@ -3964,8 +3964,8 @@ model AskPart {
 // named. It is addressed to the seed's tender, so whoever tends the seed next
 // holds it, and harvest or wither closes it. The answer is a note on the seed.
 // An agent that tends no seed asks without one: the ask is addressed to its
-// crew member or chief mailbox, or else to its session, and the answer is a
-// user message in that inbox.
+// crew member or chief mailbox, or else to its session, and the answer is
+// user input in that inbox.
 // base_dir is where the agent asked from; relative image paths resolve there.
 model Ask {
   id: string;
@@ -5498,7 +5498,7 @@ model SeedAuthorization {
 }
 
 // A change to a seed's authorization that attn types into the seed's tender
-// as a user message.
+// as user input.
 model SeedAuthorizationUpdate {
   // The tender it was addressed to, with the session it was typed into or
   // waits for.
@@ -6033,7 +6033,7 @@ model SeedEditMessage {
 
 // Set, clear or read a seed's authorization. With text it sets it, with
 // clear it removes it, and with neither it reads it. A change by someone
-// other than a live tender is typed into the tender as a user message.
+// other than a live tender is typed into the tender as user input.
 @extension("x-on", #{ home: true })
 model SeedAuthorizationMessage {
   "profile_id"?: string;
