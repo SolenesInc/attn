@@ -192,7 +192,8 @@ func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T
 	if _, err := cli.SeedTransition("contender", seed, "tend", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), string("being tended by "+accepted.SessionID)) {
 		t.Errorf("claiming the seed while its delegate boots = %v, want it refused naming the delegate", err)
 	}
-	boot()
+	boot.Await()
+	boot.Release()
 	if result, err := cli.Delegate(request); err != nil || result.SessionID != accepted.SessionID {
 		t.Fatalf("the delegation = %+v, %v; want it to finish as %s", result, err, accepted.SessionID)
 	}

@@ -34,6 +34,7 @@ type World struct {
 	peers    []*Peer
 
 	unansweredTrust map[string]bool
+	outside         *outsideHolds
 }
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -370,8 +371,14 @@ func (w *World) CodexServerOf(profile string) *fakeagent.CodexServer {
 	return w.kit.CodexServerOf(profile)
 }
 
-func (w *World) HoldNextBoot() (boot func()) {
-	return w.kit.HoldNextBoot()
+func (w *World) HoldNextBoot() *Pause {
+	w.T.Helper()
+	if w.outside == nil {
+		w.outside = newOutsideHolds(w.T)
+	}
+	name, pause := w.outside.arm("agent boot")
+	w.kit.HoldNextBoot(func() { w.outside.hold(name) })
+	return pause
 }
 
 func (w *World) LogDaemonTail() {

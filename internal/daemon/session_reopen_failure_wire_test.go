@@ -95,7 +95,6 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 		t.Errorf("retry changed terminal %s to %s", terminal, after)
 	}
 	held := w.HoldNextBoot()
-	defer held()
 	reloaded := reloadPi(app, string(recreated.ID))
 	if !reloaded.Success {
 		t.Fatal(protocol.Deref(reloaded.Error))
@@ -112,7 +111,8 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 	if !found {
 		t.Fatal("successful retry session missing")
 	}
-	held()
+	held.Await()
+	held.Release()
 	resumed := w.Launched(string(recreated.ID))
 	if !resumed.Resumed {
 		t.Errorf("retry did not resume: %q", resumed.Argv)

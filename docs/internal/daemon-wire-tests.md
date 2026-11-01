@@ -38,8 +38,11 @@ The one way to reach inside is a pause point, below.
 - `w.RequestSpawn` sends the same requests and returns the spawn result with
   the desktop and tile it added, so the test can close a refused spawn's
   tile the way the app does.
-- `w.HoldNextBoot()` keeps the next agent booting, before it paints its
-  resting title or reads input, until the test calls the returned function.
+- `w.HoldNextBoot()` holds the next agent at the start of its boot, before
+  the agent paints its resting title or reads input. It returns a
+  `testworld.Pause`: `Await` returns once the agent is held, and `Release`
+  lets the agent boot. A boot hold that no agent reaches fails the test at
+  teardown.
 - `w.ExitAtNextBoot(code, screen)` makes the next agent print `screen` and
   exit with `code` before it starts, the way a harness that cannot start does.
 - `w.RefusePiLaunches(reason)` makes the Pi driver refuse every launch and

@@ -91,7 +91,8 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 		if !again.Success {
 			t.Errorf("spawning the live %s session again: %s", agent, protocol.Deref(again.Error))
 		}
-		boot()
+		boot.Await()
+		boot.Release()
 		run := w.Launched(string(first.ID))
 		app.TypeLine(string(first.ID), "fix the build")
 		if got := run.Prompted(); got != "fix the build" {

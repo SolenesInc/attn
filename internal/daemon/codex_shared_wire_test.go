@@ -247,11 +247,11 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 
 	boot := w.HoldNextBoot()
 	app.Send(shop)
-	w.AwaitHeldBoot()
+	boot.Await()
 	if closed := closeTileFromApp(w.ConnectApp(), desktop, anchor); !closed.Success {
 		t.Fatalf("close the tile Codex launches beside: %s", protocol.Deref(closed.Error))
 	}
-	boot()
+	boot.Release()
 	if placed := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == shop.ID }); placed.Success {
 		t.Fatalf("a shared Codex launch beside a tile that closed under it was placed")
 	}

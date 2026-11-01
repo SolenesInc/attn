@@ -26,7 +26,8 @@ func TestASeedWhoseDelegationIsStillStartingRefusesASecondDelegation(t *testing.
 	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "already has a delegation being prepared") {
 		t.Errorf("a second delegation of %s while the first is starting = %+v, %v; want it refused", seed, result, err)
 	}
-	boot()
+	boot.Await()
+	boot.Release()
 	if result, err := cli.Delegate(first); err != nil || result.SessionID != accepted.SessionID || result.SeedID != seed {
 		t.Fatalf("the first delegation = %+v, %v; want it to finish on %s", result, err, seed)
 	}

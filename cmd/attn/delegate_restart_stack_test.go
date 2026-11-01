@@ -30,14 +30,14 @@ func TestADelegateWhoseAgentOutlivesARestartStillFailsWhenItExitsBeforeItsFirstT
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.AwaitHeldBoot()
+	boot.Await()
 	s.Terminal(string(accepted.SessionID))
 
 	s.Stop()
 	s.Start()
 	const screen = `Error: Model "gpt-5.6-sol" is ambiguous across providers`
 	s.ExitAtNextBoot(1, screen)
-	boot()
+	boot.Release()
 	result, err := s.Client().Delegate(request)
 	for _, want := range []string{"codex exited with code 1 before its first turn", "is ambiguous across providers"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
@@ -75,12 +75,12 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.AwaitHeldBoot()
+	boot.Await()
 	s.Terminal(string(accepted.SessionID))
 
 	s.Stop()
 	s.Start()
-	boot()
+	boot.Release()
 	successor := s.Launched(string(accepted.SessionID))
 	result, err := s.Client().Delegate(handover)
 	if err != nil || result.SessionID != accepted.SessionID {

@@ -36,8 +36,7 @@ type Kit struct {
 	control        net.Listener
 	mu             sync.Mutex
 	launches       map[string]chan *Run
-	nextBoot       chan struct{}
-	bootAsk        chan struct{}
+	nextBoot       func()
 	fakes          []*fake
 	servers        []*fake
 	failures       []string
@@ -211,28 +210,19 @@ func (k *Kit) CodexServerOf(profile string) *CodexServer {
 	return nil
 }
 
-func (k *Kit) HoldNextBoot() (boot func()) {
-	cue := make(chan struct{})
+func (k *Kit) HoldNextBoot(hold func()) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.nextBoot = cue
-	k.bootAsk = make(chan struct{})
-	return sync.OnceFunc(func() { close(cue) })
+	k.nextBoot = hold
 }
 
-func (k *Kit) awaitBoot(sessionID string) {
+func (k *Kit) awaitBoot() {
 	k.mu.Lock()
-	cue, ask := k.nextBoot, k.bootAsk
+	hold := k.nextBoot
 	k.nextBoot = nil
 	k.mu.Unlock()
-	if cue == nil {
-		return
-	}
-	close(ask)
-	select {
-	case <-cue:
-	case <-time.After(HangGuard):
-		k.fail(fmt.Sprintf("the boot of session %q was held and never released", sessionID))
+	if hold != nil {
+		hold()
 	}
 }
 

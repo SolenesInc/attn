@@ -240,7 +240,8 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	if result, err := cli.Delegate(second); err == nil || !strings.Contains(err.Error(), "checkout "+repo+" is used by active Attn session "+string(accepted.SessionID)) {
 		t.Errorf("a second delegation into the checkout the first is still launching in = %+v, %v; want it refused", result, err)
 	}
-	boot()
+	boot.Await()
+	boot.Release()
 	if result, err := cli.Delegate(first); err != nil || result.SessionID != accepted.SessionID || result.Directory != repo {
 		t.Fatalf("the first delegation = %+v, %v; want it to finish in %s", result, err, repo)
 	}

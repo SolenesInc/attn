@@ -21,9 +21,7 @@ const (
 )
 
 type Terminals struct {
-	t           testing.TB
-	pauses      *Pauses
-	holds       int
+	holds       *outsideHolds
 	mu          sync.Mutex
 	terminals   map[harness.TerminalID]*Terminal
 	onExit      func(ptybackend.ExitInfo)
@@ -66,18 +64,7 @@ type terminalStall struct {
 }
 
 func NewTerminals(t testing.TB) *Terminals {
-	pauses := NewPauses()
-	t.Cleanup(func() {
-		pauses.FailUnreached()
-		pauses.Close()
-	})
-	return &Terminals{t: t, pauses: pauses, terminals: map[harness.TerminalID]*Terminal{}}
-}
-
-func (b *Terminals) armLocked(id harness.TerminalID, kind string) (string, *Pause) {
-	b.holds++
-	name := fmt.Sprintf("terminal %s %s #%d", id, kind, b.holds)
-	return name, b.pauses.Arm(b.t, name, false)
+	return &Terminals{holds: newOutsideHolds(t), terminals: map[harness.TerminalID]*Terminal{}}
 }
 
 func (b *Terminals) Terminal(id string) *Terminal {
@@ -253,7 +240,7 @@ func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	}
 	term.removal, term.gone = "", true
 	b.mu.Unlock()
-	b.pauses.Hold(hold, nil)
+	b.holds.hold(hold)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.terminals[id] == term {
@@ -321,7 +308,7 @@ func (b *Terminals) SessionLikelyAlive(_ context.Context, id harness.TerminalID)
 	stall.hold = ""
 	b.mu.Unlock()
 	if hold != "" {
-		b.pauses.arrive(hold, 0, nil, true, func() {
+		b.holds.arrive(hold, func() {
 			b.mu.Lock()
 			defer b.mu.Unlock()
 			if term.stall == stall {
@@ -399,7 +386,7 @@ func (t *Terminal) OnSubmit(fn func(prompt string)) {
 func (t *Terminal) Stall(alive bool, probeErr error) *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	hold, pause := t.owner.armLocked(t.Options.ID, "stall")
+	hold, pause := t.owner.holds.arm("terminal " + string(t.Options.ID) + " stall")
 	t.stall = &terminalStall{alive: alive, err: probeErr, hold: hold}
 	return pause
 }
@@ -407,7 +394,7 @@ func (t *Terminal) Stall(alive bool, probeErr error) *Pause {
 func (t *Terminal) HoldRemoval() *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	hold, pause := t.owner.armLocked(t.Options.ID, "removal")
+	hold, pause := t.owner.holds.arm("terminal " + string(t.Options.ID) + " removal")
 	t.removal = hold
 	return pause
 }
@@ -466,7 +453,7 @@ func (t *Terminal) observe(source pty.Source, claim, detail string) {
 func (t *Terminal) HoldExitDelivery() *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	hold, pause := t.owner.armLocked(t.Options.ID, "exit delivery")
+	hold, pause := t.owner.holds.arm("terminal " + string(t.Options.ID) + " exit delivery")
 	t.exitHold = hold
 	return pause
 }
@@ -491,7 +478,7 @@ func (t *Terminal) Exit(code int) {
 	if report != nil {
 		if hold != "" {
 			go func() {
-				t.owner.pauses.Hold(hold, nil)
+				t.owner.holds.hold(hold)
 				report(info)
 			}()
 		} else {

@@ -127,7 +127,8 @@ func TestACodexAutomationIsDeliveredOnceItsOpeningPromptStartsATurn(t *testing.T
 			if runs[0].State != "pending" {
 				t.Fatalf("before Codex boots the run is %+v, want pending", runs[0])
 			}
-			boot()
+			boot.Await()
+			boot.Release()
 			answered := awaitAutomationRunResult(app, "ok")
 			if !answered.Success {
 				t.Fatalf("run answered %s, want success", describeRunAnswer(answered))
@@ -206,9 +207,9 @@ func TestACodexAutomationWhoseAgentExitsRightAfterItsFirstTurnStartsIsDelivered(
 	w, app := codexAutomationWorld(t, false)
 	boot := w.HoldNextBoot()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "brief"})
-	w.AwaitHeldBoot()
+	boot.Await()
 	runs := automationRuns(t, w.Client(), 1)
-	boot()
+	boot.Release()
 	agent := w.Launched(string(protocol.Deref(runs[0].SessionID)))
 	agent.Prompted()
 	agent.Exit(1)

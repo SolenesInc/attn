@@ -20,10 +20,10 @@ func TestADelegationInterruptedByARestartFinishesOnItsSessionInTheWorktreeItCrea
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.AwaitHeldBoot()
+	boot.Await()
 
 	w.stop()
-	boot()
+	boot.Release()
 	w.start()
 	result, err := w.Client().Delegate(request)
 	if err != nil || result.SessionID != accepted.SessionID || result.Directory != worktree || result.Checkout != "created" {

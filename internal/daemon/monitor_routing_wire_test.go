@@ -23,9 +23,9 @@ func TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter(t *testing.T) 
 	w.RequireEnterAtNextBoot("Do you trust the contents of this directory?")
 	boot := w.HoldNextBoot()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "trust"})
-	w.AwaitHeldBoot()
+	boot.Await()
 	runs := automationRuns(t, cli, 1)
-	boot()
+	boot.Release()
 	if len(runs) != 1 || runs[0].State != "pending" {
 		t.Fatalf("automation runs while the agent boots = %+v, want one pending run", runs)
 	}

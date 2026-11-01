@@ -93,12 +93,12 @@ func TestACodexInitialPromptTitlesItsSessionAfterItsConversationBinds(t *testing
 	firstTitle := w.HeadlessTask()
 
 	boot := w.HoldNextBoot()
-	t.Cleanup(boot)
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.InitialPrompt = protocol.Ptr("investigate the retry queue")
 	})
 	awaitTitleTask(app, session, func(task protocol.Task) bool { return task.State == "queued" })
-	boot()
+	boot.Await()
+	boot.Release()
 	codex := w.Launched(session)
 	if prompt := codex.Prompted(); prompt != "investigate the retry queue" {
 		t.Fatalf("Codex received %q, want the initial prompt", prompt)
