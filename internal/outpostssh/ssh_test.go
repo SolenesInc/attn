@@ -97,7 +97,9 @@ func TestSSHCommandProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	}
-	if strings.Contains(last, "uname -sm") {
+	if probe := os.Getenv("ATTN_SSH_PROBE"); probe != "" && strings.Contains(last, "uname -sm") {
+		_, _ = io.WriteString(os.Stdout, probe)
+	} else if strings.Contains(last, "uname -sm") {
 		_, _ = io.WriteString(os.Stdout, "Linux x86_64\n{\"version\":\"test\",\"sourceFingerprint\":\"git:test\",\"protocolVersion\":\"test\"}\n{\"daemon_id\":\"d-outpost\",\"home_daemon_id\":\"d-home\"}\nb false\n")
 	} else if strings.Contains(last, "_bridge") {
 		_, _ = io.Copy(os.Stdout, os.Stdin)
@@ -172,6 +174,20 @@ func TestSSHCommands(t *testing.T) {
 		if strings.HasPrefix(arg, "BatchMode=") {
 			t.Fatal(interactive)
 		}
+	}
+}
+func TestAnOutpostProbeRefusesAnUnsupportedPlatformAndLogindKillingUserProcesses(t *testing.T) {
+	for _, tc := range []struct{ name, output, reason string }{
+		{"platform", "Darwin arm64\nmissing\n\nb false\n", "Linux amd64 or arm64"},
+		{"logind", "Linux x86_64\nmissing\n\nb true\n", "KillUserProcesses is on"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, _ := commandWorld(t)
+			t.Setenv("ATTN_SSH_PROBE", tc.output)
+			if _, err := client.Probe(context.Background()); err == nil || !strings.Contains(err.Error(), tc.reason) {
+				t.Fatalf("probe refusal: %v", err)
+			}
+		})
 	}
 }
 func TestSSHFailures(t *testing.T) {
