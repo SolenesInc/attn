@@ -86,20 +86,34 @@ func (d *Daemon) repositoryOrigin(repository string) string {
 }
 
 func normalizedOrigin(remote string) string {
-	remote = strings.TrimSuffix(strings.TrimRight(strings.ToLower(strings.TrimSpace(remote)), "/"), ".git")
-	if _, rest, ok := strings.Cut(remote, "://"); ok {
-		remote = rest
-	} else if host, path, ok := strings.Cut(remote, ":"); ok && !strings.Contains(host, "/") {
-		remote = host + "/" + path
+	remote = strings.TrimSuffix(strings.TrimRight(strings.TrimSpace(remote), "/"), ".git")
+	if scheme, rest, ok := strings.Cut(remote, "://"); ok {
+		if strings.EqualFold(scheme, "file") {
+			return "file://" + rest
+		}
+		authority, path, _ := strings.Cut(rest, "/")
+		return hostedOrigin(authority, path, strings.HasPrefix(path, "~"))
 	}
-	host, path, _ := strings.Cut(remote, "/")
-	if at := strings.LastIndex(host, "@"); at >= 0 {
-		host = host[at+1:]
+	if authority, path, ok := strings.Cut(remote, ":"); ok && !strings.Contains(authority, "/") {
+		return hostedOrigin(authority, path, !strings.HasPrefix(path, "/"))
 	}
-	if path == "" {
+	return "file://" + remote
+}
+
+func hostedOrigin(authority, path string, relativeToUserHome bool) string {
+	user, host := "", authority
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		user, host = authority[:at], authority[at+1:]
+	}
+	path = strings.Trim(path, "/")
+	if host == "" || path == "" {
 		return ""
 	}
-	return host + "/" + path
+	origin := strings.ToLower(host + "/" + path)
+	if relativeToUserHome && user != "" && user != "git" {
+		return user + "@" + origin
+	}
+	return origin
 }
 
 func repositoryTop(path string) string {
