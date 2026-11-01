@@ -33,7 +33,7 @@ type pluginListResult struct {
 
 func runPluginCommand() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|link|install-bundled|list|uninstall|remove> ...")
+		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|link|list|uninstall|remove> ...")
 		exit(1)
 	}
 
@@ -44,9 +44,6 @@ func runPluginCommand() {
 	case "link":
 		setCommandPath("plugin link")
 		runPluginLink()
-	case "install-bundled":
-		setCommandPath("plugin install-bundled")
-		runPluginInstallBundled()
 	case "list":
 		setCommandPath("plugin list")
 		runPluginList()
@@ -111,19 +108,6 @@ func runPluginList() {
 		exit(1)
 	}
 	printJSON(result)
-}
-
-func runPluginInstallBundled() {
-	if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
-		fmt.Fprintln(os.Stderr, "usage: attn plugin install-bundled <name>")
-		exit(1)
-	}
-	name := strings.TrimSpace(os.Args[3])
-	if _, err := pluginDaemonRequest(map[string]any{"cmd": protocol.CmdInstallBundledPlugin, "name": name}, protocol.EventPluginActionResult, "install_bundled", 30*time.Second); err != nil {
-		fmt.Fprintf(os.Stderr, "plugin install-bundled: %v\n", err)
-		exit(1)
-	}
-	printJSON(pluginCommandResult{OK: true, Name: name})
 }
 
 func runPluginUninstall() {

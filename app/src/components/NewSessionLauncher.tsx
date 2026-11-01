@@ -78,7 +78,6 @@ export interface NewSessionLauncherProps extends Omit<
     agent: SessionAgent,
     yolo: boolean,
     chief: boolean,
-    auto: boolean | undefined,
     placement: Placement,
   ) => Promise<unknown>;
   onCreateWorktreeSession: (
@@ -87,7 +86,6 @@ export interface NewSessionLauncherProps extends Omit<
     from: string,
     agent: SessionAgent,
     yolo: boolean,
-    auto: boolean | undefined,
     chief: boolean | undefined,
     options: Placement & { onCreated?: (path: string) => void },
   ) => Promise<unknown>;
@@ -606,8 +604,6 @@ export function NewSessionLauncher({
     }
     const yolo = agent !== 'shell' && controls.yoloMode && controls.yoloSupported;
     const chief = agent !== 'shell' && controls.chiefOfStaff && controls.chiefToggleEligible;
-    const auto =
-      agent !== 'shell' && controls.autoModeSupported ? controls.autoMode : undefined;
     const request = generation.current;
     const current = { background: false };
     run.current = current;
@@ -648,9 +644,9 @@ export function NewSessionLauncher({
         }
         const key = `${generatedKey}:${branchName}:${startingFrom}`;
         const existing = created.current.get(key);
-        if (existing) await onSelect(existing, agent, yolo, chief, auto, placement);
+        if (existing) await onSelect(existing, agent, yolo, chief, placement);
         else
-          await onCreateWorktreeSession(repo, branchName, startingFrom, agent, yolo, auto, chief, {
+          await onCreateWorktreeSession(repo, branchName, startingFrom, agent, yolo, chief, {
             ...placement,
             onCreated: (path) => created.current.set(key, path),
           });
@@ -659,7 +655,7 @@ export function NewSessionLauncher({
         const target =
           action?.kind === 'existing' ? action.path : action?.kind === 'main' ? repo : path;
         if (!target) return;
-        await onSelect(target, agent, yolo, chief, auto, placement);
+        await onSelect(target, agent, yolo, chief, placement);
         if (action?.kind === 'main') destinationMemory = 'main_repo';
       }
       const memoryKey = repo && repoDestinationSettingKey(repo, host);

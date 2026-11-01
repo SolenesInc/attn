@@ -17,7 +17,7 @@ func (m *DelegateMessage) UnmarshalJSON(data []byte) error {
 	}
 	for _, name := range []string{"approval_policy", "sandbox_mode"} {
 		if _, found := fields[name]; found {
-			return fmt.Errorf("delegate field %q is retired; a delegation follows the daemon auto-mode config", name)
+			return fmt.Errorf("delegate field %q is retired; attn has no per-delegation approval policy or sandbox mode", name)
 		}
 	}
 	type plain DelegateMessage

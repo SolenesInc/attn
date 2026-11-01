@@ -27,7 +27,7 @@ terminal                one PTY process in a terminal tile
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
 └─ offline             its host is unreachable (bridge lost or refused, or
                        Outposts off); typing is not sent
-harness                 the agent CLI: Claude Code, Codex, pi, Nisse
+harness                 the agent CLI: Claude Code, Codex, Nisse
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses

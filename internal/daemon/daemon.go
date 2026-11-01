@@ -148,9 +148,6 @@ type Daemon struct {
 	logger                     *logging.Logger
 	debugLogging               bool
 	ghRegistry                 *github.ClientRegistry
-	repoVisibilityKnown        map[string]string
-	repoVisibilityPending      map[string]bool
-	repoVisibilityMu           sync.Mutex
 	reopenGitMu                sync.Mutex
 	reopenBranches             *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect              func(context.Context, *git.Client, string, string) (branchInspection, error)
@@ -238,16 +235,12 @@ type Daemon struct {
 	pluginSupervisor    *pluginSupervisor
 	pluginHealthEnabled bool
 
-	pluginDir           string
-	bundledPluginDir    string
-	busPinMu            sync.Mutex
-	busPinEpisodes      map[string]*busPinEpisode
-	busPinAge           time.Duration
-	removePlugin        func(pluginDir, name string) error
-	pluginActionMu      sync.Mutex
-	bundledPluginMu     sync.Mutex
-	bundledPluginSet    map[string]struct{}
-	bundledPluginLoaded bool
+	pluginDir      string
+	busPinMu       sync.Mutex
+	busPinEpisodes map[string]*busPinEpisode
+	busPinAge      time.Duration
+	removePlugin   func(pluginDir, name string) error
+	pluginActionMu sync.Mutex
 
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
@@ -534,7 +527,6 @@ func New(socketPath string) *Daemon {
 		pluginHealthEnabled: true,
 		jobQueueRoleChanged: make(chan struct{}, 1),
 		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
@@ -570,7 +562,6 @@ func NewForTesting(socketPath string) *Daemon {
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 		jobQueueRoleChanged: make(chan struct{}, 1),
@@ -2814,16 +2805,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleDocCount(conn, msg.(*protocol.DocCountMessage))
 	case protocol.CmdDocSubscribe:
 		d.handleDocSubscribe(conn, msg.(*protocol.DocSubscribeMessage))
-	case protocol.CmdAutoModeShow:
-		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
-	case protocol.CmdAutoModeEnvSlot:
-		d.handleAutoModeEnvSlot(conn, msg.(*protocol.AutoModeEnvSlotMessage))
-	case protocol.CmdAutoModeEnvNotes:
-		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
-	case protocol.CmdAutoModePropose:
-		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
-	case protocol.CmdAutoModeDenials:
-		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
 
 	case protocol.CmdAskOpen:
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))

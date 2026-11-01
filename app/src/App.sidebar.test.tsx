@@ -72,7 +72,6 @@ function savedSetting(daemon: ScriptedDaemon, key: string) {
 const HARNESSES: Array<[string, string, string]> = [
   ['claude-row', 'claude', 'Claude'],
   ['codex-row', 'codex', 'Codex'],
-  ['pi-row', 'pi', 'Pi'],
   ['shell-row', 'shell', 'Shell'],
   ['plugin-row', 'custom-driver', 'Custom Driver'],
 ];
@@ -105,10 +104,10 @@ describe('App sidebar', () => {
 
     it('keeps each harness mark in the queue and in the desktop tree, and keeps crew management in both', async () => {
       const crew = [crewMember('fern'), crewMember('sleeping')];
-      const sessions = harnessSessions((id) => (id === 'pi-row' ? { crew_member: 'fern' } : {}));
+      const sessions = harnessSessions((id) => (id === 'plugin-row' ? { crew_member: 'fern' } : {}));
       const { daemon } = await launch({ sessions, desktops: [harnessDesktop()], crew, settings: { queue_mode_enabled: 'true' } });
 
-      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
+      expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Custom Driver · idle' })).toBeInTheDocument();
       expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Claude · idle' })).toBeInTheDocument();
       await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
       expect(screen.getByRole('button', { name: 'Open codex-row' })).toHaveAttribute('title', expect.stringContaining('Codex'));

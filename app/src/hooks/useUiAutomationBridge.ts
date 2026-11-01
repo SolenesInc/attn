@@ -15,7 +15,6 @@ import {
   INACTIVE_MARKDOWN_ANNOTATIONS_STATE,
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
-import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
 import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { useProfilesStore } from '../store/profiles';
@@ -1603,10 +1602,6 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
 
 function collectAutomationFormUiState() {
   return getAutomationFormAutomationHandle()?.getState() ?? INACTIVE_AUTOMATION_FORM_STATE;
-}
-
-function collectAutoModeUiState() {
-  return getAutoModeAutomationHandle()?.getState() ?? INACTIVE_AUTOMODE_STATE;
 }
 
 function getLocationPickerRoot() {
@@ -3421,28 +3416,6 @@ export function useUiAutomationBridge({
         clickTestId(testid);
         await settleUi(3);
         return collectAutomationFormUiState();
-      }
-      case 'automode_get_state':
-        return collectAutoModeUiState();
-      case 'automode_environment_slot': {
-        const slot = typeof payload.slot === 'string' ? payload.slot : null;
-        if (!slot) throw new Error('automode_environment_slot requires slot');
-        const values = Array.isArray(payload.values)
-          ? payload.values.filter((v): v is string => typeof v === 'string')
-          : null;
-        if (values === null) throw new Error('automode_environment_slot requires values');
-        const handle = getAutoModeAutomationHandle();
-        if (!handle) throw new Error('the auto mode settings pane is not mounted');
-        await handle.setEnvironmentSlot(slot, values);
-        await settleUi(3);
-        return collectAutoModeUiState();
-      }
-      case 'automode_environment_edit': {
-        const slot = typeof payload.slot === 'string' ? payload.slot : '';
-        if (!slot) throw new Error('automode_environment_edit requires slot');
-        clickTestId(`automode-slot-edit-${slot}`);
-        await settleUi(3);
-        return collectAutoModeUiState();
       }
       case 'capture_structured_snapshot':
         return collectVisualSnapshot(

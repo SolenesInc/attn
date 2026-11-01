@@ -52,7 +52,6 @@
     "real-app:scenario-session-close-ledger": "node scripts/real-app-harness/scenario-session-close-ledger.mjs",
     "real-app:scenario-clear-opens-session": "node scripts/real-app-harness/scenario-clear-opens-session.mjs",
     "real-app:scenario-claude-shared-conversation": "node scripts/real-app-harness/scenario-claude-shared-conversation.mjs",
-    "real-app:scenario-pi-shared-conversation": "node scripts/real-app-harness/scenario-pi-shared-conversation.mjs",
     "real-app:scenario-session-reopen": "node scripts/real-app-harness/scenario-session-reopen.mjs",
     "real-app:scenario-profile-lifecycle": "node scripts/real-app-harness/scenario-profile-lifecycle.mjs",
     "real-app:scenario-sessions-surface": "node scripts/real-app-harness/scenario-sessions-surface.mjs",
@@ -90,9 +89,6 @@
     "e2e:settings-visual": "playwright test e2e/settings-visual.spec.ts",
     "e2e:headed": "playwright test --headed",
     "doctor": "npx react-doctor@latest",
-    "real-app:scenario-pi-automode": "node scripts/real-app-harness/scenario-pi-automode.mjs",
-    "real-app:scenario-pi-security": "node scripts/real-app-harness/scenario-pi-security.mjs",
-    "real-app:scenario-automode-environment": "node scripts/real-app-harness/scenario-automode-environment.mjs",
     "real-app:linux": "node scripts/real-app-harness/linux-runner.mjs",
     "real-app:scenario-conversations-surface": "node scripts/real-app-harness/scenario-conversations-surface.mjs"
   },

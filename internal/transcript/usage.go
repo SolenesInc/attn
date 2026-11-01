@@ -47,7 +47,7 @@ func NewUsageExtractor(agent string) *UsageExtractor {
 
 func SupportsUsage(agent string) bool {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
-	case "claude", "codex", "pi":
+	case "claude", "codex":
 		return true
 	default:
 		return false
@@ -62,8 +62,6 @@ func (e *UsageExtractor) Observe(line []byte, sourceKey string) (TokenUsage, boo
 		usage, ok = extractClaudeUsage(line)
 	case "codex":
 		usage, ok = e.extractCodexUsage(line, sourceKey)
-	case "pi":
-		usage, ok = extractPiUsage(line)
 	default:
 		return TokenUsage{}, false
 	}

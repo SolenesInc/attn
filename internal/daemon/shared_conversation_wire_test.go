@@ -96,25 +96,25 @@ func TestASessionLaunchedOnAConversationAnotherLiveSessionRunsShowsItShared(t *t
 	awaitSharedWith(app, 0, second, first)
 }
 
-func movePi(app *testworld.Peer, pi *fakeagent.Run, session, command string) {
+func movePlug(app *testworld.Peer, plug *fakeagent.Run, session, command string) {
 	app.T.Helper()
 	app.TypeLine(session, command)
-	if got := pi.Prompted(); got != command {
-		app.T.Fatalf("pi received %q, want %s", got, command)
+	if got := plug.Prompted(); got != command {
+		app.T.Fatalf("plug received %q, want %s", got, command)
 	}
 }
 
-func TestPiSessionsShowTheirConversationIsSharedWhileBothProcessesRunIt(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+func TestPluginSessionsShowTheirConversationIsSharedWhileBothProcessesRunIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	awaitAgentAvailable(app, string(fakeagent.Pi))
+	awaitAgentAvailable(app, string(fakeagent.Plug))
 	cwd := w.Path("shop")
-	first := w.Spawn(app, fakeagent.Pi, cwd)
+	first := w.Spawn(app, fakeagent.Plug, cwd)
 	one := w.Launched(first)
-	second := w.Spawn(app, fakeagent.Pi, cwd)
+	second := w.Spawn(app, fakeagent.Plug, cwd)
 	two := w.Launched(second)
 
-	movePi(app, two, second, "/resume "+one.ConversationID)
+	movePlug(app, two, second, "/resume "+one.ConversationID)
 	awaitSharedWith(app, 0, first, second)
 	awaitSharedWith(app, 0, second, first)
 
@@ -124,14 +124,14 @@ func TestPiSessionsShowTheirConversationIsSharedWhileBothProcessesRunIt(t *testi
 	awaitSharedWith(app, exited, second)
 }
 
-func TestPiSessionsStopSharingWhenOneMovesToANewConversation(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+func TestPluginSessionsStopSharingWhenOneMovesToANewConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	awaitAgentAvailable(app, string(fakeagent.Pi))
+	awaitAgentAvailable(app, string(fakeagent.Plug))
 	cwd := w.Path("shop")
-	first := w.Spawn(app, fakeagent.Pi, cwd)
+	first := w.Spawn(app, fakeagent.Plug, cwd)
 	one := w.Launched(first)
-	second := w.Spawn(app, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) {
+	second := w.Spawn(app, fakeagent.Plug, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(one.ConversationID)
 	})
 	two := w.Launched(second)
@@ -139,7 +139,7 @@ func TestPiSessionsStopSharingWhenOneMovesToANewConversation(t *testing.T) {
 	awaitSharedWith(app, 0, second, first)
 
 	moved := len(app.Log())
-	movePi(app, two, second, "/new")
+	movePlug(app, two, second, "/new")
 	awaitSharedWith(app, moved, first)
 	awaitSharedWith(app, moved, second)
 }

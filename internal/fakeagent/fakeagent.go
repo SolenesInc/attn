@@ -27,12 +27,12 @@ type Harness string
 const (
 	Claude Harness = "claude"
 	Codex  Harness = "codex"
-	Pi     Harness = "pi"
+	Plug   Harness = "plug"
 )
 
 const (
 	configName       = "fakeagent.json"
-	piPluginName     = "attn-pi"
+	plugPluginName   = "attn-plug"
 	wrapperName      = "attn"
 	tripwireExitCode = 97
 	roleAgent        = "agent"
@@ -49,7 +49,6 @@ const (
 	methodSubagent   = "subagent"
 	methodDropSubs   = "delete_subagent_transcripts"
 	methodHalt       = "halt"
-	methodDeny       = "deny"
 	methodExit       = "exit"
 	methodStopRead   = "stop_reading_terminal"
 	methodStatus     = "program_status"
@@ -67,18 +66,17 @@ type config struct {
 }
 
 type launch struct {
-	Role           string          `json:"role"`
-	Harness        Harness         `json:"harness"`
-	Pid            int             `json:"pid"`
-	Argv           []string        `json:"argv"`
-	Env            []string        `json:"env"`
-	AttnSessionID  string          `json:"attn_session_id,omitempty"`
-	ConversationID string          `json:"conversation_id,omitempty"`
-	Resumed        bool            `json:"resumed,omitempty"`
-	ResumePicker   bool            `json:"resume_picker,omitempty"`
-	AutoMode       json.RawMessage `json:"auto_mode,omitempty"`
-	Yolo           bool            `json:"yolo,omitempty"`
-	Error          string          `json:"error,omitempty"`
+	Role           string   `json:"role"`
+	Harness        Harness  `json:"harness"`
+	Pid            int      `json:"pid"`
+	Argv           []string `json:"argv"`
+	Env            []string `json:"env"`
+	AttnSessionID  string   `json:"attn_session_id,omitempty"`
+	ConversationID string   `json:"conversation_id,omitempty"`
+	Resumed        bool     `json:"resumed,omitempty"`
+	ResumePicker   bool     `json:"resume_picker,omitempty"`
+	Yolo           bool     `json:"yolo,omitempty"`
+	Error          string   `json:"error,omitempty"`
 }
 
 type bootingParams struct {
@@ -106,9 +104,9 @@ type exitParams struct {
 var programs = map[string]func(config) int{
 	string(Claude): runClaude,
 	string(Codex):  runCodex,
-	string(Pi):     runPiTerminal,
+	string(Plug):   runPlugTerminal,
 	string(Nisse):  runNisse,
-	piPluginName:   runPiPlugin,
+	plugPluginName: runPlugDriver,
 	wrapperName:    runWrapperTripwire,
 	miseName:       runMise,
 }
@@ -125,8 +123,8 @@ func Main() {
 		os.Exit(1)
 	}
 	harness := Harness(name)
-	if name == piPluginName {
-		harness = Pi
+	if name == plugPluginName {
+		harness = Plug
 	}
 	if name != wrapperName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
 		os.Exit(tripwire(cfg, name, fmt.Sprintf("%s spawned in a world that did not install it", name)))
@@ -191,10 +189,6 @@ type conversation interface {
 
 type halter interface {
 	halt() error
-}
-
-type autoModeGuard interface {
-	deny(denial Denial) error
 }
 
 type transcriptAuthor interface {
@@ -332,18 +326,6 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
-	case methodDeny:
-		var denial Denial
-		if err := json.Unmarshal(params, &denial); err != nil {
-			return nil, err
-		}
-		guard, ok := a.conv.(autoModeGuard)
-		if !ok {
-			return nil, fmt.Errorf("%T has no auto mode to deny a tool call", a.conv)
-		}
-		a.turn.Lock()
-		defer a.turn.Unlock()
-		return struct{}{}, guard.deny(denial)
 	case methodAskApproval, methodDismiss, methodAnswered:
 		return a.handleModal(method)
 	case methodStopRead:

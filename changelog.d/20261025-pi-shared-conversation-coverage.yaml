@@ -1,3 +1,0 @@
-kind: internal
-area: sessions
-change: The session monitor announces a conversation change it records, and a wire test plus a packaged-app scenario cover two Pi terminals on one conversation.

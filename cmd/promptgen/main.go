@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/victorarias/attn/internal/prompts"
 )
@@ -36,9 +35,6 @@ func generate(root string, check bool) error {
 	}
 	manifest, err := json.MarshalIndent(definition, "", "  ")
 	if err != nil {
-		return err
-	}
-	if err := generateCatalog(root, check, "plugins/attn-pi/automode/prompts.generated.json", func(id string) bool { return strings.HasPrefix(id, "pi-") }); err != nil {
 		return err
 	}
 	if err := generateCatalog(root, check, "app/src/prompts/catalog.generated.json", func(id string) bool { return id == "annotation-terminal" || id == "annotation-label" }); err != nil {

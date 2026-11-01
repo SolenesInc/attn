@@ -105,7 +105,7 @@ func delegateLaunchFlag(argv []string, name string) (string, bool) {
 }
 
 func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Plug)
 	cli := w.Client()
 	cwd := w.Path("api")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -118,9 +118,9 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 	}{
 		{name: "claude pinned", agent: "claude", model: "claude-fable-5", effort: "Low", wantModel: "claude-fable-5", wantEffort: "low"},
 		{name: "claude at the default effort", agent: "claude", model: "opus", wantModel: "opus", wantEffort: "medium"},
-		{name: "pi unpinned", agent: "pi"},
-		{name: "pi with a model", agent: "pi", model: "glm-5", refusal: `agent "pi" does not support --model`},
-		{name: "pi with an effort", agent: "pi", effort: "high", refusal: `agent "pi" does not support --effort`},
+		{name: "plug unpinned", agent: "plug"},
+		{name: "plug with a model", agent: "plug", model: "glm-5", refusal: `agent "plug" does not support --model`},
+		{name: "plug with an effort", agent: "plug", effort: "high", refusal: `agent "plug" does not support --effort`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			request := brief(cwd, "Tighten the retry loop")

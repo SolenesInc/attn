@@ -373,8 +373,8 @@ func TestTheAppSeesBrokenPluginManifestsBesideThePluginsItAccepts(t *testing.T) 
 	if _, ok := pluginNamed(listed.Plugins, "bad-plugin"); ok {
 		t.Error("the app lists the broken manifest as a plugin")
 	}
-	if manual, ok := pluginNamed(listed.Plugins, "manual/provider"); !ok || manual.InstallationState != "installed" {
-		t.Errorf("the app sees manual/provider as %+v (listed %v), want it installed", manual, ok)
+	if manual, ok := pluginNamed(listed.Plugins, "manual/provider"); !ok {
+		t.Errorf("the app sees manual/provider as %+v (listed %v), want it listed", manual, ok)
 	}
 	connectPlugin(t, w, "manual/provider", "worktree.create")
 	awaitPluginShown(app, "manual/provider", func(p protocol.PluginInfo) bool { return p.Connected })

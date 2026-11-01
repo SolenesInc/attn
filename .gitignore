@@ -22,8 +22,6 @@ coverage.out
 app/src-tauri/binaries/
 /pty-host/target/
 /app/speech/target/
-app/src-tauri/bundled-plugins/*
-!app/src-tauri/bundled-plugins/.gitkeep
 app/src-tauri/app-runtime/*
 !app/src-tauri/app-runtime/.gitkeep
 dist/app-runtime/

@@ -45,8 +45,6 @@ export function AppPreferences() {
     sendMuteAuthor,
     sendListPlugins,
     sendInstallPlugin,
-    sendInstallBundledPlugin,
-    sendUninstallPlugin,
     sendRemovePlugin,
     sendSetPluginPriority,
     sendSaveSetting,
@@ -91,8 +89,6 @@ export function AppPreferences() {
         pluginIssues={daemonPluginIssues}
         onListPlugins={sendListPlugins}
         onInstallPlugin={sendInstallPlugin}
-        onInstallBundledPlugin={sendInstallBundledPlugin}
-        onUninstallPlugin={sendUninstallPlugin}
         onRemovePlugin={sendRemovePlugin}
         onSetPluginPriority={sendSetPluginPriority}
         onSetSetting={sendSaveSetting}

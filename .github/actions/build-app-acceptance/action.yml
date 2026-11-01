@@ -120,7 +120,6 @@ runs:
         archive="$RUNNER_TEMP/app-tree.tar.gz"
         tar -czf "$archive" \
           attn \
-          "$app_tree" \
-          plugins/attn-pi/node_modules
+          "$app_tree"
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
         ls -l "$archive"

@@ -3574,6 +3574,20 @@ func applyMigration125(tx *sql.Tx) error {
 	return err
 }
 
+func decodeStringList(raw, field string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("automode config %s is not a JSON list: %w", field, err)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, nil
+}
+
 func applyMigration140(tx *sql.Tx) error {
 	has, err := tableExists(tx, "automode_config")
 	if err != nil || !has {

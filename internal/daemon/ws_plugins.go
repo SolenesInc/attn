@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	pluginInstallationAvailable = "available"
-	pluginInstallationInstalled = "installed"
 	pluginRuntimeStateStopped   = "stopped"
 	pluginRuntimeStateStarting  = "starting"
 	pluginRuntimeStateConnected = "connected"
@@ -56,16 +54,6 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 	var manifest plugins.Manifest
 	var err error
 	if link {
-		var name string
-		name, err = plugins.SourceName(source)
-		if err != nil {
-			d.sendPluginActionResult(client, action, "", false, err.Error())
-			return
-		}
-		if _, bundledInstalled := d.installedBundledPlugins()[name]; bundledInstalled {
-			d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", name))
-			return
-		}
 		manifest, err = plugins.LinkPath(source, d.pluginDir, options)
 	} else {
 		manifest, err = plugins.InstallSourceWithOptions(source, d.pluginDir, options)
@@ -74,59 +62,12 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 		d.sendPluginActionResult(client, action, "", false, err.Error())
 		return
 	}
-	if _, bundledInstalled := d.installedBundledPlugins()[manifest.Name]; bundledInstalled {
-		_ = plugins.Remove(d.pluginDir, manifest.Name)
-		d.sendPluginActionResult(client, action, manifest.Name, false, fmt.Sprintf("uninstall bundled plugin %q before installing a user override", manifest.Name))
-		return
-	}
 	if err := d.startInstalledPlugin(manifest); err != nil {
 		d.logf("plugin %s installed but failed to start: %v", manifest.Name, err)
 	}
 
 	d.publishFact(FactPluginInstalled, manifest.Name, nil)
 	d.sendPluginActionResult(client, action, manifest.Name, true, "")
-}
-
-func (d *Daemon) handleInstallBundledPluginWS(client *wsClient, msg *protocol.InstallBundledPluginMessage) {
-	d.pluginActionMu.Lock()
-	defer d.pluginActionMu.Unlock()
-	name := strings.TrimSpace(msg.Name)
-	if name == "" {
-		d.sendPluginActionResult(client, "install_bundled", "", false, "plugin name is required")
-		return
-	}
-	bundled, _ := discoverPluginManifests(d.bundledPluginDir)
-	var manifest *pluginManifest
-	for i := range bundled {
-		if bundled[i].Name == name {
-			manifest = &bundled[i]
-			break
-		}
-	}
-	if manifest == nil {
-		d.sendPluginActionResult(client, "install_bundled", name, false, fmt.Sprintf("bundled plugin %q is not available", name))
-		return
-	}
-	user, _ := discoverPluginManifests(d.pluginDir)
-	for _, installed := range user {
-		if installed.Name == name {
-			d.sendPluginActionResult(client, "install_bundled", name, false, fmt.Sprintf("user plugin %q must be removed before installing the bundled plugin", name))
-			return
-		}
-	}
-	if _, installed := d.installedBundledPlugins()[name]; installed {
-		d.sendPluginActionResult(client, "install_bundled", name, false, fmt.Sprintf("bundled plugin %q is already installed", name))
-		return
-	}
-	if err := d.setBundledPluginInstalled(name, true); err != nil {
-		d.sendPluginActionResult(client, "install_bundled", name, false, fmt.Sprintf("persist bundled plugin installation: %v", err))
-		return
-	}
-	if err := d.startInstalledPlugin(*manifest); err != nil {
-		d.logf("bundled plugin %s installed but failed to start: %v", name, err)
-	}
-	d.publishFact(FactPluginInstalled, name, nil)
-	d.sendPluginActionResult(client, "install_bundled", name, true, "")
 }
 
 func (d *Daemon) handleRemovePluginWS(client *wsClient, msg *protocol.RemovePluginMessage) {
@@ -147,29 +88,6 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 	}
 	if runs := d.store.ListAgentDriverRuns(name); len(runs) > 0 {
 		d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("plugin %q owns %d active delegated run(s)", name, len(runs)))
-		return
-	}
-	if _, installed := d.installedBundledPlugins()[name]; installed {
-		bundled, _ := discoverPluginManifests(d.bundledPluginDir)
-		var manifest *pluginManifest
-		for i := range bundled {
-			if bundled[i].Name == name {
-				manifest = &bundled[i]
-				break
-			}
-		}
-		if manifest == nil {
-			d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("installed bundled plugin %q is not present in this app", name))
-			return
-		}
-		d.stopAndUnregisterPlugin(name)
-		if err := d.setBundledPluginInstalled(name, false); err != nil {
-			_ = d.startInstalledPlugin(*manifest)
-			d.sendPluginActionResult(client, action, name, false, fmt.Sprintf("persist bundled plugin uninstall: %v", err))
-			return
-		}
-		d.publishFact(FactPluginUninstalled, name, nil)
-		d.sendPluginActionResult(client, action, name, true, "")
 		return
 	}
 	remove := d.removePlugin
@@ -220,11 +138,10 @@ func (d *Daemon) projectPluginsUpdated() {
 }
 
 func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
-	catalog, manifestIssues := d.pluginCatalog()
+	catalog, manifestIssues := discoverPluginManifests(d.pluginDir)
 	priorities := d.pluginPriorities()
 	pluginInfos := make([]protocol.PluginInfo, 0, len(catalog))
-	for _, item := range catalog {
-		manifest := item.Manifest
+	for _, manifest := range catalog {
 		connection := d.ensurePluginRegistry().get(manifest.Name)
 		runtime, supervised := d.ensurePluginSupervisor().Snapshot(manifest.Name)
 		healthStatus := "unknown"
@@ -246,14 +163,7 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 			Connected:    connection != nil,
 			Running:      runtime.Running,
 			HealthStatus: protocol.Ptr(healthStatus),
-			Availability: string(item.Availability),
-			CanInstall:   item.Availability == pluginAvailabilityBundled && !item.Installed,
-			CanUninstall: item.Installed && len(d.store.ListAgentDriverRuns(manifest.Name)) == 0,
-		}
-		if item.Installed {
-			info.InstallationState = pluginInstallationInstalled
-		} else {
-			info.InstallationState = pluginInstallationAvailable
+			CanUninstall: len(d.store.ListAgentDriverRuns(manifest.Name)) == 0,
 		}
 		runtimePhase := pluginPhaseStopped
 		if supervised {
@@ -263,8 +173,6 @@ func (d *Daemon) pluginsUpdatedMessage() *protocol.PluginsUpdatedMessage {
 		}
 		info.RuntimePhase = protocol.Ptr(string(runtimePhase))
 		switch {
-		case !item.Installed:
-			info.RuntimeState = pluginRuntimeStateStopped
 		case runtimePhase == pluginPhaseParked:
 			info.RuntimeState = pluginRuntimeStateParked
 		case healthStatus == "unhealthy" || runtimePhase == pluginPhaseBackoff:

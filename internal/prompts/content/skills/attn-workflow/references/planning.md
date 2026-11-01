@@ -83,169 +83,171 @@ Choose the smallest view that explains the point. The `attn` skill's [showing re
 
 ## Template
 
-Copy the template and replace everything in angle brackets. The bracketed content is one example plan, a per-session permission preset for pi. It shows each part's form. It uses a diff where the shape already exists and a whole block where the shape is new.
+Copy the template and replace everything in angle brackets. The bracketed content is one example plan, a snooze that ends when a seed closes. It shows each part's form. It uses a diff where the shape already exists and a whole block where the shape is new.
 
 ````markdown
-<Let a pi session choose its approval policy and sandbox mode at creation, as a
-preset, and switch them mid-session with /permissions. Today every pi session
-runs under the daemon's one auto-mode config, so reviewing one risky change
-means loosening or tightening all of them. The daemon's config stays the
-default, and a session can differ from it. Done when a session created as Read Only
-shows read-only in pi's status line, refuses a write until the agent escalates,
-switches on /permissions default, and relaunches as Read Only after a daemon
-restart. Out of scope: presets for Claude and Codex sessions, which have their
-own permission modes.>
+<Let the user snooze an agent until a seed is harvested or withered, as well
+as until a time. Today a snooze ends only at an instant, so a user who waits on
+a delegation's seed guesses a time and is handed the agent back too early or
+too late. The time stays, as a cap, and the seed can end the snooze sooner.
+Done when an agent snoozed on a seed stays out of the queue until the seed is
+harvested, gets its turn back within one bus delivery of the harvest, and keeps
+the seed snooze across a daemon restart. Out of scope: snoozing on a pull
+request or on a seed's checks, which have their own watches.>
 
 ## Terms
 
-- <preset: a named pair of approval policy and sandbox mode, with Codex's names
-  and descriptions (Read Only, Default, Full Access).>
-- <launch intent: the preset a session was created with, stored by the daemon.>
+- <seed snooze: a snooze that names a seed and ends when that seed closes, or
+  at its time, whichever comes first.>
+- <closed: harvested or withered, as `garden.Closed` reports it.>
 
 ## Decisions
 
-- <D1. Presets are the user-facing unit, because users already know Codex's
-  names. The raw pair stays reachable on the CLI.>
-- <D2. A mid-session switch changes pi only, as in Codex. The daemon knows only
-  the launch intent.>
+- <D1. A seed snooze keeps its time as a cap, because a seed that stalls must
+  not hide an agent for good. The menu offers the seed with the existing times.>
+- <D2. The seed belongs to the snooze, stored beside its time in the turn
+  stamps. Unsnooze and a new snooze clear it with no separate record.>
 
-Open: <whether `--yolo` on a pi launch maps to Full Access (blocks the CLI
-child)> · <the picker's position beside auto mode (the app tender decides)>
+Open: <whether parking the seed ends the snooze (the daemon child may decide;
+recommend no, since a parked seed can resume)> · <the default cap in the menu
+(the app tender decides)>
 
 ## Tradeoffs accepted
 
-- <D2. We accept that a session switched mid-way relaunches with its launch
-  intent after a daemon restart, in exchange for no per-session state shared
-  between pi and the daemon.>
+- <D2. We accept a new column on `session_runtime` in exchange for one owner of
+  the snooze and no subscription table to keep in step with it.>
+- <F2. We accept a durable bus consumer that pins retention while any seed
+  snooze is pending, in exchange for a harvest during a daemon restart still
+  ending the snooze.>
 
 ## Findings
 
-<From the spike on branch spike/pi-presets at 3f2a91c. Its code is not kept.>
+<From the spike on branch spike/seed-snooze at 7c41e0d. Its code is not kept.>
 
-- <F1. Pi's sandbox wraps only bash. The spike's Read Only session wrote a file
-  through `edit` with no prompt. Read Only therefore needs a file-tool guard in
-  the approval extension. Setting sandbox_mode alone looks sufficient and is not.>
-- <F2. Pi repaints the status line only on session events, so after a switch the
-  spike showed the old preset until the next turn. The switch must repaint itself:
-  `ctx.ui.setStatus("permissions", preset.label)` right after the config changes.>
+- <F1. The session monitor owns a snooze. `handleSnoozeTurn` in
+  `internal/daemon/snooze.go` sends `d.monitorCommand(sessionID, "snooze",
+  until, "")`, and the monitor writes `store.TurnStamps`. The seed must travel
+  in the same command. The spike's daemon wrote the seed to the store beside the
+  monitor, and an unsnooze left a stale seed that woke the agent a day later.>
+- <F2. A `bus.Subscribe` callback misses facts published while the daemon is
+  down. The spike harvested a seed during a restart, and the agent stayed
+  snoozed until its cap. A consumer registered with `d.eventBus.Register`
+  resumes from its cursor and saw the `garden.seed.harvested` fact.>
 
 ## Design
 
 Ownership:
 
-    <internal/automode/automode.go          Preset type; Presets(); PresetFor(policy, mode)
-     internal/protocol/schema/main.tsp      approval_policy and sandbox_mode on SpawnSessionMessage
-     internal/daemon/spawn_pipeline.go      applies the launch intent's pair over the daemon default
-     plugins/attn-pi/approval/rules.ts      refuses file-tool writes under Read Only (F1)
-     plugins/attn-pi/approval/session.ts    /permissions picker; repaints the status line (F2)
-     app/src/components/LocationPicker.tsx  preset control beside auto mode>
+    <internal/protocol/schema/main.tsp       new until_seed on SnoozeTurnMessage and turn_snoozed_for_seed on Session
+     internal/store/turn.go                  new SnoozedForSeed in TurnStamps, persisted in session_runtime
+     internal/sessionmonitor/commands.go     snooze stores the seed with the time; wake clears both (F1)
+     internal/daemon/snooze.go               checks the seed is open before the snooze
+     internal/daemon/snooze_seed.go          new: durable consumer that wakes sessions when their seed closes (F2)
+     app/src/components/SnoozeMenu.tsx       "Until a seed closes" choice with a seed picker>
 
 Interfaces:
 
 <```go
-label := "Custom"
-if p, ok := automode.PresetFor(cfg.ApprovalPolicy, cfg.SandboxMode); ok {
-    label = p.Label
+for _, id := range d.store.SessionsSnoozedForSeed(ev.Subject) {
+    if _, err := d.monitorCommand(id, "wake", time.Time{}, ""); err != nil {
+        d.logf("seed snooze wake %s: %v", id, err)
+    }
 }
 ```
 
 ```go
-type Preset struct {
-    ID, Label, Description string
-    ApprovalPolicy         string
-    SandboxMode            string
-}
-func Presets() []Preset
-func PresetFor(policy, mode string) (Preset, bool) // false when no preset matches
+func (s *Store) SessionsSnoozedForSeed(seedID string) []protocol.SessionID // new
 ```
 
 ```diff
- model SpawnSessionMessage {
-   cwd: string;
-+  approval_policy?: string;
-+  sandbox_mode?: string;
+ model SnoozeTurnMessage {
+   cmd: "snooze_turn";
+   session_id: SessionID;
+   until: string;
++  until_seed?: string;
  }
 ```
 
-New wire fields: edit main.tsp and run make generate-types, then commit the
-generated types and protocol schema hash. Invariant: a session relaunches with
-the pair stored as its launch intent. C1's wire test enforces it.>
+New wire field: edit main.tsp and run make generate-types, then commit the
+generated types and protocol schema hash. The new column follows
+docs/internal/db-migrations.md. Invariant: a session's snooze names a seed only
+while the snooze holds. C1's wire test enforces it.>
 
 Behavior:
 
-    <user   -> app:    picks Read Only in the location picker
-     app    -> daemon: SpawnSessionMessage{approval_policy, sandbox_mode}
-     daemon -> store:  SetLaunchIntent(session, pair)
-     daemon -> pi:     launch with the pair>
+    <user    -> app:     picks "Until a seed closes" and a seed in SnoozeMenu
+     app     -> daemon:  SnoozeTurnMessage{until, until_seed}
+     daemon  -> monitor: snooze(until, seed)
+     monitor -> store:   TurnStamps{SnoozedUntil, SnoozedForSeed}>
 
 <```diff
- executeSpawn
-   GetAutoModeConfig
-+  applyLaunchIntent          the intent pair replaces the config pair when set
-   autoModeConfigForSession
-   spawnSessionRuntime
+ handleSnoozeTurn
+   time.Parse(until)
++  readSeed(until_seed)       refuses a closed or unknown seed
+   monitorCommand("snooze")
++    with the seed            the monitor stores both (F1)
 ```>
 
-    <user  -> pi:     /permissions full-access
-     pi    -> pi:     setup.config := preset; repaint status line
-     pi    -> daemon: nothing; the switch is not durable>
+    <garden  -> bus:     garden.seed.harvested{seed}
+     bus     -> daemon:  snooze_seed consumer, from its cursor (F2)
+     daemon  -> monitor: wake, for each session snoozed for the seed>
 
 State:
 
-    <preset selection (app, LocationPicker)
-       set by:      the picker control; starts from the daemon default
-       read by:     the spawn message on launch
-       on failure:  a refused launch keeps the selection for a retry
-       on restart:  starts from the daemon default; nothing persisted
+    <seed choice (app, SnoozeMenu)
+       set by:      the seed picker; starts empty
+       read by:     the snooze message on choose
+       on failure:  a refused snooze shows the daemon's error; the menu closes
+       on restart:  starts empty; nothing persisted
 
-     launch intent (daemon, store.LaunchIntent)
-       set by:      spawn or delegate message, stored before the runtime spawns
-       read by:     spawn pipeline; reload after daemon restart
-       on failure:  a new session is removed with its intent; a relaunch restores the prior intent
-       twice:       a retried spawn writes the same pair again
-       on restart:  relaunched with the stored pair; a mid-session switch is lost>
+     snoozed-for seed (monitor, store.TurnStamps.SnoozedForSeed)
+       set by:      the snooze command, with SnoozedUntil
+       read by:     the snooze_seed consumer; the session's wire record
+       on failure:  a refused snooze leaves the prior stamps unchanged
+       twice:       a redelivered harvest wakes a session that is already awake, which changes nothing
+       on restart:  reloaded from session_runtime; the consumer replays from its cursor>
 
 ## Execution
 
 <Three children, delivered separately in this order: the
-daemon and protocol (presets, wire fields, launch intent), then pi (/permissions
-and the file-tool guard), then the app picker. The pi child blocks nothing. The
-app child waits for the daemon child's wire fields.>
+monitor and store (the seed in the turn stamps and its column), then the daemon
+and protocol (the wire field and the consumer), then the app menu. The daemon
+child waits for the store child's stamps. The app child waits for the daemon
+child's wire field.>
 
 ## Completion
 
 <The checks are on the seeds. C4's recording and scenario output go on the app
-child as one attachment, and the child's report cites that attachment. The pi child changes no daemon
-code, so the Linux build the verification guidance asks of daemon changes does
-not apply to it.>
+child as one attachment, and the child's report cites that attachment. The app
+child changes no daemon code, so the Linux build the verification guidance asks
+of daemon changes does not apply to it.>
 
 ## Alternatives rejected
 
-- <D1. Two raw pickers, approval policy and sandbox mode: users would have to
-  learn which combinations make sense. The presets cover the useful pairs.>
-- <D2. A durable mid-session switch: pi would report every switch to the daemon
-  and the app would need a per-session badge, for a choice Codex itself does
-  not keep.>
+- <D1. A seed snooze with no time: a seed that is never closed would hide the
+  agent until the user looks for it.>
+- <D2. A subscription table keyed by seed: it is a second record of the snooze
+  that unsnooze, a new snooze and closing the session would each have to clear.>
 ````
 
 The same plan planted with its checks. The plot holds the check every child proves, and each child holds its own:
 
 ```json
 {
-  "title": "Pi permission presets",
+  "title": "Seed snooze",
   "body": "<the plan body above>",
   "checks": [
     {"id": "C5", "shared": true, "text": "The child is delivered as the repository delivers changes, with that step's own checks passing. The report links the pull request or the landed commits."}
   ],
   "children": [
-    {"title": "Daemon presets and launch intent", "body": "…",
-     "checks": [{"id": "C1", "text": "A daemon wire test spawns a pi session with each preset, restarts the daemon and gets the same pair back. A wsctl run against a non-production daemon shows the same. Both outputs on this seed."}]},
-    {"title": "Pi permissions switch and file-tool guard", "body": "…",
-     "checks": [{"id": "C2", "text": "The pi plugin's approval tests for the switch and the file-tool guard pass. Output on this seed."}]},
-    {"title": "App preset picker", "body": "…", "after": ["daemon-presets-launch-intent"],
+    {"title": "Seed in the turn stamps", "body": "…",
+     "checks": [{"id": "C1", "text": "A store test snoozes a session on a seed, unsnoozes it, reopens the store and finds neither time nor seed. Output on this seed."}]},
+    {"title": "Daemon seed snooze and consumer", "body": "…", "after": ["seed-turn-stamps"],
+     "checks": [{"id": "C2", "text": "A daemon wire test snoozes a session on a seed, restarts the daemon, harvests the seed and sees the session's snooze end. A wsctl run against a non-production daemon shows the same. Both outputs on this seed."}]},
+    {"title": "App seed snooze choice", "body": "…", "after": ["daemon-seed-snooze-consumer"],
      "checks": [
-       {"id": "C3", "text": "An app wire test picks Read Only and sees the spawn message carry its pair. Output on this seed."},
-       {"id": "C4", "text": "The real-app harness scenario creates a Read Only session, sees a write refused, switches with /permissions, restarts the daemon and sees Read Only again. Recording on this seed."}
+       {"id": "C3", "text": "An app wire test picks a seed in the snooze menu and sees the snooze message carry its id. Output on this seed."},
+       {"id": "C4", "text": "The real-app harness scenario snoozes an agent on a seed, harvests the seed from the CLI and sees the agent's turn open in the queue. Recording on this seed."}
      ]}
   ]
 }

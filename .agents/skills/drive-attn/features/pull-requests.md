@@ -111,7 +111,7 @@ Preconditions:
 - **Outposts**: an agent on an outpost runs `attn pr` through its outpost daemon, and the agent's pull request links reach the home like the agent's state and cost.
 - **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen and in the drawer, and the muted repositories and authors, belong to the daemon: every profile shows the same list.
 - **Performance and idle cost**: two sessions on one pull request share one fetch, attn sends no request to a rate-limited host until the host's limit resets, and attn does not ask about a merged pull request again. The GitHub list polls every 90 seconds. Nothing measures the idle cost of the drawer or the header. When a change touches the rendering of either, check the rendering for repaints with `docs/internal/perf-testing.md`.
-- **Harnesses**: Claude Code and Codex record a pull request from `gh pr create` on their own. Pi and other plugin harnesses read the self-report guidance and run `attn pr record`. Every harness gets watch notices in its own inbox.
+- **Harnesses**: Claude Code and Codex record a pull request from `gh pr create` on their own. Plugin harnesses read the self-report guidance and run `attn pr record`. Every harness gets watch notices in its own inbox.
 - **Keyboard and native input**: ⌘⇧P toggles the drawer and ⌘R polls. The tile header's popover takes ↑, ↓, Enter (open on GitHub) and `c` (copy the URL) only after a click. While the pointer only hovers, those keys reach the terminal. No macOS menu item claims ⌘⇧P or ⌘R.
 
 ## Tests

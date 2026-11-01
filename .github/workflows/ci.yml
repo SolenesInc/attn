@@ -26,7 +26,6 @@ jobs:
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
       tauri: ${{ steps.filter.outputs.tauri }}
-      plugins: ${{ steps.filter.outputs.plugins }}
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
       app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
     steps:
@@ -82,7 +81,6 @@ jobs:
               - 'app/vite.config.ts'
               - 'app/lint/**'
               - '.oxlintrc.json'
-              - 'plugins/**'
               - 'app/pnpm-workspace.yaml'
               - 'internal/protocol/schema/**'
               - 'ghostty-vt.pin'
@@ -122,26 +120,10 @@ jobs:
               - 'Makefile'
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-toolchains/**'
-            # The plugin tests read Go sources and fixtures verbatim, and attn-pi
-            # speaks the daemon's plugin-driver and conversation-host wire.
-            plugins:
-              - 'plugins/**'
-              - 'internal/prompts/**'
-              - 'cmd/promptgen/**'
-              - 'scripts/build-bundled-plugins.sh'
-              - '.tool-versions'
-              - '.github/workflows/ci.yml'
-              - '.github/actions/setup-toolchains/**'
-              - 'internal/automode/environment.go'
-              - 'internal/hooks/testdata/pull-request-extraction.json'
-              - 'internal/hostsession/**'
-              - 'internal/daemon/host_*'
-              - 'internal/daemon/plugin_*'
             app_acceptance:
               - 'app/**'
               - 'cmd/**'
               - 'internal/**'
-              - 'plugins/**'
               - 'pty-host/**'
               - 'sdk/**'
               - 'test/**'
@@ -297,7 +279,7 @@ jobs:
         id: bun
         run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
 
-      # Bundled Pi and plugin runtime checks need the pinned Bun toolchain.
+      # Plugin runtime checks need the pinned Bun toolchain.
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -669,49 +651,6 @@ jobs:
       - name: Cargo test
         run: cargo test
 
-  # The bundled plugins are compiled by the packaged-app build, which no CI job
-  # runs — so a plugin that only builds on a machine with warm node_modules got
-  # all the way to a contributor's fresh clone. This stages them the way the app
-  # build does, from a checkout that has nothing installed.
-  plugins:
-    name: Plugins
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Linux sandbox
-        uses: ./.github/actions/setup-linux-sandbox
-
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-
-      - name: Read bun pin
-        id: bun
-        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
-
-      - name: Check prompt catalog freshness
-        run: go run ./cmd/promptgen --check
-
-      - name: Stage bundled plugins
-        run: ./scripts/build-bundled-plugins.sh "${RUNNER_TEMP}/bundled-plugins"
-
-      - name: Test plugins
-        run: |
-          for plugin in plugins/*/; do
-            [ -f "${plugin}package.json" ] || continue
-            echo ">>> ${plugin}"
-            (cd "$plugin" && bun test)
-          done
-
   app-acceptance-build:
     name: App acceptance build
     needs: changes
@@ -1057,7 +996,6 @@ jobs:
       - frontend
       - frontend-e2e
       - rust
-      - plugins
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
@@ -1090,7 +1028,6 @@ jobs:
       - frontend
       - frontend-e2e
       - rust
-      - plugins
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos

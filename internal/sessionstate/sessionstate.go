@@ -75,7 +75,7 @@ type Policy struct {
 	StuckAfter           time.Duration
 	SettleGrace          time.Duration
 	ClassifierTimeout    time.Duration
-	GuardianDwell        time.Duration
+	ReviewerDwell        time.Duration
 	ParkedAfter          time.Duration
 }
 
@@ -85,7 +85,7 @@ const (
 	defaultHeartbeatSettleAfter = 5 * time.Second
 	defaultStaleAfter           = 60 * time.Second
 	defaultStuckAfter           = 90 * time.Second
-	guardianDwell               = 60 * time.Second
+	reviewerDwell               = 60 * time.Second
 	defaultSettleGrace          = 4 * time.Second
 	defaultClassifierTimeout    = 30 * time.Second
 	defaultParkedAfter          = 30 * time.Minute
@@ -99,14 +99,14 @@ func PolicyFor(agent string) Policy {
 
 		StaleAfter:        defaultStaleAfter,
 		StuckAfter:        defaultStuckAfter,
-		GuardianDwell:     guardianDwell,
+		ReviewerDwell:     reviewerDwell,
 		SettleGrace:       defaultSettleGrace,
 		ClassifierTimeout: defaultClassifierTimeout,
 		ParkedAfter:       defaultParkedAfter,
 	}
 	if agent == string(protocol.SessionAgentClaude) {
 		policy.HeartbeatTTL = claudeHeartbeatTTL
-		policy.GuardianDwell = 0
+		policy.ReviewerDwell = 0
 	}
 	if agent == string(protocol.SessionAgentShell) {
 		policy.HeartbeatTTL = shellHeartbeatTTL
@@ -384,7 +384,7 @@ func harnessEdge(e evidence, policy Policy) (Resolution, bool) {
 }
 
 func reviewedApprovalsShowOnTheTerminal(e evidence, policy Policy) bool {
-	reviewerAnswers := e.ReviewerInLoop && policy.GuardianDwell > 0
+	reviewerAnswers := e.ReviewerInLoop && policy.ReviewerDwell > 0
 	terminalReports := e.ProgramStatus != nil && e.ProgramStatus.Source == SourceProgramStatus
 	return reviewerAnswers && terminalReports
 }
@@ -429,7 +429,7 @@ func classifierVerdict(e evidence) (Resolution, bool) {
 func DwellFor(state protocol.SessionState, terminal TerminalEvidence, conversation ConversationEvidence, policy Policy) time.Duration {
 	e := evidence{terminal, conversation}
 	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop && !waitsOnUser(e) {
-		return policy.GuardianDwell
+		return policy.ReviewerDwell
 	}
 	return 0
 }

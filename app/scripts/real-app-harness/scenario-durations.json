@@ -205,13 +205,6 @@
         "seconds": 47.2,
         "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
       },
-      "pi-shared-conversation": {
-        "run": "not yet measured",
-        "job": "estimate",
-        "recordedAt": "2026-10-24",
-        "seconds": 20.6,
-        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
-      },
       "desktop-migration": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
         "job": "App acceptance shard 4/4",
@@ -432,7 +425,6 @@
     "automation-lifecycle": 71.804,
     "automation-scheduled-cleanup": 40.6,
     "automation-surface": 32.99,
-    "automode-environment": 4.8,
     "close-pane-nonblocking": 10,
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
@@ -475,7 +467,6 @@
     "refresh-focus": 48.357,
     "clear-opens-session": 15.0,
     "claude-shared-conversation": 47.2,
-    "pi-shared-conversation": 20.6,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,

@@ -71,7 +71,7 @@ switch.
 8. Close, as described below.
 
 Don't suggest other crew members. Create a crew member only when asked, with a name the
-user picks. Auto mode, worktree preferences and planning the day aren't part of
+user picks. Worktree preferences and planning the day aren't part of
 onboarding. Answer questions about them if the user asks.
 
 ## Tour path

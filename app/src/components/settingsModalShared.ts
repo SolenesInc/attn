@@ -23,8 +23,6 @@ export interface SettingsModalProps {
   pluginIssues: DaemonPluginIssue[];
   onListPlugins: () => Promise<PluginListResult>;
   onInstallPlugin: (source: string) => Promise<{ success: boolean; name?: string }>;
-  onInstallBundledPlugin?: (name: string) => Promise<{ success: boolean; name?: string }>;
-  onUninstallPlugin?: (name: string) => Promise<{ success: boolean; name?: string }>;
   onRemovePlugin: (name: string) => Promise<{ success: boolean; name?: string }>;
   onSetPluginPriority: (name: string, priority: number) => Promise<{ success: boolean; name?: string }>;
   onSetSetting: SaveSetting;
@@ -54,7 +52,6 @@ export type SettingsSectionID =
   | 'models'
   | 'backgroundAgents'
   | 'experimental'
-  | 'autoMode'
   | 'delegation'
   | 'connectivity'
   | 'outposts'

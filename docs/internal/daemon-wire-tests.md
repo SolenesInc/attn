@@ -48,12 +48,12 @@ The one way to reach inside is a pause point, below.
   teardown.
 - `w.ExitAtNextBoot(code, screen)` makes the next agent print `screen` and
   exit with `code` before it starts, the way a harness that cannot start does.
-- `w.RefusePiLaunches(reason)` makes the Pi driver refuse every launch and
+- `w.RefusePlugLaunches(reason)` makes the plugin driver refuse every launch and
   resume with `reason` until the test calls the returned function. Setting
-  `fakeagent.PiCapabilitiesEnv` (such as `launch_instructions,resume=false`)
-  before the world starts changes the capabilities the Pi driver registers.
-  `fakeagent.PiAgentEnv` registers the driver under another harness name, and
-  `fakeagent.PiModelsEnv` holds the catalog JSON it answers `driver.models` with.
+  `fakeagent.PlugCapabilitiesEnv` (such as `launch_instructions,resume=false`)
+  before the world starts changes the capabilities the plugin driver registers.
+  `fakeagent.PlugAgentEnv` registers the driver under another harness name, and
+  `fakeagent.PlugModelsEnv` holds the catalog JSON it answers `driver.models` with.
 
 ## Playing the model
 
@@ -62,9 +62,9 @@ On a `fakeagent.Run`:
 - `Prompted` returns the prompt the agent received and moves `ConversationID`
   to the agent's current conversation. In Claude, `/clear` starts a new
   conversation and `/resume <id>` switches to the conversation `<id>`. Codex
-  switches on the first prompt after `/new`, `/clear` or `/resume <id>`. In Pi,
-  `/new` and `/resume <id>` switch conversations, and Pi sends its hello to the
-  driver again, as a reloaded suite does.
+  switches on the first prompt after `/new`, `/clear` or `/resume <id>`. In the
+  plugin harness `plug`, `/new` and `/resume <id>` switch conversations, and the
+  harness says hello to its driver again.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.

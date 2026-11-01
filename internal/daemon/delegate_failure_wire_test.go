@@ -13,16 +13,16 @@ import (
 )
 
 func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
+	pluginDriverSettings(app, "plug")
 	repo := newRepo(t, "shop")
 	root := filepath.Dir(repo)
 	source := w.Spawn(app, fakeagent.Codex, repo)
 	w.Launched(source)
 	before := w.App().Initial
 
-	defer w.RefusePiLaunches("pi could not start: the model provider is unreachable")()
+	defer w.RefusePlugLaunches("plug could not start: the model provider is unreachable")()
 	for _, row := range []struct {
 		name, source, branch string
 	}{
@@ -31,7 +31,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 		{name: "into a new worktree of its own", branch: "feature/alone"},
 	} {
 		request := brief(repo, "Add a discount field")
-		request.Agent = protocol.Ptr("pi")
+		request.Agent = protocol.Ptr("plug")
 		request.Label = protocol.Ptr(strings.ReplaceAll(row.name, " ", "-"))
 		if row.source != "" {
 			request.SourceSessionID = protocol.Ptr(protocol.SessionID(row.source))
@@ -42,7 +42,7 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 			request.Checkout = delegateNewWorktree(row.branch, "main")
 		}
 		if result, err := cli.Delegate(request); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
-			t.Errorf("%s: delegating = %+v, %v; want pi's launch failure", row.name, result, err)
+			t.Errorf("%s: delegating = %+v, %v; want plug's launch failure", row.name, result, err)
 		}
 		if row.branch != "" {
 			worktree := filepath.Join(root, "shop--"+strings.ReplaceAll(row.branch, "/", "-"))
@@ -64,15 +64,15 @@ func TestADelegationWhoseAgentCannotStartRemovesItsPaneAndKeepsItsWorktree(t *te
 }
 
 func TestADelegationFailsNamingTheScreenWhenItsAgentExitsBeforeItsFirstTurn(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
+	pluginDriverSettings(app, "plug")
 	cwd := w.Path("api")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	const screen = `Error: Model "gpt-5.6-sol" is ambiguous across providers`
-	for _, agent := range []fakeagent.Harness{fakeagent.Codex, fakeagent.Pi} {
+	for _, agent := range []fakeagent.Harness{fakeagent.Codex, fakeagent.Plug} {
 		request := brief(cwd, "Say hello")
 		request.Agent = protocol.Ptr(string(agent))
 		request.Label = protocol.Ptr("hello-" + string(agent))

@@ -130,7 +130,7 @@ func TestForgetCrewLetterTranscriptRequiresConsent(t *testing.T) {
 }
 
 func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
-	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Pi} {
+	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(agent), func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(agent))
 			writeCharter(t, s, "trellis")
@@ -214,4 +214,13 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			fmt.Println("PASS: letter filed with crew_v2_enabled=false records no transcript reference")
 		})
 	}
+}
+
+func awaitAgentAvailable(app *testworld.Peer, agent fakeagent.Harness) {
+	app.T.Helper()
+	key := string(agent) + "_available"
+	if app.Initial.Settings[key] == "true" {
+		return
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
 }

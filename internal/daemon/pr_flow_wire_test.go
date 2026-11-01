@@ -51,7 +51,7 @@ func prFlowInject(t *testing.T, w *world, pr protocol.PR) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if answer := autoModeUnixCall(t, w, string(payload)); !answer.Ok {
+	if answer := unixCall(t, w, string(payload)); !answer.Ok {
 		t.Fatalf("inject %s: %s", pr.ID, protocol.Deref(answer.Error))
 	}
 }

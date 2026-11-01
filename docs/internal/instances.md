@@ -32,16 +32,6 @@ Named instances do not poll GitHub with your `gh` credentials, so they cannot
 spend production's API budget. To test against real GitHub, start the daemon
 with `ATTN_GITHUB_POLLING=on`. Without it, harness runs use the mock GitHub.
 
-## Iterate on the pi plugin
-
-```bash
-attn plugin uninstall attn-pi
-attn plugin link --path <checkout>/plugins/attn-pi
-```
-
-New pi sessions run the checkout. After you change the driver (`src/`), restart
-the daemon. `attn plugin install-bundled attn-pi` restores the bundled copy.
-
 ## Verification requirements
 
 Cover lifecycle, protocol, PTY, background-runner, timing, and other

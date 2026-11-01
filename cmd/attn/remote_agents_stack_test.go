@@ -407,7 +407,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 		want  string
 	}{
 		{fakeagent.Claude, true, "chief and crew run only at the home"},
-		{fakeagent.Harness("pi"), false, "plugin harness pi runs only at the home"},
+		{fakeagent.Harness("plug"), false, "plugin harness plug runs only at the home"},
 	} {
 		denied, _, _ := home.RequestSpawn(pair.App, limit.agent, outpost.Path("agent"), withHost, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(limit.chief) })
 		if denied.Success || !strings.Contains(protocol.Deref(denied.Error), limit.want) {

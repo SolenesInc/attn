@@ -9,7 +9,7 @@ import (
 )
 
 func TestASeedContinuationFollowsItsTendersConversationMovePastClose(t *testing.T) {
-	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Pi} {
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Plug} {
 		t.Run(string(harness), func(t *testing.T) {
 			w := newWorld(t, harness)
 			app, cli := w.App(), w.Client()

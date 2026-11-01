@@ -26,7 +26,7 @@ Only `attn seed` reaches the garden.
 
 - `attn doc` (`cmd/attn/doc.go`): `define <namespace> <collection> [field:type ...]`, `undefine`, `collections [--json]`, `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]`, `delete [--expect <rev>]`, `query`, `count` and `watch [--resume]`, with the query flags `--where`, `--sort`, `--desc`, `--limit` and `--after`.
 - Prompts: none. Agents find the verb in `attn --help`, which the attn skill names as the authority for syntax.
-- Plugins: none. No bundled plugin uses the store, and the plugin API has no document methods.
+- Plugins: none. The plugin API has no document methods.
 
 ## Driving it
 

@@ -27,7 +27,6 @@ export interface Session {
   agent: SessionAgent;
   yoloMode?: boolean;
   chiefOfStaff?: boolean;
-  autoMode?: boolean;
   transcriptMatched: boolean;
   creating?: boolean;
   branch?: string;
@@ -87,7 +86,6 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
     agent: SessionAgent | undefined,
     yoloMode: boolean | undefined,
     chiefOfStaff?: boolean,
-    autoMode?: boolean,
   ) => Promise<string>;
   closeSession: (id: string) => void;
   removeSessionLocalState: (id: string) => void;
@@ -199,7 +197,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     agent: SessionAgent | undefined,
     yoloMode: boolean | undefined,
     chiefOfStaff?: boolean,
-    autoMode?: boolean,
   ) => {
     const id = providedId || crypto.randomUUID();
     const resolvedAgent: SessionAgent = agent ?? 'claude';
@@ -213,7 +210,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       agent: resolvedAgent,
       yoloMode: yoloMode ?? false,
       chiefOfStaff: chiefOfStaff ?? false,
-      autoMode,
       transcriptMatched: resolvedAgent !== 'codex',
       creating: true,
       desktop: createDefaultDesktopState(),
@@ -260,10 +256,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       resume_session_id: null,
       yolo_mode: session.yoloMode ?? null,
       ...(session.chiefOfStaff ? { chief_of_staff: true } : {}),
-      // Explicit false is a real answer here, so the field is sent whenever it was
-      // set and is never `&&`-collapsed away.
-      ...(session.autoMode !== undefined ? { auto_mode: session.autoMode } : {}),
-
     };
   },
 

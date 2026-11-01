@@ -20,7 +20,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 - `skill-install`: attn keeps the attn skill current in the skills folder of Claude Code and of Codex, on production and `dev`, and on a named instance only for a scenario that gives the instance a tool home of its own.
 - `prompt-catalog`: `attn prompts` lists, shows, renders and explains every prompt attn composes, without a daemon.
 - `presence`: `attn presence` tells a shell whether it runs inside attn, and as which session.
-- `plugin-instructions`: a plugin harness whose driver asks for launch instructions gets the same guidance. The bundled Pi driver does not ask.
+- `plugin-instructions`: a plugin harness whose driver asks for launch instructions gets the same guidance.
 
 ## How to get to it
 
@@ -81,7 +81,7 @@ Preconditions:
 
 - **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/internal/harnesses.md`). The daemon refreshes the skill on disk at startup, when a harness executable setting is saved, and at launch.
 - **Linux**: `attn skill`, `attn prompts` and `attn presence` work the same where the CLI runs on Linux, and the skill lands in the same folders under the home.
-- **Harnesses**: Claude Code reads the launch instructions as appended system instructions and the skill from `~/.claude/skills/attn`. Codex reads them as developer instructions and the skill from `~/.agents/skills/attn`. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability), and no attn skill is synced for it. The bundled Pi driver (`plugins/attn-pi/src/driver.ts`) does not ask, so a Pi session gets neither from attn. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on. Peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
+- **Harnesses**: Claude Code reads the launch instructions as appended system instructions and the skill from `~/.claude/skills/attn`. Codex reads them as developer instructions and the skill from `~/.agents/skills/attn`. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability), and no attn skill is synced for it. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on. Peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
 - **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on, and `app/src/prompts/render.compatibility.test.ts` checks the app's renderer against it. `attn skill` prints the copy bundled with the running build, and the sync removes reference files a newer build dropped.
 
 ## Tests
@@ -99,6 +99,6 @@ Preconditions:
 - `attn prompts` is a preview: it says so, and it is not proof that an agent received the text. The proof is the mock agent's launch record.
 - An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries.
 - A named instance does not write the skill into your harness homes. Only production and `dev` do, and so does an instance whose shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. Checking `~/.claude/skills/attn` after a run on a named instance proves nothing about the change.
-- The baseline cannot drive a plugin harness's launch instructions: the mock agent stands in only for `claude` and `codex`, and the bundled Pi driver does not ask for them. `internal/daemon/plugin_launch_instructions_wire_test.go` covers that way in.
+- The baseline cannot drive a plugin harness's launch instructions: the mock agent stands in only for `claude` and `codex`. `internal/daemon/plugin_launch_instructions_wire_test.go` covers that way in.
 - `./attn presence` in the instance shell says `not running inside attn` because the launch unsets `ATTN_INSIDE_APP`. That is the right answer for that shell.
 - Working but wrong: `attn session instructions` does not print what attn told a session. It asks a model about another session's conversation ([ledger.md](ledger.md)), though its name reads like the launch instructions this file describes.

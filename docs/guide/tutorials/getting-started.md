@@ -6,10 +6,8 @@ From a fresh install to your first agent.
 
 You need:
 
-- At least one agent CLI installed: Claude Code, Codex or Pi. Attn runs them as
-  they are, so install and log into the one you use. Pi runs through the
-  attn-pi plugin that ships with Attn: once Attn is installed, open
-  **Settings → Plugins** and install it.
+- At least one agent CLI installed: Claude Code or Codex. Attn runs them as
+  they are, so install and log into the one you use.
 - The [GitHub CLI](https://cli.github.com/) (`gh`) 2.81 or newer, if you want
   the PR features.
 

@@ -64,7 +64,7 @@ Preconditions:
 - **Durability across restarts**: usage is kept per session and survives every restart, and an upgrade carries over what an earlier version measured. A resumed conversation counts only the usage after the resume, so nothing is counted twice.
 - **Profiles**: prices are settings and apply across all profiles. Each session's usage stays with it in its profile's ledger.
 - **Performance and idle cost**: `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading usage from transcripts.
-- **Harnesses**: attn reads Claude Code's usage from each assistant message. It reads Codex's usage from the Codex token counts together with the tier and the context length. It reads Pi's usage through the Pi plugin. Only Claude Code and Codex agents take a context cap. attn refuses a cap on a shell session, and it refuses a cap value outside the allowed range.
+- **Harnesses**: attn reads Claude Code's usage from each assistant message. It reads Codex's usage from the Codex token counts together with the tier and the context length. Only Claude Code and Codex agents take a context cap. attn refuses a cap on a shell session, and it refuses a cap value outside the allowed range.
 - **Keyboard and native input**: the badge takes focus, ↓ pins the receipt and Escape closes it (twice after a ↓ pin). The palette reaches the receipt and the cap without a pointer.
 - **Compatibility across versions**: an older version's single cost cursor upgrades without losing unread usage.
 

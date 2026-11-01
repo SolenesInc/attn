@@ -4,7 +4,6 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type Fo
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { recordAppAction } from '../analytics/appActions';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
-import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 import { DaemonSettings } from '../hooks/useDaemonSocket';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { useEscapeStack } from '../hooks/useEscapeStack';
@@ -56,8 +55,6 @@ export function useSettingsModalState({
   pluginIssues,
   onListPlugins,
   onInstallPlugin,
-  onInstallBundledPlugin,
-  onUninstallPlugin,
   onRemovePlugin,
   onSetPluginPriority,
   themePreference,
@@ -83,31 +80,8 @@ export function useSettingsModalState({
     sendHarnessModels,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
-    sendAutoModeGet,
-    sendAutoModePromote,
-    sendAutoModeDiscard,
-    sendAutoModeRuleAdd,
-    sendAutoModeRuleRemove,
-    sendAutoModeLegacyDismiss,
-    sendAutoModeHostAdd,
-    sendAutoModeHostRemove,
-    sendAutoModePolicySet,
-    sendAutoModeEnvSlot,
   } = useDaemonApi();
   const githubPollingOffReason = useGitHubPollingOffReason();
-  const autoModePolicy = useAutoModePolicy({
-    enabled: isOpen,
-    getState: sendAutoModeGet,
-    promoteProposal: sendAutoModePromote,
-    discardProposal: sendAutoModeDiscard,
-    addRule: sendAutoModeRuleAdd,
-    removeRule: sendAutoModeRuleRemove,
-    addHost: sendAutoModeHostAdd,
-    removeHost: sendAutoModeHostRemove,
-    setPolicy: sendAutoModePolicySet,
-    setEnvironmentSlot: sendAutoModeEnvSlot,
-    dismissLegacy: sendAutoModeLegacyDismiss,
-  });
   const savedFlash = useSavedFlash();
   const autosave = useSettingsAutosave()!;
   const onSetSetting = useCallback(
@@ -501,28 +475,6 @@ export function useSettingsModalState({
     [onRemovePlugin, pluginPanel, refreshPlugins],
   );
 
-  const handleInstallBundledPlugin = useCallback(
-    async (name: string) => {
-      await pluginPanel.run(name, 'Failed to install bundled plugin', async () => {
-        if (!onInstallBundledPlugin) throw new Error('Bundled plugin installation is unavailable');
-        await onInstallBundledPlugin(name);
-        await refreshPlugins();
-      });
-    },
-    [onInstallBundledPlugin, pluginPanel, refreshPlugins],
-  );
-
-  const handleUninstallPlugin = useCallback(
-    async (name: string) => {
-      await pluginPanel.run(name, 'Failed to uninstall plugin', async () => {
-        if (!onUninstallPlugin) throw new Error('Plugin uninstall is unavailable');
-        await onUninstallPlugin(name);
-        await refreshPlugins();
-      });
-    },
-    [onUninstallPlugin, pluginPanel, refreshPlugins],
-  );
-
   const commitPluginPriority = useCallback(
     async (name: string, current: number) => {
       const raw = pluginPanel.priorityDraft(name).trim();
@@ -582,7 +534,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
+              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -599,13 +551,6 @@ export function useSettingsModalState({
             description: '',
             keywords:
               'delegate roles pathfinder builder reviewer orchestrator prototyper fallback harness models effort preferences alternatives',
-          },
-          {
-            id: 'autoMode',
-            label: 'Auto mode',
-            description: "Manage attn's pi automode plugin",
-            keywords:
-              'auto mode automode pi safety envelope proposals promote discard allow deny forbidden rules hosts network approval policy sandbox permissions denials',
           },
         ],
       },
@@ -634,7 +579,7 @@ export function useSettingsModalState({
           {
             id: 'plugins',
             label: 'Plugins',
-            description: 'Install bundled plugins or add your own from a local directory or Git repository, and set provider dispatch priority.',
+            description: 'Add plugins from a local directory or Git repository, and set provider dispatch priority.',
             keywords: 'plugins extensions providers priority install healthcheck',
           },
         ],
@@ -699,7 +644,6 @@ export function useSettingsModalState({
     pluginProblemCount,
     activePluginCount,
     plugins,
-    autoModePolicy,
     autoSettleEnabled,
     asksEnabled,
     calloutsEnabled,
@@ -743,8 +687,6 @@ export function useSettingsModalState({
     handleBrowsePluginPath,
     handleInstallPlugin,
     pluginIssues,
-    handleInstallBundledPlugin,
-    handleUninstallPlugin,
     handleRemovePlugin,
     commitPluginPriority,
     ptyBackendMode,

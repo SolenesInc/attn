@@ -1153,8 +1153,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin:
 		d.handleInstallPluginWS(client, msg.(*protocol.InstallPluginMessage))
-	case protocol.CmdInstallBundledPlugin:
-		d.handleInstallBundledPluginWS(client, msg.(*protocol.InstallBundledPluginMessage))
 	case protocol.CmdUninstallPlugin:
 		d.handleUninstallPluginWS(client, msg.(*protocol.UninstallPluginMessage))
 	case protocol.CmdRemovePlugin:
@@ -1267,28 +1265,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:
 		d.handleBusSetConsumerEnabled(client, msg.(*protocol.BusSetConsumerEnabledMessage))
-	case protocol.CmdAutoModeGet:
-		d.handleAutoModeGet(client, msg.(*protocol.AutoModeGetMessage))
-	case protocol.CmdAutoModePromote:
-		d.handleAutoModePromote(client, msg.(*protocol.AutoModePromoteMessage))
-	case protocol.CmdAutoModeDiscard:
-		d.handleAutoModeDiscard(client, msg.(*protocol.AutoModeDiscardMessage))
-	case protocol.CmdAutoModeEnvSlot:
-		d.handleAutoModeEnvSlotWS(client, msg.(*protocol.AutoModeEnvSlotMessage))
-	case protocol.CmdAutoModeEnvNotes:
-		d.handleAutoModeEnvNotesWS(client, msg.(*protocol.AutoModeEnvNotesMessage))
-	case protocol.CmdAutoModeRuleAdd:
-		d.handleAutoModeRuleAdd(client, msg.(*protocol.AutoModeRuleAddMessage))
-	case protocol.CmdAutoModeRuleRemove:
-		d.handleAutoModeRuleRemoveWS(client, msg.(*protocol.AutoModeRuleRemoveMessage))
-	case protocol.CmdAutoModeHostAdd:
-		d.handleAutoModeHostAdd(client, msg.(*protocol.AutoModeHostAddMessage))
-	case protocol.CmdAutoModeHostRemove:
-		d.handleAutoModeHostRemoveWS(client, msg.(*protocol.AutoModeHostRemoveMessage))
-	case protocol.CmdAutoModePolicySet:
-		d.handleAutoModePolicySetWS(client, msg.(*protocol.AutoModePolicySetMessage))
-	case protocol.CmdAutoModeLegacyDismiss:
-		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize:
 		resize := msg.(*protocol.PtyResizeMessage)
 		d.handlePtyResize(client, resize)

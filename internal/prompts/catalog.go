@@ -12,9 +12,9 @@ func Definitions() []Recipient {
 		template("session.garden-update", "content/session/garden-update.md", seedID, change, after),
 		template("session.garden-update-whole", "content/session/garden-update-whole.md", seedID, change))))
 	recipients := append(append([]Recipient{s}, lifecycleRecipients()...), originRecipients()...)
-	recipients = append(recipients, delegationPreferencesRecipient(), gardenAdvisorRecipient(), dictationRefinerRecipient(), piEnvironmentRecipient(), piSecurityRecipient(), piGuardianRecipient(), activityRecipient(), skillRecipient(), workflowSkillRecipient(), resourceRecipient(), annotationLabelRecipient(), evidenceRecipient(), askRecipient())
+	recipients = append(recipients, delegationPreferencesRecipient(), gardenAdvisorRecipient(), dictationRefinerRecipient(), activityRecipient(), skillRecipient(), workflowSkillRecipient(), resourceRecipient(), annotationLabelRecipient(), evidenceRecipient(), askRecipient())
 	recipients = append(recipients, annotationRecipients()...)
-	order := []string{"session", "crew", "chief", "delegation", "automation", "pi-environment", "pi-security", "pi-guardian", "activity", "turn-classifier", "session-title", "session-instructions", "attn-skill"}
+	order := []string{"session", "crew", "chief", "delegation", "automation", "activity", "turn-classifier", "session-title", "session-instructions", "attn-skill"}
 	rank := func(id string) int {
 		for i, name := range order {
 			if name == id {

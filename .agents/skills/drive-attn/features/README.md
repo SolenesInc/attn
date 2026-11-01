@@ -30,9 +30,6 @@ In the index, "both" means people and agents.
 - If a feature needs more in the daemon's environment, its file says so in the
   preconditions. Append the feature's `export` line to the env file, stop the
   daemon, and start the daemon again as [../SKILL.md](../SKILL.md) describes.
-- The baseline has no stand-in for Pi. A step that needs Pi, the Pi plugin or
-  the Guardian fails on the baseline, and the feature file names the scenarios
-  that run the real `pi`.
 - Never drive an instance this run did not start.
 
 ## Driving conventions
@@ -307,7 +304,7 @@ HEAD.
   see.
 - **Performance and idle cost**: memory and CPU while idle, repainting, and
   the limits a large garden, ledger or session meets.
-- **Harnesses**: how the feature differs across Claude Code, Codex and Pi.
+- **Harnesses**: how the feature differs across Claude Code, Codex and plugin harnesses.
 - **Keyboard and native input**: the keys that reach every action, where
   focus lands, and macOS menu accelerators that can take a key first.
 - **Compatibility across versions**: a later version reading today's data
@@ -333,9 +330,8 @@ instance. A file whose recipe ran live says so here.
 - [Agent state](agent-state.md) (both): What each agent is doing right now (working, waiting, needs approval…), like a presence status, and why attn shows that state.
 - [Ledger](ledger.md) (both): Every session, live and closed, like a chat history. Resume a closed session as itself, and keep or forget the session's conversation.
 - [Usage and cost](usage.md) (people): Tokens, cost and context window for each session.
-- [Harnesses](harnesses.md) (people): Bring your own harness: attn wraps Claude Code, Codex and Pi as they are, and plugins add more.
+- [Harnesses](harnesses.md) (people): Bring your own harness: attn wraps Claude Code and Codex as they are, and plugins add more.
 - [Shared Codex](shared-codex.md) (people): Codex sessions share one app-server that attn keeps updated and restarts.
-- [Auto mode](auto-mode.md) (both): Rules and a guardian model answer agents' permission prompts. Agents propose rules, and only the user promotes them.
 
 ### Attention
 

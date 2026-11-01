@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -57,7 +56,6 @@ type spawnRequest struct {
 	driver          agentdriver.Driver
 	resumeSessionID string
 	parentSessionID protocol.SessionID
-	autoModeDriver  bool
 	link            linkRuntime
 	addsTerminal    bool
 }
@@ -168,16 +166,6 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			}
 		}
 	}
-	autoModeDriver := hasPluginDriver && pluginDriver.Capabilities["auto_mode"]
-	if policy, sandbox := requestedSpawnPolicyPair(msg); policy != "" || sandbox != "" {
-		if err := automode.ValidatePolicyPair(policy, sandbox); err != nil {
-			return nil, &spawnRejection{err: err}
-		}
-		if !autoModeDriver {
-			return nil, &spawnRejection{err: fmt.Errorf(
-				"agent %q does not support a per-session approval policy or sandbox mode", agent)}
-		}
-	}
 	profile, err := d.liveLaunchProfile(msg.ProfileID)
 	if err != nil {
 		return nil, &spawnRejection{err: err}
@@ -210,7 +198,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	if err := d.checkLaunchPlacement(profile, placement); err != nil {
 		return nil, &spawnRejection{err: err}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, autoModeDriver: autoModeDriver, addsTerminal: addsTerminal}, nil
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, addsTerminal: addsTerminal}, nil
 }
 
 func (d *Daemon) addsTerminal(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) bool {
@@ -406,10 +394,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.Asks = d.launchedWithAsks(session.ID)
 	d.launchVentIntent(session.ID).applyTo(&intent)
-	intent.AutoMode = msg.AutoMode
-	if req.autoModeDriver {
-		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
-	}
 	intent.Command = req.policy.command
 	if err := d.store.SetLaunchIntent(session.ID, intent); err != nil {
 		plan.rollback(d, msg.ID)
@@ -755,22 +739,6 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 				return nil, err
 			}
 			params.Instructions = instructions
-		}
-		if req.pluginDriver.Capabilities["auto_mode"] {
-			cfg, err := d.store.GetAutoModeConfig()
-			if err != nil {
-				return nil, fmt.Errorf("read auto mode config: %w", err)
-			}
-			if msg.AutoMode != nil {
-				cfg.EnabledDefault = *msg.AutoMode
-			}
-			policy, sandbox := effectiveSpawnPolicyPair(msg)
-			cfg = applySessionPolicyPair(cfg, policy, sandbox)
-			cfg, _, err = d.autoModeConfigForSession(cfg, params.CWD)
-			if err != nil {
-				return nil, err
-			}
-			params.AutoMode = &cfg
 		}
 		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")}
 	}

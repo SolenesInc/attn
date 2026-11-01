@@ -209,8 +209,8 @@ options:
 example:
   attn prompts explain session launch --set notebook_root=/tmp/notebook --set garden_available=true
 
-The catalog covers launch, crew, delegation, automation, notifications, skills,
-background model tasks, and Pi auto mode. Caller-rendered inputs link to their
-producer events. A preview does not establish what a harness received.
+The catalog covers launch, crew, delegation, automation, notifications, skills
+and background model tasks. Caller-rendered inputs link to their producer
+events. A preview does not establish what a harness received.
 `)
 }

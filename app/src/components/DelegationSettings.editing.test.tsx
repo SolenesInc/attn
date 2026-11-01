@@ -183,12 +183,12 @@ it('keeps the fallback row when the table has no roles', async () => {
 it('reloads the table, harnesses included, when the section is shown again while Settings stays open', async () => {
   const { daemon, server, saves, loads } = await openDelegation({ templates: [], expanded: () => [] });
   expect(loads()).toHaveLength(1);
-  server.harnesses = [...server.harnesses, { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false }];
+  server.harnesses = [...server.harnesses, { id: 'plug', name: 'Plug', available: true, model_pin: true, effort_pin: true, discovery: false }];
   fireEvent.click(screen.getByTestId('settings-nav-connectivity'));
   await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-delegation')));
   expect(loads()).toHaveLength(2);
   fireEvent.click(screen.getByRole('button', { name: 'Model for anything else' }));
-  expect(screen.getByRole('option', { name: 'Pi' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Plug' })).toBeInTheDocument();
   expect(saves()).toHaveLength(0);
 });
 

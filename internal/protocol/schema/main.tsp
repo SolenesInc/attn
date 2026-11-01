@@ -155,7 +155,7 @@ model AutomationProvenance {
 
 model SessionUsageModel {
   `model`: string;
-  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the reviewer attn runs beside it. Rows written before purposes existed read as "agent".
+  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the auto-review reviewer Codex runs beside it. Rows written before purposes existed read as "agent".
   input_tokens: safeint;
   output_tokens: safeint;
   cache_read_tokens: safeint;
@@ -405,12 +405,9 @@ model PluginInfo {
   priority: int32;
   connected: boolean;
   running: boolean;
-  availability: string; // "bundled" | "user"
-  installation_state: string; // "available" | "installed"
   runtime_state: string; // "stopped" | "starting" | "connected" | "degraded" | "parked"
-  can_install: boolean;
   can_uninstall: boolean;
-  // Source checkout a linked plugin points at; absent for copied and bundled plugins.
+  // Source checkout a linked plugin points at; absent for copied plugins.
   link_target?: string;
   // "starting" | "connected" | "backoff" | "stopped". Plain string keeps
   // generated Go/TypeScript consumers aligned with other runtime status fields.
@@ -1921,11 +1918,6 @@ model InstallPluginMessage {
   link?: boolean;
 }
 
-model InstallBundledPluginMessage {
-  cmd: "install_bundled_plugin";
-  name: string;
-}
-
 model UninstallPluginMessage {
   cmd: "uninstall_plugin";
   name: string;
@@ -2207,18 +2199,6 @@ model SpawnSessionMessage {
   resume_picker?: boolean;
   priority?: boolean;
   yolo_mode?: boolean;
-  // Per-session auto mode, for an agent whose driver advertises `auto_mode`.
-  // Tri-state on purpose: absent follows the promoted config's
-  // `enabled_default`, and true/false is the launcher overriding it for this
-  // session alone. Persisted with the launch intent, so a revive or a reload
-  // relaunches on the choice that was made rather than on today's default.
-  auto_mode?: boolean;
-  // Per-session override of the daemon's auto-mode `approval_policy` /
-  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
-  // means "follow the daemon config"; the values are the same sets as the
-  // auto-mode config carries. Each may be given without the other.
-  approval_policy?: string;
-  sandbox_mode?: string;
   chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
@@ -6765,354 +6745,6 @@ model DictationRefineResultMessage {
 }
 
 // ============================================================================
-// Auto mode
-// ============================================================================
-//
-// pi's permission system, configured attn-side. Design:
-//
-// The surface is deliberately split in two, and the split IS the security
-// design. These commands — everything an agent can reach over the unix socket —
-// only ever record a PROPOSAL, which changes nothing a session launches with.
-// Promotion lives on the WebSocket surface alone (automode_promote), because a
-// human in the app is the trust boundary no CLI caller can fake. An agent must
-// not be able to write its own leash.
-
-model GuardianSelection {
-  provider?: string;
-  "model"?: string;
-  effort?: string;
-}
-
-model AutoModeConfigInfo {
-  guardian?: GuardianSelection;
-  "enabled_default": boolean;
-  // "untrusted" | "on-request" | "never".
-  "approval_policy": string;
-  // "read-only" | "workspace-write" | "danger-full-access".
-  "sandbox_mode": string;
-  "environment": AutoModeEnvironmentInfo;
-  "rules": AutoModeRuleInfo[];
-  // The subset of "rules" attn ships rather than a human adding: resolved in at
-  // read, never stored, and not removable. They are what stops a session under
-  // auto mode from rewriting its own policy.
-  "shipped_rules": AutoModeRuleInfo[];
-  "network": AutoModeNetworkInfo;
-  // The subset of network.denied_domains attn ships. It names this daemon's own
-  // WebSocket port, so a client cannot derive it and has to be told.
-  "shipped_denied_domains": string[];
-  // Old allow/hard-deny globs the migration could not turn into a prefix rule.
-  // Nothing enforces them; settings shows them so the user can rewrite them.
-  "legacy_patterns": string[];
-  // The named pairs a client offers instead of two raw dropdowns. Static, and
-  // resolved at read time like the shipped rules, so no client keeps a copy.
-  "presets": AutoModePresetInfo[];
-}
-
-// One named approval policy and sandbox mode pair. "id" is what a launcher
-// names on the CLI; the pair is what reaches spawn_session and delegate.
-model AutoModePresetInfo {
-  "id": string;
-  "label": string;
-  "description": string;
-  "approval_policy": string;
-  "sandbox_mode": string;
-}
-
-// One Codex prefix rule. "pattern" is the command's leading tokens, and each
-// token is the list of alternatives that token accepts - a token with one
-// alternative is a literal. "match" and "not_match" are pi's own example
-// commands, carried through untouched; pi checks them when it loads the rules.
-model AutoModeRuleInfo {
-  "pattern": string[][];
-  // "allow" | "prompt" | "forbidden".
-  "decision": string;
-  "sandbox": string;
-  // Required for a forbidden rule: it is the text the agent is given.
-  "justification": string;
-  "match": string[][];
-  "not_match": string[][];
-}
-
-model AutoModeNetworkInfo {
-  "enabled": boolean;
-  "allowed_domains": string[];
-  "denied_domains": string[];
-  // Off by default. With it off the driver's proxy hard denies a host that
-  // resolves to a loopback or private address, whoever allowed the name.
-  "allow_local_binding": boolean;
-}
-
-model AutoModeEnvironmentSlot {
-  "id": string;
-  "label": string;
-  "kind": string;
-  "choices": string[];
-  "detail": string;
-  "unset": string;
-  "detected": boolean;
-  "read_by": string[];
-}
-
-model AutoModeEnvironmentInfo {
-  "slots": AutoModeEnvironmentSlotValue[];
-  "notes": string[];
-}
-
-model AutoModeEnvironmentSlotValue {
-  "id": string;
-  "values": string[];
-}
-
-// One proposed change awaiting a human. "kind" says what "value" carries, and
-// promotion applies it as the matching app-only command would:
-//   "rule"        the rule's JSON, {"pattern":..,"decision":..,..}
-//   "rule_remove" {"pattern":..}, the prefix of the rule to take away
-//   "host"        {"host":..,"decision":..}
-//   "host_remove" the same pair, naming the entry to drop
-//   "policy"      {"approval_policy"?,"sandbox_mode"?,"allow_local_binding"?}
-model AutoModeProposalInfo {
-  "id": safeint;
-  "kind": string;
-  // Always empty: no kind takes a target.
-  "target": string;
-  "value": string;
-  // "value" read back as one line, for a list a human scans.
-  "summary": string;
-  // Who proposed it, when the caller said. Empty when nobody did.
-  "proposed_by": string;
-  // "pending" | "promoted" | "discarded".
-  "state": string;
-  "created_at": string;
-  // Empty while still pending.
-  "resolved_at": string;
-}
-
-// One call auto mode refused, as the session reported it.
-model AutoModeDenialInfo {
-  "id": safeint;
-  "session_id": SessionID;
-  "tool": string;
-  // The blocked call in one line — the same text the model was given.
-  "signature": string;
-  "reason": string;
-  // Who decided: the prefix rule that matched, the reviewer that answered, or
-  // "circuit-breaker".
-  "rule": string;
-  "created_at": string;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeShowMessage {
-  "cmd": "automode_show";
-  "cwd"?: string;
-}
-
-model AutoModeShowResult {
-  "config": AutoModeConfigInfo;
-  "global_rules": AutoModeRuleInfo[];
-  "repository_rules": AutoModeRuleInfo[];
-  "repository_rules_path"?: string;
-  // Everything still pending, oldest first.
-  "proposals": AutoModeProposalInfo[];
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeEnvSlotMessage {
-  "cmd": "automode_env_slot";
-  "slot": string;
-  "values": string[];
-  "request_id"?: string;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeEnvNotesMessage {
-  "cmd": "automode_env_notes";
-  "notes": string[];
-  "request_id"?: string;
-}
-
-model AutoModeEnvResult {
-  "environment": AutoModeEnvironmentInfo;
-}
-
-// Record a proposal. Refused at submission when it could never be promoted: a
-// value that is not the JSON of a rule or of a host amendment.
-@extension("x-on", #{ home: true })
-model AutoModeProposeMessage {
-  "cmd": "automode_propose";
-  "kind": string;
-  "target"?: string;
-  "value": string;
-  "proposed_by"?: string;
-}
-
-model AutoModeProposeResult {
-  "proposal": AutoModeProposalInfo;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeDenialsMessage {
-  "cmd": "automode_denials";
-  "limit"?: safeint;
-}
-
-model AutoModeDenialsResult {
-  "denials": AutoModeDenialInfo[];
-  // What the session-side denial ledger says it lost — records dropped when it
-  // rotated, lines it could not read. Empty when it lost nothing, which is the
-  // ordinary case. A feed that clipped and did not say so reads as a whole
-  // episode.
-  "ledger_note"?: string;
-}
-
-// The app's read: config plus the pending proposals its settings section
-// reviews, plus the recent denials it lists.
-model AutoModeGetMessage {
-  cmd: "automode_get";
-  request_id: string;
-}
-
-model AutoModeStateResultMessage {
-  event: "automode_state_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config: AutoModeConfigInfo;
-  proposals: AutoModeProposalInfo[];
-  denials: AutoModeDenialInfo[];
-  environment_slots: AutoModeEnvironmentSlot[];
-}
-
-model AutoModeStateChangedMessage {
-  event: "automode_state_changed";
-  config: AutoModeConfigInfo;
-  proposals: AutoModeProposalInfo[];
-  denials: AutoModeDenialInfo[];
-  environment_slots: AutoModeEnvironmentSlot[];
-}
-
-// Apply a pending proposal to the config. The app only — this command has no
-// unix-socket half, and that absence is the whole trust boundary.
-model AutoModePromoteMessage {
-  cmd: "automode_promote";
-  id: safeint;
-  request_id: string;
-}
-
-model AutoModePromoteResultMessage {
-  event: "automode_promote_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  proposal?: AutoModeProposalInfo;
-  // The config as it stands after the promotion.
-  config?: AutoModeConfigInfo;
-}
-
-// Write a rule, a host or the policy itself. Every one of these is app-only,
-// for the same reason promotion is: a rule decides what a session may do
-// without asking, so only a human at the trust boundary writes one. Removal is
-// no different from adding - `attn automode rule remove` on the unix socket
-// records a rule_remove proposal, and a human promotes it here.
-//
-// "pattern" is the command's leading tokens, one token per entry. A removal
-// names the pattern rather than an index, because the list a client renders has
-// the shipped rules resolved into it and an index into that is not an index
-// into what is stored. Re-adding a pattern that is already there replaces it,
-// so a rule keeps one decision.
-model AutoModeRuleAddMessage {
-  cmd: "automode_rule_add";
-  pattern: string[];
-  // Absent means "allow", Codex's default.
-  decision?: string;
-  sandbox?: string;
-  justification?: string;
-  request_id: string;
-}
-
-// App-only, like every other config write: on the unix socket `attn automode
-// rule remove` records a rule_remove proposal instead. "pattern" carries the
-// whole prefix - one entry per token, each the alternatives that token accepts,
-// as AutoModeRuleInfo writes it - because the prefix identifies the rule.
-model AutoModeRuleRemoveMessage {
-  cmd: "automode_rule_remove";
-  pattern: string[][];
-  request_id?: string;
-}
-
-// Drop one entry from legacy_patterns. Nothing enforces those, so this only
-// takes the reminder out of the list once its rule is in place.
-model AutoModeLegacyDismissMessage {
-  cmd: "automode_legacy_dismiss";
-  pattern: string;
-  request_id?: string;
-}
-
-model AutoModeHostAddMessage {
-  cmd: "automode_host_add";
-  host: string;
-  // "allow" | "deny". A host holds one decision; this replaces the other.
-  decision: string;
-  request_id: string;
-}
-
-model AutoModeHostRemoveMessage {
-  cmd: "automode_host_remove";
-  host: string;
-  decision: string;
-  request_id?: string;
-}
-
-// Naming neither field is refused rather than silently doing nothing.
-model AutoModePolicySetMessage {
-  cmd: "automode_policy_set";
-  guardian?: GuardianSelection;
-  approval_policy?: string;
-  sandbox_mode?: string;
-  allow_local_binding?: boolean;
-  request_id?: string;
-}
-
-// Every config edit answers with the config it produced, so the section
-// re-renders from what the daemon stored rather than what it hoped it stored.
-model AutoModeConfigResultMessage {
-  event: "automode_config_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
-}
-
-model AutoModeConfigResult {
-  "config": AutoModeConfigInfo;
-}
-
-// Close a pending proposal without applying it. App-only for symmetry: the
-// review list is the app's, and a caller that cannot promote must not be able to
-// clear what a human has not seen.
-model AutoModeDiscardMessage {
-  cmd: "automode_discard";
-  id: safeint;
-  request_id: string;
-}
-
-model AutoModeDiscardResultMessage {
-  event: "automode_discard_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  proposal?: AutoModeProposalInfo;
-}
-
-model AutoModeEnvSetResultMessage {
-  event: "automode_env_set_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
-}
-
-// ============================================================================
 // Response Types
 // ============================================================================
 
@@ -7230,11 +6862,6 @@ model Response {
   doc_query_result?: DocQueryResult;
   doc_count_result?: DocCountResult;
   doc_subscribe_result?: DocSubscribeResult;
-  automode_show_result?: AutoModeShowResult;
-  automode_env_result?: AutoModeEnvResult;
-  automode_config_result?: AutoModeConfigResult;
-  automode_propose_result?: AutoModeProposeResult;
-  automode_denials_result?: AutoModeDenialsResult;
 }
 
 // One recorded state observation and its fate. Outcome separates the ways an
@@ -8861,13 +8488,7 @@ alias DaemonEvent =
   | BusStatusResultMessage
   | BusSetConsumerEnabledResultMessage
   | DocSubscriptionDeliveryMessage
-  | DocSubscriptionEndedMessage
-  | AutoModeStateResultMessage
-  | AutoModePromoteResultMessage
-  | AutoModeConfigResultMessage
-  | AutoModeDiscardResultMessage
-  | AutoModeEnvSetResultMessage
-  | AutoModeStateChangedMessage;
+  | DocSubscriptionEndedMessage;
 
 @extension("x-on", #{ home: true })
 model TerminalExitedMessage {

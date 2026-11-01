@@ -16,9 +16,9 @@ const houseCatalog = `{"models":[
 ]}`
 
 func housePlugin(t *testing.T, capabilities string) {
-	t.Setenv(fakeagent.PiAgentEnv, "house")
-	t.Setenv(fakeagent.PiCapabilitiesEnv, capabilities)
-	t.Setenv(fakeagent.PiModelsEnv, houseCatalog)
+	t.Setenv(fakeagent.PlugAgentEnv, "house")
+	t.Setenv(fakeagent.PlugCapabilitiesEnv, capabilities)
+	t.Setenv(fakeagent.PlugModelsEnv, houseCatalog)
 }
 
 func TestAPluginDriverOffersTheModelsItDiscoversOnlyWhenItSaysItCan(t *testing.T) {
@@ -31,7 +31,7 @@ func TestAPluginDriverOffersTheModelsItDiscoversOnlyWhenItSaysItCan(t *testing.T
 	} {
 		t.Run(row.capabilities, func(t *testing.T) {
 			housePlugin(t, row.capabilities)
-			w := newWorld(t, fakeagent.Pi)
+			w := newWorld(t, fakeagent.Plug)
 			app := w.App()
 			pluginDriverSettings(app, "house")
 			found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: "house", RequestID: "house-models"},
@@ -48,7 +48,7 @@ func TestAPluginDriverOffersTheModelsItDiscoversOnlyWhenItSaysItCan(t *testing.T
 
 func TestACrewMembersModelIsCheckedAgainstItsProvidersEntryInThePluginCatalog(t *testing.T) {
 	housePlugin(t, "initial_prompt,model_pin,effort_pin,model_discovery")
-	w := newCrewWorld(t, fakeagent.Pi)
+	w := newCrewWorld(t, fakeagent.Plug)
 	cli := w.Client()
 	pluginDriverSettings(w.App(), "house")
 

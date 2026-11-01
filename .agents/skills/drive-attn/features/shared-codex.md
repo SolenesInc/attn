@@ -100,7 +100,7 @@ bridge --launch --wait-ready ping
 - **Durability across restarts**: the app-server runs as a terminal of its own, so it keeps running through app and daemon restarts, and the terminals reconnect and resume the conversations they show. If the app-server crashes, its running turns stop. attn starts the app-server again on the next connection, and hidden sessions whose turns stopped go idle.
 - **Profiles**: one app-server per profile. Inside a session, `attn codex` acts on the session's profile. Elsewhere, `attn codex` needs `--profile` when there is more than one profile.
 - **Performance and idle cost**: one app-server per profile replaces a Codex process per terminal and uses less memory. With no open shared session and no shared terminal left, the app-server stops.
-- **Harnesses**: Codex only. Claude Code and Pi have no link, so a second tile on one of their conversations is a second session ([harnesses.md](harnesses.md)).
+- **Harnesses**: Codex only. Claude Code has no link, so a second tile on one of its conversations is a second session ([harnesses.md](harnesses.md)).
 - **Keyboard and native input**: every banner action is also a palette command while that action applies.
 - **Compatibility across versions**: a tile started before a restart keeps its older Codex and denies an approval of a kind that Codex does not know. Reload tiles moves the tile to the new Codex. A running session stays shared or plain, as it launched, after the switch changes.
 - **Flow**: in queue flow a hidden session queues like any other, without a desktop chip, unless "Show hidden sessions in the queue" is off. When the user chooses a hidden session, attn opens it in a tile on the current desktop.

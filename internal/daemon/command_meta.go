@@ -143,7 +143,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdClearSessionActivity:          commandMetadata(false, true),
 	protocol.CmdListPlugins:                   commandMetadata(false, true),
 	protocol.CmdInstallPlugin:                 commandMetadata(false, true),
-	protocol.CmdInstallBundledPlugin:          commandMetadata(false, true),
 	protocol.CmdUninstallPlugin:               commandMetadata(false, true),
 	protocol.CmdRemovePlugin:                  commandMetadata(false, true),
 	protocol.CmdSetPluginPriority:             commandMetadata(false, true),
@@ -245,20 +244,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDocCount:                      commandMetadata(false, true),
 	protocol.CmdDocSubscribe:                  commandMetadata(false, true),
 	protocol.CmdDocUnsubscribe:                commandMetadata(false, true),
-	protocol.CmdAutoModeShow:                  commandMetadata(false, true),
-	protocol.CmdAutoModeEnvSlot:               commandMetadata(false, true),
-	protocol.CmdAutoModeEnvNotes:              commandMetadata(false, true),
-	protocol.CmdAutoModePropose:               commandMetadata(false, true),
-	protocol.CmdAutoModeDenials:               commandMetadata(false, true),
-	protocol.CmdAutoModeGet:                   commandMetadata(false, false),
-	protocol.CmdAutoModePromote:               commandMetadata(false, false),
-	protocol.CmdAutoModeDiscard:               commandMetadata(false, false),
-	protocol.CmdAutoModeRuleAdd:               commandMetadata(false, false),
-	protocol.CmdAutoModeHostAdd:               commandMetadata(false, false),
-	protocol.CmdAutoModeRuleRemove:            commandMetadata(false, true),
-	protocol.CmdAutoModeHostRemove:            commandMetadata(false, true),
-	protocol.CmdAutoModePolicySet:             commandMetadata(false, true),
-	protocol.CmdAutoModeLegacyDismiss:         commandMetadata(false, true),
 }
 
 func shouldLogWSCommand(cmd string) bool {

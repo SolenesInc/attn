@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -109,4 +110,18 @@ func TestAnUpgradedCostObservationRemainsRevisableAcrossSourceAdmissionAndRestar
 			t.Fatalf("revised usage after restart=%+v, want28", usage)
 		}
 	})
+}
+
+func appendTranscript(t *testing.T, path string, lines [][]byte) {
+	t.Helper()
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.Write(bytes.Join(lines, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

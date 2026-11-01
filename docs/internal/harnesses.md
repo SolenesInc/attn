@@ -32,12 +32,12 @@ whose server every terminal of the conversation joins, like shared Codex's
 app-server. A terminal on a link that resumes the conversation of a live
 session shows that session.
 
-An integration without a link starts one process per terminal. Some harnesses
-let a second process open a conversation that another process still runs. For
-those harnesses, the second terminal keeps its own session on the conversation,
-so two open sessions hold one conversation. The tiles of every live session on
-that conversation warn until one session remains. Claude Code and Pi behave this
-way. Plain Codex refuses the second process.
+An integration without a link starts one process per terminal. Claude Code
+lets a second process open a conversation that another process still runs.
+The second terminal keeps its own session on the conversation, so two open
+sessions hold one conversation. The tiles of every live session on that
+conversation warn until one session remains. Plain Codex refuses the second
+process.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
@@ -54,8 +54,6 @@ own transcripts on 2026-10-24:
   transcripts with lines up to 1.8 MB.
 - Codex (0.162.1): the first line is `session_meta`, with
   `payload.cli_version`. That line is about 23 KB.
-- Pi: the first line's `version` is the transcript format (3), not Pi's
-  version.
 
 ## Claude Code
 
@@ -718,41 +716,6 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   - brew cask, read in its source only: `brew upgrade` renames
     `Caskroom/codex/<old>` aside before installing and deletes it once the new
     version is in.
-
-## Pi
-
-Read in the installed 0.85.1 source and probed through its session SDK with
-synthetic messages:
-
-- `SessionManager.createBranchedSession` and `forkFrom` create a new session
-  file while preserving the inherited message entries' `id` and usage
-  (`dist/core/session-manager.js`). An entry id can therefore occur in more
-  than one session file.
-
-Read in the installed 1.3.0 source and probed through its session SDK, with
-two `SessionManager`s on one file that share nothing but the file:
-
-- Nothing stops a second process from opening a session file another process
-  has open. `SessionManager` holds no lock. Once the file exists,
-  `SessionManager` appends each entry with `appendFileSync`
-  (`dist/core/session-manager.js`).
-- Each writer continues its own branch from its own entries in memory, so the
-  file becomes a tree, and neither sees the other's entries. Opening the file
-  again loads the branch ending at the last entry written.
-- When you switch sessions with `/resume`, `/new` or `/fork`, Pi tears down
-  every extension with `session_shutdown` and loads a fresh instance of each
-  for the new session, which receives `session_start` with `reason` `resume`,
-  `new` or `fork` and `previousSessionFile`
-  (`dist/core/agent-session-runtime.js`).
-
-Pi has no link either, so two Pi terminals on one conversation are two
-sessions and the file forks, and both tiles warn until one process exits or
-moves to another conversation.
-
-attn gives Pi no launch instructions: the attn-pi driver does not declare the
-`launch_instructions` capability (`plugins/attn-pi/src/driver.ts`), so crew
-priming and the line asking a cleared member to run `attn crew prime` never
-reach Pi.
 
 ## Nisse
 

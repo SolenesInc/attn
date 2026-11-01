@@ -21,14 +21,14 @@ const HangGuard = 60 * time.Second
 
 const ControlSocket = "fakeagent.sock"
 
-var piManifest = fmt.Sprintf(`name = %q
+var plugManifest = fmt.Sprintf(`name = %q
 version = %q
 attn_api_version = %d
 
 [plugin]
 kind = "executable"
 path = %q
-`, piPluginName, piVersion, piPluginAPIVersion, piPluginName)
+`, plugPluginName, plugVersion, plugAPIVersion, plugPluginName)
 
 type Kit struct {
 	t              testing.TB
@@ -76,14 +76,14 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
-	for _, h := range []Harness{Claude, Codex, Pi, Nisse} {
+	for _, h := range []Harness{Claude, Codex, Plug, Nisse} {
 		links[string(h)] = self
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
-	if slices.Contains(harnesses, Pi) {
-		mustInstall(t, filepath.Join(dir, "plugins", piPluginName),
-			map[string]string{piPluginName: self},
-			map[string]string{configName: string(encoded), "attn-plugin.toml": piManifest})
+	if slices.Contains(harnesses, Plug) {
+		mustInstall(t, filepath.Join(dir, "plugins", plugPluginName),
+			map[string]string{plugPluginName: self},
+			map[string]string{configName: string(encoded), "attn-plugin.toml": plugManifest})
 	}
 	listener, err := net.Listen("unix", cfg.Control)
 	if err != nil {
@@ -284,7 +284,6 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				ResumePicker:   f.ResumePicker,
 				Argv:           f.Argv,
 				Env:            f.Env,
-				AutoMode:       f.AutoMode,
 				Yolo:           f.Yolo,
 				t:              k.t,
 				fake:           f,

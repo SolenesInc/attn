@@ -242,3 +242,15 @@ func parseStoreTime(s string) time.Time {
 	}
 	return t
 }
+
+func parseStoredTime(value string) time.Time {
+	if value == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{sortableTimeFormat, time.RFC3339Nano, time.RFC3339} {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
+}

@@ -16,15 +16,15 @@ func TestAPluginDelegateGivenOnlyAModelRunsAtTheDefaultEffortItsDriverCanPin(t *
 		{capabilities: "model_pin", wantEffort: ""},
 	} {
 		t.Run(row.capabilities, func(t *testing.T) {
-			t.Setenv(fakeagent.PiCapabilitiesEnv, row.capabilities)
-			w := newWorld(t, fakeagent.Pi)
-			pluginDriverSettings(w.App(), "pi")
+			t.Setenv(fakeagent.PlugCapabilitiesEnv, row.capabilities)
+			w := newWorld(t, fakeagent.Plug)
+			pluginDriverSettings(w.App(), "plug")
 			cwd := w.Path("glm")
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
 			request := brief(cwd, "Use the selected variant")
-			request.Agent = protocol.Ptr("pi")
+			request.Agent = protocol.Ptr("plug")
 			request.Model = protocol.Ptr("spotify-glm/zai-org/GLM-5.2-FP8")
 			result, err := w.Client().Delegate(request)
 			if err != nil {
@@ -32,9 +32,9 @@ func TestAPluginDelegateGivenOnlyAModelRunsAtTheDefaultEffortItsDriverCanPin(t *
 			}
 			argv := w.Launched(string(result.SessionID)).Argv
 			model, _ := flagValue(argv, "--model")
-			effort, _ := flagValue(argv, "--thinking")
+			effort, _ := flagValue(argv, "--effort")
 			if model != "spotify-glm/zai-org/GLM-5.2-FP8" || effort != row.wantEffort {
-				t.Errorf("pi launched on %q at effort %q, want the chosen model at %q (argv %q)", model, effort, row.wantEffort, argv)
+				t.Errorf("plug launched on %q at effort %q, want the chosen model at %q (argv %q)", model, effort, row.wantEffort, argv)
 			}
 		})
 	}

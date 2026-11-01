@@ -274,9 +274,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
 	settings[string(SettingSharedPTYHostEnabled)] = strconv.FormatBool(sharedEnabled)
 	settings[string(SettingSharedPTYHostActive)] = strconv.FormatBool(sharedActive)
-	if cfg, err := d.store.GetAutoModeConfig(); err == nil {
-		settings[string(SettingAutoModeEnabledDefault)] = strconv.FormatBool(cfg.EnabledDefault)
-	}
 	settings[string(settingNotebookSyncState)], settings[string(settingNotebookSyncLastError)] = d.notebookSyncSettings()
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt

@@ -1,1 +1,0 @@
-A tool call cannot widen the sandbox. Either work within the sandbox, or tell the user the exact command, path, and reason so that the user can decide. The user can grant a directory with `/security allow-write <directory>` and review the rest under `/security`. Do not turn security off or edit the security settings yourself.

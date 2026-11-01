@@ -217,3 +217,10 @@ func (d *Daemon) handleCalloutResult(client *wsClient, msg *protocol.CalloutResu
 	}
 	d.calloutRequests.answer(client, msg.RequestID, calloutReply{result: *msg})
 }
+
+func plural(count int, one, many string) string {
+	if count == 1 {
+		return one
+	}
+	return many
+}

@@ -1,1 +1,0 @@
-Use a project-local cache when it is a straightforward equivalent. Do not change the intended operation, skip tests, or change security settings to work around a restriction. Permission errors, DNS errors, and download errors can have ordinary causes. Check whether more access would fix the failure.

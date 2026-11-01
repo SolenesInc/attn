@@ -30,7 +30,6 @@ export function SectionStatusPills({
   pluginProblemCount,
   activePluginCount,
   plugins,
-  autoModePolicy,
   autoSettleEnabled,
   mutedRepos,
   mutedAuthors,
@@ -45,7 +44,6 @@ export function SectionStatusPills({
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
-  | 'autoModePolicy'
   | 'autoSettleEnabled'
   | 'mutedRepos'
   | 'mutedAuthors'
@@ -70,8 +68,6 @@ export function SectionStatusPills({
           plugins={plugins}
         />
       );
-    case 'autoMode':
-      return <AutoModeStatusPills autoModePolicy={autoModePolicy} />;
     case 'hygiene':
       return (
         <HygieneStatusPills autoSettleEnabled={autoSettleEnabled} mutedRepos={mutedRepos} mutedAuthors={mutedAuthors} />
@@ -516,8 +512,6 @@ export function PluginSettings({
   handleInstallPlugin,
   pluginIssues,
   plugins,
-  handleInstallBundledPlugin,
-  handleUninstallPlugin,
   handleRemovePlugin,
   commitPluginPriority,
   savedFlash,
@@ -529,8 +523,6 @@ export function PluginSettings({
   | 'handleInstallPlugin'
   | 'pluginIssues'
   | 'plugins'
-  | 'handleInstallBundledPlugin'
-  | 'handleUninstallPlugin'
   | 'handleRemovePlugin'
   | 'commitPluginPriority'
   | 'savedFlash'
@@ -567,14 +559,13 @@ export function PluginSettings({
         {pluginPanel.loading ? (
           <p className="settings-empty">Loading plugins...</p>
         ) : plugins.length === 0 ? (
-          <p className="settings-empty">No plugins available or installed.</p>
+          <p className="settings-empty">No plugins installed.</p>
         ) : (
           <div className="plugin-list">
             {plugins.map((plugin) => {
               const busy = pluginPanel.busyKey === plugin.name;
               const draftPriority = pluginPanel.priorityDraft(plugin.name, String(plugin.priority));
               const healthStatus = plugin.health_status || 'unknown';
-              const installed = plugin.installation_state === 'installed';
               const runtimePhase =
                 plugin.runtime_state ||
                 plugin.runtime_phase ||
@@ -585,45 +576,25 @@ export function PluginSettings({
                     <div className="plugin-card-title">
                       <span className="plugin-name">{plugin.name}</span>
                       <span className="settings-pill">v{plugin.version}</span>
-                      {plugin.availability === 'bundled' && <span className="settings-pill">Bundled</span>}
                       {plugin.link_target && <span className="settings-pill">Linked</span>}
-                      <span className="settings-pill">{installed ? 'Installed' : 'Available'}</span>
                       <span className={`plugin-status-badge ${runtimePhase}`}>{runtimePhase}</span>
-                      {installed && <span className={`plugin-health-badge ${healthStatus}`}>{healthStatus}</span>}
+                      <span className={`plugin-health-badge ${healthStatus}`}>{healthStatus}</span>
                     </div>
-                    {plugin.availability === 'bundled' && !installed ? (
-                      <button
-                        className="settings-action"
-                        onClick={() => void handleInstallBundledPlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_install}
-                      >
-                        Install
-                      </button>
-                    ) : plugin.availability === 'bundled' ? (
-                      <button
-                        className="settings-action danger"
-                        onClick={() => void handleUninstallPlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_uninstall}
-                      >
-                        Uninstall
-                      </button>
-                    ) : (
-                      <button
-                        className="settings-action danger"
-                        onClick={() => void handleRemovePlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_uninstall}
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <button
+                      className="settings-action danger"
+                      onClick={() => void handleRemovePlugin(plugin.name)}
+                      disabled={pluginPanel.busy || !plugin.can_uninstall}
+                    >
+                      Remove
+                    </button>
                   </div>
                   {plugin.description && (
                     <p className="settings-description plugin-description">{plugin.description}</p>
                   )}
-                  {installed && plugin.health_message && (
+                  {plugin.health_message && (
                     <div className="settings-warning">Healthcheck: {plugin.health_message}</div>
                   )}
-                  {installed && plugin.last_exit && (
+                  {plugin.last_exit && (
                     <div className="settings-warning">Last exit: {plugin.last_exit}</div>
                   )}
                   <div className="plugin-meta-grid">
@@ -649,29 +620,27 @@ export function PluginSettings({
                         <code>{plugin.next_restart_at}</code>
                       </div>
                     )}
-                    {installed && (
-                      <label className="plugin-priority-control">
-                        <span className="settings-meta-label">Priority</span>
-                        <input
-                          type="number"
-                          value={draftPriority}
-                          onChange={(e) => pluginPanel.setPriorityDraft(plugin.name, e.target.value)}
-                          onBlur={() => void commitPluginPriority(plugin.name, plugin.priority)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              void commitPluginPriority(plugin.name, plugin.priority);
-                            }
-                          }}
-                          className="settings-input plugin-priority-input"
-                          aria-label={`${plugin.name} priority`}
-                          disabled={pluginPanel.busy}
-                        />
-                        <SavedMark
-                          shown={savedFlash.saved(`plugin_priority_${plugin.name}`)}
-                          testID={`settings-plugin-priority-saved-${plugin.name}`}
-                        />
-                      </label>
-                    )}
+                    <label className="plugin-priority-control">
+                      <span className="settings-meta-label">Priority</span>
+                      <input
+                        type="number"
+                        value={draftPriority}
+                        onChange={(e) => pluginPanel.setPriorityDraft(plugin.name, e.target.value)}
+                        onBlur={() => void commitPluginPriority(plugin.name, plugin.priority)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void commitPluginPriority(plugin.name, plugin.priority);
+                          }
+                        }}
+                        className="settings-input plugin-priority-input"
+                        aria-label={`${plugin.name} priority`}
+                        disabled={pluginPanel.busy}
+                      />
+                      <SavedMark
+                        shown={savedFlash.saved(`plugin_priority_${plugin.name}`)}
+                        testID={`settings-plugin-priority-saved-${plugin.name}`}
+                      />
+                    </label>
                   </div>
                   {busy && <div className="settings-hint">Updating {plugin.name}...</div>}
                 </div>
@@ -1602,26 +1571,6 @@ export function PluginsStatusPills({
       <span className="settings-pill">
         {activePluginCount}/{plugins.length} running
       </span>
-    </>
-  );
-}
-
-export function AutoModeStatusPills({ autoModePolicy }: Pick<SettingsModalState, 'autoModePolicy'>) {
-  return (
-    <>
-      <span className={`settings-pill ${autoModePolicy.pendingCount === 0 ? 'good' : 'warn'}`}>
-        {autoModePolicy.pendingCount === 0
-          ? 'nothing waiting'
-          : `${autoModePolicy.pendingCount} proposal${autoModePolicy.pendingCount === 1 ? '' : 's'} waiting`}
-      </span>
-      {autoModePolicy.state && (
-        <>
-          <span className="settings-pill">
-            {autoModePolicy.state.config.enabled_default ? 'on by default' : 'off by default'}
-          </span>
-          <span className="settings-pill">{autoModePolicy.state.config.approval_policy}</span>
-        </>
-      )}
     </>
   );
 }

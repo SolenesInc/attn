@@ -8,7 +8,7 @@ func (w *World) RequireEnterAtNextBoot(screen string) {
 	w.kit.RequireEnterAtNextBoot(screen)
 }
 
-func (w *World) RefusePiLaunches(reason string) (allow func()) {
+func (w *World) RefusePlugLaunches(reason string) (allow func()) {
 	w.T.Helper()
-	return w.kit.RefusePiLaunches(reason)
+	return w.kit.RefusePlugLaunches(reason)
 }

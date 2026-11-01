@@ -1,6 +1,6 @@
 # Local Linux runner
 
-Run Linux sandbox tests and the packaged app from macOS through a dedicated VM.
+Run the packaged app on Linux from macOS through a dedicated VM.
 The runner supports Lima, OrbStack, and existing SSH machines (including VMs
 created in other tools). Each provider supplies lifecycle operations and an SSH
 connection. All providers share source sync, Ubuntu provisioning, execution, and
@@ -12,8 +12,7 @@ Install Lima with `brew install lima`, then run from the repository:
 
 ```sh
 pnpm --dir app real-app:linux provision
-pnpm --dir app real-app:linux run -- bash -c 'cd plugins/attn-pi && bun install --frozen-lockfile && bun test'
-pnpm --dir app real-app:linux test -- --scenario automode-environment
+pnpm --dir app real-app:linux test -- --scenario linux-shortcuts
 ```
 
 `provision` creates or starts `attn-linux` and installs the tools. The template
@@ -30,7 +29,7 @@ An Apple Silicon host runs ARM64 Linux. Keep x86_64 verification in CI.
 ```sh
 pnpm --dir app real-app:linux provision --provider orb --name attn-linux
 pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
-pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario automode-environment
+pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario linux-shortcuts
 ```
 
 The SSH provider accepts `--ssh-config <file>`. It provisions an existing Ubuntu 24.04 machine. The machine must allow passwordless sudo. The SSH provider does not create or stop that machine.
@@ -89,6 +88,4 @@ Add an adapter to `app/scripts/real-app-harness/vm/providers.mjs` with `up`,
 SSH config path. Keep provider-specific commands in the adapter. Scenarios and
 guest setup must not depend on which VM manager launched the machine.
 
-## CI sandbox setup
-
-CI also uses the shared `scripts/setup-linux-sandbox.sh`. The script grants user namespaces to `/usr/bin/bwrap` through AppArmor and keeps Ubuntu's global restriction enabled. Tool versions come from `go.mod`, `rust-toolchain.toml`, and `.tool-versions`. Node 26 and pnpm 9 match the CI major versions.
+Tool versions come from `go.mod`, `rust-toolchain.toml`, and `.tool-versions`. Node 26 and pnpm 9 match the CI major versions.

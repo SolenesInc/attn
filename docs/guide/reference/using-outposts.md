@@ -155,8 +155,7 @@ unreachable or removed, and names the host.
 
 The chief and crew run only at the home. Attn refuses to start, wake or hand off
 a crew member on an outpost, and refuses to make an outpost agent the chief. The
-refusal names that limit. Plugin harnesses, including Pi, also run only at the
-home.
+refusal names that limit. Plugin harnesses also run only at the home.
 
 Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent open no tile and enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.

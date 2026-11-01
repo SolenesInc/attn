@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func reloadPi(app *testworld.Peer, session string) protocol.ReloadSessionResultMessage {
+func reloadPlug(app *testworld.Peer, session string) protocol.ReloadSessionResultMessage {
 	app.T.Helper()
 	return testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
 		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
@@ -20,7 +20,7 @@ func converse(t *testing.T, app *testworld.Peer, session string, run *fakeagent.
 	t.Helper()
 	app.TypeLine(session, prompt)
 	if got := run.Prompted(); got != prompt {
-		t.Fatalf("pi for %s received %q, want %q", session, got, prompt)
+		t.Fatalf("plug for %s received %q, want %q", session, got, prompt)
 	}
 	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	run.Reply("Done. <!-- attn:state=idle -->")
@@ -28,29 +28,29 @@ func converse(t *testing.T, app *testworld.Peer, session string, run *fakeagent.
 }
 
 func TestAReloadedPluginSessionResumesItsConversationOnTheLaunchItHad(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "pi")
-	session := w.Spawn(app, fakeagent.Pi, w.Path("shop"))
+	pluginDriverSettings(app, "plug")
+	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 	first := w.Launched(session)
 
-	if reloaded := reloadPi(app, session); !reloaded.Success {
+	if reloaded := reloadPlug(app, session); !reloaded.Success {
 		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
 	}
 	second := w.Launched(session)
 	if !second.Resumed || second.ConversationID != first.ConversationID || slices.Contains(second.Argv, "--append-system-prompt") {
-		t.Errorf("the reload ran pi resuming %v %s with guidance %v, want it resuming %s with no launch instructions its driver does not take",
+		t.Errorf("the reload ran plug resuming %v %s with guidance %v, want it resuming %s with no launch instructions its driver does not take",
 			second.Resumed, second.ConversationID, slices.Contains(second.Argv, "--append-system-prompt"), first.ConversationID)
 	}
 	converse(t, app, session, second, "price the checkout")
 }
 
 func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testing.T) {
-	t.Setenv(fakeagent.PiCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,yolo")
-	w := newWorld(t, fakeagent.Pi)
+	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,yolo")
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "pi")
-	chief := w.Spawn(app, fakeagent.Pi, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
+	pluginDriverSettings(app, "plug")
+	chief := w.Spawn(app, fakeagent.Plug, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
 		m.ChiefOfStaff = protocol.Ptr(true)
 		m.Model = protocol.Ptr("provider/model")
 		m.Effort = protocol.Ptr("high")
@@ -58,16 +58,16 @@ func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testin
 	})
 	first := w.Launched(chief)
 
-	if reloaded := reloadPi(app, chief); !reloaded.Success {
+	if reloaded := reloadPlug(app, chief); !reloaded.Success {
 		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
 	}
 	second := w.Launched(chief)
 	model, _ := flagValue(second.Argv, "--model")
-	thinking, _ := flagValue(second.Argv, "--thinking")
+	effort, _ := flagValue(second.Argv, "--effort")
 	guidance, _ := flagValue(second.Argv, "--append-system-prompt")
-	if !second.Resumed || second.ConversationID != first.ConversationID || model != "provider/model" || thinking != "high" || !second.Yolo {
-		t.Errorf("the reload ran pi resuming %v %s on %q at %q (yolo %v), want it resuming %s on provider/model at high effort in yolo",
-			second.Resumed, second.ConversationID, model, thinking, second.Yolo, first.ConversationID)
+	if !second.Resumed || second.ConversationID != first.ConversationID || model != "provider/model" || effort != "high" || !second.Yolo {
+		t.Errorf("the reload ran plug resuming %v %s on %q at %q (yolo %v), want it resuming %s on provider/model at high effort in yolo",
+			second.Resumed, second.ConversationID, model, effort, second.Yolo, first.ConversationID)
 	}
 	if !strings.Contains(guidance, "chief of staff") {
 		t.Error("the reloaded chief was launched without the chief guidance")
@@ -76,16 +76,16 @@ func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testin
 }
 
 func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
-	t.Setenv(fakeagent.PiCapabilitiesEnv, "launch_instructions")
-	w := newWorld(t, fakeagent.Pi)
+	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions")
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "pi")
-	chief := w.Spawn(app, fakeagent.Pi, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
-	worker := w.Spawn(app, fakeagent.Pi, w.Path("worker"))
+	pluginDriverSettings(app, "plug")
+	chief := w.Spawn(app, fakeagent.Plug, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	worker := w.Spawn(app, fakeagent.Plug, w.Path("worker"))
 	runs := map[string]*fakeagent.Run{chief: w.Launched(chief), worker: w.Launched(worker)}
 
-	allow := w.RefusePiLaunches("the pi session store is locked")
-	if reloaded := reloadPi(app, chief); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), "store is locked") {
+	allow := w.RefusePlugLaunches("the plug session store is locked")
+	if reloaded := reloadPlug(app, chief); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), "store is locked") {
 		t.Errorf("reloading the chief = %+v, want it failing with the driver's reason", reloaded)
 	}
 	for session, promote := range map[string]bool{worker: true, chief: false} {
@@ -111,7 +111,7 @@ func TestReloadingASessionWhoseHarnessIsGoneIsRefusedNamingTheHarness(t *testing
 	session, _ := spawnDriven(w, app, driver, w.Path("shop"))
 	driver.leave(w)
 
-	if reloaded := reloadPi(app, session); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), `agent "house" is not available`) {
+	if reloaded := reloadPlug(app, session); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), `agent "house" is not available`) {
 		t.Fatalf("reloading a session whose harness is gone = %+v, want it refused naming the harness", reloaded)
 	}
 	if got := queriedSession(t, w.Client(), session); got.Agent != "house" {

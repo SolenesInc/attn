@@ -358,8 +358,6 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 	case "codex":
 		parsed.events = parseCodexEvent(envelope)
 		parsed.assistantEchoCandidate = envelope.Type == "response_item"
-	case "pi":
-		parsed.events = parsePiEvent(envelope)
 	}
 	parsed.events = withoutStateMarkers(parsed.events)
 	return parsed
@@ -497,34 +495,6 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 		kind = ""
 	}
 	return parseMessageEvents(envelope.Timestamp, kind, message.Content)
-}
-
-func parsePiEvent(envelope eventEnvelope) []Event {
-	if envelope.Type != "message" {
-		return nil
-	}
-	var message struct {
-		eventMessage
-		ToolCallID   string `json:"toolCallId"`
-		ToolName     string `json:"toolName"`
-		IsError      bool   `json:"isError"`
-		ErrorMessage string `json:"errorMessage"`
-	}
-	if json.Unmarshal(envelope.Message, &message) != nil {
-		return nil
-	}
-	if message.Role == "toolResult" {
-		return []Event{{Timestamp: envelope.Timestamp, Kind: EventKindToolResult, ToolCallID: message.ToolCallID,
-			ToolName: message.ToolName, Text: extractEventContentText(message.Content), IsError: message.IsError}}
-	}
-	if message.Role != EventKindUser && message.Role != EventKindAssistant {
-		return nil
-	}
-	events := parseMessageEvents(envelope.Timestamp, message.Role, message.Content)
-	if message.ErrorMessage != "" {
-		events = append(events, Event{Timestamp: envelope.Timestamp, Kind: EventKindError, Role: message.Role, Text: message.ErrorMessage})
-	}
-	return events
 }
 
 func parseMessageEvents(timestamp, kind string, content json.RawMessage) []Event {

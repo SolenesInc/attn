@@ -72,7 +72,6 @@ const (
 	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
 	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
 	SettingNotebookProfileRoot           = settingkeys.SettingNotebookProfileRoot
-	SettingAutoModeEnabledDefault        = settingkeys.SettingAutoModeEnabledDefault
 	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
 	SettingActivityConfig                = settingkeys.SettingActivityConfig
 	SettingActivityIntervals             = settingkeys.SettingActivityIntervals
@@ -101,8 +100,6 @@ const (
 	settingWorktreeSweepEnabled          = settingkeys.SettingWorktreeSweepEnabled
 	SettingSessionsFilters               = settingkeys.SettingSessionsFilters
 	SettingPluginPriorities              = settingkeys.SettingPluginPriorities
-	SettingInstalledBundledPlugins       = settingkeys.SettingInstalledBundledPlugins
-	settingAutoModeDenialCursor          = settingkeys.SettingAutoModeDenialCursor
 	DestinationNewWorktree               = "new_worktree"
 	DestinationMainRepo                  = "main_repo"
 )
@@ -315,7 +312,6 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},
 	{key: "pty_backend_mode", scope: daemonScope, description: "Active terminal backend.", readOnly: true},
 	{key: "pty_shared_host_active", scope: daemonScope, description: "Whether the shared terminal host is active.", readOnly: true},
-	{key: "automode_enabled_default", scope: daemonScope, description: "Default auto-mode state from the auto-mode configuration.", readOnly: true},
 	{key: "db.last_backup_at", scope: daemonScope, description: "Time of the last database backup.", readOnly: true},
 	{key: "headless_tasks.enabled.stored", scope: daemonScope, description: "Stored background model task switch.", readOnly: true},
 	{key: "headless_tasks.enabled.override", scope: daemonScope, description: "Environment override for background model tasks.", readOnly: true},

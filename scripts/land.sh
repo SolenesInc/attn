@@ -21,7 +21,6 @@ protocol_outputs=(
 prompt_outputs=(
   internal/prompts/catalog.generated.json
   app/src/prompts/catalog.generated.json
-  plugins/attn-pi/automode/prompts.generated.json
 )
 
 fail() {

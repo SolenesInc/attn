@@ -7,12 +7,12 @@ export const reportedModel = (harness: string, id: string, name: string, tier?: 
 export const harnesses = [
   { id: 'claude', name: 'Claude', available: true, model_pin: true, effort_pin: true, discovery: true },
   { id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true },
-  { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: true },
+  { id: 'plug', name: 'Plug', available: true, model_pin: true, effort_pin: true, discovery: true },
 ];
 export const catalogs: Record<string, Model[]> = {
   claude: [reportedModel('claude', 'default', 'Default (recommended)'), reportedModel('claude', 'opus', 'Opus 5.5', 'deep'), reportedModel('claude', 'sonnet', 'Sonnet 5.5', 'standard'), reportedModel('claude', 'haiku', 'Haiku 5.5', 'light')],
   codex: [reportedModel('codex', 'gpt-6.1-sol', 'gpt-6.1-sol', 'deep', ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']), reportedModel('codex', 'gpt-6-astra', 'gpt-6-astra', 'deep'), reportedModel('codex', 'gpt-6-luna', 'gpt-6-luna', 'light'), reportedModel('codex', 'gpt-5.6-terra', 'gpt-5.6-terra', 'standard'), reportedModel('codex', 'gpt-5.6-luna', 'gpt-5.6-luna', 'light'), reportedModel('codex', 'new-model', 'New model', undefined)],
-  pi: [],
+  plug: [],
 };
 export function serveHarnessCatalogs(daemon: ScriptedDaemon, reportedHarnesses = harnesses) {
   daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: true, preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: reportedHarnesses, templates: [], expanded_roles: [] }));

@@ -293,14 +293,14 @@ func mailAgentAtWork(w *world, app *testworld.Peer, dir, prompt string) (string,
 }
 
 func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Pi)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
+	pluginDriverSettings(app, "plug")
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("pi")})
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("plug")})
 	before := paneSessions(w)
 
-	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
+	allow := w.RefusePlugLaunches("plug could not start: the model provider is unreachable")
 	if result, err := cli.AgentMsg("keel", protocol.SessionID(sender), "please wake"); err != nil || result.Status != protocol.AgentMsgStatusQueued || !strings.Contains(result.Detail, "provider is unreachable") {
 		t.Fatalf("mail for a Keel that cannot wake = %+v, %v; want the launch failure", result, err)
 	}

@@ -13,8 +13,7 @@ function servePlugins(daemon: ScriptedDaemon, plugins: Plugin[]) {
   daemon.on('list_plugins', () => ({ event: 'plugins_updated', plugins, issues: [] }));
   const succeed = (action: string) => ({ name }: { name?: string }) => ({ event: 'plugin_action_result' as const, action, name, success: true });
   daemon.on('install_plugin', () => ({ event: 'plugin_action_result', action: 'install', success: true }));
-  daemon.on('install_bundled_plugin', succeed('install_bundled'));
-  daemon.on('uninstall_plugin', succeed('uninstall'));
+  daemon.on('remove_plugin', succeed('remove'));
   daemon.on('set_plugin_priority', succeed('set_priority'));
 }
 
@@ -26,10 +25,7 @@ const installedPlugin = (overrides: Partial<Plugin> = {}): Plugin => ({
   priority: 10,
   connected: true,
   running: true,
-  availability: 'user',
-  installation_state: 'installed',
   runtime_state: 'connected',
-  can_install: false,
   can_uninstall: true,
   ...overrides,
 });
@@ -104,39 +100,24 @@ describe('SettingsModal', () => {
     expect(daemon.sentOf('list_plugins').length).toBeGreaterThan(listsBeforeInstall);
   });
 
-  it('installs an available bundled plugin', async () => {
-    const bundled = installedPlugin({
-      name: 'attn-example', dir: '/Applications/attn.app/Contents/Resources/plugins/attn-example', priority: 0,
-      connected: false, running: false, availability: 'bundled', installation_state: 'available',
-      runtime_state: 'stopped', can_install: true, can_uninstall: false,
-    });
-    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [bundled]));
-
-    expect(screen.getByText('Bundled')).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Install', { selector: 'button' })));
-
-    expect(daemon.sentOf('install_bundled_plugin')).toEqual([expect.objectContaining({ name: 'attn-example' })]);
-  });
-
   it('shows a linked plugin with its checkout', async () => {
     const linked = installedPlugin({
-      name: 'attn-pi', version: '0.2.0', dir: '/Users/me/.attn/plugins/attn-pi', link_target: '/Users/me/src/attn/plugins/attn-pi', priority: 0,
+      name: 'attn-plug', version: '0.2.0', dir: '/Users/me/.attn/plugins/attn-plug', link_target: '/Users/me/src/attn/plugins/attn-plug', priority: 0,
     });
     await openSection('plugins', {}, (scripted) => servePlugins(scripted, [linked]));
 
     expect(screen.getByText('Linked')).toBeInTheDocument();
-    expect(screen.getByText('/Users/me/src/attn/plugins/attn-pi')).toBeInTheDocument();
+    expect(screen.getByText('/Users/me/src/attn/plugins/attn-plug')).toBeInTheDocument();
   });
 
-  it('uninstalls an installed bundled plugin', async () => {
-    const bundled = installedPlugin({
-      name: 'attn-example', dir: '/Applications/attn.app/Contents/Resources/plugins/attn-example', priority: 0, availability: 'bundled',
-    });
-    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [bundled]));
+  it('removes an installed plugin and refreshes the list', async () => {
+    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [installedPlugin()]));
+    const listsBeforeRemove = daemon.sentOf('list_plugins').length;
 
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Uninstall', { selector: 'button' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByText('Remove', { selector: 'button' })));
 
-    expect(daemon.sentOf('uninstall_plugin')).toEqual([expect.objectContaining({ name: 'attn-example' })]);
+    expect(daemon.sentOf('remove_plugin')).toEqual([expect.objectContaining({ name: 'services-pilot-worktrees' })]);
+    expect(daemon.sentOf('list_plugins').length).toBeGreaterThan(listsBeforeRemove);
   });
 
   it('updates provider priority for an installed plugin', async () => {

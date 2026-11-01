@@ -29,7 +29,7 @@ func policyLifetimes(p sessionstate.Policy) []time.Duration {
 		p.StaleAfter + p.SettleGrace,
 		p.StuckAfter,
 		p.ClassifierTimeout,
-		p.GuardianDwell,
+		p.ReviewerDwell,
 		p.ParkedAfter,
 	}
 }

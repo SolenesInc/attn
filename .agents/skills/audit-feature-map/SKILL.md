@@ -134,7 +134,7 @@ tried. The usual reasons:
 
 - It needs input drive-attn's rules forbid here, such as taking focus on a Mac
   someone is using.
-- The baseline instance doesn't have it, such as Pi or an outpost peer.
+- The baseline instance doesn't have it, such as an outpost peer.
   `features/README.md` lists what the baseline has.
 - It needs a real external service.
 - The permissions denied a step.

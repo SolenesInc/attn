@@ -11,7 +11,6 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -23,7 +22,6 @@ const pluginDriverCallTimeout = 30 * time.Second
 const pluginDeliverMessageTimeout = 15 * time.Second
 
 // Full header scans: 91 real files <=125ms; 10,000 synthetic files across two directories <=7.3s.
-// Receipt: plugins/attn-pi/receipts/resume-availability.md (2026-10-01).
 const pluginResumeAvailabilityTimeout = 10 * time.Second
 
 type pluginDriverRegistration struct {
@@ -40,7 +38,6 @@ type pluginDriverRegisterParams struct {
 type pluginDriverRegisterResult struct {
 	OK         bool              `json:"ok"`
 	ActiveRuns []activePluginRun `json:"active_runs,omitempty"`
-	AutoMode   *automode.Config  `json:"auto_mode,omitempty"`
 }
 
 type activePluginRun struct {
@@ -63,7 +60,6 @@ type pluginDriverSpawnParams struct {
 	Metadata        json.RawMessage           `json:"metadata,omitempty"`
 	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
 	Instructions    *pluginLaunchInstructions `json:"instructions,omitempty"`
-	AutoMode        *automode.Config          `json:"auto_mode,omitempty"`
 }
 
 type pluginDriverSpawnResult struct {
@@ -155,34 +151,6 @@ type pluginReportTranscriptPathParams struct {
 	SessionID  protocol.SessionID  `json:"-"`
 	RunID      string              `json:"run_id"`
 	Path       string              `json:"path"`
-}
-
-type pluginReportAutoModeDenialParams struct {
-	TerminalID protocol.TerminalID `json:"session_id"`
-	SessionID  protocol.SessionID  `json:"-"`
-	RunID      string              `json:"run_id"`
-	Tool       string              `json:"tool"`
-	Action     string              `json:"action"`
-	Reason     string              `json:"reason"`
-	Rule       string              `json:"rule"`
-	At         string              `json:"at"`
-}
-
-type pluginReportExecPolicyAmendmentParams struct {
-	TerminalID    protocol.TerminalID `json:"session_id"`
-	SessionID     protocol.SessionID  `json:"-"`
-	RunID         string              `json:"run_id"`
-	Pattern       []string            `json:"pattern"`
-	Decision      string              `json:"decision"`
-	Justification string              `json:"justification"`
-}
-
-type pluginReportNetworkAmendmentParams struct {
-	TerminalID protocol.TerminalID `json:"session_id"`
-	SessionID  protocol.SessionID  `json:"-"`
-	RunID      string              `json:"run_id"`
-	Host       string              `json:"host"`
-	Decision   string              `json:"decision"`
 }
 
 type pluginClassifyStopParams struct {
@@ -278,7 +246,6 @@ func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, 
 		"model_discovery":        {},
 		"effort_pin":             {},
 		"launch_instructions":    {},
-		"auto_mode":              {},
 		"pull_request_reporting": {},
 	}
 	out := make(map[string]bool, len(values))
@@ -315,14 +282,6 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			runs = append(runs, item)
 		}
 		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
-		driver, registered := d.ensurePluginRegistry().driver(normalizePluginAgent(params.Agent))
-		if registered && driver.Capabilities["auto_mode"] && d.store != nil {
-			if cfg, err := d.store.GetAutoModeConfig(); err != nil {
-				d.logf("automode: register for %s carried no config: %v", plugin.name, err)
-			} else {
-				result.AutoMode = &cfg
-			}
-		}
 		return result, true, nil
 	case "session.report_state":
 		var params pluginReportStateParams
@@ -378,10 +337,6 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			}
 		}
 		return struct{}{}, true, nil
-	case "session.report_input_taken":
-		// Acknowledge and drop: pi drivers from before custody-only input still send this,
-		// and an error makes their relay reconnect and resend it in a loop.
-		return struct{}{}, true, nil
 	case "session.report_pull_request":
 		var params pluginReportPullRequestParams
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
@@ -420,84 +375,9 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			d.applyPluginReportedTranscriptPath(params)
 		}
 		return struct{}{}, true, nil
-	case "session.report_automode_denial":
-		var params pluginReportAutoModeDenialParams
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return nil, true, fmt.Errorf("decode session.report_automode_denial params: %w", err)
-		}
-		params.SessionID = d.sessionInTerminal(params.TerminalID)
-		if strings.TrimSpace(params.Action) == "" {
-			return nil, true, errors.New("session.report_automode_denial action is required")
-		}
-		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
-			return nil, true, err
-		}
-		d.notePluginDriverReport(params.SessionID)
-		if err := d.recordAutoModeDenial(params); err != nil {
-			return nil, true, err
-		}
-		return struct{}{}, true, nil
-	case "session.report_execpolicy_amendment":
-		var params pluginReportExecPolicyAmendmentParams
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return nil, true, fmt.Errorf("decode session.report_execpolicy_amendment params: %w", err)
-		}
-		params.SessionID = d.sessionInTerminal(params.TerminalID)
-		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
-			return nil, true, err
-		}
-		d.notePluginDriverReport(params.SessionID)
-		value, err := automode.FormatRuleValue(automode.NormalizeRule(automode.Rule{
-			Pattern:       autoModeRuleTokens(params.Pattern),
-			Decision:      strings.TrimSpace(params.Decision),
-			Justification: strings.TrimSpace(params.Justification),
-		}))
-		if err != nil {
-			return nil, true, err
-		}
-		if err := d.promoteReportedAmendment(automode.KindRule, value, params.SessionID); err != nil {
-			return nil, true, err
-		}
-		return struct{}{}, true, nil
-	case "session.report_network_amendment":
-		var params pluginReportNetworkAmendmentParams
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return nil, true, fmt.Errorf("decode session.report_network_amendment params: %w", err)
-		}
-		params.SessionID = d.sessionInTerminal(params.TerminalID)
-		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
-			return nil, true, err
-		}
-		d.notePluginDriverReport(params.SessionID)
-		value, err := automode.FormatHostValue(automode.HostAmendment{
-			Host:     strings.TrimSpace(params.Host),
-			Decision: strings.TrimSpace(params.Decision),
-		})
-		if err != nil {
-			return nil, true, err
-		}
-		if err := d.promoteReportedAmendment(automode.KindHost, value, params.SessionID); err != nil {
-			return nil, true, err
-		}
-		return struct{}{}, true, nil
 	default:
 		return nil, false, nil
 	}
-}
-
-func (d *Daemon) promoteReportedAmendment(kind string, value string, sessionID protocol.SessionID) error {
-	if d.store == nil {
-		return errors.New("no database")
-	}
-	proposedBy := "pi session " + d.sessionLabel(protocol.TrimID(sessionID))
-	proposal, cfg, err := d.store.PromoteReportedAmendment(kind, value, proposedBy, time.Now())
-	if err != nil {
-		return err
-	}
-	d.logf("automode: %s promoted %s (%s)", proposedBy, kind,
-		automode.DescribeProposal(proposal.Kind, proposal.Value))
-	d.announceAutoModeConfig(cfg)
-	return nil
 }
 
 func (d *Daemon) authorizePluginSessionReport(plugin *pluginConnection, sessionID protocol.SessionID, runID string) error {
@@ -771,9 +651,6 @@ func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conv
 }
 
 func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params pluginDriverSpawnParams, resume bool) (pluginDriverSpawnResult, error) {
-	if params.Yolo && !reg.Capabilities["yolo"] && reg.Capabilities["auto_mode"] {
-		params.Yolo = false
-	}
 	if params.Yolo && !reg.Capabilities["yolo"] {
 		return pluginDriverSpawnResult{}, fmt.Errorf("agent %q does not support yolo launches", reg.Agent)
 	}

@@ -101,7 +101,6 @@ export function useSessionLaunch({
       cwd: string;
       agent: SessionAgent;
       yoloMode?: boolean;
-      autoMode?: boolean;
       chiefOfStaff?: boolean;
       direction: TerminalSplitDirection;
       anchorPaneId?: string;
@@ -128,7 +127,6 @@ export function useSessionLaunch({
           spawn.agent,
           spawn.agent === 'shell' ? false : spawn.yoloMode,
           spawn.chiefOfStaff,
-          spawn.agent === 'shell' ? undefined : spawn.autoMode,
         );
         const spawnArgs = takeSessionSpawnArgs(spawn.sessionId, 80, 24);
         if (!spawnArgs) {
@@ -163,7 +161,7 @@ export function useSessionLaunch({
       providedSessionId?: string,
       agent: SessionAgent = 'claude',
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string; host?: string },
+      options?: { chiefOfStaff?: boolean; desktopId?: string; host?: string },
     ) =>
       spawnOnCurrentDesktop({
         sessionId: providedSessionId || crypto.randomUUID(),
@@ -171,7 +169,6 @@ export function useSessionLaunch({
         cwd,
         agent,
         yoloMode,
-        autoMode: options?.autoMode,
         chiefOfStaff: options?.chiefOfStaff,
         direction: 'vertical',
         desktopId: options?.desktopId,
@@ -216,7 +213,6 @@ export function useSessionLaunch({
           cwd,
           agent,
           yoloMode: options.yoloMode ?? base?.yoloMode,
-          autoMode: options.autoMode,
           direction,
           anchorPaneId: targetPaneId,
           spawnedFrom: base?.id,
@@ -244,7 +240,6 @@ export function useSessionLaunch({
       cwd: string;
       agent: SessionAgent;
       yoloMode: boolean;
-      autoMode?: boolean;
       chiefOfStaff: boolean;
       desktopId?: string;
       host?: string;
@@ -259,7 +254,6 @@ export function useSessionLaunch({
           cwd: pick.cwd,
           agent: pick.agent,
           yoloMode: pick.yoloMode,
-          autoMode: pick.autoMode,
           chiefOfStaff: false,
           direction,
           spawnedFrom: baseId || undefined,
@@ -273,7 +267,7 @@ export function useSessionLaunch({
         undefined,
         pick.agent,
         pick.yoloMode,
-        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId, host: pick.host },
+        { chiefOfStaff: true, desktopId: pick.desktopId, host: pick.host },
       );
       return sessionId;
     },
@@ -286,7 +280,6 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode = false,
       chiefOfStaff = false,
-      autoMode?: boolean,
       { desktopId, host }: { desktopId?: string; host?: string } = {},
     ) => {
       if (!host && agent !== TERMINAL_AGENT && !hasAvailableAgents)
@@ -300,7 +293,6 @@ export function useSessionLaunch({
         cwd: path,
         agent: selectedAgent,
         yoloMode,
-        autoMode,
         chiefOfStaff,
         desktopId,
         host,
@@ -315,7 +307,6 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode = false,
       chiefOfStaff = false,
-      autoMode?: boolean,
       desktopId?: string,
     ) => {
       const jobId = sessionCreationJobIdRef.current + 1;
@@ -334,7 +325,6 @@ export function useSessionLaunch({
         cwd: path,
         agent: selectedAgent,
         yoloMode,
-        autoMode,
         chiefOfStaff,
         desktopId,
       };
@@ -374,7 +364,6 @@ export function useSessionLaunch({
       startingFrom: string,
       agent: SessionAgent,
       yoloMode: boolean,
-      autoMode?: boolean,
       chiefOfStaff = false,
       {
         desktopId,
@@ -387,7 +376,7 @@ export function useSessionLaunch({
       if (!result.success || !result.path)
         throw new Error(result.error || 'Failed to create worktree');
       onCreated?.(result.path);
-      return startLocation(result.path, agent, yoloMode, chiefOfStaff, autoMode, {
+      return startLocation(result.path, agent, yoloMode, chiefOfStaff, {
         desktopId: pickedDesktopId,
         host,
       });
@@ -402,7 +391,6 @@ export function useSessionLaunch({
       startingFrom: string,
       agent: SessionAgent,
       yoloMode: boolean,
-      autoMode?: boolean,
       chiefOfStaff = false,
       pickedOnDesktopId?: string,
     ) => {
@@ -426,7 +414,6 @@ export function useSessionLaunch({
           startingFrom,
           agent,
           yoloMode,
-          autoMode,
           chiefOfStaff,
           {
             desktopId: pickedOnDesktopId,

@@ -75,10 +75,10 @@ func TestASpawnWithoutALabelIsNamedAfterItsDirectoryOnItsDesktop(t *testing.T) {
 }
 
 func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Plug)
 	app := w.App()
-	awaitAgentAvailable(app, string(fakeagent.Pi))
-	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Pi} {
+	awaitAgentAvailable(app, string(fakeagent.Plug))
+	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Plug} {
 		cwd := w.Path(string(agent))
 		boot := w.HoldNextBoot()
 		first, _, _ := w.RequestSpawn(app, agent, cwd)
@@ -141,4 +141,22 @@ func TestAChiefStartsOnTheConfiguredChiefModelAndEffort(t *testing.T) {
 	if model != "claude-opus-4" || effort != "high" {
 		t.Errorf("the chief ran claude %q, want the configured chief model and effort", chief.Argv)
 	}
+}
+
+func refuseSpawnLikeTheApp(w *world, app *testworld.Peer, agent fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) protocol.SpawnResultMessage {
+	app.T.Helper()
+	refused, _, _ := w.RequestSpawn(app, agent, cwd, opts...)
+	if refused.Success {
+		app.T.Fatalf("spawning %s in %s was accepted", agent, cwd)
+	}
+	view := w.App().Initial
+	if slices.ContainsFunc(view.Sessions, func(s protocol.Session) bool { return s.ID == refused.ID }) {
+		app.T.Errorf("the refused spawn %s left a session behind", refused.ID)
+	}
+	for _, desktop := range view.Desktops {
+		if slices.ContainsFunc(desktop.Panes, func(p protocol.DesktopPane) bool { return p.SessionID == refused.ID }) {
+			app.T.Errorf("the refused spawn %s left a pane on desktop %s", refused.ID, desktop.ID)
+		}
+	}
+	return refused
 }

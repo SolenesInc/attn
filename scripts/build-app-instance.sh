@@ -86,10 +86,6 @@ if [ -n "${speech_helper:-}" ]; then
   cp "$speech_helper" "app/src-tauri/binaries/attn-speech-${host_triple}"
 fi
 
-# Compile first-party plugins before Tauri collects resources. Bundled means
-# available in the catalog; the daemon still requires a per-instance opt-in.
-bash ./scripts/build-bundled-plugins.sh
-
 cd app
 pnpm install
 
@@ -158,7 +154,6 @@ if [ "$(uname -s)" != "Darwin" ]; then
   cp "${target_dir}/${cargo_profile}/app" "${tree_dir}/bin/attn-app"
   cp "$attn" "${tree_dir}/bin/attn"
   cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
-  cp -R app/src-tauri/bundled-plugins "${tree_dir}/resources/plugins"
   write_build_identity "${tree_dir}/resources/build-identity.json"
   echo ">>> Built $tree_dir"
   exit 0

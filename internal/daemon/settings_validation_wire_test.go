@@ -19,7 +19,7 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		{"new_session_agent", "codex", true},
 		{"new_session_agent", "claude", true},
 		{"new_session_agent", "", true},
-		{"new_session_agent", "pi", false},
+		{"new_session_agent", "plug", false},
 		{"new_session_agent", "gpt", false},
 		{"claude_executable", "", true},
 		{"codex_executable", "", true},

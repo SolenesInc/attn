@@ -68,8 +68,8 @@ repository root.
   before launch; no fixture means a silent agent. Real providers need
   `allowRealAgents` and a reason.
 - In those scenarios the agent tripwire fails any real agent or headless model
-  task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
-  every agent and turns headless tasks back on.
+  task. `allowRealAgents: ['codex']` exempts only the named agents; `true`
+  exempts every agent and turns headless tasks back on.
 - Those scenarios talk to the mock GitHub (`scripts/mock-github.mjs`) on
   non-production instances; production keeps the real github.com. Seed custom
   PRs through `/__control/seed`.
@@ -108,8 +108,8 @@ repository root.
   native focus and pointer, the UI diagnostics ring).
 - Check pane text and native screenshots before diagnosing. WebGL terminals need
   native window captures.
-- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`, `nvim`,
-  and `pi`, plus `attn plugin install-bundled attn-pi`.
+- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`
+  and `nvim`.
 
 ## Recordings
 

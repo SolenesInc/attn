@@ -209,7 +209,6 @@ const (
 	CmdDropOutpostCopy               = "drop_outpost_copy"
 	CmdListPlugins                   = "list_plugins"
 	CmdInstallPlugin                 = "install_plugin"
-	CmdInstallBundledPlugin          = "install_bundled_plugin"
 	CmdUninstallPlugin               = "uninstall_plugin"
 	CmdRemovePlugin                  = "remove_plugin"
 	CmdSetPluginPriority             = "set_plugin_priority"
@@ -356,28 +355,6 @@ const (
 	EventMigrationResult           = "migration_result"
 	EventMigrationChanged          = "migration_changed"
 )
-
-const (
-	CmdAutoModeShow     = "automode_show"
-	CmdAutoModeEnvSlot  = "automode_env_slot"
-	CmdAutoModeEnvNotes = "automode_env_notes"
-	CmdAutoModePropose  = "automode_propose"
-	CmdAutoModeDenials  = "automode_denials"
-
-	CmdAutoModeGet           = "automode_get"
-	CmdAutoModePromote       = "automode_promote"
-	CmdAutoModeDiscard       = "automode_discard"
-	CmdAutoModeRuleAdd       = "automode_rule_add"
-	CmdAutoModeRuleRemove    = "automode_rule_remove"
-	CmdAutoModeHostAdd       = "automode_host_add"
-	CmdAutoModeHostRemove    = "automode_host_remove"
-	CmdAutoModePolicySet     = "automode_policy_set"
-	CmdAutoModeLegacyDismiss = "automode_legacy_dismiss"
-)
-
-const EventAutoModeEnvSetResult = "automode_env_set_result"
-
-const EventAutoModeStateChanged = "automode_state_changed"
 
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
@@ -535,10 +512,6 @@ const (
 	EventSessionMessagesChanged          = "session_messages_changed"
 	EventBusStatusResult                 = "bus_status_result"
 	EventBusSetConsumerEnabledResult     = "bus_set_consumer_enabled_result"
-	EventAutoModeStateResult             = "automode_state_result"
-	EventAutoModePromoteResult           = "automode_promote_result"
-	EventAutoModeDiscardResult           = "automode_discard_result"
-	EventAutoModeConfigResult            = "automode_config_result"
 	EventSessionAnnotationsGetResult     = "session_annotations_get_result"
 	EventSessionAnnotationsSaveResult    = "session_annotations_save_result"
 	EventSessionAnnotationsClearResult   = "session_annotations_clear_result"

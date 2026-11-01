@@ -84,10 +84,7 @@ const (
 	FactNotificationCreated = "notification.created"
 	FactNotificationRead    = "notification.read"
 
-	FactAutoModeDenied = "automode.denied"
-
 	FactDelegationPreferencesChanged = "delegation.preferences.changed"
-	FactAutoModeConfigChanged        = "automode.config.changed"
 
 	FactAutomationChanged = "automation.changed"
 	FactTaskChanged       = "task.changed"
@@ -384,16 +381,8 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
 		},
 		{
-			filter: bus.Filter{FactAutoModeDenied},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
-		},
-		{
 			filter: bus.Filter{FactDelegationPreferencesChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectDelegationPreferencesChanged() },
-		},
-		{
-			filter: bus.Filter{FactAutoModeConfigChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectAutoModeStateChanged() },
 		},
 		{
 			filter: bus.Filter{FactAutomationChanged},
@@ -591,10 +580,7 @@ const (
 	snapshotNotifs      = "notifications_updated"
 	snapshotAutomations = "automations_changed"
 	snapshotTasks       = "tasks_changed"
-	snapshotAutoMode    = "automode_state_changed"
 )
-
-const AutoModeConfigSubject = "config"
 
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)

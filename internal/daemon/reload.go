@@ -379,8 +379,6 @@ func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.Spaw
 	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.Command = prior.Command
-		intent.AutoMode = prior.AutoMode
-		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
 	if err := d.store.SetLaunchIntent(sessionID, intent); err != nil {
 		d.logf("save launch intent: %v", err)
@@ -601,23 +599,6 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 			return nil, err
 		}
 		params.Instructions = instructions
-	}
-	if reg.Capabilities["auto_mode"] {
-		cfg, err := d.store.GetAutoModeConfig()
-		if err != nil {
-			return nil, fmt.Errorf("read auto mode config: %w", err)
-		}
-		if intent, ok := d.store.LaunchIntent(session.ID); ok {
-			if intent.AutoMode != nil {
-				cfg.EnabledDefault = *intent.AutoMode
-			}
-			cfg = applySessionPolicyPair(cfg, intent.ApprovalPolicy, intent.SandboxMode)
-		}
-		cfg, _, err = d.autoModeConfigForSession(cfg, params.CWD)
-		if err != nil {
-			return nil, err
-		}
-		params.AutoMode = &cfg
 	}
 	if metadata := strings.TrimSpace(d.store.GetAgentMetadata(session.ID)); metadata != "" && json.Valid([]byte(metadata)) {
 		params.Metadata = json.RawMessage(metadata)

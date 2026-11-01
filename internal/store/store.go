@@ -82,9 +82,6 @@ type TerminalCommand struct {
 type LaunchIntent struct {
 	Command          *TerminalCommand                    `json:"command,omitempty"`
 	YoloMode         bool                                `json:"yolo_mode,omitempty"`
-	AutoMode         *bool                               `json:"auto_mode,omitempty"`
-	ApprovalPolicy   string                              `json:"approval_policy,omitempty"`
-	SandboxMode      string                              `json:"sandbox_mode,omitempty"`
 	ApprovalRoute    launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`
 	Executable       string                              `json:"executable,omitempty"`
 	Model            string                              `json:"model,omitempty"`

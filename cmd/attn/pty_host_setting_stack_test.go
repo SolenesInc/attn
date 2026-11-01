@@ -45,9 +45,9 @@ func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemonO
 		t.Errorf("settings while the host is probed read enabled=%s active=%s, want the old false/false", enabled, active)
 	}
 	stateID := uuid.NewString()
-	if state := testworld.Request(app, protocol.AutoModeGetMessage{Cmd: protocol.CmdAutoModeGet, RequestID: stateID}, protocol.EventAutoModeStateResult,
-		func(r protocol.AutoModeStateResultMessage) bool { return r.RequestID == stateID }); !state.Success {
-		t.Errorf("automode_get while the host is probed failed: %s", protocol.Deref(state.Error))
+	if listed := testworld.Request(app, protocol.ListAnalyticsRecordsMessage{Cmd: protocol.CmdListAnalyticsRecords, RequestID: protocol.Ptr(stateID), Limit: 1, Stream: protocol.Ptr("cli")},
+		protocol.EventListAnalyticsRecordsResult, func(r protocol.ListAnalyticsRecordsResultMessage) bool { return r.RequestID == stateID }); listed.Error != nil {
+		t.Errorf("a request while the host is probed failed: %s", protocol.Deref(listed.Error))
 	}
 	app.TypeLine(running, "typed while the host is probed")
 	if prompt := agent.Prompted(); !strings.Contains(prompt, "typed while the host is probed") {

@@ -213,9 +213,6 @@ func run() {
 	case "doc":
 		maybePrintInstanceBanner()
 		runDoc()
-	case "automode":
-		maybePrintInstanceBanner()
-		runAutoMode()
 	case "journal":
 		maybePrintInstanceBanner()
 		runJournal()

@@ -116,13 +116,6 @@ import { useSessionStore } from '../store/sessions';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import type { Desktop, VentKind } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
-import {
-  handleAutoModeDaemonEvent,
-  type AutoModeConfigEdit,
-  type AutoModePolicyEdit,
-  type AutoModePromotion,
-  type AutoModeState,
-} from './daemonAutoModeEvents';
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
@@ -159,7 +152,6 @@ import {
 } from './daemonPendingRequests';
 import { BUILD_INSTANCE, daemonInstanceMatches, fetchDaemonHealthInstance, instanceMismatchMessage } from '../utils/buildInstance';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
-import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
@@ -2044,7 +2036,7 @@ export function useDaemonSocket({
           case 'plugins_updated': {
             const plugins = data.plugins || [];
             const issues = data.issues || [];
-            const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.installation_state, plugin.connected, plugin.availability, plugin.runtime_state, plugin.health_status]));
+            const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.connected, plugin.runtime_state, plugin.health_status]));
             if (signature !== harnessPluginSignatureRef.current) {
               harnessPluginSignatureRef.current = signature;
               refreshHarnesses();
@@ -2359,7 +2351,6 @@ export function useDaemonSocket({
             if (handleAskDaemonEvent(data, pending)) break;
             if (handleSharedCodexDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
-            if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -2386,7 +2377,6 @@ export function useDaemonSocket({
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
-      useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
       useDelegationPreferencesPush.getState().push();
       useSessionStore.getState().cancelIntent();
@@ -2468,7 +2458,6 @@ export function useDaemonSocket({
       ...(args.resume_session_id && { resume_session_id: args.resume_session_id }),
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
-      ...(args.auto_mode !== undefined && { auto_mode: args.auto_mode }),
       ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
       ...(args.spawned_from && { spawned_from: args.spawned_from }),
       ...(args.executable && { executable: args.executable }),
@@ -2679,127 +2668,6 @@ export function useDaemonSocket({
     sendRequest('agent_catalog', { host }, 'Reading the harness catalog timed out'), [sendRequest]);
   const sendHarnessModels = useCallback((harness: string, refresh = false): Promise<HarnessModelCatalog> =>
     sendRequest('harness_models', { harness, ...(refresh ? { refresh: true } : {}) }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
-
-  const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
-    return sendRequest<AutoModeState>(
-      'automode_get',
-      {},
-      'Reading auto mode timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModePromote = useCallback((id: number): Promise<AutoModePromotion> => {
-    return sendRequest<AutoModePromotion>(
-      'automode_promote',
-      { id },
-      'Promoting the proposal timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModeDiscard = useCallback((id: number): Promise<AutoModePromotion> => {
-    return sendRequest<AutoModePromotion>(
-      'automode_discard',
-      { id },
-      'Discarding the proposal timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModeRuleAdd = useCallback(
-    (pattern: string[], decision: string, sandbox: string, justification: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_rule_add',
-        { pattern, decision, sandbox, justification },
-        'Adding the rule timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  // The whole pattern, alternatives and all: "git {push|pull}" and "git push"
-  // are two rules and the daemon takes away the one named here.
-  const sendAutoModeRuleRemove = useCallback(
-    (pattern: string[][]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_rule_remove',
-        { pattern },
-        'Removing the rule timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeLegacyDismiss = useCallback(
-    (pattern: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_legacy_dismiss',
-        { pattern },
-        'Dismissing the pattern timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeHostAdd = useCallback(
-    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_host_add',
-        { host, decision },
-        'Adding the host timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeHostRemove = useCallback(
-    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_host_remove',
-        { host, decision },
-        'Removing the host timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModePolicySet = useCallback(
-    (edit: AutoModePolicyEdit): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_policy_set',
-        {
-          ...(edit.approvalPolicy === undefined ? {} : { approval_policy: edit.approvalPolicy }),
-          ...(edit.guardian === undefined ? {} : { guardian: edit.guardian }),
-          ...(edit.sandboxMode === undefined ? {} : { sandbox_mode: edit.sandboxMode }),
-          ...(edit.allowLocalBinding === undefined
-            ? {}
-            : { allow_local_binding: edit.allowLocalBinding }),
-        },
-        'Saving the approval policy timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeEnvSlot = useCallback(
-    (slot: string, values: string[]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_env_slot',
-        { slot, values },
-        'Saving what the reviewer knows about this machine timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeEnvNotes = useCallback(
-    (notes: string[]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_env_notes',
-        { notes },
-        'Saving your notes about this machine timed out',
-      );
-    },
-    [sendRequest],
-  );
 
   const sendSetTerminalTheme = useCallback((theme: {
     foreground: string;
@@ -3334,16 +3202,6 @@ export function useDaemonSocket({
   const sendInstallPlugin = useCallback((source: string): Promise<PluginActionResult> => {
     const key = 'plugin_action:install:pending';
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'install_plugin', source }, 'Install plugin timed out', 60000);
-  }, [sendKeyedRequest]);
-
-  const sendInstallBundledPlugin = useCallback((name: string): Promise<PluginActionResult> => {
-    const key = `plugin_action:install_bundled:${name}`;
-    return sendKeyedRequest<PluginActionResult>(key, { cmd: 'install_bundled_plugin', name }, 'Install bundled plugin timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const sendUninstallPlugin = useCallback((name: string): Promise<PluginActionResult> => {
-    const key = `plugin_action:uninstall:${name}`;
-    return sendKeyedRequest<PluginActionResult>(key, { cmd: 'uninstall_plugin', name }, 'Uninstall plugin timed out', 30000);
   }, [sendKeyedRequest]);
 
   const sendRemovePlugin = useCallback((name: string): Promise<PluginActionResult> => {
@@ -4393,8 +4251,6 @@ export function useDaemonSocket({
     sendRemoveOutpost,
     sendListPlugins,
     sendInstallPlugin,
-    sendInstallBundledPlugin,
-    sendUninstallPlugin,
     sendRemovePlugin,
     sendSetPluginPriority,
     sendSessionMessagesGet,
@@ -4466,17 +4322,6 @@ export function useDaemonSocket({
     sendDelegationPreferencesSave,
     sendHarnessModels,
     sendAgentCatalog,
-    sendAutoModeGet,
-    sendAutoModePromote,
-    sendAutoModeDiscard,
-    sendAutoModeRuleAdd,
-    sendAutoModeRuleRemove,
-    sendAutoModeLegacyDismiss,
-    sendAutoModeHostAdd,
-    sendAutoModeHostRemove,
-    sendAutoModePolicySet,
-    sendAutoModeEnvSlot,
-    sendAutoModeEnvNotes,
     sendBusSetConsumerEnabled,
     sendSettleTurn,
     sendSetSessionPriority,

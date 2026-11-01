@@ -63,7 +63,6 @@ const (
 	SettingNotebookRoot                  MachineSetting = "notebook.root"
 	SettingNotebookRootEffective         MachineSetting = "notebook.root.effective"
 	SettingNotebookProfileRoot           ProfileSetting = "notebook.profile_root"
-	SettingAutoModeEnabledDefault        HomeSetting    = "automode_enabled_default"
 	SettingActivityEnabled               HomeSetting    = "activity.enabled"
 	SettingActivityConfig                HomeSetting    = "activity.config"
 	SettingActivityIntervals             HomeSetting    = "activity.intervals"
@@ -92,8 +91,6 @@ const (
 	SettingWorktreeSweepEnabled          MachineSetting = "worktree_sweep_enabled"
 	SettingSessionsFilters               HomeSetting    = "sessions.filters"
 	SettingPluginPriorities              HomeSetting    = "plugin_provider_priorities"
-	SettingInstalledBundledPlugins       HomeSetting    = "installed_bundled_plugins"
-	SettingAutoModeDenialCursor          HomeSetting    = "automode_denial_ledger_cursor"
 )
 
 func ClassOf(key string) Class {

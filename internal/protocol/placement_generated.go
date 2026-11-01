@@ -50,11 +50,6 @@ var Placements = map[string][]Placement{
 	"automation_runs_get":              {Placement{LocatorHome, ""}},
 	"automation_set_enabled":           {Placement{LocatorHome, ""}},
 	"automation_validate":              {Placement{LocatorHome, ""}},
-	"automode_denials":                 {Placement{LocatorHome, ""}},
-	"automode_env_notes":               {Placement{LocatorHome, ""}},
-	"automode_env_slot":                {Placement{LocatorHome, ""}},
-	"automode_propose":                 {Placement{LocatorHome, ""}},
-	"automode_show":                    {Placement{LocatorHome, ""}},
 	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"browser_control":                  {Placement{LocatorHome, ""}},
 	"caller_session":                   {Placement{LocatorHere, ""}},
@@ -523,66 +518,6 @@ func (m AutomationValidateMessage) Placement() Placement {
 }
 
 func (m AutomationValidateMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeDenialsMessage) CommandName() string {
-	return "automode_denials"
-}
-
-func (m AutoModeDenialsMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeDenialsMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeEnvNotesMessage) CommandName() string {
-	return "automode_env_notes"
-}
-
-func (m AutoModeEnvNotesMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeEnvNotesMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeEnvSlotMessage) CommandName() string {
-	return "automode_env_slot"
-}
-
-func (m AutoModeEnvSlotMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeEnvSlotMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeProposeMessage) CommandName() string {
-	return "automode_propose"
-}
-
-func (m AutoModeProposeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeProposeMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeShowMessage) CommandName() string {
-	return "automode_show"
-}
-
-func (m AutoModeShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeShowMessage) Locate() string {
 	return ""
 }
 

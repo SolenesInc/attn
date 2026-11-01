@@ -2,7 +2,6 @@ import { OutpostsSettings } from './OutpostsSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AnalyticsSettings } from './Analytics/AnalyticsSettings';
-import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
 import { SettingsAutosaveProvider, SettingsAutosaveStatus } from './SettingsAutosave';
 import './SettingsModal.css';
@@ -117,7 +116,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
-                    autoModePolicy={state.autoModePolicy}
                     autoSettleEnabled={state.autoSettleEnabled}
                     mutedRepos={state.mutedRepos}
                     mutedAuthors={state.mutedAuthors}
@@ -139,7 +137,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
 }
 
 function SelectedSection({ state }: { state: SettingsModalState }) {
-  const { selectedSection, delegationPolicy, sendHarnessModels, autoModePolicy } = state;
+  const { selectedSection, delegationPolicy, sendHarnessModels } = state;
 
   switch (selectedSection) {
     case 'general':
@@ -184,8 +182,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           handleInstallPlugin={state.handleInstallPlugin}
           pluginIssues={state.pluginIssues}
           plugins={state.plugins}
-          handleInstallBundledPlugin={state.handleInstallBundledPlugin}
-          handleUninstallPlugin={state.handleUninstallPlugin}
           handleRemovePlugin={state.handleRemovePlugin}
           commitPluginPriority={state.commitPluginPriority}
           savedFlash={state.savedFlash}
@@ -300,8 +296,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       ) : null;
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
-    case 'autoMode':
-      return <AutoModeSettings policy={autoModePolicy} loadModels={sendHarnessModels} />;
     case 'connectivity':
     default:
       return (
