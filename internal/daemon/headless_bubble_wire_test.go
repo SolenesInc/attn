@@ -15,7 +15,7 @@ func inBubbleAnsweringHeadlessTasks(t *testing.T, agents []fakeagent.Harness, sc
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
 		bubbled.T = t
-		w := &world{World: &bubbled, bubbled: true, terms: testworld.NewTerminals()}
+		w := &world{World: &bubbled, bubbled: true, terms: testworld.NewTerminals(t)}
 		w.start()
 		script(t, w)
 	})

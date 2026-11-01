@@ -19,11 +19,12 @@ func TestAnAgentThatExitsIsNotReattachedWhileItsWorkerShutsDown(t *testing.T) {
 			t.Fatalf("attach %s refused: %s", terminal, protocol.Deref(attached.Error))
 		}
 		term := w.terminal(session)
-		finishRemoval := term.HoldRemoval()
+		removal := term.HoldRemoval()
 
 		go term.Exit(1)
+		removal.Await()
 		synctest.Wait()
-		finishRemoval()
+		removal.Release()
 		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 		synctest.Wait()
 

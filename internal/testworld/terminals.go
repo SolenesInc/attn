@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -20,6 +21,9 @@ const (
 )
 
 type Terminals struct {
+	t           testing.TB
+	pauses      *Pauses
+	holds       int
 	mu          sync.Mutex
 	terminals   map[harness.TerminalID]*Terminal
 	onExit      func(ptybackend.ExitInfo)
@@ -47,9 +51,9 @@ type Terminal struct {
 	streams   []chan ptybackend.OutputEvent
 	onSubmit  func(string)
 	onKill    func(syscall.Signal)
-	exitHold  <-chan struct{}
+	exitHold  string
 	stall     *terminalStall
-	removal   <-chan struct{}
+	removal   string
 	gone      bool
 
 	lastSignal *pty.Observation
@@ -58,10 +62,22 @@ type Terminal struct {
 type terminalStall struct {
 	alive bool
 	err   error
+	hold  string
 }
 
-func NewTerminals() *Terminals {
-	return &Terminals{terminals: map[harness.TerminalID]*Terminal{}}
+func NewTerminals(t testing.TB) *Terminals {
+	pauses := NewPauses()
+	t.Cleanup(func() {
+		pauses.FailUnreached()
+		pauses.Close()
+	})
+	return &Terminals{t: t, pauses: pauses, terminals: map[harness.TerminalID]*Terminal{}}
+}
+
+func (b *Terminals) armLocked(id harness.TerminalID, kind string) (string, *Pause) {
+	b.holds++
+	name := fmt.Sprintf("terminal %s %s #%d", id, kind, b.holds)
+	return name, b.pauses.Arm(b.t, name, false)
 }
 
 func (b *Terminals) Terminal(id string) *Terminal {
@@ -229,15 +245,15 @@ func (b *Terminals) Remove(_ context.Context, id harness.TerminalID) error {
 	}
 	term.streams = nil
 	term.running = false
-	held := term.removal
-	if held == nil {
+	hold := term.removal
+	if hold == "" {
 		delete(b.terminals, id)
 		b.mu.Unlock()
 		return nil
 	}
-	term.removal, term.gone = nil, true
+	term.removal, term.gone = "", true
 	b.mu.Unlock()
-	<-held
+	b.pauses.Hold(hold, nil)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.terminals[id] == term {
@@ -295,11 +311,25 @@ func (b *Terminals) Recover(ctx context.Context) (ptybackend.RecoveryReport, err
 
 func (b *Terminals) SessionLikelyAlive(_ context.Context, id harness.TerminalID) (bool, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if term := b.terminals[id]; term != nil && term.stall != nil {
-		return term.stall.alive, term.stall.err
+	term := b.terminals[id]
+	if term == nil || term.stall == nil {
+		b.mu.Unlock()
+		return false, nil
 	}
-	return false, nil
+	stall := term.stall
+	hold := stall.hold
+	stall.hold = ""
+	b.mu.Unlock()
+	if hold != "" {
+		b.pauses.arrive(hold, 0, nil, true, func() {
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			if term.stall == stall {
+				term.stall = nil
+			}
+		})
+	}
+	return stall.alive, stall.err
 }
 
 func (b *Terminals) Shutdown(context.Context) error { return nil }
@@ -366,23 +396,20 @@ func (t *Terminal) OnSubmit(fn func(prompt string)) {
 	t.onSubmit = fn
 }
 
-func (t *Terminal) Stall(alive bool, probeErr error) (answer func()) {
+func (t *Terminal) Stall(alive bool, probeErr error) *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	t.stall = &terminalStall{alive: alive, err: probeErr}
-	return func() {
-		t.owner.mu.Lock()
-		defer t.owner.mu.Unlock()
-		t.stall = nil
-	}
+	hold, pause := t.owner.armLocked(t.Options.ID, "stall")
+	t.stall = &terminalStall{alive: alive, err: probeErr, hold: hold}
+	return pause
 }
 
-func (t *Terminal) HoldRemoval() (release func()) {
+func (t *Terminal) HoldRemoval() *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	held := make(chan struct{})
-	t.removal = held
-	return func() { close(held) }
+	hold, pause := t.owner.armLocked(t.Options.ID, "removal")
+	t.removal = hold
+	return pause
 }
 
 func (t *Terminal) Submitted() []string {
@@ -436,12 +463,12 @@ func (t *Terminal) observe(source pty.Source, claim, detail string) {
 	}
 }
 
-func (t *Terminal) HoldExitDelivery() func() {
+func (t *Terminal) HoldExitDelivery() *Pause {
 	t.owner.mu.Lock()
 	defer t.owner.mu.Unlock()
-	release := make(chan struct{})
-	t.exitHold = release
-	return func() { close(release) }
+	hold, pause := t.owner.armLocked(t.Options.ID, "exit delivery")
+	t.exitHold = hold
+	return pause
 }
 
 func (t *Terminal) Exit(code int) {
@@ -462,8 +489,11 @@ func (t *Terminal) Exit(code int) {
 	}
 	t.owner.mu.Unlock()
 	if report != nil {
-		if hold != nil {
-			go func() { <-hold; report(info) }()
+		if hold != "" {
+			go func() {
+				t.owner.pauses.Hold(hold, nil)
+				report(info)
+			}()
 		} else {
 			report(info)
 		}

@@ -8,7 +8,7 @@ import (
 )
 
 func BenchmarkLocalPtyInput(b *testing.B) {
-	w := &world{World: prepareWorld(b), terms: testworld.NewTerminals()}
+	w := &world{World: prepareWorld(b), terms: testworld.NewTerminals(b)}
 	w.start()
 	defer w.stop()
 	app := w.App()

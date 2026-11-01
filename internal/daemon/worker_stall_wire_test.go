@@ -28,14 +28,18 @@ func TestARestartKeepsAWorkingAgentWhoseTerminalDoesNotAnswer(t *testing.T) {
 				testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 				agent.term.Heartbeat("busy", "Claude Code")
 
-				answer := agent.term.Stall(tc.alive, tc.probeErr)
+				stall := agent.term.Stall(tc.alive, tc.probeErr)
 				w.restart()
 				if tc.answerAt > 0 {
 					w.advance(tc.answerAt)
+					stall.Await()
 					assertStillWorking(t, w, agent.id)
-					answer()
+					stall.Release()
 				}
 				w.advance(2 * time.Minute)
+				if tc.answerAt == 0 {
+					stall.Await()
+				}
 				assertStillWorking(t, w, agent.id)
 			})
 		})

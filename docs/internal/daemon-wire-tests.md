@@ -120,11 +120,16 @@ On a `fakeagent.Run`:
   On each tick, `w.tickSchedulesUntil` waits until the job runner is idle, moves
   the clock one schedule tick, and waits until the runner is idle again, so
   `done` reads settled state. It fails after `scheduleTickLimit` ticks.
-- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
-  terminal's `Stall(alive, err)` makes the terminal's worker stop answering
-  until the test calls the returned function. Recovery then waits out the
-  worker's deadline and counts the terminal missing, and the liveness probe
-  answers `alive, err`. The terminal's `HoldRemoval()` stops the next removal
-  halfway until the test calls the returned function. At that point the
-  terminal's streams have ended and its worker no longer answers, but the
-  backend has not forgotten the terminal yet.
+- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. Each hold on
+  a terminal returns a `testworld.Pause`. `Await` returns once the daemon has
+  reached the hold, and `Release` lets the daemon go on. A hold the daemon
+  never reaches fails the test at teardown.
+  - `Stall(alive, err)` makes the terminal's worker stop answering. Recovery
+    then waits out the worker's deadline and counts the terminal missing, and
+    the liveness probe answers `alive, err`. The pause arrives at the first
+    liveness probe, and releasing the pause makes the worker answer again.
+  - `HoldRemoval()` stops the next removal halfway. At that point the
+    terminal's streams have ended and its worker no longer answers, but the
+    backend has not forgotten the terminal yet.
+  - `HoldExitDelivery()` holds the report of the terminal's exit to the
+    daemon, for a test about an exit that arrives late.

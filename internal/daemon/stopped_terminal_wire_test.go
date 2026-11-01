@@ -4,6 +4,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"testing/synctest"
@@ -194,17 +195,20 @@ func TestStoppingAReloadedAgentKeepsItsTileWhenTheOldExitArrivesLate(t *testing.
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
 		agent := w.bubbleClaude(t, app, "shop")
-		releaseOldExit := agent.term.HoldExitDelivery()
-		releaseStoppedExit := make(chan struct{})
+		oldExit := agent.term.HoldExitDelivery()
+		stoppedExit := make(chan struct{})
+		releaseStoppedExit := sync.OnceFunc(func() { close(stoppedExit) })
+		t.Cleanup(releaseStoppedExit)
 		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
-			term.OnKill(func(syscall.Signal) { <-releaseStoppedExit; term.Exit(0) })
+			term.OnKill(func(syscall.Signal) { <-stoppedExit; term.Exit(0) })
 		})
 		reloadRespawned(t, app, agent.id)
 		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(agent.id)})
+		oldExit.Await()
 		synctest.Wait()
-		releaseOldExit()
+		oldExit.Release()
 		synctest.Wait()
-		close(releaseStoppedExit)
+		releaseStoppedExit()
 		exit := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == agent.id })
 		if exit.ExitCode != 0 {
 			t.Fatalf("replacement exited %d, want its caught Stop returning 0", exit.ExitCode)
@@ -220,13 +224,15 @@ func TestTwoReloadsWhoseOldExitsArriveLateLeaveTheAgentRunning(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
 		agent := w.bubbleClaude(t, app, "shop")
-		releaseFirstExit := agent.term.HoldExitDelivery()
-		var releaseSecondExit func()
-		w.terms.OnNextSpawn(func(term *testworld.Terminal) { releaseSecondExit = term.HoldExitDelivery() })
+		firstExit := agent.term.HoldExitDelivery()
+		var secondExit *testworld.Pause
+		w.terms.OnNextSpawn(func(term *testworld.Terminal) { secondExit = term.HoldExitDelivery() })
 		reloadRespawned(t, app, agent.id)
 		reloadRespawned(t, app, agent.id)
-		releaseFirstExit()
-		releaseSecondExit()
+		firstExit.Await()
+		secondExit.Await()
+		firstExit.Release()
+		secondExit.Release()
 		synctest.Wait()
 		if state := queriedSession(t, w.Client(), agent.id); state.TerminalExit != nil {
 			t.Fatalf("the replaced agents' exits ended the agent the second reload started: %+v", state.TerminalExit)
