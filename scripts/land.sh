@@ -158,8 +158,6 @@ sync_history() {
   go tool test-history sync || echo "land: $1" >&2
 }
 
-sync_history "choosing landing tests from the history already synced"
-
 for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main
   [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }

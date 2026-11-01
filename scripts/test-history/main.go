@@ -37,14 +37,15 @@ const usage = `usage: go tool test-history <command>
       Print the spool directory.
 
   land --units-out <file> --group <group>... [--main <ref>]
-      Choose the landing tests for HEAD's change against <ref> (default
-      origin/main), as scripts/land.sh does, for the groups it matched: their
-      baseline units, the tests the change touches, and every test that failed
-      on main and has since passed there, until it passes on 30 later main
-      revisions; one still red on main is listed, not run. Writes the units to
-      run, one per line, to <file>, and prints each added, red, missing or
-      unavailable test with its reason. With no successful sync in the spool,
-      it chooses the baseline.
+      Run sync, then choose the landing tests for HEAD's change against <ref>
+      (default origin/main), as scripts/land.sh does, for the groups it
+      matched: their baseline units, the tests the change touches, and every
+      test that failed on main and has since passed there, until it passes on
+      30 later main revisions; one still red on main is listed, not run.
+      Writes the units to run, one per line, to <file>, and prints each added,
+      red, missing or unavailable test with its reason. When the sync fails,
+      it chooses from the history already synced; with no successful sync in
+      the spool, it chooses the baseline.
   select [--group <group>]... [--main <ref>] [--json]
       What land would choose for this checkout's change, including the
       failures that have cleared; groups default to those the change matches.

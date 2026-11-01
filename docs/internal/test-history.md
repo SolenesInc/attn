@@ -101,8 +101,8 @@ Syncs of one spool take turns, because every worktree shares `mirror/` and
 and starts when the other ends, from the cursor the other saved. A sync killed
 midway releases its turn, and the next sync resumes from the last page it saved.
 
-A sync never changes a test's result. `scripts/land.sh` runs sync before
-choosing landing tests and after a push. No test command runs sync.
+A sync never changes a test's result. `land` runs sync before choosing landing
+tests, and `scripts/land.sh` runs sync after a push. No test command runs sync.
 `ATTN_TEST_HISTORY_URL` points sync at another service. Each request has a
 2-minute budget, and connecting has a 10-second budget. A connection to the
 service takes about 0.15 seconds, and off the tailnet a connection never
@@ -201,9 +201,10 @@ failure stops the push.
   requests a baseline unit missing from the checkout, such as a renamed test,
   anyway. The run reports the unit `MISSING`, and the landing fails until the
   unit's line in `scripts/landing-tests` names a test again.
-- Before choosing, `land.sh` runs `sync`, and after a push `land.sh` runs `sync`
-  again, so the landing's own receipt reaches the shared history. When a sync
-  fails, `land.sh` prints when a sync last succeeded and continues. The landing
+- Before choosing, `land` runs `sync` with the rebased checkout's own code, so
+  the choice reads the history that code keeps. After a push, `land.sh` runs
+  `sync` again, so the landing's own receipt reaches the shared history. When
+  the sync before choosing fails, `land` prints when a sync last succeeded and
   chooses from the history already in the spool.
 - With no successful sync in the spool, `land` chooses the baseline and says so.
 - When `land` fails or chooses nothing, `land.sh` prints that it is running the

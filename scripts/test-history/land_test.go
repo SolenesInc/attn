@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -60,6 +61,7 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	repo.write("README.md", "docs only\n")
 	head := repo.commit("change the docs", start.Add(time.Hour))
 
+	var landErr string
 	land := func(groups ...string) (string, string, int) {
 		t.Helper()
 		unitsFile := filepath.Join(t.TempDir(), "units")
@@ -67,24 +69,33 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 		for _, group := range groups {
 			args = append(args, "--group", group)
 		}
-		out, code := repo.history(args...)
+		cmd := historyCommand(t, repo.spool, repo.dir, args...)
+		cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=", "ATTN_TEST_HISTORY_URL="+service.server.URL, "XDG_CONFIG_HOME="+config)
+		var out, errOut bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &errOut
+		code := exitCode(cmd.Run())
+		landErr = errOut.String()
 		units, _ := os.ReadFile(unitsFile)
 		chosen := strings.Split(strings.TrimSpace(string(units)), "\n")
 		sort.Strings(chosen)
-		return out, strings.Join(chosen, ", "), code
+		return out.String(), strings.Join(chosen, ", "), code
 	}
 
+	olderVersion := `{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":20,"cursor_of":"` + service.server.URL + ` github.com/` + checkoutRepository + ` .json.zst"}`
+	if err := os.WriteFile(filepath.Join(repo.spool, "sync.json"), []byte(olderVersion), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service.mu.Lock()
+	service.down = true
+	service.mu.Unlock()
 	out, units, code := land("go")
-	if code != 0 || units != "go ./p TestA, go ./p TestRenamed" || !strings.Contains(out, "the baseline, no shared history") {
-		t.Fatalf("before any sync, land exited %d and chose %s:\n%s", code, units, out)
+	if code != 0 || units != "go ./p TestA, go ./p TestRenamed" || !strings.Contains(out, "the baseline, no shared history") || !strings.Contains(landErr, "choosing landing tests from the history already synced") {
+		t.Fatalf("offline, with only an older version's sync in the spool, land exited %d and chose %s:\n%s\nstderr: %s", code, units, out, landErr)
 	}
 
-	sync := historyCommand(t, repo.spool, repo.dir, "sync")
-	sync.Env = append(sync.Env, "ATTN_TEST_HISTORY_URL="+service.server.URL, "XDG_CONFIG_HOME="+config)
-	if synced, err := sync.CombinedOutput(); err != nil {
-		t.Fatalf("sync: %v\n%s", err, synced)
-	}
-
+	service.mu.Lock()
+	service.down = false
+	service.mu.Unlock()
 	out, units, code = land("go")
 	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent" {
 		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failure:\n%s", code, units, out)
