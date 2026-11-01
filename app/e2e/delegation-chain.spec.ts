@@ -14,7 +14,7 @@ async function scrollToTop(terminal: Locator) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/test-harness/?component=DelegationChain');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 });
 
 for (const [platform, shortcut] of [['MacIntel', 'Meta+Shift+k'], ['Linux x86_64', 'Control+Alt+k']]) {
@@ -24,7 +24,7 @@ for (const [platform, shortcut] of [['MacIntel', 'Meta+Shift+k'], ['Linux x86_64
       Object.defineProperty(navigator, 'userAgent', { value: platform, configurable: true });
     }, platform);
     await page.reload();
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
     await terminal.focus();
     await page.getByTestId('row-builder').getByRole('button').hover();

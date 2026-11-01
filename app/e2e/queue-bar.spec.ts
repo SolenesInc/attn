@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('fits the session names from the queue popup and stays within a narrow viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/test-harness/?component=QueueBar&popupNames&oneDesktop');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await page.getByTestId('queue-bar-waiting').hover();
 
   const names = page.locator('[data-testid=queue-bar-waiting-peek] .unified-palette-name');
@@ -24,7 +24,7 @@ test('fits the session names from the queue popup and stays within a narrow view
 test('keeps every bar control on screen at 800px with long profile, waiting and automation names', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   const controls = [
     'queue-bar-show-sidebar',
@@ -58,7 +58,7 @@ test('keeps every bar control on screen at 800px with long profile, waiting and 
 test('keeps both peeks on screen when a long profile pushes the waiting pill right on a single desktop', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar&oneDesktop');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   const anchor = (await page.getByTestId('queue-bar-waiting').boundingBox())!;
   expect(anchor.x + 420).toBeGreaterThan(800);
@@ -76,7 +76,7 @@ test('keeps both peeks on screen when a long profile pushes the waiting pill rig
 test('an open peek shifts back on screen when the window narrows under it', async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 600 });
   await page.goto('/test-harness/?component=QueueBar&oneDesktop');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   await page.getByTestId('queue-bar-waiting').hover();
   const panel = page.locator('[data-testid=queue-bar-waiting-peek] .queue-bar-peek-panel');
@@ -96,7 +96,7 @@ test('an open peek shifts back on screen when the window narrows under it', asyn
 test('an open peek shifts back on screen when the UI scale grows under it', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar&oneDesktop');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   await page.getByTestId('queue-bar-waiting').hover();
   const panel = page.locator('[data-testid=queue-bar-waiting-peek] .queue-bar-peek-panel');

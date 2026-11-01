@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('NotebookTile finder', () => {
   test('Cmd+P opens the finder; typing filters; Enter opens the note', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookTile');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
 
     await expect(page.locator('.cm-editor')).toBeVisible();
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
@@ -27,7 +27,7 @@ test.describe('NotebookTile finder', () => {
 
   test('Escape dismisses the finder back to the note', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookTile');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await expect(page.locator('.cm-editor')).toBeVisible();
 
     await page.locator('.notebook-surface-tile').click();
@@ -43,7 +43,7 @@ test.describe('NotebookTile finder', () => {
     // Focus must stay inside the tile after Esc: on <body> the tile-scoped keydown never
     // fires and Cmd+P cannot re-summon.
     await page.goto('/test-harness/?component=NotebookTile&initialPath=');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
 
     await expect(page.locator('.notebook-finder')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -55,7 +55,7 @@ test.describe('NotebookTile finder', () => {
 
   test('a fresh tile (no seed) auto-opens the finder on its empty screen', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookTile&initialPath=');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
 
     await expect(page.locator('.notebook-finder')).toBeVisible();
     await expect(page.locator('.notebook-finder-input')).toBeFocused();

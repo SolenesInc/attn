@@ -51,7 +51,7 @@ for (const notes of [1, 12]) {
 test('three-leaf markdown headers switch modes before their controls collide', async ({ page }) => {
   await page.setViewportSize({ width: 1900, height: 700 });
   await page.goto('/test-harness/?component=TileHeader');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   const desktop = page.getByTestId('three-leaf-desktop');
   const tiles = page.locator('.desktop-dock-tile');

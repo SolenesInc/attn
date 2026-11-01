@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/test-harness/?component=SeedHeader');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 });
 
 test('lifecycle remains visible when the agent releases its seed, with a useful keyboard preview', async ({ page }) => {

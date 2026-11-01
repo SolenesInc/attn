@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function openEditor(page: Page) {
   await page.goto('/test-harness/?component=TerminalAnnotations');
-  await page.waitForFunction(() => window.__HARNESS__?.ready);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await expect(page.getByTestId('desktop-first').locator('canvas').first()).toBeVisible();
   await page.getByTitle('Edit this annotation').click();
   const editor = page.getByRole('textbox', { name: 'Annotation comment', exact: true });

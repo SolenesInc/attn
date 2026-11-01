@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // This needs a real browser because jsdom/happy-dom do not apply the stylesheet.
 test('active-pane selection markers paint above the split divider', async ({ page }) => {
   await page.goto('/test-harness/?component=PaneFocusRing');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   const desktop = page.locator('[data-testid="desktop"]');
   const pane = page.locator('[data-testid="pane-active"]');
@@ -43,7 +43,7 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
   test(`arrival ring flashes once in rail and spotlight selection (${reducedMotion})`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/test-harness/?component=PaneFocusRing');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
 
     const desktop = page.getByTestId('desktop');
     const pane = page.getByTestId('pane-active');

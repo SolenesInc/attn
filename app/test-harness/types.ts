@@ -16,9 +16,6 @@ export interface HarnessAPI {
 
   /** Trigger a re-render (component-specific implementation) */
   triggerRerender: () => void;
-
-  /** Check if harness is ready */
-  ready: boolean;
 }
 
 /** Extend Window to include harness API */

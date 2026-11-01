@@ -30,7 +30,7 @@ function highlightedTexts(page: Page) {
 test.describe('markdown annotations across tiles', () => {
   test('keeps every tile’s marks in the shared highlight registry while another tile repaints or closes', async ({ page }) => {
     await page.goto('/test-harness/?component=MarkdownAnnotationTiles');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const first = page.getByRole('region', { name: 'First tile' });
     const second = page.getByRole('region', { name: 'Second tile' });
 
@@ -49,7 +49,7 @@ test.describe('markdown annotations across tiles', () => {
 test('a fragment link scrolls its own tile when another tile shows the same document', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/test-harness/?component=MarkdownAnnotationTiles&document=fragments');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const first = page.getByRole('region', { name: 'First tile' });
   const second = page.getByRole('region', { name: 'Second tile' });
   await expect(second.getByRole('heading', { name: 'Setup' })).not.toBeInViewport();

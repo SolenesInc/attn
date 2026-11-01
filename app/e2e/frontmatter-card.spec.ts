@@ -8,7 +8,7 @@ const PAST_FOCUS_SETTLE_MS = 1_000;
 test.describe('FrontmatterCard', () => {
   test('renders frontmatter as a card and hides the raw YAML', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     const card = page.locator('.cm-md-frontmatter');
@@ -25,7 +25,7 @@ test.describe('FrontmatterCard', () => {
 
   test('clicking the card reveals raw YAML, clicking the body restores the card', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-md-frontmatter');
 
     await page.locator('.cm-md-frontmatter').click();
@@ -40,7 +40,7 @@ test.describe('FrontmatterCard', () => {
 
   test('opens frontmatter editing from the keyboard', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const card = page.getByRole('button', { name: 'Edit note properties' });
     await card.focus();
     await expect(card).toBeFocused();
@@ -53,7 +53,7 @@ test.describe('FrontmatterCard', () => {
 
   test('opens frontmatter editing from a synthesized semantic click', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const card = page.getByRole('button', { name: 'Edit note properties' });
 
     await card.evaluate((el) => (el as HTMLElement).click());
@@ -64,7 +64,7 @@ test.describe('FrontmatterCard', () => {
   test('focusing the body never expands frontmatter under the pointer click', async ({ page }) => {
     await page.clock.install();
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-md-frontmatter');
 
     await page.evaluate(() => {
@@ -89,7 +89,7 @@ test.describe('FrontmatterCard', () => {
 
   test('moves the caret out of hidden YAML when frontmatter editing loses focus', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const content = page.locator('.cm-content');
 
     await page.locator('.cm-md-frontmatter').click();
@@ -113,7 +113,7 @@ test.describe('FrontmatterCard', () => {
 
   test('keeps long markdown rendered and ArrowUp local beyond character 3,000', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard&long=1');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-md-frontmatter');
 
     const scroller = page.locator('.cm-scroller');
@@ -148,7 +148,7 @@ test.describe('FrontmatterCard', () => {
 
   test('a frontmatter-only note stays raw (no body line to anchor the cursor)', async ({ page }) => {
     await page.goto('/test-harness/?component=FrontmatterCard&empty=1');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await expect(page.locator('.cm-md-frontmatter')).toHaveCount(0);

@@ -11,7 +11,6 @@ import type { HarnessAPI } from './types';
 const initHarnessAPI = (componentName: string): HarnessAPI => ({
   componentName,
   calls: {},
-  ready: false,
 
   recordCall(fnName: string, args: unknown[]) {
     if (!this.calls[fnName]) {
@@ -75,7 +74,6 @@ function HarnessApp() {
   window.__HARNESS__ = initHarnessAPI(componentName);
 
   const handleReady = () => {
-    window.__HARNESS__.ready = true;
     markHarnessReady();
     console.log(`[Harness] ${componentName} ready`);
   };

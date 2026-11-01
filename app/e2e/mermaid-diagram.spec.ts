@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function openHarness(page: Page) {
   await page.goto('/test-harness/?component=MermaidDiagram');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 }
 
 test.describe('large Mermaid diagram reader', () => {

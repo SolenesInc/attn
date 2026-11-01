@@ -23,7 +23,7 @@ async function scrollIntoLongNote(page: Page): Promise<number> {
 test.describe('LiveMarkdownEditor (live preview)', () => {
   test('renders markdown inline, hides syntax off the cursor line, and reveals it on it', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await expect(page.locator('.cm-md-h1').first()).toBeVisible();
@@ -49,7 +49,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
     // basicSetup's drawSelection hides the native caret and draws its own .cm-cursor,
     // whose default border is solid black — invisible on the dark pane.
     await page.goto('/test-harness/?component=LiveMarkdownEditor');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.locator('.cm-content').click();
 
     const cursor = page.locator('.cm-cursor').first();
@@ -61,7 +61,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
 
   test('typing edits the document and reports changes', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor&empty=1');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await page.locator('.cm-content').click();
@@ -78,7 +78,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
 
   test('mod-click on a wiki link reports the href to follow', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-md-link');
 
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
@@ -91,7 +91,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
 
   test('keeps the reader scrolled in place when an on-disk change is applied (minimal edit)', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor&long=1');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     const scroller = page.locator('.cm-scroller');
@@ -116,7 +116,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
 
   test('contrast: a full value swap snaps the scroller to the top (the bug the fix avoids)', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor&long=1');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     const scroller = page.locator('.cm-scroller');
@@ -133,7 +133,7 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
 
   test('renders list bullets, task checkboxes, and a fenced code block, and toggles a checkbox on click', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await expect(page.locator('.cm-md-bullet').first()).toBeVisible();
