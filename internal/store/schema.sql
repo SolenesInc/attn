@@ -1,5 +1,6 @@
 CREATE INDEX idx_analytics_outbox_at ON analytics_outbox(at);
 CREATE INDEX idx_analytics_outbox_stream ON analytics_outbox(stream, id);
+CREATE INDEX idx_analytics_outbox_unsent ON analytics_outbox(id) WHERE sent_at IS NULL;
 CREATE UNIQUE INDEX idx_automation_bindings_active ON automation_continuity_bindings(definition_id, continuity_key) WHERE status='active';
 CREATE INDEX idx_automation_bindings_seed_active ON automation_continuity_bindings(definition_id,seed_id) WHERE status='active' AND seed_id<>'';
 CREATE INDEX idx_automation_review_edges_host ON automation_review_request_edges(definition_id, host, active);
