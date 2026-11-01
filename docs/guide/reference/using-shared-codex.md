@@ -49,11 +49,10 @@ Attn answers yes to the trust question in these cases:
 Any other folder still asks. An automation never stops at the question: Attn
 decides before it starts Codex, as [Automations](automations.md) describes
 under "Does a Codex run trust its folder?". Attn writes nothing to your Codex
-config when it
-answers. A folder you marked untrusted stays untrusted. Codex itself saves a
-folder you never answered for as trusted when a conversation that can write
-there starts. If the folder is inside a repository, Codex saves the whole
-repository.
+config when it answers. A folder you marked untrusted stays untrusted. Codex
+itself saves a folder you never answered for as trusted when a conversation that
+can write there starts. If the folder is inside a repository, Codex saves the
+whole repository.
 
 ## One conversation, one session
 
