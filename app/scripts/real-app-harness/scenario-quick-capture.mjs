@@ -691,7 +691,7 @@ try {
 
     await hotkeys({ action: 'dictation', binding: '' });
     assert.equal(route(await hotkeys()), undefined);
-    await openCapture('Quick Capture after dictation unbind');
+    await openCapture();
     await key('escape');
     await hidden();
     runner.writeJson('dictation-routing.json', { bareRightOption, outside, fixtureKey, inside, mainPress, browserPress, capturePress });
