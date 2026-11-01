@@ -633,6 +633,7 @@ func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *test
 	outpost.Start()
 	home.Start()
 	app := home.App()
+	defaultProfile := app.SelectedProfile()
 	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
 	if !created.Success {
 		t.Fatalf("create Side: %+v", created)
@@ -650,7 +651,7 @@ func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *test
 	}
 	defaultCopy := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
 	writeFileAt(t, filepath.Join(defaultCopy, "from-outpost.md"), "written in Default's copy")
-	awaitHomeFile(t, pair.App, home, notebookPath(home, "from-outpost.md"), "written in Default's copy", false)
+	awaitHomeFile(t, home.AppOn(defaultProfile), home, notebookPath(home, "from-outpost.md"), "written in Default's copy", false)
 	notifications := testworld.Request(pair.App, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr("conflicts")}, protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == "conflicts" })
 	found := false
 	for _, notification := range notifications.Notifications {
@@ -658,14 +659,14 @@ func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *test
 			continue
 		}
 		found = true
-		if strings.Contains(notification.Body+notification.SourceID, "secret plan") || strings.Contains(notification.Body, side) || !strings.Contains(notification.Body, "profile Side") {
+		if strings.Contains(notification.Title+notification.Body+notification.SourceID, "secret plan") || strings.Contains(notification.Body, side) || strings.Contains(notification.Body, "Side") {
 			t.Fatalf("a conflict in Side's own folder notifies every profile with %+v", notification)
 		}
 	}
 	if !found {
 		t.Fatal("no notification for the conflict copy in Side's folder")
 	}
-	t.Logf("Side's blocked copy failed alone (%s); Default's folder synced; the conflict notification names the profile, not the file", protocol.Deref(state.Error))
+	t.Logf("Side's blocked copy failed alone (%s); Default's folder synced; the conflict notification names neither the file nor the profile", protocol.Deref(state.Error))
 
 	if err := os.Remove(blocked); err != nil {
 		t.Fatal(err)

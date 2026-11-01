@@ -697,10 +697,10 @@ func (d *Daemon) notifyNotebookConflict(folder, root, rel string) error {
 	path := filepath.Join(root, filepath.FromSlash(rel))
 	sum := sha256.Sum256([]byte(root + "\x00" + rel))
 	body, source := fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path), rel
-	if owners, private, err := d.privateNotebookFolderOwners(folder); err != nil {
+	if shared, err := d.notebookFolderSharedByEveryProfile(folder); err != nil {
 		return err
-	} else if private {
-		body, source = fmt.Sprintf("Both versions were kept in the Notebook folder of %s. Open that Notebook, compare the file with its .sync-conflict- copy, merge what you need, then remove the copy.", strings.Join(owners, ", ")), folder
+	} else if !shared {
+		body, source = "Both versions were kept in a Notebook folder. Open your Notebook, compare the file with its .sync-conflict- copy, merge what you need, then remove the copy.", folder
 	}
 	notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
 		ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
@@ -1386,21 +1386,20 @@ func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string
 	return filepath.Join(root, "seeds", seed), nil
 }
 
-func (d *Daemon) privateNotebookFolderOwners(folder string) ([]string, bool, error) {
+func (d *Daemon) notebookFolderSharedByEveryProfile(folder string) (bool, error) {
 	d.notebookSync.mu.Lock()
 	users := slices.Clone(d.notebookSync.disk.Folders[folder].Profiles)
 	d.notebookSync.mu.Unlock()
 	live, err := d.store.ListProfiles(false)
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
-	var owners []string
 	for _, profile := range live {
-		if slices.Contains(users, profile.ID) {
-			owners = append(owners, "profile "+profile.Name)
+		if !slices.Contains(users, profile.ID) {
+			return false, nil
 		}
 	}
-	return owners, len(owners) != len(live), nil
+	return true, nil
 }
 
 func notebookConflictOriginal(path string) string {
