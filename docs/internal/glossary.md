@@ -128,10 +128,13 @@ garden                  a profile's issue tracker
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
    ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ authorization (at most 1)  the user's words for what agents may do on
+   │                    the seed without asking, and where they stop
    ├─ watcher (0..n)    a session or crew member that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ log entry (0..n)  a line in the ticket's log: a note, move, link, edit,
-   │  │                 check or answer; like an entry in a ticket's history
+   │  │                 check, answer or authorization; like an entry in a
+   │  │                 ticket's history
    │  └─ note           a log entry someone wrote; like a comment
    ├─ check (0..n)      something the seed must prove, numbered like C1; like
    │  │                 an acceptance criterion
