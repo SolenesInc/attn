@@ -47,7 +47,9 @@ it stores them:
   come from a fixed set, such as a status or a kind, is kept as it is. A field
   that holds an id, such as the session that planted a seed
   (`caused_by_session_id`), becomes the same keyed hash as that id's subject,
-  so a record can be joined to the records about the thing it names.
+  so a record can be joined to the records about the thing it names. A field
+  that names who acted, such as who closed a session (`closed_by`), keeps
+  `user` and `attn` as they are and hashes any other actor the same way.
 - `setting.changed` names the setting in plain text, because setting names come
   from a fixed set. A setting whose name carries a value, such as
   `new_session_destination_<repository>`, is named by that pattern, never by

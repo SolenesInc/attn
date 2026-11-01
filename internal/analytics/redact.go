@@ -16,7 +16,10 @@ type Field uint8
 const (
 	Safe Field = iota + 1
 	ID
+	Actor
 )
+
+var namedActors = map[string]bool{"user": true, "attn": true}
 
 type Fields map[string]Field
 
@@ -54,6 +57,11 @@ func redactValue(value any, path string, fields Fields, secret []byte) any {
 		case Safe:
 			return v
 		case ID:
+			return HashSubject(secret, v)
+		case Actor:
+			if namedActors[v] {
+				return v
+			}
 			return HashSubject(secret, v)
 		}
 		return redactedString{S: len(v)}

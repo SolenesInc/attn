@@ -4,7 +4,7 @@ var BusFields = map[string]Fields{
 	"garden.seed.artifact.changed":        {"caused_by_session_id": ID},
 	"garden.seed.body.edited":             {"caused_by_session_id": ID},
 	"garden.seed.edge.linked":             {"edge_kind": Safe, "caused_by_session_id": ID, "target_seed_id": ID},
-	"garden.seed.edge.unlinked":           {"edge_kind": Safe, "target_seed_id": ID},
+	"garden.seed.edge.unlinked":           {"edge_kind": Safe, "caused_by_session_id": ID, "target_seed_id": ID},
 	"garden.seed.harvest_when.cleared":    {"caused_by_session_id": ID, "pull_request_id": ID},
 	"garden.seed.harvest_when.configured": {"caused_by_session_id": ID, "pull_request_id": ID},
 	"garden.seed.harvested":               {"caused_by_session_id": ID},
@@ -30,9 +30,10 @@ var BusFields = map[string]Fields{
 	"session.closed": {
 		"agent": Safe, "state": Safe,
 		"usage.models.model": Safe, "usage.models.purpose": Safe, "usage.models.unpriced_reason": Safe,
-		"id": ID, "profile_id": ID, "workspace_id": ID,
+		"id": ID, "profile_id": ID, "workspace_id": ID, "closed_by": Actor,
 	},
-	"session.pty.exited": {"signal": Safe},
+	"session.pty.exited": {"signal": Safe, "terminal": ID},
+	"session.respawned":  {"terminal": ID},
 	"session.unregistered": {
 		"agent": Safe, "state": Safe,
 		"automation.trigger_type": Safe,

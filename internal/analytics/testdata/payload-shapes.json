@@ -29,6 +29,7 @@
     "target_seed_id": "string"
   },
   "garden.seed.edge.unlinked": {
+    "caused_by_session_id": "string",
     "edge_kind": "string",
     "target_seed_id": "string"
   },

@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -287,6 +288,69 @@ func TestSessionFactsAndVentsTellTheReportedModelFromTheRequestedOne(t *testing.
 		}
 		if model, requested := ventModels(); model != "claude-opus-5-5" || requested != "opus" {
 			t.Errorf("after usage a vent carries model %q and model_requested %q, want claude-opus-5-5 and opus", model, requested)
+		}
+	})
+}
+
+func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		chief := w.bubbleClaude(t, app, "chief")
+		target := w.bubbleClaude(t, app, "target")
+		closedByUser := w.bubbleClaude(t, app, "closed-by-user")
+		if made := setChiefOfStaff(app, chief.id, true); !made.Success {
+			t.Fatalf("making the chief: %+v", made)
+		}
+		first := plantDelegationSeed(t, cli, chief.id, "First")
+		second := plantDelegationSeed(t, cli, chief.id, "Second")
+		scoped := cli.WithGardenProfile("", protocol.SessionID(chief.id))
+		if _, err := scoped.SeedLink(first, "blocks", second, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := scoped.SeedLink(first, "blocks", second, true); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := cli.AgentReload([]string{target.id}, protocol.SessionID(chief.id), false); err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success {
+			t.Fatalf("reload = %+v, %v", result, err)
+		}
+		synctest.Wait()
+		if _, err := cli.AgentClose(target.id, protocol.SessionID(chief.id), "finished"); err != nil {
+			t.Fatalf("the chief closes the target: %v", err)
+		}
+		if closed := closeFromApp(app, closedByUser.id); !closed.Accepted {
+			t.Fatalf("the user closes a session: %+v", closed)
+		}
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		chiefSubject, terminal := analytics.HashSubject(secret, chief.id), analytics.HashSubject(secret, target.self)
+		for _, want := range []struct {
+			name, subject, field, value string
+		}{
+			{"garden.seed.edge.unlinked", analytics.HashSubject(secret, first), "caused_by_session_id", chiefSubject},
+			{"session.respawned", analytics.HashSubject(secret, target.id), "terminal", terminal},
+			{"session.pty.exited", analytics.HashSubject(secret, target.id), "terminal", terminal},
+			{"session.closed", analytics.HashSubject(secret, target.id), "closed_by", chiefSubject},
+			{"session.closed", analytics.HashSubject(secret, closedByUser.id), "closed_by", "user"},
+		} {
+			var values []string
+			for _, record := range mirroredRecords(t, app, want.name) {
+				if record.Subject != want.subject {
+					continue
+				}
+				var props map[string]any
+				if err := json.Unmarshal(record.Props, &props); err != nil {
+					t.Fatal(err)
+				}
+				values = append(values, fmt.Sprint(props[want.field]))
+			}
+			if !slices.Contains(values, want.value) {
+				t.Errorf("%s about %s carries %s %v, want %q", want.name, want.subject, want.field, values, want.value)
+			}
 		}
 	})
 }
