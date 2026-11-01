@@ -32,9 +32,8 @@ func TestSeedAuthorizationSaysWhereEachChangeWent(t *testing.T) {
 	if got := seedAs(t, s, tender, "authorization", seed.ID, "You may push this branch."); got != seed.ID+" authorization set. You tend "+seed.ID+", so nothing is typed.\n" {
 		t.Errorf("the tender setting its own seed's authorization printed %q", got)
 	}
-	refused := s.Run(testworld.Invocation{Args: []string{"seed", "authorization", seed.ID, "--clear"}})
-	if refused.Code == 0 || !strings.Contains(refused.Stderr, "outside your delegation chain") {
-		t.Errorf("a call from outside attn while %s tends the seed exited %d: %s", tender, refused.Code, refused.Stderr)
+	if got := seedAs(t, s, "", "authorization", seed.ID, "Ask me before landing."); !strings.HasPrefix(got, seed.ID+" authorization set. ") || !strings.Contains(got, tender[:8]) {
+		t.Errorf("the user changing the words while %s tends the seed printed %q; want where the change went", tender, got)
 	}
 	if got := seedAs(t, s, tender, "authorization", seed.ID, "--clear"); got != seed.ID+" authorization cleared. You tend "+seed.ID+", so nothing is typed.\n" {
 		t.Errorf("clearing printed %q", got)

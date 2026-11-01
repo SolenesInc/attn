@@ -105,13 +105,16 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			entryBody = fmt.Sprintf("Cleared the authorization. These words no longer apply: %q", previous.Text)
 		}
 		if typeIntoTender {
+			if err := d.checkAuthorizationStanding(seed, setter); err != nil {
+				return authorizationChange{}, err
+			}
 			standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
 			tender := seed.Tender
 			switch {
 			case !seed.ClaimHolds(standing.Holds):
 			case tender.Actor() == setter:
 				change.callerTends = true
-			case standing.Oversees(setter, tender):
+			default:
 				received := d.wordsTenderLastReceived(tender.Address(), previous)
 				replaced := received
 				if text == "" && replaced == "" {
@@ -126,10 +129,6 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 					next.Authorization.TypedUpdate = item.ID
 					next.Authorization.TenderLastReceived = received
 				}
-			default:
-				return authorizationChange{}, fmt.Errorf(
-					"%s tends %s and is outside your delegation chain. The tender, the sessions above it in the delegation chain, and the chief can change a seed's authorization",
-					d.partyLabel(tender), seed.ID)
 			}
 		}
 		entry := seedMoveNote{
@@ -213,18 +212,6 @@ func partyAt(a who.Address) (who.Party, bool) {
 		return who.Member(key), true
 	}
 	return who.Party{}, false
-}
-
-func (d *Daemon) partyLabel(p who.Party) string {
-	view := d.partyView(p)
-	id, _ := p.Session()
-	if live := protocol.Deref(view.SessionID); live != "" {
-		id = live
-	}
-	if id == "" || view.Name == shortSessionID(id) {
-		return view.Name
-	}
-	return fmt.Sprintf("%s (%s)", view.Name, shortSessionID(id))
 }
 
 func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) error {

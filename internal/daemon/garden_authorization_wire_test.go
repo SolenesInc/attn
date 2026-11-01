@@ -91,7 +91,7 @@ If this applies to work you delegated, update those seeds with attn seed authori
 
 		registerSessions(t, w, cli, "outsider")
 		_, err = cli.WithGardenProfile("", "outsider").SeedAuthorization(seed, "You may release.", false)
-		if err == nil || !strings.Contains(err.Error(), "outside your delegation chain") || !strings.Contains(err.Error(), "the chief can change a seed's authorization") {
+		if err == nil || !strings.Contains(err.Error(), "the sessions above") || !strings.Contains(err.Error(), "the chief or the user can set its authorization") {
 			t.Fatalf("a session outside the delegation chain got %v; want the refusal with the rule", err)
 		}
 
