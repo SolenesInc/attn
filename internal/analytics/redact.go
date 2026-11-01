@@ -11,7 +11,14 @@ import (
 
 const hashedSubjectHexLen = 12
 
-type Allowlist map[string]bool
+type Field uint8
+
+const (
+	Safe Field = iota + 1
+	ID
+)
+
+type Fields map[string]Field
 
 type redactedString struct {
 	S int `json:"s"`
@@ -23,7 +30,7 @@ type redactedObject struct {
 
 var identifierKey = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
-func Redact(payload json.RawMessage, allow Allowlist) json.RawMessage {
+func Redact(payload json.RawMessage, fields Fields, secret []byte) json.RawMessage {
 	if len(bytes.TrimSpace(payload)) == 0 {
 		return nil
 	}
@@ -33,18 +40,21 @@ func Redact(payload json.RawMessage, allow Allowlist) json.RawMessage {
 	if err := decoder.Decode(&value); err != nil {
 		return nil
 	}
-	redacted, err := json.Marshal(redactValue(value, "", allow))
+	redacted, err := json.Marshal(redactValue(value, "", fields, secret))
 	if err != nil {
 		return nil
 	}
 	return redacted
 }
 
-func redactValue(value any, path string, allow Allowlist) any {
+func redactValue(value any, path string, fields Fields, secret []byte) any {
 	switch v := value.(type) {
 	case string:
-		if allow[path] {
+		switch fields[path] {
+		case Safe:
 			return v
+		case ID:
+			return HashSubject(secret, v)
 		}
 		return redactedString{S: len(v)}
 	case map[string]any:
@@ -54,12 +64,12 @@ func redactValue(value any, path string, allow Allowlist) any {
 			}
 		}
 		for key, field := range v {
-			v[key] = redactValue(field, joinPath(path, key), allow)
+			v[key] = redactValue(field, joinPath(path, key), fields, secret)
 		}
 		return v
 	case []any:
 		for i, item := range v {
-			v[i] = redactValue(item, path, allow)
+			v[i] = redactValue(item, path, fields, secret)
 		}
 		return v
 	default:

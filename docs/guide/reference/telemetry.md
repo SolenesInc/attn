@@ -39,12 +39,19 @@ Attn redacts records on the `bus`, `app`, `cli` and `sample` streams before
 it stores them:
 
 - Numbers, booleans and nulls are kept.
-- A string becomes its length, `{"s": 24}`, unless its field is on the
-  allowlist in `internal/analytics/allowlist.go`. The allowlist holds fields
-  whose values come from a fixed set, such as a status or a kind.
 - A subject (a session, path, pull request or other id) becomes a keyed hash,
   `h:` and 12 hex digits, with a secret that never leaves the machine
   (`<data-dir>/analytics-secret`). The same subject always gives the same hash, so records about one thing group together without revealing what the thing is.
+- A string becomes its length, `{"s": 24}`, unless
+  `internal/analytics/fields.go` classifies its field. A field whose values
+  come from a fixed set, such as a status or a kind, is kept as it is. A field
+  that holds an id, such as the session that planted a seed
+  (`caused_by_session_id`), becomes the same keyed hash as that id's subject,
+  so a record can be joined to the records about the thing it names.
+- `setting.changed` names the setting in plain text, because setting names come
+  from a fixed set. A setting whose name carries a value, such as
+  `new_session_destination_<repository>`, is named by that pattern, never by
+  its concrete name.
 - Session facts carry the harness, model, how the session was launched (user,
   delegation, automation, crew, chief) and its state. Repository facts carry
   three booleans: has an `AGENTS.md`, is a worktree, has a remote. Names and paths never leave the machine.

@@ -23,13 +23,16 @@ func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, 
 	if err != nil {
 		return fmt.Errorf("encode %s/%s props: %w", stream, name, err)
 	}
-	record := analytics.Record{Stream: stream, Name: name, At: time.Now().UTC(), Props: analytics.Redact(encoded, analyticsSafeValues(stream, name))}
-	if subject != "" {
-		secret, err := ensureAnalyticsSecret(d.dataRoot)
-		if err != nil {
-			return err
-		}
-		record.Subject = analytics.HashSubject(secret, subject)
+	secret, err := ensureAnalyticsSecret(d.dataRoot)
+	if err != nil {
+		return err
+	}
+	record := analytics.Record{
+		Stream:  stream,
+		Name:    name,
+		Subject: analytics.HashSubject(secret, subject),
+		At:      time.Now().UTC(),
+		Props:   analytics.Redact(encoded, analyticsFields(stream, name), secret),
 	}
 	if err := d.store.AppendAnalyticsStreamRecord(record); err != nil {
 		return fmt.Errorf("record %s/%s: %w", stream, name, err)
@@ -37,12 +40,12 @@ func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, 
 	return nil
 }
 
-func analyticsSafeValues(stream analytics.Stream, name string) analytics.Allowlist {
+func analyticsFields(stream analytics.Stream, name string) analytics.Fields {
 	switch stream {
 	case analytics.StreamApp:
-		return analytics.AppSafeValues[name]
+		return analytics.AppFields[name]
 	case analytics.StreamCLI:
-		return analytics.CLISafeValues
+		return analytics.CLIFields
 	default:
 		return nil
 	}

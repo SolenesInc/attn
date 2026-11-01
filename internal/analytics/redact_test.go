@@ -10,12 +10,14 @@ import (
 	"github.com/victorarias/attn/internal/analytics"
 )
 
-func TestRedactKeepsTheShapeOfEveryRealPayloadAndOnlyAllowlistedStrings(t *testing.T) {
+var testSecret = []byte("redaction corpus secret")
+
+func TestRedactKeepsTheShapeOfEveryRealPayloadAndOnlyClassifiedStrings(t *testing.T) {
 	shapes := loadPayloadShapes(t)
 	for name, payload := range shapes {
 		t.Run(name, func(t *testing.T) {
-			allow := analytics.SafeValues[name]
-			redacted := analytics.Redact(payload, allow)
+			fields := analytics.BusFields[name]
+			redacted := analytics.Redact(payload, fields, testSecret)
 			if payload == nil {
 				if redacted != nil {
 					t.Fatalf("an empty payload redacted to %s, want nothing", redacted)
@@ -25,26 +27,26 @@ func TestRedactKeepsTheShapeOfEveryRealPayloadAndOnlyAllowlistedStrings(t *testi
 			var in, out any
 			decode(t, payload, &in)
 			decode(t, redacted, &out)
-			compareRedacted(t, "", in, out, allow)
+			compareRedacted(t, "", in, out, fields)
 		})
 	}
 }
 
-func TestEveryAllowlistedFieldIsInARealPayloadShape(t *testing.T) {
+func TestEveryClassifiedFieldIsInARealPayloadShape(t *testing.T) {
 	shapes := loadPayloadShapes(t)
-	for name, allow := range analytics.SafeValues {
+	for name, fields := range analytics.BusFields {
 		payload, ok := shapes[name]
 		if !ok || payload == nil {
-			t.Errorf("SafeValues lists %s, which no recorded payload carries", name)
+			t.Errorf("BusFields lists %s, which no recorded payload carries", name)
 			continue
 		}
 		var shape any
 		decode(t, payload, &shape)
 		strings := map[string]bool{}
 		collectStringPaths("", shape, strings)
-		for path := range allow {
+		for path := range fields {
 			if !strings[path] {
-				t.Errorf("SafeValues[%s] allows %q, which is not a string field of its payload", name, path)
+				t.Errorf("BusFields[%s] classifies %q, which is not a string field of its payload", name, path)
 			}
 		}
 	}
@@ -72,22 +74,27 @@ func TestNoRealPayloadUsesAKeyTheDerivedTraitsTakeInProps(t *testing.T) {
 	}
 }
 
-func TestRedactShipsNoTextOutsideTheAllowlist(t *testing.T) {
+func TestRedactShipsNoTextOutsideItsClassifiedFields(t *testing.T) {
+	sessionID := "0095c903-0123-4029-a5b6-1f2e3d4c5b6a"
+	sessionHash := analytics.HashSubject(testSecret, sessionID)
 	for _, tc := range []struct {
 		payload, want string
-		allow         analytics.Allowlist
+		fields        analytics.Fields
 	}{
 		{`{"path":"/Users/someone/repo","n":3,"ok":true,"none":null}`, `{"n":3,"none":null,"ok":true,"path":{"s":19}}`, nil},
-		{`{"kind":"refresh_repository","path":"/a"}`, `{"kind":"refresh_repository","path":{"s":2}}`, analytics.Allowlist{"kind": true}},
-		{`{"items":[{"kind":"x","title":"secret"}]}`, `{"items":[{"kind":"x","title":{"s":6}}]}`, analytics.Allowlist{"items.kind": true}},
-		{`{"kind":{"kind":"nested"}}`, `{"kind":{"kind":{"s":6}}}`, analytics.Allowlist{"kind": true}},
+		{`{"kind":"refresh_repository","path":"/a"}`, `{"kind":"refresh_repository","path":{"s":2}}`, analytics.Fields{"kind": analytics.Safe}},
+		{`{"items":[{"kind":"x","title":"secret"}]}`, `{"items":[{"kind":"x","title":{"s":6}}]}`, analytics.Fields{"items.kind": analytics.Safe}},
+		{`{"kind":{"kind":"nested"}}`, `{"kind":{"kind":{"s":6}}}`, analytics.Fields{"kind": analytics.Safe}},
+		{`{"caused_by_session_id":"` + sessionID + `","title":"x"}`, `{"caused_by_session_id":"` + sessionHash + `","title":{"s":1}}`, analytics.Fields{"caused_by_session_id": analytics.ID}},
+		{`{"panes":[{"session_id":"` + sessionID + `"}]}`, `{"panes":[{"session_id":"` + sessionHash + `"}]}`, analytics.Fields{"panes.session_id": analytics.ID}},
+		{`{"seed_id":""}`, `{"seed_id":""}`, analytics.Fields{"seed_id": analytics.ID}},
 		{`{"by_path":{"/Users/someone/repo":"dirty","0095c903-0123-4029":"idle"},"n":2}`, `{"by_path":{"n":2},"n":2}`, nil},
 		{`{"empty":{}}`, `{"empty":{}}`, nil},
 		{`"bare"`, `{"s":4}`, nil},
 		{`{"big":12345678901234567890}`, `{"big":12345678901234567890}`, nil},
 	} {
-		if got := analytics.Redact(json.RawMessage(tc.payload), tc.allow); string(got) != tc.want {
-			t.Errorf("Redact(%s, %v) = %s, want %s", tc.payload, tc.allow, got, tc.want)
+		if got := analytics.Redact(json.RawMessage(tc.payload), tc.fields, testSecret); string(got) != tc.want {
+			t.Errorf("Redact(%s, %v) = %s, want %s", tc.payload, tc.fields, got, tc.want)
 		}
 	}
 }
@@ -119,13 +126,19 @@ func decode(t *testing.T, raw json.RawMessage, into *any) {
 	}
 }
 
-func compareRedacted(t *testing.T, path string, in, out any, allow analytics.Allowlist) {
+func compareRedacted(t *testing.T, path string, in, out any, fields analytics.Fields) {
 	t.Helper()
 	switch v := in.(type) {
 	case string:
-		if allow[path] {
+		switch fields[path] {
+		case analytics.Safe:
 			if out != v {
-				t.Errorf("%s: allowlisted string became %v", path, out)
+				t.Errorf("%s: safe string became %v", path, out)
+			}
+			return
+		case analytics.ID:
+			if want := analytics.HashSubject(testSecret, v); out != want {
+				t.Errorf("%s: id became %v, want its subject hash %s", path, out, want)
 			}
 			return
 		}
@@ -143,7 +156,7 @@ func compareRedacted(t *testing.T, path string, in, out any, allow analytics.All
 			if path != "" {
 				child = path + "." + key
 			}
-			compareRedacted(t, child, field, got[key], allow)
+			compareRedacted(t, child, field, got[key], fields)
 		}
 	case []any:
 		got, ok := out.([]any)
@@ -151,7 +164,7 @@ func compareRedacted(t *testing.T, path string, in, out any, allow analytics.All
 			t.Fatalf("%s: array became %v", path, out)
 		}
 		for i := range v {
-			compareRedacted(t, path, v[i], got[i], allow)
+			compareRedacted(t, path, v[i], got[i], fields)
 		}
 	default:
 		if out != in {

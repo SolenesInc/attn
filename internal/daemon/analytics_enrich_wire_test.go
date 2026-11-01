@@ -158,3 +158,58 @@ func mirroredRecords(t *testing.T, app *testworld.Peer, name string) []analytics
 	}
 	return records
 }
+
+func TestAMirroredIDFieldMatchesTheSubjectOfTheSameEntity(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "planter")
+		seedID := plantDelegationSeed(t, cli, agent.id, "Keyed ids")
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		records := mirroredRecords(t, app, "")
+		session := slices.IndexFunc(records, func(r analytics.Record) bool { return strings.HasPrefix(r.Name, "session.") && r.Subject != "" })
+		planted := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Name == "garden.seed.planted" })
+		if session < 0 || planted < 0 {
+			t.Fatalf("the outbox holds no session.* record (%d) or no garden.seed.planted record (%d)", session, planted)
+		}
+		if records[session].Subject != analytics.HashSubject(secret, agent.id) || records[planted].Subject != analytics.HashSubject(secret, seedID) {
+			t.Fatalf("subjects %q and %q, want the hashed session and seed", records[session].Subject, records[planted].Subject)
+		}
+		var props struct {
+			CausedBy string `json:"caused_by_session_id"`
+		}
+		if err := json.Unmarshal(records[planted].Props, &props); err != nil {
+			t.Fatal(err)
+		}
+		if props.CausedBy != records[session].Subject {
+			t.Errorf("garden.seed.planted carries caused_by_session_id %q in %s, want the planting session's subject %q", props.CausedBy, records[planted].Props, records[session].Subject)
+		}
+	})
+}
+
+func TestAMirroredSettingChangeNamesTheSettingAndNotItsConcreteKey(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		setSetting(t, app, "new_session_destination_local_/Users/someone/shop", "main_repo")
+		synctest.Wait()
+
+		var subjects []string
+		for _, record := range mirroredRecords(t, app, "setting.changed") {
+			subjects = append(subjects, record.Subject)
+		}
+		if !slices.Contains(subjects, "analytics.enabled") || !slices.Contains(subjects, "new_session_destination_<repository>") {
+			t.Errorf("setting.changed subjects %v, want analytics.enabled and the pattern new_session_destination_<repository>", subjects)
+		}
+		for _, subject := range subjects {
+			if strings.Contains(subject, "someone") {
+				t.Errorf("setting.changed subject %q carries the concrete key's path", subject)
+			}
+		}
+	})
+}

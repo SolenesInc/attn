@@ -31,12 +31,21 @@ func (d *Daemon) startAnalyticsMirror(secret []byte) error {
 			Stream:  analytics.StreamBus,
 			Seq:     ev.Seq,
 			Name:    ev.Name,
-			Subject: analytics.HashSubject(secret, ev.Subject),
+			Subject: mirroredSubject(secret, ev),
 			At:      ev.CreatedAt,
 			Bytes:   len(ev.Payload),
-			Props:   analytics.Props(ev.Payload, analytics.SafeValues[ev.Name], d.derivedFactTraits(ev)),
+			Props:   analytics.Props(ev.Payload, analytics.BusFields[ev.Name], secret, d.derivedFactTraits(ev)),
 		})
 	})
+}
+
+func mirroredSubject(secret []byte, ev bus.Event) string {
+	if ev.Name == FactSettingChanged {
+		if spec, ok := lookupSetting(ev.Subject); ok {
+			return spec.key
+		}
+	}
+	return analytics.HashSubject(secret, ev.Subject)
 }
 
 func (d *Daemon) stopAnalyticsMirror() error {
