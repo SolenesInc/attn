@@ -111,9 +111,6 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 	if candidate != source {
 		monitor.StartCost()
 	}
-	if driver := monitor.Driver(); driver.TranscriptPath != "" {
-		monitor.WatchDriverUsage(driver.TranscriptPath)
-	}
 	monitor.EnsureTranscriptWatcher(proposed.TranscriptPath)
 	if !source.SettleConversation(outcome.Conversation, monitor, "") {
 		return

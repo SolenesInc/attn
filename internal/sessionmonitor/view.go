@@ -54,11 +54,10 @@ type AutoSettleView struct {
 }
 
 type DriverMetadata struct {
-	Plugin         string
-	Run            string
-	Sequence       uint64
-	Metadata       string
-	TranscriptPath string
+	Plugin   string
+	Run      string
+	Sequence uint64
+	Metadata string
 }
 
 type ConversationObservation struct {

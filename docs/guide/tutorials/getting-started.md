@@ -43,8 +43,7 @@ The Linux app is still in progress, and releases don't package it yet, so build
 it from source. We test on Ubuntu 24.04.
 
 You need Go 1.27.1 or newer, Rust through rustup (the repository pins the Rust
-version to use), Node.js 26 or newer, pnpm 9 or newer, bun 1.3.14 or newer, and
-these packages:
+version to use), Node.js 26 or newer, pnpm 9 or newer, and these packages:
 
 ```bash
 sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \

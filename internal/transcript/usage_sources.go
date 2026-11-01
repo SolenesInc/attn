@@ -386,15 +386,3 @@ func codexRolloutDate(path string) (time.Time, error) {
 	stamp, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(path), "rollout-"), "T")
 	return time.Parse("2006-01-02", stamp)
 }
-
-func NewReportedUsageSourceResolver(rootPath string) UsageSourceResolver {
-	return &reportedUsageSourceResolver{rootPath: filepath.Clean(rootPath)}
-}
-
-type reportedUsageSourceResolver struct {
-	rootPath string
-}
-
-func (r *reportedUsageSourceResolver) Discover() ([]UsageSource, error) {
-	return []UsageSource{{ID: r.rootPath, Path: r.rootPath, Root: true}}, nil
-}

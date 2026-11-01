@@ -70,8 +70,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_cost_wire_test.go`, `internal/daemon/session_cost_forks_wire_test.go`, `internal/daemon/session_cost_upgrade_wire_test.go`, `internal/daemon/session_usage_wire_test.go`, `internal/daemon/context_window_cap_wire_test.go`, `internal/daemon/codex_usage_wire_test.go`, `internal/daemon/codex_close_usage_wire_test.go`, `internal/daemon/plugin_usage_wire_test.go`.
-- Stack: `internal/daemon/plugin_usage_admission_stack_test.go`.
+- Wire: `internal/daemon/session_cost_wire_test.go`, `internal/daemon/session_cost_forks_wire_test.go`, `internal/daemon/session_cost_upgrade_wire_test.go`, `internal/daemon/session_usage_wire_test.go`, `internal/daemon/context_window_cap_wire_test.go`, `internal/daemon/codex_usage_wire_test.go`, `internal/daemon/codex_close_usage_wire_test.go`.
 - Scenario: `session-usage`.
 - Kernel: `internal/sessioncost/*_test.go`, `internal/transcript/usage_test.go`, `internal/transcript/usage_sources_test.go`.
 - App: `app/src/App.sessionCostPrices.test.tsx`, `app/src/components/ledger/SessionsTab.usage.test.tsx`.

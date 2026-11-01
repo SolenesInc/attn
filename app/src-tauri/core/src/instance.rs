@@ -22,14 +22,13 @@ const APP_LOCK_DIR: &str = ".attn.locks";
 // Tripwire past a whole `instance clean` (measured 0.44s, 2026-08-30, macOS): a launch
 // that close to one waits it out instead of refusing to start.
 const APP_LOCK_WAIT: Duration = Duration::from_secs(3);
-const ROUTING_PATH_OVERRIDES: [&str; 7] = [
+const ROUTING_PATH_OVERRIDES: [&str; 6] = [
     "ATTN_SOCKET_PATH",
     "ATTN_DB_PATH",
     "ATTN_CONFIG_PATH",
     "ATTN_DATA_DIR",
     "ATTN_PLUGIN_DIR",
     "ATTN_DAEMON_BINARY",
-    "ATTN_BUNDLED_PLUGIN_DIR",
 ];
 
 pub fn build_instance() -> &'static str {

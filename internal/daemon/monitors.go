@@ -224,7 +224,7 @@ func branchFromSession(session *protocol.Session) attngit.BranchInfo {
 func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.DriverMetadata {
 	cursor := d.store.GetAgentDriverRun(session)
 	return sessionmonitor.DriverMetadata{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq,
-		Metadata: d.store.GetAgentMetadata(session), TranscriptPath: d.store.GetAgentDriverTranscriptPath(session)}
+		Metadata: d.store.GetAgentMetadata(session)}
 }
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {

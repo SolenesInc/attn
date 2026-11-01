@@ -171,21 +171,6 @@ func AppDaemonBinaryInTree(appPath string) string {
 	return filepath.Join(appPath, "bin", "attn")
 }
 
-func InstallResourcesDir(executable string) string {
-	binDir := filepath.Dir(executable)
-	parent := filepath.Dir(binDir)
-	if filepath.Base(binDir) == "MacOS" && filepath.Base(parent) == "Contents" {
-		return filepath.Join(parent, "Resources")
-	}
-	if filepath.Base(binDir) == "bin" {
-		resources := filepath.Join(parent, "resources")
-		if info, err := os.Stat(resources); err == nil && info.IsDir() {
-			return resources
-		}
-	}
-	return ""
-}
-
 func DeepLinkSchemeForInstance(instance string) string {
 	p := normalizeInstanceForDerivation(instance)
 	if p == "" {

@@ -2,17 +2,13 @@ package automode
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
 type Rule struct {
 	Pattern       []PatternToken `json:"pattern"`
 	Decision      string         `json:"decision"`
-	Sandbox       string         `json:"sandbox,omitempty"`
 	Justification string         `json:"justification,omitempty"`
-	Match         [][]string     `json:"match,omitempty"`
-	NotMatch      [][]string     `json:"not_match,omitempty"`
 }
 
 type PatternToken struct {
@@ -59,20 +55,6 @@ func (t PatternToken) MarshalJSON() ([]byte, error) {
 		return json.Marshal([]string{})
 	}
 	return json.Marshal(t.Alternatives)
-}
-
-func (t *PatternToken) UnmarshalJSON(data []byte) error {
-	var single string
-	if err := json.Unmarshal(data, &single); err == nil {
-		t.Alternatives = []string{single}
-		return nil
-	}
-	var alternatives []string
-	if err := json.Unmarshal(data, &alternatives); err != nil {
-		return fmt.Errorf("a rule pattern token is neither a string nor a list of strings: %s", data)
-	}
-	t.Alternatives = alternatives
-	return nil
 }
 
 func ConvertGlob(glob, decision, justification string) (Rule, bool) {

@@ -110,12 +110,11 @@ On a `fakeagent.Run`:
   `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
   package that arms a stepped timer gives the timer a `stepclock.Name`, so a
   wait never matches another operation's timer of the same duration.
-- Transcript watchers, including a driver plugin's usage watcher, poll on
-  that clock too. Whenever a fake agent writes a transcript, the poll
-  (`sessionmonitor.TranscriptPoll`) fires without moving the clock. The poll
-  fires before the write returns to the agent, so the daemon reads the
-  transcript with no advance. A test that writes a transcript itself calls
-  `w.readTranscripts()`. The discovery grace and the quiet window still depend
+- Transcript watchers poll on that clock too. Whenever a fake agent writes a
+  transcript, the poll (`sessionmonitor.TranscriptPoll`) fires without moving
+  the clock. The poll fires before the write returns to the agent, so the
+  daemon reads the transcript with no advance. A test that writes a transcript
+  itself calls `w.readTranscripts()`. The discovery grace and the quiet window still depend
   on time. When a test depends on the discovery grace or the quiet window, the
   test advances the clock past that duration, for example with
   `w.advance(sessionmonitor.TranscriptDiscoveryGrace)`.

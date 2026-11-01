@@ -36,16 +36,14 @@ type plugTerminal struct {
 	term         *terminal
 	relay        *rpcPeer
 	conversation string
-	transcript   string
 	resumed      bool
 	prompt       string
 	yolo         bool
 }
 
 type relayHello struct {
-	Token          string `json:"token"`
-	PlugSessionID  string `json:"plug_session_id"`
-	TranscriptPath string `json:"transcript_path"`
+	Token         string `json:"token"`
+	PlugSessionID string `json:"plug_session_id"`
 }
 
 type relayState struct {
@@ -88,7 +86,7 @@ func (p *plugTerminal) connectRelay() error {
 		p.relay.close()
 	}
 	p.relay = newRPCPeer(conn, nil).start()
-	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PlugSessionID: p.conversation, TranscriptPath: p.transcript}, nil); err != nil {
+	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PlugSessionID: p.conversation}, nil); err != nil {
 		return fmt.Errorf("plug relay hello: %w", err)
 	}
 	return nil
@@ -105,12 +103,10 @@ func (p *plugTerminal) openSession() error {
 	}
 	if file != "" {
 		p.resumed = true
-		p.transcript = file
 		return nil
 	}
 	p.term.print(fmt.Sprintf("Warning: No project session found with id %s; creating a new session with that id.", p.conversation))
 	file = filepath.Join(plugSessionDir(p.cfg.ToolHome, cwd), strings.ReplaceAll(now(), ":", "-")+"_"+p.conversation+".jsonl")
-	p.transcript = file
 	return appendLines(file, map[string]any{"type": "session", "version": 3, "id": p.conversation, "timestamp": now(), "cwd": cwd})
 }
 
@@ -169,33 +165,7 @@ func (p *plugTerminal) submit(prompt string) error {
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
 		return p.moveTo(strings.TrimSpace(conversation))
 	}
-	if err := p.record("user", prompt); err != nil {
-		return err
-	}
 	return p.relay.call(context.Background(), "report_state", relayState{State: "working"}, nil)
-}
-
-func (p *plugTerminal) record(role, text string) error {
-	file, err := os.Open(p.transcript)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	var parent any
-	decoder := json.NewDecoder(file)
-	for decoder.More() {
-		var entry struct{ Type, ID string }
-		if err := decoder.Decode(&entry); err != nil {
-			return err
-		}
-		if entry.Type != "session" {
-			parent = entry.ID
-		}
-	}
-	return appendLines(p.transcript, map[string]any{
-		"type": "message", "id": uuid.NewString(), "parentId": parent, "timestamp": now(),
-		"message": map[string]any{"role": role, "content": []map[string]any{{"type": "text", "text": text}}},
-	})
 }
 
 func (p *plugTerminal) moveTo(conversation string) error {
@@ -209,9 +179,6 @@ func (p *plugTerminal) moveTo(conversation string) error {
 func (p *plugTerminal) reply(text string, afterStop bool) error {
 	if afterStop {
 		return errors.New("plug has no Stop hook to reply after")
-	}
-	if err := p.record("assistant", text); err != nil {
-		return err
 	}
 	p.term.print(text)
 	return p.relay.call(context.Background(), "report_stop", relayStop{AssistantText: text}, nil)
@@ -465,10 +432,7 @@ func (p *plugDriver) handleRelay(relay *rpcPeer, method string, params json.RawM
 		if err != nil {
 			return nil, err
 		}
-		if err := p.reportMetadata(run); err != nil {
-			return nil, err
-		}
-		return struct{}{}, p.report("session.report_transcript_path", run, map[string]any{"path": hello.TranscriptPath})
+		return struct{}{}, p.reportMetadata(run)
 	}
 	run := p.runOn(relay)
 	if run == nil {

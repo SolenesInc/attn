@@ -308,12 +308,9 @@ func (m *Monitor) StopTranscriptWatchers() {
 		return
 	}
 	m.mu.Lock()
-	watcher, plugin := m.transcriptWatch, m.pluginUsageWatch
-	m.transcriptWatch, m.pluginUsageWatch = nil, nil
+	watcher := m.transcriptWatch
+	m.transcriptWatch = nil
 	m.mu.Unlock()
-	if plugin != nil {
-		close(plugin.stopCh)
-	}
 	if watcher != nil {
 		close(watcher.stopCh)
 	}
@@ -374,12 +371,9 @@ func (m *Monitor) finishUsage() (func(), *usageTracker) {
 	}
 	m.mu.Lock()
 	m.usageDraining = true
-	watcher, plugin, idle := m.transcriptWatch, m.pluginUsageWatch, m.usageIdle
-	m.transcriptWatch, m.pluginUsageWatch = nil, nil
+	watcher, idle := m.transcriptWatch, m.usageIdle
+	m.transcriptWatch = nil
 	m.mu.Unlock()
-	if plugin != nil {
-		close(plugin.stopCh)
-	}
 	if watcher != nil {
 		close(watcher.stopCh)
 	}

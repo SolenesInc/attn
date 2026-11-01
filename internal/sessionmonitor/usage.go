@@ -34,11 +34,7 @@ func newUsageTracker(w *transcriptWatcher, rootPath string) *usageTracker {
 	if resolver == nil {
 		return nil
 	}
-	return newUsageTrackerAt(w.monitor, string(w.agent), rootPath, resolver)
-}
-
-func newUsageTrackerAt(monitor *Monitor, agent string, rootPath string, resolver transcript.UsageSourceResolver) *usageTracker {
-	return &usageTracker{monitor: monitor, agent: agent, resolver: resolver, rootPath: rootPath, sources: make(map[string]*trackedUsageSource)}
+	return &usageTracker{monitor: w.monitor, agent: string(w.agent), resolver: resolver, rootPath: rootPath, sources: make(map[string]*trackedUsageSource)}
 }
 
 func (t *usageTracker) Reconcile() {

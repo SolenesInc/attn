@@ -215,19 +215,6 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		}
 		d.sessionMonitor(session.ID).StartTranscriptWatcher(binding.TranscriptPath)
 	}
-	d.restorePluginUsageWatchers()
-}
-
-func (d *Daemon) restorePluginUsageWatchers() {
-	if d.store == nil {
-		return
-	}
-	for _, run := range d.store.ListActiveAgentDriverRuns() {
-		if strings.TrimSpace(run.TranscriptPath) == "" || d.store.Get(run.SessionID) == nil {
-			continue
-		}
-		d.sessionMonitor(run.SessionID).WatchDriverUsage(run.TranscriptPath)
-	}
 }
 
 func (d *Daemon) armPluginDriverSilenceWatch(pluginName string) {

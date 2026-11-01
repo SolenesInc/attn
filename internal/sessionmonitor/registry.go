@@ -118,7 +118,6 @@ type Monitor struct {
 	dismissal            autoSettleDismissal
 	activityAt           time.Time
 	transcriptWatch      *transcriptWatcher
-	pluginUsageWatch     *pluginUsageWatcher
 	finalUsage           []func()
 	usageRuns            int
 	usageIdle            chan struct{}

@@ -93,7 +93,7 @@ too late. The time stays, as a cap, and the seed can end the snooze sooner.
 Done when an agent snoozed on a seed stays out of the queue until the seed is
 harvested, gets its turn back within one bus delivery of the harvest, and keeps
 the seed snooze across a daemon restart. Out of scope: snoozing on a pull
-request or on a seed's checks, which have their own watches.>
+request, which has its own watch.>
 
 ## Terms
 
@@ -132,7 +132,8 @@ recommend no, since a parked seed can resume)> · <the default cap in the menu
 - <F2. A `bus.Subscribe` callback misses facts published while the daemon is
   down. The spike harvested a seed during a restart, and the agent stayed
   snoozed until its cap. A consumer registered with `d.eventBus.Register`
-  resumes from its cursor and saw the `garden.seed.harvested` fact.>
+  for `garden.seed.harvested` and `garden.seed.withered` resumes from its
+  cursor and saw the harvest.>
 
 ## Design
 
@@ -162,6 +163,7 @@ func (s *Store) SessionsSnoozedForSeed(seedID string) []protocol.SessionID // ne
 ```diff
  model SnoozeTurnMessage {
    cmd: "snooze_turn";
+   caller_session_id?: SessionID;
    session_id: SessionID;
    until: string;
 +  until_seed?: string;

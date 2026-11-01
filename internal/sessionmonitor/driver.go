@@ -3,7 +3,6 @@ package sessionmonitor
 import (
 	"strings"
 
-	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -39,7 +38,6 @@ func (m *Monitor) RestoreDriverRun(run DriverMetadata) {
 		return
 	}
 	run.Metadata = m.driver.Metadata
-	run.TranscriptPath = m.driver.TranscriptPath
 	m.driver = run
 	view := m.viewLocked()
 	m.mu.Unlock()
@@ -56,7 +54,7 @@ func (m *Monitor) EndDriverRun() DriverMetadata {
 		m.mu.Unlock()
 		return DriverMetadata{}
 	}
-	m.driver = DriverMetadata{Metadata: ended.Metadata, TranscriptPath: ended.TranscriptPath}
+	m.driver = DriverMetadata{Metadata: ended.Metadata}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
@@ -81,7 +79,7 @@ func (m *Monitor) RetireDriver(run string) bool {
 		m.mu.Unlock()
 		return false
 	}
-	m.driver = DriverMetadata{Metadata: m.driver.Metadata, TranscriptPath: m.driver.TranscriptPath}
+	m.driver = DriverMetadata{Metadata: m.driver.Metadata}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
@@ -101,22 +99,6 @@ func (m *Monitor) ReportDriverMetadata(run string, sequence uint64, metadata str
 	m.driver.Metadata = strings.TrimSpace(metadata)
 	view := m.viewLocked()
 	m.mu.Unlock()
-	return m.publish(view)
-}
-
-func (m *Monitor) ReportDriverTranscript(run, path string) bool {
-	if m == nil {
-		return false
-	}
-	m.mu.Lock()
-	if run == "" || m.driver.Run != run {
-		m.mu.Unlock()
-		return false
-	}
-	m.driver.TranscriptPath = path
-	view := m.viewLocked()
-	m.mu.Unlock()
-	pausepoint.At(pausepoint.DriverTranscriptCaptured)
 	return m.publish(view)
 }
 
