@@ -33,12 +33,12 @@ type Working struct {
 
 func (s Spool) ReceiptsDir() string { return filepath.Join(s.Dir, "receipts") }
 func (s Spool) UploadedDir() string { return filepath.Join(s.Dir, "uploaded") }
-func (s Spool) SharedDir() string   { return filepath.Join(s.Dir, "shared") }
+func (s Spool) MirrorDir() string   { return filepath.Join(s.Dir, "mirror") }
 func (s Spool) SyncStatePath() string {
-	return filepath.Join(s.Dir, "sync.json")
+	return filepath.Join(s.Dir, "mirror.json")
 }
 func (s Spool) SyncLockPath() string {
-	return filepath.Join(s.Dir, "sync.lock")
+	return filepath.Join(s.Dir, "mirror.lock")
 }
 func (s Spool) workingRoot() string { return filepath.Join(s.Dir, "working") }
 
@@ -46,10 +46,10 @@ func (s Spool) ReceiptPath(id string) string {
 	return filepath.Join(s.ReceiptsDir(), id+".json")
 }
 
-const SharedSuffix = ".json.zst"
+const MirrorSuffix = ".json.zst"
 
-func (s Spool) SharedPath(id string) string {
-	return filepath.Join(s.SharedDir(), filepath.Base(id)+SharedSuffix)
+func (s Spool) MirrorPath(id string) string {
+	return filepath.Join(s.MirrorDir(), filepath.Base(id)+MirrorSuffix)
 }
 
 var (

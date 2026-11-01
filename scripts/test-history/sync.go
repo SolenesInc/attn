@@ -274,13 +274,13 @@ func (s historyService) put(repo, id string, body []byte) (stored bool, refusal 
 }
 
 func (s historyService) download(spool testhistory.Spool, repo string, state *syncState, report *syncReport) error {
-	if mirror := s.base + " " + strings.ToLower(repo) + " " + testhistory.SharedSuffix; state.CursorOf != mirror {
-		if err := os.RemoveAll(spool.SharedDir()); err != nil {
+	if mirror := s.base + " " + strings.ToLower(repo); state.CursorOf != mirror {
+		if err := os.RemoveAll(spool.MirrorDir()); err != nil {
 			return err
 		}
 		state.Cursor, state.CursorOf, state.LastSuccess = 0, mirror, nil
 	}
-	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
+	if err := os.MkdirAll(spool.MirrorDir(), 0o755); err != nil {
 		return err
 	}
 	for {
@@ -304,7 +304,7 @@ func (s historyService) download(spool testhistory.Spool, repo string, state *sy
 			return fmt.Errorf("GET receipts after %d: %w", state.Cursor, err)
 		}
 		for _, r := range page.Receipts {
-			if err := writeAtomically(spool.SharedPath(r.ID), testhistory.Compress(r.Receipt)); err != nil {
+			if err := writeAtomically(spool.MirrorPath(r.ID), testhistory.Compress(r.Receipt)); err != nil {
 				return err
 			}
 			report.downloaded++

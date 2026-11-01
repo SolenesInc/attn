@@ -33,7 +33,7 @@ type history struct {
 }
 
 func loadHistory(spool string) (history, error) {
-	return loadReceipts(filepath.Join(spool, "receipts"), filepath.Join(spool, "shared"))
+	return loadReceipts(filepath.Join(spool, "receipts"), testhistory.Spool{Dir: spool}.MirrorDir())
 }
 
 func loadReceipts(dirs ...string) (history, error) {
@@ -47,7 +47,7 @@ func loadReceipts(dirs ...string) (history, error) {
 			if err != nil || entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 				return err
 			}
-			compressed := strings.HasSuffix(entry.Name(), testhistory.SharedSuffix)
+			compressed := strings.HasSuffix(entry.Name(), testhistory.MirrorSuffix)
 			if !compressed && !strings.HasSuffix(entry.Name(), ".json") {
 				return nil
 			}

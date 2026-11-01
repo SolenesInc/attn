@@ -215,7 +215,7 @@ func (w *syncWorld) receiptRepo(id string) string {
 }
 
 func (w *syncWorld) shared(id string) []byte {
-	data, err := os.ReadFile(testhistory.Spool{Dir: w.spool}.SharedPath(id))
+	data, err := os.ReadFile(testhistory.Spool{Dir: w.spool}.MirrorPath(id))
 	if err != nil {
 		return nil
 	}
@@ -367,19 +367,6 @@ func TestACursorFromAnotherServiceDoesNotSkipThisServicesHistory(t *testing.T) {
 	}
 }
 
-func TestACursorWrittenBeforeCursorsNamedTheirServiceStartsOver(t *testing.T) {
-	w := newSyncWorld(t)
-	for i := range 3 {
-		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)))
-	}
-	if err := os.WriteFile(filepath.Join(w.spool, "sync.json"), []byte(`{"last_attempt":"2026-10-31T12:00:00Z","cursor":20}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 3;") {
-		t.Fatalf("sync from a sync.json with cursor 20 and no service exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
-	}
-}
-
 func repetitiveReceipt(id string) []byte {
 	return []byte(`{"invocation_id":"` + id + `","results":[` + strings.Repeat(`{"unit":"go ./internal/daemon TestStateExplain","outcome":"pass"},`, 100) + `{}]}`)
 }
@@ -410,7 +397,7 @@ func TestSyncAsksForCompressedPagesAndPrintsEachServiceWarningOnce(t *testing.T)
 		if !bytes.Equal(w.shared(id), repetitiveReceipt(id)) {
 			t.Fatalf("shared %s = %q, want the receipt's bytes", id, w.shared(id))
 		}
-		if info, err := os.Stat(testhistory.Spool{Dir: w.spool}.SharedPath(id)); err != nil || info.Size()*5 > int64(len(repetitiveReceipt(id))) {
+		if info, err := os.Stat(testhistory.Spool{Dir: w.spool}.MirrorPath(id)); err != nil || info.Size()*5 > int64(len(repetitiveReceipt(id))) {
 			t.Fatalf("shared %s takes %v bytes on disk for a %d-byte receipt (%v)", id, info.Size(), len(repetitiveReceipt(id)), err)
 		}
 	}
@@ -428,51 +415,77 @@ func TestSyncFromAServiceThatSendsPlainJSONKeepsTheSameCompressedMirror(t *testi
 	}
 }
 
-func (w *syncWorld) mirrorInTheUncompressedLayout(receipts int) {
+func (w *syncWorld) serviceHolds(receipts int) {
+	for i := range receipts {
+		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)))
+	}
+}
+
+func (w *syncWorld) syncAsAnOlderVersion(cursor int) {
 	w.t.Helper()
 	shared := filepath.Join(w.spool, "shared")
+	if err := os.RemoveAll(shared); err != nil {
+		w.t.Fatal(err)
+	}
 	if err := os.MkdirAll(shared, 0o755); err != nil {
 		w.t.Fatal(err)
 	}
-	for i := range receipts {
-		body := []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i))
-		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), body)
-		if err := os.WriteFile(filepath.Join(shared, fmt.Sprintf("ci-%d.json", i)), body, 0o644); err != nil {
+	for i := range cursor {
+		if err := os.WriteFile(filepath.Join(shared, fmt.Sprintf("ci-%d.json", i)), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)), 0o644); err != nil {
 			w.t.Fatal(err)
 		}
 	}
-	state := fmt.Sprintf(`{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":%d,"cursor_of":"%s github.com/%s"}`, receipts, w.service.server.URL, checkoutRepository)
+	state := fmt.Sprintf(`{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":%d,"cursor_of":"%s github.com/%s"}`, cursor, w.service.server.URL, checkoutRepository)
 	if err := os.WriteFile(filepath.Join(w.spool, "sync.json"), []byte(state), 0o644); err != nil {
 		w.t.Fatal(err)
 	}
 }
 
-func TestAMirrorInTheUncompressedLayoutDownloadsAgainAsCompressed(t *testing.T) {
+func TestASpoolAnOlderVersionSyncedDownloadsItsOwnMirrorAndLeavesTheOldOneAlone(t *testing.T) {
 	w := newSyncWorld(t)
-	w.mirrorInTheUncompressedLayout(3)
-	shared := filepath.Join(w.spool, "shared")
+	w.serviceHolds(3)
+	w.syncAsAnOlderVersion(3)
 
-	w.service.mu.Lock()
-	w.service.down = true
-	w.service.mu.Unlock()
+	w.setDown(true)
 	if _, errOut, code := w.sync(); code != 1 || !strings.Contains(errOut, "no sync has succeeded yet") {
-		t.Fatalf("an interrupted download of the new mirror exited %d and must not count as a success\nstderr: %s", code, errOut)
+		t.Fatalf("an interrupted first download of the mirror exited %d and must not count as a success\nstderr: %s", code, errOut)
 	}
-
-	w.service.mu.Lock()
-	w.service.down = false
-	w.service.mu.Unlock()
+	w.setDown(false)
 	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 3;") {
-		t.Fatalf("sync of an uncompressed mirror exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+		t.Fatalf("sync of a spool an older version synced exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
 	}
-	if old, _ := filepath.Glob(filepath.Join(shared, "*.json")); len(old) != 0 {
-		t.Fatalf("uncompressed receipts left behind: %v", old)
+	w.assertCompleteCompressedMirror(3)
+	if old, _ := filepath.Glob(filepath.Join(w.spool, "shared", "*.json")); len(old) != 3 {
+		t.Fatalf("the older version's mirror changed under it: %v", old)
 	}
-	for i := range 3 {
-		if w.shared(fmt.Sprintf("ci-%d", i)) == nil {
-			t.Errorf("ci-%d missing from the compressed mirror", i)
+}
+
+func TestAnOlderVersionSyncingDuringASyncLeavesTheMirrorWhole(t *testing.T) {
+	w := newSyncWorld(t)
+	w.serviceHolds(3)
+	var once sync.Once
+	held := w.holdRequests(func(method, after string) bool {
+		first := false
+		if after == "2" {
+			once.Do(func() { first = true })
 		}
+		return first
+	})
+
+	running, _ := w.startSync("")
+	lastPage := <-held
+	w.syncAsAnOlderVersion(0)
+	close(lastPage.release)
+	if code := <-running.exited; code != 0 {
+		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, running.stdout.String(), running.stderr.String())
 	}
+	w.assertCompleteCompressedMirror(3)
+
+	w.syncAsAnOlderVersion(0)
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 0;") {
+		t.Fatalf("a sync after an older version's sync exited %d and must resume from its own cursor\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	w.assertCompleteCompressedMirror(3)
 }
 
 type heldRequest struct {
@@ -543,10 +556,10 @@ func (w *syncWorld) assertCompleteCompressedMirror(receipts int) {
 	}
 }
 
-func TestOverlappingSyncsOfAnUncompressedMirrorKeepEveryReceipt(t *testing.T) {
+func TestOverlappingFirstSyncsKeepEveryReceipt(t *testing.T) {
 	w := newSyncWorld(t)
 	w.captureReceipt()
-	w.mirrorInTheUncompressedLayout(3)
+	w.serviceHolds(3)
 	held := w.holdRequests(func(method, after string) bool { return method == http.MethodPut || after == "2" })
 
 	first, _ := w.startSync("")
@@ -585,7 +598,7 @@ func TestOverlappingSyncsOfAnUncompressedMirrorKeepEveryReceipt(t *testing.T) {
 
 func TestASyncKilledMidDownloadLeavesTheNextSyncToFinishTheMirror(t *testing.T) {
 	w := newSyncWorld(t)
-	w.mirrorInTheUncompressedLayout(3)
+	w.serviceHolds(3)
 	var once sync.Once
 	held := w.holdRequests(func(method, after string) bool {
 		first := false

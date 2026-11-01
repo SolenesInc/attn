@@ -40,16 +40,20 @@ spool. The spool holds:
 - `working/<id>/`: a run in progress. Capture and the test command hold the
   run's lock while they run.
 - `receipts/<id>.json`: sealed receipts. A sealed receipt is never rewritten.
-- `shared/<id>.json.zst`: this repository's receipts that [sync](#sharing)
+- `mirror/<id>.json.zst`: this repository's receipts that [sync](#sharing)
   downloaded from the shared history, this machine's own included, each the
   sealed bytes in one zstd frame. Selection reads them with the sealed ones.
 - `uploaded/<id>`: an empty file marking a sealed receipt the service
   acknowledged.
-- `sync.json`: the download cursor with the service, repository and `shared/`
-  layout the cursor was read for, and when sync last ran, last succeeded and why
-  sync last failed.
-- `sync.lock`: the lock a sync holds from reading `sync.json` until writing it
-  back.
+- `mirror.json`: the download cursor with the service and repository the cursor
+  was read for, and when sync last ran, last succeeded and why sync last
+  failed.
+- `mirror.lock`: the lock a sync holds from reading `mirror.json` until writing
+  it back.
+- `shared/`, `sync.json` and `sync.lock`: the mirror that older versions of
+  sync keep. A worktree that has not rebased onto a version with `mirror/`
+  still syncs there. Nothing current reads or writes them, so an older sync
+  never disturbs `mirror/`. Delete them once every worktree has rebased.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete.
@@ -77,11 +81,11 @@ machine's receipts. The service imports CI's receipt artifacts automatically.
   refuses a receipt whose `repo` is not `host/owner/name`, as for a run captured
   outside a checkout with an origin remote (`repo` is `unknown`). Sync reports
   each refused receipt, offers the receipt again on every sync, and exits 1.
-- Sync downloads this repository's receipts into `shared/<id>.json.zst`,
-  resuming after the cursor in `sync.json`. Sync asks for each page as one zstd
+- Sync downloads this repository's receipts into `mirror/<id>.json.zst`,
+  resuming after the cursor in `mirror.json`. Sync asks for each page as one zstd
   stream, about a thirtieth of the page's JSON, because receipts repeat the same
-  test names. A cursor read from another service, repository or `shared/`
-  layout empties `shared/` and starts the download over. Until that download
+  test names. A cursor read from another service or repository empties
+  `mirror/` and starts the download over. Until that download
   finishes, no sync has succeeded. The service treats every spelling of a
   repository as one, so a checkout whose origin is spelled
   `github.com/solenesinc/attn` receives CI's `github.com/SolenesInc/attn`
@@ -92,8 +96,8 @@ machine's receipts. The service imports CI's receipt artifacts automatically.
 - Sync prints each warning the service sends with the pages, such as storage
   growing past the service's daily tripwire, without failing.
 
-Syncs of one spool take turns, because every worktree shares `shared/` and
-`sync.json`. A sync that starts while another runs prints that it is waiting
+Syncs of one spool take turns, because every worktree shares `mirror/` and
+`mirror.json`. A sync that starts while another runs prints that it is waiting
 and starts when the other ends, from the cursor the other saved. A sync killed
 midway releases its turn, and the next sync resumes from the last page it saved.
 
