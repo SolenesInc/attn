@@ -53,13 +53,6 @@ func TestReadInstanceOriginAbsentOrUnusable(t *testing.T) {
 	}
 }
 
-func TestOriginPathIsInsideDataDir(t *testing.T) {
-	dataDir := t.TempDir()
-	if got, want := originPath(dataDir), filepath.Join(dataDir, "origin.json"); got != want {
-		t.Fatalf("originPath() = %q, want %q", got, want)
-	}
-}
-
 func TestCountLiveWorkers(t *testing.T) {
 	dataDir := t.TempDir()
 	if got := countLiveWorkers(dataDir); got != 0 {

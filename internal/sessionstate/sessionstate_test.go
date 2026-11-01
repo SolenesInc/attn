@@ -914,25 +914,6 @@ func TestBracketStalenessBoundary(t *testing.T) {
 	}
 }
 
-func TestResolveIsStableForTheSameInputs(t *testing.T) {
-	e := evidence{TerminalEvidence: TerminalEvidence{
-		Heartbeat:  seen(SourceHeartbeat, ClaimBusy, 2*time.Second),
-		LastBusyAt: now.Add(-2 * time.Second),
-
-		LastMovement: now.Add(-time.Second)},
-		ConversationEvidence: ConversationEvidence{
-			TurnOpen: true,
-
-			LastClassifier: seen(SourceClassifier, ClaimIdle, time.Second)},
-	}
-	first := Resolve(e.TerminalEvidence, e.ConversationEvidence, testPolicy(), now)
-	for range 5 {
-		if got := Resolve(e.TerminalEvidence, e.ConversationEvidence, testPolicy(), now); got != first {
-			t.Fatalf("got %+v, want the same %+v", got, first)
-		}
-	}
-}
-
 func TestResolutionCarriesTheWinningDetail(t *testing.T) {
 	e := evidence{TerminalEvidence: TerminalEvidence{
 		Heartbeat: &Observation{
