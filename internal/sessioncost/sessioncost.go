@@ -153,6 +153,20 @@ func (l Ledger) Add(key LedgerKey, usage Usage) bool {
 	return true
 }
 
+func (l Ledger) Since(earlier Ledger) (Ledger, bool) {
+	spent := make(Ledger)
+	for key, usage := range l {
+		difference := usage.Subtract(earlier[key])
+		if !difference.valid() {
+			return nil, false
+		}
+		if difference.hasAnyValue() {
+			spent[key] = difference
+		}
+	}
+	return spent, true
+}
+
 type RateCard struct {
 	InputUSDPerMTok        float64 `json:"input_usd_per_mtok"`
 	OutputUSDPerMTok       float64 `json:"output_usd_per_mtok"`

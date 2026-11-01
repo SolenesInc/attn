@@ -601,7 +601,7 @@ export function useSettingsModalState({
             id: 'analytics' as const,
             label: 'Analytics',
             description: '',
-            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample retention',
+            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample run runs retention',
           }] : []),
         ],
       },

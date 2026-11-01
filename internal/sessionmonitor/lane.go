@@ -121,6 +121,8 @@ type runState struct {
 	ref          runRef
 	credited     bool
 	notification Maintenance
+	launch       bool
+	prompted     bool
 }
 
 func (r *runState) startedByNotification() bool {
@@ -136,6 +138,7 @@ type lane struct {
 	placed                   map[string]Attempt
 	creditNextRun            bool
 	notifyNextRun            Maintenance
+	launchNextRun            bool
 	stoppedAfterNotification bool
 	epoch                    uint64
 	userSubmit               bool
@@ -349,6 +352,8 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	if l.claimNextLocked() || typed {
 		current.credited = true
 	}
+	current.prompted = true
+	m.runPromptedLocked()
 	run, credited := current.ref, current.credited
 	m.mu.Unlock()
 	m.MarkModelRequestStarted(at)
@@ -363,10 +368,18 @@ func (l *lane) ensureRunLocked() *runState {
 		return l.run
 	}
 	l.epoch++
-	l.run = &runState{ref: runRef{epoch: l.epoch}, credited: l.claimNextLocked(), notification: l.notifyNextRun}
-	l.notifyNextRun = ""
+	l.run = &runState{ref: runRef{epoch: l.epoch}, credited: l.claimNextLocked(), notification: l.notifyNextRun, launch: l.launchNextRun}
+	l.notifyNextRun, l.launchNextRun = "", false
 	l.stoppedAfterNotification = false
 	return l.run
+}
+
+func (l *lane) launchPromptTakenLocked() {
+	if l.run != nil {
+		l.run.launch = true
+		return
+	}
+	l.launchNextRun = true
 }
 
 func (l *lane) observePhaseLocked(phase protocol.SessionState) {

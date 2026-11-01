@@ -462,6 +462,8 @@ func (w *transcriptWatcher) run() {
 	m := w.monitor
 	label := m.Label()
 	defer m.endUsageRun()
+	var finalMeasureAt time.Time
+	defer func() { w.handOverRunsAtExit(finalMeasureAt) }()
 	defer close(w.doneCh)
 
 	if w.behavior == nil {
@@ -489,6 +491,7 @@ func (w *transcriptWatcher) run() {
 	)
 	defer func() {
 		if w.usageTracker != nil {
+			finalMeasureAt = time.Now()
 			w.usageTracker.Reconcile()
 		}
 	}()
@@ -511,6 +514,7 @@ func (w *transcriptWatcher) run() {
 			}
 		}
 
+		passStartedAt := time.Now()
 		sessionState := m.sessionState()
 		usageSettled := usageState == protocol.SessionStateWorking && sessionState != protocol.SessionStateWorking
 		usageState = sessionState
@@ -647,6 +651,11 @@ func (w *transcriptWatcher) run() {
 		if usageSettled && w.usageTracker != nil {
 			w.usageTracker.Reconcile()
 		}
+		if w.usageTracker != nil {
+			m.handOverEndedRuns(passStartedAt, false)
+		} else {
+			m.handOverEndedRuns(time.Time{}, true)
+		}
 
 		quietSince := w.behavior.QuietSince(lastAssistantAt)
 		if assistantSeq > classifiedSeq &&
@@ -674,6 +683,20 @@ func (w *transcriptWatcher) run() {
 			m.registry.host.Go("classifySessionState", func() { m.ClassifyStop(path, StopClassification{}) })
 		}
 	}
+}
+
+func (w *transcriptWatcher) handOverRunsAtExit(measuredFrom time.Time) {
+	m := w.monitor
+	select {
+	case <-m.registry.host.Done():
+		return
+	default:
+	}
+	m.mu.Lock()
+	successor := m.transcriptWatch
+	runs := m.takeEndedRunsLocked(measuredFrom, successor == nil || watcherStopped(successor))
+	m.mu.Unlock()
+	m.reportRuns(runs)
 }
 
 func staleTranscriptAbort(abortAt, sessionStartedAt time.Time) (bool, string) {

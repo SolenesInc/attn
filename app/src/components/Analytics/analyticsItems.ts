@@ -1,8 +1,8 @@
 import { VentKind, VentSend, type Seed, type Vent } from '../../types/generated';
 
-export const VIEWS = ['vents', 'all', 'bus', 'app', 'cli', 'sample'] as const;
+export const VIEWS = ['vents', 'all', 'bus', 'app', 'cli', 'sample', 'run'] as const;
 export type View = (typeof VIEWS)[number];
-export const VIEW_LABEL: Record<View, string> = { vents: 'Vents', all: 'All records', bus: 'bus', app: 'app', cli: 'cli', sample: 'sample' };
+export const VIEW_LABEL: Record<View, string> = { vents: 'Vents', all: 'All records', bus: 'bus', app: 'app', cli: 'cli', sample: 'sample', run: 'run' };
 
 export interface StoredRecord {
   id: number;

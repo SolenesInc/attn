@@ -81,6 +81,10 @@ Probed on 2.1.288 with a mock API.
 - `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.
+- When Stop fires, the transcript already holds the turn's final assistant
+  message with its usage. Only `stop_hook_summary`, `last-prompt` and
+  `cost-state` lines come after it (probed on 2.1.316 in `claude -p`, with a
+  Stop hook that copied the transcript; the interactive TUI was not probed).
 
 Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 
@@ -285,6 +289,10 @@ Read in the source at openai/codex 60947e2341.
   (older launches use `ATTN_SESSION_ID` with the same meaning). For a
   `--remote` TUI, that process is the app-server, so a hook there cannot name
   the terminal.
+- When Stop fires, the rollout already holds every `token_count` event of the
+  turn. Only `task_complete` comes after them (probed on 0.164.0 in
+  `codex exec`, with a Stop hook that copied the rollout; the TUI was not
+  probed).
 
 Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
 

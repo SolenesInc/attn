@@ -58,22 +58,31 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 		if session == nil {
 			return analytics.Derived{}
 		}
-		intent, _ := d.store.LaunchIntent(session.ID)
-		models := d.sessionModels(session, intent)
-		return analytics.Derived{
-			Session: &analytics.SessionTraits{
-				Harness:        session.Agent,
-				Model:          models.reported,
-				ModelRequested: models.requested,
-				Launch:         d.sessionLaunch(session.ID, intent),
-				State:          string(session.State),
-			},
-			Repo: repoTraits(session.Directory),
-		}
+		return analytics.Derived{Session: d.sessionTraitsOf(session), Repo: repoTraits(session.Directory)}
 	case strings.HasPrefix(ev.Name, worktreeFactPrefix):
 		return analytics.Derived{Repo: repoTraits(ev.Subject)}
 	default:
 		return analytics.Derived{}
+	}
+}
+
+func (d *Daemon) sessionTraits(id protocol.SessionID) *analytics.SessionTraits {
+	session := d.store.Get(id)
+	if session == nil {
+		return nil
+	}
+	return d.sessionTraitsOf(session)
+}
+
+func (d *Daemon) sessionTraitsOf(session *protocol.Session) *analytics.SessionTraits {
+	intent, _ := d.store.LaunchIntent(session.ID)
+	models := d.sessionModels(session, intent)
+	return &analytics.SessionTraits{
+		Harness:        session.Agent,
+		Model:          models.reported,
+		ModelRequested: models.requested,
+		Launch:         d.sessionLaunch(session.ID, intent),
+		State:          string(session.State),
 	}
 }
 

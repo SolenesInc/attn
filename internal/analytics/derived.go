@@ -25,7 +25,7 @@ type SessionTraits struct {
 	Model          string `json:"model,omitempty"`
 	ModelRequested string `json:"model_requested,omitempty"`
 	Launch         Launch `json:"launch"`
-	State          string `json:"state"`
+	State          string `json:"state,omitempty"`
 }
 
 type RepoTraits struct {

@@ -170,9 +170,9 @@ func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage, pro
 	}
 	stream := analytics.Stream(protocol.Deref(msg.Stream))
 	switch stream {
-	case "", analytics.StreamBus, analytics.StreamApp, analytics.StreamCLI, analytics.StreamSample, analytics.StreamVent:
+	case "", analytics.StreamBus, analytics.StreamApp, analytics.StreamCLI, analytics.StreamSample, analytics.StreamVent, analytics.StreamRun:
 	default:
-		return store.AnalyticsPage{}, fmt.Errorf("unknown analytics stream %q: use bus, app, cli, sample or vent", stream)
+		return store.AnalyticsPage{}, fmt.Errorf("unknown analytics stream %q: use bus, app, cli, sample, vent or run", stream)
 	}
 	return d.store.AnalyticsRecords(profileID, stream, int64(protocol.Deref(msg.BeforeID)), msg.Limit)
 }

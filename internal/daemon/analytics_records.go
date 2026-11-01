@@ -19,6 +19,10 @@ func (d *Daemon) recordAnalytics(stream analytics.Stream, name, subject string, 
 }
 
 func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, props any) error {
+	return d.appendAnalyticsAt(stream, name, subject, time.Now(), props)
+}
+
+func (d *Daemon) appendAnalyticsAt(stream analytics.Stream, name, subject string, at time.Time, props any) error {
 	encoded, err := json.Marshal(props)
 	if err != nil {
 		return fmt.Errorf("encode %s/%s props: %w", stream, name, err)
@@ -31,7 +35,7 @@ func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, 
 		Stream:  stream,
 		Name:    name,
 		Subject: analytics.HashSubject(secret, subject),
-		At:      time.Now().UTC(),
+		At:      at.UTC(),
 		Props:   analytics.Redact(encoded, analyticsFields(stream, name), secret),
 	}
 	if err := d.store.AppendAnalyticsStreamRecord(record, d.analyticsBuild()); err != nil {
@@ -48,6 +52,8 @@ func analyticsFields(stream analytics.Stream, name string) analytics.Fields {
 		return analytics.CLIFields
 	case analytics.StreamSample:
 		return analytics.SampleFields[name]
+	case analytics.StreamRun:
+		return analytics.RunFields
 	default:
 		return nil
 	}

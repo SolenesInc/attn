@@ -59,4 +59,9 @@ var SampleFields = map[string]Fields{
 	"daemon_start": {"previous_end": Safe, "stop_reason": Safe, "previous_run": ID},
 }
 
+var RunFields = Fields{
+	"started_by": Safe, "ended": Safe, "usage": Safe,
+	"session.harness": Safe, "session.model": Safe, "session.model_requested": Safe, "session.launch": Safe,
+}
+
 var CLIFields = Fields{"error_kind": Safe, "refusal": Safe, "caller": Safe, "harness": Safe}

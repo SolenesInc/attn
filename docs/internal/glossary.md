@@ -116,6 +116,9 @@ flow (1)                  how the user works with attn and their agents:
 queue                     agents in order of the attention they are owed
 └─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
                                agent stops, or when it asks (attn turn open)
+run                       one stretch of agent work, from the moment the
+                          agent goes working to its stop; an approval wait
+                          does not end it
 notification run          a run that attn's own input started, such as a ring;
                           with quiet notifications its stop opens no turn
 snooze                    puts off a turn until a set time
