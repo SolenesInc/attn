@@ -166,10 +166,10 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
-		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (?, ?)
+		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (SELECT value FROM json_each(?))
 		ORDER BY i.created_at, i.id
 		LIMIT ?
-	`, inbox.PeerMessage, addressJSON, inbox.AskAnswer, inbox.QuickCapture, normalizeAgentInboxLimit(limit))
+	`, inbox.PeerMessage, addressJSON, typedKindsJSON(), normalizeAgentInboxLimit(limit))
 	if err != nil {
 		return nil, 0, fmt.Errorf("list unread inbox items: %w", err)
 	}
@@ -223,8 +223,8 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items
-		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (?, ?)
-	`, addressJSON, inbox.AskAnswer, inbox.QuickCapture).Scan(&remaining); err != nil {
+		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (SELECT value FROM json_each(?))
+	`, addressJSON, typedKindsJSON()).Scan(&remaining); err != nil {
 		return nil, 0, fmt.Errorf("count unread inbox items: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -256,6 +256,11 @@ func (s *Store) ReadGardenSeedInboxItems(to who.Address, readBy protocol.Session
 		}
 	}
 	return changed > 0, tx.Commit()
+}
+
+func typedKindsJSON() string {
+	data, _ := json.Marshal(inbox.TypedKinds())
+	return string(data)
 }
 
 func inboxAddressJSON(addresses []who.Address) string {
@@ -322,7 +327,7 @@ func (s *Store) InboxAttempt(to who.Address) (InboxAttempt, error) {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (?, ?)),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, inbox.AskAnswer, inbox.QuickCapture, to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
+	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (SELECT value FROM json_each(?))),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, typedKindsJSON(), to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
 	return result, err
 }
 

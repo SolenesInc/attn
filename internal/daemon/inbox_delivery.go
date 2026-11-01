@@ -353,19 +353,19 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 	var texts []string
 	for _, delivery := range deliveries {
 		item := delivery.Item
-		switch item.Kind {
-		case inbox.AskAnswer:
-			texts = append(texts, item.Text)
-		case inbox.QuickCapture:
+		if !item.Kind.Typed() {
+			paste.notified = bell
+			continue
+		}
+		if item.Kind == inbox.QuickCapture {
 			record, err := d.store.QuickCapture(profileID, item.Source)
 			if err != nil {
 				return inboxPaste{}, fmt.Errorf("quick capture %s: %w", item.Source, err)
 			}
 			texts = append(texts, inbox.QuickCaptureText(item.Text, item.Source, record.Attachments))
 			paste.captures = append(paste.captures, item.Source)
-		default:
-			paste.notified = bell
-			continue
+		} else {
+			texts = append(texts, item.Text)
 		}
 		paste.typed = append(paste.typed, item.ID)
 	}

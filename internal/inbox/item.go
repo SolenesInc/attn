@@ -1,6 +1,8 @@
 package inbox
 
 import (
+	"slices"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -14,6 +16,10 @@ const (
 	AskAnswer    Kind = "ask_answer"
 	Notice       Kind = "maintenance_prompt"
 )
+
+func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture} }
+
+func (k Kind) Typed() bool { return slices.Contains(TypedKinds(), k) }
 
 const (
 	DefaultInboxLimit = 20
