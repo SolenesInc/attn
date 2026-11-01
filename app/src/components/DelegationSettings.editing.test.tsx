@@ -3,11 +3,11 @@ import { expect, it } from 'vitest';
 import { emptySelection, openDelegationSettings, type DelegationTable, type Role } from '../test/delegationDaemon';
 import { gesture } from '../test/renderApp';
 
-const custom: Role = { id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: emptySelection() }] };
-const template: Role = { ...custom, id: 'builder', builtin: 'builder', name: '', icon: '', description: '', instructions: '', stopping_point: '' };
-const expandedTemplate: Role = { ...template, name: 'Builder', icon: 'code', description: 'Implement a change\nSecond line', instructions: 'Run relevant tests', stopping_point: 'Return for review' };
+const custom: Role = { id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: emptySelection() }] };
+const template: Role = { ...custom, id: 'builder', builtin: 'builder', name: '', icon: '', description: '', instructions: '' };
+const expandedTemplate: Role = { ...template, name: 'Builder', icon: 'code', description: 'Implement a change\nSecond line', instructions: 'Run relevant tests' };
 
-const expand = (role: Role): Role => role.builtin ? { ...role, name: expandedTemplate.name, icon: expandedTemplate.icon, description: expandedTemplate.description, instructions: expandedTemplate.instructions, stopping_point: expandedTemplate.stopping_point } : role;
+const expand = (role: Role): Role => role.builtin ? { ...role, name: expandedTemplate.name, icon: expandedTemplate.icon, description: expandedTemplate.description, instructions: expandedTemplate.instructions } : role;
 
 const openDelegation = (table: DelegationTable = {}) =>
   openDelegationSettings({ templates: [template], expanded: (roles) => [...roles.map(expand), expandedTemplate], ...table });
@@ -60,7 +60,17 @@ it('adopts maintained roles from the empty state with the install flag and shows
   fireEvent.click(row);
   expect(screen.getByText('Run relevant tests')).toBeInTheDocument();
   expect(screen.queryByLabelText('Instructions')).not.toBeInTheDocument();
+  expect(screen.queryByText('Stops when')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Make an editable copy' })).toBeInTheDocument();
+});
+
+it('adds a custom role whose guidance is a description and instructions', async () => {
+  const { daemon, saves, lastSaved } = await openDelegation();
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: '+ Custom role' })));
+  expect(saves()).toHaveLength(1);
+  expect(Object.keys(lastSaved().roles[0]).sort()).toEqual(['choices', 'default_choice_id', 'description', 'enabled', 'icon', 'id', 'instructions', 'name']);
+  expect(screen.getByLabelText('Instructions')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Stops when')).not.toBeInTheDocument();
 });
 
 it('saves a model picked from the row, an alternative with its condition, and the switch', async () => {
@@ -130,8 +140,8 @@ it('deletes a role with undo and reloads after a conflict', async () => {
 
 it('renders a maintained role by built-in kind and offers a missing one by name', async () => {
   const configured: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'pathfinder' };
-  const pathfinderView: Role = { ...configured, name: 'Pathfinder', icon: 'search', description: 'Investigate the path', instructions: 'Find the path', stopping_point: 'Return a plan' };
-  const orchestratorView: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'orchestrator', name: 'Orchestrator', icon: 'spark', description: 'Coordinate work', instructions: 'Coordinate', stopping_point: 'Return the outcome' };
+  const pathfinderView: Role = { ...configured, name: 'Pathfinder', icon: 'search', description: 'Investigate the path', instructions: 'Find the path' };
+  const orchestratorView: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'orchestrator', name: 'Orchestrator', icon: 'spark', description: 'Coordinate work', instructions: 'Coordinate' };
   const { daemon, saves } = await openDelegation({ roles: [configured], templates: [orchestratorView], expanded: () => [pathfinderView, orchestratorView], harnesses: [] });
   expect(screen.getByRole('button', { name: 'Pathfinder' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Orchestrator' })).not.toBeInTheDocument();

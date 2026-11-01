@@ -1021,7 +1021,6 @@ model DelegationRole {
   enabled: boolean;
   description: string;
   instructions: string;
-  stopping_point: string;
   default_choice_id: string;
   choices: DelegationChoice[];
 }

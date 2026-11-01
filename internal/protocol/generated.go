@@ -4001,9 +4001,6 @@ type DelegationRole struct {
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
-
-	// StoppingPoint corresponds to the JSON schema field "stopping_point".
-	StoppingPoint string `json:"stopping_point"`
 }
 
 type DelegationRolesMessage struct {

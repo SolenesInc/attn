@@ -70,7 +70,7 @@ try {
     await preferencesRequest('delegation_preferences_save', { ...baseline, revision: current.revision });
   });
   const role = (id, name, icon) => ({
-    id, name, icon, enabled: true, description: '', instructions: 'Wait for direction.', stopping_point: '', default_choice_id: 'default',
+    id, name, icon, enabled: true, description: '', instructions: 'Wait for direction.', default_choice_id: 'default',
     choices: [{ id: 'default', name: 'Default', when: '', selection: { harness: 'codex', provider: '', model: '', effort: '' } }],
   });
   await preferencesRequest('delegation_preferences_save', {

@@ -104,7 +104,7 @@ those choices. For each role you set:
 - When to choose this role. The agent reads this to pick a role, so describe
   the work the role fits and what it's not for.
 - What it runs on: harness, model and effort.
-- Its instructions, and when it stops.
+- Its instructions: how it works and when it stops.
 
 A role can have alternatives: another model for a condition you describe, such
 as frontend work, or consequential work that needs a stronger model. "Anything
@@ -210,7 +210,7 @@ Through the garden. Each new delegation starts a watch on the delegate's seed, a
 <details>
 <summary>Does a delegate see my conversation with the agent that started it?</summary>
 
-No. The delegate's first prompt names the delegate's seed and tells the delegate to read the seed with `attn seed show`. The prompt then adds the role's name, instructions, and stopping point, or your Anything else instructions if you wrote any. The delegating agent writes the brief in the seed, so the seed must hold anything the delegate needs from your conversation.
+No. The delegate's first prompt names the delegate's seed and tells the delegate to read the seed with `attn seed show`. The prompt then adds the role's name and instructions, or your Anything else instructions if you wrote any. The delegating agent writes the brief in the seed, so the seed must hold anything the delegate needs from your conversation.
 </details>
 
 <details>

@@ -299,7 +299,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			joined := s.Provider + "/" + s.Model
 			msg.Model = &joined
 		}
-		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions, resolved.StoppingPoint)
+		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions)
 	}
 	sessionID := reservedSessionID
 	if sessionID == "" {

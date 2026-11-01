@@ -15,7 +15,7 @@ const harnesses = [
 ];
 const model = (id: string, name: string, tier: Model['tier'], efforts: string[] = ['medium', 'high']): Model => ({ harness: 'claude', provider: '', id, name, tier, shipped_tier: tier, tier_source: id === 'default' ? 'alias' : tier ? 'shipped' : 'none', description: '', detail: '', effort_support: efforts.length ? 'supported' : 'unsupported', effort_levels: efforts, access: 'unknown' });
 const catalog: Reply = { event: 'harness_models_result', success: true, tier_defaults: { deep: 'opus', standard: 'sonnet', light: 'haiku' }, models: [model('default', 'Default (recommended)', undefined), model('opus', 'Opus', 'deep'), model('deep-two', 'Second deep', 'deep'), model('haiku', 'Haiku', 'light', []), model('sonnet', 'Sonnet', 'standard', []), model('new-id', 'New release', undefined)], detail: 'Reported by Claude' };
-const role = (selection: Partial<Selection>): Role => ({ id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { ...emptySelection(), ...selection } }] });
+const role = (selection: Partial<Selection>): Role => ({ id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { ...emptySelection(), ...selection } }] });
 async function picker(selection: Partial<Selection> = {}, held = false) {
   const settings = await openDelegationSettings({ roles: [role(selection)], harnesses });
   const requests: CommandMessage<'harness_models'>[] = [];

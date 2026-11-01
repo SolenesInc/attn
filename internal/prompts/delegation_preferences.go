@@ -33,17 +33,17 @@ func delegationPreferencesRecipient() Recipient {
 		names []string
 	}{
 		{"guidance", nil}, {"empty", nil},
-		{"role", []string{"name", "id", "description", "instructions", "stopping_point", "choices"}},
+		{"role", []string{"name", "id", "description", "instructions", "choices"}},
 		{"choice", []string{"kind", "name", "id", "selection", "condition"}},
 		{"fallback", []string{"selection", "instructions"}},
-		{"execution", []string{"name", "instructions", "stopping_point"}},
+		{"execution", []string{"name", "instructions"}},
 		{"fallback-execution", []string{"instructions"}},
 		{"opening", []string{"task", "guidance"}},
 	} {
 		events = append(events, On(spec.id, "message_fragment", "Delegation preference guidance supplied on demand.", template("delegation-preferences."+spec.id, "content/delegation-preferences/"+spec.id+".md", fields(spec.names...)...)))
 	}
 	for _, role := range delegationRoleSpecs {
-		for _, field := range []string{"description", "instructions", "stopping-point"} {
+		for _, field := range []string{"description", "instructions"} {
 			id := string(role.id) + "-" + field
 			events = append(events, On(id, "message_fragment", "Editable starting guidance for a delegation role.", Use("delegation-preferences."+id, "content/delegation-preferences/"+id+".md")))
 		}
@@ -82,7 +82,6 @@ func ExpandDelegationRoles(roles []protocol.DelegationRole) []protocol.Delegatio
 				copy.Icon = spec.icon
 				copy.Description = preferenceText(key+"-description", nil)
 				copy.Instructions = preferenceText(key+"-instructions", nil)
-				copy.StoppingPoint = preferenceText(key+"-stopping-point", nil)
 				break
 			}
 		}
@@ -117,7 +116,7 @@ func DelegationRolesText(result protocol.DelegationRolesResult) string {
 			}
 			choices = append(choices, preferenceText("choice", Values{"kind": kind, "name": c.Name, "id": c.ID, "selection": selection(c.Selection), "condition": condition}))
 		}
-		parts = append(parts, preferenceText("role", Values{"name": r.Name, "id": r.ID, "description": r.Description, "instructions": r.Instructions, "stopping_point": r.StoppingPoint, "choices": strings.Join(choices, "\n")}))
+		parts = append(parts, preferenceText("role", Values{"name": r.Name, "id": r.ID, "description": r.Description, "instructions": r.Instructions, "choices": strings.Join(choices, "\n")}))
 	}
 	if f := result.Fallback; f != nil {
 		parts = append(parts, preferenceText("fallback", Values{"selection": selection(f.Selection), "instructions": f.Instructions}))
@@ -125,14 +124,14 @@ func DelegationRolesText(result protocol.DelegationRolesResult) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func DelegationExecutionGuidance(name, instructions, stoppingPoint string) string {
+func DelegationExecutionGuidance(name, instructions string) string {
 	if name == "" {
 		if strings.TrimSpace(instructions) == "" {
 			return ""
 		}
 		return preferenceText("fallback-execution", Values{"instructions": instructions})
 	}
-	return preferenceText("execution", Values{"name": name, "instructions": instructions, "stopping_point": stoppingPoint})
+	return preferenceText("execution", Values{"name": name, "instructions": instructions})
 }
 
 func DelegationOpeningWithGuidance(task, guidance string) string {

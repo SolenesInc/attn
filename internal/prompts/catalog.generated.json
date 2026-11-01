@@ -4174,17 +4174,6 @@
                 }
               },
               {
-                "name": "stopping_point",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "stopping_point",
-                    "kind": "text",
-                    "description": "stopping_point"
-                  }
-                }
-              },
-              {
                 "name": "choices",
                 "node": {
                   "kind": "input",
@@ -4329,17 +4318,6 @@
                     "description": "instructions"
                   }
                 }
-              },
-              {
-                "name": "stopping_point",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "stopping_point",
-                    "kind": "text",
-                    "description": "stopping_point"
-                  }
-                }
               }
             ]
           }
@@ -4422,16 +4400,6 @@
           }
         },
         {
-          "id": "pathfinder-stopping-point",
-          "delivery": "message_fragment",
-          "description": "Editable starting guidance for a delegation role.",
-          "body": {
-            "kind": "text",
-            "id": "delegation-preferences.pathfinder-stopping-point",
-            "source": "content/delegation-preferences/pathfinder-stopping-point.md"
-          }
-        },
-        {
           "id": "builder-description",
           "delivery": "message_fragment",
           "description": "Editable starting guidance for a delegation role.",
@@ -4449,16 +4417,6 @@
             "kind": "text",
             "id": "delegation-preferences.builder-instructions",
             "source": "content/delegation-preferences/builder-instructions.md"
-          }
-        },
-        {
-          "id": "builder-stopping-point",
-          "delivery": "message_fragment",
-          "description": "Editable starting guidance for a delegation role.",
-          "body": {
-            "kind": "text",
-            "id": "delegation-preferences.builder-stopping-point",
-            "source": "content/delegation-preferences/builder-stopping-point.md"
           }
         },
         {
@@ -4482,16 +4440,6 @@
           }
         },
         {
-          "id": "reviewer-stopping-point",
-          "delivery": "message_fragment",
-          "description": "Editable starting guidance for a delegation role.",
-          "body": {
-            "kind": "text",
-            "id": "delegation-preferences.reviewer-stopping-point",
-            "source": "content/delegation-preferences/reviewer-stopping-point.md"
-          }
-        },
-        {
           "id": "orchestrator-description",
           "delivery": "message_fragment",
           "description": "Editable starting guidance for a delegation role.",
@@ -4512,16 +4460,6 @@
           }
         },
         {
-          "id": "orchestrator-stopping-point",
-          "delivery": "message_fragment",
-          "description": "Editable starting guidance for a delegation role.",
-          "body": {
-            "kind": "text",
-            "id": "delegation-preferences.orchestrator-stopping-point",
-            "source": "content/delegation-preferences/orchestrator-stopping-point.md"
-          }
-        },
-        {
           "id": "prototyper-description",
           "delivery": "message_fragment",
           "description": "Editable starting guidance for a delegation role.",
@@ -4539,16 +4477,6 @@
             "kind": "text",
             "id": "delegation-preferences.prototyper-instructions",
             "source": "content/delegation-preferences/prototyper-instructions.md"
-          }
-        },
-        {
-          "id": "prototyper-stopping-point",
-          "delivery": "message_fragment",
-          "description": "Editable starting guidance for a delegation role.",
-          "body": {
-            "kind": "text",
-            "id": "delegation-preferences.prototyper-stopping-point",
-            "source": "content/delegation-preferences/prototyper-stopping-point.md"
           }
         }
       ]
@@ -6374,5 +6302,5 @@
       ]
     }
   ],
-  "definitions_hash": "86ffa69ae5c326f8bd8fa4b23904a51d48571be250a9f50f26cddbf5a47336db"
+  "definitions_hash": "12bbdb14fed3bb6f020a4335e297157429182637697e17974b07e26b722fc9da"
 }

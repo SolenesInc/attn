@@ -89,7 +89,6 @@ function RoleEditor({ role, onUpdate }: { role: DelegationRole; onUpdate: (role:
     </div>
     <TextField id={`desc-${role.id}`} label="When to choose this role" value={role.description} placeholder="Describe the work this role fits. The agent reads this to pick a role, so say what it looks like and what it is not for." hint="Prose, as long as it needs to be. The first line is what the table shows." onCommit={description => onUpdate({ ...role, description })} />
     <TextField id={`ins-${role.id}`} label="Instructions" value={role.instructions} onCommit={instructions => onUpdate({ ...role, instructions })} />
-    <TextField id={`stop-${role.id}`} label="Stops when" value={role.stopping_point} onCommit={stopping_point => onUpdate({ ...role, stopping_point })} />
   </>;
 }
 
@@ -169,10 +168,7 @@ function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onTo
     {open && <>
       <div className="delegation-details">
         {readOnly
-          ? <>
-            <ReadOnlyField label="Instructions" value={v.instructions} note="maintained by Attn, updates with releases" />
-            <ReadOnlyField label="Stops when" value={v.stopping_point} />
-          </>
+          ? <ReadOnlyField label="Instructions" value={v.instructions} note="maintained by Attn, updates with releases" />
           : <RoleEditor role={role} onUpdate={onUpdate} />}
       </div>
       {alts.map(alt => <AlternativeRow key={alt.id} alt={alt} harnesses={harnesses} open={expandedAlt === alt.id} popoverOpen={popoverKey === `${role.id}/${alt.id}`}
@@ -293,7 +289,7 @@ export function DelegationSettings({ policy }: { policy: DelegationPreferencesPo
   const updateRole = (next: DelegationRole) => commit(withRoles(config.roles.map(role => role.id === next.id ? next : role)));
 
   const addRole = () => {
-    const role: DelegationRole = { id: newID('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
+    const role: DelegationRole = { id: newID('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
     commit(withRoles([...config.roles, role]));
     rows.expand(role.id);
   };

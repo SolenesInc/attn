@@ -130,7 +130,7 @@ changing (each accepts -m TEXT, the reason recorded in history):
         older or newer: rolling forward is restoring a later revision.
 
 guidance flags (custom roles only):
-  --description TEXT  --instructions TEXT  --stopping-point TEXT  --icon TEXT
+  --description TEXT  --instructions TEXT  --icon TEXT
 
 model flags:
   --agent NAME     harness; changing it starts a fresh selection
@@ -208,7 +208,7 @@ func writeDelegationRole(w io.Writer, role protocol.DelegationRole) {
 		fmt.Fprint(w, " · off")
 	}
 	fmt.Fprintln(w)
-	for _, section := range [][2]string{{"description", role.Description}, {"instructions", role.Instructions}, {"stopping point", role.StoppingPoint}} {
+	for _, section := range [][2]string{{"description", role.Description}, {"instructions", role.Instructions}} {
 		if strings.TrimSpace(section[1]) != "" {
 			fmt.Fprintf(w, "\n%s:\n%s\n", section[0], strings.TrimSpace(section[1]))
 		}
@@ -444,7 +444,7 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	}
 	message := fs.String("m", "", "reason recorded in history")
 	name, icon, when := text("name"), text("icon"), text("when")
-	description, instructions, stoppingPoint := text("description"), text("instructions"), text("stopping-point")
+	description, instructions := text("description"), text("instructions")
 	builtin := text("builtin")
 	makeDefault := fs.Bool("default", false, "make the alternative the role's default")
 	fallback := fs.Bool("fallback", false, "change the unmatched-work fallback")
@@ -456,7 +456,7 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	if err != nil {
 		return nil, "", usageError{err}
 	}
-	guidance := guidanceEdits{name: name, icon: icon, description: description, instructions: instructions, stoppingPoint: stoppingPoint}
+	guidance := guidanceEdits{name: name, icon: icon, description: description, instructions: instructions}
 	target := func(usage string) (string, string, error) {
 		if len(positionals) != 1 {
 			return "", "", usagef("usage: attn delegate roles %s", usage)
@@ -512,13 +512,13 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	return edit, *message, nil
 }
 
-type guidanceEdits struct{ name, icon, description, instructions, stoppingPoint *optionalText }
+type guidanceEdits struct{ name, icon, description, instructions *optionalText }
 
 func (g guidanceEdits) apply(role *protocol.DelegationRole) {
 	for _, field := range []struct {
 		edit   *optionalText
 		target *string
-	}{{g.name, &role.Name}, {g.icon, &role.Icon}, {g.description, &role.Description}, {g.instructions, &role.Instructions}, {g.stoppingPoint, &role.StoppingPoint}} {
+	}{{g.name, &role.Name}, {g.icon, &role.Icon}, {g.description, &role.Description}, {g.instructions, &role.Instructions}} {
 		if field.edit.value != nil {
 			*field.target = strings.TrimSpace(*field.edit.value)
 		}

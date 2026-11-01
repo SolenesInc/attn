@@ -41,7 +41,7 @@ func Validate(c Config) error {
 			if !c.WorkflowSkillEnabled {
 				return fmt.Errorf("role %q is an Attn role and needs the attn-workflow skill; install it with attn delegate roles install, or Add Attn roles in Settings > Delegation", role.ID)
 			}
-			if strings.TrimSpace(role.Name+role.Icon+role.Description+role.Instructions+role.StoppingPoint) != "" {
+			if strings.TrimSpace(role.Name+role.Icon+role.Description+role.Instructions) != "" {
 				return fmt.Errorf("role %q copies maintained guidance; save only its built-in reference and choices", role.ID)
 			}
 		} else if strings.TrimSpace(role.Name) == "" {
@@ -106,13 +106,12 @@ type Request struct {
 }
 
 type Resolved struct {
-	Builtin       *protocol.BuiltinDelegationRole `json:"builtin,omitempty"`
-	Selection     Selection                       `json:"selection"`
-	RoleName      string                          `json:"role_name"`
-	RoleIcon      string                          `json:"role_icon,omitempty"`
-	Instructions  string                          `json:"instructions"`
-	StoppingPoint string                          `json:"stopping_point"`
-	Revision      int                             `json:"revision"`
+	Builtin      *protocol.BuiltinDelegationRole `json:"builtin,omitempty"`
+	Selection    Selection                       `json:"selection"`
+	RoleName     string                          `json:"role_name"`
+	RoleIcon     string                          `json:"role_icon,omitempty"`
+	Instructions string                          `json:"instructions"`
+	Revision     int                             `json:"revision"`
 }
 
 func Resolve(c Config, r Request) (Resolved, error) {
@@ -156,7 +155,7 @@ func Resolve(c Config, r Request) (Resolved, error) {
 		if choiceID != role.DefaultChoiceID && strings.TrimSpace(choice.When) == "" {
 			return out, fmt.Errorf("choice %q needs a Use when condition in Settings > Delegation", choiceID)
 		}
-		out.Selection, out.RoleName, out.Instructions, out.StoppingPoint = choice.Selection, role.Name, role.Instructions, role.StoppingPoint
+		out.Selection, out.RoleName, out.Instructions = choice.Selection, role.Name, role.Instructions
 		out.Builtin = role.Builtin
 		out.RoleIcon = role.Icon
 	}

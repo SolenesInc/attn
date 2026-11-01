@@ -4122,7 +4122,6 @@ export interface RoleElement {
     id:                string;
     instructions:      string;
     name:              string;
-    stopping_point:    string;
     [property: string]: any;
 }
 
@@ -4282,7 +4281,6 @@ export interface DelegationRole {
     id:                string;
     instructions:      string;
     name:              string;
-    stopping_point:    string;
     [property: string]: any;
 }
 
@@ -22158,7 +22156,6 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "instructions", js: "instructions", typ: "" },
         { json: "name", js: "name", typ: "" },
-        { json: "stopping_point", js: "stopping_point", typ: "" },
     ], "any"),
     "ChoiceObject": o([
         { json: "id", js: "id", typ: "" },
@@ -22245,7 +22242,6 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "instructions", js: "instructions", typ: "" },
         { json: "name", js: "name", typ: "" },
-        { json: "stopping_point", js: "stopping_point", typ: "" },
     ], "any"),
     "DelegationRolesMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationRolesMessageCmd") },

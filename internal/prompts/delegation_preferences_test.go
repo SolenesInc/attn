@@ -45,7 +45,7 @@ func TestDelegationRolesIncludesMaintainedGuidanceAndChoices(t *testing.T) {
 	if !strings.Contains(reference, "attn delegate roles") || !strings.Contains(reference, "configured fallback") {
 		t.Fatal("delegation reference is missing stable routing guidance")
 	}
-	guidance := DelegationExecutionGuidance("Reviewer", roles[2].Instructions, roles[2].StoppingPoint)
+	guidance := DelegationExecutionGuidance("Reviewer", roles[2].Instructions)
 	opening := DelegationOpeningWithGuidance("Task {{task_literal}}", guidance)
 	if !strings.Contains(opening, roles[2].Instructions) || !strings.Contains(opening, "{{task_literal}}") || strings.Contains(opening, "Hard verification") {
 		t.Fatal(opening)
@@ -120,8 +120,8 @@ func TestDelegationTemplatesKeepSelectionsUserOwned(t *testing.T) {
 				t.Fatalf("preset %s selects a harness or model for the user: %+v", role.ID, choice.Selection)
 			}
 		}
-		opening := DelegationOpeningWithGuidance("Exercise the agreed behavior.", DelegationExecutionGuidance(expanded[i].Name, expanded[i].Instructions, expanded[i].StoppingPoint))
-		if !strings.Contains(opening, expanded[i].Instructions) || !strings.Contains(opening, expanded[i].StoppingPoint) {
+		opening := DelegationOpeningWithGuidance("Exercise the agreed behavior.", DelegationExecutionGuidance(expanded[i].Name, expanded[i].Instructions))
+		if !strings.Contains(opening, expanded[i].Instructions) {
 			t.Fatalf("preset %s lost guidance in the delegated opening", role.ID)
 		}
 	}

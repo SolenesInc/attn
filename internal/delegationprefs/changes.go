@@ -87,7 +87,6 @@ func roleChanges(before, after Role) []string {
 		{"icon", before.Icon, after.Icon},
 		{"description", before.Description, after.Description},
 		{"instructions", before.Instructions, after.Instructions},
-		{"stopping point", before.StoppingPoint, after.StoppingPoint},
 	} {
 		if field.before != field.after {
 			add("%s edited", field.name)
