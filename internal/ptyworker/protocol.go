@@ -19,6 +19,8 @@ const MinCompatibleRPCMinor = 0
 
 const TeardownRPCTimeout = 15 * time.Second
 
+const ReadyLine = "ready\n"
+
 const (
 	MethodHello          = "hello"
 	MethodInfo           = "info"

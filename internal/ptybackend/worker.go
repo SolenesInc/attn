@@ -1,6 +1,7 @@
 package ptybackend
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -43,7 +44,6 @@ const (
 	watchResponseTimeout    = 5 * time.Second
 	pollerFailureThreshold  = 3
 	pollerUnreachableAfter  = 30 * time.Second
-	spawnReadyPollInterval  = 100 * time.Millisecond
 	spawnKillGracePeriod    = 1 * time.Second
 	spawnWaitTimeout        = 500 * time.Millisecond
 	streamPublishWait       = 250 * time.Millisecond
@@ -689,9 +689,18 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		workerEnv = append(workerEnv, "ATTN_PTY_DAEMON_ENV="+string(envJSON))
 	}
 	cmd.Env = workerEnv
+	readyReader, readyWriter, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("create pty worker ready pipe: %w", err)
+	}
+	defer readyReader.Close()
+	cmd.ExtraFiles = []*os.File{readyWriter}
+	cmd.Args = append(cmd.Args, "--ready-fd", "3")
 
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start pty worker: %w", err)
+	startErr := cmd.Start()
+	readyWriter.Close()
+	if startErr != nil {
+		return fmt.Errorf("start pty worker: %w", startErr)
 	}
 	workerProc = cmd.Process
 	session.WorkerPID = workerProc.Pid
@@ -701,42 +710,47 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		waitCh <- cmd.Wait()
 	}()
 
-	deadline := time.Now().Add(spawnReadyTimeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		select {
-		case waitErr := <-workerWait:
-			workerProc = nil
-			if waitErr != nil {
-				return fmt.Errorf("worker exited before ready: %w", waitErr)
-			}
-			return errors.New("worker exited before ready")
-		default:
-		}
-		_, err := b.callInfo(ctx, session)
-		if err == nil {
-			spawnReady = true
-			b.startPoller(session)
-			b.startMonitor(session)
-			b.cfg.Logf("worker backend spawn ready: session=%s socket=%s", sessionID, session.SocketPath)
-			return nil
-		}
-		lastErr = err
-		time.Sleep(spawnReadyPollInterval)
-	}
-	select {
-	case waitErr := <-workerWait:
+	announced := make(chan bool, 1)
+	go func() {
+		line, _ := bufio.NewReader(readyReader).ReadString('\n')
+		announced <- line == ptyworker.ReadyLine
+	}()
+	deadline := time.NewTimer(spawnReadyTimeout)
+	defer deadline.Stop()
+	exitedBeforeReady := func(waitErr error) error {
 		workerProc = nil
 		if waitErr != nil {
 			return fmt.Errorf("worker exited before ready: %w", waitErr)
 		}
 		return errors.New("worker exited before ready")
-	default:
 	}
-	return fmt.Errorf("worker did not become ready: %w", lastErr)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-deadline.C:
+		return fmt.Errorf("worker did not become ready within %s", spawnReadyTimeout)
+	case waitErr := <-workerWait:
+		return exitedBeforeReady(waitErr)
+	case ready := <-announced:
+		if !ready {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline.C:
+				return fmt.Errorf("worker closed its ready pipe without becoming ready and did not exit within %s", spawnReadyTimeout)
+			case waitErr := <-workerWait:
+				return exitedBeforeReady(waitErr)
+			}
+		}
+	}
+	if _, err := b.callInfo(ctx, session); err != nil {
+		return fmt.Errorf("worker announced ready but did not answer: %w", err)
+	}
+	spawnReady = true
+	b.startPoller(session)
+	b.startMonitor(session)
+	b.cfg.Logf("worker backend spawn ready: session=%s socket=%s", sessionID, session.SocketPath)
+	return nil
 }
 
 func appendUnattendedLaunchArgs(args []string, launch launchcontract.UnattendedLaunchSpec) ([]string, error) {

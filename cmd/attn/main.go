@@ -385,6 +385,8 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
 	fs.IntVar(&cfg.AdoptPtmxFD, "adopt-ptmx-fd", 0, "inherited pty master descriptor")
 	fs.IntVar(&cfg.AdoptListenerFD, "adopt-listener-fd", 0, "inherited unix listener descriptor")
+	var readyFD int
+	fs.IntVar(&readyFD, "ready-fd", 0, "inherited descriptor the worker writes to once it accepts connections")
 	fs.StringVar(&cfg.RegistryPath, "registry-path", "", "registry path")
 	fs.StringVar(&cfg.SocketPath, "socket-path", "", "socket path")
 	fs.StringVar(&cfg.ControlToken, "control-token", "", "control token")
@@ -416,6 +418,11 @@ func runPTYWorker() {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
 			os.Exit(1)
 		}
+	}
+
+	if readyFD > 0 {
+		syscall.CloseOnExec(readyFD)
+		cfg.Ready = os.NewFile(uintptr(readyFD), "pty-worker-ready")
 	}
 
 	cfg.HostName = os.Getenv("ATTN_PTY_HOST_NAME")
