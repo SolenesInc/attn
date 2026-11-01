@@ -4,6 +4,8 @@ import { createPaneRuntimeEventRouterController } from '../../src/components/Ses
 import { DaemonApiProvider, type DaemonApi } from '../../src/contexts/DaemonApiContext';
 import { BuiltinDelegationRole } from '../../src/types/generated';
 import type { Seed } from '../../src/hooks/useDaemonSocket';
+import { useAsksStore } from '../../src/store/asks';
+import type { DesktopSelectionStyle } from '../../src/utils/desktopSelectionStyle';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
 
@@ -21,12 +23,26 @@ const seed: Seed = {
 
 export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const options = new URLSearchParams(window.location.search);
-  const split = options.has('split');
+  const three = options.has('three');
+  const split = options.has('split') || three;
   const hasSeed = options.has('seed');
+  const signals = options.has('signals');
   const label = 'Coordinate the release';
   const agents = [{ id: 'pane-agent', runtimeId: 'agent', sessionId: 'agent', title: label }];
   if (split) agents.push({ id: 'pane-peer', runtimeId: 'peer', sessionId: 'peer', title: 'Review the release' });
-  useEffect(() => { onReady(); setTriggerRerender(() => noop); }, [onReady, setTriggerRerender]);
+  if (three) agents.push({ id: 'pane-third', runtimeId: 'third', sessionId: 'third', title: 'Draft the notes' });
+  useEffect(() => {
+    useAsksStore.getState().setAsks(signals ? agents.map((agent) => ({
+      id: `ask-${agent.sessionId}`, session_id: agent.sessionId, subject: 'Which store?', parts: [],
+      base_dir: '/tmp/header-alignment', created_at: '2026-09-15T12:00:00Z',
+    })) : []);
+    onReady();
+    setTriggerRerender(() => noop);
+  }, [onReady, setTriggerRerender]);
+  const peers = three ? {
+    type: 'split', splitId: 'split-peers', direction: 'horizontal', ratio: 0.5,
+    children: [{ type: 'pane', paneId: 'pane-peer' }, { type: 'pane', paneId: 'pane-third' }],
+  } as const : { type: 'pane', paneId: 'pane-peer' } as const;
   return (
     <DaemonApiProvider api={api}>
       <div style={{ height: '100vh', display: 'flex', background: 'var(--color-bg-app)' }}>
@@ -35,6 +51,7 @@ export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps
           desktopSessions={agents.map((agent) => ({
             id: agent.sessionId, label: agent.title, agent: 'codex', cwd: '/tmp/header-alignment', state: 'idle',
             seedId: hasSeed ? seed.id : undefined,
+            autoSettleHeld: signals || undefined,
             usage: options.has('usage') ? {
               total_tokens: 12500, cost_usd: 2.61,
               models: [{ model: 'gpt-5.6-sol', purpose: 'agent', input_tokens: 10000, output_tokens: 2500,
@@ -51,9 +68,11 @@ export function AgentHeaderHarness({ onReady, setTriggerRerender }: HarnessProps
           })) : []}
           gardenSeeds={hasSeed ? [seed] : []}
           onOpenSeed={noop}
+          onOpenAsk={signals ? noop : undefined}
+          desktopSelectionStyle={(options.get('selection') as DesktopSelectionStyle | null) ?? undefined}
           terminalState={{ agents, layoutTree: split ? {
             type: 'split', splitId: 'split', direction: 'vertical', ratio: 0.5,
-            children: [{ type: 'pane', paneId: 'pane-agent' }, { type: 'pane', paneId: 'pane-peer' }],
+            children: [{ type: 'pane', paneId: 'pane-agent' }, peers],
           } : { type: 'pane', paneId: 'pane-agent' } }}
           activePaneId="pane-agent"
           fontSize={13}

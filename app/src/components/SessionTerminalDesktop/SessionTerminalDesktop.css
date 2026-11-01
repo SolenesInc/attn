@@ -6,7 +6,8 @@
   background: var(--color-bg-editor);
 }
 
-.session-terminal-desktop.zoom-mode .desktop-pane:not(.active) {
+.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.session-terminal-desktop.zoom-mode .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
   opacity: 0.72;
 }
 
@@ -126,12 +127,30 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  opacity: 0.58;
   transition: opacity 120ms ease;
+}
+
+.desktop-pane:where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
+  opacity: 0.58;
 }
 
 .desktop-pane.active {
   opacity: 1;
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) .desktop-pane-title {
+  color: var(--color-text-secondary);
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) :is(
+  .desktop-pane-host,
+  .desktop-pane-usage,
+  .delegation-chain-trigger,
+  .session-provenance,
+  .pane-seed-chip
+) {
+  opacity: 0.7;
 }
 
 .desktop-pane--suspended {
@@ -303,6 +322,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .desktop-pane,
+  .desktop-pane-body,
   .session-terminal-panes[data-suspension-animating] > .desktop-pane {
     transition: none;
   }
@@ -480,9 +500,8 @@
    before the ellipsis.
 
    Set at the primary text colour and one step up in size: this is the pane's
-   headline, and inactive panes are already dimmed wholesale by
-   `.desktop-pane`'s opacity, so the title does not need to whisper to show
-   which leaf is unfocused. */
+   headline. An inactive agent tile steps it down to the secondary colour while
+   its state dot and signals stay at full strength. */
 .desktop-pane-identity {
   flex: 1;
   min-width: 40%;
@@ -712,6 +731,7 @@
   min-width: 0;
   position: relative;
   overflow: hidden;
+  transition: opacity 120ms ease;
 }
 
 .desktop-agent-stopped {
