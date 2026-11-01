@@ -117,7 +117,8 @@ Usage:
 
 List anchors first to see which are on screen. Agent anchors accept a session
 id, short id or crew name (agent:<who>); desktop anchors accept a slot digit,
-name or id (desktop:<which>). Enter on either goes there.
+name or id (desktop:<which>). On the last step, Enter or → goes there; on an
+earlier step it moves on.
 
 A callout has at most 20 steps, each at most 160 characters. A new callout
 replaces the one showing. The command returns when the app accepts it; the
