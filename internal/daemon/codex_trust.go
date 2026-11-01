@@ -28,12 +28,9 @@ type codexFolderTrust struct {
 	config     *codexTrustConfig
 }
 
-func (d *Daemon) readCodexFolderTrust(path string) (codexFolderTrust, error) {
+func (d *Daemon) readCodexFolderTrust(path, profile string) (codexFolderTrust, error) {
 	trust := codexFolderTrust{path: path, repository: path}
-	var worktrees []string
-	if top := repositoryTop(path); top != "" {
-		worktrees = git.RepositoryWorktrees(top)
-	}
+	worktrees := repositoryWorktrees(path)
 	if len(worktrees) > 0 {
 		trust.repository = worktrees[0]
 	}
@@ -45,44 +42,64 @@ func (d *Daemon) readCodexFolderTrust(path string) (codexFolderTrust, error) {
 	if trust.saved = config.level(path); trust.saved == "" {
 		trust.saved = config.level(trust.repository)
 	}
-	trust.worked = d.store.HasStartedConversationIn(append([]string{path}, worktrees...))
+	trust.worked = d.store.HasStartedConversationIn(profile, append([]string{path}, worktrees...))
 	return trust, nil
 }
 
-func (d *Daemon) workedInAnotherCheckout(repository string) bool {
-	identity := d.originIdentity(repository)
-	if identity == "" {
-		return false
+func repositoryWorktrees(path string) []string {
+	if top := repositoryTop(path); top != "" {
+		return git.RepositoryWorktrees(top)
 	}
-	seen := map[string]bool{repository: true}
-	for _, directory := range d.store.StartedConversationDirectories() {
-		top := repositoryTop(directory)
-		if top == "" {
+	return nil
+}
+
+func (d *Daemon) workedInRepository(repository, profile string) bool {
+	origin, originRead := "", false
+	seen := map[string]bool{}
+	for _, directory := range d.store.StartedConversationDirectories(profile) {
+		worktrees := repositoryWorktrees(directory)
+		if len(worktrees) == 0 || seen[worktrees[0]] {
 			continue
 		}
-		if worktrees := git.RepositoryWorktrees(top); len(worktrees) > 0 {
-			top = worktrees[0]
+		seen[worktrees[0]] = true
+		if worktrees[0] == repository {
+			return true
 		}
-		if seen[top] {
-			continue
+		if !originRead {
+			origin, originRead = d.repositoryOrigin(repository), true
 		}
-		seen[top] = true
-		if d.originIdentity(top) == identity {
+		if origin != "" && d.repositoryOrigin(worktrees[0]) == origin {
 			return true
 		}
 	}
 	return false
 }
 
-func (d *Daemon) originIdentity(repository string) string {
-	identity, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) (string, error) {
-		host, ownerRepo, err := client.OriginHostOwnerRepo(ctx, repository)
-		return strings.ToLower(host + "/" + ownerRepo), err
+func (d *Daemon) repositoryOrigin(repository string) string {
+	remote, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) ([]byte, error) {
+		return client.Output(ctx, git.OpMetadata, repository, "remote", "get-url", "origin")
 	})
-	if err != nil || strings.HasSuffix(identity, "/") {
+	if err != nil {
 		return ""
 	}
-	return identity
+	return normalizedOrigin(string(remote))
+}
+
+func normalizedOrigin(remote string) string {
+	remote = strings.TrimSuffix(strings.TrimRight(strings.ToLower(strings.TrimSpace(remote)), "/"), ".git")
+	if _, rest, ok := strings.Cut(remote, "://"); ok {
+		remote = rest
+	} else if host, path, ok := strings.Cut(remote, ":"); ok && !strings.Contains(host, "/") {
+		remote = host + "/" + path
+	}
+	host, path, _ := strings.Cut(remote, "/")
+	if at := strings.LastIndex(host, "@"); at >= 0 {
+		host = host[at+1:]
+	}
+	if path == "" {
+		return ""
+	}
+	return host + "/" + path
 }
 
 func repositoryTop(path string) string {
@@ -100,13 +117,13 @@ func (t codexFolderTrust) known() bool {
 	return t.saved == codexTrusted || t.saved == "" && t.worked
 }
 
-func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, shared bool) error {
+func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, profile string, shared bool) error {
 	if opts.Agent != string(protocol.SessionAgentCodex) || opts.UnattendedLaunch.IsZero() {
 		return nil
 	}
 	d.codexTrustMu.Lock()
 	defer d.codexTrustMu.Unlock()
-	trust, err := d.readCodexFolderTrust(opts.CWD)
+	trust, err := d.readCodexFolderTrust(opts.CWD, profile)
 	switch {
 	case err != nil:
 		return err
@@ -114,7 +131,7 @@ func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, share
 		return nil
 	case trust.saved != "":
 		return fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
-	case !trust.worked && !d.workedInAnotherCheckout(trust.repository):
+	case !trust.worked && !d.workedInRepository(trust.repository, profile):
 		return fmt.Errorf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path)
 	case shared:
 		return nil

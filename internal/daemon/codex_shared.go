@@ -205,16 +205,16 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
 		return err
 	}
-	r.answerTrustIfKnown(opts)
+	r.answerTrustIfKnown(opts, profile)
 	opts.CodexRemote = remote
 	opts.LaunchExecutable = r.terminalBinary(profile, installed)
 	r.refreshInstalledSoon()
 	return nil
 }
 
-func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions) {
+func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions, profile string) {
 	if opts.UnattendedLaunch.IsZero() {
-		if trust, err := r.d.readCodexFolderTrust(opts.CWD); err != nil || !trust.known() {
+		if trust, err := r.d.readCodexFolderTrust(opts.CWD, profile); err != nil || !trust.known() {
 			return
 		}
 	}
@@ -919,7 +919,7 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 		return nil
 	}
 	opts.CodexRemote = "unix://" + v.socket
-	r.answerTrustIfKnown(opts)
+	r.answerTrustIfKnown(opts, v.profile)
 	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
 		r.d.logf("shared Codex: relaunching terminal %s before its app-server answers: %v", opts.ID, err)
 	}

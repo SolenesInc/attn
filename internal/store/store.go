@@ -681,7 +681,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	return result
 }
 
-func (s *Store) StartedConversationDirectories() []string {
+func (s *Store) StartedConversationDirectories(profileID string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -689,7 +689,7 @@ func (s *Store) StartedConversationDirectories() []string {
 	}
 	rows, err := s.db.Query(`
 		SELECT DISTINCT s.directory FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
-		WHERE s.agent != ? AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, protocol.AgentShellValue)
+		WHERE s.profile_id = ? AND s.agent != ? AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, profileID, protocol.AgentShellValue)
 	if err != nil {
 		return nil
 	}
@@ -704,7 +704,7 @@ func (s *Store) StartedConversationDirectories() []string {
 	return directories
 }
 
-func (s *Store) HasStartedConversationIn(directories []string) bool {
+func (s *Store) HasStartedConversationIn(profileID string, directories []string) bool {
 	if len(directories) == 0 {
 		return false
 	}
@@ -716,7 +716,7 @@ func (s *Store) HasStartedConversationIn(directories []string) bool {
 		return false
 	}
 
-	args := []any{protocol.AgentShellValue}
+	args := []any{profileID, protocol.AgentShellValue}
 	for _, directory := range directories {
 		args = append(args, directory)
 	}
@@ -724,7 +724,7 @@ func (s *Store) HasStartedConversationIn(directories []string) bool {
 	err := s.db.QueryRow(`
 		SELECT EXISTS(
 			SELECT 1 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
-			WHERE s.agent != ?
+			WHERE s.profile_id = ? AND s.agent != ?
 				AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')
 				AND s.directory IN (?`+strings.Repeat(", ?", len(directories)-1)+`))`, args...).Scan(&started)
 	return err == nil && started

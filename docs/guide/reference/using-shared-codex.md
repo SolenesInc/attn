@@ -37,11 +37,11 @@ worktree, even of a repository you trusted, unless the repository has a
 
 Attn answers yes to the trust question in these cases:
 
-- An agent session in Attn already started a conversation in that folder. A
-  shell, or a launch that stopped before the conversation started, doesn't
-  count.
-- The folder is at the top of a worktree, and an agent session in Attn already
-  started a conversation at the top of any other worktree of the same
+- An agent session in this profile already started a conversation in that
+  folder. A shell, or a launch that stopped before the conversation started,
+  doesn't count.
+- The folder is at the top of a worktree, and an agent session in this profile
+  already started a conversation at the top of any other worktree of the same
   repository that still exists. The repository's main checkout counts as one of
   those worktrees.
 - Your Codex config saves the folder's repository as trusted.
