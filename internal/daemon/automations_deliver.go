@@ -128,6 +128,9 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(persistErr, err)
 	}
+	if _, confirming := d.automationLaunchWaits.Load(run.ID); confirming {
+		return d.store.GetAutomationRun(run.ID)
+	}
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
 		failed, err := d.handleAutomationDeliveryError(run, cause.(error))
 		if _, pending := d.automationLaunchFailures.Load(run.ID); pending {
