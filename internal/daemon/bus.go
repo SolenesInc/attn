@@ -105,12 +105,13 @@ const (
 
 	FactGardenReviewChanged = "garden.review.changed"
 
-	FactCrewRegistered   = "crew.registered"
-	FactCrewBound        = "crew.bound"
-	FactCrewReleased     = "crew.released"
-	FactCrewUpdated      = "crew.updated"
-	FactQuickCaptureRead = "quick_capture.read"
-	FactBackgroundLaunch = "session.background.launch"
+	FactCrewRegistered         = "crew.registered"
+	FactCrewBound              = "crew.bound"
+	FactCrewReleased           = "crew.released"
+	FactCrewUpdated            = "crew.updated"
+	FactQuickCaptureRead       = "quick_capture.read"
+	FactSeedAuthorizationTyped = "seed_authorization.typed"
+	FactBackgroundLaunch       = "session.background.launch"
 )
 
 var CompactableFacts = []string{FactSessionTitleChanged, FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
@@ -284,6 +285,10 @@ func buildWireProjections() []projection {
 					d.projectGardenSeeds()
 				}
 			},
+		},
+		{
+			filter: bus.Filter{FactSeedAuthorizationTyped},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
 		{
 			filter: bus.Filter{"garden.seed.*"},

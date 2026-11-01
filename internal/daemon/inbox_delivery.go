@@ -307,6 +307,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
+		for _, seedID := range paste.authorizedSeeds {
+			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
+		}
 		if !bellWaitsForPrompt {
 			state.wakeSession = ""
 		}
@@ -338,10 +341,11 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 }
 
 type inboxPaste struct {
-	text     string
-	typed    []string
-	captures []string
-	notified bool
+	text            string
+	typed           []string
+	captures        []string
+	authorizedSeeds []string
+	notified        bool
 }
 
 func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPaste, error) {
@@ -366,6 +370,9 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 			paste.captures = append(paste.captures, item.Source)
 		} else {
 			texts = append(texts, item.Text)
+		}
+		if item.Kind == inbox.Authorization {
+			paste.authorizedSeeds = append(paste.authorizedSeeds, item.Source)
 		}
 		paste.typed = append(paste.typed, item.ID)
 	}

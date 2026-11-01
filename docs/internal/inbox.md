@@ -134,6 +134,8 @@ item.
   writes the item only when someone other than the tender changes the words
   while the claim holds, in the same write as the words and their log entry.
   A successor after a handover reads the current words in its opening instead.
+  The seed page in the app says whether the change waits for the tender or was
+  typed, and changes as soon as a ring types it.
   attn does not check where the words came from. The agent that set them
   answers for them.
 

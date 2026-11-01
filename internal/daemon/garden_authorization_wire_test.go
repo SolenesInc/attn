@@ -195,6 +195,53 @@ If this applies to work you delegated, update those seeds with attn seed authori
 	})
 }
 
+func TestTheAppSeesAWaitingAuthorizationUpdateTypedOnceTheTenderTakesIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_approve_enabled", "false")
+		dispatcher := w.Spawn(app, fakeagent.Claude, w.Path("dispatcher"))
+		seed := plantDelegationSeed(t, cli, dispatcher, "Search endpoint")
+		request := delegateAtSeed(dispatcher, w.Path("dispatcher"), seed)
+		request.Agent = protocol.Ptr("claude")
+		delegated, err := cli.Delegate(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tender := w.bootBubbleClaude(t, string(delegated.SessionID))
+		tender.reply("Started on the endpoint. <!-- attn:state=waiting_input -->")
+		terminal := protocol.TerminalID(w.Terminal(tender.id))
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+
+		set := testworld.Request(app, protocol.SeedAuthorizationMessage{
+			Cmd: protocol.CmdSeedAuthorization, RequestID: protocol.Ptr("set"), SeedID: seed, Text: protocol.Ptr("You may land on main."),
+		}, protocol.EventSeedAuthorizationResult, func(m protocol.SeedAuthorizationResultMessage) bool { return m.RequestID == "set" })
+		if u := set.Result.Update; u == nil || u.TypedAt != nil || !protocol.Deref(u.NeedsApproval) {
+			t.Fatalf("setting the words while the tender needs approval returned %+v; want an update waiting on the approval", set.Result)
+		}
+		w.advance(0)
+		mark := len(app.Log())
+
+		if err := cli.UpdateStateFromHookEvidence(terminal, protocol.StateWorking, "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		pushed := testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+			for _, changed := range m.Seeds {
+				if changed.ID == seed && changed.Authorization != nil && changed.Authorization.Update != nil && changed.Authorization.Update.TypedAt != nil {
+					return true
+				}
+			}
+			return false
+		})
+		if len(typedAuthorizations(tender)) != 1 {
+			t.Fatalf("the app was pushed %+v before the tender was typed the update", pushed)
+		}
+	})
+}
+
 func typedAuthorizations(agent *bubbleClaude) []string {
 	synctest.Wait()
 	var typed []string
