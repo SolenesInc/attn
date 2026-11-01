@@ -28,6 +28,18 @@ const PATHS = {
       <path d="M4.5 5.6c0 4 7 2.4 7 4.8" />
     </>
   ),
+  machine: (
+    <>
+      <rect x="2" y="3" width="12" height="8" rx="1.2" />
+      <path d="M6 13.5h4M8 11v2.5" />
+    </>
+  ),
+  elsewhere: (
+    <>
+      <circle cx="7" cy="7" r="4" />
+      <path d="M10 10l3.5 3.5" />
+    </>
+  ),
   delete: <path d="M3 5h10M6 5V3.5h4V5M5 5l.6 8h4.8L11 5" />,
 };
 

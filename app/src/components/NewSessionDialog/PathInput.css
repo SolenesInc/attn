@@ -53,3 +53,21 @@
 
 .path-input-field { display: flex; align-items: center; gap: 10px; }
 .path-input-field > .path-input-container { flex: 1; min-width: 0; }
+
+.path-input--mirrored {
+  color: transparent;
+}
+
+.path-input-mirror {
+  position: absolute;
+  top: 50%;
+  left: var(--path-input-text-inset, 16px);
+  font-size: var(--font-size);
+  color: var(--color-text-primary);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.path-input-accent {
+  color: #8fb4ff;
+}

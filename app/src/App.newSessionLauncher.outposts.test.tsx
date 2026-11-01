@@ -2,7 +2,7 @@ import { act, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { gesture, pressShortcut } from './test/renderApp';
 import { HOLD, answerInTurn, type ScriptedDaemon } from './test/scriptedDaemon';
-import { HOME, openPicker, pathInput, press, repoInfo, typePath } from './test/locations';
+import { HOME, inspection, openPicker, pathInput, press, repoInfo, typePath } from './test/locations';
 import type { EventMessage } from './test/protocol';
 import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 
@@ -133,7 +133,10 @@ describe('launcher with outposts attached', () => {
     ).toEqual([sandbox.id]);
     expect(screen.getAllByRole('option')[2]).toHaveAttribute('data-reach', 'unreachable');
     await typePath(daemon, 'ai-s');
-    expect(machines()).toEqual([{ name: 'shop', machine: 'ai-sandbox' }]);
+    expect(machines()).toEqual([
+      { name: 'ai-sandbox:', machine: null },
+      { name: 'shop', machine: 'ai-sandbox' },
+    ]);
   });
 
   it.each([
@@ -352,5 +355,305 @@ describe('launcher without outposts', () => {
     expect(daemon.sentOf('browse_directory').map(({ input_path }) => input_path)).toEqual([
       '~/projects/',
     ]);
+  });
+});
+
+type Disk = Record<string, string[]>;
+const SCRATCH = `${HOME}/scratch`;
+
+function absolutePath(path: string) {
+  const expanded = path === '~' || path.startsWith('~/') ? `${HOME}${path.slice(1)}` : path;
+  return expanded.length > 1 ? expanded.replace(/\/+$/, '') : expanded;
+}
+
+function serveDisks(daemon: ScriptedDaemon, disks: Record<string, Disk>) {
+  const diskOf = (host?: string) => disks[host ?? ''] ?? {};
+  daemon.on('browse_directory', ({ input_path, host }) => {
+    const directory = absolutePath(input_path);
+    const names = diskOf(host)[directory];
+    if (!names)
+      return {
+        event: 'browse_directory_result',
+        success: false,
+        input_path,
+        directory: '',
+        entries: [],
+        home_path: HOME,
+        error: `open ${directory}: no such file or directory`,
+      };
+    return {
+      event: 'browse_directory_result',
+      success: true,
+      input_path,
+      home_path: HOME,
+      directory,
+      entries: names.map((name) => ({
+        name,
+        path: `${directory}/${name}`,
+        is_dir: true,
+        is_repo: `${directory}/${name}` === REPO,
+      })),
+    };
+  });
+  daemon.on('inspect_path', ({ path, host }) => {
+    const target = absolutePath(path);
+    const disk = diskOf(host);
+    const exists =
+      target in disk ||
+      Object.entries(disk).some(([dir, names]) => names.some((name) => `${dir}/${name}` === target));
+    return inspection(path, { exists, repoRoot: exists && target === REPO ? REPO : undefined });
+  });
+}
+
+const sandboxDisk: Disk = {
+  [HOME]: ['projects', 'scratch'],
+  [`${HOME}/projects`]: ['evals', 'shop'],
+  [SCRATCH]: [],
+};
+const macDisk: Disk = {
+  [HOME]: ['notes', 'projects'],
+  [`${HOME}/projects`]: ['shop'],
+  [NOTES]: [],
+};
+
+function rowNames() {
+  return screen.getAllByRole('option').map((row) => ({
+    name: row.querySelector('.picker-name')?.textContent,
+    machine: within(row).queryByTestId('launcher-machine')?.textContent ?? null,
+    selected: row.getAttribute('aria-selected') === 'true',
+  }));
+}
+function browses(daemon: ScriptedDaemon) {
+  return daemon.sentOf('browse_directory').map(({ input_path, host }) => ({ input_path, host }));
+}
+function status() {
+  return screen.queryByTestId('launcher-status')?.textContent ?? null;
+}
+
+describe('launcher addresses', () => {
+  async function openWithDisks(disks: Record<string, Disk> = { '': macDisk, [sandbox.id]: sandboxDisk }) {
+    const view = await openPicker({}, { settings, outposts: [sandbox, piLab] });
+    await press(view.daemon, 'Escape');
+    serveOutposts(view.daemon);
+    serveDisks(view.daemon, disks);
+    return view;
+  }
+  async function reopen(daemon: ScriptedDaemon, shortcut: 'session.new' | 'session.newTerminal' = 'session.new') {
+    await gesture(daemon, () => pressShortcut(shortcut));
+  }
+
+  it('suggests a machine for its name and Tab browses it from the opening prefetch', async () => {
+    const { daemon } = await openWithDisks();
+    const earlier = browses(daemon).length;
+    await reopen(daemon);
+    const sinceOpening = () => browses(daemon).slice(earlier);
+    expect(sinceOpening()).toEqual([
+      { input_path: '~/', host: sandbox.id },
+      { input_path: `${HOME}/projects/`, host: sandbox.id },
+    ]);
+    expect(pathInput()).toHaveAttribute('placeholder', 'Project, path, or machine:path');
+    expect(screen.getByText('name:')).toBeInTheDocument();
+
+    await typePath(daemon, 'ai');
+    expect(rowNames()).toEqual([
+      { name: 'ai-sandbox:', machine: null, selected: true },
+      { name: 'shop', machine: 'ai-sandbox', selected: false },
+    ]);
+    expect(screen.getByText('Browse a machine')).toBeInTheDocument();
+    expect(screen.getByText('connected · Tab browses ai-sandbox:~/')).toBeInTheDocument();
+    expect(screen.getByText('-sandbox:~/')).toHaveClass('path-ghost');
+
+    await press(daemon, 'Tab');
+    expect(pathInput()).toHaveValue('ai-sandbox:~/');
+    expect(document.querySelector('.path-input-accent')).toHaveTextContent('ai-sandbox:');
+    expect(status()).toBeNull();
+    expect(rowNames().map(({ name }) => name)).toEqual(['shop', 'projects/', 'scratch/']);
+    expect(screen.getByText(`Folders in ~/ on ai-sandbox`)).toBeInTheDocument();
+    expect(sinceOpening()).toHaveLength(2);
+
+    await typePath(daemon, 'ai-sandbox:~/projects/e');
+    expect(rowNames().map(({ name }) => name)).toEqual(['evals/']);
+    await press(daemon, 'Tab');
+    expect(pathInput()).toHaveValue('ai-sandbox:~/projects/evals/');
+    expect(sinceOpening()).toEqual([
+      { input_path: '~/', host: sandbox.id },
+      { input_path: `${HOME}/projects/`, host: sandbox.id },
+      { input_path: '~/projects/evals/', host: sandbox.id },
+    ]);
+  });
+
+  it('puts a remote recent address in the input on Tab', async () => {
+    const { daemon } = await openWithDisks();
+    await reopen(daemon, 'session.newTerminal');
+    await press(daemon, 'Tab');
+    expect(pathInput()).toHaveValue('ai-sandbox:~/projects/shop/');
+  });
+
+  it('searches recents aimed at a machine and holds the highlight while confirmed rows arrive', async () => {
+    const { daemon } = await openWithDisks();
+    daemon.on('inspect_path', () => undefined);
+    await reopen(daemon);
+    await typePath(daemon, 'ai-sandbox:e');
+    const asked = daemon.sentOf('inspect_path');
+    expect(asked.map(({ path, host }) => ({ path, host }))).toEqual([
+      { path: '~/projects/shop', host: sandbox.id },
+      { path: SENSOR, host: sandbox.id },
+      { path: '~/notes', host: sandbox.id },
+    ]);
+    expect(rowNames()).toEqual([{ name: 'shop', machine: 'ai-sandbox', selected: true }]);
+
+    const answer = (index: number, exists: boolean) =>
+      gesture(daemon, () =>
+        daemon.replyTo(asked[index], inspection(asked[index].path, { exists, repoRoot: index === 0 ? REPO : undefined })),
+      );
+    await answer(2, true);
+    await press(daemon, 'ArrowDown');
+    expect(rowNames()).toEqual([
+      { name: 'shop', machine: 'ai-sandbox', selected: false },
+      { name: 'notes', machine: 'ai-sandbox', selected: true },
+    ]);
+    await answer(1, false);
+    await answer(0, true);
+    expect(rowNames()).toEqual([
+      { name: 'shop', machine: 'ai-sandbox', selected: false },
+      { name: 'notes', machine: 'ai-sandbox', selected: true },
+    ]);
+
+    await press(daemon, 'Enter');
+    expect(spawns(daemon)).toEqual([{ cwd: NOTES, agent: 'claude', host: sandbox.id }]);
+  });
+
+  it('keeps a highlighted confirmed row when an earlier candidate answers later', async () => {
+    const { daemon } = await openWithDisks();
+    daemon.on('inspect_path', () => undefined);
+    await reopen(daemon);
+    await typePath(daemon, 'ai-sandbox:o');
+    const asked = daemon.sentOf('inspect_path');
+    const answer = (path: string) => {
+      const command = asked.find((candidate) => candidate.path === path)!;
+      return gesture(daemon, () => daemon.replyTo(command, inspection(path)));
+    };
+    await answer('~/notes');
+    await press(daemon, 'ArrowDown');
+    await answer(SENSOR);
+    expect(rowNames()).toEqual([
+      { name: 'shop', machine: 'ai-sandbox', selected: false },
+      { name: 'notes', machine: 'ai-sandbox', selected: true },
+      { name: 'sensor-hub', machine: 'ai-sandbox', selected: false },
+    ]);
+  });
+
+  it('finds a folder missing on the target on another machine and rewrites the input to it', async () => {
+    const { daemon } = await openWithDisks();
+    await reopen(daemon);
+    await typePath(daemon, '~/scratch/');
+    expect(rowNames()).toEqual([
+      { name: '~/scratch/ is on ai-sandbox', machine: 'ai-sandbox', selected: false },
+    ]);
+    expect(screen.getByText('Enter browses ai-sandbox:~/scratch/')).toBeInTheDocument();
+    expect(browses(daemon).filter(({ host }) => host === piLab.id)).toEqual([]);
+    await press(daemon, 'ArrowDown');
+    await press(daemon, 'Enter');
+    expect(pathInput()).toHaveValue('ai-sandbox:~/scratch/');
+    expect(spawns(daemon)).toEqual([]);
+
+    await typePath(daemon, 'ai-sandbox:~/notes/');
+    expect(status()).toBe('~/notes is not on ai-sandbox');
+    expect(rowNames()).toEqual([
+      { name: '~/notes/ is on This Mac', machine: 'This Mac', selected: false },
+    ]);
+    await press(daemon, 'ArrowDown');
+    await press(daemon, 'Tab');
+    expect(pathInput()).toHaveValue('~/notes/');
+
+    await typePath(daemon, 'ai-sandbox:~/projects/');
+    expect(screen.queryByText(/is on/)).toBeNull();
+  });
+
+  it('keeps saying a folder is missing after the machine reports its home', async () => {
+    const { daemon } = await openPicker({}, { settings, outposts: [] });
+    await press(daemon, 'Escape');
+    serveOutposts(daemon);
+    serveDisks(daemon, { '': macDisk, [sandbox.id]: sandboxDisk });
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [sandbox, piLab] }));
+    daemon.on('browse_directory', ({ input_path, host }) =>
+      host && input_path !== '~/nope/'
+        ? undefined
+        : {
+            event: 'browse_directory_result',
+            success: false,
+            input_path,
+            directory: '',
+            entries: [],
+            home_path: HOME,
+            error: `open ${HOME}/nope: no such file or directory`,
+          },
+    );
+    await reopen(daemon);
+    await typePath(daemon, 'ai-sandbox:~/nope/');
+    expect(status()).toBe('~/nope is not on ai-sandbox');
+    const prefetch = daemon.sentOf('browse_directory').find(({ input_path }) => input_path === '~/')!;
+    await gesture(daemon, () =>
+      daemon.replyTo(prefetch, {
+        event: 'browse_directory_result',
+        success: true,
+        input_path: '~/',
+        home_path: HOME,
+        directory: HOME,
+        entries: [],
+      }),
+    );
+    expect(status()).toBe('~/nope is not on ai-sandbox');
+  });
+
+  it('shows how a slow and an unreachable machine answer under the input', async () => {
+    const { daemon } = await openWithDisks();
+    const served = daemon.sentOf('browse_directory').length;
+    daemon.on('browse_directory', () => undefined);
+    await reopen(daemon);
+    await typePath(daemon, 'ai-sandbox:~/notes/');
+    expect(status()).toBe('asking ai-sandbox for ~/notes/ · 150 ms');
+    expect(screen.queryByTestId('location-picker-empty')).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(status()).toBe('asking ai-sandbox for ~/notes/ · 400 ms');
+
+    const [prefetchHome] = daemon.sentOf('browse_directory').slice(served);
+    serveDisks(daemon, { [sandbox.id]: sandboxDisk });
+    await gesture(daemon, () =>
+      daemon.replyTo(prefetchHome, {
+        event: 'browse_directory_result',
+        success: true,
+        input_path: '~/',
+        home_path: HOME,
+        directory: HOME,
+        entries: [{ name: 'projects', path: `${HOME}/projects`, is_dir: true, is_repo: false }],
+      }),
+    );
+    const lostAt = new Date(Date.now() - 2 * 60_000).toISOString();
+    await gesture(daemon, () =>
+      daemon.emit({
+        event: 'outposts_updated',
+        outposts: [{ ...sandbox, state: 'lost', reach: 'unreachable', state_since: lostAt }, piLab],
+      }),
+    );
+    await typePath(daemon, 'ai-sandbox:~/');
+    expect(status()).toBe('ai-sandbox unreachable · folders as of just now');
+    expect(rowNames().map(({ name }) => name)).toEqual(['shop', 'projects/']);
+
+    const before = daemon.sent.length;
+    await typePath(daemon, 'pi-lab:~/');
+    expect(status()).toBe('pi-lab unreachable · no folders cached for ~');
+    expect(daemon.sent.slice(before)).toEqual([]);
+  });
+
+  it('opens a terminal at an address on its machine', async () => {
+    const { daemon } = await openWithDisks();
+    await reopen(daemon, 'session.newTerminal');
+    await typePath(daemon, 'ai-sandbox:~/projects/');
+    await press(daemon, 'Enter');
+    expect(daemon.sentOf('inspect_path').map(({ path, host }) => ({ path, host }))).toEqual([
+      { path: `${HOME}/projects`, host: sandbox.id },
+    ]);
+    expect(spawns(daemon)).toEqual([{ cwd: `${HOME}/projects`, agent: 'shell', host: sandbox.id }]);
   });
 });

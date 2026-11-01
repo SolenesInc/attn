@@ -63,6 +63,10 @@
 }
 .new-session-launcher .path-input-container {
   --path-input-text-inset: 0px;
+  overflow: hidden;
+}
+.new-session-launcher .path-input::placeholder {
+  color: var(--launcher-text-faint);
 }
 
 .new-session-launcher .picker-results {
@@ -407,4 +411,14 @@
     --launcher-worktree-color: var(--color-success);
     border-color: var(--color-border-subtle);
   }
+}
+
+.launcher-status {
+  margin: 8px 2px 0;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--launcher-text-quiet);
+}
+.launcher-status[data-bad] {
+  color: #ff9c9c;
 }

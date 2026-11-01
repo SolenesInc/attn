@@ -172,6 +172,46 @@ conversation, Attn says it is no longer in storage when you resume it. Files
 sent by a remote agent open no tile and enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.
 
+## Start on an outpost from the launcher
+
+With **Launcher 2.0** on in **Settings → Experimental** and an outpost added,
+the new-session launcher (**⌘N**, or **⌘T** for a terminal) starts agents and
+shells on any machine.
+
+Recent projects from every machine share one list. Each row shows its machine,
+This Mac included. **Enter** starts on the row's machine. For an agent, **Tab**
+on a repository opens its worktree choices there. **Tab** on any other row, and
+on every row in a terminal launcher, puts its address in the input.
+
+An address names a machine and a place on it, as ssh writes it:
+`<machine>:<rest>`. Text without a machine means This Mac, and `home:` names
+This Mac too. Machine names match whole and ignore case, so names that contain
+`@` or `:`, such as `user@host`, work as typed.
+
+- `ai-sandbox:~/projects/` lists folders on ai-sandbox. Anything that starts
+  with `~` or `/` browses.
+- `ai-sandbox:attn` searches recent projects and starts the result on
+  ai-sandbox. ai-sandbox's own recents come first. Recents from other machines
+  follow once ai-sandbox confirms it has the same folder, relative to its home.
+- Typing the start of a machine's name, such as `ai`, offers that machine. **Tab**
+  completes `ai-sandbox:~/`.
+
+While you browse an outpost, a line under the input says what the outpost is
+doing: `asking ai-sandbox for ~/projects/ · 120 ms`, `~/scratch is not on
+ai-sandbox`, `ai-sandbox unreachable · folders as of 3m ago`, or
+`ai-sandbox unreachable · no folders cached for ~/projects`. When a folder you
+browse is missing on that machine, the launcher asks your other reachable
+machines and adds a row such as `~/scratch/ is on This Mac`. **Enter** on it
+changes the address to that machine.
+
+When the launcher opens, it asks each reachable outpost for its home folder and
+the parent folders of its recent projects, so browsing them usually shows
+folders at once. The launcher keeps these listings until it closes.
+
+A start on an unreachable machine, or with a harness that machine lacks, is
+refused in the launcher with the reason. A start on a stalled outpost waits.
+**Esc** closes the launcher and leaves the start to finish in the background.
+
 ## Notebook sync
 
 Pairing an outpost starts two-way sync of the shared Notebook. Each machine has
