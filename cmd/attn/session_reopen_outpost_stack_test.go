@@ -177,13 +177,20 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 		name       string
 		action     protocol.SessionReopenAction
 		remoteOnly bool
+		seedFolder string
 	}{
-		{"stale local worktree", protocol.SessionReopenActionRecreateWorktreeAndReopen, false},
-		{"branch on archive remote", protocol.SessionReopenActionFetchRecreateAndReopen, true},
+		{"stale local worktree", protocol.SessionReopenActionRecreateWorktreeAndReopen, false, ""},
+		{"branch on archive remote", protocol.SessionReopenActionFetchRecreateAndReopen, true, ""},
+		{"a seed's nested folder", protocol.SessionReopenActionRecreateWorktreeAndReopen, false, "subdir"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			home := testworld.NewStack(t)
 			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if scenario.seedFolder != "" {
+				homesOwnCheckout := home.Path("home-checkout")
+				gitRepo(t, homesOwnCheckout)
+				giveTheHomeItsOwnCheckoutAt(t, home, "*/worktree|*/worktree/*", homesOwnCheckout)
+			}
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			pair.Start()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
@@ -209,6 +216,17 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 				git(worktree, "push", "-qu", "archive", "feat/resume")
 			}
 			cwd := worktree
+			if scenario.seedFolder != "" {
+				cwd = filepath.Join(worktree, scenario.seedFolder)
+				if err := os.MkdirAll(cwd, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(cwd, "tracked.txt"), []byte("nested\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				git(worktree, "add", scenario.seedFolder)
+				git(worktree, "-c", "user.name=attn", "-c", "user.email=attn@example.invalid", "commit", "-qm", "nested folder")
+			}
 			outpost.SetCodexFolderTrust(cwd, "trusted")
 			id := home.Spawn(pair.App, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
 			first := outpost.LaunchedCarrying(pair.App.Terminal(id))
@@ -218,6 +236,16 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 			reply := "Done. <!-- attn:state=waiting_input -->"
 			first.Reply(reply)
 			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == 2*len(reply) })
+			if scenario.seedFolder != "" {
+				testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return protocol.Deref(s.Branch) == "feat/resume" })
+				planted, err := home.Client().SeedPlant(protocol.SessionID(id), "Continue the nested work", "Finish it.", "", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := home.Client().SeedTransition(protocol.SessionID(id), planted.Seed.ID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
 				t.Fatal(err)
 			}
@@ -246,6 +274,9 @@ func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *t
 				t.Fatal(err)
 			}
 			second := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			if created := protocol.Deref(reopened.WorktreeCreated); created != worktree {
+				t.Fatalf("worktree recreated at %q, want %q for a session in %q", created, worktree, cwd)
+			}
 			if reopened.Directory != cwd || !second.Resumed || second.ConversationID != conversation {
 				t.Fatalf("reopened=%+v resumed=%t conversation=%s, want %s in %s", reopened, second.Resumed, second.ConversationID, conversation, cwd)
 			}

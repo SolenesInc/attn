@@ -78,8 +78,11 @@ func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Ex
 
 func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
 	execution := snapshotGardenExecution(session, now)
-	if execution.Cwd == "" || d.sessionHost(session.ID) != "" {
+	if execution.Cwd == "" {
 		return execution
+	}
+	if host := d.sessionHost(session.ID); host != "" {
+		return d.observedRemoteGardenExecution(host, execution)
 	}
 	var checkoutRoot, mainRepo, branch string
 	err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred}, func(ctx context.Context, client *attngit.Client) error {
@@ -109,6 +112,18 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 	}
 	if execution.Branch == "" {
 		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
+	}
+	return execution
+}
+
+func (d *Daemon) observedRemoteGardenExecution(host string, execution garden.Execution) garden.Execution {
+	inspection, err := Call[protocol.CheckoutInspection](context.Background(), d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: execution.Cwd})
+	if err != nil || inspection.RepoRoot == "" {
+		return execution
+	}
+	execution.RepositoryRoot, execution.RepositorySubdir = inspection.MainRepo, inspection.RepositorySubdir
+	if inspection.Branch != "" {
+		execution.Branch = inspection.Branch
 	}
 	return execution
 }
