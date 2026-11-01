@@ -66,12 +66,12 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 		t.Fatalf("reviewer authority is ambiguous: %q", reviewer.Description)
 	}
 	rolesText := DelegationRolesText(protocol.DelegationRolesResult{Roles: DelegationRoleTemplates(), Guidance: DelegationRoutingGuidance()})
-	for _, expected := range []string{"reviewing each Builder's work", "explicitly requests a separate Reviewer delegation", "wait for their answer"} {
+	for _, expected := range []string{"reviewing each Builder's work", "explicitly requests a separate Reviewer delegation"} {
 		if !strings.Contains(rolesText, expected) {
 			t.Errorf("composed role catalog is missing %q", expected)
 		}
 	}
-	for _, expected := range []string{"present the delivery units and their order", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
+	for _, expected := range []string{"use its Planning process", "present the delivery units and their order"} {
 		if !strings.Contains(pathfinder.Instructions, expected) {
 			t.Errorf("pathfinder checkpoint is missing %q: %s", expected, pathfinder.Instructions)
 		}

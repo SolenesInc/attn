@@ -1,10 +1,9 @@
 # Delivery
 
-Delivery is how a finished change reaches the repository's main line and where
-your part ends. Read the repository's agent guidance, such as `AGENTS.md`,
-`CLAUDE.md`, or contributing docs, to choose the flow. When the guidance says
-nothing, use pull requests. If the task's authorization stops before delivery,
-follow the authorization.
+Delivery is how finished work reaches where it is used, and where your part
+ends. The task's authorization and the project's guidance, such as `AGENTS.md`,
+`CLAUDE.md`, or contributing docs, say how to deliver. When neither does, ask
+the user.
 
 ## Pull requests
 
