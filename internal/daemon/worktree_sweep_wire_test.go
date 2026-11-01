@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -442,4 +443,71 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestTheSweepForgetsARepositoryWhoseFolderIsGoneUntilAttnMakesAWorktreeThere(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		shop := newRepo(t, "shop")
+		path := createWorktree(t, app, shop, "feat-work")
+		away := shop + "-unmounted"
+		if err := os.Rename(shop, away); err != nil {
+			t.Fatal(err)
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+
+		if listed, err := cli.WorktreeList(shop, 0); err != nil || len(listed.Worktrees) != 0 {
+			t.Errorf("the missing repository's worktrees are still listed: %+v, %v", listed, err)
+		}
+		log, err := cli.WorktreeSweepLog(shop, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		forgotten := map[string]string{}
+		for _, entry := range log.Entries {
+			if entry.Action == "forgotten" {
+				forgotten[entry.Path] = protocol.Deref(entry.Reason)
+			}
+		}
+		for _, want := range []string{shop, path} {
+			if !strings.Contains(forgotten[want], "repository folder is gone") {
+				t.Errorf("the sweep log has no forgotten entry for %s that says why: %+v", want, log.Entries)
+			}
+		}
+		failedGit := func() int {
+			failed := 0
+			for _, record := range mirroredRecords(t, app, "git.operation.finished") {
+				if strings.Contains(string(record.Props), `"status":"failed"`) {
+					failed++
+				}
+			}
+			return failed
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if failed := failedGit(); failed != 0 {
+			t.Errorf("the sweep ran git in the missing repository %d times", failed)
+		}
+
+		if err := os.Rename(away, shop); err != nil {
+			t.Fatal(err)
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if listed, err := cli.WorktreeList(shop, 0); err != nil || len(listed.Worktrees) != 0 {
+			t.Errorf("the forgotten repository was swept before attn made a worktree there: %+v, %v", listed, err)
+		}
+		again := createWorktree(t, app, shop, "again")
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		listed, err := cli.WorktreeList(shop, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paths := worktreeCreatePaths(listed.Worktrees); !slices.Contains(paths, path) || !slices.Contains(paths, again) {
+			t.Errorf("after a new worktree the sweep lists %v, want %s rediscovered beside %s", paths, path, again)
+		}
+	})
 }

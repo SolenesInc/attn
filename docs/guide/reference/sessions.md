@@ -93,7 +93,7 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 <details>
 <summary>Why did my worktree disappear?</summary>
 
-The sweep removes a worktree after 14 days without activity, when removing it loses nothing. The sweep runs every hour and covers every worktree of a repository where Attn has made one, including worktrees you added with git yourself. Removing a worktree also deletes its local branch, unless an open seed can still continue from the branch, and leaves a note on the seeds that worked there. The Worktrees tab's Removed list shows when the worktree went and why. For a session that ran there, see the FAQ "Why can't I resume a closed session?".
+The sweep removes a worktree after 14 days without activity, when removing it loses nothing. The sweep runs every hour and covers every worktree of a repository where Attn has made one, including worktrees you added with git yourself. Removing a worktree also deletes its local branch, unless an open seed can still continue from the branch, and leaves a note on the seeds that worked there. The Worktrees tab's Removed list shows when the worktree went and why. When a repository's folder is gone, the sweep stops tracking it and drops its worktrees from the list. The Removed list shows them and the repository as forgotten. Creating a worktree there with Attn tracks the repository again, along with its existing worktrees. For a session that ran there, see the FAQ "Why can't I resume a closed session?".
 </details>
 
 <details>

@@ -323,7 +323,8 @@ model WorktreeSweepEntry {
   path: string;
   main_repo: string;
   branch?: string;
-  // "removed" (the sweep decided) | "deleted" (you did) | "failed"
+  // "removed" (the sweep decided) | "deleted" (you did) | "failed" |
+  // "forgotten" (the repository folder is gone, so the sweep stopped tracking it)
   action: string;
   reason?: string;
   at: string;

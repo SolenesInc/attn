@@ -148,6 +148,17 @@ func (s *Store) MonitorWorktreeRepository(mainRepo string) {
 	s.execLog(`INSERT INTO monitored_worktree_repositories (main_repo) VALUES (?) ON CONFLICT DO NOTHING`, mainRepo)
 }
 
+func (s *Store) ForgetWorktreeRepository(mainRepo string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	s.execLog(`DELETE FROM monitored_worktree_repositories WHERE main_repo = ?`, mainRepo)
+}
+
 func (s *Store) MonitoredWorktreeRepositories() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

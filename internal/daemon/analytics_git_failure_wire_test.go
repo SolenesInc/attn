@@ -20,7 +20,7 @@ func TestAFailedGitOperationsRecordNamesWhyItFailed(t *testing.T) {
 		exitCode *int
 		arrange  func(t *testing.T, shop, path string)
 	}{
-		{"a repository folder that is gone", protocol.GitOperationKindRefreshRepository, protocol.GitFailureMissingDirectory, nil, func(t *testing.T, shop, _ string) {
+		{"deleting a worktree whose repository folder is gone", protocol.GitOperationKindDeleteWorktree, protocol.GitFailureMissingDirectory, nil, func(t *testing.T, shop, _ string) {
 			if err := os.RemoveAll(shop); err != nil {
 				t.Fatal(err)
 			}

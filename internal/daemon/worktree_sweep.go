@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ const (
 const (
 	gardenUnreadableReason = "the home's Garden could not be read, so nothing here is decided"
 	openSeedReason         = "an open seed points at it"
+	repositoryGoneReason   = "its repository folder is gone; attn tracks the repository again when you create a worktree there"
 )
 
 const defaultWorktreeSweepIdleDays = 14
@@ -99,6 +101,10 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 	for _, repo := range repos {
 		if cause := context.Cause(ctx); cause != nil {
 			return refreshed, removed, kept, cause
+		}
+		if _, statErr := os.Stat(repo); errors.Is(statErr, fs.ErrNotExist) {
+			d.forgetMissingRepository(repo, now)
+			continue
 		}
 		states, listErr := d.reconcileWorktreeRegistryContext(ctx, repo, now)
 		if listErr != nil {
@@ -424,6 +430,23 @@ func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now t
 	}
 	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
+}
+
+func (d *Daemon) forgetMissingRepository(repo string, now time.Time) {
+	d.logf("worktree sweep: %s is gone; no longer tracking it", repo)
+	for _, wt := range d.store.ListWorktreesByRepo(repo) {
+		d.store.RemoveWorktree(wt.Path)
+		d.publishFact(FactWorktreeDeleted, wt.Path, nil)
+		d.recordForgotten(store.WorktreeSweepLogEntry{Path: wt.Path, MainRepo: repo, Branch: wt.Branch}, now)
+	}
+	d.recordForgotten(store.WorktreeSweepLogEntry{Path: repo, MainRepo: repo}, now)
+	d.store.ForgetWorktreeRepository(repo)
+}
+
+func (d *Daemon) recordForgotten(entry store.WorktreeSweepLogEntry, now time.Time) {
+	entry.Action, entry.Reason = "forgotten", repositoryGoneReason
+	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
+	d.publishFact(FactWorktreeSwept, entry.Path, protocolSweepEntry(entry))
 }
 
 func removalActionAndReason(opts deleteWorktreeOptions) (string, string) {
