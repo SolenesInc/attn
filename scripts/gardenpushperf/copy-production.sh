@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Copies the production database read-only into a named instance and turns off
+# what would reach real repositories, worktrees, the Notebook or other machines.
+set -euo pipefail
+
+name=${1:?usage: copy-production.sh <instance>}
+attn=${ATTN:-./attn}
+data=$(ATTN_INSTANCE=$name "$attn" instance resolve --field dataDir)
+if [ "$data" = "$HOME/.attn" ]; then
+  echo "copy-production.sh: $name resolves to the production data directory" >&2
+  exit 1
+fi
+if [ -e "$data/attn.sock" ]; then
+  echo "copy-production.sh: $name is running; run attn instance clean $name first" >&2
+  exit 1
+fi
+
+mkdir -p "$data/notebook-scratch"
+rm -f "$data/attn.db" "$data/attn.db-wal" "$data/attn.db-shm"
+sqlite3 "file:$HOME/.attn/attn.db?mode=ro" ".backup '$data/attn.db'"
+
+drops=$(sqlite3 "$data/attn.db" "SELECT 'DROP TRIGGER ' || name || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
+creates=$(sqlite3 "$data/attn.db" "SELECT sql || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
+sqlite3 "$data/attn.db" <<SQL
+BEGIN;
+$drops
+DELETE FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled');
+INSERT INTO settings (key, value) VALUES
+  ('notebook.root', '$data/notebook-scratch'),
+  ('worktree_sweep_enabled', 'false'),
+  ('outposts_enabled', 'false'),
+  ('tailscale_enabled', 'false'),
+  ('analytics.sharing_enabled', 'false');
+$creates
+UPDATE automation_definitions SET enabled = 0;
+COMMIT;
+SQL
+
+sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"

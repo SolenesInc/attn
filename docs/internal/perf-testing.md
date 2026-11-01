@@ -33,19 +33,36 @@ footprint change, never to silence a regression you don't understand.
 ## Garden push
 
 `scripts/gardenpushperf` measures what one garden update costs on a real
-garden. Copy the database into a named instance (`sqlite3
-"file:$HOME/.attn/attn.db?mode=ro" ".backup <instance data dir>/attn.db"`),
-start the instance's daemon, and plant a seed to move. The Go tool reports bytes
-and move-to-update latency for notes and for wither and replant moves:
+garden. Copy the database into a named instance with
+`scripts/gardenpushperf/copy-production.sh <name>`, which reads production
+read-only and turns off what the copy would otherwise reach: the real Notebook
+root, the worktree sweep, outposts, Tailscale and every automation. Start the
+instance's daemon and plant a seed to move. The Go tool reports bytes and
+move-to-update latency for notes and for wither and replant moves:
 
 ```bash
 ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -n 20
 ```
 
 `attn instance resolve --field dataDir` and `--field wsPort` give the data
-directory and port. The app side needs a bundle built against that instance.
-`app-push.mjs` then reports the socket handler, message-to-next-frame, and
-`JSON.parse` per update in headless Chromium (`PROFILE=1` adds a CPU profile):
+directory and port.
+
+To measure the daemon's CPU per garden mutation instead, start the daemon with
+`ATTN_PPROF=<port>`, plant the seed under a watched plot, and pass the
+diagnostics endpoint and the garden's profile:
+
+```bash
+ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -profile <profile id> \
+  -vars http://127.0.0.1:<port>/debug/vars -n 10
+```
+
+Each run makes six mutations (a ringing note, a plain note, a check removed and
+restored, a wither and a replant), waits for the daemon to return to idle, and
+reports CPU milliseconds per mutation above the idle rate.
+
+The app side needs a bundle built against that instance. `app-push.mjs` then
+reports the socket handler, message-to-next-frame, and `JSON.parse` per update
+in headless Chromium (`PROFILE=1` adds a CPU profile):
 
 ```bash
 VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
