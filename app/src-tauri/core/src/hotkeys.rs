@@ -357,16 +357,14 @@ fn dispatch(app: &AppHandle, action: Action) {
 fn key_window_label(app: &AppHandle) -> Option<String> {
     let mtm = MainThreadMarker::new().expect("dispatch runs on the main thread");
     let key = NSApplication::sharedApplication(mtm).keyWindow()?;
-    app.webview_windows()
-        .into_iter()
-        .find_map(|(label, window)| {
-            let native = window.ns_window().ok()?;
-            std::ptr::eq(
-                native.cast_const(),
-                objc2::rc::Retained::as_ptr(&key).cast(),
-            )
-            .then_some(label)
-        })
+    app.windows().into_iter().find_map(|(label, window)| {
+        let native = window.ns_window().ok()?;
+        std::ptr::eq(
+            native.cast_const(),
+            objc2::rc::Retained::as_ptr(&key).cast(),
+        )
+        .then_some(label)
+    })
 }
 
 fn observe_key_window(app: &AppHandle) {
