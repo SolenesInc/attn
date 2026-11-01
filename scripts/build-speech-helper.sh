@@ -27,6 +27,10 @@ source_key() {
 }
 
 key="$(source_key)"
+if [[ "${1:-}" == --print-cache-entry ]]; then
+  printf '%s\n' "$(attn_build_cache_root speech-helper)/$key"
+  exit
+fi
 cached="$(attn_build_cache_root speech-helper)/$key/attn-speech"
 
 if [[ ! -x "$cached" ]]; then

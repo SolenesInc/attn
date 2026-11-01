@@ -111,6 +111,8 @@ jobs:
             tauri:
               - 'app/src-tauri/**'
               - 'app/speech/**'
+              - 'scripts/build-speech-helper.sh'
+              - '.github/actions/cache-speech-helper/**'
               - 'pty-host/**'
               - 'internal/ptyhost/**'
               - 'scripts/rust-zig-linker.sh'
@@ -622,6 +624,9 @@ jobs:
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
+      - name: Ensure speech helper
+        uses: ./.github/actions/cache-speech-helper
+
       - name: Build attn binary
         run: |
           cd ../..
@@ -633,7 +638,6 @@ jobs:
           cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
           if [ "$(uname -s)" = "Darwin" ]; then
-            make build-speech-helper
             cp app/speech/target/release/attn-speech "app/src-tauri/binaries/attn-speech-${target_triple}"
           fi
           cd app/src-tauri

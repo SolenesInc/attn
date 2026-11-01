@@ -1,0 +1,39 @@
+name: Cache the attn-speech helper
+description: >-
+  Restore the attn-speech helper built from the same inputs, so
+  make build-speech-helper copies it instead of compiling. macOS only, the
+  one platform that builds the helper. Requires Rust to be set up first.
+runs:
+  using: composite
+  steps:
+    - name: Resolve speech helper cache entry
+      id: entry
+      if: runner.os == 'macOS'
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: |
+        entry="$(./scripts/build-speech-helper.sh --print-cache-entry)"
+        echo "path=$entry" >> "$GITHUB_OUTPUT"
+        echo "key=${{ runner.os }}-${{ runner.arch }}-speech-helper-$(basename "$entry")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore speech helper
+      id: restore
+      if: runner.os == 'macOS'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.entry.outputs.path }}
+        key: ${{ steps.entry.outputs.key }}
+
+    - name: Build speech helper
+      if: runner.os == 'macOS'
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: make build-speech-helper
+
+    # Concurrent jobs race for this key; the loser logs a duplicate and carries on.
+    - name: Save speech helper
+      if: runner.os == 'macOS' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.entry.outputs.path }}
+        key: ${{ steps.entry.outputs.key }}

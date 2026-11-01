@@ -85,6 +85,9 @@ runs:
           app/speech
           pty-host
 
+    - name: Ensure speech helper
+      uses: ./.github/actions/cache-speech-helper
+
     - name: Build the packaged app
       shell: bash
       env:
