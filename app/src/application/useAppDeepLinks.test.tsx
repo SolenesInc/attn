@@ -74,17 +74,4 @@ describe('useAppDeepLinks', () => {
     deepLink.listener?.([SPAWN_URL]);
     await waitFor(() => expect(launchAgent).toHaveBeenCalledTimes(2));
   });
-
-  it('launches a link again when it is opened after its first launch finished', async () => {
-    useProfilesStore.setState({ selectedProfileId: 'profile-1', currentDesktopId: 'desktop-1', desktops: [desktop] });
-    const launchAgent = vi.fn(async () => 'session-plan');
-    renderDeepLinks(launchAgent);
-
-    await waitFor(() => expect(deepLink.listener).not.toBeNull());
-    deepLink.listener?.([SPAWN_URL]);
-    await waitFor(() => expect(launchAgent).toHaveBeenCalledTimes(1));
-
-    deepLink.listener?.([SPAWN_URL]);
-    await waitFor(() => expect(launchAgent).toHaveBeenCalledTimes(2));
-  });
 });

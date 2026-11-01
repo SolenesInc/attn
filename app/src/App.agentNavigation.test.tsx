@@ -18,6 +18,7 @@ import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 import type { CommandMessage } from './test/protocol';
 import { useSessionStore } from './store/sessions';
 import { openActionMenu } from './test/appFixtures';
+import { serveLaunches } from './test/locations';
 
 const LADDER = ['profile_select', 'desktop_place_session', 'desktop_set_active_pane', 'desktop_set_current'] as const;
 const LATER = '2100-01-01T00:00:00Z';
@@ -331,6 +332,19 @@ describe('agent selection', () => {
 
     expect(shows(daemon)).not.toContain('session:s2');
     expect(daemon.sentOf('spawn_session').map((spawn) => spawn.cwd)).toEqual(['/tmp/s2']);
+  });
+
+  it('opens the agent a deep link started when the same link is opened again later', async () => {
+    const { daemon } = await renderAgents({ s1: {}, s2: { profile_id: 'profile-side' } }, { laidOut: ['s1'] });
+    serveLaunches(daemon);
+    await gesture(daemon, () => deepLinkTo('s2'));
+    const [spawn] = daemon.sentOf('spawn_session');
+    await open(daemon, 's1');
+
+    await gesture(daemon, () => deepLinkTo('s2'));
+
+    expect(shows(daemon).pop()).toBe(`session:${spawn.id}`);
+    expect(daemon.sentOf('spawn_session')).toHaveLength(1);
   });
 
   it.each([
