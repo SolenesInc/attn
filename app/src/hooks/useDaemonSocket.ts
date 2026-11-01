@@ -3722,13 +3722,13 @@ export function useDaemonSocket({
     }, 'Recent files timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendGetRecentLocations = useCallback((limit?: number): Promise<RecentLocationsResult> => {
+  const sendGetRecentLocations = useCallback((limit?: number, machines: 'home' | 'every' = 'home'): Promise<RecentLocationsResult> => {
     const requestId = nextRequestID('recent_locations');
     const key = `get_recent_locations_${requestId}`;
     return sendKeyedRequest(key, {
       cmd: 'get_recent_locations',
       ...(limit && { limit }),
-      home_only: true,
+      ...(machines === 'home' && { home_only: true }),
       request_id: requestId,
     }, 'Get recent locations timed out');
   }, [nextRequestID, sendKeyedRequest]);

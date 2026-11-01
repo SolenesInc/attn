@@ -173,6 +173,43 @@
   white-space: nowrap;
   text-align: right;
 }
+.launcher-machine {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.launcher-machine::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--launcher-text-faint);
+}
+.launcher-machine[data-state='connected']::before {
+  background: var(--color-success);
+  box-shadow: none;
+}
+.launcher-machine[data-state='stalled']::before {
+  background: var(--color-warning);
+  box-shadow: none;
+}
+.launcher-machine[data-state='lost']::before,
+.launcher-machine[data-state='refused']::before {
+  background: var(--color-error);
+  box-shadow: none;
+}
+.new-session-launcher .picker-item[data-reach='unreachable'] {
+  opacity: 0.55;
+}
+.launcher-controls .agent-option--missing .agent-option-name {
+  text-decoration: line-through;
+}
+.launcher-error-reason {
+  color: color-mix(in srgb, #ffb4b4 75%, transparent);
+}
+.launcher-progress[data-stalled] {
+  color: var(--color-warning);
+}
 .launcher-branch,
 .launcher-section-hint {
   text-transform: none;

@@ -1,12 +1,19 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LocationPickerProps } from './LocationPicker';
 import type { RecentLocation } from '../hooks/useDaemonSocket';
+import type { OutpostInfo } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
 import { useSettings } from '../contexts/SettingsContext';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { agentLabel } from '../utils/agentAvailability';
 import { useFilesystemSuggestions } from '../hooks/useFilesystemSuggestions';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { PathInput } from './NewSessionDialog/PathInput';
-import { SessionControls, useSessionControls } from './NewSessionDialog/SessionControls';
+import {
+  SessionControls,
+  useSessionControls,
+  type MissingHarnesses,
+} from './NewSessionDialog/SessionControls';
 import {
   parseRepoDestination,
   repoDestinationSettingKey,
@@ -32,12 +39,19 @@ type Row = {
   kind: 'recent' | 'folder';
   path: string;
   name: string;
+  host?: string;
   repoRoot?: string;
   lastSeen?: string;
 };
+type Problem = { message: string; reason?: string };
 export interface NewSessionLauncherProps extends Omit<
   LocationPickerProps,
-  'onSelect' | 'onCreateWorktreeSession' | 'projectsDirectory'
+  | 'onSelect'
+  | 'onCreateWorktreeSession'
+  | 'projectsDirectory'
+  | 'onGetRecentLocations'
+  | 'onGetRepoInfo'
+  | 'onDeleteWorktree'
 > {
   onSelect: (
     path: string,
@@ -45,6 +59,7 @@ export interface NewSessionLauncherProps extends Omit<
     yolo?: boolean,
     chief?: boolean,
     auto?: boolean,
+    host?: string,
   ) => Promise<unknown>;
   onCreateWorktreeSession: (
     repo: string,
@@ -52,12 +67,38 @@ export interface NewSessionLauncherProps extends Omit<
     from: string,
     agent: SessionAgent,
     yolo: boolean,
-    auto?: boolean,
-    chief?: boolean,
-    onCreated?: (path: string) => void,
+    auto: boolean | undefined,
+    chief: boolean | undefined,
+    options: { host?: string; onCreated?: (path: string) => void },
   ) => Promise<unknown>;
+  onGetRecentLocations?: (
+    limit?: number,
+    machines?: 'home' | 'every',
+  ) => Promise<{ locations: RecentLocation[]; home_path?: string }>;
+  onGetRepoInfo?: (
+    repo: string,
+    host?: string,
+  ) => ReturnType<NonNullable<LocationPickerProps['onGetRepoInfo']>>;
+  onDeleteWorktree?: (
+    path: string,
+    options?: { force?: boolean },
+    host?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
-type Where = { repo: string; info?: RepoInfo };
+type Where = { repo: string; host?: string; info?: RepoInfo };
+
+const THIS_MAC = 'This Mac';
+const NO_OUTPOSTS: OutpostInfo[] = [];
+
+function unreachableReason(outpost?: OutpostInfo): string {
+  if (!outpost) return 'It is no longer attached to this Mac.';
+  if (outpost.state === 'refused') return outpost.last_error || 'It refused the connection.';
+  if (outpost.state === 'lost') {
+    const age = locationAge(outpost.state_since);
+    return age === 'now' ? 'Lost just now.' : `Lost for ${age}.`;
+  }
+  return 'Still connecting.';
+}
 
 export function NewSessionLauncher({
   isOpen,
@@ -73,11 +114,17 @@ export function NewSessionLauncher({
   onGetRepoInfo,
   onCreateWorktreeSession,
   onDeleteWorktree,
+  onError,
   agentAvailability,
   chiefExists,
 }: NewSessionLauncherProps) {
   const inline = variant === 'inline';
   const { settings, setSetting } = useSettings();
+  const api = useOptionalDaemonApi();
+  const outposts = (settings.outposts_enabled === 'true' && api?.outposts) || NO_OUTPOSTS;
+  const outpostsAtOpen = useRef(outposts);
+  outpostsAtOpen.current = outposts;
+  const sendAgentCatalog = api?.sendAgentCatalog;
   const controls = useSessionControls({
     isOpen,
     initialAgent,
@@ -92,8 +139,12 @@ export function NewSessionLauncher({
   const [home, setHome] = useState('');
   const [where, setWhere] = useState<Where | null>(null);
   const [branch, setBranch] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
+  const [starting, setStarting] = useState<{ host?: string; at: number } | null>(null);
+  const [catalogs, setCatalogs] = useState<Record<string, ReadonlySet<string>>>({});
+  const run = useRef<{ background: boolean } | null>(null);
+  const [, tick] = useState(0);
   const [deletion, setDeletion] = useState<{
     path: string;
     branch: string;
@@ -105,9 +156,26 @@ export function NewSessionLauncher({
   const folders = useRef(new Map<string, boolean>());
   const root = useRef<HTMLDivElement>(null);
   const pathMode = query.trim().startsWith('~') || query.trim().startsWith('/');
-  const remember = (repo: string) =>
-    parseRepoDestination(settings[repoDestinationSettingKey(repo)]) || 'main_repo';
+  const remember = (repo: string, host?: string) =>
+    parseRepoDestination(settings[repoDestinationSettingKey(repo, host)]) || 'main_repo';
   const display = (path: string) => toDisplayPath(path, home);
+  const outpostOf = (host: string) => outposts.find((outpost) => outpost.id === host);
+  const machineName = (host?: string) => (host ? (outpostOf(host)?.name ?? host) : THIS_MAC);
+  const onMachine = (repo: string, host?: string) => (host ? `${host}:${repo}` : repo);
+  const fail = (reason: unknown) =>
+    setError({ message: reason instanceof Error ? reason.message : String(reason) });
+  const refusal = (host: string | undefined, agent: SessionAgent): Problem | null => {
+    if (!host) return null;
+    const outpost = outpostOf(host);
+    const name = machineName(host);
+    if (outpost?.reach !== 'reachable')
+      return { message: `${name} is unreachable; this needs it now`, reason: unreachableReason(outpost) };
+    if (agent !== 'shell' && catalogs[host] && !catalogs[host].has(agent))
+      return {
+        message: `${agentLabel(agent)} is not installed on ${name}. Pick another harness (${keyCombo('alt', '1')}–${keyCombo('alt', '9')}) or machine.`,
+      };
+    return null;
+  };
 
   const browse = useCallback(
     async (path: string) => {
@@ -137,14 +205,29 @@ export function NewSessionLauncher({
     setHighlight(-1);
     setWhere(null);
     setBranch('');
-    setError('');
+    setError(null);
     setDeletion(null);
     setBusy(false);
+    setStarting(null);
+    setCatalogs({});
+    run.current = null;
     generated.current.clear();
     created.current.clear();
     folders.current.clear();
     let cancelled = false;
-    onGetRecentLocations?.()
+    const attached = outpostsAtOpen.current;
+    for (const outpost of attached)
+      if (outpost.reach === 'reachable')
+        sendAgentCatalog?.(outpost.id)
+          .then((catalog) => {
+            if (cancelled) return;
+            const installed = new Set(
+              catalog.harnesses.filter((harness) => harness.available).map(({ id }) => id),
+            );
+            setCatalogs((current) => ({ ...current, [outpost.id]: installed }));
+          })
+          .catch(() => {});
+    onGetRecentLocations?.(undefined, attached.length ? 'every' : 'home')
       .then((reply) => {
         if (cancelled) return;
         setRecents(
@@ -154,26 +237,30 @@ export function NewSessionLauncher({
         setFresh(true);
       })
       .catch((reason) => {
-        if (!cancelled) setError(String(reason));
+        if (!cancelled) fail(reason);
       });
     return () => {
       cancelled = true;
       generation.current++;
     };
-  }, [isOpen, onGetRecentLocations]);
+  }, [isOpen, onGetRecentLocations, sendAgentCatalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo<Row[]>(() => {
     const needle = expandDisplayPath(query.trim(), home).toLowerCase();
+    const address = (item: RecentLocation) =>
+      (item.host ? `${machineName(item.host)}:${item.path}` : item.path).toLowerCase();
     const recent = recents.filter((item) =>
       pathMode
-        ? item.path.toLowerCase().startsWith(needle) &&
+        ? !item.host &&
+          item.path.toLowerCase().startsWith(needle) &&
           item.path.replace(/\/+$/, '').toLowerCase() !== needle.replace(/\/+$/, '')
-        : item.path.toLowerCase().includes(needle),
+        : address(item).includes(needle),
     );
     const recentRows: Row[] = recent.map((item) => ({
       kind: 'recent',
       path: item.path,
       name: pathBasename(item.path),
+      host: item.host || undefined,
       repoRoot: item.repo_root,
       lastSeen: item.last_seen,
     }));
@@ -188,7 +275,7 @@ export function NewSessionLauncher({
           }))
       : [];
     return [...recentRows, ...directoryRows];
-  }, [query, home, recents, pathMode, suggestions]);
+  }, [query, home, recents, pathMode, suggestions, outposts]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!where && !pathMode) setHighlight(fresh && rows.length ? 0 : -1);
   }, [query, fresh, rows, where, pathMode]);
@@ -198,7 +285,9 @@ export function NewSessionLauncher({
       ?.scrollIntoView({ block: 'nearest' });
   }, [highlight, query, branch, where?.info]);
 
-  const name = where ? branch.trim() || generated.current.get(where.repo) || '' : '';
+  const name = where
+    ? branch.trim() || generated.current.get(onMachine(where.repo, where.host)) || ''
+    : '';
   const whereRows = useMemo<WhereRow[]>(() => {
     if (!where?.info) return [];
     const info = where.info;
@@ -228,7 +317,41 @@ export function NewSessionLauncher({
         })),
     ];
   }, [where, branch]);
-  const memory = where ? remember(where.repo) : 'main_repo';
+  const memory = where ? remember(where.repo, where.host) : 'main_repo';
+  const targetHost = where ? where.host : rows[highlight]?.host;
+  const targetCatalog = targetHost ? catalogs[targetHost] : undefined;
+  const missing: MissingHarnesses | undefined = targetCatalog && {
+    machine: machineName(targetHost),
+    harnesses: new Set(
+      controls.orderedAgentList.filter(
+        (candidate) => candidate !== 'shell' && !targetCatalog.has(candidate),
+      ),
+    ),
+  };
+  const startingOutpost = starting?.host ? outpostOf(starting.host) : undefined;
+  const stalled = busy && startingOutpost?.state === 'stalled';
+  const stalledSeconds =
+    stalled && starting
+      ? Math.max(
+          0,
+          Math.round(
+            (Date.now() - Math.max(starting.at, Date.parse(startingOutpost.state_since) || 0)) /
+              1000,
+          ),
+        )
+      : 0;
+  useEffect(() => {
+    if (!stalled) return;
+    const timer = window.setInterval(() => tick((count) => count + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [stalled]);
+  const background = () => {
+    if (run.current) run.current.background = true;
+    run.current = null;
+    setBusy(false);
+    setStarting(null);
+    onClose();
+  };
   useLayoutEffect(() => {
     if (!where?.info) return;
     const exact = branch.trim()
@@ -247,11 +370,14 @@ export function NewSessionLauncher({
     generation.current++;
     setQuery(value);
     setHighlight(value.trim().startsWith('~') || value.trim().startsWith('/') ? -1 : 0);
-    setError('');
+    setError(null);
   };
   const stepBack = () => {
-    if (busy) return;
-    setError('');
+    if (busy) {
+      if (stalled) background();
+      return;
+    }
+    setError(null);
     if (deletion) {
       setDeletion(null);
       return;
@@ -268,39 +394,52 @@ export function NewSessionLauncher({
   };
   useEscapeStack(stepBack, isOpen && active && !inline);
 
-  async function openWhere(repo: string) {
+  async function openWhere(repo: string, host?: string) {
+    const refused = refusal(host, 'shell');
+    if (refused) {
+      setError(refused);
+      return;
+    }
     const request = ++generation.current;
-    setWhere({ repo });
+    setWhere({ repo, host });
     setBranch('');
     setHighlight(-1);
-    setError('');
+    setError(null);
     try {
-      const reply = await onGetRepoInfo?.(repo);
+      const reply = await onGetRepoInfo?.(repo, host);
       if (request !== generation.current) return;
       if (!reply?.success || !reply.info)
         throw new Error(reply?.error || 'Failed to read repository');
-      if (!generated.current.has(repo))
+      if (!generated.current.has(onMachine(repo, host)))
         generated.current.set(
-          repo,
+          onMachine(repo, host),
           generateWorktreeName(reply.info.worktrees.map((item) => item.branch)),
         );
       setWhere((value) => value && { ...value, info: reply.info });
     } catch (reason) {
-      if (request === generation.current)
-        setError(reason instanceof Error ? reason.message : String(reason));
+      if (request === generation.current) fail(reason);
     }
   }
 
   async function launch(row?: Row, terminal = false, destination?: WhereRow) {
     if (busy) return;
     const agent = terminal ? 'shell' : controls.agent;
+    const host = where ? where.host : row?.host;
+    const refused = refusal(host, agent);
+    if (refused) {
+      setError(refused);
+      return;
+    }
     const yolo = agent !== 'shell' && controls.yoloMode && controls.yoloSupported;
     const chief = agent !== 'shell' && controls.chiefOfStaff && controls.chiefToggleEligible;
     const auto =
       agent !== 'shell' && controls.autoModeSupported ? controls.autoMode : undefined;
     const request = generation.current;
+    const current = { background: false };
+    run.current = current;
     setBusy(true);
-    setError('');
+    setStarting({ host, at: Date.now() });
+    setError(null);
     try {
       let path = row?.path;
       let repo = row?.repoRoot;
@@ -317,54 +456,59 @@ export function NewSessionLauncher({
       if (where) repo = where.repo;
       if (!action && repo)
         action =
-          agent !== 'shell' && remember(repo) === 'new_worktree'
+          agent !== 'shell' && remember(repo, host) === 'new_worktree'
             ? { kind: 'new', from: 'default', branch: '' }
             : { kind: 'main', branch: '' };
       let destinationMemory: 'main_repo' | 'new_worktree' | undefined;
       if (action?.kind === 'new' && repo) {
-        if (!generated.current.has(repo)) generated.current.set(repo, generateWorktreeName());
-        const branchName = where ? name : generated.current.get(repo)!;
+        const generatedKey = onMachine(repo, host);
+        if (!generated.current.has(generatedKey))
+          generated.current.set(generatedKey, generateWorktreeName());
+        const branchName = where ? name : generated.current.get(generatedKey)!;
         let startingFrom = action.branch;
         if (!where) {
-          const reply = await onGetRepoInfo?.(repo);
+          const reply = await onGetRepoInfo?.(repo, host);
           if (!reply?.success || !reply.info)
             throw new Error(reply?.error || 'Failed to read repository');
           startingFrom = reply.info.default_branch;
         }
-        const key = `${repo}:${branchName}:${startingFrom}`;
+        const key = `${generatedKey}:${branchName}:${startingFrom}`;
         const existing = created.current.get(key);
-        if (existing) await onSelect(existing, agent, yolo, chief, auto);
+        if (existing) await onSelect(existing, agent, yolo, chief, auto, host);
         else
-          await onCreateWorktreeSession(
-            repo,
-            branchName,
-            startingFrom,
-            agent,
-            yolo,
-            auto,
-            chief,
-            (path) => created.current.set(key, path),
-          );
+          await onCreateWorktreeSession(repo, branchName, startingFrom, agent, yolo, auto, chief, {
+            host,
+            onCreated: (path) => created.current.set(key, path),
+          });
         destinationMemory = 'new_worktree';
       } else {
         const target =
           action?.kind === 'existing' ? action.path : action?.kind === 'main' ? repo : path;
         if (!target) return;
-        await onSelect(target, agent, yolo, chief, auto);
+        await onSelect(target, agent, yolo, chief, auto, host);
         if (action?.kind === 'main') destinationMemory = 'main_repo';
       }
+      const memoryKey = repo && repoDestinationSettingKey(repo, host);
       if (
-        repo &&
+        memoryKey &&
         destinationMemory &&
         agent !== 'shell' &&
-        settings[repoDestinationSettingKey(repo)] !== destinationMemory
+        settings[memoryKey] !== destinationMemory
       )
-        setSetting(repoDestinationSettingKey(repo), destinationMemory);
-      onClose();
+        setSetting(memoryKey, destinationMemory);
+      if (!current.background) onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (!current.background) fail(reason);
+      else
+        onError?.(
+          `Starting on ${machineName(host)} failed: ${reason instanceof Error ? reason.message : String(reason)}`,
+        );
     } finally {
-      setBusy(false);
+      if (!current.background) {
+        run.current = null;
+        setBusy(false);
+        setStarting(null);
+      }
     }
   }
 
@@ -372,9 +516,10 @@ export function NewSessionLauncher({
     if (where || busy) return;
     const row = rows[highlight];
     if (controls.agent !== 'shell' && row?.repoRoot) {
-      await openWhere(row.repoRoot);
+      await openWhere(row.repoRoot, row.host);
       return;
     }
+    if (row?.host) return;
     if (controls.agent !== 'shell' && !row && pathMode) {
       const path = normalizePickerPath(query, home);
       const known = folders.current.get(path);
@@ -395,7 +540,7 @@ export function NewSessionLauncher({
             return;
           }
         } catch (reason) {
-          setError(reason instanceof Error ? reason.message : String(reason));
+          fail(reason);
           return;
         }
       }
@@ -407,11 +552,12 @@ export function NewSessionLauncher({
   async function deleteWorktree() {
     if (!deletion || !onDeleteWorktree || busy) return;
     setBusy(true);
-    setError('');
+    setError(null);
     try {
       const reply = await onDeleteWorktree(
         deletion.path,
         deletion.force ? { force: true } : undefined,
+        where?.host,
       );
       if (!reply.success) throw new Error(reply.error || 'Failed to delete worktree');
       const remaining = whereRows.length - 1;
@@ -429,7 +575,7 @@ export function NewSessionLauncher({
       setHighlight(Math.min(highlight, remaining - 1));
       setDeletion(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      fail(reason);
       if (!deletion.force && (reason as { forceable?: boolean }).forceable)
         setDeletion({ ...deletion, force: true });
       else setDeletion(null);
@@ -441,6 +587,10 @@ export function NewSessionLauncher({
   function keyDown(event: React.KeyboardEvent) {
     if (busy) {
       if (['Enter', 'Tab', 'Escape'].includes(event.key)) event.preventDefault();
+      if (event.key === 'Escape' && stalled) {
+        event.stopPropagation();
+        background();
+      }
       return;
     }
     if (deletion) {
@@ -449,7 +599,7 @@ export function NewSessionLauncher({
       if (event.key.toLowerCase() === 'y') void deleteWorktree();
       else if (event.key.toLowerCase() === 'n' || event.key === 'Escape') {
         setDeletion(null);
-        setError('');
+        setError(null);
       }
       return;
     }
@@ -486,7 +636,7 @@ export function NewSessionLauncher({
       stepBack();
     } else if (where && isAccelKeyPressed(event) && event.key === 'Backspace') {
       event.preventDefault();
-      setError('');
+      setError(null);
       const row = whereRows[highlight];
       if (row?.kind === 'existing')
         setDeletion({ path: row.path, branch: row.branch, force: false });
@@ -516,7 +666,7 @@ export function NewSessionLauncher({
       aria-busy={busy}
     >
       <div className="launcher-controls">
-        <SessionControls controls={controls} compact />
+        <SessionControls controls={controls} compact missing={missing} />
       </div>
       <div className="picker-header">
         <div className="picker-title" data-testid="location-picker-title">
@@ -528,7 +678,7 @@ export function NewSessionLauncher({
             if (busy || deletion) return;
             if (where) {
               setBranch(value);
-              setError('');
+              setError(null);
             } else changeQuery(value);
           }}
           leading={
@@ -579,7 +729,7 @@ export function NewSessionLauncher({
       ) : (
         <div className="picker-results" role="listbox" aria-label="Locations">
           {rows.map((row, index) => (
-            <Fragment key={`${row.kind}:${row.path}`}>
+            <Fragment key={`${row.kind}:${row.host ?? ''}:${row.path}`}>
               {(index === 0 || rows[index - 1].kind !== row.kind) && (
                 <div className="picker-section-title">
                   {row.kind === 'recent'
@@ -595,6 +745,8 @@ export function NewSessionLauncher({
                 data-index={index}
                 data-kind={row.kind === 'folder' ? 'directory' : 'recent'}
                 data-path={row.path}
+                data-host={row.host}
+                data-reach={row.host ? (outpostOf(row.host)?.reach ?? 'unreachable') : undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
                   setHighlight(index);
@@ -617,15 +769,24 @@ export function NewSessionLauncher({
                   (controls.agent !== 'shell' &&
                   (row.kind === 'recent' || highlight === index) ? (
                     <span
-                      className={`launcher-badge launcher-destination${remember(row.repoRoot) === 'new_worktree' ? ' launcher-worktree' : ''}`}
+                      className={`launcher-badge launcher-destination${remember(row.repoRoot, row.host) === 'new_worktree' ? ' launcher-worktree' : ''}`}
                     >
-                      {remember(row.repoRoot) === 'new_worktree'
+                      {remember(row.repoRoot, row.host) === 'new_worktree'
                         ? '⎇ new worktree'
                         : 'main checkout'}
                     </span>
                   ) : (
                     row.kind === 'folder' && <span className="launcher-badge">repo</span>
                   ))}
+                {row.kind === 'recent' && outposts.length > 0 && (
+                  <span
+                    className="launcher-badge launcher-machine"
+                    data-testid="launcher-machine"
+                    data-state={row.host ? (outpostOf(row.host)?.state ?? 'lost') : 'local'}
+                  >
+                    {machineName(row.host)}
+                  </span>
+                )}
                 {row.lastSeen && (
                   <span className="launcher-age">{locationAge(row.lastSeen)}</span>
                 )}
@@ -643,16 +804,22 @@ export function NewSessionLauncher({
       )}
       {error && (
         <div className="launcher-error" role="alert">
-          {error}
+          {error.message}
+          {error.reason && <div className="launcher-error-reason">{error.reason}</div>}
         </div>
       )}
       {busy && (
-        <div className="launcher-progress" role="status">
-          Starting…
+        <div className="launcher-progress" role="status" data-stalled={stalled || undefined}>
+          {starting?.host ? `Starting on ${machineName(starting.host)}…` : 'Starting…'}
+          {stalled && ` no answer for ${stalledSeconds}s`}
         </div>
       )}
       <div className="picker-footer">
-        {deletion ? (
+        {stalled ? (
+          <span>
+            <kbd>Esc</kbd> keep waiting in the background
+          </span>
+        ) : deletion ? (
           <>
             <span>
               <kbd>y</kbd> delete

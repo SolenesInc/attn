@@ -77,9 +77,11 @@ export function AppSessionPrompts() {
       {experimental ? (
         <NewSessionLauncher
           {...pickerProps}
-          onSelect={startLocation}
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, undefined, onCreated)
+          onSelect={(path, agent, yolo, chief, auto, host) =>
+            startLocation(path, agent, yolo, chief, auto, { host })
+          }
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, options) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, options)
           }
         />
       ) : (

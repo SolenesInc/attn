@@ -21,7 +21,7 @@ closes the session.
 - `clean-quit`: when a process quits cleanly, attn closes its session into the ledger.
 - `launch-failure`: attn registers no session for an agent that cannot start.
 - `session-title`: a background model names a new session from its first prompt.
-- `launch-launcher`: the experimental "Launcher 2.0" replaces the picker with one dialog for the path, the repository and its worktree.
+- `launch-launcher`: the experimental "Launcher 2.0" replaces the picker with one dialog for the path, the repository and its worktree. With an outpost attached it starts on the highlighted recent's machine ([outposts.md](outposts.md) `launcher-machines`).
 - `launch-mode`: the experimental "Direct agent launches" switch, described in Settings as launching agents using less memory.
 
 ## How to get to it
@@ -114,7 +114,7 @@ Preconditions:
 - Stack: `cmd/attn/agent_launch_stack_test.go`, `cmd/attn/agent_reload_stack_test.go`, `cmd/attn/agent_env_stack_test.go`, `cmd/attn/agent_signal_stack_test.go`, `cmd/attn/wrapper_stack_test.go`, `internal/daemon/agent_launch_abort_stack_test.go`, `internal/daemon/session_exit_order_stack_test.go`, `app/e2e/location-picker.spec.ts`, `app/e2e/new-session-launcher.spec.ts`.
 - Scenario: `new-session-launcher`, `session-creation-shortcuts`, `agent-reload`, `agent-close`, `autoclose-on-exit`.
 - Kernel: `internal/daemon/session_title_sanitize_test.go`.
-- App: `app/src/App.newSession.test.tsx`, `app/src/App.newSessionLauncher.test.tsx`, `app/src/App.locationPicker.test.tsx`, `app/src/App.emptyDesktopLauncher.test.tsx`, `app/src/App.sessionExit.test.tsx`, `app/src/App.stoppedTerminal.test.tsx`, `app/src/App.sessionCloseGuard.test.tsx`, `app/src/application/useAppDeepLinks.test.tsx`, `app/src/components/LocationPicker.test.tsx`.
+- App: `app/src/App.newSession.test.tsx`, `app/src/App.newSessionLauncher.test.tsx`, `app/src/App.newSessionLauncher.outposts.test.tsx`, `app/src/App.locationPicker.test.tsx`, `app/src/App.emptyDesktopLauncher.test.tsx`, `app/src/App.sessionExit.test.tsx`, `app/src/App.stoppedTerminal.test.tsx`, `app/src/App.sessionCloseGuard.test.tsx`, `app/src/application/useAppDeepLinks.test.tsx`, `app/src/components/LocationPicker.test.tsx`.
 
 ## Gotchas
 

@@ -259,12 +259,16 @@ export function useSessionControls({
   };
 }
 
+export type MissingHarnesses = { machine: string; harnesses: ReadonlySet<SessionAgent> };
+
 export function SessionControls({
   controls,
   compact = false,
+  missing,
 }: {
   controls: ReturnType<typeof useSessionControls>;
   compact?: boolean;
+  missing?: MissingHarnesses;
 }) {
   const {
     agent,
@@ -399,17 +403,24 @@ export function SessionControls({
                     : null;
               const shortcut = key && (compact ? key : keyCombo('alt', key));
               const label = pickerAgentLabel(candidate);
+              const absent = missing?.harnesses.has(candidate) && missing.machine;
               return (
                 <button
                   key={candidate}
                   type="button"
-                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
+                  className={`agent-option ${agent === candidate ? 'active' : ''}${absent ? ' agent-option--missing' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleAgentChange(candidate)}
                   role="radio"
                   aria-checked={agent === candidate}
                   disabled={!available}
-                  title={!available ? `${label} is not available on this machine` : undefined}
+                  title={
+                    !available
+                      ? `${label} is not available on this machine`
+                      : absent
+                        ? `${label} is not installed on ${absent}`
+                        : undefined
+                  }
                 >
                   <span className="agent-option-name">{label}</span>
                   {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}

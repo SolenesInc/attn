@@ -106,17 +106,21 @@ export function EmptyDesktopLauncher({
           active={active}
           title={`New agent on ${label}`}
           onClose={() => setPickerGeneration((generation) => generation + 1)}
-          onSelect={(path, agent, yolo, chief, auto) =>
-            startLocation(path, agent, yolo, chief, auto, desktopId)
+          onSelect={(path, agent, yolo, chief, auto, host) =>
+            startLocation(path, agent, yolo, chief, auto, { desktopId, host })
           }
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, desktopId, onCreated)
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, options) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, {
+              ...options,
+              desktopId,
+            })
           }
           onGetRecentLocations={sendGetRecentLocations}
           onBrowseDirectory={sendBrowseDirectory}
           onInspectPath={sendInspectPath}
           onGetRepoInfo={getRepoInfo}
           onDeleteWorktree={sendDeleteWorktree}
+          onError={showError}
           agentAvailability={agentAvailability}
           chiefExists={hasChiefOfStaff}
         />

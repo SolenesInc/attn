@@ -163,7 +163,7 @@ export function useSessionLaunch({
       providedSessionId?: string,
       agent: SessionAgent = 'claude',
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string },
+      options?: { chiefOfStaff?: boolean; autoMode?: boolean; desktopId?: string; host?: string },
     ) =>
       spawnOnCurrentDesktop({
         sessionId: providedSessionId || crypto.randomUUID(),
@@ -175,6 +175,7 @@ export function useSessionLaunch({
         chiefOfStaff: options?.chiefOfStaff,
         direction: 'vertical',
         desktopId: options?.desktopId,
+        host: options?.host,
       }),
     [spawnOnCurrentDesktop],
   );
@@ -246,6 +247,7 @@ export function useSessionLaunch({
       autoMode?: boolean;
       chiefOfStaff: boolean;
       desktopId?: string;
+      host?: string;
     }): Promise<string | null> => {
       if (!pick.chiefOfStaff) {
         const desktop = currentDesktopForLaunch();
@@ -262,6 +264,7 @@ export function useSessionLaunch({
           direction,
           spawnedFrom: baseId || undefined,
           desktopId: pick.desktopId,
+          host: pick.host,
         });
       }
       const sessionId = await launchAgent(
@@ -270,7 +273,7 @@ export function useSessionLaunch({
         undefined,
         pick.agent,
         pick.yoloMode,
-        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId },
+        { chiefOfStaff: true, autoMode: pick.autoMode, desktopId: pick.desktopId, host: pick.host },
       );
       return sessionId;
     },
@@ -284,12 +287,14 @@ export function useSessionLaunch({
       yoloMode = false,
       chiefOfStaff = false,
       autoMode?: boolean,
-      desktopId?: string,
+      { desktopId, host }: { desktopId?: string; host?: string } = {},
     ) => {
-      if (agent !== TERMINAL_AGENT && !hasAvailableAgents)
+      if (!host && agent !== TERMINAL_AGENT && !hasAvailableAgents)
         throw new Error('No supported agent CLI found in PATH.');
       const selectedAgent =
-        agent === TERMINAL_AGENT ? agent : resolvePreferredAgent(agent, agentAvailability, 'codex');
+        host || agent === TERMINAL_AGENT
+          ? agent
+          : resolvePreferredAgent(agent, agentAvailability, 'codex');
       return launchPicked({
         label: selectedAgent === TERMINAL_AGENT ? '' : path.split('/').pop() || 'session',
         cwd: path,
@@ -298,6 +303,7 @@ export function useSessionLaunch({
         autoMode,
         chiefOfStaff,
         desktopId,
+        host,
       });
     },
     [agentAvailability, hasAvailableAgents, launchPicked],
@@ -370,15 +376,21 @@ export function useSessionLaunch({
       yoloMode: boolean,
       autoMode?: boolean,
       chiefOfStaff = false,
-      desktopId?: string,
-      onCreated?: (path: string) => void,
+      {
+        desktopId,
+        host,
+        onCreated,
+      }: { desktopId?: string; host?: string; onCreated?: (path: string) => void } = {},
     ) => {
       const pickedDesktopId = desktopId ?? currentDesktopForLaunch().id;
-      const result = await sendCreateWorktree(mainRepo, branch, undefined, startingFrom);
+      const result = await sendCreateWorktree(mainRepo, branch, undefined, startingFrom, host);
       if (!result.success || !result.path)
         throw new Error(result.error || 'Failed to create worktree');
       onCreated?.(result.path);
-      return startLocation(result.path, agent, yoloMode, chiefOfStaff, autoMode, pickedDesktopId);
+      return startLocation(result.path, agent, yoloMode, chiefOfStaff, autoMode, {
+        desktopId: pickedDesktopId,
+        host,
+      });
     },
     [sendCreateWorktree, startLocation],
   );
@@ -416,11 +428,13 @@ export function useSessionLaunch({
           yoloMode,
           autoMode,
           chiefOfStaff,
-          pickedOnDesktopId,
-          (path) => {
-            setSessionCreationJob((current) =>
-              current?.id === jobId ? { ...current, path, phase: 'starting_session' } : current,
-            );
+          {
+            desktopId: pickedOnDesktopId,
+            onCreated: (path) => {
+              setSessionCreationJob((current) =>
+                current?.id === jobId ? { ...current, path, phase: 'starting_session' } : current,
+              );
+            },
           },
         );
         setSessionCreationJob((current) => (current?.id === jobId ? null : current));
