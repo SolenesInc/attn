@@ -277,6 +277,12 @@ func TestAnOutpostWorksInItsProfilesOwnNotebookFolder(t *testing.T) {
 	shell := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
 	pair.App.TypeLine(shell, `printf '__notebook_%s\n' "$(basename "$(ATTN_TERMINAL_ID=`+pair.App.Terminal(shell)+` attn settings get notebook.root.effective)")"`)
 	pair.App.AwaitScreen(shell, "__notebook_"+filepath.Base(copied))
+	if got := outpost.Attn("settings", "get", "notebook.root"); got.Code == 0 || !strings.Contains(got.Stderr, "saved at the home") {
+		t.Fatalf("reading a profile's notebook.root on the outpost = %+v, want it named as saved at the home", got)
+	}
+	if listed := outpost.Attn("settings", "list"); strings.Contains(listed.Stdout, "notebook.root ") {
+		t.Fatalf("the outpost lists notebook.root with a value it does not hold:\n%s", listed.Stdout)
+	}
 	t.Logf("profile folder %s synced to %s; home writes arrived; outpost attach landed in %s before returning; seed show printed the copy's seed folder; an outpost shell's notebook.root.effective names the copy", own, copied, filepath.Join(own, "seeds", seed.ID))
 }
 
