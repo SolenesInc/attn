@@ -56,8 +56,9 @@ session                 attn's record of one conversation in one profile; like
 │                       the terminal shows that conversation's session
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
-├─ stake (at most 1)    the seed assigned to the session by its delegation;
-│                       it tends it and reports there; like an assignment
+├─ stake (at most 1)    the seed the delegation assigned to the session. The
+│                       session tends that seed and reports there; like an
+│                       assignment
 ├─ vent (0..n)          an agent's report of a problem they had; like a bug
 │  │                    report
 │  ├─ attn vent         about attn itself; only these can go to attn's
@@ -88,7 +89,7 @@ address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
 ├─ inbox (1)
-│  └─ item (0..n)       peer message, seed update, quick capture,
+│  └─ item (0..n)       peer message, seed update, user input,
 │                       PR watch update or notice
 └─ ask (0..n)           a question an agent sends the user, who answers in
                         their own time; like a decision request

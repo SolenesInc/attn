@@ -17,7 +17,7 @@ an experimental setting, off by default, and the panel is macOS only.
 - `capture-files`: attach files and images by paste or drop. The agent saves each file with `attn agent attachment`.
 - `capture-draft`: the unsent text and files survive hiding the panel and restarting the app.
 - `capture-history`: recent messages, each marked "Read" once its agent retrieved the message from its inbox, and "Sent" before.
-- `capture-delivery`: the message lands as a user message in the mailbox's session, waking an asleep member.
+- `capture-delivery`: the message lands as user input in the mailbox's session, waking an asleep member.
 - `capture-guidance`: what attn tells agents about messages from quick capture.
 
 ## How to get to it
@@ -37,7 +37,7 @@ an experimental setting, off by default, and the panel is macOS only.
 
 ### Triggers
 
-- A sent capture is a user message in the chosen mailbox's inbox. A ring types the capture at once, without the 📬 line. If the member is asleep, attn wakes the member first, and that wake does not count against the wake limit (`internal/daemon/quick_captures.go`). The rules are in `docs/internal/inbox.md`.
+- A sent capture is user input in the chosen mailbox's inbox. A ring types the capture at once, without the 📬 line. If the member is asleep, attn wakes the member first, and that wake does not count against the wake limit (`internal/daemon/quick_captures.go`). The rules are in `docs/internal/inbox.md`.
 
 ## Driving it
 

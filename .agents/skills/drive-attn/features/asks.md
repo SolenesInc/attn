@@ -42,7 +42,7 @@ the seed. Asks are an experimental setting, off by default.
 
 ### Triggers
 
-- The user's answer is a user message in the addressee's inbox. A ring types the answer into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`). The rules are in `docs/internal/inbox.md`.
+- The user's answer is user input in the addressee's inbox. A ring types the answer into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`). The rules are in `docs/internal/inbox.md`.
 
 ## Driving it
 
@@ -122,7 +122,7 @@ Preconditions:
 
 - The Asks switch is below the visible Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
 - The bridge keeps the app in the background, where CSS `:focus` can match nothing even when `document.activeElement` is the answer input. Use `dom_wait` with `"focused":true`.
-- An answer is a user message, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
+- An answer is user input, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
 - `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
 - The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
