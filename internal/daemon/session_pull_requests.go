@@ -273,7 +273,17 @@ func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []prot
 		addresses = append(addresses, who.ToChief(session.ProfileID))
 	}
 	byPR := d.pullRequestWatchesByPR()
-	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)
+	bySession := d.store.SessionPullRequestsOf(withWatchHolders([]protocol.SessionID{session.ID}, byPR))
+	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, bySession, byPR), addresses, byPR)
+}
+
+func withWatchHolders(ids []protocol.SessionID, byPR map[string][]store.PullRequestWatch) []protocol.SessionID {
+	for _, watches := range byPR {
+		for _, watch := range watches {
+			ids = append(ids, watch.SessionID)
+		}
+	}
+	return ids
 }
 
 func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []who.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {

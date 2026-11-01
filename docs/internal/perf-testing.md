@@ -37,7 +37,7 @@ footprint change, never to silence a regression you don't understand.
 garden. Copy the database into a named instance with
 `scripts/gardenpushperf/copy-production.sh <name>`, which reads production
 read-only and turns off what the copy would otherwise reach: the real Notebook
-root, the worktree sweep, outposts, Tailscale and every automation. Start the
+root, worktree removal, outposts, Tailscale and every automation. Start the
 instance's daemon and plant a seed to move. The Go tool reports bytes and
 move-to-update latency for notes and for wither and replant moves:
 
@@ -70,6 +70,50 @@ VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<inst
   pnpm --dir app exec vite build --outDir <dir>
 pnpm --dir app exec vite preview --outDir <dir> --port <port>
 ATTN_INSTANCE=<name> node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
+```
+
+## Session facts
+
+`scripts/sessionfactperf` measures what one session fact, such as a state or
+cost change, costs the daemon and the app. It changes the
+`session_cost.billed_as.codex-auto-review` setting to its built-in value, so
+the daemon reprices every session with usage and sends one
+`session_state_changed` for each, while the usage the app shows stays the same.
+
+Copy production into a named instance with
+`scripts/gardenpushperf/copy-production.sh <name>`, as for the garden push, and
+start its daemon with `ATTN_PPROF=<pprof port>`. Each run is one reprice burst. The
+tool waits for the daemon to return to idle and reports CPU milliseconds per
+fact above the idle rate, the gaps between frames and their sizes:
+
+```bash
+ATTN_INSTANCE=<name> go run ./scripts/sessionfactperf -vars http://127.0.0.1:<pprof port>/debug/vars -n 10
+```
+
+`-pace 10s -for 60s` sends one reprice every 10 seconds for a minute instead and
+reports the daemon's share of a core. `-frames <file>` writes every
+`session_state_changed` frame of the bursts to a file, one per line, to compare
+the wire output of two builds on the same copy. Keep a backup of the copied
+database (`sqlite3 <data dir>/attn.db ".backup <file>"`) and restore it before
+each daemon start. Even then, `state_since` and `state_updated_at` differ
+between starts, because each start marks the copy's sessions recoverable.
+
+The worktree sweep's read-only pass still runs on the copy and moves the idle
+rate by tens of milliseconds a second, so whole-daemon CPU per fact is noisy.
+For a before-and-after comparison, take a profile during the bursts instead,
+`/debug/pprof/profile` for CPU and two `/debug/pprof/allocs` snapshots for
+allocations, and read `projectSessionStateChanged` with `go tool pprof -top
+-cum`, using `-base <first snapshot>` for allocations.
+
+`app-session.mjs` measures the app's main-thread time, React commits and paints
+per fact in headless Chromium. It runs the Go tool for the bursts. Serve a
+bundle built against the instance, as for the garden push. A dev server also
+names the components each commit renders, and needs the instance's port:
+
+```bash
+VITE_DAEMON_PORT=<instance ws port> ATTN_INSTANCE=<name> pnpm --dir app exec vite --port <port>
+ATTN_INSTANCE=<name> node scripts/sessionfactperf/app-session.mjs http://localhost:<port>/ \
+  http://127.0.0.1:<pprof port>/debug/vars 10
 ```
 
 ## Daemon profiling

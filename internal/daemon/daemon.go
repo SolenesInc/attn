@@ -3334,8 +3334,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	dispatcherBySession := d.gardenDispatchersBySession()
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
-	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
+	ids := make([]protocol.SessionID, 0, len(sessions))
+	for _, session := range sessions {
+		ids = append(ids, session.ID)
+	}
+	pullRequestsBySession := d.store.SessionPullRequestsOf(withWatchHolders(ids, pullRequestWatchesByPR))
 	sharedConversations := d.conversationsSharedByLiveSessions()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
