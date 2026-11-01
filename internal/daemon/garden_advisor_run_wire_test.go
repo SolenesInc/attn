@@ -159,3 +159,37 @@ func TestEachReviewItemKeepsOnlyAdviceItCouldActOnForTheEvidenceItWasGiven(t *te
 		}
 	}
 }
+
+func TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	seed := gardenReviewAbandonedSeed(t, w, app, cli, "checkout", "Finish checkout")
+	setSetting(t, app, "garden.advisor", `{"agent":"claude"}`)
+	t.Setenv("ATTN_HEADLESS_TASKS", "on")
+	review := gardenReviewStart(t, cli)
+	advising := w.HeadlessTask()
+	if again := gardenReviewStart(t, cli); again.Run.ID != review.Run.ID {
+		t.Fatalf("starting the review again opened %s, want the unfinished review %s", again.Run.ID, review.Run.ID)
+	}
+	advising.Answer(`{"recommendation":"keep_growing","explanation":"Checkout work remains.","evidence":["The discount field is unfinished."]}`)
+	testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
+		return m.Review.Run.ID == review.Run.ID && len(m.Review.Items) == 1 && m.Review.Items[0].Status == "ready"
+	})
+	item := gardenReviewItem(t, gardenReviewShow(t, cli, review.Run.ID).Review, seed)
+	for {
+		requestID := uuid.NewString()
+		listed := testworld.Request(app, protocol.TaskListMessage{Cmd: protocol.CmdTaskList, RequestID: protocol.Ptr(requestID)},
+			protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == requestID })
+		if slices.ContainsFunc(listed.Tasks, func(task protocol.Task) bool {
+			return task.Kind == "garden_review_classify" && task.Subject == item.ID && task.State == "done"
+		}) {
+			break
+		}
+		testworld.Await[protocol.TasksChangedMessage](app, protocol.EventTasksChanged, nil)
+	}
+	if shown := gardenReviewItem(t, gardenReviewShow(t, cli, review.Run.ID).Review, seed); shown.Status != "ready" ||
+		protocol.Deref(shown.Recommendation) != "keep_growing" || protocol.Deref(shown.Explanation) != "Checkout work remains." {
+		t.Errorf("the item is %s recommending %q because %q, want its ready advice to keep growing unchanged",
+			shown.Status, protocol.Deref(shown.Recommendation), protocol.Deref(shown.Explanation))
+	}
+}

@@ -571,7 +571,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 	if err != nil {
 		return nil, err
 	}
-	if !found || item.Resolution != garden.ReviewResolutionUnresolved ||
+	if !found || item.Resolution != garden.ReviewResolutionUnresolved || item.Status == garden.ReviewItemStatusReady ||
 		item.EvidenceVersion != payload.EvidenceVersion {
 		return nil, nil
 	}
