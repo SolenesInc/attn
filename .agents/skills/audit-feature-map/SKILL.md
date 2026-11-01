@@ -32,10 +32,10 @@ user asks for the audit directly, plant one. At the end, harvest it with
 `attn seed harvest <stake> -m "<outcome> at <revision>: <summary>"`.
 
 The next pass looks for new ways in from a baseline: the revision of the
-newest pass that ended clean or changed. A blocked pass never moves the
-baseline, because it may have stopped before its scan for new ways in
-finished or before its fixes landed. The interval it covered stays in the
-next pass's scan.
+newest pass that finished, ending clean or changed. A blocked pass never moves
+the baseline, because it may have stopped before its scan for new ways in
+finished or before its fixes landed. The interval it covered stays in the next
+pass's scan.
 
 ## What you may change
 
@@ -91,10 +91,10 @@ claims the subagents raised, but don't re-check the parts they found correct.
 Then look for ways into features that no map file lists yet. Find the
 baseline: run `attn seed search "feature map audit" --limit 50`, read the
 harvest messages of the audit stakes, and take the newest revision among those
-that start with `clean` or `changed`. If none does, take the newest revision
-any harvested audit stake names. Read the commits from the baseline to your
-revision in `cmd/attn`, `app/src/shortcuts`, `app/src/application`
-and `internal/prompts/content`. Only count a way in as missing when you can
+that don't start with `blocked`. Passes from before these outcomes harvested
+only when they finished, so their revisions count. Read the commits from the
+baseline to your revision in `cmd/attn`, `app/src/shortcuts`,
+`app/src/application` and `internal/prompts/content`. Only count a way in as missing when you can
 point at the source that adds it.
 
 ### 4. Drive every feature
@@ -175,10 +175,10 @@ Pack the evidence folder into a `.tar.gz` and attach it to your stake with
 with the features you covered, the unreachable ones and what they need, the
 map fixes, the seeds you planted or noted, the open asks, and the outcome.
 
-If no ask is open, harvest the stake. If one is, end your turn and leave the
-stake open, because closing the stake closes the ask. When the user answers,
-act on the answer: fix the map and land the fix, or report the bug. Then
-note what you did and harvest the stake.
+If no ask is open, harvest the stake. Otherwise end your turn and leave the
+stake open, because closing the stake closes every ask on it. Each time the
+user answers, act on that answer: fix the map and land the fix, or report the
+bug, and note what you did. Harvest the stake once no ask on it is open.
 
 Use the `attn` on your `PATH` only for your stake, seeds and asks. Run it in a
 shell without drive-attn's prefix, because the prefix points `attn` at the
