@@ -42,6 +42,9 @@ fn the_helper_greets_refuses_work_before_prepare_and_exits_when_its_lease_closes
     stdin.write_all(body).unwrap();
     writeln!(stdin, r#"{{"op":"warm","id":8}}"#).unwrap();
     for id in [7, 8] {
+        let started = next();
+        assert_eq!(started["event"], "started");
+        assert_eq!(started["id"], id);
         let refused = next();
         assert_eq!(refused["id"], id);
         assert_eq!(refused["event"], "error");

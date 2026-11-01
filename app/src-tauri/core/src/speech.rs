@@ -70,18 +70,21 @@ impl Helper {
         Ok(self.next_id)
     }
 
-    fn release(self) {
+    fn stop(self) {
         let Helper {
             mut child, stdin, ..
         } = self;
         drop(stdin);
-        thread::spawn(move || {
-            let _ = child.wait();
-        });
+        let _ = child.wait();
     }
 }
 
 fn cache_root() -> Result<PathBuf, String> {
+    let data_dir = crate::instance::data_dir()?;
+    let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
+    if data_dir != home.join(".attn") {
+        return Ok(data_dir.join("speech-models"));
+    }
     dirs::cache_dir()
         .map(|dir| dir.join("attn").join("speech-models"))
         .ok_or_else(|| "the user cache directory is unavailable".to_string())
@@ -226,13 +229,13 @@ fn phase_after(event: &Value) -> Option<Phase> {
 
 fn release(state: &mut State) {
     if let Some(helper) = state.helper.take() {
-        helper.release();
+        helper.stop();
     }
     state.phase = Phase::Off;
 }
 
 #[tauri::command]
-pub fn speech_enable<R: Runtime>(app: AppHandle<R>) -> Status {
+pub async fn speech_enable<R: Runtime>(app: AppHandle<R>) -> Status {
     let speech = app.state::<Speech>();
     let mut state = speech.lock();
     if matches!(state.phase, Phase::Ready) && state.helper.is_some() {
@@ -257,7 +260,7 @@ pub fn speech_enable<R: Runtime>(app: AppHandle<R>) -> Status {
 }
 
 #[tauri::command]
-pub fn speech_disable<R: Runtime>(app: AppHandle<R>) -> Status {
+pub async fn speech_disable<R: Runtime>(app: AppHandle<R>) -> Status {
     let speech = app.state::<Speech>();
     let mut state = speech.lock();
     release(&mut state);
@@ -265,12 +268,12 @@ pub fn speech_disable<R: Runtime>(app: AppHandle<R>) -> Status {
 }
 
 #[tauri::command]
-pub fn speech_status<R: Runtime>(app: AppHandle<R>) -> Status {
+pub async fn speech_status<R: Runtime>(app: AppHandle<R>) -> Status {
     status_of(&app.state::<Speech>().lock())
 }
 
 #[tauri::command]
-pub fn speech_remove<R: Runtime>(app: AppHandle<R>) -> Result<Status, String> {
+pub async fn speech_remove<R: Runtime>(app: AppHandle<R>) -> Result<Status, String> {
     let speech = app.state::<Speech>();
     let state = speech.lock();
     if state.helper.is_some() {
@@ -287,13 +290,5 @@ pub fn speech_remove<R: Runtime>(app: AppHandle<R>) -> Result<Status, String> {
 }
 
 pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
-    let speech = app.state::<Speech>();
-    let mut state = speech.lock();
-    if let Some(Helper {
-        mut child, stdin, ..
-    }) = state.helper.take()
-    {
-        drop(stdin);
-        let _ = child.wait();
-    }
+    release(&mut app.state::<Speech>().lock());
 }

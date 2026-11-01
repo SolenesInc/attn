@@ -20,7 +20,7 @@ use artifacts::{Cache, PARAKEET_UNIFIED_ENGLISH, REQUIRED, SILERO_VAD};
 use engine::{Engine, Outcome};
 
 const PROTOCOL: u32 = 1;
-const USAGE: &str = "usage: attn-speech serve --cache DIR | attn-speech remove --cache DIR";
+const USAGE: &str = "usage: attn-speech serve --cache DIR";
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -65,27 +65,11 @@ type Pending = Arc<Mutex<HashMap<u64, Stop>>>;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (command, cache) = match args.as_slice() {
-        [command, flag, dir] if flag == "--cache" => {
-            (command.as_str(), Cache::new(PathBuf::from(dir)))
-        }
-        _ => {
-            eprintln!("{USAGE}");
-            return ExitCode::from(2);
-        }
-    };
-    match command {
-        "serve" => {
-            serve(cache);
+    match args.as_slice() {
+        [command, flag, dir] if command == "serve" && flag == "--cache" => {
+            serve(Cache::new(PathBuf::from(dir)));
             ExitCode::SUCCESS
         }
-        "remove" => match cache.remove() {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("could not remove the speech model cache: {error}");
-                ExitCode::FAILURE
-            }
-        },
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
@@ -172,6 +156,7 @@ fn work(cache: &Cache, queue: &mpsc::Receiver<(u64, Stop, Job)>, pending: &Pendi
         let result = if stop.triggered() {
             Err("canceled before it started".to_string())
         } else {
+            emit(&json!({"event": "started", "id": id}));
             match job {
                 Job::Prepare => prepare(cache, &mut engine, id, &stop),
                 Job::Warm => warm(engine.as_mut()),

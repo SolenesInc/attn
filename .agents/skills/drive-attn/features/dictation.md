@@ -1,9 +1,11 @@
 # Dictation
 
 Experimental and off by default, on Apple silicon Macs. Turning dictation on
-downloads the pinned English speech model into a cache shared by every attn on
-the Mac, `~/Library/Caches/attn/speech-models`, and starts one private
-`attn-speech` helper per app. The helper keeps the model ready while the app
+downloads the pinned English speech model and starts one private
+`attn-speech` helper per app. The production app keeps the model in
+`~/Library/Caches/attn/speech-models`. A named instance keeps its own copy in
+`<data dir>/speech-models`, so driving it never touches production's model, and
+`attn instance clean` removes it. The helper keeps the model ready while the app
 runs and exits when dictation turns off or the app quits. Recording and
 inserting text arrive in later slices of the dictation plan; this file covers
 setup.
@@ -33,21 +35,21 @@ setup.
 
 ## Driving it
 
-Preconditions: the baseline instance with its app (`bridge --launch --wait-ready ping` answers). A first run downloads about 730 MB. Note what `~/Library/Caches/attn/speech-models` holds before the run, since Remove model deletes it for every attn on the Mac.
+Preconditions: the baseline instance with its app (`bridge --launch --wait-ready ping` answers). The instance's model cache is `$(./attn instance resolve --field dataDir)/speech-models`. Without it, the first step downloads about 730 MB. To skip the download, copy a cache you already have into that folder (`cp -cR <cache> "$(./attn instance resolve --field dataDir)/speech-models"`); never point the instance at production's.
 
-- **Turn it on.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'`, click `[data-testid="settings-nav-experimental"]`, then turn the "Dictation" switch on (or run `./attn settings set dictation_enabled true`). The status reads `Downloading Parakeet Unified English: … of 731 MB`, then `Verifying …`, `Loading the speech model…` and `Ready.`. `pgrep -P "$(cat "$(./attn instance resolve --field dataDir)/app.pid")" -x attn-speech` prints one helper, running `<app>/Contents/MacOS/attn-speech serve --cache ~/Library/Caches/attn/speech-models`.
-- **Turn it off.** The helper exits, and the status reads `Speech model downloaded (733 MB).` with Remove model.
+- **Turn it on.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'`, click `[data-testid="settings-nav-experimental"]`, then turn the "Dictation" switch on (or run `./attn settings set dictation_enabled true`). The status reads `Downloading Parakeet Unified English: … of 731 MB`, then `Verifying …`, `Loading the speech model…` and `Ready.`. `pgrep -P "$(cat "$(./attn instance resolve --field dataDir)/app.pid")" -x attn-speech` prints one helper, running `<app>/Contents/MacOS/attn-speech serve --cache <data dir>/speech-models`.
+- **Turn it off.** The helper exits before the status changes, and the status reads `Speech model downloaded (733 MB).` with Remove model.
 - **On again from the cache.** The status reaches `Ready.` within seconds, without a download.
 - **A helper that stops.** End the helper (it is a child of this instance's app): the status names the exit, `The speech helper stopped unexpectedly (signal: 9 (SIGKILL)). Retry to start it again.`, and the app keeps answering `bridge ping`. Retry reaches `Ready.`.
 - **Quit and start with it on.** `./attn instance stop-app` ends the helper with the app. `bridge --launch --wait-ready ping` starts a new helper that reaches `Ready.` without any action.
-- **Remove the model.** Turn dictation off and click Remove model: the status line goes and the cache folder is gone.
+- **Remove the model.** Turn dictation off and click Remove model: the status line goes and the instance's `speech-models` folder is gone.
 - **The helper alone.** `python3 -I scripts/verify-speech-helper.py check <app>/Contents/MacOS/attn-speech <workdir> <clips>` runs the helper's process checks: download, resume, cancel, crash, lease exit and fixture transcription. `idle` measures the helper's idle CPU, wakeups and memory, and the first request after an idle period.
 - **Proof.** Keep each status text with the command that produced it, the helper's `ps` line, and `bridge capture_screenshot` at Ready and after a stop.
 
 ## Contexts
 
 - **Durability across restarts**: the helper belongs to one app process. An app restart starts a new helper from the cache. A daemon restart does not touch it.
-- **Profiles**: the setting is home-wide, and the model cache is shared by every instance on the Mac.
+- **Profiles**: the setting is home-wide. Each named instance has its own model cache; the production app's cache is the Mac's.
 - **Performance and idle cost**: an idle prepared helper uses about 1 ms of CPU a minute and wakes about once every 3 seconds. macOS reclaims the model's pages while idle, so the first request after a long idle pays to bring them back.
 - **Linux**: no app dictation. The row is hidden and the helper is not bundled.
 - **Microphone**: setup never opens the microphone. The helper links no audio framework.
@@ -60,4 +62,3 @@ Preconditions: the baseline instance with its app (`bridge --launch --wait-ready
 ## Gotchas
 
 - `bridge` calls take about a second each, so times measured through `bridge` include it. Use the helper's own `load_ms` and `warm_ms` (the `check` and `idle` output) for preparation receipts.
-- Remove model deletes the shared cache that other attn instances on the Mac also use.

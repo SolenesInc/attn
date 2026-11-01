@@ -82,6 +82,10 @@ class Helper:
         return time.monotonic() - closed
 
 
+def wait_started(helper, request_id):
+    return helper.wait(lambda e: e.get("id") == request_id and e["event"] == "started")
+
+
 def children_of(pid):
     out = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True).stdout
     return [int(p) for p in out.split()]
@@ -321,17 +325,17 @@ def check(BINARY, WORK, CLIPS, PREPARED):
 
     xlong = open(os.path.join(CLIPS, "Daniel", "xlong.wav"), "rb").read()
     request = h.send("transcribe", xlong)
-    time.sleep(0.15)
+    wait_started(h, request)
     canceled_at = time.monotonic()
     h.cancel(request)
     settled = h.finish(request)
     after = h.finish(h.send("transcribe", open(os.path.join(CLIPS, "Daniel", "short.wav"), "rb").read()))
     report("cancel stops an in-flight transcription and the helper keeps serving",
-           settled["event"] == "error" and "cancel" in settled["message"] and after["event"] == "transcript",
+           settled["event"] == "error" and settled["message"] == "transcription canceled" and after["event"] == "transcript",
            settle_ms=round((settled["_t"] - canceled_at) * 1000, 1), settled=strip(settled), next=strip(after))
 
     request = h.send("transcribe", xlong)
-    time.sleep(0.15)
+    wait_started(h, request)
     closed = time.monotonic()
     h.proc.stdin.close()
     h.proc.wait(timeout=30)
@@ -340,8 +344,7 @@ def check(BINARY, WORK, CLIPS, PREPARED):
 
     h = Helper(BINARY, cache)
     h.finish(h.send("prepare"))
-    h.send("transcribe", xlong)
-    time.sleep(0.15)
+    wait_started(h, h.send("transcribe", xlong))
     h.proc.send_signal(signal.SIGKILL)
     eof = h.wait(lambda e: e["event"] == "eof", timeout=10)
     h = Helper(BINARY, cache)
