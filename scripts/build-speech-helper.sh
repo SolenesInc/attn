@@ -8,16 +8,23 @@ crate=app/speech
 binary="$repo/$crate/target/release/attn-speech"
 
 cargo_configs() {
-  local dir="$repo/$crate" name
+  local dir="$repo/$crate" up="" name
   while :; do
     for name in config config.toml; do
-      if [[ -f "$dir/.cargo/$name" ]]; then cat "$dir/.cargo/$name"; fi
+      if [[ -f "$dir/.cargo/$name" ]]; then
+        printf '%s.cargo/%s\n' "$up" "$name"
+        cat "$dir/.cargo/$name"
+      fi
     done
     [[ "$dir" == / ]] && break
     dir="$(dirname "$dir")"
+    up="../$up"
   done
   for name in config config.toml; do
-    if [[ -f "${CARGO_HOME:-$HOME/.cargo}/$name" ]]; then cat "${CARGO_HOME:-$HOME/.cargo}/$name"; fi
+    if [[ -f "${CARGO_HOME:-$HOME/.cargo}/$name" ]]; then
+      printf 'CARGO_HOME/%s\n' "$name"
+      cat "${CARGO_HOME:-$HOME/.cargo}/$name"
+    fi
   done
 }
 
@@ -49,7 +56,7 @@ fi
 cached="$(attn_build_cache_root speech-helper)/$key/attn-speech"
 
 if [[ ! -x "$cached" ]]; then
-  cargo build --manifest-path "$repo/$crate/Cargo.toml" --release --locked
+  (cd "$repo/$crate" && cargo build --release --locked)
   staging="$(mktemp -d "${TMPDIR:-/tmp}/attn-speech-helper.XXXXXX")"
   trap 'rm -rf "$staging"' EXIT
   mkdir "$staging/artifact"

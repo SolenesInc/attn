@@ -13,7 +13,7 @@ cp "$root/rust-toolchain.toml" "$work/repo/"
 cat > "$work/bin/cargo" <<'CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
-crate="$(dirname "$3")"
+crate="$PWD"
 mkdir -p "$crate/target/release"
 cat "$crate/src/main.rs" > "$crate/target/release/attn-speech"
 chmod +x "$crate/target/release/attn-speech"
@@ -60,4 +60,8 @@ mkdir -p "$work/second/.cargo"
 printf '[profile.release]\nlto = false\n' > "$work/second/.cargo/config.toml"
 "$work/second/scripts/build-speech-helper.sh" > /dev/null
 [[ "$(builds)" == 5 ]] || { echo 'a Cargo config file reused a binary built without it' >&2; exit 1; }
+
+mv "$work/second/.cargo" "$work/second/app/speech/.cargo"
+"$work/second/scripts/build-speech-helper.sh" > /dev/null
+[[ "$(builds)" == 6 ]] || { echo 'a Cargo config moved to another directory reused a binary built before the move' >&2; exit 1; }
 echo 'speech helper cache: OK'
