@@ -19,15 +19,26 @@ export async function stepClock(socketPath, timeoutMs) {
   let revision = 0;
   let marked = 0;
   let armedWaiters = [];
+  let idleWaiters = [];
 
+  const wakeAll = waiters => {
+    for (const wake of waiters) wake();
+  };
   const notifyArmed = () => {
     const waiters = armedWaiters;
     armedWaiters = [];
-    for (const wake of waiters) wake();
+    wakeAll(waiters);
+  };
+  const busyPids = () => [...peers].filter(peer => peer.busy).map(peer => peer.pid);
+  const notifyIdle = () => {
+    if (busyPids().length > 0) return;
+    const waiters = idleWaiters;
+    idleWaiters = [];
+    wakeAll(waiters);
   };
 
   const server = net.createServer(socket => {
-    const peer = { socket, pid: undefined, advanced: [], closed: false, error: undefined };
+    const peer = { socket, pid: undefined, advanced: [], busy: false, closed: false, error: undefined };
     peers.add(peer);
     const input = createInterface({ input: socket });
     const finish = error => {
@@ -39,6 +50,7 @@ export async function stepClock(socketPath, timeoutMs) {
         if (key.startsWith(`${peer.pid} `)) pending.delete(key);
       }
       for (const settle of peer.advanced.splice(0)) settle();
+      notifyIdle();
     };
     socket.on('error', finish);
     input.on('close', () => finish());
@@ -62,6 +74,8 @@ export async function stepClock(socketPath, timeoutMs) {
       } else if (fields[0] === 'advanced' && fields.length === 2) {
         peer.advanced.shift()?.();
       } else if ((fields[0] === 'busy' || fields[0] === 'idle') && fields.length === 1) {
+        peer.busy = fields[0] === 'busy';
+        notifyIdle();
       } else {
         finish(new Error(`step clock process ${peer.pid} sent ${JSON.stringify(line)}`));
         socket.destroy();
@@ -107,6 +121,13 @@ export async function stepClock(socketPath, timeoutMs) {
             return;
           }
           await new Promise(resolve => armedWaiters.push(resolve));
+        }
+      });
+    },
+    awaitIdle() {
+      return guarded(() => `step clock awaitIdle: processes [${busyPids().join(', ')}] stayed busy`, async () => {
+        while (busyPids().length > 0) {
+          await new Promise(resolve => idleWaiters.push(resolve));
         }
       });
     },

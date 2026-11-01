@@ -76,17 +76,22 @@ repository root.
 - Hand-run scripts outside `createScenarioRunner` have none of these guards and
   may launch real providers; read one before running it.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
-- Outpost scenarios that exercise silence use `stepClock` for each daemon and
-  advance it around observed bridge states instead of waiting for liveness
-  timers. Await a fresh timer registration by its name, such as
-  `bridge-retry`, before advancing an asynchronous retry or a dial whose
-  answer is deliberately held. A stepped daemon's transcript watchers poll
-  only when its clock advances. Supply each clock's
-  `env` through the daemon's child environment or the app's `launchEnv`; quit
-  the old app before stopping its daemon so relaunch picks up that environment.
-  Stop the daemons before closing their clocks. To measure a connecting notice,
-  hold new requests at the fake SSH boundary and release them after the explicit
-  wall-time CPU sample; a paused daemon's health check rejects new connections.
+- A scenario that waits on a daemon timer, such as an outpost's liveness
+  timers or an automation schedule, steps that daemon with `stepClock` instead
+  of waiting. Supply each clock's `env` through the daemon's child environment
+  or the app's `launchEnv`; quit the old app before stopping its daemon so
+  relaunch picks up that environment. Stop the daemons before closing their
+  clocks. A stepped daemon's transcript watchers poll only when its clock
+  advances.
+  - Outpost scenarios advance around observed bridge states. Await a fresh
+    timer registration by its name, such as `bridge-retry`, before advancing an
+    asynchronous retry or a dial whose answer is deliberately held. To measure
+    a connecting notice, hold new requests at the fake SSH boundary and release
+    them after the explicit wall-time CPU sample; a paused daemon's health
+    check rejects new connections.
+  - Schedule ticks follow the Go wire tests: `awaitIdle`, `advance('1m')`,
+    `awaitIdle`, then read the result. `awaitIdle` returns once the daemon's
+    job runner has finished what the tick started.
 - Take verdicts from the screen, the protocol, or the CLI, not the daemon DB;
   see [Testing](../../../docs/internal/testing.md#scenario). Read the DB, when a
   scenario must, through `queryDaemonDb`. Resolve pane ids from app state.
