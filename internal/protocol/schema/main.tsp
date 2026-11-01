@@ -1422,6 +1422,9 @@ model RecordAnalyticsMessage {
   stream: string; // app or cli
   name: string;
   props?: Record<unknown>;
+  // The session a cli record is about once the caller's terminal no longer
+  // names one, as after the session closed itself.
+  session_id?: SessionID;
 }
 
 // Fields the CLI adds to every frame it writes to the daemon socket.

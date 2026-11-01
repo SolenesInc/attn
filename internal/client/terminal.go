@@ -25,6 +25,7 @@ func (c *Client) TerminalCommand(ctx context.Context, message any) (*protocol.Re
 		}
 		return nil, fmt.Errorf("terminal command: %w", err)
 	}
+	noteReply(response.Ok, response.Refusal)
 	if !response.Ok {
 		return nil, fmt.Errorf("%s", protocol.Deref(response.Error))
 	}

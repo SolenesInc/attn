@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/prompts"
@@ -488,16 +490,24 @@ func runAgentClose(args []string) {
 		fmt.Fprintf(os.Stderr, "agent close: %v\n", err)
 		exit(2)
 	}
+	outliveTheCloseOfOwnSession()
 	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %s\n", agentCloseErrorMessage(parsed, err))
 		exit(1)
+	}
+	if result.Rule == protocol.AgentCloseRuleSelf {
+		recordAsClosedSession(result.TargetSessionID)
 	}
 	if parsed.json {
 		printJSON(result)
 		return
 	}
 	printAgentClose(os.Stdout, result)
+}
+
+func outliveTheCloseOfOwnSession() {
+	signal.Ignore(syscall.SIGTERM, syscall.SIGHUP)
 }
 
 func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {

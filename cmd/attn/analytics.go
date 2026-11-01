@@ -24,6 +24,7 @@ const (
 type invocationRecord struct {
 	path       string
 	caller     protocol.TerminalID
+	session    protocol.SessionID
 	usageError string
 	unrecorded bool
 }
@@ -36,6 +37,10 @@ func setCommandPath(path string) {
 
 func actAsCaller(terminal protocol.TerminalID) {
 	invocation.caller = terminal
+}
+
+func recordAsClosedSession(session protocol.SessionID) {
+	invocation.session = session
 }
 
 func leaveInvocationUnrecorded() {
@@ -66,7 +71,7 @@ func recordInvocation(code int) {
 	if invocation.caller != "" {
 		c = c.WithCaller(invocation.caller)
 	}
-	_ = c.RecordAnalytics("cli", invocation.path, props)
+	_ = c.RecordAnalytics("cli", invocation.path, invocation.session, props)
 }
 
 func invocationError(code int) (kind, refusal string) {

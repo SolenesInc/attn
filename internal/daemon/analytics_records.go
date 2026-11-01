@@ -57,6 +57,9 @@ func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, cal
 	props := map[string]any(msg.Props)
 	var sessionID protocol.SessionID
 	if stream == analytics.StreamCLI {
+		if caller == "" {
+			caller = protocol.Deref(msg.SessionID)
+		}
 		props, sessionID = d.withAnalyticsCaller(props, caller)
 	}
 	d.recordAnalytics(stream, msg.Name, string(sessionID), props)
@@ -73,6 +76,8 @@ func (d *Daemon) withAnalyticsCaller(props map[string]any, sessionID protocol.Se
 	props["caller"] = "agent"
 	if session := d.store.Get(sessionID); session != nil {
 		props["harness"] = session.Agent
+	} else if closed := d.store.SessionLedgerEntry(sessionID); closed != nil {
+		props["harness"] = closed.Agent
 	}
 	return props, sessionID
 }

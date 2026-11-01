@@ -8969,6 +8969,9 @@ type RecordAnalyticsMessage struct {
 	// Props corresponds to the JSON schema field "props".
 	Props RecordUnknown `json:"props,omitempty,omitzero"`
 
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
 	// Stream corresponds to the JSON schema field "stream".
 	Stream string `json:"stream"`
 }

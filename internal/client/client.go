@@ -71,6 +71,7 @@ func (c *Client) sendAutomation(msg any, out any) error {
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return err
 	}
+	noteReply(probe.Success, nil)
 	if !probe.Success {
 		return fmt.Errorf("daemon error: %s", protocol.Deref(probe.Error))
 	}
@@ -207,13 +208,20 @@ func (c *Client) marshalFrame(msg any) ([]byte, error) {
 	return append(frame, '\n'), nil
 }
 
-func (c *Client) RecordAnalytics(stream, name string, props map[string]any) error {
+func (c *Client) RecordAnalytics(stream, name string, session protocol.SessionID, props map[string]any) error {
 	conn, err := c.connect()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	if err := c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(recordAnalyticsDeadline)); err != nil {
+		return err
+	}
+	message := protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}
+	if session != "" {
+		message.SessionID = &session
+	}
+	if err := c.writeFrame(conn, message); err != nil {
 		return err
 	}
 	_, err = io.Copy(io.Discard, conn)
@@ -282,12 +290,8 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 		return nil, fmt.Errorf("receive response: %w", err)
 	}
 
+	noteReply(resp.Ok, resp.Refusal)
 	if !resp.Ok {
-		refusal := protocol.RefusalUnclassified
-		if resp.Refusal != nil {
-			refusal = *resp.Refusal
-		}
-		lastRefusal.Store(&refusal)
 		return nil, &DaemonError{
 			Code:     protocol.Deref(resp.ErrorCode),
 			Message:  protocol.Deref(resp.Error),
@@ -298,7 +302,20 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	return &resp, nil
 }
 
+const recordAnalyticsDeadline = 2 * time.Second
+
 var lastRefusal atomic.Pointer[protocol.Refusal]
+
+func noteReply(ok bool, refusal *protocol.Refusal) {
+	if ok {
+		lastRefusal.Store(nil)
+		return
+	}
+	if refusal == nil {
+		refusal = protocol.Ptr(protocol.RefusalUnclassified)
+	}
+	lastRefusal.Store(refusal)
+}
 
 func LastRefusal() (protocol.Refusal, bool) {
 	refusal := lastRefusal.Load()

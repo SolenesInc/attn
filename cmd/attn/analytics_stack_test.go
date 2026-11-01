@@ -35,6 +35,7 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		fromAgent("seed", "show", "s-zzzzzz")
 		fromAgent("seed", "check", "report", seed.ID, "C1", "-m", "the field saves")
 		fromAgent("seed", "ls", "--bogus")
+		fromAgent("terminal", "read", "t-missing")
 		s.Attn("frobnicate")
 	}
 
@@ -52,18 +53,24 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		t.Fatalf("claude received %q", got)
 	}
 	claude.Reply("Added.")
+	if closed := s.Run(testworld.Invocation{Args: []string{"agent", "close", "--self", "-m", "done"}, Terminal: app.Terminal(session)}); closed.Code != 0 {
+		t.Fatalf("self-close: %+v", closed)
+	}
 
 	var got []string
 	hooks := 0
+	subjects := map[string]string{}
 	for _, record := range cliRecords(t, app) {
 		line := record.Name + " " + string(record.Props)
 		if strings.HasPrefix(record.Name, "_hook-") {
 			hooks++
+			subjects["_hook-"] = record.Subject
 			if !strings.Contains(line, `"caller":"agent","exit_code":0,"harness":"claude","ok":true`) || record.Subject == "" {
 				t.Errorf("hook record %s with subject %q, want it ok from the claude session", line, record.Subject)
 			}
 			continue
 		}
+		subjects[record.Name] = record.Subject
 		got = append(got, line)
 	}
 	slices.Reverse(got)
@@ -73,13 +80,18 @@ func TestEachAttnCommandWritesOneCLIRecordNamedByItsPath(t *testing.T) {
 		`seed show {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"not_found"}`,
 		`seed check report {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"not_found"}`,
 		`seed ls {"caller":"agent","error_kind":"unknown_flag","exit_code":2,"harness":"claude","ok":false}`,
+		`terminal read {"caller":"agent","error_kind":"refused","exit_code":1,"harness":"claude","ok":false,"refusal":"unclassified"}`,
 		`attn {"caller":"human","error_kind":"unknown_command","exit_code":1,"ok":false}`,
+		`agent close {"caller":"agent","exit_code":0,"harness":"claude","ok":true}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("cli records, oldest first:\n%s\nwant one per command, no query:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if hooks == 0 {
 		t.Fatal("the turn's hooks wrote no _hook- records")
+	}
+	if subjects["agent close"] != subjects["_hook-"] {
+		t.Fatalf("the self-close record has subject %q, want its session's %q", subjects["agent close"], subjects["_hook-"])
 	}
 }
 

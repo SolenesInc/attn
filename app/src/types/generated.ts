@@ -8865,10 +8865,11 @@ export interface RecentLocationElement {
 }
 
 export interface RecordAnalyticsMessage {
-    cmd:    RecordAnalyticsMessageCmd;
-    name:   string;
-    props?: { [key: string]: any };
-    stream: string;
+    cmd:         RecordAnalyticsMessageCmd;
+    name:        string;
+    props?:      { [key: string]: any };
+    session_id?: string;
+    stream:      string;
     [property: string]: any;
 }
 
@@ -25247,6 +25248,7 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("RecordAnalyticsMessageCmd") },
         { json: "name", js: "name", typ: "" },
         { json: "props", js: "props", typ: u(undefined, m("any")) },
+        { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "stream", js: "stream", typ: "" },
     ], "any"),
     "RecordCommandUsageMessage": o([

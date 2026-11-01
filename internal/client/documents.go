@@ -146,6 +146,7 @@ func (c *Client) DocSubscribe(query protocol.DocumentQuery, held []protocol.Stor
 		if err := decoder.Decode(&resp); err != nil {
 			return &DocSubscriptionEnded{Message: "the daemon closed the connection", lost: true}
 		}
+		noteReply(resp.Ok, resp.Refusal)
 		if !resp.Ok {
 			return &DocSubscriptionEnded{
 				Code:    protocol.Deref(resp.ErrorCode),
