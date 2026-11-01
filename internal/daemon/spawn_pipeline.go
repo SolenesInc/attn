@@ -590,15 +590,31 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
-	if protocol.Deref(msg.Host) == "" {
-		d.store.UpsertRecentLocation(req.cwd)
-	}
+	d.recordRecentLocation(protocol.Deref(msg.Host), req.cwd)
 	d.publishFact(fact, string(session.ID), nil)
 	plan.commit()
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
 	return &spawnOutcome{}
+}
+
+func (d *Daemon) recordRecentLocation(host, cwd string) {
+	if host == "" {
+		d.store.UpsertRecentLocation("", cwd, "")
+		return
+	}
+	inspection, err := Call[protocol.CheckoutInspection](context.Background(), d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
+	if err != nil {
+		d.logf("recent location %s on %s recorded unresolved: %v", cwd, host, err)
+		d.store.UpsertRecentLocation(host, cwd, "")
+		return
+	}
+	if inWorktree := inspection.MainRepo != inspection.RepoRoot; inWorktree {
+		d.store.UpsertRecentLocation(host, inspection.MainRepo, inspection.MainRepo)
+		return
+	}
+	d.store.UpsertRecentLocation(host, inspection.Cwd, inspection.RepoRoot)
 }
 
 func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session *protocol.Session) *spawnOutcome {

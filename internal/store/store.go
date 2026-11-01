@@ -38,7 +38,7 @@ type Store struct {
 	teardownIntents        map[protocol.SessionID]SessionTeardownIntent
 	sessionCloses          map[protocol.SessionID]sessionCloseMark
 	agentMetadata          map[protocol.SessionID]string
-	recentLocations        map[string]*protocol.RecentLocation
+	recentLocations        map[recentLocationKey]*protocol.RecentLocation
 	settings               map[string]string
 	settingCopies          map[string]map[string]string
 	writes                 *tableWrites
@@ -127,7 +127,7 @@ func newMapBackedStore() *Store {
 		sessionCosts:    make(map[protocol.SessionID]sessioncost.Checkpoint),
 		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
 		agentMetadata:   make(map[protocol.SessionID]string),
-		recentLocations: make(map[string]*protocol.RecentLocation),
+		recentLocations: make(map[recentLocationKey]*protocol.RecentLocation),
 	}
 }
 
@@ -2042,8 +2042,13 @@ func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
 	}
 }
 
-func (s *Store) UpsertRecentLocation(path string) {
-	path = resolveRecentLocationPath(path)
+type recentLocationKey struct{ host, path string }
+
+func (s *Store) UpsertRecentLocation(host, path, repoRoot string) {
+	if host == "" {
+		path, repoRoot = resolveRecentLocationPath(path), ""
+	}
+	key := recentLocationKey{host, path}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2051,15 +2056,18 @@ func (s *Store) UpsertRecentLocation(path string) {
 	now := time.Now().Format(time.RFC3339)
 	if s.db == nil {
 		if s.recentLocations == nil {
-			s.recentLocations = make(map[string]*protocol.RecentLocation)
+			s.recentLocations = make(map[recentLocationKey]*protocol.RecentLocation)
 		}
-		if existing := s.recentLocations[path]; existing != nil {
+		if existing := s.recentLocations[key]; existing != nil {
 			existing.LastSeen = now
 			existing.UseCount++
+			existing.RepoRoot = nonEmptyPtr(repoRoot)
 			return
 		}
-		s.recentLocations[path] = &protocol.RecentLocation{
+		s.recentLocations[key] = &protocol.RecentLocation{
+			Host:     nonEmptyPtr(host),
 			Path:     path,
+			RepoRoot: nonEmptyPtr(repoRoot),
 			LastSeen: now,
 			UseCount: 1,
 		}
@@ -2067,12 +2075,20 @@ func (s *Store) UpsertRecentLocation(path string) {
 	}
 
 	s.execLog(`
-		INSERT INTO recent_locations (path, last_seen, use_count)
-		VALUES (?, ?, 1)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO recent_locations (host, path, repo_root, last_seen, use_count)
+		VALUES (?, ?, NULLIF(?, ''), ?, 1)
+		ON CONFLICT(host, path) DO UPDATE SET
+			repo_root = excluded.repo_root,
 			last_seen = excluded.last_seen,
 			use_count = use_count + 1`,
-		path, now)
+		host, path, repoRoot, now)
+}
+
+func nonEmptyPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return protocol.Ptr(value)
 }
 
 func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
@@ -2090,7 +2106,7 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 		}
 	} else {
 		rows, err := s.db.Query(`
-			SELECT path, last_seen, use_count
+			SELECT host, path, COALESCE(repo_root, ''), last_seen, use_count
 			FROM recent_locations`)
 		if err != nil {
 			s.mu.RUnlock()
@@ -2098,35 +2114,37 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 		}
 		for rows.Next() {
 			var loc protocol.RecentLocation
-			if err := rows.Scan(&loc.Path, &loc.LastSeen, &loc.UseCount); err != nil {
+			var host, repoRoot string
+			if err := rows.Scan(&host, &loc.Path, &repoRoot, &loc.LastSeen, &loc.UseCount); err != nil {
 				continue
 			}
+			loc.Host, loc.RepoRoot = nonEmptyPtr(host), nonEmptyPtr(repoRoot)
 			raw = append(raw, &loc)
 		}
 		rows.Close()
 	}
 	s.mu.RUnlock()
 
-	var toDelete []string
-	merged := make(map[string]*protocol.RecentLocation, len(raw))
+	var missingHere []string
+	merged := make(map[recentLocationKey]*protocol.RecentLocation, len(raw))
 	for _, loc := range raw {
-		if _, err := os.Stat(loc.Path); os.IsNotExist(err) {
-			toDelete = append(toDelete, loc.Path)
-			continue
+		if loc.Host == nil {
+			if _, err := os.Stat(loc.Path); os.IsNotExist(err) {
+				missingHere = append(missingHere, loc.Path)
+				continue
+			}
+			resolved, repoRoot := recentLocationTarget(loc.Path)
+			loc.Path, loc.RepoRoot = resolved, nonEmptyPtr(repoRoot)
 		}
-		resolved, repoRoot := recentLocationTarget(loc.Path)
-		if repoRoot != "" {
-			loc.RepoRoot = protocol.Ptr(repoRoot)
-		}
-		if existing := merged[resolved]; existing != nil {
+		key := recentLocationKey{protocol.Deref(loc.Host), loc.Path}
+		if existing := merged[key]; existing != nil {
 			existing.UseCount += loc.UseCount
 			if loc.LastSeen > existing.LastSeen {
 				existing.LastSeen = loc.LastSeen
 			}
 			continue
 		}
-		loc.Path = resolved
-		merged[resolved] = loc
+		merged[key] = loc
 	}
 
 	result := make([]*protocol.RecentLocation, 0, len(merged))
@@ -2143,18 +2161,21 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 		if result[i].LastSeen != result[j].LastSeen {
 			return result[i].LastSeen > result[j].LastSeen
 		}
-		return result[i].Path < result[j].Path
+		if result[i].Path != result[j].Path {
+			return result[i].Path < result[j].Path
+		}
+		return protocol.Deref(result[i].Host) < protocol.Deref(result[j].Host)
 	})
 	if len(result) > limit {
 		result = result[:limit]
 	}
 
-	if len(toDelete) > 0 && s.db != nil {
+	if len(missingHere) > 0 && s.db != nil {
 		go func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			for _, path := range toDelete {
-				s.execLog("DELETE FROM recent_locations WHERE path = ?", path)
+			for _, path := range missingHere {
+				s.execLog("DELETE FROM recent_locations WHERE host = '' AND path = ?", path)
 			}
 		}()
 	}
@@ -2169,10 +2190,10 @@ func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
 	if s.db == nil {
 		cutoff := time.Now().Add(-maxAge)
 		removed := 0
-		for path, loc := range s.recentLocations {
+		for key, loc := range s.recentLocations {
 			lastSeen, err := time.Parse(time.RFC3339, loc.LastSeen)
 			if err != nil || lastSeen.Before(cutoff) {
-				delete(s.recentLocations, path)
+				delete(s.recentLocations, key)
 				removed++
 			}
 		}
@@ -2188,18 +2209,6 @@ func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
 
 	affected, _ := result.RowsAffected()
 	return int(affected)
-}
-
-func (s *Store) RemoveRecentLocation(path string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		delete(s.recentLocations, path)
-		return
-	}
-
-	s.execLog("DELETE FROM recent_locations WHERE path = ?", path)
 }
 
 func boolToInt(b bool) int {

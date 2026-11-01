@@ -8801,6 +8801,7 @@ export interface FileElement {
 }
 
 export interface RecentLocation {
+    host?:      string;
     last_seen:  string;
     path:       string;
     repo_root?: string;
@@ -8823,6 +8824,7 @@ export enum RecentLocationsResultMessageEvent {
 }
 
 export interface RecentLocationElement {
+    host?:      string;
     last_seen:  string;
     path:       string;
     repo_root?: string;
@@ -25004,6 +25006,7 @@ const typeMap: any = {
         { json: "source", js: "source", typ: "" },
     ], "any"),
     "RecentLocation": o([
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
         { json: "repo_root", js: "repo_root", typ: u(undefined, "") },
@@ -25018,6 +25021,7 @@ const typeMap: any = {
         { json: "success", js: "success", typ: true },
     ], "any"),
     "RecentLocationElement": o([
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "last_seen", js: "last_seen", typ: "" },
         { json: "path", js: "path", typ: "" },
         { json: "repo_root", js: "repo_root", typ: u(undefined, "") },

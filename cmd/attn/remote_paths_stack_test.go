@@ -1,7 +1,8 @@
 package main_test
 
 import (
-	"path/filepath"
+	"maps"
+	"os"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -46,14 +47,24 @@ func TestARemoteShellsDirectoryIsNeverReadOnTheHomesDisk(t *testing.T) {
 		app.AwaitScreen(id, "up-2")
 	}
 
+	if err := os.RemoveAll(elsewhere); err != nil {
+		t.Fatal(err)
+	}
 	recent := testworld.Request(app, protocol.GetRecentLocationsMessage{Cmd: protocol.CmdGetRecentLocations, RequestID: protocol.Ptr("recent")},
 		protocol.EventRecentLocationsResult, func(r protocol.RecentLocationsResultMessage) bool { return protocol.Deref(r.RequestID) == "recent" })
-	recorded := map[string]bool{}
+	type machineFolder struct{ host, path, repoRoot string }
+	recorded := map[machineFolder]int{}
 	for _, location := range recent.RecentLocations {
-		recorded[filepath.Base(location.Path)] = true
+		recorded[machineFolder{protocol.Deref(location.Host), location.Path, protocol.Deref(location.RepoRoot)}]++
 	}
-	if recorded["remote-only"] || !recorded["local"] {
-		t.Errorf("recent locations = %+v; want the local shell's folder and never the remote shell's", recent.RecentLocations)
+	want := map[machineFolder]int{
+		{"", repo, repo}:      1,
+		{"", local, ""}:       1,
+		{host, repo, repo}:    1,
+		{host, elsewhere, ""}: 1,
+	}
+	if !maps.Equal(recorded, want) {
+		t.Errorf("recent locations = %v, want %v: each machine's folders with their host, the worktree folded into its repo, and the remote folder kept though it is gone from the home's disk", recorded, want)
 	}
 
 	deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktree},

@@ -2176,7 +2176,7 @@ export function useDaemonSocket({
               if (data.success) {
                 pending.resolve({
                   success: true,
-                  locations: data.recent_locations || [],
+                  locations: (data.recent_locations || []).filter((location) => !location.host),
                   home_path: data.home_path,
                 });
               } else {

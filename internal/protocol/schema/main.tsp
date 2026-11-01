@@ -423,6 +423,7 @@ model AuthorState {
 }
 
 model RecentLocation {
+  host?: string;        // absent: the home's machine
   path: string;
   repo_root?: string;
   last_seen: string;    // ISO timestamp

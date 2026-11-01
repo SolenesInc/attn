@@ -8906,6 +8906,9 @@ type RecentFilesResultMessage struct {
 }
 
 type RecentLocation struct {
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// LastSeen corresponds to the JSON schema field "last_seen".
 	LastSeen string `json:"last_seen"`
 
