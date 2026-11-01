@@ -55,9 +55,9 @@ export function CalloutOverlay() {
     navigating.current = false;
   }, [callout, requestTerminalFocus]);
 
-  const advance = (goThere: boolean) => {
-    if (!step) return;
-    if (goThere && (step.session_id || step.desktop_id)) {
+  const advance = () => {
+    if (!callout || !step) return;
+    if (callout.index === callout.steps.length - 1 && (step.session_id || step.desktop_id)) {
       navigating.current = true;
       end();
       if (step.session_id) selectAgent(step.session_id);
@@ -74,7 +74,7 @@ export function CalloutOverlay() {
       if (event.key !== 'Enter' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       event.stopPropagation();
-      advance(event.key === 'Enter');
+      advance();
     };
     const outside = (event: PointerEvent) => {
       if (!cardRef.current?.contains(event.target as Node)) end();
@@ -130,8 +130,8 @@ export function CalloutOverlay() {
   }, [callout?.requestId, callout?.index, step, agentListOpen, toggleAgentList]);
 
   if (!callout || !step) return null;
-  const dynamic = Boolean(step.session_id || step.desktop_id);
   const last = callout.index === callout.steps.length - 1;
+  const action = !last ? 'Next' : step.session_id || step.desktop_id ? 'Go there' : 'Done';
   const rect = placement?.rect;
   return createPortal(
     <div className="callout-overlay" data-testid="callout-overlay">
@@ -142,8 +142,7 @@ export function CalloutOverlay() {
         {!rect && <div className="callout-unanchored">{step.label ?? step.anchor} isn't on screen</div>}
         <p>{step.text}</p>
         <div className="callout-actions">
-          <button type="button" onClick={() => advance(true)}><kbd>↵</kbd> {dynamic ? 'Go there' : last ? 'Done' : 'Next'}</button>
-          {dynamic && <button type="button" onClick={() => advance(false)}><kbd>→</kbd> {last ? 'Done' : 'Next'}</button>}
+          <button type="button" onClick={advance}><kbd>↵</kbd> {action}</button>
           <span><kbd>esc</kbd> end</span>
         </div>
       </div>

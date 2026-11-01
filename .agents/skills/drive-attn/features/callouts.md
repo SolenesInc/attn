@@ -4,15 +4,15 @@ An agent points at part of the app window with a short text, like a guided
 tour. When the user asks where something is, or an agent wants the user to
 look at another agent or a desktop, the agent shows a callout: a card beside
 the named part of the window, one step at a time. The user steps through the
-callout with Enter or →, goes to a named agent or desktop with Enter, and ends
-the callout with Esc. Callouts are experimental and off until the user turns
+callout with Enter or →, goes to the agent or desktop the last step names, and
+ends the callout with Esc. Callouts are experimental and off until the user turns
 them on.
 
 ## Sub-features
 
 - `callout-show`: up to 20 steps, each an anchor and at most 160 characters of text. A new callout replaces the one showing.
 - `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
-- `callout-stepping`: Enter or → goes to the next step, Enter on an agent or desktop step goes there, Esc or a click outside ends it.
+- `callout-stepping`: Enter and → do the same on every step: they go to the next step, and on the last step they go to its agent or desktop and end the callout. Esc or a click outside ends it.
 - `callout-setting`: the experimental switch the user turns on. Every call checks the switch, except from the Chief's session while the Chief's onboarding is pending (`attn onboarding`).
 
 ## How to get to it
@@ -20,7 +20,7 @@ them on.
 ### People
 
 - Settings, Experimental, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
-- The callout card (`app/src/callouts/CalloutOverlay.tsx`) shows the pointing agent's name and the step count, the text, and "↵ Next", or "↵ Done" on the last step. On agent and desktop steps it shows "↵ Go there" beside "→ Next", or "→ Done" on the last step. It also shows "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
+- The callout card (`app/src/callouts/CalloutOverlay.tsx`) shows the pointing agent's name and the step count, the text, and "↵ Next", or on the last step "↵ Done", or "↵ Go there" when that step names an agent or desktop. It also shows "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
 - Where people see what agents do: the card names the agent that points, and the ring marks what it points at.
 - Their own shell: `attn settings set callouts_enabled true`, and `attn callout show --session <id>` to point from a session.
 
@@ -89,9 +89,8 @@ Preconditions:
 - The setting is off on every fresh instance. A refusal naming Settings > Experimental > Agent callouts means the switch, not a bug.
 - While another overlay is open (Settings, the palette, What's new, the notebook), `callout show` is refused with `not on screen:` naming every anchor of the callout and `on screen now:` empty. Close the overlay and call again.
 - `callout show` returns as soon as the app accepts the card, before the user reads the card. There is no completion. Prove the stepping from the app with `bridge`, not from the CLI.
-- An agent anchor whose agent no tile shows still shows its step, saying it isn't on screen, and Enter still goes there.
+- An agent anchor whose agent no tile shows still shows its step, saying it isn't on screen, and Enter on the last step still goes there.
 - In queue flow `queue` is on screen and `desktops` may not be. List anchors before choosing them in a recipe.
 - `bridge capture_screenshot` draws the page without the card or its ring. Use `capture_native_window_screenshot` to see them.
 - `bridge dom_click` on the card's buttons skips native input. Drive the steps with `native_key`.
 - If a callout has a step over 160 characters or a 21st step, attn refuses the whole callout, naming the limit and the count. The callout already showing stays.
-- Working but wrong: Enter on an agent or desktop step goes there and ends the callout, so the steps after that step never show. → moves on without going. A tour that puts such a step in the middle loses its tail when the user presses Enter.

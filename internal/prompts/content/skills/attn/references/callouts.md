@@ -27,8 +27,9 @@ depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 `agent:<who>` accepts a session id, short id or crew name.
 `desktop:<which>` accepts a slot digit, name or id. Both address only the
 pointing session's profile. The app reveals the target when it can, or shows
-the step with its name. When the user presses Enter, the app goes to the
-target and ends the callout. → skips the step.
+the step with its name. On the last step, Enter or → goes to the target and
+ends the callout. On an earlier step they move on, so put the agent or desktop
+the user should go to last.
 
 Keep each step short, at most 160 characters. A callout can have at most 20
 steps. If a fixed anchor is missing, the command refuses the whole callout and
