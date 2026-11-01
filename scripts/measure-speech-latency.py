@@ -68,7 +68,7 @@ class Helper:
                 sys.exit(f"helper exited with {self.proc.wait()}")
             if event["event"] == "error":
                 sys.exit(f"request {event.get('id')} failed: {event['message']}")
-            if event.get("id") == request_id and event["event"] != "progress":
+            if event.get("id") == request_id and event["event"] in ("ready", "transcript", "warmed"):
                 return event
 
     def request(self, op):
