@@ -35,6 +35,12 @@ export function buildLabel(build: AnalyticsBuild): string {
   return `${channel} ${version}${build.dirty ? ', uncommitted changes' : ''}`;
 }
 
+export function modelLabel(reported?: string, requested?: string): string {
+  if (!requested || requested === reported) return reported ?? '';
+  if (!reported) return `requested ${requested}`;
+  return `${reported} (requested ${requested})`;
+}
+
 export function settingName(key: string): string {
   const words = key.replace(/[._]enabled$/, '').replace(/[._]/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);

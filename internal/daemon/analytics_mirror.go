@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"cmp"
 	"context"
 	"strings"
 
@@ -60,12 +59,14 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 			return analytics.Derived{}
 		}
 		intent, _ := d.store.LaunchIntent(session.ID)
+		models := d.sessionModels(session, intent)
 		return analytics.Derived{
 			Session: &analytics.SessionTraits{
-				Harness: session.Agent,
-				Model:   cmp.Or(d.leadingAgentModel(session), intent.Model),
-				Launch:  d.sessionLaunch(session.ID, intent),
-				State:   string(session.State),
+				Harness:        session.Agent,
+				Model:          models.reported,
+				ModelRequested: models.requested,
+				Launch:         d.sessionLaunch(session.ID, intent),
+				State:          string(session.State),
 			},
 			Repo: repoTraits(session.Directory),
 		}

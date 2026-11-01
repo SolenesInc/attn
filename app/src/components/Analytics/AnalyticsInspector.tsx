@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { VentKind, VentSend, type Seed, type Vent } from '../../types/generated';
 import { harnessLabel } from '../harnessLabel';
-import { buildLabel, longAgo, settingName, when } from './analyticsFormat';
+import { buildLabel, longAgo, modelLabel, settingName, when } from './analyticsFormat';
 import { ventDestination, type RecordItem } from './analyticsItems';
 
 const LONG_VENT_CHARS = 420;
@@ -77,10 +77,11 @@ function VentWhere({ vent, sharing, onAction }: { vent: Vent; sharing: boolean; 
 
 function VentContext({ vent: { created_at, context }, slug }: { vent: Vent; slug: (id: string) => string }) {
   const none = <span className="dim">none</span>;
+  const model = modelLabel(context.model, context.model_requested);
   return (
     <dl className="analytics-context">
       <dt>When</dt><dd>{when(created_at)} <span className="dim">· {longAgo(created_at, Date.now())}</span></dd>
-      <dt>Agent</dt><dd>{[harnessLabel(context.harness), context.harness_version].filter(Boolean).join(' ')}{context.model && <> <span className="dim">·</span> {context.model}</>}</dd>
+      <dt>Agent</dt><dd>{[harnessLabel(context.harness), context.harness_version].filter(Boolean).join(' ')}{model && <> <span className="dim">·</span> {model}</>}</dd>
       <dt>Stake seed</dt><dd>{context.seed_id ? slug(context.seed_id) : none}</dd>
       <dt>Build</dt><dd>{buildLabel(context.build)}</dd>
       <dt>Experimental</dt><dd>{context.experimental.length ? context.experimental.map(settingName).join(', ') : none}</dd>

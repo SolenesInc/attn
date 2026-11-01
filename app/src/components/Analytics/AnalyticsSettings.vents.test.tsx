@@ -18,7 +18,8 @@ function vent(id: string, overrides: Partial<Vent> = {}): Vent {
       session_label: 'fix garden bell staleness',
       harness: 'claude',
       harness_version: '2.4.1',
-      model: 'opus-5.5',
+      model: 'claude-opus-5-5',
+      model_requested: 'opus',
       seed_id: 's-stake1',
       build: { version: '0.42.1', commit: 'a3f9e1c22', channel: 'source', dirty: true, build_time: '', fingerprint: '', protocol: '', os: 'darwin', arch: 'arm64', app_version: '', app_channel: '' },
       experimental: ['asks_enabled'],
@@ -82,7 +83,7 @@ describe('Settings › Analytics vents', () => {
     expect(inspector().getByText('garden-show-stale-bell')).toBeInTheDocument();
     expect(inspector().getByText('Source a3f9e1c, uncommitted changes')).toBeInTheDocument();
     expect(inspector().getByText('Asks')).toBeInTheDocument();
-    expect(inspector().getByText(/Claude 2\.4\.1/)).toBeInTheDocument();
+    expect(inspector().getByText(/Claude 2\.4\.1/)).toHaveTextContent('Claude 2.4.1 · claude-opus-5-5 (requested opus)');
     expect(inspector().getByText('Kept on this machine')).toBeInTheDocument();
   });
 

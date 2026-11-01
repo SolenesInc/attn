@@ -66,7 +66,7 @@ Preconditions:
 - **Outposts**: `analytics.enabled` is a machine setting, so each machine decides whether it records and keeps its own outbox. `analytics.sharing_enabled`, `analytics.share_vents` and `analytics.tool_vents` are home settings that outposts copy read-only. An `attn` command's record, usage errors included, is kept on the machine that ran the command.
 - **Profiles**: records are the daemon's, across every profile. A vent record is listed only in the profile its vent belongs to.
 - **Performance and idle cost**: one resource sample every 5 minutes, and an upload carries at most 5,000 records. The open Analytics page does not animate or change while idle (scenario `analytics-settings`). The outbox mirror is an event bus consumer, so a stalled mirror pins the log. `attn bus status` shows the mirror ([diagnostics.md](diagnostics.md)).
-- **Harnesses**: each `cli` record carries the harness of the agent that ran the command, and session facts carry the harness and model.
+- **Harnesses**: each `cli` record carries the harness of the agent that ran the command, and session facts carry the harness, the reported model and the requested model.
 - **Keyboard and native input**: every list action is one key, listed at the foot of the page, and the section takes focus when it opens. Keys typed into a text field do nothing to the lists.
 - **Compatibility across versions**: attn-ingest accepts event names and streams it has never seen, so a newer build loses nothing to an older service. attn-ingest counts the records of a retried batch as duplicates and adds no rows.
 

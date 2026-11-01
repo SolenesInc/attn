@@ -4066,6 +4066,7 @@ model VentContext {
   harness: string;
   harness_version?: string;
   `model`?: string;
+  model_requested?: string;
   seed_id?: string;
   build: AnalyticsBuild;
   experimental: string[];

@@ -242,10 +242,12 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	if context.Experimental == nil {
 		context.Experimental = []string{}
 	}
-	if model := d.leadingAgentModel(session); model != "" {
-		context.Model = &model
-	} else if intent.Model != "" {
-		context.Model = protocol.Ptr(intent.Model)
+	models := d.sessionModels(session, intent)
+	if models.reported != "" {
+		context.Model = &models.reported
+	}
+	if models.requested != "" {
+		context.ModelRequested = &models.requested
 	}
 	if seed, ok := d.gardenDispatchCrown(session.ID); ok && seed != "" {
 		context.SeedID = &seed
@@ -259,6 +261,15 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 		}
 	}
 	return context
+}
+
+type sessionModels struct {
+	reported  string
+	requested string
+}
+
+func (d *Daemon) sessionModels(session *protocol.Session, intent store.LaunchIntent) sessionModels {
+	return sessionModels{reported: d.leadingAgentModel(session), requested: intent.Model}
 }
 
 func (d *Daemon) leadingAgentModel(session *protocol.Session) string {
@@ -453,6 +464,7 @@ type ventRecordProps struct {
 	Harness        string          `json:"harness"`
 	HarnessVersion string          `json:"harness_version,omitempty"`
 	Model          string          `json:"model,omitempty"`
+	ModelRequested string          `json:"model_requested,omitempty"`
 	Turn           string          `json:"turn"`
 	Experimental   []string        `json:"experimental"`
 	Build          analytics.Build `json:"build"`
@@ -464,6 +476,7 @@ func (v storedVent) record() (analytics.Record, error) {
 		Harness:        v.Context.Harness,
 		HarnessVersion: protocol.Deref(v.Context.HarnessVersion),
 		Model:          protocol.Deref(v.Context.Model),
+		ModelRequested: protocol.Deref(v.Context.ModelRequested),
 		Turn:           v.Turn,
 		Experimental:   v.Context.Experimental,
 		Build:          v.Context.Build,
@@ -488,7 +501,7 @@ func (v storedVent) seedTitle() string {
 
 func (v storedVent) seedBody() string {
 	agent := strings.Join(nonEmpty(v.Context.Harness, protocol.Deref(v.Context.HarnessVersion)), " ")
-	if model := protocol.Deref(v.Context.Model); model != "" {
+	if model := modelLabel(protocol.Deref(v.Context.Model), protocol.Deref(v.Context.ModelRequested)); model != "" {
 		agent += " · " + model
 	}
 	build := strings.Join(nonEmpty(v.Context.Build.Channel, v.Context.Build.Version, v.Context.Build.Commit), " ")
@@ -509,6 +522,16 @@ func (v storedVent) seedBody() string {
 		lines = append(lines, "- Experimental: "+strings.Join(v.Context.Experimental, ", "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func modelLabel(reported, requested string) string {
+	switch {
+	case requested == "" || requested == reported:
+		return reported
+	case reported == "":
+		return "requested " + requested
+	}
+	return reported + " (requested " + requested + ")"
 }
 
 func nonEmpty(values ...string) []string {

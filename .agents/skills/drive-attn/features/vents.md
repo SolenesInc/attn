@@ -88,7 +88,7 @@ Preconditions:
 - **Linux**: `attn vent` works the same where the CLI runs on Linux. **Settings → Analytics** is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
 - **Outposts**: an agent's `attn vent` and `attn vent withdraw` on an outpost are recorded by the home, and the agent's vents show in the home's app.
 - **Profiles**: a vent belongs to its session's profile. **Settings → Analytics** lists, triages and clears only the current profile's vents.
-- **Harnesses**: every harness vents with the same `attn vent`. Each vent records the harness, its version and the model. A tool vent may be about the harness's own permissions or approval review.
+- **Harnesses**: every harness vents with the same `attn vent`. Each vent records the harness, its version, the model the harness reports and the model the session was launched with. A tool vent may be about the harness's own permissions or approval review.
 - **Keyboard and native input**: every triage action is one key, listed at the foot of the page. The page takes keys once the page has focus. The page takes focus when the section opens and after a row click. A key typed into a text field does nothing to the list.
 
 ## Tests

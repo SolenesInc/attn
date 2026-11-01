@@ -21,10 +21,11 @@ type Derived struct {
 }
 
 type SessionTraits struct {
-	Harness string `json:"harness"`
-	Model   string `json:"model,omitempty"`
-	Launch  Launch `json:"launch"`
-	State   string `json:"state"`
+	Harness        string `json:"harness"`
+	Model          string `json:"model,omitempty"`
+	ModelRequested string `json:"model_requested,omitempty"`
+	Launch         Launch `json:"launch"`
+	State          string `json:"state"`
 }
 
 type RepoTraits struct {
@@ -35,10 +36,11 @@ type RepoTraits struct {
 }
 
 var DerivedFields = Fields{
-	"session.harness": Safe,
-	"session.model":   Safe,
-	"session.launch":  Safe,
-	"session.state":   Safe,
+	"session.harness":         Safe,
+	"session.model":           Safe,
+	"session.model_requested": Safe,
+	"session.launch":          Safe,
+	"session.state":           Safe,
 }
 
 func Props(payload json.RawMessage, fields Fields, secret []byte, derived Derived) json.RawMessage {

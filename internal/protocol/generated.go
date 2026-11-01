@@ -13385,6 +13385,9 @@ type VentContext struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// ModelRequested corresponds to the JSON schema field "model_requested".
+	ModelRequested *string `json:"model_requested,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 

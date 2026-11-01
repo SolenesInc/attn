@@ -6079,6 +6079,7 @@ export interface Context {
     harness:          string;
     harness_version?: string;
     model?:           string;
+    model_requested?: string;
     seed_id?:         string;
     session_label:    string;
     transcript?:      Transcript;
@@ -12434,6 +12435,7 @@ export interface VentContext {
     harness:          string;
     harness_version?: string;
     model?:           string;
+    model_requested?: string;
     seed_id?:         string;
     session_label:    string;
     transcript?:      Transcript;
@@ -22949,6 +22951,7 @@ const typeMap: any = {
         { json: "harness", js: "harness", typ: "" },
         { json: "harness_version", js: "harness_version", typ: u(undefined, "") },
         { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "model_requested", js: "model_requested", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_label", js: "session_label", typ: "" },
         { json: "transcript", js: "transcript", typ: u(undefined, r("Transcript")) },
@@ -26981,6 +26984,7 @@ const typeMap: any = {
         { json: "harness", js: "harness", typ: "" },
         { json: "harness_version", js: "harness_version", typ: u(undefined, "") },
         { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "model_requested", js: "model_requested", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_label", js: "session_label", typ: "" },
         { json: "transcript", js: "transcript", typ: u(undefined, r("Transcript")) },

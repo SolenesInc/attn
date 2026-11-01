@@ -9,8 +9,10 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -122,10 +124,11 @@ func assertDerivedTraitsAreClosed(t *testing.T, record analytics.Record) {
 		t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
 	}
 	closed := map[string]map[string]bool{
-		"harness": {protocol.SessionAgentClaude: true},
-		"model":   {"fable": true},
-		"launch":  {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},
-		"state":   {},
+		"harness":         {protocol.SessionAgentClaude: true},
+		"model":           {"fable": true},
+		"model_requested": {"fable": true},
+		"launch":          {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},
+		"state":           {},
 	}
 	for _, state := range []protocol.SessionState{protocol.SessionStateIdle, protocol.SessionStateLaunching, protocol.SessionStatePendingApproval, protocol.SessionStateRecoverable, protocol.SessionStateScheduled, protocol.SessionStateUnknown, protocol.SessionStateWaitingInput, protocol.SessionStateWorking} {
 		closed["state"][string(state)] = true
@@ -210,6 +213,80 @@ func TestAMirroredSettingChangeNamesTheSettingAndNotItsConcreteKey(t *testing.T)
 			if strings.Contains(subject, "someone") {
 				t.Errorf("setting.changed subject %q carries the concrete key's path", subject)
 			}
+		}
+	})
+}
+
+func TestSessionFactsAndVentsTellTheReportedModelFromTheRequestedOne(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		id := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Model = protocol.Ptr("opus") })
+		agent := w.bootBubbleClaude(t, id)
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := analytics.HashSubject(secret, id)
+		sessionFacts := func(after int64) []analytics.SessionTraits {
+			var traits []analytics.SessionTraits
+			for _, record := range mirroredRecords(t, app, "") {
+				if record.Subject != subject || !strings.HasPrefix(record.Name, "session.") || record.Seq <= after {
+					continue
+				}
+				var derived analytics.Derived
+				if err := json.Unmarshal(record.Props, &derived); err != nil {
+					t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
+				}
+				if derived.Session != nil {
+					traits = append(traits, *derived.Session)
+				}
+			}
+			return traits
+		}
+		ventModels := func() (string, string) {
+			vent, err := cli.RecordVent(protocol.SessionID(id), protocol.VentKindAttn, "attn ask lost my answer.")
+			if err != nil {
+				t.Fatalf("vent: %v", err)
+			}
+			if err := cli.WithdrawVent(protocol.SessionID(id), vent.ID); err != nil {
+				t.Fatalf("withdraw: %v", err)
+			}
+			return protocol.Deref(vent.Context.Model), protocol.Deref(vent.Context.ModelRequested)
+		}
+
+		before := sessionFacts(0)
+		if len(before) == 0 {
+			t.Fatal("the outbox holds no session fact before usage")
+		}
+		for _, traits := range before {
+			if traits.Model != "" || traits.ModelRequested != "opus" {
+				t.Errorf("before usage a session fact carries model %q and model_requested %q, want no model and model_requested opus", traits.Model, traits.ModelRequested)
+			}
+		}
+		if model, requested := ventModels(); model != "" || requested != "opus" {
+			t.Errorf("before usage a vent carries model %q and model_requested %q, want no model and model_requested opus", model, requested)
+		}
+
+		var last int64
+		for _, record := range mirroredRecords(t, app, "") {
+			last = max(last, record.Seq)
+		}
+		appendLegacyCostUsage(t, agent.transcript.Path, "reply-1", "claude-opus-5-5", 10, 4)
+		w.advance(time.Second)
+		awaitUsageTokens(app, id, 14)
+		app.TypeLine(id, "ship the refund flow")
+		agent.reply("shipped <!-- attn:state=idle -->")
+
+		after := sessionFacts(last)
+		if len(after) == 0 {
+			t.Fatal("the outbox holds no session fact after usage")
+		}
+		if latest := after[len(after)-1]; latest.Model != "claude-opus-5-5" || latest.ModelRequested != "opus" {
+			t.Errorf("after usage the latest session fact carries model %q and model_requested %q, want claude-opus-5-5 and opus", latest.Model, latest.ModelRequested)
+		}
+		if model, requested := ventModels(); model != "claude-opus-5-5" || requested != "opus" {
+			t.Errorf("after usage a vent carries model %q and model_requested %q, want claude-opus-5-5 and opus", model, requested)
 		}
 	})
 }
