@@ -28,8 +28,8 @@ install from the token, so no request can name another install. After a delete,
 the token no longer works.
 
 A batch body is gzip of newline-delimited JSON. The first line is
-`{"build": {...}}`, the build that sent the batch. Every following line is one
-record. `analytics.WriteBatch` writes the body. The service accepts event names
+`{"build": {...}}`, the build that recorded every record in the batch. Every
+following line is one record. `analytics.WriteBatch` writes the body. The service accepts event names
 and streams it has never seen, so a newer build never loses data. The service
 enforces the shape and sizes, and a malformed line gets a `400` that names the
 line and the field.

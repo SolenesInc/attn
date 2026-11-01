@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,22 +22,16 @@ type AnalyticsPage struct {
 	Waiting int
 }
 
-func (s *Store) AppendAnalyticsRecord(record analytics.Record) error {
+type UnsentAnalytics struct {
+	Build analytics.Build
+	Rows  []AnalyticsRow
+}
+
+func (s *Store) AppendAnalyticsRecord(record analytics.Record, build analytics.Build) error {
 	encoded, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.db == nil {
-		return fmt.Errorf("the analytics outbox needs the SQLite store")
-	}
-	_, err = s.db.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?) ON CONFLICT(stream, seq) DO NOTHING",
-		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded))
-	return err
-}
-
-func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -47,13 +42,39 @@ func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := appendStreamRecord(tx, record); err != nil {
+	buildID, err := analyticsBuildID(tx, build)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record, build_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(stream, seq) DO NOTHING",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded), buildID); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-func appendStreamRecord(tx *sql.Tx, record analytics.Record) (int64, error) {
+func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record, build analytics.Build) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := appendStreamRecord(tx, record, build); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func appendStreamRecord(tx *sql.Tx, record analytics.Record, build analytics.Build) (int64, error) {
+	buildID, err := analyticsBuildID(tx, build)
+	if err != nil {
+		return 0, err
+	}
 	if err := tx.QueryRow("INSERT INTO analytics_sequences (stream, seq) VALUES (?, 1) ON CONFLICT(stream) DO UPDATE SET seq = seq + 1 RETURNING seq",
 		record.Stream).Scan(&record.Seq); err != nil {
 		return 0, err
@@ -62,31 +83,59 @@ func appendStreamRecord(tx *sql.Tx, record analytics.Record) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?)",
-		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded)); err != nil {
+	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record, build_id) VALUES (?, ?, ?, ?, ?)",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded), buildID); err != nil {
 		return 0, err
 	}
 	return record.Seq, nil
 }
 
-func (s *Store) UnsentAnalyticsRecords(limit int) ([]AnalyticsRow, error) {
+func analyticsBuildID(tx *sql.Tx, build analytics.Build) (int64, error) {
+	encoded, err := json.Marshal(build)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec("INSERT INTO analytics_builds (build) VALUES (?) ON CONFLICT(build) DO NOTHING", string(encoded)); err != nil {
+		return 0, err
+	}
+	var id int64
+	err = tx.QueryRow("SELECT id FROM analytics_builds WHERE build = ?", string(encoded)).Scan(&id)
+	return id, err
+}
+
+func (s *Store) UnsentAnalyticsRecords(limit int, unrecorded analytics.Build) (UnsentAnalytics, error) {
+	unsent := UnsentAnalytics{Build: unrecorded}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return nil, nil
+		return unsent, nil
 	}
-	rows, err := s.db.Query("SELECT id, record FROM analytics_outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", limit)
+	var buildID sql.NullInt64
+	var build sql.NullString
+	switch err := s.db.QueryRow(`SELECT o.build_id, b.build FROM analytics_outbox o LEFT JOIN analytics_builds b ON b.id = o.build_id
+		WHERE o.sent_at IS NULL ORDER BY o.id LIMIT 1`).Scan(&buildID, &build); {
+	case errors.Is(err, sql.ErrNoRows):
+		return unsent, nil
+	case err != nil:
+		return unsent, err
+	}
+	if build.Valid {
+		unsent.Build = analytics.Build{}
+		if err := json.Unmarshal([]byte(build.String), &unsent.Build); err != nil {
+			return unsent, fmt.Errorf("analytics build %d: %w", buildID.Int64, err)
+		}
+	}
+	rows, err := s.db.Query("SELECT id, record FROM analytics_outbox WHERE sent_at IS NULL AND build_id IS ? ORDER BY id LIMIT ?", buildID, limit)
 	if err != nil {
-		return nil, err
+		return unsent, err
 	}
 	defer rows.Close()
-	var unsent []AnalyticsRow
 	for rows.Next() {
 		var row AnalyticsRow
 		if err := rows.Scan(&row.ID, &row.Record); err != nil {
-			return nil, err
+			return unsent, err
 		}
-		unsent = append(unsent, row)
+		unsent.Rows = append(unsent.Rows, row)
 	}
 	return unsent, rows.Err()
 }
@@ -179,6 +228,9 @@ func (s *Store) PruneAnalyticsOutbox(before, unsentBefore time.Time) (int64, err
 	if err != nil {
 		return 0, err
 	}
+	if _, err := s.db.Exec("DELETE FROM analytics_builds WHERE id NOT IN (SELECT build_id FROM analytics_outbox WHERE build_id IS NOT NULL)"); err != nil {
+		return 0, err
+	}
 	return result.RowsAffected()
 }
 
@@ -209,6 +261,9 @@ func (s *Store) ClearAnalyticsOutbox() (int64, error) {
 	}
 	result, err := s.db.Exec("DELETE FROM analytics_outbox")
 	if err != nil {
+		return 0, err
+	}
+	if _, err := s.db.Exec("DELETE FROM analytics_builds"); err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()

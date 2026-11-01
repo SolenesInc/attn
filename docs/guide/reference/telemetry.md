@@ -90,8 +90,12 @@ instance on the default data folder uploads there. Any other instance uploads
 to `http://127.0.0.1:1`, where nothing listens, unless its daemon starts with
 `ATTN_ANALYTICS_INGEST_URL` naming another service. The Share row in
 **Settings → Analytics** shows where uploads go. Each upload is one batch of at
-most 5,000 unsent records, oldest first, preceded by the details of the build
-that sent it:
+most 5,000 unsent records, oldest first, all recorded by the same build. The
+batch starts with the details of that build and of the app connected when the
+records were written, so records written before an upgrade keep the build that
+wrote them. `dirty` is true when the source the build ships differs from its
+commit; changes only to tests, scripts or docs the build does not embed leave
+it false:
 
 ```json
 {"build":{"version":"0.42.1","commit":"a3f9e1c","channel":"release","build_time":"...","fingerprint":"...",
@@ -100,8 +104,9 @@ that sent it:
 ```
 
 The busiest minute measured on a real install held 882 facts, so five minutes
-hold at most 4,410 and one scheduled batch carries them. One batch is half the
-service's limit of 10,000 records a minute, so scheduled uploads never reach it,
+hold at most 4,410 and one scheduled batch carries them. Records written by
+another build, such as after an upgrade or once the app connects, go in the next
+upload. One batch is half the service's limit of 10,000 records a minute, so scheduled uploads never reach it,
 even while catching up after time offline. When you turn sharing on, Attn uploads right
 away, outside the schedule. If you turn sharing on several times within a minute
 while a backlog waits, the uploads can reach the limit, and Attn then waits for the retry delay that the refusal names.

@@ -34,7 +34,7 @@ func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, 
 		At:      time.Now().UTC(),
 		Props:   analytics.Redact(encoded, analyticsFields(stream, name), secret),
 	}
-	if err := d.store.AppendAnalyticsStreamRecord(record); err != nil {
+	if err := d.store.AppendAnalyticsStreamRecord(record, d.analyticsBuild()); err != nil {
 		return fmt.Errorf("record %s/%s: %w", stream, name, err)
 	}
 	return nil

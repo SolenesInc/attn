@@ -90,7 +90,7 @@ func (d *Daemon) queueVentRecord(vent storedVent) error {
 	} else if len(line) > analytics.RecordLineLimit {
 		return fmt.Errorf("vent %s cannot be sent: attn-ingest takes records of up to %d bytes, and this vent's record is %d", vent.ID, analytics.RecordLineLimit, len(line))
 	}
-	switch queued, err := d.store.QueueVentRecord(vent.ID, record); {
+	switch queued, err := d.store.QueueVentRecord(vent.ID, record, vent.Context.Build); {
 	case errors.Is(err, store.ErrVentSent):
 		return fmt.Errorf("vent %s was already sent", vent.ID)
 	case err != nil:
