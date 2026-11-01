@@ -83,6 +83,10 @@
   cursor: default;
 }
 
+.session-provenance__target-icon {
+  display: none;
+}
+
 button.session-provenance__target {
   cursor: pointer;
 }

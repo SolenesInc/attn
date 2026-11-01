@@ -177,3 +177,37 @@ for (const selection of ['rail', 'spotlight'] as const) {
     }
   });
 }
+
+async function nextFrames(page: Page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+test('a pull request collapsed to its icon still opens its details from the keyboard', async ({ page }) => {
+  await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
+  await page.goto('/test-harness/?component=AgentHeader&width=480');
+  await page.evaluate(() => window.__HARNESS_READY__);
+  const pane = page.locator('[data-pane-id="pane-release"]');
+  await expect(pane.locator('.desktop-pane-piece[data-fit-piece="provenance"]')).toHaveAttribute('data-level', 'icon');
+  const details = pane.getByRole('button', { name: 'Pull request attn#412 details' });
+  await expect(details).toBeVisible();
+  await details.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.session-pr-popover')).toBeVisible();
+});
+
+test('agent headers refit when the app text size changes', async ({ page }) => {
+  await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
+  await page.goto('/test-harness/?component=AgentHeader&width=480');
+  await page.evaluate(() => window.__HARNESS_READY__);
+  await nextFrames(page);
+  await page.evaluate(() => document.documentElement.style.setProperty('--ui-scale', '1.5'));
+  await nextFrames(page);
+  const headers = await readHeaders(page);
+  const receipt = JSON.stringify(headers);
+  for (const header of headers) expect(header.overflow, receipt).toEqual([]);
+  const release = page.locator('[data-pane-id="pane-release"]');
+  const row = (await release.locator('.desktop-pane-subline').boundingBox())!;
+  const details = (await release.getByRole('button', { name: 'Pull request attn#412 details' }).boundingBox())!;
+  expect(details.width, receipt).toBeGreaterThan(0);
+  expect(details.x + details.width, receipt).toBeLessThanOrEqual(row.x + row.width + 0.5);
+});

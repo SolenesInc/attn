@@ -576,9 +576,14 @@
   display: none;
 }
 
-.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > :not(:first-child),
-.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance__kind-label {
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > :not([data-icon-part]),
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] :is(.session-provenance__kind-label, .session-provenance__target-label) {
   display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance__target-icon {
+  display: inline;
+  color: var(--accent);
 }
 
 .desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > ::after {

@@ -60,7 +60,7 @@ describe('App session provenance', () => {
     expect(row.getByText('GPT Sol medium')).toBeInTheDocument();
     expect(row.getByText('Fix validation race')).toBeInTheDocument();
 
-    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'feed-nexus-web#101 ↗' })));
+    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Open pull request feed-nexus-web#101' })));
 
     expect(openUrl).toHaveBeenCalledWith(reviewRun.pull_request!.url);
   });

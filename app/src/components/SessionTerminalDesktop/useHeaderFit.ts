@@ -11,11 +11,13 @@ import {
 interface Measured {
   widths: Partial<Record<HeaderPiece, PieceWidths>>;
   fixed: number[];
+  elements: HTMLElement[];
 }
 
 function measurePieces(row: HTMLElement): Measured {
   const widths: Measured['widths'] = {};
-  for (const element of row.querySelectorAll<HTMLElement>('[data-fit-piece]')) {
+  const pieces = Array.from(row.querySelectorAll<HTMLElement>('[data-fit-piece]'));
+  for (const element of pieces) {
     const shown = element.dataset.level;
     const levels = (element.dataset.fitLevels ?? 'full').split(' ') as MeasuredLevel[];
     const measured: Partial<Record<MeasuredLevel, number>> = {};
@@ -27,8 +29,9 @@ function measurePieces(row: HTMLElement): Measured {
     else element.dataset.level = shown;
     if (measured.full) widths[element.dataset.fitPiece as HeaderPiece] = measured as PieceWidths;
   }
-  const fixed = Array.from(row.querySelectorAll<HTMLElement>('[data-fit-fixed]'), (element) => element.getBoundingClientRect().width);
-  return { widths, fixed };
+  const fixedElements = Array.from(row.querySelectorAll<HTMLElement>('[data-fit-fixed]'));
+  const fixed = fixedElements.map((element) => element.getBoundingClientRect().width);
+  return { widths, fixed, elements: [...pieces, ...fixedElements] };
 }
 
 function sameLevels(a: HeaderLevels, b: HeaderLevels): boolean {
@@ -50,6 +53,7 @@ export function useHeaderFit(
     const kept = keepKey ? (keepKey.split(' ') as HeaderPiece[]) : [];
     let measured: Measured | null = null;
     let disposed = false;
+    const observed = new WeakSet<HTMLElement>();
 
     const apply = (next: HeaderLevels) => setLevels((current) => (sameLevels(current, next) ? current : next));
     const fit = () => {
@@ -59,7 +63,14 @@ export function useHeaderFit(
         apply({});
         return;
       }
-      measured ??= measurePieces(row);
+      if (!measured) {
+        measured = measurePieces(row);
+        for (const element of measured.elements) {
+          if (observed.has(element)) continue;
+          observed.add(element);
+          resizes?.observe(element);
+        }
+      }
       apply(fitHeaderRow({
         available,
         gap: Number.parseFloat(style.columnGap) || 0,
@@ -75,12 +86,14 @@ export function useHeaderFit(
       fit();
     };
 
+    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+      if (entries.every((entry) => entry.target === row)) fit();
+      else remeasure();
+    });
     fit();
-    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
     resizes?.observe(row);
     const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver(remeasure);
     mutations?.observe(row, { childList: true, subtree: true, characterData: true });
-    document.fonts?.ready.then(remeasure);
     return () => {
       disposed = true;
       mutations?.disconnect();

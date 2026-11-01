@@ -115,7 +115,7 @@ describe('SessionTerminalDesktop pane header', () => {
     const header = within(container.querySelector<HTMLElement>('.desktop-pane-header')!);
     expect(header.getByText('feed-nexus-web#101 · gpt-5.6-sol')).toBeInTheDocument();
     expect(header.getByText('GPT Sol medium')).toBeInTheDocument();
-    expect(header.getByRole('button', { name: 'feed-nexus-web#101 ↗' })).toBeInTheDocument();
+    expect(header.getByRole('button', { name: 'Open pull request feed-nexus-web#101' })).toBeInTheDocument();
     expect(header.getByText('Fix validation race')).toBeInTheDocument();
     expect(header.getByRole('button', { name: /Builder · Show delegation chain/i })).toBeInTheDocument();
     expect(header.getByLabelText('Session usage $2.61')).toBeInTheDocument();
