@@ -146,6 +146,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 	defer r.mu.Unlock()
 	for _, row := range rows {
 		info := protocol.OutpostInfo{ID: row.ID, Name: row.Name, Destination: row.Destination, State: protocol.OutpostStateConnecting, StateSince: row.AddedAt}
+		if row.Home != "" {
+			info.Home = protocol.Ptr(row.Home)
+		}
 		if row.DaemonID != "" {
 			info.DaemonID = protocol.Ptr(row.DaemonID)
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())

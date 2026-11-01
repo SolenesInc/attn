@@ -377,6 +377,7 @@ model OutpostInfo {
   daemon_id?: string;
   host_key_fingerprint?: string;
   build?: string;
+  home?: string; // The outpost's home directory, which ~ stands for there; absent until it has connected once
   update?: OutpostUpdate;
   notebook?: OutpostNotebook;
   last_error?: string;

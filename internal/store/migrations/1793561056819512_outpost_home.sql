@@ -1,0 +1,1 @@
+ALTER TABLE outposts ADD COLUMN home TEXT;

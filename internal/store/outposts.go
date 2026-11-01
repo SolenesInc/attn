@@ -14,6 +14,7 @@ type Outpost struct {
 	Destination string
 	HostKey     string
 	DaemonID    string
+	Home        string
 	AddedAt     string
 }
 
@@ -24,7 +25,7 @@ func (s *Store) AddOutpost(name, destination string) (Outpost, error) {
 }
 
 func (s *Store) ListOutposts() ([]Outpost, error) {
-	rows, err := s.db.Query(`SELECT id,name,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),added_at FROM outposts ORDER BY added_at,id`)
+	rows, err := s.db.Query(`SELECT id,name,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),COALESCE(home,''),added_at FROM outposts ORDER BY added_at,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +33,7 @@ func (s *Store) ListOutposts() ([]Outpost, error) {
 	out := []Outpost{}
 	for rows.Next() {
 		var row Outpost
-		if err := rows.Scan(&row.ID, &row.Name, &row.Destination, &row.HostKey, &row.DaemonID, &row.AddedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Destination, &row.HostKey, &row.DaemonID, &row.Home, &row.AddedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -42,6 +43,11 @@ func (s *Store) ListOutposts() ([]Outpost, error) {
 
 func (s *Store) PinOutpost(id, hostKey, daemonID string) error {
 	result, err := s.db.Exec(`UPDATE outposts SET host_key=?,daemon_id=?,paired_at=? WHERE id=?`, hostKey, daemonID, time.Now().UTC().Format(time.RFC3339Nano), id)
+	return outpostWriteResult(id, result, err)
+}
+
+func (s *Store) SetOutpostHome(id, home string) error {
+	result, err := s.db.Exec(`UPDATE outposts SET home=? WHERE id=?`, home, id)
 	return outpostWriteResult(id, result, err)
 }
 

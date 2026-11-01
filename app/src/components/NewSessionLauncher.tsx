@@ -293,6 +293,7 @@ export function NewSessionLauncher({
     listings.reset();
     let cancelled = false;
     const attached = outpostsAtOpen.current;
+    for (const outpost of attached) listings.learnHome(outpost.id, outpost.home);
     for (const outpost of attached)
       if (outpost.reach === 'reachable')
         sendAgentCatalog?.(outpost.id)

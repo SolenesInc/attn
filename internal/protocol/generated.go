@@ -7848,6 +7848,9 @@ type OutpostInfo struct {
 	// Destination corresponds to the JSON schema field "destination".
 	Destination string `json:"destination"`
 
+	// Home corresponds to the JSON schema field "home".
+	Home *string `json:"home,omitempty,omitzero"`
+
 	// HostKeyFingerprint corresponds to the JSON schema field "host_key_fingerprint".
 	HostKeyFingerprint *string `json:"host_key_fingerprint,omitempty,omitzero"`
 

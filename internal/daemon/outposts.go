@@ -310,8 +310,21 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			continue
 		}
 		retryDelay = bridge.ReconnectInterval
+		d.learnOutpostHome(&row, conn.Peer().Home)
 		d.bridgeOutpost(ctx, row.ID, run, conn, push)
 	}
+}
+
+func (d *Daemon) learnOutpostHome(row *store.Outpost, home string) {
+	if home == "" || home == row.Home {
+		return
+	}
+	if err := d.store.SetOutpostHome(row.ID, home); err != nil {
+		d.logf("outpost %s home: %v", row.ID, err)
+		return
+	}
+	row.Home = home
+	d.publishFact(FactOutpostChanged, row.ID, nil)
 }
 
 func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn, push *outpostPush) {

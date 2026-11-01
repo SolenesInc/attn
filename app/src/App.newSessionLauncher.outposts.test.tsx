@@ -139,6 +139,13 @@ describe('launcher with outposts attached', () => {
     ]);
   });
 
+  it('shows an unreachable machine recent relative to the home it last reported', async () => {
+    await open({}, [sandbox, { ...piLab, home: HOME }]);
+    expect(
+      screen.getAllByRole('option').map((row) => row.querySelector('.picker-path')?.textContent),
+    ).toEqual(['~/projects/shop', '~/projects/shop', '~/projects/sensor-hub', '~/notes']);
+  });
+
   it.each([
     ['main_repo', REPO],
     ['new_worktree', undefined],

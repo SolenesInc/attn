@@ -6296,6 +6296,7 @@ export interface OutpostElement {
     connectable?:          boolean;
     daemon_id?:            string;
     destination:           string;
+    home?:                 string;
     host_key_fingerprint?: string;
     id:                    string;
     last_error?:           string;
@@ -8020,6 +8021,7 @@ export interface OutpostInfo {
     connectable?:          boolean;
     daemon_id?:            string;
     destination:           string;
+    home?:                 string;
     host_key_fingerprint?: string;
     id:                    string;
     last_error?:           string;
@@ -23707,6 +23709,7 @@ const typeMap: any = {
         { json: "connectable", js: "connectable", typ: u(undefined, true) },
         { json: "daemon_id", js: "daemon_id", typ: u(undefined, "") },
         { json: "destination", js: "destination", typ: "" },
+        { json: "home", js: "home", typ: u(undefined, "") },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
@@ -24731,6 +24734,7 @@ const typeMap: any = {
         { json: "connectable", js: "connectable", typ: u(undefined, true) },
         { json: "daemon_id", js: "daemon_id", typ: u(undefined, "") },
         { json: "destination", js: "destination", typ: "" },
+        { json: "home", js: "home", typ: u(undefined, "") },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },

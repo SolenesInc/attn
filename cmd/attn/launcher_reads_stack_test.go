@@ -116,7 +116,9 @@ func TestLauncherReadsRunOnTheNamedOutpost(t *testing.T) {
 
 	lost := app.EventCount()
 	pair.Disconnect()
-	outpostStateSince(app, "outpost", protocol.OutpostStateLost, lost)
+	if lostRow := outpostStateSince(app, "outpost", protocol.OutpostStateLost, lost); protocol.Deref(lostRow.Home) != machineHome {
+		t.Errorf("the lost outpost's home = %q; want the home it reported, %s", protocol.Deref(lostRow.Home), machineHome)
+	}
 	unreachable := "outpost is unreachable"
 	failed := map[string]string{}
 	failed["browse_directory"] = protocol.Deref(testworld.Request(app, protocol.BrowseDirectoryMessage{Cmd: protocol.CmdBrowseDirectory, Host: onOutpost, InputPath: "~/", RequestID: protocol.Ptr("browse-lost")},
@@ -146,6 +148,11 @@ func TestLauncherReadsRunOnTheNamedOutpost(t *testing.T) {
 	}
 	if _, err := os.Stat(repo); err != nil {
 		t.Errorf("the repository must survive a delete sent to a lost outpost: %v", err)
+	}
+	home.Stop()
+	home.Start()
+	if rows := home.App().Initial.Outposts; len(rows) != 1 || protocol.Deref(rows[0].Home) != machineHome {
+		t.Errorf("after a home restart the outposts = %+v; want one with home %s", rows, machineHome)
 	}
 	t.Logf("outpost reads answered; with the outpost lost: %v", failed)
 }
