@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { createCodexProbe } from './codexProbe.mjs';
+import { workInFolder } from './workedFolder.mjs';
 import {
   currentHarnessInstance,
   dataDirForInstance,
@@ -341,6 +342,12 @@ async function main() {
 
     await runner.step('launch_packaged_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+    });
+
+    await runner.step('work_in_the_automation_folders', async () => {
+      for (const cwd of [editFixture, deleteFixture, cleanupFixture.repo]) {
+        await workInFolder({ observer, binary, env: daemonEnv, cwd });
+      }
     });
 
     let run1 = null;

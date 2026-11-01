@@ -12,6 +12,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { codexInvocations, createCodexProbe } from './codexProbe.mjs';
+import { workInFolder } from './workedFolder.mjs';
 import {
   currentHarnessInstance,
   dataDirForInstance,
@@ -278,6 +279,7 @@ async function main() {
       }, 'instance daemon');
     });
     await runner.step('launch_packaged_app', () => launchFreshAppAndConnect(client, observer));
+    await runner.step('work_in_the_fixture_repository', () => workInFolder({ observer, binary, env: daemonEnv, cwd: fixture.repo }));
     // A YAML carrying `enabled:` is rejected outright
     // (errEnabledManagedOutsideSpec in internal/automation/automation.go).
     const definition = (id, name, model) => `api_version: attn.dev/automations/v1alpha1\n${id ? `id: ${id}\n` : ''}name: ${name}\ntrigger:\n  type: github_review_requested\n  repositories:\n    mode: all_accessible\n    include: [mock.github.local/owner/repo]\nprompt: |\n  Review only the local fixture and report on this seed. Never write to GitHub.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(probe.executable)}\n  model: ${model}\n  effort: high\nlocation:\n  type: repository_worktree\n  repository_sources:\n    default: {type: managed_cache}\n    overrides:\n      mock.github.local/owner/repo:\n        type: local_clone\n        path: ${JSON.stringify(fixture.repo)}\n`;

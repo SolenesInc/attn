@@ -12,6 +12,7 @@ import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
+import { workInFolder } from './workedFolder.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -306,6 +307,16 @@ async function main() {
       daemonEnv.ATTN_AUTOMATION_SCHEDULE_INTERVAL = SCHEDULE_TICK_INTERVAL;
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
+    });
+
+    await runner.step('work_in_the_automation_folder', async () => {
+      const observer = new DaemonObserver({ wsUrl: options.wsUrl });
+      await observer.connect();
+      try {
+        await workInFolder({ observer, binary, env: daemonEnv, cwd: fixtureRoot });
+      } finally {
+        await observer.close();
+      }
     });
 
     await runner.step('leg1_apply_and_anchor', async () => {
