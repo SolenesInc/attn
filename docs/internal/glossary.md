@@ -107,7 +107,7 @@ quick capture           a quick message (with optional attachments) the user
 ```
 
 ```text
-flow (1 per profile)      how the user works with attn and their agents:
+flow (1)                  how the user works with attn and their agents:
                           what asks for attention and how they move to it
 ├─ queue flow             attn brings the next turn to the user; like working
 │                         an inbox to zero
@@ -283,7 +283,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 
 ### Changes to make
 
-- Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
 - Named claims let any name tend a seed. Remove them, or define who can use
   them.
 - The chief is not a crew member. Make it one.
