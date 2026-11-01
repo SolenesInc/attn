@@ -571,6 +571,8 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
+const DEFAULT_RECENT_LOCATIONS = 20;
+const RECENT_LOCATIONS_ACROSS_MACHINES = 1_000;
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
@@ -2176,7 +2178,7 @@ export function useDaemonSocket({
               if (data.success) {
                 pending.resolve({
                   success: true,
-                  locations: (data.recent_locations || []).filter((location) => !location.host),
+                  locations: data.recent_locations || [],
                   home_path: data.home_path,
                 });
               } else {
@@ -3722,14 +3724,15 @@ export function useDaemonSocket({
     }, 'Recent files timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendGetRecentLocations = useCallback((limit?: number): Promise<RecentLocationsResult> => {
+  const sendGetRecentLocations = useCallback(async (limit = DEFAULT_RECENT_LOCATIONS): Promise<RecentLocationsResult> => {
     const requestId = nextRequestID('recent_locations');
     const key = `get_recent_locations_${requestId}`;
-    return sendKeyedRequest(key, {
+    const result = await sendKeyedRequest<RecentLocationsResult>(key, {
       cmd: 'get_recent_locations',
-      ...(limit && { limit }),
+      limit: RECENT_LOCATIONS_ACROSS_MACHINES,
       request_id: requestId,
     }, 'Get recent locations timed out');
+    return { ...result, locations: result.locations.filter((location) => !location.host).slice(0, limit) };
   }, [nextRequestID, sendKeyedRequest]);
 
   const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[], host?: string): Promise<BrowseDirectoryResult> => {

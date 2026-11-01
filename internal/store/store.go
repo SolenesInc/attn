@@ -2183,34 +2183,6 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	return result
 }
 
-func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		cutoff := time.Now().Add(-maxAge)
-		removed := 0
-		for key, loc := range s.recentLocations {
-			lastSeen, err := time.Parse(time.RFC3339, loc.LastSeen)
-			if err != nil || lastSeen.Before(cutoff) {
-				delete(s.recentLocations, key)
-				removed++
-			}
-		}
-		return removed
-	}
-
-	cutoff := time.Now().Add(-maxAge).Format(time.RFC3339)
-	result, err := s.db.Exec("DELETE FROM recent_locations WHERE last_seen < ?", cutoff)
-	if err != nil {
-		log.Printf("[store] CleanupStaleLocations: failed: %v", err)
-		return 0
-	}
-
-	affected, _ := result.RowsAffected()
-	return int(affected)
-}
-
 func boolToInt(b bool) int {
 	if b {
 		return 1

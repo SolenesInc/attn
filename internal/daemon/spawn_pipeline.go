@@ -551,7 +551,7 @@ func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
 	return d.removeTerminalRuntime(context.Background(), terminal)
 }
 
-func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
+func (d *Daemon) commitSpawn(ctx context.Context, req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
 	current := d.store.Get(session.ID)
 	if current == nil {
@@ -590,7 +590,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
-	d.recordRecentLocation(protocol.Deref(msg.Host), req.cwd)
+	d.recordRecentLocation(ctx, protocol.Deref(msg.Host), req.cwd)
 	d.publishFact(fact, string(session.ID), nil)
 	plan.commit()
 	if req.existingSession != nil {
@@ -599,12 +599,12 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	return &spawnOutcome{}
 }
 
-func (d *Daemon) recordRecentLocation(host, cwd string) {
+func (d *Daemon) recordRecentLocation(ctx context.Context, host, cwd string) {
 	if host == "" {
 		d.store.UpsertRecentLocation("", cwd, "")
 		return
 	}
-	inspection, err := Call[protocol.CheckoutInspection](context.Background(), d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
+	inspection, err := Call[protocol.CheckoutInspection](ctx, d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
 	if err != nil {
 		d.logf("recent location %s on %s recorded unresolved: %v", cwd, host, err)
 		d.store.UpsertRecentLocation(host, cwd, "")
@@ -692,7 +692,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	} else if outcome.alreadyLive {
 		return placementOutcome{session: msg.ID}, nil
 	}
-	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
+	if outcome := d.commitSpawn(ctx, req, plan); outcome.err != nil {
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
 	req.placed.session = msg.ID
