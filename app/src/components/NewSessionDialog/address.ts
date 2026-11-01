@@ -1,39 +1,58 @@
 import type { OutpostInfo } from '../../types/generated';
 
-export type Machine = { host?: string; name: string };
-export const THIS_MAC: Machine = { name: 'This Mac' };
-const HOME_NAME = 'home';
+export type Machine = { host?: string; name: string; label: string };
+export const THIS_MAC: Machine = { name: 'This Mac', label: 'home' };
 
 export type Address =
   | { mode: 'search'; text: string; prefix: string; machine?: Machine }
-  | { mode: 'browse'; path: string; prefix: string; machine: Machine };
+  | { mode: 'browse'; path: string; prefix: string; machine: Machine }
+  | { mode: 'ambiguous'; prefix: string; machines: Machine[] };
 
 export function isBrowsePath(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.startsWith('~') || trimmed.startsWith('/');
 }
 
-function named(query: string, outposts: OutpostInfo[]): { machine: Machine; prefix: string } | null {
+function sharesName(outpost: OutpostInfo, outposts: OutpostInfo[]): boolean {
+  const lower = outpost.name.toLowerCase();
+  return outposts.some((other) => other.id !== outpost.id && other.name.toLowerCase() === lower);
+}
+
+export function machineFor(outpost: OutpostInfo, outposts: OutpostInfo[]): Machine {
+  return {
+    host: outpost.id,
+    name: outpost.name,
+    label: sharesName(outpost, outposts) ? outpost.id : outpost.name,
+  };
+}
+
+function named(query: string, outposts: OutpostInfo[]): { machines: Machine[]; prefix: string } | null {
   const lower = query.toLowerCase();
-  const candidates = [
-    ...outposts.map((outpost) => ({ name: outpost.name, machine: { host: outpost.id, name: outpost.name } })),
-    { name: HOME_NAME, machine: THIS_MAC },
-  ].sort((a, b) => b.name.length - a.name.length);
-  for (const candidate of candidates) {
-    const prefix = `${candidate.name}:`;
-    if (lower.startsWith(prefix.toLowerCase()))
-      return { machine: candidate.machine, prefix: query.slice(0, prefix.length) };
-  }
-  return null;
+  const matches = [
+    ...outposts.flatMap((outpost) =>
+      [outpost.name, outpost.id].map((label) => ({ label, machine: machineFor(outpost, outposts) })),
+    ),
+    { label: THIS_MAC.label, machine: THIS_MAC },
+  ].filter(({ label }) => lower.startsWith(`${label.toLowerCase()}:`));
+  if (!matches.length) return null;
+  const longest = Math.max(...matches.map(({ label }) => label.length));
+  const machines = new Map(
+    matches
+      .filter(({ label }) => label.length === longest)
+      .map(({ machine }) => [machine.host ?? '', machine]),
+  );
+  return { machines: [...machines.values()], prefix: query.slice(0, longest + 1) };
 }
 
 export function parseAddress(query: string, outposts: OutpostInfo[]): Address {
   const addressed = named(query, outposts);
+  if (addressed && addressed.machines.length > 1)
+    return { mode: 'ambiguous', prefix: addressed.prefix, machines: addressed.machines };
+  const machine = addressed?.machines[0];
   const rest = addressed ? query.slice(addressed.prefix.length) : query;
   const prefix = addressed?.prefix ?? '';
-  if (isBrowsePath(rest))
-    return { mode: 'browse', path: rest.trim(), prefix, machine: addressed?.machine ?? THIS_MAC };
-  return { mode: 'search', text: rest.trim(), prefix, machine: addressed?.machine };
+  if (isBrowsePath(rest)) return { mode: 'browse', path: rest.trim(), prefix, machine: machine ?? THIS_MAC };
+  return { mode: 'search', text: rest.trim(), prefix, machine };
 }
 
 export function machinesNamed(text: string, outposts: OutpostInfo[]): OutpostInfo[] {
@@ -43,5 +62,5 @@ export function machinesNamed(text: string, outposts: OutpostInfo[]): OutpostInf
 }
 
 export function addressOf(machine: Machine, path: string): string {
-  return machine.host ? `${machine.name}:${path}` : path;
+  return machine.host ? `${machine.label}:${path}` : path;
 }

@@ -431,8 +431,11 @@ function status() {
 }
 
 describe('launcher addresses', () => {
-  async function openWithDisks(disks: Record<string, Disk> = { '': macDisk, [sandbox.id]: sandboxDisk }) {
-    const view = await openPicker({}, { settings, outposts: [sandbox, piLab] });
+  async function openWithDisks(
+    disks: Record<string, Disk> = { '': macDisk, [sandbox.id]: sandboxDisk },
+    outposts: OutpostInfo[] = [sandbox, piLab],
+  ) {
+    const view = await openPicker({}, { settings, outposts });
     await press(view.daemon, 'Escape');
     serveOutposts(view.daemon);
     serveDisks(view.daemon, disks);
@@ -644,6 +647,44 @@ describe('launcher addresses', () => {
     await typePath(daemon, 'pi-lab:~/');
     expect(status()).toBe('pi-lab unreachable · no folders cached for ~');
     expect(daemon.sent.slice(before)).toEqual([]);
+  });
+
+  it('finishes a typed start in the background after Esc on a stalled machine', async () => {
+    const { daemon } = await openWithDisks();
+    daemon.on('inspect_path', () => undefined);
+    await reopen(daemon);
+    await typePath(daemon, 'ai-sandbox:~/projects/');
+    await press(daemon, 'Enter');
+    await gesture(daemon, () =>
+      daemon.emit({
+        event: 'outposts_updated',
+        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date(Date.now()).toISOString() }, piLab],
+      }),
+    );
+    await act(() => vi.advanceTimersByTimeAsync(4_000));
+    await press(daemon, 'Escape');
+    expect(screen.queryByTestId('location-picker')).toBeNull();
+    const [asked] = daemon.sentOf('inspect_path');
+    await gesture(daemon, () => daemon.replyTo(asked, inspection(asked.path)));
+    expect(spawns(daemon)).toEqual([{ cwd: `${HOME}/projects`, agent: 'claude', host: sandbox.id }]);
+  });
+
+  it('lists every machine a shared name means and browses the one picked', async () => {
+    const twin: OutpostInfo = { ...sandbox, id: 'outpost-ai-2', name: 'AI-Sandbox', destination: 'ai-sandbox-2' };
+    const { daemon } = await openWithDisks({ '': macDisk, [sandbox.id]: sandboxDisk, [twin.id]: sandboxDisk }, [sandbox, twin]);
+    await reopen(daemon);
+    const before = browses(daemon).length;
+    await typePath(daemon, 'ai-sandbox:~/');
+    expect(status()).toBe('ai-sandbox names 2 machines · pick one below');
+    expect(rowNames().map(({ name }) => name)).toEqual(['ai-sandbox:', 'AI-Sandbox:']);
+    expect(screen.getByText(`connected · Tab browses ${twin.id}:~/`)).toBeInTheDocument();
+    expect(browses(daemon).slice(before)).toEqual([]);
+
+    await press(daemon, 'ArrowDown');
+    await press(daemon, 'Tab');
+    expect(pathInput()).toHaveValue(`${twin.id}:~/`);
+    expect(screen.getByText('Folders in ~/ on AI-Sandbox')).toBeInTheDocument();
+    expect(browses(daemon).slice(before).map(({ host }) => host)).not.toContain(sandbox.id);
   });
 
   it('opens a terminal at an address on its machine', async () => {

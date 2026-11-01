@@ -22,6 +22,7 @@ import { LauncherIcon } from './NewSessionDialog/LauncherIcon';
 import {
   THIS_MAC,
   addressOf,
+  machineFor,
   machinesNamed,
   parseAddress,
   type Machine,
@@ -203,7 +204,11 @@ export function NewSessionLauncher({
   const display = (path: string, host?: string) => toDisplayPath(path, listings.home(host));
   const outpostOf = (host: string) => outposts.find((outpost) => outpost.id === host);
   const machineName = (host?: string) => (host ? (outpostOf(host)?.name ?? host) : THIS_MAC.name);
-  const machineOf = (host?: string): Machine => (host ? { host, name: machineName(host) } : THIS_MAC);
+  const machineOf = (host?: string): Machine => {
+    if (!host) return THIS_MAC;
+    const outpost = outpostOf(host);
+    return outpost ? machineFor(outpost, outposts) : { host, name: host, label: host };
+  };
   const reachable = (host?: string) => !host || outpostOf(host)?.reach === 'reachable';
   const onMachine = (repo: string, host?: string) => (host ? `${host}:${repo}` : repo);
   const fail = (reason: unknown) =>
@@ -405,12 +410,17 @@ export function NewSessionLauncher({
     }
     const searched = address.mode === 'search' ? address.text : '';
     const needle = expandDisplayPath(searched, home).toLowerCase();
-    const machineRows: Row[] = machinesNamed(searched, outposts).map((outpost) => ({
+    const machineRows: Row[] = (
+      address.mode === 'ambiguous'
+        ? address.machines.flatMap((machine) => outposts.filter(({ id }) => id === machine.host))
+        : machinesNamed(searched, outposts)
+    ).map((outpost) => ({
       kind: 'machine',
       path: '~/',
       name: `${outpost.name}:`,
       host: outpost.id,
     }));
+    if (address.mode === 'ambiguous') return machineRows;
     const recentRows = recents
       .filter((item) =>
         (item.host ? `${machineName(item.host)}:${item.path}` : item.path)
@@ -610,7 +620,7 @@ export function NewSessionLauncher({
       if (!where && !row && browsing) {
         const typed = normalizePickerPath(browsing.path, listings.home(browseHost));
         const reply = await onInspectPath?.(typed, browseHost);
-        if (request !== generation.current) return;
+        if (request !== generation.current && !current.background) return;
         if (!reply?.inspection?.exists || !reply.inspection.is_directory)
           throw new Error(`Directory not found: ${typed}`);
         path = reply.inspection.resolved_path;
@@ -849,7 +859,9 @@ export function NewSessionLauncher({
   const remote = browsing?.machine.host;
   const elapsedSince = (started: number) => Math.max(0, Date.now() - started);
   const statusLine =
-    !where && browsing && browseDir && remote
+    !where && address.mode === 'ambiguous'
+      ? `${address.prefix.slice(0, -1)} names ${address.machines.length} machines · pick one below`
+      : !where && browsing && browseDir && remote
       ? !browseReachable
         ? current?.status === 'listed'
           ? `${browsing.machine.name} unreachable · folders as of ${listedAge(current.at)}`
@@ -923,7 +935,10 @@ export function NewSessionLauncher({
             role="status"
             data-testid="launcher-status"
             data-bad={
-              !browseReachable || current?.status === 'missing' || current?.status === 'failed'
+              address.mode === 'ambiguous' ||
+              !browseReachable ||
+              current?.status === 'missing' ||
+              current?.status === 'failed'
                 ? true
                 : undefined
             }
@@ -1010,7 +1025,7 @@ export function NewSessionLauncher({
                   )}
                   {row.kind === 'machine' && (
                     <div className="picker-path">
-                      {outpostOf(row.host!)?.state} · Tab browses {row.name}~/
+                      {outpostOf(row.host!)?.state} · Tab browses {addressOf(machineOf(row.host), '~/')}
                     </div>
                   )}
                   {row.kind === 'elsewhere' && (

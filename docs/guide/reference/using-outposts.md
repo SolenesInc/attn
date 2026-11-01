@@ -186,7 +186,9 @@ on every row in a terminal launcher, puts its address in the input.
 An address names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means This Mac, and `home:` names
 This Mac too. Machine names match whole and ignore case, so names that contain
-`@` or `:`, such as `user@host`, work as typed.
+`@` or `:`, such as `user@host`, work as typed. An outpost's id works too. When
+two outposts share a name, the launcher lists both under that name, and the one
+you pick goes into the input by its id.
 
 - `ai-sandbox:~/projects/` lists folders on ai-sandbox. Anything that starts
   with `~` or `/` browses.
