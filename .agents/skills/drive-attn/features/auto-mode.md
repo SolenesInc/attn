@@ -1,19 +1,20 @@
 # Auto mode
 
-Rules and a guardian model answer agents' permission prompts; agents propose
-rules, only the user promotes them. Auto mode is Pi's approval policy. Prefix
-rules decide whether a command runs, asks or is refused; a list of network
-hosts decides what a sandboxed command may reach; an approval policy and a
-sandbox mode set the rest. When a command needs approval, exactly one reviewer
+Rules and a guardian model answer agents' permission prompts. Agents propose
+rules, and only the user promotes them. Auto mode is Pi's approval policy.
+Prefix rules decide whether a command runs, asks or is refused. A list of
+network hosts decides what a sandboxed command may reach. An approval policy
+and a sandbox mode set the rest. When a command needs approval, exactly one reviewer
 answers it: the user, or, with auto mode on, the Guardian model. Agents and
 people propose rules, hosts and policies from the CLI, and nothing they
-propose takes effect until the user promotes it in Settings. The environment,
-what the Guardian knows about this machine, is edited directly.
+propose takes effect until the user promotes it in Settings. Agents and
+people edit the environment, which is what the Guardian knows about this
+machine, directly.
 
 ## Sub-features
 
 - `automode-show`: the effective policy, the Guardian, the environment, the rules, the hosts and the pending proposals.
-- `automode-rules`: propose a prefix rule, allow, prompt or forbidden, that inherits or bypasses the sandbox; or propose removing one.
+- `automode-rules`: propose a prefix rule, allow, prompt or forbidden, that inherits or bypasses the sandbox, or propose removing a rule.
 - `automode-hosts`: propose allowing or denying a network host, or removing one.
 - `automode-policy`: propose an approval policy, a sandbox mode, or whether the proxy may reach localhost.
 - `automode-environment`: the slots the Guardian reads about this machine, such as trusted repositories, domains and registries, edited directly.
@@ -21,27 +22,41 @@ what the Guardian knows about this machine, is edited directly.
 - `guardian`: the model and reasoning that answer prompts when auto mode is on.
 - `automode-denials`: recent denials, newest first, with the session, the rule and the reason.
 - `automode-launch`: whether new Pi sessions start in auto mode, the picker's switch, and `/auto` inside a session.
-- `repository-rules`: rules a repository's checkout carries, merged in for sessions in it.
+- `repository-rules`: rules a repository's checkout carries, which attn merges in for sessions in that repository.
 
 ## How to get to it
 
 ### People
 
-- Settings, Auto mode (section `autoMode`, `app/src/components/AutoModeSettings.tsx`): Global policy, with the new-sessions state `[data-testid="automode-new-sessions"]` ("Auto mode on" or "Auto mode off", shown, not a control), "Approval policy" and "Sandbox mode"; This machine, the environment slots, each with its Add button `[data-testid="automode-slot-edit-<slot>"]`, its entry field and a remove button on each value; Global rules, which the user adds and removes directly (`[data-testid="automode-rules-remove"]`); Network; Proposed rules, each with Promote `[data-testid="automode-promote-<id>"]` and Discard `[data-testid="automode-discard-<id>"]`; and Recent denials with a refresh button. The Guardian's "Guardian model" and "Guardian reasoning" are in `app/src/components/GuardianSettings.tsx`.
-- The new-agent picker's auto mode switch, `[data-testid="location-picker-automode-toggle"]`, shown only for a harness whose plugin offers auto mode, which is Pi with `attn-pi` installed (`app/src/components/NewSessionDialog/SessionControls.tsx`). Launcher 2.0 adds ⌥A for it; the standard picker has no key.
+- Settings, Auto mode (section `autoMode`, `app/src/components/AutoModeSettings.tsx`), has these parts:
+  - Global policy: the new-sessions state `[data-testid="automode-new-sessions"]` ("Auto mode on" or "Auto mode off", shown, not a control), "Approval policy" and "Sandbox mode".
+  - This machine: the environment slots, each with its Add button `[data-testid="automode-slot-edit-<slot>"]`, its entry field and a remove button on each value.
+  - Global rules, which the user adds and removes directly (`[data-testid="automode-rules-remove"]`).
+  - Network.
+  - Proposed rules, each with Promote `[data-testid="automode-promote-<id>"]` and Discard `[data-testid="automode-discard-<id>"]`.
+  - Recent denials, with a refresh button.
+
+  The Guardian's "Guardian model" and "Guardian reasoning" are in `app/src/components/GuardianSettings.tsx`.
+- The new-agent picker's auto mode switch, `[data-testid="location-picker-automode-toggle"]`, shown only for a harness whose plugin offers auto mode, which is Pi with `attn-pi` installed (`app/src/components/NewSessionDialog/SessionControls.tsx`). Launcher 2.0 adds ⌥A for the switch. The standard picker has no key.
 - Inside a Pi session: `/auto on`, `/auto off` and `/auto status`, and `/permissions` for that session only (`plugins/attn-pi/docs/automode.md`).
-- Where people see what agents do: a denial is announced naming the session, what was blocked, why and who decided, and it lands in Recent denials.
+- Where people see what agents do: attn announces each denial with the session, what was blocked, why and who decided, and lists the denial in Recent denials.
 - Their own shell: `attn automode`, below.
 
 ### Agents
 
-- `attn automode` (`cmd/attn/automode.go`): `show`; `env`, `env set <slot> <value>…`, `env clear <slot>`, `env notes` (from stdin); `rule add <token>…` and `rule remove <token>…` with `--decision allow|prompt|forbidden`, `--sandbox inherit|bypass` and `--justification`; `host add <host>` and `host remove <host>` with `--decision allow|deny`; `policy` with `--approval-policy`, `--sandbox-mode` and `--allow-local-binding`; `denials [--limit <n>]`. Every subcommand takes `--json`. `rule`, `host` and `policy` record a proposal; `env` writes directly.
+- `attn automode` (`cmd/attn/automode.go`) has these subcommands. Every subcommand takes `--json`. `rule`, `host` and `policy` record a proposal. `env` writes directly.
+  - `show`
+  - `env`, `env set <slot> <value>…`, `env clear <slot>`, `env notes` (from stdin)
+  - `rule add <token>…` and `rule remove <token>…` with `--decision allow|prompt|forbidden`, `--sandbox inherit|bypass` and `--justification`
+  - `host add <host>` and `host remove <host>` with `--decision allow|deny`
+  - `policy` with `--approval-policy`, `--sandbox-mode` and `--allow-local-binding`
+  - `denials [--limit <n>]`
 - Prompts: what a Pi session is told about its sandbox, its credentials and its failures (`internal/prompts/content/pi/security/`), the Guardian's policy and answer format (`internal/prompts/content/pi/guardian/`), and the environment slots the Guardian reads (`internal/prompts/content/pi/environment/`).
 
 ### Triggers
 
-- A Pi command that needs approval goes to the Guardian when auto mode is on, and to the user otherwise; a denial is recorded and announced (`internal/daemon/automode.go`).
-- attn reads the repository a folder belongs to for the `trusted_repo` and `repo_visibility` slots, and the rules its checkout carries (`internal/daemon/automode_detect.go`).
+- A Pi command that needs approval goes to the Guardian when auto mode is on, and to the user otherwise. The daemon records and announces a denial (`internal/daemon/automode.go`).
+- attn reads the repository a folder belongs to for the `trusted_repo` and `repo_visibility` slots, and the rules that repository's checkout carries (`internal/daemon/automode_detect.go`).
 - Only the user changes the rules, hosts or policy: by promoting a proposal (`PromoteAutoModeProposal`, `internal/store/automode.go`) or by editing them in Settings. `attn automode rule`, `host` and `policy` only propose.
 
 ## Driving it
@@ -59,51 +74,51 @@ Preconditions:
 ]}
 ```
 
-`<n>` and `<m>` are the proposal numbers the propose steps print; `<terminal>` is the agent's terminal id from `wsctl list`; `<P>` is the proof folder's path written out.
+`<n>` and `<m>` are the proposal numbers the propose steps print. `<terminal>` is the agent's terminal id from `wsctl list`. `<P>` is the proof folder's path written out.
 
 - **Read the config.** Run `(cd $P && $R/attn automode show)`. It prints `enabled by default`, `approval policy`, `sandbox mode` and `guardian`, then `environment:` with `trusted_repo  (unset: …)` and the other slots, the rules, `network local binding:`, and `pending proposals: none`. `./attn automode denials` prints `no denials recorded`.
-- **An agent proposes a rule.** Run `wsctl add-session --cwd $M --agent claude --label automode-agent --id automode-agent --place`, find its terminal, and run `wsctl input --id <terminal> --text "propose a rule" --enter`. `./attn agent peek automode-agent` shows `recorded proposal <n>: rule allow, inherit sandbox: go vet` and `This changed nothing yet. Promote it in the attn app to put it in force.` `./attn automode show` lists it under `pending proposals (promote them in the attn app):`, and its rules do not include `go vet`.
+- **An agent proposes a rule.** Run `wsctl add-session --cwd $M --agent claude --label automode-agent --id automode-agent --place`, find its terminal, and run `wsctl input --id <terminal> --text "propose a rule" --enter`. `./attn agent peek automode-agent` shows `recorded proposal <n>: rule allow, inherit sandbox: go vet` and `This changed nothing yet. Promote it in the attn app to put it in force.` `./attn automode show` lists it under `pending proposals (promote them in the attn app):`, and the rules in that output do not include `go vet`.
 - **A person proposes from the shell.** Run `./attn automode host add example.com`: it prints `recorded proposal <m>: host allow example.com`. `./attn automode policy --approval-policy untrusted` records a policy proposal the same way.
-- **Promote in Settings.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-autoMode"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"automode-promote-<n>\"]","timeoutMs":5000}'` matches. Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"automode-promote-<n>\"]"}'` for setup, then click it natively. `./attn automode show` lists `allow  inherit  go vet` under its rules, and proposal `<n>` is no longer pending.
+- **Promote in Settings.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-autoMode"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"automode-promote-<n>\"]","timeoutMs":5000}'` matches. Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"automode-promote-<n>\"]"}'` for setup, then click the Promote button natively. `./attn automode show` lists `allow  inherit  go vet` under the rules, and proposal `<n>` is no longer pending.
 - **Discard in Settings.** Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"automode-discard-<m>\"]"}'` for setup, then click `[data-testid="automode-discard-<m>"]` natively. `./attn automode show` no longer lists `<m>`, and `network allowed` does not include `example.com`.
-- **Change the policy and rules in Settings.** Scroll `[data-testid="automode-approval-policy"]` into view, click it natively and run `bridge native_text '{"text":"u"}'`: `./attn automode show` prints `approval policy     untrusted`. Click it again and type `o` to put back `on-request`. Do the same on `[data-testid="automode-sandbox-mode"]` with `r`, then `w`. With the promoted `go vet` rule showing, click `[data-testid="automode-rules-remove"]` natively: `go vet` leaves the rules. Click `[data-testid="automode-refresh"]` under Recent denials natively.
+- **Change the policy and rules in Settings.** Scroll `[data-testid="automode-approval-policy"]` into view, click it natively and run `bridge native_text '{"text":"u"}'`: `./attn automode show` prints `approval policy     untrusted`. Click the select again and type `o` to put `on-request` back. Do the same on `[data-testid="automode-sandbox-mode"]` with `r`, then `w`. With the promoted `go vet` rule showing, click `[data-testid="automode-rules-remove"]` natively: `go vet` leaves the rules. Click `[data-testid="automode-refresh"]` under Recent denials natively.
 - **Edit a slot in Settings.** Scroll `[data-testid="automode-slot-edit-domains"]` into view and click it natively: `[data-testid="automode-slot-input-domains"]` takes the keyboard. Type `ui.example` with `native_text` and press Enter: `./attn automode env` prints `domains          ui.example`. Click `[aria-label^="Remove ui.example"]` natively: it prints `(unset: …)` again.
-- **Edit the environment.** Run `./attn automode env set domains internal.example`. It prints `environment:` with `domains  internal.example`. With Settings still open on Auto mode, `bridge automode_get_state` shows `present: true` and the slot with that value; the reply is empty while the section is closed. `./attn automode env clear domains` puts it back to `(unset: …)`. `printf 'Audit notes.\n' | ./attn automode env notes` prints them under `notes (no rule reads these):`; an empty stdin clears them.
+- **Edit the environment.** Run `./attn automode env set domains internal.example`. It prints `environment:` with `domains  internal.example`. With Settings still open on Auto mode, `bridge automode_get_state` shows `present: true` and the slot with that value. The reply is empty while the section is closed. `./attn automode env clear domains` puts the slot back to `(unset: …)`. `printf 'Audit notes.\n' | ./attn automode env notes` prints them under `notes (no rule reads these):`. An empty stdin clears them.
 - **Removals are proposals too.** `./attn automode rule remove go vet` prints `recorded proposal <k>: rule_remove remove rule go vet`, and `./attn automode host remove example.com` records a `host_remove`. A built-in rule or host is refused: `./attn automode rule remove attn automode policy` exits 1 naming it built-in. Discard both proposals in Settings.
 - **What the folder's repository adds.** From the repository root, `./attn automode show` prints `trusted_repo     (detected here: <root>, <remote>)`. In a scratch git checkout holding `.attn/rules.json`, such as `{"rules":[{"pattern":["make","check"],"decision":"allow","sandbox":"inherit"}]}`, it prints `repository rules (<path>):` with `allow  inherit  make check`, and the rule again under `effective rules:`. `repo_visibility` stays unset on the baseline: it is read from the GitHub host's repository API, and the mock GitHub does not answer it.
-- **The picker's switch.** Press Escape to close Settings, then press ⌘N and wait for `[data-testid="location-picker-overlay"]`. With Claude or Codex checked, `[data-testid="location-picker-automode-toggle"]` is absent; it shows only for Pi, which needs `./attn plugin install-bundled attn-pi` and the real `pi` binary. Re-read `./attn plugin list` until `attn-pi` has `connected: true`, then press ⌥3 to select Pi. With Pi checked, click the switch natively and read `aria-checked` flip. Press Escape.
+- **The picker's switch.** Press Escape to close Settings, then press ⌘N and wait for `[data-testid="location-picker-overlay"]`. With Claude or Codex checked, `[data-testid="location-picker-automode-toggle"]` is absent. The switch shows only for Pi, which needs `./attn plugin install-bundled attn-pi` and the real `pi` binary. Re-read `./attn plugin list` until `attn-pi` has `connected: true`, then press ⌥3 to select Pi. With Pi checked, click the switch natively and read `aria-checked` flip. Press Escape.
 - **The Guardian.** Reopen Settings on Auto mode. This needs Pi with `attn-pi` installed: the model list is read from Pi, and on the baseline `[aria-label="Guardian model"]` offers only "Follow session model" and the section shows a harness-unavailable error. With Pi, click the select natively, choose a model by typing its first letters with `bridge native_text`, and `./attn automode show` prints that model on its `guardian` line.
-- **Proof.** In `$P`, keep `./attn automode show` before the proposals, after the promote and after the discard; `./attn automode show --json`; the peek after the agent's proposal; each command's exit code; and `bridge capture_screenshot '{"path":"<P>/automode-proposals.png"}'` with the proposals showing. Put the way in in each file's name, such as `automode-settings-promote.txt`.
+- **Proof.** In `$P`, keep `./attn automode show` before the proposals, after the promote and after the discard. Keep `./attn automode show --json`, the peek after the agent's proposal, and each command's exit code. Capture `bridge capture_screenshot '{"path":"<P>/automode-proposals.png"}'` with the proposals showing. Name each file for its way in, such as `automode-settings-promote.txt`.
 
 ## Contexts
 
 - **Durability across restarts**: rules, hosts, policy, environment, proposals and denials are the daemon's records and survive restarts. A respawned Pi session keeps its auto mode choice and its policy pair.
 - **Linux**: Pi's sandbox wraps commands in bubblewrap on Linux and Seatbelt on macOS (`plugins/attn-pi/AGENTS.md`). The verbs work the same.
-- **Performance and idle cost**: the denial log keeps a bounded number of denials and says what it dropped; pending proposals have a cap, and a proposal past it is refused naming the proposer, the limit and the ask.
+- **Performance and idle cost**: the denial log keeps a bounded number of denials and says what it dropped. Pending proposals have a cap. attn refuses a proposal past the cap and names the proposer, the limit and the ask.
 - **Harnesses**: auto mode is Pi's, through the `attn-pi` plugin. Claude Code and Codex use their own permission modes, YOLO and auto-approve ([harnesses.md](harnesses.md)).
-- **Keyboard and native input**: ⌥A toggles auto mode in Launcher 2.0 for a Pi agent; the standard picker's switch is clicked.
+- **Keyboard and native input**: ⌥A toggles auto mode for a Pi agent in Launcher 2.0. In the standard picker, click the switch.
 - **Compatibility across versions**: old patterns that could not be turned into rules show under `not converted (rewrite these as rules)`. A rule proposed without `--sandbox` keeps the old behavior: allow bypasses the sandbox, other decisions inherit it. Shipped rules stay ahead of the user's and cannot be removed.
 
 ## Tests
 
 - Wire: `internal/daemon/automode_wire_test.go`, `internal/daemon/automode_driver_wire_test.go`, `internal/daemon/automode_launch_wire_test.go`, `internal/daemon/automode_repository_rules_wire_test.go`, `internal/daemon/plugin_driver_rules_wire_test.go`.
 - Stack: `cmd/attn/automode_stack_test.go`.
-- Scenario: `automode-environment`; outside the catalog, `app/scripts/real-app-harness/scenario-pi-automode.mjs` and `app/scripts/real-app-harness/scenario-pi-security.mjs`.
+- Scenario: `automode-environment`, and outside the catalog, `app/scripts/real-app-harness/scenario-pi-automode.mjs` and `app/scripts/real-app-harness/scenario-pi-security.mjs`.
 - Kernel: `internal/automode/*_test.go`, `internal/store/automode_test.go`, `internal/store/automode_guardian_test.go`.
 - App: `app/src/App.autoMode.test.tsx`, `app/src/components/SettingsModal.autoMode.test.tsx`, `app/src/components/GuardianSettings.selection.test.tsx`.
 
 ## Gotchas
 
-- Installing the bundled plugin is enough to expose Pi and its auto mode switch; no Pi session needs to start. Wait for the plugin to connect before selecting it.
+- Installing the bundled plugin is enough to expose Pi and its auto mode switch. No Pi session needs to start. Wait for the plugin to connect before selecting Pi.
 - On the baseline at `b292a5aa5`, Guardian model selection remains unreachable after the plugin connects: `[aria-label="Guardian model"]` contains only `Follow session model`. The section reports `harness "pi" is not available. Refresh models after fixing the harness.` ArrowDown and Enter leave the Guardian unset. This verifies no Guardian decision.
-- A select's native menu does not open in the parked app: ArrowDown and Enter leave its value as it was. With the select holding the keyboard, type the option's first letters with `native_text`. A select is disabled while its change saves; click it again before the next letters.
-- `bridge capture_screenshot` draws Settings from its top even after `dom_scroll_into_view`; read the proposals with `dom_text` or `automode_get_state`.
+- A select's native menu does not open in the parked app: ArrowDown and Enter leave its value as it was. With the select holding the keyboard, type the option's first letters with `native_text`. A select is disabled while its change saves. Click the select again before the next letters.
+- `bridge capture_screenshot` draws Settings from its top even after `dom_scroll_into_view`. Read the proposals with `dom_text` or `automode_get_state`.
 - Proposals sit below the baseline window's viewport. Scroll each Promote or Discard button into view before resolving its point and clicking natively.
-- `rule`, `host` and `policy` only propose, and nothing over the CLI promotes. A run that expects `automode show` to change after `rule add` has not promoted yet.
-- `env` writes at once, unlike the rest; a shipped forbidden rule keeps a session out of it.
-- `automode show` reads the folder it runs in. From the repository root it prints `trusted_repo  (detected here: …)` and may merge the checkout's rules; run it from a folder outside any repository for the plain view.
+- `rule`, `host` and `policy` only propose, and nothing over the CLI promotes. `automode show` does not change after `rule add` until you promote the proposal in Settings.
+- `env` writes at once, unlike the rest. A shipped forbidden rule keeps a session out of `env`.
+- `automode show` reads the folder it runs in. From the repository root it prints `trusted_repo  (detected here: …)` and may merge the checkout's rules. Run it from a folder outside any repository for the plain view.
 - On the baseline nothing asks for approval: the mock agent is not Pi, so the Guardian never answers and `denials` stays empty. Denials and the Guardian need a real Pi session with the `attn-pi` plugin, as `automode-environment` and `scenario-pi-automode.mjs` run.
 - Proposed rules can be below the settings viewport. Scroll Promote and Discard into view before resolving their points and clicking natively. Close Settings before driving the picker, then reopen Auto mode for the Guardian read.
-- A proposal number is the daemon's counter; take it from the propose output or `--json`, never from an earlier run.
+- A proposal number is the daemon's counter. Take the number from the propose output or `--json`, never from an earlier run.
 - `rule add` with no tokens exits 2 with `automode rule add: name the command tokens`.
-- Working but wrong: the Settings section describes itself as "Manage attn's pi automode plugin" though it also holds the environment and the Guardian; and the CLI tells agents to "Promote it in the attn app" while nothing in the app points at a new proposal outside Settings.
+- Working but wrong: the Settings section describes itself as "Manage attn's pi automode plugin" though the section also holds the environment and the Guardian. Also, the CLI tells agents to "Promote it in the attn app" while nothing in the app points at a new proposal outside Settings.

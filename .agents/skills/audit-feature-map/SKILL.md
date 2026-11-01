@@ -10,22 +10,22 @@ description:
 The drive-attn skill (`.agents/skills/drive-attn`) and its feature map tell
 agents how to reach and drive each attn feature. Whoever changes a feature
 should update its map file, but some changes slip through. This audit finds
-and fixes what they missed.
+and fixes what those changes missed.
 
-Each run of the audit is a pass. A pass reads every feature's source, drives
-every feature on a live instance, and lands the map fixes it proved. It checks
-each feature as a whole; it does not need a separate proof for every bullet in
-a feature file.
+Each run of the audit is a pass. In a pass, you read every feature's source,
+drive every feature on a live instance, and land the map fixes you proved.
+Check each feature as a whole. You do not need a separate proof for every
+bullet in a feature file.
 
 ## Outcomes
 
 Each pass ends with one of these:
 
-- **clean**: every feature was read and driven, and nothing needed fixing.
+- **clean**: you read and drove every feature, and nothing needed fixing.
   Nothing lands.
-- **changed**: the pass fixed the map, and the fixes land on `main` together.
-- **blocked**: the pass couldn't finish, or its fixes couldn't land. Say
-  exactly why.
+- **changed**: you fixed the map, and the fixes land on `main` together.
+- **blocked**: you couldn't finish, or your fixes couldn't land. Say exactly
+  why.
 
 Your stake is the seed named in the automation's opening message. When the
 user asks for the audit directly, plant one. At the end, harvest it with
@@ -48,10 +48,11 @@ the map describing what attn should do.
 Run `git pull --ff-only`. If this file changed, read it again.
 
 Then check that no other pass is in the way. A pass might still be running, or
-might have died halfway. Signs of one are uncommitted changes in the checkout,
-or an instance named `audit-*` in `attn instance list`. If you see either,
-don't touch it: it might belong to a pass that is still running. Ask the user
-with `attn ask` what to do, naming what you found. Then end your turn and
+might have died halfway. Signs of either are uncommitted changes in the
+checkout, or an instance named `audit-*` in `attn instance list`. If you see
+either, don't touch what you found, because it might belong to a pass that is
+still running. Ask the user with `attn ask` what to do, naming what you
+found. Then end your turn and
 leave your stake open, because closing the stake closes the ask. Start over
 when they answer.
 
@@ -64,7 +65,8 @@ twice.
 ### 2. Read each feature's source
 
 Start one subagent per feature file, all at the same time. Each subagent only
-reads; it never drives an instance and never edits a file. Tell it to:
+reads. It never drives an instance and never edits a file. Tell each subagent
+to:
 
 1. Read its feature file and the "Feature entry contract" section of
    `features/README.md`.
@@ -77,8 +79,8 @@ reads; it never drives an instance and never edits a file. Tell it to:
 
 ### 3. Combine the results
 
-Make sure every feature file got a summary back. Where several recipes need
-the same setup, combine them so you set it up once. Check the out-of-date
+Check that every feature file got a summary back. Where several recipes need
+the same setup, combine the recipes so you set up once. Check the out-of-date
 claims the subagents raised, but don't re-check the parts they found correct.
 
 Then look for ways into features that no map file lists yet. Find the previous
@@ -98,22 +100,22 @@ Three rules hold for the whole step:
 - **Check the instance before trusting it.** Run drive-attn's doctor before
   the first drive and after any drive that fails. Some failures don't show up
   in the doctor, such as an app that stopped responding while the daemon is
-  fine. Then go back to the baseline, or clean the instance and launch a new
-  one.
-- **Keep the evidence safe.** Save it in a folder made with
-  `mktemp -d /tmp/drive-attn-audit.XXXX`. After each cleanup, check that it is
-  still there.
-- **Clean up as you go.** When a drive fails, remove what it left on the
-  instance before the next one. Stop processes only with drive-attn's
+  fine. After you run the doctor, go back to the baseline, or clean the instance and launch a new one.
+- **Keep the evidence safe.** Save the evidence in a folder made with
+  `mktemp -d /tmp/drive-attn-audit.XXXX`. After each cleanup, check that the
+  folder is still there.
+- **Clean up as you go.** When a drive fails, remove what the drive left on
+  the instance before the next drive. Stop processes only with drive-attn's
   `clean.sh`.
 
 When the doctor fails because drive-attn's instructions are out of date, fix
-them and try once more. If it still fails, the pass is blocked.
+the instructions and try once more. If the doctor still fails, the pass is
+blocked.
 
 Don't commit anything until you have finished driving. `bridge` refuses to
 drive an app whose source changed since it was built, and a commit counts as a
 change. Editing feature files without committing is fine. Editing drive-attn's
-`scripts/` is not: rebuild and launch again afterwards.
+`scripts/` is not fine. After you edit the scripts, rebuild and launch again.
 
 Some features can't be driven in a given run. Mark such a feature
 unreachable and write down what it needs that the run lacks, and what you
@@ -139,23 +141,23 @@ Before you change anything, find out what attn is meant to do: read the
 commit that changed the behavior, its seed, `docs/guide` and the glossary.
 Then sort each finding:
 
-- **The map is wrong**: it describes the feature wrongly or misses a way in.
-  Fix the feature file.
+- **The map is wrong**: the map describes the feature wrongly or misses a way
+  in. Fix the feature file.
 - **drive-attn can't drive it**: attn works, but the instructions or scripts
-  can't reach it. Fix them, and when you add a script, say in `SKILL.md` how
-  to run it.
+  can't reach the feature. Fix the instructions or scripts, and when you add a
+  script, say in `SKILL.md` how to run the script.
 - **attn has a bug**: attn doesn't do what it is meant to. Search for an
-  existing seed with `attn seed search <words>`. Add a note to it, or plant a
-  new one with `--discovered-from <stake>`. One seed per cause. Don't put a
-  fix in this pass.
+  existing seed with `attn seed search <words>`. Add a note to the existing
+  seed, or plant a new seed with `--discovered-from <stake>`. Use one seed per
+  cause. Don't fix the bug in this pass.
 - **You can't tell what attn is meant to do**: ask the user with `attn ask`,
   and leave the map as it is.
 
-Never make a recipe weaker so that it passes.
+Never make a recipe weaker so that the recipe passes.
 
 ### 6. Finish
 
-If the pass changed anything, read every changed file whole, commit, and land
+If you changed anything, read every changed file whole, commit, and land
 with the `land-on-main` skill. Otherwise land nothing.
 
 Pack the evidence folder into a `.tar.gz` and attach it to your stake with
@@ -164,9 +166,9 @@ with the features you covered, the unreachable ones and what they need, the
 map fixes, the seeds you planted or noted, and the outcome. Then harvest the
 stake.
 
-Use the `attn` on your `PATH` only for your stake, seeds and asks, and in a
-shell without drive-attn's prefix: that prefix points `attn` at the instance,
-which doesn't have your stake.
+Use the `attn` on your `PATH` only for your stake, seeds and asks. Run it in a
+shell without drive-attn's prefix, because the prefix points `attn` at the
+instance, and the instance doesn't have your stake.
 
 ## Install
 
@@ -198,11 +200,11 @@ location:
   path: <clone>
 ```
 
-Before applying it, start the harness once in the clone, accept its folder
-trust prompt, and quit. Otherwise an unattended run waits at that prompt while
-attn shows it as working.
+Before applying the file, start the harness once in the clone, accept the
+harness's folder trust prompt, and quit. Otherwise an unattended run waits at
+that prompt while attn shows the run as working.
 
-Apply it with
+Apply the file with
 `attn automation apply --file <file> --launch-desktop own --desktop-name "Feature map audit"`.
-It starts enabled. Run it once with `attn automation run <id>` and read the
-note on its stake.
+The automation starts enabled. Run the automation once with
+`attn automation run <id>` and read the note on its stake.

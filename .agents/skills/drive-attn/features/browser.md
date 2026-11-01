@@ -1,43 +1,43 @@
 # In-app browser
 
-A browser tile that the user and their agents open and drive. An agent opens
-a page beside itself, reads it as a structured snapshot, clicks and types, and
-captures screenshots or PDFs; the user watches the same tile, navigates it,
-and signs in by hand when a site asks. Each desktop has at most one browser
-tile, and its cookies and storage outlive restarts.
+The in-app browser is a tile that the user and their agents open and drive. An
+agent opens a page beside itself, reads the page as a structured snapshot,
+clicks and types, and captures screenshots or PDFs. The user watches the same
+tile, navigates it, and signs in by hand when a site asks. Each desktop has at
+most one browser tile, and the tile's cookies and storage outlive restarts.
 
 ## Sub-features
 
-- `browser-open`: open a URL in the desktop's browser tile, beside the caller; opening again navigates the same tile.
+- `browser-open`: open a URL in the desktop's browser tile, beside the caller. Opening again navigates the same tile.
 - `browser-navigate`: the address field, back, forward and reload.
 - `browser-snapshot`: the page's URL, title, text and interactive elements, each with a reference to act on.
 - `browser-locate`: find or wait for an element by CSS, XPath, link text, role and name, text, label, placeholder, alt, title or test id.
 - `browser-input`: click, type into a field, press a key, scroll.
 - `browser-capture`: save a screenshot or a PDF of the page to a private file.
-- `browser-cookies`: list the page's cookies; sign-ins persist.
+- `browser-cookies`: list the page's cookies. Sign-ins persist.
 - `browser-command`: call the WebDriver-shaped API directly.
 
 ## How to get to it
 
 ### People
 
-- No key or palette command opens a browser tile; an agent or the user's shell does.
+- No key or palette command opens a browser tile. An agent or the user's shell does.
 - In the tile (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `BrowserAddressForm.tsx`, `BrowserTileBody.tsx`): the "Browser address" field (Enter navigates), "Reload browser", "Close tile", and the page itself, clicked and typed into like any browser.
 - File → "Close Pane" (⌘W) closes the browser tile while the page has focus (`app/src-tauri/core/src/lib.rs`).
 - The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`): "Reload <title>" and "Close <title>" buttons, which take clicks while the pointer is over the row.
 - Where people see what agents do: the tile shows the page the agent drives as it changes, beside the agent's tile. The user types credentials themselves; agents are told not to.
-- Their own shell: the same `attn browser` verbs agents use, below. Without a session they act on the current desktop of the profile used most recently.
+- Their own shell: the same `attn browser` verbs agents use, below. Without a session, the verbs act on the current desktop of the profile used most recently.
 
 ### Agents
 
-- `attn browser` (`cmd/attn/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each takes `--session <id>`.
+- `attn browser` (`cmd/attn/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
 - Prompts: the attn skill's browser reference, on the workflow, sessions, credentials and page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`), named in its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The app is the browser host; without it every verb but `open` fails.
+- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The app is the browser host. Without the app, every verb but `open` fails.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-browser.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `page.html`: `<title>Drive page</title><h1>Drive heading</h1><input aria-label="Search"><button onclick="document.querySelector('h1').textContent='Clicked '+document.querySelector('input').value">Go</button><a href="other.html">Other</a>`, and `other.html`: `<title>Other page</title><h1>Other heading</h1>`. The headings differ from the titles so a text wait matches the page, not its `<title>`.
 - A local page server: `{ python3 -m http.server 8765 --bind 127.0.0.1 --directory $P & echo "export SRV=$!" >> $DRIVE_ENV; }`. Stop it at the end with `kill $SRV`.
 - An agent folder, `A=$(mktemp -d /tmp/drive-attn-browser-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
@@ -91,7 +91,7 @@ Preconditions:
 - **Close with ⌘W.** Resolve the center of `[data-tile-kind="browser"] .browser-tile-host`, the page area, with `bridge dom_native_point` and click it natively: `bridge get_browser_focus_state` shows a `label`. Run `bridge native_key '{"key":"w","modifiers":["command"]}'`: `bridge dom_wait '{"selector":"[data-tile-kind=\"browser\"]","absent":true,"timeoutMs":5000}'` matches and the agent's tile is still there. A further agent `web-snapshot` fails with an error that ends `browser_control: no browser tile is open for that session`.
 - **From the sidebar.** Open the page again with `./attn browser open http://127.0.0.1:8765/page.html --session web-agent`. Move the pointer over the tile's sidebar row, `[data-testid^="sidebar-tile-"]` (`bridge native_mouse` with `"action":"move"`), click `[data-testid^="reload-tile-"]` natively: the page reloads and `tile_params` stays. Click `[data-testid^="close-tile-"]` the same way: the tile leaves `wsctl list`.
 - **Refusals.** `./attn browser open file:///etc/hosts` exits 1 with `open_browser: only http and https urls are supported`. `./attn browser find` exits 1 with `attn browser find: --using and --value are required`.
-- **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek web-agent` after each agent step, `wsctl list` after the open, the person's navigation and the close, and the screenshot and PDF the agent saved. Capture the page with `bridge capture_native_window_screenshot '{"path":"<P>/browser-native.png"}'`, `<P>` written out, since the page is a native view the web view capture leaves out. Put the way in in each file's name, such as `browser-agent-snapshot-peek.txt`.
+- **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek web-agent` after each agent step, `wsctl list` after the open, the person's navigation and the close, and the screenshot and PDF the agent saved. Capture the page with `bridge capture_native_window_screenshot '{"path":"<P>/browser-native.png"}'`, `<P>` written out, since the page is a native view the web view capture leaves out. Name each file for its way in, such as `browser-agent-snapshot-peek.txt`.
 
 ## Contexts
 
@@ -99,13 +99,13 @@ Preconditions:
 - **Linux**: `attn browser` works the same where the daemon and CLI run on Linux, but the page runs in the app: a daemon on Linux drives a browser only through an app connected to it.
 - **Outposts**: the browser tile lives on a home desktop and the page loads in the app on the user's machine, so `localhost` in a URL is that machine, not the outpost an agent runs on.
 - **Profiles**: the tile opens on a desktop of the caller's profile, and `--session` targets a session's desktop in its own profile.
-- **Performance and idle cost**: a hidden or covered browser tile hides its native view; a callout over it hides it until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
+- **Performance and idle cost**: a hidden or covered browser tile hides its native view. A callout over the tile hides the native view until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
 - **Harnesses**: every harness drives the browser with the same `attn browser` verbs and reads the same reference.
-- **Keyboard and native input**: the page is a native view. Once a click puts focus in it, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu.
+- **Keyboard and native input**: the page is a native view. Once a click puts focus in the page, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu.
 
 ## Tests
 
-- Packaged CLI: `browser-wait-navigation` checks immediate open/wait, close/reopen/wait and zero-timeout results. It also checks `command wait_for` immediately after navigation, starts a wait on a loaded page and navigates after its unsatisfied condition, and verifies that an asynchronous action executes once while later actions retain its element reference.
+- Packaged CLI: `browser-wait-navigation` checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks `command wait_for` immediately after navigation, starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending, and verifies that an asynchronous action executes once while later actions retain the action's element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
 - Stack: `cmd/attn/agent_commands_stack_test.go`.
@@ -115,16 +115,16 @@ Preconditions:
 
 ## Gotchas
 
-- An agent opening and driving the browser does not take the user off Home. The tile's DOM can remain mounted while offscreen, so a DOM box alone does not prove a native click can reach it. Show its desktop before native navigation or page-focus checks.
-- Live on `drive-3` at `379a7b3f8`: clicking the visible address field focused it but did not preserve select-all. Typing the replacement URL inserted it into the old URL. `dom_value` recorded the concatenated address. Explicit ⌘A allowed navigation, but does not pass the recipe's replacement-on-focus expectation. `BrowserAddressForm` selects on `focus`, so a click in a field that already has focus places the cursor instead of selecting; an explicit ⌘A works around it.
+- An agent opening and driving the browser does not take the user off Home. The tile's DOM can remain mounted while offscreen, so a DOM box alone does not prove a native click can reach it. Show the tile's desktop before native navigation or page-focus checks.
+- Live on `drive-3` at `379a7b3f8`: clicking the visible address field focused it but did not preserve select-all. Typing the replacement URL inserted the replacement into the old URL. `dom_value` recorded the concatenated address. Explicit ⌘A allowed navigation, but does not pass the recipe's replacement-on-focus expectation. `BrowserAddressForm` selects on `focus`, so a click in a field that already has focus places the cursor instead of selecting. An explicit ⌘A works around the problem.
 - Mock browser JSON is one long line, and the terminal can wrap inside a title or an element reference. Read the logical JSON across screen rows instead of waiting for an unbroken fragment.
 - With only the daemon, `attn browser open` places the tile and exits 0, and every other verb fails with `browser_control: no in-app browser host is connected`. Launch the app first.
-- Verbs before `open` fail with `no browser tile is open for that session`. Each desktop holds one browser tile; a second `open` navigates it instead of adding one.
-- `bridge dom_*` reads see the tile's header and address field but not the page; `bridge capture_screenshot` leaves the page out. Read the page with `attn browser snapshot` and capture it with `bridge capture_native_window_screenshot`.
-- Element references come from one page load. After navigation or reload, find the element again. A read-only `wait` keeps checking the requested condition across navigation within its original timeout; it does not reuse an element reference from the old document.
-- A verb that follows `open` or a navigation can reach a page that has not loaded. Wait on something the new page shows (`attn browser wait --using css --value h1 --state visible`) before reading it. A text wait checks the first element with that text, which can be the page's `<title>`, so wait on text that only the body holds.
+- Verbs before `open` fail with `no browser tile is open for that session`. Each desktop holds one browser tile. A second `open` navigates that tile instead of adding one.
+- `bridge dom_*` reads see the tile's header and address field but not the page. `bridge capture_screenshot` leaves the page out. Read the page with `attn browser snapshot` and capture it with `bridge capture_native_window_screenshot`.
+- Element references come from one page load. After navigation or reload, find the element again. A read-only `wait` keeps checking the requested condition across navigation within its original timeout. The `wait` does not reuse an element reference from the old document.
+- A verb that follows `open` or a navigation can reach a page that has not loaded. Wait on something the new page shows (`attn browser wait --using css --value h1 --state visible`) before reading the page. A text wait checks the first element with that text, which can be the page's `<title>`, so wait on text that only the body holds.
 - Going back can restore the page as it was left, edits included. Wait on an element that tells the pages apart, not on text the page changes itself.
 - `screenshot` and `pdf` write to the folder `attn` runs in, `attn-browser.png` or `attn-browser.pdf` by default, and replace a file of that name.
 - A recipe that points at a public site depends on the network; serve local pages instead.
-- `bridge capture_native_window_screenshot` needs macOS Screen Recording permission for the instance's app or your terminal; without it the capture fails.
+- `bridge capture_native_window_screenshot` needs macOS Screen Recording permission for the instance's app or your terminal. Without the permission, the capture fails.
 - Working but wrong: no key, palette command or sidebar control opens a browser tile, so a person without a shell has no way in, and once a person closes the tile in the app, they cannot open it again from the app.
