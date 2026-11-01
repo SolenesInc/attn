@@ -115,7 +115,7 @@ Preconditions:
 ## Gotchas
 
 - Put `--force` before the path: `attn worktree delete --force <path>`. The CLI help shows it after the path, but a flag there is ignored and a dirty tree still refuses deletion.
-- On macOS, `bridge native_key '{"key":"l","modifiers":["command","shift"]}'` can report `handledBy: ["menu"]` while the ledger stays closed. The ledger-shortcut step is unverified in that run. Open the palette command `sessions` ("Open the sessions list") to continue the row checks without counting that as shortcut proof.
+- On macOS, `bridge native_key '{"key":"l","modifiers":["command","shift"]}'` can report `handledBy: ["menu"]` while the ledger stays closed ([usage.md](usage.md)). When it does, the ledger-shortcut step is unverified. Open the palette command `sessions` ("Open the sessions list") to continue the row checks, and do not count that as proof of the shortcut.
 - `attn worktree refresh` and the list's "refresh" run a whole sweep pass. With the sweep on, they remove what is eligible, though the help says only that refresh updates state.
 - Without `ATTN_WORKTREE_SWEEP_IDLE_DAYS=0`, nothing on a fresh instance is old enough: every row that nothing holds says `too young for deep inspection; age floor is 0 of 14 days`. With the variable set, the next refresh removes every merged, clean worktree that nothing holds. Hold any worktree a step needs to keep first: make the worktree dirty, pin it once listed, or keep a session running in it.
 - `attn worktree keep` refuses a worktree attn has not listed yet (`worktree not found in registry`). Refresh after `git worktree add` before you pin.

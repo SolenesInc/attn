@@ -108,7 +108,7 @@ Preconditions:
 - **Performance and idle cost**: an ask's markdown is at most 64 KiB. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep its own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
-- **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. Earlier agents refuse `attn ask` until they relaunch.
+- **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
 - **Flow**: in queue flow, the queue bar counts open asks and shows them on hover. Clicking the queue bar or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
 
 ## Tests
@@ -122,7 +122,6 @@ Preconditions:
 
 - The Asks switch lies below the visible Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
 - The bridge keeps the app in the background, where CSS `:focus` can match nothing even when `document.activeElement` is the answer input. Use `dom_wait` with `"focused":true`.
-- Asks apply to agents launched after the setting turns on. An agent launched before refuses `attn ask` for its whole life. Relaunch the agent rather than toggling the setting again.
 - An answer is a user message, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
 - `attn ask --seed <id>` needs the asker to tend the seed. Without a claim it is refused with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.

@@ -21,15 +21,15 @@ session holds it reads.
 
 | Address | Who reads it | When nobody holds it |
 |---|---|---|
-| session | that session | The item waits. attn never resumes a closed session to deliver it. Seed updates are the exception (see [Seed updates](#seed-updates)). |
+| session | that session | The item waits, and attn never resumes a closed session to deliver an item. A seed update is the exception: attn withdraws it when the session closes (see [Seed updates](#seed-updates)). |
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
 | chief | the profile's current chief session | The item waits for the next chief. attn never wakes a chief. With crew v2 on, the Chief is a crew member and new items for it use the Chief's member address instead. |
 | seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. |
 
 An item follows its mailbox. When a member's session ends, their next session
 gets the unread items. When a seed gets a new tender, the new tender gets the
-unread items addressed to the seed. Seed updates are addressed to the tender
-and the watchers themselves, so they do not move to a new tender.
+unread items addressed to the seed. attn addresses a seed update to the tender
+and to each watcher directly, so a seed update does not move to a new tender.
 
 The sender picks the address:
 
@@ -41,7 +41,7 @@ The sender picks the address:
 - A seed update addresses a crew member tender as the member. It addresses a
   session tender and every watcher as their session.
 - Crew sleep and auto-sleep requests address the session, because each request
-  concerns that one session. A wake to deliver a request makes no sense.
+  concerns that one session. attn never wakes a member to deliver a request.
 
 A session reads all its addresses together: its own, its member's, the chief's
 when it is the chief, and those of the seeds it tends.
@@ -74,9 +74,9 @@ Some Garden events put a seed update in the inbox of the seed's tender, the
 tenders of every plot above it, and every session that watches the seed or a
 seed it is part of. A plot's tender needs no watch, because the claim covers
 the tender until the claim ends. Two sessions get no update, at any of their
-addresses: the session that caused the event, and the session that attn told
-about the event directly, such as the new tender of a delegation, a handover or
-a seed sent to the chief.
+addresses. One is the session that caused the event. The other is a session
+that attn told about the event directly: the new tender of a delegation, the
+new tender of a handover, or the chief that received the seed.
 
 | Event | Seed update |
 |---|---|
@@ -94,7 +94,7 @@ what changed: "s-x moved: parked — read what changed with `attn seed show s-x
 command returns the event's log entries and those of every later event on the
 seed or the seeds below it. For a check move, the update gives the move and who
 made it in place of the kind: "s-x moved: check C4 rejected by c9b177e1 — …".
-An update stored before updates kept a bookmark ends "read it with `attn seed
+An update stored before attn added the bookmark ends "read it with `attn seed
 show s-x`" instead.
 
 The reply to a lifecycle move, a ringing note or a check move lists who gets
@@ -102,9 +102,10 @@ the seed update: the current and covering tenders and the watchers, without the
 session that caused the event. With nobody left, the reply says so, so a ring
 on a closed seed with no watcher is not silent. A recipient who already has an
 unread update on that seed gets the move merged into that update, and no new
-ring (see [Coalescing](#coalescing)). The reply names the audience when the
-move commits. attn sends the update to the audience at delivery, so the two
-differ only when a tender or watch changes in between.
+ring (see [Coalescing](#coalescing)). The reply lists the audience as it stands
+when the move commits. attn sends the update to the audience as it stands at
+delivery, so the delivered audience differs from the listed one only when a
+tender or watch changes in between.
 
 `attn seed show` and `attn seed notes` mark the reader's unread update for that
 seed as read. attn withdraws a recipient's unread update for a seed when they
@@ -135,7 +136,7 @@ A PR watch update tells the watching agent what happened on a pull request:
 ready, checks failed, changes requested, merged, closed, new review feedback, a
 reopened thread, or that monitoring is delayed. attn withdraws the pull
 request's unread updates when the watch stops. attn withdraws an unread status
-update when the pull request leaves that status, and an unread delay notice
+update when the pull request leaves that status, and an unread delay update
 when monitoring recovers.
 
 ### Notices
@@ -151,20 +152,20 @@ An item can have a key. What happens to a second item with the same address and
 key depends on the kind of item.
 
 Seed updates merge. The key is the seed, so an address has at most one unread
-update per seed. A later event on that seed leaves the unread update as it is,
-with the same attempts and no new ring. The update keeps the kind of the first
-event, or the check move when the first event was a check move, unless the
-later event is `unblocked`. The update also
-keeps the first event's bookmark, so the read command returns the later events
-too. Once a seed update has used its 3 attempts, later events on that seed stay
-silent until the agent reads the update. The seed's log still has every event.
+update per seed. A later event on that seed adds no new update, no new attempt,
+and no new ring. The merged update keeps the first event's kind and bookmark,
+so the read command returns the later events too. When the first event was a check
+move, the update keeps the move and who made it. An `unblocked` event is the exception: it
+replaces the kind and drops a check move's description. Once a seed update has
+used its 3 attempts, later events on that seed stay silent until the agent
+reads the update. The seed's log still has every event.
 
 attn replaces other keyed items. The new item takes the place of the old item
 and gets fresh attempts.
 
 - A PR watch status update (ready, checks failed, changes requested, merged or
   closed) replaces the older unread status update for the same pull request. A
-  delay notice replaces the older unread delay notice. New review feedback and
+  delay update replaces the older unread delay update. New review feedback and
   reopened threads are separate items.
 - An auto-sleep request replaces the older unread auto-sleep request.
 
@@ -173,38 +174,38 @@ Rings coalesce too. One ring covers every unread item at an address. See
 
 ## Rings
 
-A ring is one prompt that covers every unread item at the address. The ring
-types the text of each unread user message, oldest first. When other unread
-items remain, the ring ends with "📬 You have unread items in your attn inbox.
-Run attn agent inbox to read them.", and the text of those items stays in the
-inbox. A session that holds several addresses with unread items gets one ring
-for each.
+A ring is one prompt that covers every unread item at the address. attn types
+the text of each unread user message in the ring, oldest first. When other
+unread items remain, attn ends the ring with the line "📬 You have unread items
+in your attn inbox. Run attn agent inbox to read them." The text of those items
+stays in the inbox. A session that holds several addresses with unread items
+gets one ring for each address.
 
 Once attn has placed a ring in the session, attn records the session as the
 reader of the ring's user messages. attn never checks that the agent acted on
 the messages. A ring lost to an open menu in the harness stays lost.
 
 - attn types user messages while the agent works or is at a safe prompt, and
-  ends a ring with 📬 only at a safe prompt. A ring placed while the agent
-  works types its user messages alone. The 📬 for the other items waits for the
-  prompt.
-- attn goes by the agent's state and never reads the agent's screen. attn types
-  nothing while the agent needs approval, launches or is in a state attn cannot
-  tell, or within 30 seconds of the user's last keystroke in the agent's
-  terminal. Waiting costs no attempt.
+  adds the 📬 line only at a safe prompt. A ring placed while the agent
+  works types its user messages alone. The 📬 line for the other items waits for
+  the prompt.
+- attn decides from the agent's state and never reads the agent's screen. attn
+  types nothing while the agent needs approval, is launching, or is in a state
+  attn cannot tell. attn also types nothing within 30 seconds of the user's last
+  keystroke in the agent's terminal. Waiting costs no attempt.
 - A shell never gets a ring.
-- After a ring that ends with 📬, the address has an outstanding ring. The
-  outstanding ring ends when the agent reads, or 5 minutes after the ring. New
-  items do not ring while the outstanding ring lasts. New items wait for the
-  read or the next ring. A user message does not wait. attn types a user
-  message right away and leaves out the 📬 until the outstanding ring ends.
+- When a ring includes the 📬 line, the address has an outstanding ring until
+  the agent reads the inbox or 5 minutes pass. While the address has an
+  outstanding ring, new items wait for the read or for the next ring. attn types
+  a user message right away, without the 📬 line.
 - After 5 minutes with unread items, attn rings again.
-- Each ring that ends with 📬 is one attempt for every unread item the ring
-  covers. An item gets at most 3 attempts. Then attn stops ringing for that
+- Each ring that includes the 📬 line is one attempt for every unread item the
+  ring covers. An item gets at most 3 attempts. Then attn stops ringing for that
   item. The item stays unread, and the daemon log records the stop. Typing a
   user message uses no attempt.
 - A new item has 3 fresh attempts. The ring for a new item also covers the
-  older items.
+  older items, but the ring counts as an attempt only for items that have
+  attempts left.
 
 ## Notification runs
 
@@ -217,8 +218,9 @@ on, attn does not bring the agent to the user for a notification run:
 
 - When the run stops, attn opens no turn, unless the agent needs approval or
   attn cannot tell the agent's state.
-- When the run starts, attn settles a turn that opened on its own. The agent
-  made that change, so the app leaves the user where they are.
+- When the run starts, attn settles a turn that opened when the agent stopped,
+  not with `attn turn open`. The agent started working because of attn's own
+  input, so the app leaves the user where they are.
 - During the run, `attn agent inbox` ends with a note that says the run is
   quiet and points to `attn turn open`.
 
@@ -227,8 +229,9 @@ agent runs the command while it works, the turn opens when the agent stops. If
 the user has snoozed the agent, the turn opens once the snooze ends and the
 agent has stopped. The request survives a daemon restart. Notification runs do
 not settle that turn. The user settles the turn, or the agent runs
-`attn turn settle`, which refuses a turn that opened on its own. With the queue
-flow off, both commands change nothing.
+`attn turn settle`. That command refuses a turn that opened when the agent
+stopped, not with `attn turn open`. With the queue flow off, both commands
+change nothing.
 
 ## Wakes
 
@@ -247,10 +250,10 @@ wakes the member before it rings.
 - A wake that fails still uses an attempt, including one the wake limit
   refuses. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
-- attn never wakes a retired member. attn refuses `attn agent msg` to a retired
-  member, by name or by the member's session. Items that were unread at
-  retirement keep their attempts and wait. Restoring the member delivers the
-  items, which can wake the member.
+- attn never wakes a retired member, and attn refuses `attn agent msg` to a
+  retired member, by name or by the member's session. Items that were unread at
+  retirement keep their attempts and wait. When someone restores the member,
+  attn delivers those items, and the delivery can wake the member.
 - attn wakes a member again when the member goes back to sleep with unread
   items that have attempts left. The wake comes 5 minutes after the last
   attempt, or at once for a user message.
@@ -281,8 +284,9 @@ these:
 - attn is waking a member.
 - The message waits for a tender or a chief.
 - The wake limit is used up. The reply also names the setting to change.
+
 `attn agent msg-status <id>` shows the sender whether the message is queued,
-notified or read.
+notified, or read.
 
 ## Limits
 
@@ -298,11 +302,11 @@ notified or read.
 | Items per `attn agent inbox` | 20 by default, 50 at most | `inbox.DefaultInboxLimit`, `inbox.MaxInboxLimit` | |
 | Remembered delivery IDs per session input lane | 65,536 | `sessionmonitor.MaxPlacedDeliveries` | Over 14 times the 4,390 user records in the busiest of 10 sampled inbox recipients' transcripts (2026-10-29). The sample counts whole conversations, including direct input and tool results, across up to 23 days. |
 
-A successful delivery keeps its first receipt until the input lane resets on an
-agent reload or daemon restart. A retry with the same ID returns that receipt.
-At the delivery-ID limit, new deliveries fail before attn types them, and the
-error names the session, the limit and the requested count. Existing IDs still
-return their receipts.
+attn keeps the first delivery receipt of each successful delivery until the
+input lane resets on an agent reload or daemon restart. A retry with the same ID
+returns that delivery receipt. At the delivery-ID limit, new deliveries fail
+before attn types them, and the error names the session, the limit and the
+requested count. Existing IDs still return their delivery receipts.
 
 ## Restarts
 
@@ -341,6 +345,6 @@ old tender also tends a plot above it or watches the seed. The new tender gets
 no update for the earlier event. A message sent to the seed's id goes to the new tender.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
-member's 8th wake in 12 hours. The sender's receipt names `crew.wake_limit`.
+member's 8th wake in 12 hours. The reply to the sender names `crew.wake_limit`.
 attn tries at 0, 5 and 10 minutes, then stops. The message waits for the
 member's next session.

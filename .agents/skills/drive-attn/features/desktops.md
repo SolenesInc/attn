@@ -16,7 +16,7 @@ sessions on a launch desktop.
 - `desktop-rename`: name a desktop from the sidebar.
 - `desktop-close`: close a desktop and everything on it, after a confirmation. ⌘W closes an empty desktop.
 - `desktop-sort`: numbered desktops first, then names A–Z, with Undo. Drag a desktop in the sidebar to reorder it.
-- `empty-desktop-sweep`: an unnamed empty desktop goes away 30 seconds after the user leaves it.
+- `empty-desktop-sweep`: an unnamed empty desktop goes away 30 seconds after it is both empty and not current.
 - `tile-split`: open a shell beside or below the active terminal tile.
 - `tile-focus`: move the active tile with arrows. The focus style marks the active tile (dim, rail or spotlight).
 - `tile-zoom`: zoom the active tile, or focus it alone on the desktop.
@@ -48,7 +48,7 @@ sessions on a launch desktop.
 
 ### Triggers
 
-- The daemon removes a desktop 30 seconds after it empties, if the desktop is unnamed, not current, and not any item's launch desktop (`internal/daemon/empty_desktops.go`).
+- The daemon removes a desktop once it has been empty and not the current desktop for 30 seconds, if the desktop is also unnamed and not any item's launch desktop (`internal/daemon/empty_desktops.go`).
 - A crew wake or an automation run starts the session on the member's or the automation's launch desktop (`internal/daemon/launch_desktops.go`). Crew and automations own the wake and the run.
 
 ## Driving it
@@ -81,7 +81,7 @@ Preconditions:
 - **Close other tiles with ⌘W.** Open one tile of each kind, click it natively so it holds keyboard focus, press ⌘W, and read the desktop's `tree_json` in `wsctl list` until the tile is gone while the agent that opened it stays: a markdown tile from a mock agent whose fixture runs `attn open notes.md`, a browser tile from one that runs `attn browser open <url>`, the palette's "Open Editor tile" (`notebook` in `tree_json`), and a seed tile from "Open as tile" on a seed's page in the garden. Then press ⌘<n> for an empty numbered desktop and press ⌘W there: the desktop closes at once.
 - **New desktop from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"New desktop"}'` and `bridge native_key '{"key":"Enter"}'`. `bridge get_state` shows one more entry in `arrangement.desktops` with the lowest free `slot`, `arrangement.currentDesktopId` is the new one, and `bridge dom_wait '{"selector":"[data-testid=\"empty-desktop-launcher\"]","timeoutMs":5000}'` matches.
 - **Switch with digits and bounce.** Run `bridge native_key '{"key":"<n>","modifiers":["command"]}'`: `arrangement.currentDesktopId` is `<desktop>`. Press it again: the new desktop is current, and `previousDesktopId` is `<desktop>`. Press it once more to return.
-- **Empty desktops go.** Re-read `bridge get_state` until the new, unnamed desktop is gone from `arrangement.desktops`, with a 45 second deadline that fails the run: the daemon removes it 30 seconds after you left it (`ATTN_EMPTY_DESKTOP_GRACE` shortens that, see Gotchas). `wsctl list` no longer holds it either.
+- **Empty desktops go.** Re-read `bridge get_state` until the new, unnamed desktop is gone from `arrangement.desktops`, with a 45 second deadline that fails the run: the daemon removes it once it has been empty and not current for 30 seconds (`ATTN_EMPTY_DESKTOP_GRACE` shortens that, see Gotchas). `wsctl list` no longer holds it either.
 - **Send and stay.** Select the shell for setup. Run `bridge native_key '{"key":"2","modifiers":["command","option","shift"]}'`. `wsctl list` shows `desk-shell` under the desktop whose `shortcut_slot` is 2, created if it was missing, and `arrangement.currentDesktopId` is still `<desktop>`.
 - **Step through desktops.** Run `bridge native_key '{"key":"ArrowDown","modifiers":["command"]}'`: `arrangement.currentDesktopId` is the entry after `<desktop>` in `arrangement.desktops`, and wraps to the first entry after the last. Run it with `ArrowUp`: it is back on `<desktop>`. Open the palette, type `Go to Desktop 2`, press Enter: the slot 2 desktop is current. Press ⌘<n> to return to `<desktop>`.
 - **The overview.** Run `bridge native_key '{"key":"g","modifiers":["command"]}'` and `bridge dom_wait '{"selector":"dialog.desktop-overview","timeoutMs":5000}'`. `bridge dom_text '{"selector":"dialog.desktop-overview h2"}'` names the profile and counts its desktops. Run `bridge native_key '{"key":"2"}'`: the overview closes and `currentDesktopId` is the slot 2 desktop. Open it again and press Escape: `bridge dom_wait '{"selector":"dialog.desktop-overview","absent":true,"timeoutMs":5000}'` matches. Open it again, press ← and ↵: it closes on the card to the left. Open it from the palette, command `Desktop overview`, and click `dialog.desktop-overview .desktop-overview-card.new` ("+ New desktop") natively: a new desktop with the lowest free slot is current. Back on `<desktop>`, select a split shell, open the overview, move to the new desktop's card with → and press ⇧↵: `wsctl list` shows the shell on that desktop and `currentDesktopId` stays on `<desktop>`. Open the overview from the sidebar by clicking its "Desktop overview" row natively, and close it with Escape.
@@ -125,7 +125,7 @@ Preconditions:
 ## Gotchas
 
 - Pressing the current desktop's digit goes back to the previous desktop, once the window has left one. A run that presses ⌘1 twice expecting to stay is wrong, not attn.
-- A desktop with no name and nothing on it disappears 30 seconds after you leave it, numbered or not. Name it, put a tile on it, or make it a launch desktop before a step that comes back to it. The daemon reads the wait from `ATTN_EMPTY_DESKTOP_GRACE` (such as `2s`) when it starts. A short value shortens the sweep step.
+- A desktop with no name and nothing on it disappears once it has been empty and not current for 30 seconds, numbered or not. Name it, put a tile on it, or make it a launch desktop before a step that comes back to it. The daemon reads the wait from `ATTN_EMPTY_DESKTOP_GRACE` (such as `2s`) when it starts. A short value shortens the sweep step.
 - ⌘W on a terminal tile ends what runs in it: a split shell closes, and an agent's session closes too. Press it on a shell in a recipe, never on the agent you still need.
 - `attn delegate` without a role needs `--model` and `--cwd`. The mock agent answers to `--model mock-agent-1`, and `--agent` defaults to the caller's harness. Without `--model` the delegation step stops at `--model is required`.
 - `attn terminal` needs a session: from the instance shell it exits 1 with the caller rule. Drive moves through the mock agent.

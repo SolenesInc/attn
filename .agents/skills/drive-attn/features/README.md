@@ -26,12 +26,11 @@ In the index, "both" means people and agents.
   (`ATTN_ANALYTICS_INGEST_URL`). The doctor passes before the first action.
 - On a fresh app, What's new covers the home screen and holds the palette
   and most shortcuts. Run `bridge dismiss_whats_new` first.
-- A feature that needs realistic data says so in its own preconditions. Copy
-  production data out read-only, and never point an instance at `~/.attn`.
-- A feature that needs more in the daemon's environment says so in its
-  preconditions. Append the feature's `export` line to the env file, then stop
-  the daemon and start the daemon again as [../SKILL.md](../SKILL.md)
-  describes.
+- If a feature needs realistic data, its file says so in the preconditions.
+  Copy production data out read-only, and never point an instance at `~/.attn`.
+- If a feature needs more in the daemon's environment, its file says so in the
+  preconditions. Append the feature's `export` line to the env file, stop the
+  daemon, and start the daemon again as [../SKILL.md](../SKILL.md) describes.
 - The baseline has no stand-in for Pi. A step that needs Pi, the Pi plugin or
   the Guardian fails on the baseline, and the feature file names the scenarios
   that run the real `pi`.
@@ -45,20 +44,20 @@ In the index, "both" means people and agents.
   `. /tmp/drive-attn-<name>.env &&`, which sources the env file
   [../SKILL.md](../SKILL.md)'s Launch writes. Every command in these files
   runs there, written without the prefix, unless a step says otherwise.
-- Each command starts in a fresh shell, so a recipe variable, shell function
-  or background PID that one command sets is gone by the next command. The
-  command that sets a variable appends the variable to the env file through
-  `$DRIVE_ENV`, which holds the path of the env file:
-  `P=$(mktemp -d /tmp/drive-attn-<feature>.XXXX) && echo "export P=$P" >> $DRIVE_ENV`,
-  or, for a background process,
+- Each command starts in a fresh shell, so a variable, shell function or
+  background PID that one command sets is gone by the next command. To keep a
+  variable, append it to the env file through `$DRIVE_ENV`, which holds the
+  path of the env file, in the command that sets it:
+  `P=$(mktemp -d /tmp/drive-attn-<feature>.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+  Later commands see what you appended, and a later append of the same name
+  wins.
+- To keep a background PID, wrap the start in braces:
   `{ python3 -m http.server 8765 & echo "export SRV=$!" >> $DRIVE_ENV; }`.
-  The braces matter, because a bare `&` after the prefix backgrounds the
-  prefix too, and `$DRIVE_ENV` is empty in the foreground. Later commands see
-  what was appended, and a later append of the same name wins.
-- `wait` and `$?` reach only a process that the same command started. A step
-  that needs the exit code of a background process has the subshell that
-  started the process write the code to a file, as
-  [doc-store.md](doc-store.md) does.
+  Without the braces, the `&` after the prefix backgrounds the prefix too, and
+  `$DRIVE_ENV` is empty in the foreground.
+- `wait` and `$?` reach only a process that the same command started. To get
+  the exit code of a background process, make the subshell that started the
+  process write the code to a file, as [doc-store.md](doc-store.md) does.
 
 ### Entrypoints and harnesses
 
@@ -160,9 +159,9 @@ In the index, "both" means people and agents.
 - `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
-  buttons, ignores the pointer until the pointer is over the row, and
-  `dom_native_point` refuses the control as covered. Resolve the row's point
-  and `move` there first, then resolve the control's point and click it.
+  buttons, counts as covered until the pointer reaches the row, so
+  `dom_native_point` refuses it. To click it, resolve the row's point and
+  `move` there, then resolve the control's point and click it.
 - Before you resolve a point, show the intended desktop and scope the
   selector to the visible tile of that desktop, because retained desktops keep
   hidden copies of their elements. Native input rejects coordinates outside
@@ -183,8 +182,8 @@ In the index, "both" means people and agents.
   closed, hidden with `aria-hidden="true"`. Tell open from closed by that
   attribute, not by whether an inner selector is present.
 - DOM actions (`dom_click`, `dispatch_shortcut`, `settings_select_section`,
-  `sessions_set_filter` and the like) skip native input: use them to set up,
-  never as proof of a person's way in.
+  `sessions_set_filter` and the like) are the ones
+  [../SKILL.md](../SKILL.md#drive) says to use only to set up.
 
 ### Waiting
 
@@ -202,26 +201,27 @@ In the index, "both" means people and agents.
 ### Runs
 
 - Start each recipe from the baseline unless the recipe's preconditions say
-  otherwise. Remove what a recipe created when the next recipe needs a clean slate, but never remove the proof.
-- Each recipe keeps its proof in a folder made with `P=$(mktemp -d
-  /tmp/drive-attn-<feature>.XXXX)`. The recipe's preconditions make the folder
-  and append `P` to the env file as above. `bridge` JSON is single-quoted, so
-  a path in the JSON is written out. `<P>` stands for the path of that folder.
-- Drive each way in once, in the file that documents the way in. Other files link
-  to that file. A way in that the harnesses cannot reach keeps its step. The
-  step says so and fails, and the reason goes in that file's Gotchas.
+  otherwise. When the next recipe needs a clean instance, remove what the
+  earlier recipe created, but never remove the proof.
+- In each recipe's preconditions, make a proof folder with `P=$(mktemp -d
+  /tmp/drive-attn-<feature>.XXXX)` and append `P` to the env file as above.
+  `bridge` JSON is single-quoted, so write the path out in the JSON. `<P>`
+  stands for the path of that folder.
+- Drive each way in once, in the file that documents the way in. Other files
+  link to that file. If the harnesses cannot reach a way in, keep the way in's
+  step in that file. The step states that the harnesses cannot reach the way
+  in, and fails. Put the reason in that file's Gotchas.
 
 ## Proof and skip reporting
 
-- Capture the action and the resulting state, not only the final screen.
+Follow [Evidence](../SKILL.md#evidence) for what to capture, and add these:
+
 - App proof is a `bridge` read (`get_state`, the feature's `*_get_state`, or
   `dom_text`) and a `bridge capture_screenshot` that shows the instance
   marker in the sidebar: `instance <name>` while the sidebar is expanded,
   `<name>` on the collapsed sidebar or the queue bar
   ([instances.md](instances.md)).
 - CLI proof is the command, stdout, stderr and exit code.
-- Prove a change from a second view: read a change made in the app back
-  through `./attn ... --json`, and a change made from the CLI back in the app.
 - Record the feature id and the way in with every artifact.
 - Report a way in you could not reach with the command you tried and the
   precondition that failed. Never report a skipped way in as verified

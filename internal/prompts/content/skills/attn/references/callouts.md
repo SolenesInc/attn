@@ -26,9 +26,10 @@ depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 
 `agent:<who>` accepts a session id, short id or crew name.
 `desktop:<which>` accepts a slot digit, name or id. Both address only the
-pointing session's profile. The app reveals the target when it can, or shows
-the step with its name. Put the agent or desktop the user should go to on the
-last step, because Enter and → go there only on the last step.
+profile of the pointing session. When the app can reveal the target, it does.
+Otherwise it shows the step with the target's name. Put the agent or desktop
+the user should go to on the last step, because Enter and → go there only from
+the last step.
 
 Keep each step short, at most 160 characters. A callout can have at most 20
 steps. If a fixed anchor is missing, the command refuses the whole callout and
@@ -38,11 +39,10 @@ The command returns once the app accepts the callout. Continue your work,
 because there is no completion callback. A new callout replaces the one
 showing.
 
-The user advances with Enter or →, and both keys act the same on every step. On
-an earlier step they move to the next step. On a last step that names an agent
-or desktop, they go to it and end the callout. The user ends the callout with
-Esc or a click outside. Another overlay or a profile switch also ends the
-callout.
+The user advances the callout with Enter or →. On every step except the last,
+either key moves to the next step. On a last step that names an agent or
+desktop, either key goes to it and ends the callout. Esc, a click outside the
+callout, another overlay, or a profile switch also ends the callout.
 
 The desktop app must be showing your profile. With no such app, `anchors`
 still lists the directory and says so, and `show` refuses. Every refusal exits 1.

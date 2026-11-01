@@ -13,8 +13,7 @@ returns `testworld.Main(m)`.
   The stack holds its WebSocket listener until cleanup, including while the
   daemon is stopped, so another process cannot take its address.
 - The historical PTY upgrade test uses port `0`. Older binaries cannot inherit
-  that listener. After the daemon's bind-ready log, `lsof` finds the assigned
-  port of the captured PID, without releasing a reservation or retrying startup.
+  that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured PID to read the assigned port. It does not release a reservation or retry startup.
 - For a promise about a moment between two steps of one operation, call
   `s.PauseAt(point)` to hold the daemon or a worker the first time it reaches a
   pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`).

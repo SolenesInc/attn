@@ -109,11 +109,12 @@ error, not by its run: the same failure in a newer run is the same failure.
   test, even at a different step or with a different error, means the repair
   did not fix the failure. Return the failure to the owner with that run. When
   a second landed repair for the same failure record fails this way,
-  [Attack the premise](#principles) instead.
-- `main` may have moved on. A commit since the run's `headSha` that the record
-  does not name, such as a fix that the culprit's author landed, may already
-  revert or fix the culprit. When the diff of the commit shows that it does,
-  treat the commit as a landed repair.
+  apply [Attack the premise](#principles) instead of returning the failure
+  again.
+- `main` may have changed since the run's `headSha`. A newer commit that the
+  record does not name, such as a fix the culprit's author landed, may already
+  revert or fix the culprit. Read the commit's diff. If the diff reverts or
+  fixes the culprit, treat the commit as a landed repair.
 
 ## Diagnose
 
@@ -149,8 +150,8 @@ error, not by its run: the same failure in a newer run is the same failure.
     revert a migration (`docs/internal/db-migrations.md`).
   - the culprit is a release commit.
   - the runner, the network or another service failed, not a commit.
-  - the owner disagrees with a redesign that
-    [Attack the premise](#principles) brought.
+  - the owner disagrees with the redesign you brought them under
+    [Attack the premise](#principles).
 
 ## Dispatch
 
@@ -215,9 +216,10 @@ session or the re-land seed.
 
 ## Gotchas
 
-- CI runs one push at a time and keeps only the newest push waiting. The run
-  of a push that arrives behind a newer push concludes `cancelled` with no
-  jobs, so a red run covers every commit since the last green one.
+- CI runs one push at a time and keeps only the newest push waiting. When a
+  newer push arrives while another push is waiting, the waiting push's run
+  concludes `cancelled` with no jobs. A red run therefore covers every commit
+  since the last green run.
 - A landing lists a test that is still red on `main` and does not run the
   test. The test is yours. Once the test passes on `main`, it runs in every
   landing that runs landing tests, until it has passed on 30 later `main`

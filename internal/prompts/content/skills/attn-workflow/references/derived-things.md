@@ -37,7 +37,7 @@ current:
 4. **Check it on a schedule.** When no single change causes the drift, an
    automation audits the derived thing regularly.
 
-A derived thing with none of these goes stale without anyone noticing. Delete
+A derived thing with none of these becomes wrong without anyone noticing. Delete
 it rather than ask agents to remember it.
 
 ## Write a `verify-<thing>` skill

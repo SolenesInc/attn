@@ -37,7 +37,7 @@ read-only values. Settings apply across all profiles. Use
 
 An Attn delegation creates a separate session the user can inspect and steer. A subagent is a native runtime subagent that reports to its calling agent.
 
-Follow the task brief and its authorization boundaries. Start further Attn delegations when the user or the assigned task authorizes them. Do not treat a configured role, or your stake (the seed a delegation assigned you), alone as that authority.
+Follow the task brief and its authorization boundaries. Start further Attn delegations when the user or the assigned task authorizes them. A configured role does not authorize a delegation, and neither does your stake (the seed a delegation assigned you).
 
 For delegation mechanics and configured role selection, read [references/delegation.md](references/delegation.md). For an assigned delegation's reporting and completion, read [references/delegated-agent.md](references/delegated-agent.md).
 

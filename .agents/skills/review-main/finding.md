@@ -1,7 +1,8 @@
 # What makes a finding
 
-You review one unit of attn commits: a slice about to land on `main`, or
-commits that landed there, the commits of one seed or one commit. Read the
+You review one unit of attn commits. A unit is the commits of one seed, or one
+commit. The commits are either a slice about to land on `main` or commits that
+already landed there. Read the
 seed first (`attn seed show <seed>`) and the plan of the plot that the seed is
 part of, then each commit (`git show <sha>`), then the code around the commit:
 the whole file, the callers, and the tests.
@@ -42,12 +43,13 @@ Look in this order:
    (`docs/internal/testing.md`)?
 
 Leave out style, naming, anything CI checks, and what predates the unit.
-When you are not sure, leave the finding out. No finding beats a weak finding.
+When you are not sure, leave the finding out. Return no finding rather than a
+weak one.
 
 Return each finding as: commit sha, `file:line`, P0 or P1, a one-line title,
 the trigger, why it matters, and what a fix needs. Or return "no findings".
 
-A verifier gets one finding and tries to refute the finding against the code
-at `<head>`. When a targeted test settles the question, the verifier runs the
-test in a throwaway worktree. The verifier returns "confirmed", "refuted" or
-"uncertain", with the evidence.
+If you are the verifier, you get one finding. Try to refute the finding
+against the code at `<head>`. When a targeted test can settle whether the
+finding holds, run the test in a throwaway worktree. Return "confirmed",
+"refuted" or "uncertain", with the evidence.

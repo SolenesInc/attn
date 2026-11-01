@@ -40,9 +40,11 @@ When the answer arrives, act on it, then close.
 
 ## Close yourself
 
-When nothing is left to raise:
+When nothing is left to raise, run:
 
     attn agent close --self -m "<what you settled>"
 
-The close is immediate, so write everything first. attn adds the reason as a
-note on each seed you still tend, and the session stays in the ledger.
+attn refuses this close when you are the chief of staff or a session a crew
+member works in. Those sessions stay open after the wrap-up. The close is
+immediate, so write everything first. attn adds the reason as a note on each
+seed you still tend, and the session stays in the ledger.

@@ -6,7 +6,7 @@ says which app flow such a test follows.
 
 Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
 can reach the daemon only through the protocol, the CLI client, and the hooks
-`export_test.go` exposes. Those hooks make the things the daemon depends on outside itself fail.
+`export_test.go` exposes. Those hooks make the daemon's external dependencies fail.
 The one way to reach inside is a pause point, below.
 
 ## The world
@@ -17,15 +17,18 @@ The one way to reach inside is a pause point, below.
   the world's own sockets allow, for promises about socket paths.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
 - `w.PauseAt(name)` holds the daemon the first time each daemon run reaches
-  the pause point `name`, and `w.PauseEvery(name)` holds it every time. Both
-  return the `testworld.Pause` a stack test gets. Any world can arm a point after
-  the world starts. `inBubbleHeldAt(t, points, script)` arms points before a
-  bubbled world's daemon starts, for a step the daemon takes on startup. `Await`
-  fails the test if nothing arrives within `fakeagent.HangGuard` (bubble time
-  inside a bubble). It fails at once with the step's error when a `Done` point's
-  step failed. Teardown and `w.restart()` release every hold before the daemon
-  stops. Points match by name, so arm a point only while a single operation of
-  its kind is in flight. One world per test binary can hold points at a time.
+  the pause point `name`. `w.PauseEvery(name)` holds it every time. Both return
+  the same `testworld.Pause` that a stack test gets.
+- A test can arm a point at any time after the world starts. To arm a point for
+  a step the daemon takes on startup, call `inBubbleHeldAt(t, points, script)`,
+  which arms the points before a bubbled world's daemon starts.
+- `Await` fails the test if nothing arrives within `fakeagent.HangGuard`.
+  Inside a bubble, that limit is bubble time. When the step of a
+  `pausepoint.Done` point failed, `Await` fails at once with the step's error.
+- Teardown and `w.restart()` release every hold before the daemon stops.
+- Points match by name. Arm a point only while one operation of its kind is in
+  flight.
+- Only one world in a test binary can hold points at a time.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
   the daemon sends.
 
@@ -72,13 +75,14 @@ On a `fakeagent.Run`:
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises
   under the same message. `Subagent` writes a subagent's transcript, and
   `DeleteSubagentTranscripts` removes those transcripts.
-  A Claude launched with a bare `-r` opens its resume picker, which starts a
-  new conversation and sets `ResumePicker` on its `Run`.
+  A bare `-r` makes Claude open its resume picker. The picker starts a new
+  conversation and sets `ResumePicker` on the `Run`.
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
-  are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
-  returns the next task's `Harness`, `Model`, `Effort` and `Prompt` to `Answer`
-  or `Fail`, and a task the test never takes fails the test. The task also carries
-  the `Argv`, `Env` and working `Dir` the harness process was started with.
+  are off unless the test sets `ATTN_HEADLESS_TASKS=on`. When they are on,
+  `w.HeadlessTask()` returns the next task. The task carries its `Harness`,
+  `Model`, `Effort`, and `Prompt`, and the `Argv`, `Env`, and working `Dir` the
+  harness process started with. The test answers the task with `Answer` or
+  `Fail`. A task the test never takes fails the test.
 
 ## Waiting for results
 
@@ -103,17 +107,18 @@ On a `fakeagent.Run`:
   it, such as a terminal's kill escalation, a folder watch's window, the
   background job runner's schedule and the daemon's database backup, fire
   only when the test calls
-  `w.advance(d)`. `w.awaitTimer(name)` first waits until the timer with that
-  `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. The package
-  that arms each stepped timer names it, so a wait never matches another
-  operation's timer of the same duration.
+  `w.advance(d)`. `w.awaitTimer(name)` waits until the timer with that
+  `stepclock.Name`, such as `notebook.WatchDebounceTimer`, is armed. Each
+  package that arms a stepped timer gives the timer a `stepclock.Name`, so a
+  wait never matches another operation's timer of the same duration.
 - Transcript watchers, including a driver plugin's usage watcher, poll on
   that clock too. Whenever a fake agent writes a transcript, the poll
   (`sessionmonitor.TranscriptPoll`) fires without moving the clock. The poll
   fires before the write returns to the agent, so the daemon reads the
   transcript with no advance. A test that writes a transcript itself calls
   `w.readTranscripts()`. The discovery grace and the quiet window still depend
-  on time. A test that depends on either advances past it, such as
+  on time. When a test depends on the discovery grace or the quiet window, the
+  test advances the clock past that duration, for example with
   `w.advance(sessionmonitor.TranscriptDiscoveryGrace)`.
 - A test about outside edits to watched folders calls `w.closeWatchWindows()`,
   which closes each folder watch's window as soon as it opens.

@@ -1,6 +1,6 @@
 # Delegation roles
 
-Delegation roles are the user's routing table in **Settings → Delegation**: each role defines the kind of work it covers, how the delegated agent should work, and the harness, model and effort the agent runs on. An alternative names another model that a role uses for conditions its default model should not cover. The fallback is used for work that no role fits.
+Delegation roles are the user's routing table, set in **Settings → Delegation**. Each role defines three things: the kind of work it covers, how the delegated agent should work, and the harness, model and effort the agent runs on. A role can also list alternatives. An alternative is another model, with a condition for the cases where the role's default model should not be used. The fallback is the choice for work that no role fits.
 
 Change the saved table only when the user asks to change it. A model or role the user requests for one delegation is a launch override, not a request to save it. Use `attn delegate roles --help` for the installed command syntax.
 

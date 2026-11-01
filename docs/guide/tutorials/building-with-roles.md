@@ -18,15 +18,14 @@ to to work as a Pathfinder, and it takes the role right there.
 
 ## Before you start
 
-Open **Settings → Delegation** and click "Add Attn roles", or run
+Open **Settings → Delegation** and click **Add Attn roles**, or run
 `attn delegate roles install`. Either action adds the five roles and installs
-the attn-workflow skill. Each role reads the skill to learn how to work.
+the attn-workflow skill. An agent in any role reads the skill to learn how to work.
 See [delegation](../reference/delegation.md#roles) for what each role is.
 
 The roles arrive without a model, and
 [agents can't pick a role until it has one](../reference/delegation.md#roles).
-Pick a harness and model for each role you want to use, in the "Runs on"
-column. You can also ask any agent to set them for you.
+Pick a harness and model for each role you want to use, in the **Runs on** column. You can also ask any agent to set them for you.
 
 ## Plan with a Pathfinder
 
@@ -43,7 +42,7 @@ what a refactor would cost, the Pathfinder suggests a spike: a quick throwaway
 build to find out. When a choice is easier to make by comparing options, such as
 a screen or the shape of an interface, it suggests a Prototyper to build them
 side by side. When the choice is costly to reverse and the Prototyper role has
-more than one model, it can suggest one independent candidate per model instead.
+more than one model, the Pathfinder can instead suggest one independent candidate per model.
 
 When the interview ends, the Pathfinder puts the plan in the garden: one seed
 for a single task, or a plot with a child per piece of work, saying which pieces

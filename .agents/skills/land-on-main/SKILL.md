@@ -119,10 +119,10 @@ Settle uncertain findings yourself against the code, or ask the user.
 scripts/land.sh
 ```
 
-`scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the changed
-paths, and pushes. It is the only way to push `main`, because
-`.githooks/pre-push` refuses a plain `git push`. Use `git push --no-verify`
-only when `scripts/land.sh` cannot run, and run its checks yourself first.
+Push with `scripts/land.sh`. It rebases onto `origin/main`, runs a fast gate
+for the changed paths, and pushes. `.githooks/pre-push` refuses a plain
+`git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
+after you run its checks yourself.
 
 When `main` moves during landing, `scripts/land.sh` rebases, runs its gate
 again and pushes on its own. Your checks still count. When `scripts/land.sh`
@@ -150,10 +150,10 @@ Report on the seed and in the conversation:
 
 - the landed commits, and the commit your checks ran on when a rebase moved
   the landed commits
-- each of the seed's checks with its evidence, as
+- the seed's checks. For each check, run
   `attn seed check report <seed> <C#> -m "<summary line>" --evidence
-  <file|artifact|url> --commit <rev>`, which copies a local file onto the
-  seed, or in a note when the seed has no checks
+  <file|artifact|url> --commit <rev>`. The command copies a local file onto the
+  seed. If the seed has no checks, put the evidence in a note
 - the review: which readers ran, the confirmed findings and their fixes, and
   the findings you refuted
 - any landing test that failed and passed on a rerun, and whether you used

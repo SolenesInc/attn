@@ -30,19 +30,18 @@ make build                                              # ./attn from this check
 . /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github ensure
 ```
 
-Every command after `write-env.sh` runs in the instance shell, which means
-the command starts with `. /tmp/drive-attn-<name>.env &&`. Agents' command
-tools start a fresh shell for each command (Claude Code keeps only the
-working directory, and Codex starts a new process), so a selection, variable
-or function from one command is gone by the next. Without the prefix,
-`./attn` acts on production as your own session, `wsctl` and `bridge` are
-undefined, and the mock GitHub reaches the `dev` instance. A missing file
-stops the command, and the file ends with a guard that fails unless
-`ATTN_INSTANCE` is `<name>`. In a shell that keeps its state, such as a
-person's terminal, source the file once in a terminal of its own instead, so
-your own `attn` keeps pointing at the attn you run inside. Code blocks here
-show the prefix. Inline commands, here and in the feature map, leave the
-prefix out.
+Run every command after `write-env.sh` in the instance shell: start the
+command with `. /tmp/drive-attn-<name>.env &&`. Agents' command tools start a
+fresh shell for each command (Claude Code keeps only the working directory,
+and Codex starts a new process), so a selection, variable or function from one
+command is gone by the next. Without the prefix, `./attn` acts on production
+as your own session, `wsctl` and `bridge` are undefined, and the mock GitHub
+reaches the `dev` instance. If the file is missing, the command stops. The
+file ends with a guard that fails unless `ATTN_INSTANCE` is `<name>`. In a
+shell that keeps its state, such as a person's terminal, source the file once
+in a terminal of its own instead, so your own `attn` keeps pointing at the
+attn you run inside. Code blocks here show the prefix. Inline commands, here
+and in the feature map, leave the prefix out.
 
 Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`, because `dev`
 is shared with other work and installs the attn skill into your harness
@@ -88,13 +87,17 @@ Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
 input failure is a bridge or harness bug to diagnose, not permission to take
 focus. A scenario that requires activation or system input needs a dedicated
 display. Such a scenario cannot prove a shared-Mac recipe. On macOS,
-`make run INSTANCE=<name>` opens the app through Launch Services instead,
-and Launch Services does not pass the env file's exports to the app. If the
-daemon started without those exports (the doctor shows a real agent's executable), or
-a recipe needs another variable in the daemon's environment, quit the app
-with `./attn instance stop-app`, stop the daemon with
-`"$(./attn instance resolve --field appDaemon)" daemon stop`, append the
-missing `export` line to the env file, then launch again.
+`make run INSTANCE=<name>` opens the app through Launch Services, which does
+not pass the env file's exports to the app. On a shared Mac, launch with
+`bridge --launch` instead. If the daemon started without those exports (the
+doctor shows a real agent's executable), or a recipe needs another variable in
+the daemon's environment, do these steps in order:
+
+1. Quit the app with `./attn instance stop-app`.
+2. Stop the daemon with
+   `"$(./attn instance resolve --field appDaemon)" daemon stop`.
+3. Append the missing `export` line to the env file.
+4. Launch again with `bridge --launch --wait-ready ping`.
 
 ## Doctor
 
@@ -214,9 +217,9 @@ move on. For each instance you started:
 .agents/skills/drive-attn/scripts/clean.sh <name>
 ```
 
-The script sources the env file, runs `./attn instance clean <name>`, stops
-the instance's mock GitHub, and removes the scratch tool home,
-`$ATTN_TOOL_HOME`, and then the env file. The script stops at the first
+The script sources the env file and runs `./attn instance clean <name>`. Then
+it stops the instance's mock GitHub, removes the scratch tool home
+(`$ATTN_TOOL_HOME`), and removes the env file. The script stops at the first
 command that fails and keeps the env file, so you can run the script again.
 Close a terminal that sourced the env file.
 

@@ -4,18 +4,22 @@ Load this reference when you read or maintain the attn Notebook, your
 profile's durable markdown store, especially when your session is the chief of
 staff. The Notebook outlives any single agent.
 
-The Notebook is plain markdown on disk. Read the files and edit knowledge notes
-with your native tools (Read, Write, Edit, `ls`, `rg`). Append journal entries
-with `attn journal append`, which serializes writes at the home.
-There is no `attn notebook` CLI. Your operating guidance gives you the notebook
-root, and the chief of staff gets that guidance in the launch injection.
-`attn settings get notebook.root.effective` prints the root. Profiles share one
-folder, `~/attn-notebook` by default, unless a profile sets its own folder with
-`notebook.profile_root`. Per-instance variants append the instance name. Paths
-below are relative to that `<root>`. On an outpost, `notebook.root.effective`
-names that machine's copy of the shared Notebook, which syncs with the home. A
-folder that a profile set for itself does not sync. `attn seed show <seed>`
-prints that machine's artifact folder.
+The Notebook is plain markdown on disk. Read the files, and edit knowledge
+notes, with your native tools (Read, Write, Edit, `ls`, `rg`). To append a
+journal entry, run `attn journal append`, which serializes writes at the home.
+There is no `attn notebook` CLI.
+
+Your operating guidance gives you the Notebook root, and the chief of staff
+gets that guidance at launch. `attn settings get notebook.root.effective`
+prints the root. All profiles share
+one folder, `~/attn-notebook` by default. A profile can set its own folder with
+`notebook.profile_root`, and a non-default instance adds its name to the folder
+name. Paths below are relative to `<root>`.
+
+On an outpost, `notebook.root.effective` is that machine's copy of the shared
+Notebook, and the copy syncs with the home. A folder that a profile set for
+itself does not sync. `attn seed show <seed>` prints that machine's artifact
+folder.
 
 `<root>/crew/` holds crew members' homes: a folder per member with the member's
 charter and letters. attn owns that folder and records where each home is, so
@@ -41,8 +45,7 @@ Then browse the relevant subtree with `ls` or `grep` under
   single change. It is organized **PARA-style**. `projects/` holds bounded
   efforts, roughly one per plot or epic. `areas/` holds ongoing
   responsibilities and subsystems. `resources/` holds reference material.
-  `archive/` holds inactive items. When a project finishes, promote its durable
-  knowledge up into `areas/`.
+  `archive/` holds inactive items.
 
 When a `projects/<slug>/` folder corresponds to a plot in the garden, stamp the
 `index.md` frontmatter of that folder with `resource: attn:seed/<plot-id>`.
@@ -82,19 +85,20 @@ Create a file under the right PARA directory, such as
     The Notebook's markdown files are canonical; edits are plain file writes.
 
 To edit, Read the file, then Edit it. These are ordinary on-disk edits. The
-daemon's filesystem watcher notices your change and refreshes any open in-app
-browser.
+daemon watches the Notebook folder and refreshes any open Notebook view in the
+app when a file changes.
 
 ## Rules that keep the knowledge base trustworthy
 
 - **Grounding is required.** Give every durable knowledge note resolvable
   `sources:` in its frontmatter, as journal anchors or URLs. Do not write a note
   from paraphrase alone.
-- **Frontmatter is OKF.** `type:` is the one required field. It is an open,
-  author-chosen string, such as `note`, not a fixed enum. `title`, `summary`,
-  `tags`, `created`, `updated`, and `sources` are recommended. Unknown keys are
-  preserved untouched. The reserved files `index.md` and `log.md` have no
-  frontmatter.
+- **Frontmatter is OKF.** `type:` is the one required field. Its value is an
+  open string you choose, such as `note`, not a fixed list. `title`, `summary`,
+  `tags`, `created`, `updated`, and `sources` are recommended. attn leaves
+  unknown keys untouched. The `index.md` and `log.md` files that attn scaffolds
+  have no frontmatter. A project's `index.md` is the exception: it carries
+  `resource:`, as above.
 - **Links are root-absolute markdown:** `[label](/knowledge/areas/foo.md)`, not
   `[[wikilinks]]`. Keep the relationship kind, such as supersedes or
   relates-to, in prose.
@@ -103,8 +107,9 @@ browser.
 
 ## As chief of staff
 
-The Notebook is your home. When attn promotes you to the role mid-session, it
-points you at `<root>/index.md`. Read that file to orient. Then read
+The Notebook holds your member home and the knowledge you maintain. When attn
+promotes you to the role mid-session, attn points you at `<root>/index.md`.
+Read that file to orient. Then read
 `<root>/knowledge/index.md`, record durable decisions in the knowledge base as
 you make them, and keep the day's journal current with your view of your
 profile. Write at a chief-of-staff level of detail: what moved across your

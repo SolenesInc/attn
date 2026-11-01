@@ -18,7 +18,7 @@ queue, but the user settles a run's turn the same way in either flow.
 - `walk`: step through the queue's agents in order: the turns, then the working agents, then the snoozed ones.
 - `settle`: close a turn. The user moves on to the next turn, or home when none is left.
 - `run-settle`: close an automation run's turn, in either flow. The user stays on the run (see [automations.md](automations.md) for runs).
-- `settle-move-on`: in queue flow, ⌘⇧E on an agent of the queue that is owed no turn settles nothing and moves the user to the head of the queue, or home.
+- `settle-move-on`: in queue flow, ⌘⇧E on an agent of the queue that is owed no turn and is not snoozed settles nothing and moves the user to the head of the queue, or home.
 - `auto-settle`: close a turn once the user steered the agent and the agent kept working, after a visible countdown.
 - `countdown-cancel`: stop the countdown and keep the turn. A second press lets the turn settle again.
 - `snooze`: put an agent off until a set time. The user moves on.
@@ -31,7 +31,7 @@ queue, but the user settles a run's turn the same way in either flow.
 
 ### People
 
-- Keys (`app/src/shortcuts/registry.ts`): ⌘J (`session.jumpToWaiting`) opens the head of the queue. ⌘↑ (`session.prev`) and ⌘↓ (`session.next`) step to the previous or next agent of the queue, wrapping, and from home start at the queue's first or last row ([desktops.md](desktops.md) has them in desktop flow). ⌘⇧E (`session.settle`) settles. ⌘⇧S (`session.snooze`) opens the snooze menu. ⌘⇧I (`session.priority`) toggles priority. ⌘. (`session.cancelCountdown`) stops a countdown, or keeps the next turn of the agent on screen. Settle, snooze and priority act on the focused queue row, otherwise on the agent on screen. ⌘⇧E settles an automation run's turn in either flow, and in desktop flow nothing else. In queue flow, ⌘⇧E on an agent of the queue that is owed no turn and is not snoozed settles nothing and moves the user to the head of the queue, or home with "Take me to the next agent that needs you" checked when no turn is owed.
+- Keys (`app/src/shortcuts/registry.ts`): ⌘J (`session.jumpToWaiting`) opens the head of the queue. ⌘↑ (`session.prev`) and ⌘↓ (`session.next`) step to the previous or next agent of the queue, wrapping, and from home start at the queue's first or last row ([desktops.md](desktops.md) has them in desktop flow). ⌘⇧E (`session.settle`) settles. ⌘⇧S (`session.snooze`) opens the snooze menu. ⌘⇧I (`session.priority`) toggles priority. ⌘. (`session.cancelCountdown`) stops a countdown, or keeps the next turn of the agent on screen. Settle, snooze and priority act on the focused queue row, otherwise on the agent on screen. ⌘⇧E settles an automation run's turn in either flow, and in desktop flow nothing else. In queue flow, ⌘⇧E on an agent of the queue that is owed no turn and is not snoozed settles nothing. It moves the user to the head of the queue. When no turn is owed anywhere, it moves the user home with "Take me to the next agent that needs you" checked.
 - ⌘. reaches attn through the File menu's "Stop Countdown" item, because macOS takes the key before the web view (`app/src-tauri/core/src/lib.rs`).
 - Palette (`app/src/application/useAppCommands.tsx`): `toggle-queue-mode` ("Turn on the agent queue" or "Turn off the agent queue"), `jump-to-waiting` ("Jump to the oldest turn"), `settle-active-session` ("Settle this agent", while the agent on screen is owed a turn that ⌘⇧E can settle, so in desktop flow only on a run), `snooze-active-session` ("Snooze this agent…"), `wake-active-session` ("Wake this agent now", the unsnooze), `toggle-session-priority` ("Mark as priority" or "Clear priority"), `toggle-auto-settle` ("Turn on auto-settle"), and `toggle-crew-queue` ("Put the crew in the queue"), which [crew.md](crew.md) drives. In the agent palette, ⌘⇧E, ⌘⇧I and ⌘⇧S act on the highlighted agent. [palette.md](palette.md) drives them.
 - The sidebar's flow button, "Switch to queue flow" or "Switch to desktop flow" (`app/src/components/SidebarHeader.tsx`).
@@ -46,7 +46,7 @@ queue, but the user settles a run's turn the same way in either flow.
 
 ### Agents
 
-- `attn turn open|settle` (`cmd/attn/turn.go`): `open` puts the calling session in the queue, and `settle` takes the session out of a turn that it opened itself. Run while working, `open` opens the turn at the stop. With queue flow off, both succeed and change nothing.
+- `attn turn open|settle` (`cmd/attn/turn.go`): `open` puts the calling session in the queue. `settle` takes the session out of a turn that the session opened itself. If the session is working when it runs `open`, the turn opens when the session stops. With queue flow off, both succeed and change nothing.
 - `attn session snooze <id>... --until <when>` and `attn session unsnooze <id>...` (`cmd/attn/session_snooze.go`): a session may snooze itself and the agents below it in its delegation chain. The chief may snooze any agent of the chief's profile. `--until` takes an RFC3339 instant, a positive duration such as `30m` or `1h`, or `tomorrow`, `saturday` or `monday` at 09:00 local.
 - `attn session priority on|off [--session <id>]` (`cmd/attn/session_priority.go`): any agent may mark any session.
 - Reads: `attn agent list` shows `owed` in its TURN column (`cmd/attn/agent.go`). `attn session list --tree` shows `owed` or `snoozed until <instant>` (`cmd/attn/session_tree.go`).
@@ -197,7 +197,7 @@ EOF
 - A row's ✓, ☾, ↩ and ••• buttons take clicks only while the pointer is on the row. After a native click on one, keyboard focus stays on that row, and ⌘⇧E, ⌘⇧S and ⌘⇧I then act on that row, not on the agent on screen. Select the agent with `bridge select_session` before pressing the key.
 - The mock agent prints errors and replies at the terminal's width, so a long line wraps anywhere. Match the first words of a line, not its ending.
 - ⌘⇧S and the palette's snooze and unsnooze commands exist only in queue flow and only with an agent on screen. "Settle this agent" shows in either flow, but only while the agent on screen is owed a turn the user can settle: in queue flow an agent of the queue or a run, in desktop flow only a run. A missing palette command usually means the precondition is missing, not that the command is broken.
-- In queue flow, ⌘⇧E on an agent of the queue that is owed no turn settles nothing and takes the user to the head of the queue, or home. A press that jumps instead of settling means the turn had already closed.
+- A ⌘⇧E that jumps instead of settling means the turn had already closed.
 - A run's ✓ in the queue sidebar shows only inside its automation's open group. Showing the run opens the group, and a click on the group's header closes it again.
 - Rings wait 30 seconds after the last `wsctl input` into that terminal. Quiet notifications change nothing while queue flow is off.
 - Turn ages tick every 30 seconds. A fresh turn reads `now`.

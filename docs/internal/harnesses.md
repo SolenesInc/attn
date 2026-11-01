@@ -31,12 +31,13 @@ Showing one session in many terminals needs the session to run over a link
 whose server every terminal of the conversation joins, like shared Codex's
 app-server. A terminal on a link that resumes the conversation of a live
 session shows that session.
-An integration without a link starts one process per terminal, and falls short
-of the model when the harness lets a second process open a conversation
-that another process still runs. That terminal keeps its own session on the
-conversation, so two open sessions hold the conversation. The tiles of every
-live session on one conversation warn until only one session remains. Claude
-Code and Pi fall short this way. Plain Codex refuses the second process.
+
+An integration without a link starts one process per terminal. Some harnesses
+let a second process open a conversation that another process still runs. For
+those harnesses, the second terminal keeps its own session on the conversation,
+so two open sessions hold one conversation. The tiles of every live session on
+that conversation warn until one session remains. Claude Code and Pi behave this
+way. Plain Codex refuses the second process.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
@@ -209,8 +210,8 @@ conversation moved into the daemon no longer runs in the terminal attn
 launched: attn would open one session for the draft and another for the fork,
 the agent's attn commands would name another terminal, and Reload session could
 not resume the conversation. The variable also reaches `claude` run from the
-agent's tools, so `claude` run there cannot start conversations in the daemon
-that carry the agent's attn identity. Claude that the user starts by hand in a
+agent's tools, so a `claude` that the agent runs cannot start conversations in
+the daemon. Such conversations would carry the agent's attn identity. Claude that the user starts by hand in a
 terminal running a shell keeps its agent view. That terminal has no
 `ATTN_TERMINAL_ID`, so the conversation carries no attn identity.
 
@@ -352,8 +353,8 @@ non-production attn daemon:
 Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 
 - `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a
-  socket that `PATH` links to under `/tmp/codex-daemon-<uid>/`. A client must
-  resolve the link before connecting when `PATH` is long.
+  socket. `PATH` is a symlink to that socket, under `/tmp/codex-daemon-<uid>/`.
+  When `PATH` is long, a client must resolve the symlink before connecting.
 - Hooks given to the server with `-c` are session-flag hooks. A
   `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash` given
   the same way trusts them. They run in the server's environment, with the
@@ -475,9 +476,9 @@ these.
 - The drain ends when no turn is running and no request admitted before the
   drain is still preparing or submitting work. The drain has no timeout of its
   own. A turn waiting on an approval or a question is still running, and so is
-  a turn's title generation. A second SIGTERM or SIGINT forces the exit. With
-  neither left, the drain ends at once (`ShutdownState::update` in
-  `app-server/src/lib.rs`).
+  a turn's title generation. A second SIGTERM or SIGINT forces the exit. When no
+  turn is running and no admitted request is pending at the first signal, the
+  drain ends at once (`ShutdownState::update` in `app-server/src/lib.rs`).
 - At the end the server stops listening, removes its socket and drops every
   connection without a WebSocket close frame, so clients see EOF before the
   process exits. The server then drains its background tasks and shuts all its
@@ -654,9 +655,9 @@ shared Codex tile follows:
 - `/agents` reads the root conversation picked with `thread/read` and resumes
   the conversation with `thread/resume`, even a conversation the TUI showed
   before. The exception is a conversation the TUI started itself and has not
-  prompted yet. When the TUI leaves that conversation, it stays subscribed to
-  it and goes back to it without a request, so attn first sees the
-  `turn/start` of the next prompt there (`tui/src/app/agents_overview.rs`,
+  prompted yet. When the TUI leaves that conversation, the TUI stays subscribed to the
+  conversation and goes back to it without a request. attn therefore first sees
+  the `turn/start` of the next prompt on that conversation (`tui/src/app/agents_overview.rs`,
   `tui/src/app/thread_routing.rs`).
 - Picking a subagent that is not attached resumes the subagent
   (`tui/src/app/session_lifecycle.rs`). On reconnect, the TUI resumes the

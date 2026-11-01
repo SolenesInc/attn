@@ -4,11 +4,11 @@ Principles this process relies on: [Encode lessons in structure](../principles/e
 
 Use this process when a kind of mistake keeps coming back: the user or a reviewer corrects agents for the mistake a second time, a review finding repeats an earlier one, or a bug's cause has happened before. Use it also when you find yourself writing the same instruction a second time, such as one rule repeated across briefs. Fix the class, not only the instance, so the next agent cannot make the mistake.
 
-Assume the next contributor is an agent that sees only the files the agent opened, copies the nearest example, and takes the shortest path that compiles, as [Design](design.md) describes under Check the structure behind it. An instruction in a file that agent never opens does not reach the agent.
+Assume the next contributor is an agent, as [Design](design.md) describes under Check the structure behind it. That agent never sees an instruction in a file it did not open.
 
 ## Find the class
 
-Name the class you arrived with. Find the class's earlier instances in recent commits, reverts, review comments, the repository's agent guidance, and code comments that explain a workaround. Some classes are mistakes of understanding: agents act on something the user overturned. Find the text that still states the overturned decision, such as a doc, a brief, a seed note, a code comment, or a name in the code. That text is the old way that the first level below removes. A mistake counts as a class once it has happened twice. Fix a one-off where it happened. The instances are the class's evidence, and the proof below needs at least one instance. When the user asks for a sweep instead, read the same sources for every mistake, group the mistakes into classes, and fix the most frequent class first.
+Name the class that brought you here. Find its earlier instances in recent commits, reverts, review comments, the repository's agent guidance, and code comments that explain a workaround. Some classes are mistakes of understanding, where agents act on a decision the user has since overturned. For these, find the text that still states the overturned decision, such as a doc, a brief, a seed note, a code comment, or a name in the code. Remove that text under level 1 below. A mistake counts as a class once it has happened twice. Fix a one-off where it happened. The instances are the class's evidence, and the proof below needs at least one instance. When the user asks for a sweep instead, read the same sources for every mistake, group the mistakes into classes, and fix the most frequent class first.
 
 ## Fix it at the highest level that works
 
@@ -22,10 +22,10 @@ Go down a level only when the level above cannot remove the class:
 
 ## Prove it
 
-Fix each class in its own commit. Show each new check failing on a real past instance of the mistake, then passing on the fix. A check that nobody has seen fail is not known to work. Run the same command locally and in CI. Put an exception on the offending line with the reason for it, and with an expiry or the user's approval when the repository has a convention for either.
+Fix each class in its own commit. Show each new check failing on a real past instance of the mistake, then passing on the fix. A check that nobody has seen fail is not known to work. Run the same command locally and in CI. Put each exception on the offending line, with the reason for it. When the repository has a convention for an expiry or for the user's approval, add that too.
 
 ## Keep the record
 
-Where the repository keeps its agent guidance, keep a table of the classes fixed this way. For each class, list one instance and what now prevents the mistake, from the owner, type, check, or test to the guidance line for a judgment call. When a correction arrives, fix the mistake and check the table. If the class is listed, it has come back and its fix did not hold, so move the class up the ladder in the same change. Remove a row once a structure or type makes the mistake unwritable.
+Where the repository keeps its agent guidance, keep a table of the classes fixed this way. For each class, list one instance and what now prevents the mistake: an owner, a type, a check, a test, or, for a judgment call, a guidance line. When a correction arrives, fix the mistake and check the table. If the class is listed, the mistake has come back and the fix did not hold, so move the class to a higher level in the same change. Remove a row once a structure or type makes the mistake unwritable.
 
 Report each class with its evidence, the level you chose, and why the levels above that level did not work.

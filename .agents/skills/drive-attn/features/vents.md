@@ -3,10 +3,11 @@
 Agents report what got in their way, for the user to review later, like a bug
 report. An agent that meets a broken attn command, instructions that
 contradict each other or a capability it had to work around sends a vent and
-keeps working. Nobody replies. The user reads vents in **Settings → Analytics**,
-opens the session or transcript behind a vent, dismisses the vent or plants a
-seed from the vent, and can send attn vents to attn's maintainers. Vents need usage analytics
-on when the session launched.
+keeps working. Nobody replies. The user reads vents in **Settings → Analytics**.
+There the user can open the session or transcript behind a vent, dismiss it, or
+plant a seed from it. The user can also send attn vents to attn's maintainers.
+A session can vent only while usage analytics is on, both when the session
+launches and when it vents.
 
 ## Sub-features
 

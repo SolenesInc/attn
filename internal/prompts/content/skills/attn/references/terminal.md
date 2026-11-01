@@ -28,14 +28,14 @@ directory on the target machine. attn creates a missing numbered `--desktop`.
 selects an outpost, and `--host home` selects the home. If you change the
 machine and omit `--cwd`, the shell starts in that machine's home directory.
 
-`open -- command` waits for the shell's first OSC 133 prompt before it types
-the command. It refuses known unsupported shells before opening. If the wait
-for the first prompt exceeds 30 seconds, the command fails with the terminal's
-id, leaves the terminal open, and types nothing later. In the startup spike,
-first prompts took between 9 and 176 ms across fish, zsh and bash. The
-30-second limit catches broken startup or integration that startup files
-disabled. Use `send` to continue in that terminal. For a shell without command
-marks, open without a command.
+`open -- command` waits for the shell's first OSC 133 prompt, then types the
+command. Before it opens a terminal, `open` refuses known unsupported shells. If
+the first prompt takes more than 30 seconds, `open` fails and reports the
+terminal's id. It leaves the terminal open and types nothing. A healthy start
+takes far less: first prompts took between 9 and 176 ms across fish, zsh and
+bash. The 30-second limit catches a broken startup, or startup files that
+turned the shell integration off. To continue in that terminal after a failure,
+use `send`. For a shell without command marks, open without a command.
 
 An opened terminal is an ordinary interactive shell. The command enters the
 shell's history, so the user can recall it with ↑. The terminal records you as

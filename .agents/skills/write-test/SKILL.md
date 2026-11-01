@@ -20,10 +20,10 @@ lists the habits that most often break the strategy.
 - Search the suite for a test of the same promise through the same entry:
   the same command, event, CLI verb or world helper. Extend that test
   instead of adding another.
-- When the harness cannot reach or observe the promise, extend the harness
-  with something outside attn: an agent, the user, the clock, the network.
-  When the promise is about a moment between two steps of one action, add a
-  pause or crash point instead.
+- When the harness cannot reach or observe the promise, extend the harness with
+  something outside attn: an agent, the user, the clock, the network. For a
+  promise about a moment between two steps of one action, use a pause or
+  crash point, as Internals describes.
 
 ## Read
 

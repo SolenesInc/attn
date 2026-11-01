@@ -33,8 +33,7 @@ pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
 pnpm --dir app real-app:linux test --provider ssh --target tester@linux -- --scenario automode-environment
 ```
 
-The SSH provider accepts `--ssh-config <file>`. It provisions an existing Ubuntu
-24.04 machine with passwordless sudo. It does not create or stop that machine.
+The SSH provider accepts `--ssh-config <file>`. It provisions an existing Ubuntu 24.04 machine. The machine must allow passwordless sudo. The SSH provider does not create or stop that machine.
 The Lima and OrbStack providers create, start, and stop their VMs. No adapter
 deletes VMs.
 
@@ -63,18 +62,15 @@ name. The guest receives no host routing variables or provider credentials.
 
 `test` syncs, removes the guest instance with `attn instance clean`, installs the
 instance again, and runs the existing serial matrix under Xvfb, so every run
-starts from empty instance data, like CI. `test` copies the artifacts even when
-a scenario fails and preserves the failing command's exit status. Pass
-`--out <directory>` to choose where results land. By default, results go under
-the host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
-Xvfb uses `-noreset` so short-lived window probes cannot reset the display while
-GTK initializes the app. CI acceptance and soak runs use the same setting.
-The runner saves packaged-app stdout and stderr as `app-launch-<id>.log` in the
-selected artifacts directory. For the serial matrix, that directory is the
-artifacts root. If the app exits early, the runner reports the exit code, the
-signal, and the log path.
-`artifacts` repeats collection after an interrupted run. For shell operators,
-use an explicit shell: `run -- bash -c 'command && next-command'`.
+starts from empty instance data, like CI. `test` copies the artifacts even when a scenario fails, and it exits with the failing command's exit status. Pass `--out <directory>` to choose the results directory. Without `--out`, `test` writes results under the host temporary directory in `attn-linux-artifacts/<provider>/<checkout hash>`.
+
+The runner starts Xvfb with `-noreset`, so short-lived window probes cannot reset the display while GTK initializes the app. CI acceptance and soak runs use the same setting.
+
+The runner saves the packaged app's stdout and stderr as `app-launch-<id>.log` in the artifacts directory. For the serial matrix, the artifacts directory is the artifacts root. If the app exits early, the runner reports the exit code, the signal, and the log path.
+
+After an interrupted run, run `artifacts` to collect the artifacts again.
+
+To use shell operators with `run`, start an explicit shell: `run -- bash -c 'command && next-command'`.
 
 ```sh
 pnpm --dir app real-app:linux status
@@ -93,7 +89,6 @@ Add an adapter to `app/scripts/real-app-harness/vm/providers.mjs` with `up`,
 SSH config path. Keep provider-specific commands in the adapter. Scenarios and
 guest setup must not depend on which VM manager launched the machine.
 
-CI also uses the shared `scripts/setup-linux-sandbox.sh`. The script grants user
-namespaces to `/usr/bin/bwrap` through AppArmor while keeping Ubuntu's global
-restriction enabled. Tool versions come from `go.mod`, `rust-toolchain.toml`,
-and `.tool-versions`. Node 26 and pnpm 9 match the CI major versions.
+## CI sandbox setup
+
+CI also uses the shared `scripts/setup-linux-sandbox.sh`. The script grants user namespaces to `/usr/bin/bwrap` through AppArmor and keeps Ubuntu's global restriction enabled. Tool versions come from `go.mod`, `rust-toolchain.toml`, and `.tool-versions`. Node 26 and pnpm 9 match the CI major versions.

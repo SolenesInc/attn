@@ -8,8 +8,9 @@ focus a live session, or bring a closed one back in a tile under its own id.
 The ledger's Conversations list holds attn's own copies of Claude
 conversations. Agents list and read sessions, rename their own, read
 transcripts and resume sessions from the CLI. When a harness moves a terminal
-to another conversation, the terminal shows that conversation's session, and
-the session it left goes to the ledger.
+to another conversation, the terminal shows that conversation's session. The
+session it left closes into the ledger, except under shared Codex, where it
+stays open and hidden.
 
 ## Sub-features
 
@@ -117,7 +118,7 @@ Preconditions:
 - **Outposts**: the home, which holds the ledger, answers `attn session instructions` from an outpost. A live or closed row shows the outpost its session ran on by name, or by its host id once that outpost is removed, and offers neither Show worktree nor Keep conversation, since an outpost conversation has no kept copy at the home. "Reopen" or `attn session reopen <id>` resumes a closed outpost session on that same outpost, and the session's conversation and cost continue. When the session's worktree was deleted, the `recreate_worktree_and_reopen` and `fetch_recreate_and_reopen` actions recreate the worktree there, and the second action fetches the branch first. Resume refuses and the row stays closed when the outpost is unreachable or removed or Outposts is off (the refusal names the host), when the folder no longer exists there, and when the harness no longer has the conversation (`conversation <id> is no longer in codex's storage`).
 - **Profiles**: each profile has its own ledger, and a session belongs to one profile for life. Resume lands in the session's own profile. A session whose profile was deleted cannot come back. Inside attn, the session's profile scopes `session list --tree`. Outside attn, `--profile` narrows the list. The glossary still lists checking that a request with no profile does not list every profile.
 - **Performance and idle cost**: attn loads the ledger in pages. The CLI ends a page with `showing N, M omitted, paginate with --before <id>`, and the dialog offers older rows on request.
-- **Harnesses**: attn keeps copies of Claude Code conversations only, so Keep conversation shows on Claude rows that ran at the home. /clear moves Claude Code, /new moves Codex, /resume both, and Codex /agents under shared Codex. Under shared Codex the session left behind stays live and hidden instead of closing ([shared-codex.md](shared-codex.md)). Two Claude Code or Pi tiles on one conversation are two sessions, and both warn ([harnesses.md](harnesses.md)).
+- **Harnesses**: attn keeps copies of Claude Code conversations only, so Keep conversation shows on Claude rows that ran at the home. In Claude Code, /clear and /resume move a terminal to another conversation. In Codex, /new and /resume do, and so does /agents under shared Codex. Under shared Codex the session left behind stays live and hidden instead of closing ([shared-codex.md](shared-codex.md)). Two Claude Code or Pi tiles on one conversation are two sessions, and both warn ([harnesses.md](harnesses.md)).
 - **Keyboard and native input**: ⌘⇧L opens the ledger, `]` moves across its lists, arrows walk rows, Enter runs a row's first action, `2` asks to forget a kept conversation, and Escape closes. In the Forget confirmation, Enter is Cancel and `2` is "Forget now".
 - **Compatibility across versions**: a later version reads today's sessions and kept conversations through the store's migrations. `attn conversation forget` against a daemon from before `--unlink-crew-letters` deletes the copy, then exits 1 with `daemon returned no conversation forget result`. Restart the daemon on the CLI's build before driving `forget`. The CLI's stale-daemon warning shows only when the version numbers differ, so two builds of the same version give no warning.
 

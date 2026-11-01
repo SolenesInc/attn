@@ -21,7 +21,7 @@ switch.
    something together. End with the first question, about your name.
 2. Agree your name and charter, as your launch guidance says. Rename yourself
    with `attn crew rename chief <name>` only if the user picks a name. You keep
-   working from your home. The home's folder takes the new name at your next
+   working from your member home. Its folder takes the new name at your next
    wake.
 3. Set up delegation roles. Read the delegation-roles reference, the
    `<harness>_available` lines of `attn settings list --all`, and
@@ -41,7 +41,7 @@ switch.
    folder and the notebook reference, then show the layout:
 
    ```text
-   index.md             the layout, which agents read first
+   index.md             the layout, read first by agents
    journal/<date>.md    the record of each day
    knowledge/           the knowledge base: projects, areas, resources, archive
    seeds/<id>/          files attached to seeds
@@ -88,8 +88,8 @@ Agree your name and charter. Read `attn crew list`, `attn delegate roles show`
 and the settings that matter. Use the full path's roles and Notebook steps only
 for what's missing, and skip what's set up, including queue flow if they already
 use it. If `attn crew list` shows a member whose home is outside the Notebook,
-offer to move the home with `attn crew move-home <member>`, which needs the
-member asleep. Offer callouts for your row and other parts of the app the user
+offer to move the home with `attn crew move-home <member>`. The command needs
+the member asleep. Offer callouts for your row and other parts of the app the user
 may not know. Don't offer to build something unless the user asks. Offer to help attn's
 maintainers, then close.
 
@@ -114,12 +114,13 @@ Then explain vents, an additional layer. A vent is a short report that an
 agent files when attn hinders the agent. A vent includes the agent's own words,
 so the user can read each vent in **Settings → Analytics** first. While sharing is
 on, the user can send just the vents they choose, with `x` on a vent, or turn
-on `analytics.share_vents` to send every new attn vent. Ask before you turn
-that setting on.
+on `analytics.share_vents` to send every new attn vent. Ask the user before you
+turn on `analytics.share_vents`.
 
 Also offer `analytics.tool_vents`: agents can also vent about the user's own
 tooling and environment, such as skills, other CLIs and harness permissions.
-Tool vents stay on this machine. Ask before you turn that setting on.
+Tool vents stay on this machine. Ask the user before you turn on
+`analytics.tool_vents`.
 
 If the user wants to read records or vents without publishing anything, offer
 local recording: `analytics.enabled` on, `analytics.sharing_enabled` off.

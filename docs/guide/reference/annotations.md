@@ -28,8 +28,8 @@ Four labels also tell the agent what to do:
 ## In a terminal
 
 Hold Option (Alt on Linux) and drag across text the agent wrote. A small
-popup opens on the selection: pick a label, ⚡ for more labels, 💬 to write a
-comment, or 🗑 to drop it. In the comment box, Cmd+Enter (Ctrl+Enter on Linux)
+popup opens on the selection: pick a label, click ⚡ for more labels, click 💬 to
+write a comment, or click 🗑 to drop the annotation. In the comment box, Cmd+Enter (Ctrl+Enter on Linux)
 saves the comment. The passage stays highlighted. Option-click the passage (Alt-click
 on Linux) to change the annotation.
 
@@ -39,10 +39,7 @@ box at the bottom ("Anything else to say with these?") adds a note that goes
 with the batch.
 
 Send the batch with **Send all**, or Cmd+Enter (Ctrl+Shift+Enter on Linux)
-while the agent's tile is active. The agent receives the batch as your message,
-headed "Feedback on your last message.", then your note, then each
-annotation in the order the annotations appear: the annotation's number, its
-label, the quote, and your comment.
+while the agent's tile is active. The agent receives the batch as your message. The message starts with "Feedback on your last message.", then your note, then each annotation in order. Each annotation shows its number, its label, the quote, and your comment.
 
 You can annotate only text the agent wrote. Attn finds the text in the agent's
 own transcript, so if you drag over your prompt, the harness's own interface,
@@ -75,9 +72,7 @@ seed, and ▾ offers **Note on seed**, which adds the batch to the seed's log
 instead. A seed nobody tends offers only the note. Cmd+Enter (Ctrl+Shift+Enter
 on Linux) sends while the tile is active.
 
-The agent receives a message headed "Markdown Annotations" with the file's
-path, then each annotation with its line numbers, the quote, its label and
-comment, then a count of the labels you used.
+The agent receives a message headed "Markdown Annotations" that gives the file's path. The message then lists each annotation with its line numbers, the quote, the label and the comment, and ends with a count of the labels you used.
 
 ## Details
 
@@ -102,5 +97,5 @@ Yes. The batch arrives as your message, and in queue flow [auto-settle](queue.md
 <details>
 <summary>Can I annotate a shell?</summary>
 
-No. Terminal annotations need an agent's transcript to know which text it wrote, and a shell has none.
+No. Attn finds the text an agent wrote in the agent's transcript, and a shell has no transcript.
 </details>

@@ -40,10 +40,10 @@ opens it below.
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
-Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles, and continue
-to the next desktop when you reach the edge. When you close a tile, you land on
-the tile you used before it. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) walk
-back and forward through the tiles you've looked at.
+Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
+a desktop, they move to the next desktop. When you close a tile, Attn takes you
+to the tile you used before it. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux)
+move back and forward through the tiles you've looked at.
 
 When a desktop gets crowded:
 
@@ -95,7 +95,7 @@ Closing a desktop closes every agent and shell on it, and their sessions wait in
 <details>
 <summary>Where does an agent open when I resume it?</summary>
 
-Resuming a closed session from the ledger puts it back on the desktop it was last on. When that desktop is gone, Attn brings it back if it had a digit, and otherwise opens the agent on the desktop you're on.
+Resuming a closed session from the ledger opens the agent on the desktop it was last on. If that desktop is gone and had a digit, Attn recreates the desktop with that digit. If it had no digit, Attn opens the agent on the desktop you're on.
 </details>
 
 <details>
@@ -119,13 +119,13 @@ Pressing the digit of the desktop you're on takes you back only while you're loo
 <details>
 <summary>Where does a tile land when I move it to another desktop?</summary>
 
-Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. Dropping a tile on a desktop in the sidebar docks the tile along that desktop's left side at about a third of its width, and dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
+Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. Dropping a tile on a desktop in the sidebar docks the tile along that desktop's left side, at about a third of the desktop's width. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
 </details>
 
 <details>
 <summary>Which agents move when I move with delegates?</summary>
 
-The agent takes along every delegate it started that sits on the same desktop, plus the delegates those started, and each lands beside the agent that started it. Delegates on other desktops stay where they are along with anything they started (even on this desktop), and so do shells you split off the agent. The "Move with delegates to" commands appear in the command palette only when the agent you're looking at has a delegate of its own on its desktop, and they leave you where you are. An Option drop (Alt on Linux) on a sidebar desktop does the same move and takes you there.
+Attn moves every delegate that the agent started and that is on the agent's desktop, and the delegates those delegates started. Each delegate lands beside the agent that started it. Attn leaves behind delegates on other desktops, and anything those delegates started, even if it is on this desktop. Attn also leaves behind shells you split off the agent. The "Move with delegates to" commands appear in the command palette only when the agent you're looking at has a delegate of its own on its desktop. They leave you where you are. An Option drop (Alt on Linux) on a sidebar desktop makes the same move and takes you to that desktop.
 </details>
 
 <details>
@@ -137,11 +137,11 @@ Point the agent at a desktop by digit, by name in any case, by the label an unna
 <details>
 <summary>Why did zoom or focus turn off?</summary>
 
-Zoom stays on for its desktop while you switch desktops, and it follows whichever tile is active there. Focus on an agent ends when you look at another agent or leave its desktop, while focus on any other tile stays when you switch desktops. Turning one on turns the other off, and neither survives an app restart.
+Zoom stays on for its desktop while you switch desktops, and it applies to whichever tile is active there. Focus on an agent ends when you look at another agent or leave its desktop, while focus on any other tile stays when you switch desktops. Turning zoom on turns focus off, turning focus on turns zoom off, and neither survives an app restart.
 </details>
 
 <details>
 <summary>Why can't I delete a profile?</summary>
 
-Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, its Chief included, no crew members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked), no pending delegations and no running garden reviews. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
+Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, no awake Chief, no crew members other than the Chief and retired members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked), no pending delegations and no running garden reviews. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
 </details>

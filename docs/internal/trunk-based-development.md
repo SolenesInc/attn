@@ -31,11 +31,12 @@ landing changes, and pushes:
   are current.
 - `app/`: typecheck and lint.
 - `scripts/`: run the shell script tests.
-- The landing tests, which the script chooses for the commit it is about to
-  push: the baseline (the groups in `scripts/landing-tests` whose path pattern
-  matches the changes), the tests the landing changes, and every test that
-  failed on `main` and has since passed there, until the test has passed on 30
-  later commits of `main`. They are a few tests, not a suite. The script prints
+- The landing tests. `land.sh` chooses a few tests for the commit it is about to
+  push, not a suite. The choice has three parts. The first is the baseline: the
+  groups in `scripts/landing-tests` whose path pattern matches the changes. The
+  second is the tests the landing changes. The third is every test that failed
+  on `main` and has since passed there. A test of the third kind stays in the
+  choice until it has passed on 30 later commits of `main`. The script prints
   each test it added and why, each test's result (skipped tests included), and
   the command that reruns a failed test.
 
@@ -59,12 +60,12 @@ specification.
   of `main`, in the lane where it failed. A commit where the test did not run
   does not count, and a new failure starts the count over.
 - Runs of unlanded or uncommitted work never count as `main`'s health.
-- A landing only counts a failed test that is gone from the checkout. Native
-  scenarios have no landing recipe and stay with CI. A landing lists a native
-  scenario that has not cleared as unavailable.
-- The baseline still grows from red `main`. When the sheriff's repair lands,
-  the test that caught the failure joins its group in `scripts/landing-tests` if
-  the test runs in seconds.
+- `land.sh` counts a failed test that is gone from the checkout and does not run
+  it. Native scenarios have no landing recipe and stay with CI. `land.sh` lists a
+  native scenario that has not cleared as unavailable.
+- The baseline still grows from red `main`. When the test that caught the
+  failure runs in seconds, the sheriff's repair adds the test to its group in
+  `scripts/landing-tests` in the same landing.
 
 Without a synced history, `land.sh` runs the baseline and says so.
 `scripts/land.sh --baseline` lands with the baseline alone. Use `--baseline`
@@ -79,7 +80,8 @@ frontend suites and the scenario matrix, macOS included, run in CI on `main`
 after landing, and so do the combinations of changes that landed together.
 
 Reviewers catch a defect before landing, while the author still remembers the
-work and before other slices build on the defect. The review on `main` still reads every commit afterwards, with the slices of a plan side by side.
+work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the
+slices of a plan side by side.
 
 The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones. It is
 not a landing step.
@@ -106,20 +108,21 @@ delegation watch, even after harvest. Corrections are new landings.
 
 ## When main is red
 
-CI runs on `main` after every landing. Pushes that arrive during a run are
-batched into the next run. A red `main` opens the
+CI runs on `main` after every landing, and it batches pushes that arrive during
+a run into the next run. When Acceptance fails, CI opens the
 `Branch health: main acceptance` issue. The sheriff automation watches `main`'s
 CI and counts a run as red when any job in it failed, even when the run itself
-concluded `cancelled`. The sheriff never re-runs CI. The sheriff reads the first failed job as soon as
-that job fails, finds the commit that broke the job, and delegates an agent to
-fix forward when the fix is small and clear, or to revert the commit when the
-revert is clean. The fix lands like any other, and the next push run on `main`
-judges the fix. The issue records each failure once, with the failure's owner
-and the repair that landed, so a failure already owned or already repaired gets
-no second fix. Every revert gets an owner: the commit's live session, or a seed
-that the chief receives, to land the change again. When neither path is clearly
-right, the sheriff asks the user. The `sheriff` skill is the sheriff's
-procedure. Keep landing while `main` is red. A release waits for green.
+concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
+sheriff reads it, finds the commit that broke it, and delegates an agent
+to fix forward when the fix is small and clear, or to revert the commit when the
+revert is clean. The fix lands like any other, and the next push run on
+`main` shows whether the fix worked. The issue records each failure once, with
+the failure's owner and the repair that landed, so the sheriff does not fix a
+failure that already has an owner or a repair. Every revert gets an owner who
+will land the change again: the commit's live session, or a seed that the chief
+receives. When neither owner is clearly right, the sheriff asks the user. The
+`sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
+release waits for green.
 
 ## Releases
 

@@ -18,9 +18,13 @@ The records are the ones the daemon writes to its outbox, and
 | `GET /metrics` | Prometheus counters |
 | `GET /healthz` | `200` while ClickHouse answers |
 
+`attn_ingest_batch_bytes_accepted_total` counts the gzip bytes of every batch
+the service answers `200`, duplicates included. The deployment has an alert on
+this volume.
+
 The token identifies an install, not a person. The service stores only the
-token's SHA-256, and every `/v1/installs/me` request finds its install from the
-token, so no request can name another install. After a delete the token no
+token's SHA-256, and the service finds the install from the token on every
+`/v1/installs/me` request, so no request can name another install. After a delete the token no
 longer works.
 
 A batch body is gzip of newline-delimited JSON. The first line is
@@ -30,8 +34,8 @@ and streams it has never seen, so a newer build never loses data. The service
 enforces the shape and sizes, and a malformed line gets a `400` that names the
 line and the field.
 
-A record is stored once per install, stream and seq. A retried batch answers
-with its records counted as `duplicates` and adds no rows.
+A record is stored once per install, stream and seq. The service answers a
+retried batch with its records counted as `duplicates` and adds no rows.
 
 ## Limits
 
@@ -56,8 +60,8 @@ this request would produce. A `429` also says when to retry:
 | `record_line_bytes` | 64 KiB | 413 | guessed: 4× the 16 KB vent text the vent tool will allow. Remeasure from the largest real line |
 
 Records and bytes count against the event and byte limits whether or not they
-turn out to be duplicates. A refused batch counts nothing. The service handles
-one install's batches and delete one at a time, so concurrent retries count as
+turn out to be duplicates. A refused batch counts nothing. The service handles the
+batches and the delete of one install one at a time, so concurrent retries count as
 duplicates and a delete leaves nothing behind. The service decodes at most 2
 batches at once across all installs, and the rest wait their turn. A batch at
 the 16 MiB limit took the service to 130 MiB resident (measured 2026-10-24),
@@ -70,9 +74,10 @@ Every stored row keeps a keyed hash of the address that sent it
 
 ## Quarantine
 
-Insert an install id or an address hash into the `quarantine` table. The service
-then refuses that install or address with `403` and the reason, on registration
-and on every batch:
+To refuse an install or an address, insert its install id or address hash into
+the `quarantine` table. The service then refuses it with `403` and the reason,
+on registration and on every batch. To remove the stored events of a
+quarantined install, run the `DELETE`:
 
 ```sql
 INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('i-…', '', 'flooded garbage names', now64());
@@ -98,9 +103,6 @@ Expose only `/v1/` publicly.
 `ghcr.io/solenesinc/attn-ingest:sha-<short>` for every push to `main` that
 changes the service, and on demand. The image holds only the static binary and
 runs as a non-root user. The deployment pins one of those tags.
-
-`attn_ingest_batch_bytes_accepted_total` counts the gzip bytes of every batch
-answered `200`, duplicates included. The deployment alerts on this volume.
 
 ## Running locally
 

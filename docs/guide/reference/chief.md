@@ -3,8 +3,7 @@
 The Chief is the agent that looks after your other agents. You shape work with
 it and decide what gets delegated. The Chief follows what each agent reports, brings
 you blockers, collisions and the decisions that need you, and journals your day
-in the Notebook. Ask it where things stand, or go straight to an agent and work
-beside it.
+in the Notebook. Ask the Chief where things stand, or go straight to an agent and work beside that agent.
 
 Each profile has at most one Chief. Make any agent your Chief with **Make chief
 of staff** in its ••• menu, or turn **Chief of Staff** on when you start one.
@@ -31,9 +30,7 @@ chief-of-staff/
 └── archive/           finished work
 ```
 
-`AGENTS.md` tells the Chief what good support looks like, how you make
-decisions, when to explore and when to act, how to propose delegations, and
-where your important code and systems live. A starter:
+In `AGENTS.md`, describe what good support looks like, how you make decisions, when to explore and when to act, how to propose delegations, and where your important code and systems live. A starter:
 
 ```md
 # My chief of staff
@@ -89,8 +86,7 @@ With **Settings → Experimental → Crew v2** (`crew_v2_enabled`) on, the Chief
 a [crew member](crew.md) instead of a session you mark, and every profile has
 one, named Chief:
 
-- `chief` reaches the Chief under any name, in `attn agent msg`, `attn crew` and the
-  other commands that take a member. You can rename it like any member.
+- `chief` always names the Chief in `attn agent msg`, `attn crew` and the other commands that take a member, even after you rename the Chief. You can rename the Chief like any member.
 - It can sleep, but it can't be closed or retired, and Attn never sends it
   heartbeats or puts it to sleep on its own. Deleting a profile needs its Chief
   asleep, and retires the Chief.
@@ -107,7 +103,7 @@ one, named Chief:
   with one click. The command palette has the same actions.
 - It runs on its own launch settings (`attn crew set chief`). The Chief's
   model, effort and context budget in **Settings → Background agents**, and
-  the Chief of Staff card on Home, apply only to a Chief session with Crew v2
+  the Chief of Staff card on the home screen, apply only to a Chief session with Crew v2
   off.
 - If a session was your Chief, the new Chief starts with that session's
   harness, model, effort and folder, and the session becomes an ordinary session.
@@ -130,8 +126,7 @@ you, and onboards you, one question at a time. Skip anything you don't want.
 
 Helping Attn's maintainers means publishing usage analytics to them. No
 personal information is sent. See [telemetry](telemetry.md) for what is recorded.
-Vents are an extra layer, short reports agents file when Attn gets in their
-way. You choose them separately and can send only the ones you pick. You can
+Vents are separate, short reports that agents file when Attn gets in their way. You choose them separately and can send only the ones you pick. You can
 also let agents vent about your own tools and environment. Those vents never
 leave your machine. Nothing turns on unless you say yes.
 

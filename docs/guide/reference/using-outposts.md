@@ -40,11 +40,7 @@ Attn starts the daemon over ssh and keeps it running when ssh disconnects.
 The machine must have logind's `KillUserProcesses` off, or Attn refuses and
 names the setting. No systemd service or root access is needed.
 
-Add continues until the daemons first pair. After ssh authentication succeeds,
-Attn finishes installation on the next connection attempt. An Add interrupted by
-a home restart continues when the home starts again. If installation fails, the
-row keeps the reason, and Attn waits for you to choose **Update to home build**
-or **Re-pair** before trying another install.
+Adding an outpost finishes when the two daemons pair for the first time. After ssh authentication succeeds, Attn finishes the installation on the next connection attempt. If a home restart interrupts the Add, it continues when the home starts again. If the installation fails, the row shows the reason, and Attn waits for you to choose **Update to home build** or **Re-pair** before it tries another install.
 
 The first connection pairs the daemons. The home remembers the outpost's
 identity, and the outpost accepts only that home until you release it.
@@ -76,8 +72,7 @@ install when nothing is installed yet.
 
 The home builds or downloads its matching Linux binary, sends it over ssh,
 verifies it, and reconnects. A home built from source cross-compiles the Linux
-binary, for Add as well as Update. Its first build takes about a minute; later
-builds reuse the build cache and take seconds. Running shells keep their
+binary, for Add as well as Update. The first build takes about a minute. Later builds reuse the build cache and take seconds. Running shells keep their
 processes. The old binary stays at `<install path>.previous`. Installation
 refuses if the outpost has `pty_shared_host_enabled` on or its database needs a
 newer build.
@@ -85,9 +80,7 @@ newer build.
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row says why and offers Update.
 
-Keep the data folders, because they hold the pairing identities and work.
-If a build migrated the database, an older build may need a backup restored
-with `attn db restore`.
+Keep the data folders, because they hold the pairing identities and work. To return to an older build after a build migrated the database, you may need to restore a backup with `attn db restore`.
 
 ## Open a shell on an outpost
 
@@ -105,7 +98,7 @@ The shell opens beside your agent and preserves
 focus. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 
-In an outpost shell, **⌘D** opens another shell on the same outpost, in the
+In an outpost shell, Cmd+D opens another shell on the same outpost, in the
 original shell's start directory.
 
 A lost connection leaves the shell running. After the connection returns, the screen comes from the outpost again. Shells also survive a restart of either
@@ -120,19 +113,16 @@ immediately and names the home. If the bridge is lost during a command, the
 error says that the command may have run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
-⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
+Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing
 opens a Mac file that happens to have the same path. With an outpost shell in
-front, the editor tile and the file opener (⌘P) start at your notebook root.
+front, the editor tile and the file opener (Cmd+P) start at your notebook root.
 
 ## Run agents on an outpost
 
-Install and log in to Claude Code or Codex on the outpost. Each machine uses its
-own harness executable and credentials. The home copies home settings, including
-monitor policy, read-only to outposts. Machine settings, including harness
-executables, stay local to each machine.
+Install and log in to Claude Code or Codex on the outpost. Each machine uses its own harness executable and credentials, because harness executables are machine settings. See [Read and change settings](#read-and-change-settings).
 
 The outpost's first Notebook sync must finish before an agent can start.
-An early spawn refuses and names the remaining work. From a home agent,
+Attn refuses an agent start that comes too early and names the remaining work. From a home agent,
 delegate onto an outpost with:
 
 ```sh
@@ -162,14 +152,12 @@ deleted, the ledger can offer to recreate the worktree on that outpost, fetching
 the branch first when needed. Attn refuses to resume a session whose outpost is
 unreachable or removed, and names the host.
 
-The chief and crew run only at the home. Attn refuses to spawn, wake or hand off
+The chief and crew run only at the home. Attn refuses to start, wake or hand off
 a crew member on an outpost, and refuses to make an outpost agent the chief. The
 refusal names that limit. Plugin harnesses, including Pi, also run only at the
 home.
 
-Outpost conversations have no kept copy at the home. If the harness deleted the
-conversation, Attn says it is no longer in storage when you resume it. Files
-sent by a remote agent open no tile and enter no recent-file list. Transcript
+Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent open no tile and enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.
 
 ## Start on an outpost from the launcher
@@ -219,11 +207,7 @@ refused in the launcher with the reason. A start on a stalled outpost waits.
 Pairing an outpost starts two-way sync of the shared Notebook. Each machine has
 its own folder, selected by its machine setting `notebook.root`. Read the
 resolved path with `attn settings get notebook.root.effective` on that machine.
-A profile that sets its own folder with `notebook.profile_root` keeps that
-folder at the home, unsynced. The profile's agents on an outpost see the shared Notebook,
-and `attn seed attach`, `detach` and `check report --evidence` refuse to run
-there for that profile's seeds and name the folder. Run the commands from a
-shell at the home. Files edited, created or deleted on either machine reach the
+A profile that sets its own folder with `notebook.profile_root` keeps that folder at the home and does not sync it. That profile's agents on an outpost see the shared Notebook. For that profile's seeds, `attn seed attach`, `detach` and `check report --evidence` refuse to run on an outpost and name the folder. Run the commands from a shell at the home. Files edited, created or deleted on either machine reach the
 others. Knowledge notes and seed artifacts stay ordinary files you can read and
 edit with native tools. Append journal entries with
 `attn journal append --entry '<text>'`, so concurrent appends share the home's
@@ -298,8 +282,7 @@ immediately to close, split, kill or reload a live terminal, naming the outpost.
 A stopped, recoverable agent still supports record-only close, rename and
 priority changes.
 
-Offline agents keep their queue rows, marked, but Next, automatic advance, ⌘J
-and waiting counts skip them. Attn hides the actions Settle, snooze, unsnooze,
+Offline agents keep their queue rows, marked, but Next, automatic advance, Cmd+J and waiting counts skip them. Attn hides the actions Settle, snooze, unsnooze,
 cancel countdown and submit annotation. A running auto-settle countdown shows
 frozen, and the assistant window names the unreachable outpost. Rename and
 priority remain available.
@@ -313,28 +296,21 @@ While the home is connecting to an outpost, each tile says
 starts, when you turn Outposts on, and when you add or re-pair an outpost. The
 terminal's sidebar, queue and home screen rows keep their usual appearance.
 
-A stalled outpost's tiles say "<name> not responding". The connection stays open
-and still sends typing, without waiting for earlier keys to be answered. If the
-connection ends before a key's answer arrives, Attn cannot tell whether that key
-ran. Attn does not flash the tile for that key. A key that Attn handed to the bridge may still reach the outpost when the outpost comes back, so look at the shell before you
-retype.
+A stalled outpost's tiles say "<name> not responding". The connection stays open and still sends typing, without waiting for earlier keys to be answered. If the connection ends before a key's answer arrives, Attn cannot tell whether that key ran, and the tile does not flash for it. Attn may have handed that key to the bridge, so the key can still reach the outpost when the outpost comes back. Look at the shell before you retype.
 
 A tile flashes red for a key only when Attn refuses the key before handing it to
 the bridge, or the outpost answers with an error. The tile says how many keys
 may not have been sent, and clears that message when a key you type goes out
 again. Attn never retries a key.
 
-A tile that stays open keeps its last screen. If you switch desktops or
-restart the app while the terminal is offline, its tile shows an empty
-terminal and tells you that the screen is on the outpost. When the connection
-returns, the tile attaches and shows the current screen.
+While a terminal is offline, an open tile keeps its last screen. If you switch desktops or restart the app, the tile instead shows an empty terminal and says that the screen is on the outpost. When the connection returns, the tile attaches and shows the current screen.
 
 ## Connection states
 
 | State | Meaning |
 | --- | --- |
 | connecting | The home is connecting to the outpost. |
-| connected | The home and the outpost hear each other. |
+| connected | Each side receives the other's messages. |
 | stalled | Nothing heard for 3 seconds, usually a brief network problem. It returns to connected on its own. |
 | lost | Nothing heard for 60 seconds, or the connection dropped. Attn keeps reconnecting. |
 | refused | Attn won't connect until you act. The error says why. |
@@ -347,11 +323,11 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 
 | Refused because | What to do |
 | --- | --- |
-| the two use different instance names | Start an outpost with the same instance name as the home. |
-| the two run different builds | Choose **Update to home build** on the row or **Update outposts** in the banner. |
-| the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
-| the outpost is paired to another home | This home installs nothing there, even when its build differs. Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
-| ssh needs a host-key answer, passphrase, password, 2FA, or security-key touch | Choose **Connect in a terminal** and answer ssh there. When it succeeds, the outpost connects automatically. Close the terminal with **⌘W**. |
+| the home and the outpost use different instance names | Start an outpost with the same instance name as the home. |
+| the home and the outpost run different builds | Choose **Update to home build** on the row or **Update outposts** in the banner. |
+| the outpost changed host key or daemon id | Someone reinstalled the outpost or replaced its data folder. If you expect that change, choose **Re-pair**. |
+| the outpost is paired to another home | This home installs nothing there, even when the outpost's build differs. Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
+| ssh needs a host-key answer, passphrase, password, 2FA, or security-key touch | Choose **Connect in a terminal** and answer ssh there. When it succeeds, the outpost connects automatically. Close the terminal with Cmd+W. |
 | ssh says the machine's host key changed | Choose **Connect in a terminal** to read ssh's refusal. Check the machine's identity and follow ssh's message to fix your known hosts before trying again. |
 | it is the same outpost as another row | You added it twice under two destinations. Remove one. |
 
@@ -367,8 +343,7 @@ says so.
 **Remove** closes the outpost's terminals across all profiles. Over ssh, Remove
 releases the outpost's enrollment to this home, stops the outpost's daemon for
 the home's instance, then exits that outpost's ssh master and removes the row.
-An outpost enrolled to another home, such as one whose Add this home was
-refused, keeps its enrollment and its running daemon. Remove keeps the binary,
+An outpost enrolled to another home keeps its enrollment and its running daemon. That includes an outpost for which this home's Add was refused. Remove keeps the binary,
 `<install path>.previous`, the data folder, and the Notebook folder on the
 outpost.
 

@@ -8,7 +8,7 @@ Performance checks record trends. None fails a PR.
 go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 ```
 
-`allocs/op` is the stable signal. `ns/op` compares only on the same machine.
+`allocs/op` is the stable signal. Compare `ns/op` only between runs on the same machine.
 For PRs that touch those packages, the `Bench A/B` workflow runs base and head
 on one runner and posts the `benchstat` delta in the workflow summary.
 
@@ -23,7 +23,7 @@ failing the exit code.
 | Scenario | Measures | Command |
 | --- | --- | --- |
 | Baseline | RSS with N sessions | `pnpm --dir app run real-app:scenario-perf-baseline -- --sessions 8 --stream 2` |
-| Cold/warm | RSS fresh and after a workload | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
+| Cold and warm | RSS fresh and after a workload | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
 | Leak soak | Retained-RSS slope across session cycles | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-leak-soak -- --cycles 12` |
 
 Cold/warm and leak soak wipe their data, so they need a dedicated instance

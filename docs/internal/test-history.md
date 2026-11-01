@@ -23,8 +23,9 @@ Each of these commands runs through
 The runner is `go`, `vitest`, `playwright` or `native`. For `go`, the command is
 the arguments to `go test`: capture runs `go test -json` and prints the text
 `go test` itself prints. The output and the exit status are the command's own.
-When the spool cannot be written, capture warns that history will not keep
-the run, still writes `--receipt-out`, and the run goes on.
+When capture cannot write to the spool (described below), it warns that history
+will not keep the run. It still writes `--receipt-out` and runs the command to
+the end.
 
 - `--unit` names a requested unit (see [Receipt](#receipt)). A unit that reports
   nothing shows as `MISSING` in `summary`.
@@ -84,8 +85,8 @@ machine's receipts. The service imports CI's receipt artifacts automatically.
 - Sync downloads this repository's receipts into `mirror/<id>.json.zst`,
   resuming after the cursor in `mirror.json`. Sync asks for each page as one zstd
   stream, about a thirtieth of the page's JSON, because receipts repeat the same
-  test names. A cursor read from another service or repository empties
-  `mirror/` and starts the download over. Until that download
+  test names. When the cursor in `mirror.json` was read for another service
+  or repository, sync empties `mirror/` and starts the download over. Until that download
   finishes, no sync has succeeded. The service treats every spelling of a
   repository as one, so a checkout whose origin is spelled
   `github.com/solenesinc/attn` receives CI's `github.com/SolenesInc/attn`
@@ -195,9 +196,7 @@ runs:
 failure stops the push.
 
 - `land` prints each added test with the commit and lane where it failed, its
-  passes since, and how many more passes clear it. `land` also prints each red,
-  missing baseline or unavailable test with the reason, the baseline's size,
-  and how many failures have cleared or are gone from the checkout. `land`
+  passes since, and how many more passes clear it. `land` also prints each red test, each missing baseline unit, and each unavailable test with its reason, the baseline's size, and how many failures have cleared or are gone from the checkout. `land`
   requests a baseline unit missing from the checkout, such as a renamed test,
   anyway. The run reports the unit `MISSING`, and the landing fails until the
   unit's line in `scripts/landing-tests` names a test again.
@@ -267,12 +266,12 @@ The 30-pass threshold catches 40 of 50 observed recurrences: over 312 main commi
 40 of the 50 tests that failed again after passing on `main` did so within 30
 passing revisions. At 30, a landing added a median of 7 tests and at most 36,
 and the largest set took this Mac's Go landing tests from 20.6s to 38.3s.
-`testhistory.ClearedAfter` keeps the measurement. Remeasure the threshold when
+The measurement is recorded in the comment on `testhistory.ClearedAfter`. Remeasure the threshold when
 recurrences get past the landing tests, or when landings add too many tests or
 run slowly.
 
 A failed test that is no longer in the checkout, such as a renamed or removed
-test, is `MISSING`. `land` only counts it. A baseline unit missing from the
+test, is `MISSING`. `land` prints only a count of such tests and runs none of them. A baseline unit missing from the
 checkout is also `MISSING`, and `land` requests it anyway, as above. A test
 whose file does not build on this platform, such as a `_linux_test.go` test on
 a Mac, is `UNAVAILABLE`, with the reason. A native scenario that has not
@@ -289,21 +288,18 @@ samples.
 - A Vitest or Playwright file costs the wall time of a command that reported
   only that file, setup included. Pricing ignores a run filtered to some tests
   (Vitest `-t`, Playwright `--grep`).
-- A Go selection runs as one `go test` command, whose packages run in parallel.
-  The selection costs the command's setup, plus the slowest package: that
-  package's own setup and teardown plus the times of its selected tests. The
-  command setup costs the receipt's wall time less its slowest package, and
-  each package's setup costs its time less its tests' times.
+- A Go selection runs as one `go test` command, and its packages run in
+  parallel. The selection's price is the command setup plus the time of the
+  slowest package. A package's time is its own setup and teardown plus the times
+  of its selected tests. The command setup is the receipt's wall time minus the
+  slowest package's time. A package's setup is its time minus its tests' times.
 - Pricing ignores a Go receipt with a cached result, repeated attempts
   (`-count` above 1), a `-skip`, or a `-run` pattern naming subtests.
 
 ### Replay
 
 `replay --from <rev>` prints one JSON line per main commit after `<rev>`. For
-each commit, `replay` selects tests with the receipts that had finished by the
-commit's committer time, the history before the commit, and the commit's own
-list, tests and diff. Then `replay` compares what the baseline and the rule run
-(`baseline`, `landing`) with the failures later observed on that commit.
+each commit, `replay` selects tests from the history before the commit, which is the receipts that had finished by the commit's committer time, and from the commit's own list, tests and diff. Then `replay` compares what the baseline and the landing selection (`baseline`, `landing`) would run with the failures later observed on that commit.
 `replay` leaves out a receipt without a finish time, such as one `recover`
 sealed, because the time its results existed is unknown. `select` still reads
 that receipt.
@@ -313,9 +309,7 @@ Each selection's `estimate_ms` lists under `unpriced` the selected units that
 that commit: the median wall time of each run whose requested units are a
 baseline component (the Go baseline units together, or one app unit), summed.
 Components with no run are `missing`. `replay` counts runs with other
-requested units as `unattributed`. A failure that a selection included does not
-prove that the selection would have prevented it. A Linux failure, for one,
-need not fail on the machine that lands.
+requested units as `unattributed`. A selection that includes a test that later failed on that commit does not prove that the selection would have prevented the failure. For example, a Linux failure need not occur on the machine that lands.
 
 ## Failure report
 
@@ -326,8 +320,9 @@ in one lane:
 - A **flake** also passed on the commit of its last failure in that lane, in a
   retry or in another run of that commit, including each case that failed. A
   run that passed only other cases of the test does not make it a flake.
-- An **unresolved** failure did not: a break, fixed or not, or a flake nobody
-  ran again. Its earlier failures do not make it a flake.
+- An **unresolved** failure did not pass on the commit of its last failure. It
+  is a break (fixed or not), or a failure that nobody ran again on that commit.
+  Earlier failures of the test do not make it a flake.
 - **Passes since** counts the commits of `main` where the test passed afresh
   in that lane after its last failure, as [Clearing](#clearing) does. A flake
   with at least `--dormant-after` passes since (default 60) is dormant. That

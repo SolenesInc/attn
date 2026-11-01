@@ -31,11 +31,11 @@ Your stake is the seed named in the automation's opening message. When the
 user asks for the audit directly, plant one. At the end, harvest it with
 `attn seed harvest <stake> -m "<outcome> at <revision>: <summary>"`.
 
-The next pass looks for new ways in from a baseline: the revision of the
-newest pass that finished, ending clean or changed. A blocked pass never moves
-the baseline, because it may have stopped before its scan for new ways in
-finished or before its fixes landed. The interval it covered stays in the next
-pass's scan.
+The next pass scans for new ways in from the last audited revision. That is
+the revision recorded by the newest pass that ended clean or changed. A
+blocked pass does not move the last audited revision, because the blocked pass
+may have stopped before its scan for new ways in finished, or before its fixes
+landed. The next pass scans the interval that the blocked pass covered again.
 
 ## What you may change
 
@@ -89,11 +89,11 @@ the same setup, combine the recipes so you set up once. Check the out-of-date
 claims the subagents raised, but don't re-check the parts they found correct.
 
 Then look for ways into features that no map file lists yet. Find the
-baseline: run `attn seed search "feature map audit" --limit 50`, read the
+last audited revision: run `attn seed search "feature map audit" --limit 50`, read the
 harvest messages of the audit stakes, and take the newest revision among those
 that don't start with `blocked`. Passes from before these outcomes harvested
 only when they finished, so their revisions count. Read the commits from the
-baseline to your revision in `cmd/attn`, `app/src/shortcuts`,
+last audited revision to your revision in `cmd/attn`, `app/src/shortcuts`,
 `app/src/application` and `internal/prompts/content`. Only count a way in as missing when you can
 point at the source that adds it.
 
@@ -121,9 +121,11 @@ the instructions and try once more. If the doctor still fails, the pass is
 blocked.
 
 Don't commit anything until you have finished driving. `bridge` refuses to
-drive an app whose source changed since it was built, and a commit counts as a
-change. Editing feature files without committing is fine. Editing drive-attn's
-`scripts/` is not fine. After you edit the scripts, rebuild and launch again.
+drive an app whose source fingerprint changed since the app was built, and a
+commit changes the fingerprint. Editing feature files does not change the
+fingerprint, so edit them without committing. Editing drive-attn's `scripts/`
+does change the fingerprint. After you edit the scripts, rebuild and launch
+again.
 
 Some features can't be driven in a given run. Mark such a feature
 unreachable and write down what it needs that the run lacks, and what you

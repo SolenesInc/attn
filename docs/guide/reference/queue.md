@@ -13,8 +13,8 @@ The loop has three steps:
 ![The queue loop: Attn shows the agent waiting the longest, you prompt it and settle it, and Attn moves to the next agent waiting, or Home when nobody is](../diagrams/queue-loop.svg)
 
 Driving agents costs humans effort. We make impactful decisions much more often
-than before, so cutting the number of decisions saves mental energy. The queue
-flow cuts decisions: you stop asking yourself which agent to go to next, and
+than before, so cutting the number of decisions saves mental energy. Queue flow
+cuts decisions: you stop asking yourself which agent to go to next, and
 Attn picks the agent for you.
 
 We've seen this way of working increase throughput a lot.
@@ -28,9 +28,10 @@ Home and your crew, the agents waiting for you are listed oldest first.
 
 ## Turns
 
-In queue flow, it's always someone's turn: the agent's, while it does its work,
-or yours, while it waits for you. When it's your turn, the agent is owed a turn.
-When you hand the turn back, the agent is settled.
+In queue flow, every agent is either working or waiting for you. While an agent
+works, it is the agent's turn. When the agent finishes or asks you something, it
+is your turn, and the agent is owed a turn. When you settle the agent, the turn
+goes back to the agent.
 
 The "N waiting" line at the top of the queue counts how many agents are waiting
 for you. Click it, or press Cmd+J (Ctrl+Shift+J on Linux), to go to the agent at
@@ -54,8 +55,7 @@ You can settle an agent:
 ![Turns: it is the agent's turn until it finishes or asks you something, then it is your turn until you settle it](../diagrams/turns.svg)
 
 Settling takes you to the next agent waiting for you, or Home when nobody is.
-Cmd+Shift+E on an agent that's on its own turn takes you to the front of the
-queue.
+Cmd+Shift+E on an agent that is working takes you to the front of the queue.
 
 A snooze settles an agent for a period of time. Use it when you don't want to
 close the agent but can't make a decision yet. Three controls open the snooze choices: Cmd+Shift+S (Ctrl+Alt+S on Linux), the snooze button on the agent's row, and "Snooze this agent…" in the command palette. The choices are 30 minutes, an hour, 2, 4 or 8 hours, or until
@@ -95,7 +95,7 @@ Prompting an agent doesn't settle its turn, so the turn stays owed while the age
 <details>
 <summary>Why didn't settling take me to the oldest agent?</summary>
 
-Settling takes you to the agent after the one you settled, in queue order, and wraps to the top at the end. If you jumped into the middle of the queue, you carry on from there, and Cmd+J (Ctrl+Shift+J on Linux) takes you back to the top. A priority turn at the top always comes first. The same happens when the turn on screen closes through auto-settle or a snooze, while settling another agent from its row keeps you where you are.
+Settling takes you to the agent after the one you settled, in queue order, and wraps to the top at the end. If you jumped into the middle of the queue, settling continues from there. Cmd+J (Ctrl+Shift+J on Linux) takes you back to the top. A priority turn at the top always comes first. When auto-settle or a snooze closes the turn on your screen, you move the same way. Settling another agent from its row keeps you where you are.
 </details>
 
 <details>
@@ -107,7 +107,7 @@ Shells and the Chief are never owed a turn, and the Chief keeps its own slot in 
 <details>
 <summary>Where are my agents that aren't waiting?</summary>
 
-The sidebar lists as many waiting agents as fit, at least three, and a row below them counts the rest. Cmd+Shift+A (Ctrl+Alt+A on Linux) opens the full list, with a filter you can type into. The list shows the remaining waiting agents first, then the settled ones under Working, then the snoozed ones, with the snooze ending soonest on top. Cmd+Up and Cmd+Down (Ctrl+Shift+PageUp and Ctrl+Shift+PageDown on Linux) move you through that same order and wrap around at the ends, and Cmd+Option+Up and Down (Ctrl+Shift+Up and Down on Linux) do the same once you run out of tiles on the desktop.
+The sidebar lists as many waiting agents as fit, at least three, and a row below them counts the rest. Cmd+Shift+A (Ctrl+Alt+A on Linux) opens the full list, with a filter you can type into. The list shows the remaining waiting agents first, then the settled ones under Working, then the snoozed ones, with the snooze ending soonest on top. Cmd+Up and Cmd+Down (Ctrl+Shift+PageUp and Ctrl+Shift+PageDown on Linux) move you through that same order and wrap around at the ends. Cmd+Option+Up and Cmd+Option+Down (Ctrl+Shift+Up and Ctrl+Shift+Down on Linux) move you through the same order once you run out of tiles on the desktop.
 </details>
 
 <details>
@@ -125,19 +125,19 @@ Press Cmd+. (Ctrl+Shift+. on Linux), or click "Settling…" in the tile header. 
 <details>
 <summary>What happens on Home when nobody is waiting?</summary>
 
-When settling leaves nobody waiting, you land on Home with "All settled" and "Take me to the next agent that needs you" ticked. Attn then takes you to the next agent the moment a turn opens, unless you've gone somewhere else first. Going Home yourself with Cmd+Shift+H (Ctrl+Alt+H on Linux) leaves the box unticked until you tick it.
+When settling leaves nobody waiting, Attn takes you to Home. Home shows "All settled" and a ticked box labeled "Take me to the next agent that needs you". While the box is ticked, Attn takes you to the next agent as soon as a turn opens, unless you go somewhere else first. If you go Home yourself with Cmd+Shift+H (Ctrl+Alt+H on Linux), the box stays unticked until you tick it.
 </details>
 
 <details>
 <summary>What happens when a snoozed agent finishes or asks for approval?</summary>
 
-It stays snoozed, and its turn waits until the snooze ends. If the agent is waiting, needs approval, is idle or is unknown by then, the agent gets a turn dated to when the snooze ended, so the turn lines up behind turns that opened earlier. If the agent is still working, it goes back under Working and is owed a turn the next time it waits for you.
+The agent stays snoozed, and it has no turn until the snooze ends. If the agent is then waiting, needs approval, is idle or is unknown, it gets a turn dated to when the snooze ended, so the turn comes after turns that opened earlier. If the agent is still working, it goes back under Working and is owed a turn the next time it waits for you.
 </details>
 
 <details>
 <summary>Can the Chief or my agents snooze or prioritize agents for me?</summary>
 
-Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>` yourself. `<when>` is a duration such as `2h`, one of `tomorrow`, `saturday` or `monday` (9:00 unless you add a time, as in `"tomorrow 14:00"`), or an exact RFC 3339 time. An agent can snooze itself and the agents below it in its delegation chain, the Chief can snooze any agent in its profile, and from a terminal outside Attn you can snooze any agent. `attn session unsnooze <id>` follows the same rules. `attn session priority on|off --session <id>` sets or clears the flag on any agent. Without `--session`, the command acts on the agent running it. None of these settle a turn for you. An agent can put itself in your queue with `attn turn open` and take itself out with `attn turn settle`, but only for a turn it opened that way. A turn that opened when the agent stopped is yours to settle.
+Yes. Ask the Chief or an agent, or run `attn session snooze <id> --until <when>` yourself. `<when>` is a duration such as `2h`, one of `tomorrow`, `saturday` or `monday` (9:00 unless you add a time, as in `"tomorrow 14:00"`), or an exact RFC 3339 time. An agent can snooze itself and the agents below it in its delegation chain, the Chief can snooze any agent in its profile, and from a terminal outside Attn you can snooze any agent. `attn session unsnooze <id>` follows the same rules. `attn session priority on|off --session <id>` sets or clears the flag on any agent. Without `--session`, the command acts on the agent running it. Snoozing settles the agent's turn until the snooze ends. Unsnoozing and changing priority settle nothing. An agent can put itself in your queue with `attn turn open` and take itself out with `attn turn settle`, but only for a turn it opened that way. A turn that opened when the agent stopped is yours to settle.
 </details>
 
 <details>
@@ -163,9 +163,9 @@ do not need you. The setting is off by default. In queue flow:
   needs an approval or Attn can't tell what it's doing.
 - An agent waiting for you leaves the queue when a notification sets it working
   again. If the agent is on screen, you stay there, and settle moves you on as usual.
-- An agent that needs you runs `attn turn open`, which puts it in your queue
-  when it stops. Notifications do not take it out: you settle it, or the agent
-  runs `attn turn settle`.
+- An agent that needs you runs `attn turn open`. That command puts the agent in
+  your queue when the agent stops. Notifications do not take the agent out. You
+  settle the agent, or the agent runs `attn turn settle`.
 
 If you type into an agent while it works on a notification, the run is yours,
 and the agent goes into your queue as usual when it stops.

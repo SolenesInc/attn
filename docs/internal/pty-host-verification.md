@@ -40,8 +40,8 @@ Before the daemon touches a live host, it rehearses the move on a throwaway
 host running the same old build with a probe terminal. If the rehearsal fails,
 the daemon leaves the live host alone and the host's terminals show the reload
 notice. If the new build cannot take the terminals over, the new build hands
-them back to the build it replaced. A host started before this feature cannot
-move. Its terminals show the reload notice until the user reloads or closes
+them back to the build it replaced. A host started by a build from before hosts
+could move cannot move. Its terminals show the reload notice until the user reloads or closes
 them.
 
 ## Upgrade test
@@ -55,8 +55,8 @@ then checks that sessions survive daemon upgrades, backend toggles, host changes
 failing host builds, and a missing host, all in temporary data directories. CI
 runs it on macOS and Linux.
 
-`scripts/build-retained-pty-host.sh OUTPUT` builds the last host before host
-checks. With `ATTN_TEST_RETAINED_PTY_HOST=OUTPUT`, the shared-host integration
+`scripts/build-retained-pty-host.sh OUTPUT` builds the retained host, the last
+host build from before hosts could move terminals to a new build. With `ATTN_TEST_RETAINED_PTY_HOST=OUTPUT`, the shared-host integration
 tests verify that the current daemon keeps operating that host's sessions and
 never adopts it for new ones.
 

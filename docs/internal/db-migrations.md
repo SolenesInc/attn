@@ -5,7 +5,8 @@ does not support. This applies to daemon startup and CLI commands that open
 the database directly. Install a build that supports the database's migrations,
 or restore a backup taken before the upgrade with `attn db restore`.
 
-- Create a SQL migration from the repository root:
+- Create a SQL migration from the repository root. Use lowercase words
+  separated by underscores for the slug:
 
   ```sh
   go run ./cmd/db-migrations new session_priority
@@ -13,14 +14,15 @@ or restore a backup taken before the upgrade with `attn db restore`.
 
   The command creates `internal/store/migrations/<unix-microseconds>_<slug>.sql`
   with the current Unix timestamp in microseconds. The timestamp has one million
-  slots per second. Use lowercase words separated by underscores in the slug.
-  If this checkout already uses the timestamp, the command names the file and
-  refuses to overwrite it. Rerun the command to get the current timestamp.
-  Existing 14-digit UTC-second IDs remain supported. Write SQL in the empty file.
+  slots per second. Write your SQL in that empty file. If this checkout already
+  uses the timestamp, the command names the file and refuses to overwrite it.
+  Rerun the command to get the current timestamp. Existing 14-digit UTC-second
+  IDs remain supported.
 - Write plain SQL. Each migration runs once, so do not add existence guards to
-  accommodate another branch's schema. Keep the schema readable by system SQLite
-  on supported platforms, which can be older than the Go driver's bundled version.
-  Packaged-app checks exercise those readers too.
+  accommodate another branch's schema. Write schema that the system SQLite on
+  every supported platform can read. That SQLite can be older than the SQLite
+  bundled with the Go driver. Packaged-app checks also exercise the system
+  SQLite.
 - Use Go only for data logic SQL cannot express:
 
   ```sh

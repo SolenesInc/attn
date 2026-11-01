@@ -2,8 +2,8 @@
 
 Apply when output, files, or searches are large, and when work may outlast your context.
 
-Your context is finite and gets summarized, and what lives only in the context is lost or distorted. Route bulk work, such as wide searches, long logs, and large files, to a subagent when your harness has one, and keep the subagent's conclusion, not the payload. Point briefs at seeds and files instead of pasting their content.
+Your context is finite and the harness summarizes it, and what lives only in the context is lost or distorted. Route bulk work, such as wide searches, long logs, and large files, to a subagent when your harness has one, and keep the subagent's conclusion, not the payload. Point briefs at seeds and files instead of pasting their content.
 
-Keep what must survive in the seed. Write decisions and findings in the body, progress in notes, and attach artifacts. Size each phase so you finish it with room to spare.
+Keep what must survive in the seed. Write decisions and findings in the body, progress in notes, and attach artifacts. Size each phase so you finish it before the context fills.
 
 When the work will outlast your context, leave a handoff note on the seed. Write the note so that a fresh agent, or you after a summary, can resume from it. Suggest a handover when a fresh agent should take the work.

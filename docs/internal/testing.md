@@ -49,10 +49,11 @@ and [Daemon wire tests](daemon-wire-tests.md) say how each world arms them.
 
 A point marks the moment it holds. `pausepoint.At(name)` marks a moment, such
 as the instant before a step's first effect. `pausepoint.Done(name, err)` marks
-a finished step. It holds only when the step succeeded, and otherwise fails the
-waiting test at once with the step's error. To fault an operation, hold the
-operation at its own point, arm the fault, then release the hold. A hold on
-something the operation might wait for, such as a fake agent's boot, orders nothing unless the operation waits for that thing every time.
+a finished step. It holds only when the step succeeded. When the step failed, it
+fails the waiting test at once with the step's error. To fault an operation,
+hold the operation at its own point, arm the fault, then release the hold. A
+hold on something the operation only might wait for, such as a fake agent's
+boot, orders no steps unless the operation waits for it every time.
 Arm only points that some daemon run or worker reaches at least once during the
 test. If no run reaches an armed point, the test fails at cleanup and names the
 point, because a hold that nothing reached cannot order any step.
@@ -93,8 +94,8 @@ happened. No test sleeps or polls.
 - Stack tests move one stepped clock shared by the daemon and every PTY worker
   it starts. See [CLI stack tests](cli-stack-tests.md).
 - Browser end-to-end specs wait for what the page shows (`expect`,
-  `expect.poll`, `page.waitForFunction`), or install `page.clock` and run
-  forward the timers the behavior depends on.
+  `expect.poll`, `page.waitForFunction`), or install `page.clock` and advance
+  the timers the behavior depends on.
 - Scenarios step each daemon with the harness's `stepClock`, as the
   [harness guide](../../app/scripts/real-app-harness/AGENTS.md) describes.
 - A process signals that it is ready by opening a pipe the test reads.
@@ -102,16 +103,16 @@ happened. No test sleeps or polls.
   not start.
 
 A stepped timer the test never advances fails at the hang guard instead of
-passing slowly. `make lint-go` fails a `time.Sleep`, `time.Tick`,
-`time.NewTicker`, a bare `<-time.After` or a `time.After` deadline other than
-`fakeagent.HangGuard` in Go test code outside a `synctest.Test` body, and
-`scripts/testtimelint` lists the few allowed ones with their reasons.
-`pnpm --dir app run lint` fails a `waitForTimeout` in `app/e2e`, and in app,
-plugin and SDK tests a sleep on `setTimeout` or `Bun.sleep` and a poll with
-Testing Library's `waitFor` or `findBy*`, `vi.waitFor` or `expect.poll`.
-`.oxlintrc.json` lists the files still allowed, with their reasons.
-Heartbeats, kernel socket deadlines, the operating system's file events,
-syncthing's own timers and the shared PTY host keep real time.
+passing slowly. `make lint-go` rejects these in Go test code outside a `synctest.Test` body:
+`time.Sleep`, `time.Tick`, `time.NewTicker`, a bare `<-time.After`, and a
+`time.After` deadline other than `fakeagent.HangGuard`. `scripts/testtimelint`
+lists the few allowed exceptions with their reasons. `pnpm --dir app run lint`
+rejects `waitForTimeout` in `app/e2e`. In app, plugin, and SDK tests it rejects
+a sleep on `setTimeout` or `Bun.sleep`, and a poll with Testing Library's
+`waitFor` or `findBy*`, `vi.waitFor`, or `expect.poll`. `.oxlintrc.json` lists
+the files still allowed, with their reasons. Heartbeats, kernel socket
+deadlines, the operating system's file events, syncthing's own timers, and the
+shared PTY host keep real time.
 
 ### Wire
 
@@ -207,11 +208,12 @@ installed CLI.
 
 Before landing, run targeted tests for the behavior you changed, such as
 `./scripts/test-go.sh --packages -run TestName ./pkg` or one file with
-`pnpm --dir app exec vitest run`. The `land-on-main` skill is the rest of
-landing.
+`pnpm --dir app exec vitest run`. The `land-on-main` skill covers the remaining
+steps of landing.
 
 `--packages` passes the remaining arguments to `go test` without running the
-full suite. Leading `--unit` and `--receipt-out` options go to test history.
+full suite. `scripts/test-go.sh` passes leading `--unit` and `--receipt-out` options to
+`go tool test-history capture`.
 The runner and Makefile use `-trimpath` so unchanged packages can reuse build
 artifacts across worktrees. The runner gives targeted and full test runs the
 same isolated outer data directory, and each package's `TestMain` still creates

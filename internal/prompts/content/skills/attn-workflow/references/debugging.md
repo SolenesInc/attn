@@ -12,7 +12,7 @@ before choosing a fix.
 Read the errors, reproduce the behavior yourself on the surface where it was
 reported, and check relevant changes. Ask the user to reproduce only when you
 have a specific reason that the surface is out of your reach, and only after you
-drive the surface as far as it goes. Trace the failing data through the system.
+drive the surface as far as you can. Trace the failing data through the system.
 Compare the failing path with a working example, and examine the differences in
 code, configuration, and dependencies.
 
@@ -42,14 +42,14 @@ change that merely might help is a hypothesis, not a fix. When evidence refutes
 a hypothesis, revert what the hypothesis motivated. Run the original reproduction on
 the surface where the failure was reported. It must pass. A unit test
 alone shows branch behavior, not that the bug is gone. When the reproduction is
-a committed test, commit the test before the fix. You can then watch the test fail without the fix and pass with it.
+a committed test, commit the test before the fix. Run the test without the fix and watch it fail. Then run it with the fix and watch it pass.
 When the cause is a mistake that has happened before, fix the class too: follow
 [Correction](correction.md), or plant a seed for the class when the work falls
 outside the task.
 
 If two fixes that share an assumption have failed the same check, [Attack the
 premise](../principles/attack-the-premise.md) before the next fix. If the
-assumption fails, reassess the diagnosis and the approach.
+test shows that the assumption is false, reassess the diagnosis and the approach.
 Consider a broader design problem when the evidence supports one, and discuss
 scope changes with the user.
 

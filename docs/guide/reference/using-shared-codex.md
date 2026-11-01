@@ -74,16 +74,10 @@ Codex is out, a banner at the top of Attn offers it with **Install**. Close the
 banner and the same offer stays under the bell in the sidebar. Install opens a
 terminal tile running Codex's own update, so whatever the update prints, a
 failure included, stays in that tile. Shared Codex terminals don't show Codex's
-own update prompt, since Codex's Update now would exit the terminal. Exiting the
-terminal closes the session and archives the session's conversation.
+own update prompt, since Codex's Update now would exit the terminal, and exiting the terminal closes the session and archives the session's conversation.
 
 Attn reads which Codex is installed when a shared terminal opens, when the
-app-server starts, once a day, and when an update it ran finishes. When that
-isn't the Codex the app-server runs, Attn restarts the app-server on the
-installed Codex once no conversation runs a turn, including a turn that waits on
-an approval or on your answer to a question, and every shared terminal has
-finished starting. The banner names the sessions Attn waits on, and you can jump
-to each.
+app-server starts, once a day, and when an update it ran finishes. If the installed Codex is not the Codex the app-server runs, Attn restarts the app-server on the installed Codex. Attn restarts it when no conversation is running a turn, including a turn that waits on an approval or on your answer to a question, and every shared terminal has finished starting. The banner names the sessions Attn waits on, and you can jump to each one.
 
 - First Attn starts the installed Codex separately for a moment. If that Codex
   refuses to start, for example over a setting in your Codex config that the new
@@ -122,23 +116,18 @@ tiles**. From a terminal:
   latest ones, a restart and what the restart waits on, and the tiles still on
   an older Codex.
 - `attn codex update` runs Codex's own update in your terminal, then has Attn
-  read the installed Codex. After a plain `codex update`, Attn notices the new
-  Codex at its next read. `attn codex restart` reads the installed Codex at
-  once.
-- `attn codex restart` restarts the app-server once no turn runs, even if the
-  installed Codex is the one the app-server already runs.
+  read the installed Codex. After a plain `codex update`, Attn notices the new Codex at its next read.
+- `attn codex restart` reads the installed Codex at once, then restarts the app-server once no turn runs, even if the installed Codex is the one the app-server already runs.
   `attn codex restart --now` does what Restart now does, without first listing
   what each session would lose.
 
 ## Switching conversations
 
-`/new`, `/resume` and `/agents` change the conversation a terminal shows, and
-its tile shows that conversation's session at once, with its name and state.
+`/new`, `/resume` and `/agents` change the conversation a terminal shows, and the terminal's tile shows that conversation's session at once, with the session's name and state.
 The session you left stays open and **hidden**:
 
 - The hidden session keeps its state, so a session that was waiting for you
-  still waits. From then on the app-server tells Attn when the session's turn
-  runs, waits on an approval or asks you a question, and when that turn ends.
+  still waits. From then on the app-server tells Attn when the session's turn starts, when the turn waits on an approval or asks you a question, and when the turn ends.
   Switch a terminal back to the session with `/resume` or `/agents` and the
   terminal takes over again. An approval the session was waiting on shows in the
   terminal, and you answer it as usual.
@@ -155,10 +144,7 @@ stays open and hidden if you leave it without a prompt, like any other session.
 A new tile is the exception: until its first prompt, switching it to another
 conversation leaves no empty session behind.
 
-One switch shows late. When `/agents` takes a terminal back to a conversation
-that the terminal started and you never prompted, Codex doesn't tell the
-app-server, so the tile shows that conversation's session at your first prompt
-there.
+One switch shows its session late. When `/agents` takes a terminal back to a conversation that this terminal started and that you never prompted, Codex doesn't tell the app-server about the switch. The tile therefore shows that conversation's session only when you send the first prompt there.
 
 A session keeps the approval mode it launched with, YOLO or auto-approve,
 wherever its conversation opens: in any shared terminal with `/resume` or
@@ -180,9 +166,7 @@ hidden sessions in the queue**. They stay in the Sessions ledger.
 
 ## Names
 
-The session's name in Attn and the conversation's name in Codex follow each
-other: rename in either place and the other updates. If both change, Attn's
-name wins.
+The session's name in Attn and the conversation's name in Codex stay in sync: rename in either place and the other updates. If both change, Attn's name replaces Codex's.
 
 ## Closing and resuming
 
@@ -199,8 +183,7 @@ the setting says.
 
 - Codex lets one process write a conversation at a time. While the app-server
   holds a conversation, `/resume` of it in a plain Codex fails with
-  `already has an active writer`. `/resume` works once the app-server lets the
-  conversation go, about a minute after no terminal shows the conversation. The
+  `already has an active writer`. `/resume` works once the app-server releases the conversation, about a minute after no terminal shows the conversation. The
   session then runs plain in that terminal.
 - If Attn can't reach the app-server when a conversation starts, that
   conversation isn't written to disk and can't be resumed after a restart.
@@ -208,8 +191,7 @@ the setting says.
   app-server again on the next connection, and the terminals reconnect and
   resume the conversation they show. Hidden sessions whose turns stopped go idle
   at once. A terminal shows its stopped turn as interrupted once it reconnects.
-- A subagent's activity counts for the session of the conversation that
-  started it.
+- A subagent's activity belongs to the session of the conversation that started it.
 - In a shared terminal where you picked permissions with `/permissions`,
   Codex refuses `/resume` with `Permission overrides are not supported when
   resuming a remote task.` Resume the conversation from another shared

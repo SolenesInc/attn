@@ -18,8 +18,7 @@ Run a scene:
 
 Without `--out`, files land in `$TMPDIR/attn-demo/<scene>`. Copy the ones you
 want into this folder. Each run starts from an empty instance, creates its
-repos in `~/projects/attn-demo`, and removes them at the end. It refuses to
-start if that folder already exists. When you're done recording,
+repos in `~/projects/attn-demo`, and removes them at the end. The run refuses to start if that folder already exists. When you're done recording,
 `attn instance clean demo` removes the instance.
 
 Scenes:
@@ -66,10 +65,7 @@ export default {
   `claude` unless you pass `agent: 'codex'`.
 - `prompt` types like a person, and the stub plays the turn. The same turn
   works for both agents: `read`, `edit` and `run` become each agent's own
-  tools. A turn ends with `ask` (the session waits for you), `done` (it goes
-  idle) or `hold` after a `read`, `edit` or `run` (it keeps working until
-  the scene ends). `prompt` returns
-  once the session reaches that state.
+  tools. A turn ends in one of three ways: `ask` leaves the session waiting for you, `done` leaves it idle, and `hold` after a `read`, `edit` or `run` leaves it working until the scene ends. `prompt` returns when the session reaches the state that the turn ends in.
 - `demo.ui(action, payload)` sends an action to the instance's UI automation
   endpoint on localhost, which lets a script click, type and read the running
   app (`app/src/hooks/useUiAutomationBridge.ts`).

@@ -4,7 +4,7 @@ An agent can start another agent to work on something. The delegate is a full
 session you can open and steer, in any harness.
 
 If you are used to subagents, think of a delegation as a subagent that you can
-inspect and steer, because the delegate is a first-class agent.
+inspect and steer, because the delegate is a full agent.
 
 ## Delegating
 
@@ -12,7 +12,7 @@ Ask any agent to delegate work to another agent. The delegate opens next to the
 agent that started it, without taking your focus, or on whichever desktop you
 ask for.
 
-Attn keeps track of your delegation chain. Cmd+Shift+Up (Ctrl+Alt+O on Linux)
+Attn records your delegation chain. Cmd+Shift+Up (Ctrl+Alt+O on Linux)
 takes you from a delegate back to the agent that started it. To go the other way, click the chain button on an agent's sidebar row. The button lists everyone in the chain, and clicking an agent in the list takes you to that agent.
 
 ### The `attn delegate` command
@@ -61,17 +61,17 @@ can follow along. The agent can stop following with `attn seed unwatch`.
 
 ### Agents messaging each other
 
-Agents can message each other with `attn agent msg`, so you can ask the agent
-that started a delegate to pass something along. The target can be a session,
-a crew member, or a seed id. A seed id reaches whoever tends that seed now, or
-next if nobody does yet. The message waits in the recipient's inbox, and Attn
+Agents can message each other with `attn agent msg`. For example, you can ask
+the agent that started a delegate to send the delegate a message. The target
+can be a session, a crew member, or a seed id. A seed id reaches whoever tends
+that seed now, or whoever tends it next if nobody does yet. The message waits in the recipient's inbox, and Attn
 lets the recipient know it's there.
 
 ### Handing work to a fresh agent
 
 A handover gives a seed, and the seed's claim, to a new agent. The agent handing
 over the seed runs `attn delegate --seed <id> --handover -m "<what comes next>"`,
-with a role and folder like any delegation. The note goes on the seed. The
+plus a role and a folder, as in any delegation. The note goes on the seed. The
 previous agent keeps running until you close it or it closes itself.
 
 Handovers are how a Pathfinder passes an agreed plan to an Orchestrator or a
@@ -86,8 +86,8 @@ Asks are off by default. Turn them on in **Settings → Experimental → Asks**
 Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer, where you answer them
 without opening the agent's terminal. Attn types your answer into the
 agent's conversation as your message. When the ask is about a seed, the answer
-goes to whoever tends that seed by then, and Attn adds the answer to the seed as
-a note.
+goes to whoever tends that seed when you answer, and Attn adds the answer to the
+seed as a note.
 
 ## Roles
 
@@ -99,7 +99,8 @@ When making a delegation, the agent picks:
 - A way of working.
 
 In **Settings → Delegation**, you define delegation roles, each a combination of
-those choices. For each role you set:
+those choices. Your roles together make up the delegation table. For each role
+you set:
 
 - When to choose this role. The agent reads this to pick a role, so describe
   the work the role fits and what it's not for.
@@ -112,14 +113,14 @@ else" covers delegations no role fits. The switch at the top of **Settings →
 Delegation** turns the whole table off, and then agents pick harness and model on
 their own.
 
-Attn bundles its own delegation roles. Add them with "Add Attn roles" in
+Attn bundles its own delegation roles. Add them with **Add Attn roles** in
 **Settings → Delegation**, or with `attn delegate roles install`. Each role arrives
 without a model, and agents can't pick a role until it has one, so pick a model
 for each role you want agents to use. Adding the
 roles also installs the attn-workflow skill for your harnesses. The
 bundled roles need the skill. Any agent on your computer can use the skill,
-although the skill is built for use inside Attn. To change how a bundled role works, use "Make
-an editable copy".
+although the skill is built for use inside Attn. To change how a bundled role works, use **Make
+an editable copy**.
 
 Agents can read and change the saved table for you with `attn delegate roles`
 (`attn delegate roles --help` lists the commands), for example to add Attn's
@@ -146,8 +147,8 @@ hear about it in its inbox: readiness, failed checks, review findings, human
 comments and replies, reopened review threads, and monitoring outages. Watches
 survive restarts, and Attn doesn't notify the agent again about an observation
 that hasn't changed. Feedback already on the PR at the first check is the
-baseline. Changing modes keeps that history. If you unwatch and then watch
-again, the watch starts a new baseline.
+baseline. Changing the mode keeps that baseline. If you unwatch and then watch
+again, the new watch starts a new baseline.
 
 | Mode | Ready when |
 |---|---|
@@ -155,8 +156,9 @@ again, the watch starts a new baseline.
 | `codex` | `green`, plus the Codex app's 👍 and no 👀 after a 30-second settling window. Reactions are best effort, since GitHub doesn't tie them to a commit. |
 | `formal-review` | GitHub's overall approval. `--reviewer <login>` requires that reviewer's current verdict instead. |
 
-Comments, threads, requested changes and failed checks are feedback the agent
-hears about, not extra conditions for ready. A watch never changes anything on
+Apart from the conditions in the table, comments, threads, requested changes
+and failed checks are feedback the agent hears about. None of them adds a
+condition for ready. A watch never changes anything on
 GitHub and never grants permission to merge.
 
 `attn pr status` lists the watches, and `attn pr unwatch <url>` stops a watch and
@@ -172,11 +174,11 @@ garden. A seed is a ticket, like one in Jira or Linear, kept inside Attn. If you
 know [beads](https://github.com/steveyegge/beads), the garden works much like
 beads.
 
-Seeds can contain other seeds recursively, and each seed can be delegated to an
-agent to work on, or a single agent can work across several seeds.
+Seeds can contain other seeds at any depth. You can delegate each seed to an
+agent, or one agent can work across several seeds.
 
-A seed with other seeds is called a plot. Seeds can be taken by agents (tended),
-completed (harvested), dropped (withered), or put on hold (parked).
+A seed with other seeds is called a plot. Agents tend a seed to take it,
+harvest it to complete it, wither it to drop it, and park it to put it on hold.
 
 Cmd+Shift+T (Ctrl+Alt+G on Linux) opens the garden, with every seed and where it
 stands.
@@ -205,7 +207,7 @@ The delegate keeps running with its seed, and you can still open, steer, and clo
 <details>
 <summary>How does the agent that started a delegate hear how it's going?</summary>
 
-Through the garden. Each new delegation starts a watch on the delegate's seed, and a watch covers every seed under the delegate's seed, including seeds planted later. The agent that delegated hears when a seed there moves, when a note there is marked to ring, and when blocked work there becomes ready. Plain notes stay quiet, and nobody hears about their own moves. Attn merges several updates on one seed into one update until the agent reads it. `attn seed unwatch <id>` removes a watch. Restarting or resuming the delegation does not bring the watch back, but `attn seed watch <id>` does.
+Through the garden. Each new delegation starts a watch on the delegate's seed. The watch covers every seed under that seed, including seeds planted later. The agent that delegated hears when any of those seeds moves, when a note on any of them is marked to ring, and when blocked work among them becomes ready. Plain notes do not notify the agent, and an agent never hears about its own moves. Attn merges several updates on one seed into one update until the agent reads it. `attn seed unwatch <id>` removes a watch. Restarting or resuming the delegation does not bring a removed watch back, but `attn seed watch <id>` does.
 </details>
 
 <details>
@@ -217,7 +219,13 @@ No. The delegate's first prompt names the delegate's seed and tells the delegate
 <details>
 <summary>How does an agent pick a role, and what if no role fits?</summary>
 
-The agent reads your table with `attn delegate roles`, which lists only the roles that are on and have a model set for their default, and picks the role whose "When to choose this role" text fits the work. Within that role the agent takes the alternative whose condition fits, or else the default, so an alternative without a condition is never picked. When no role fits it uses Anything else, and when Anything else has no model, or the whole table is off, the agent picks the harness and model itself. The table guides agents rather than locking them in, so a role or model you ask for applies to that one delegation. Table changes apply from the next delegation, while running delegates keep what they started with.
+The agent reads your table with `attn delegate roles`. The command lists only the roles that are on and have a default model. The agent picks the role whose "When to choose this role" text fits the work.
+
+Within that role, the agent takes the alternative whose condition fits, and otherwise the default. An alternative without a condition is never picked.
+
+When no role fits, the agent uses Anything else. When Anything else has no model, or the whole table is off, the agent picks the harness and model itself.
+
+A role or model you ask for applies to that one delegation, because the table guides agents and does not bind them. Table changes apply from the next delegation. Running delegates keep the settings they started with.
 </details>
 
 <details>
@@ -229,25 +237,25 @@ It adds the Attn roles your table doesn't have yet, each without a model, so age
 <details>
 <summary>Do Attn's roles change when Attn updates, and what does an editable copy change?</summary>
 
-Attn maintains the text of its own roles and updates the text with releases, while the models and alternatives you set stay yours. "Make an editable copy" adds a custom role right below the original, named like the original with "(custom)" at the end, starting from the current text, models, alternatives, and on/off state. Attn never changes the copy after that. The original stays in your table, so turn off or delete the original if the copy should replace it.
+Attn maintains the text of its own roles and updates the text with releases, while the models and alternatives you set stay yours. **Make an editable copy** adds a custom role right below the original, named like the original with "(custom)" at the end, starting from the current text, models, alternatives, and on/off state. Attn never changes the copy after that. The original stays in your table, so turn off or delete the original if the copy should replace it.
 </details>
 
 <details>
 <summary>What happens to a delegate's seed when the delegate closes?</summary>
 
-The seed doesn't move. The seed keeps its state and still names the closed session as its tender, but the claim stops counting, so any agent can tend or delegate the seed without `--force`. When an agent closed the delegate, Attn adds a note to the seed with who closed it and why. Resuming the closed session makes the claim count again.
+The seed doesn't move. The seed keeps its state and still names the closed session as its tender, but the claim no longer blocks anyone, so any agent can tend or delegate the seed without `--force`. When an agent closes the delegate, Attn adds a note to the seed that says who closed it and why. Resuming the closed session makes the claim apply again.
 </details>
 
 <details>
 <summary>Can an agent close the delegates it started?</summary>
 
-Yes. An agent can close itself and any agent below it in its delegation chain, delegates of delegates included, and the Chief can close any agent in its profile, while any other agent is refused. When a crew member started the delegate, the member's later sessions can close it too. Each agent close needs a reason of up to 400 characters, and the ledger shows the reason on the closed session.
+Yes. An agent can close itself and any agent below it in its delegation chain, delegates of delegates included. The Chief can close any agent in its profile. Attn refuses any other agent. When a crew member started the delegate, the member's later sessions can close it too. Each close by an agent needs a reason of up to 400 characters, and the ledger shows the reason on the closed session.
 </details>
 
 <details>
 <summary>What do the seed states mean, and who can move a seed?</summary>
 
-Planted is open with nobody on it, and growing means an agent or crew member has claimed (tended) the seed. Parked means the seed is on hold with no claim. Some places label it dormant. Harvested (done, with a summary of what got done) and withered (dropped) are closed until someone replants them. The garden board shows these as Ready, In progress, Parked, and Closed. Any agent can move a seed with `attn seed`, but an agent needs `--force` to take a seed that another agent is tending, unless the agent sits above that agent in the delegation chain or is the profile's Chief. In the garden you can park, harvest, wither or replant any seed, even one an agent is tending.
+A planted seed is open and nobody tends it. A seed is growing while an agent or crew member tends it. A parked seed is on hold and has no tender. The app labels it Dormant in some places. A harvested seed (done, with a summary of what got done) and a withered seed (dropped) stay closed until someone replants them. The garden board shows planted, growing, parked and closed seeds as Ready, In progress, Parked and Closed. Any agent can move a seed with `attn seed`. To take a seed that another agent tends, an agent needs `--force`, unless it sits above that agent in the delegation chain or is the profile's Chief. In the garden, you can park, harvest, wither or replant any seed, even one an agent tends.
 </details>
 
 <details>

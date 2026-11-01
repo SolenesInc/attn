@@ -3,11 +3,11 @@
 ## Release notes
 
 Release notes come from the commits that land on `main`.
-`scripts/compile-changelog.sh` reads the commits since the previous release,
-groups them by their `Attn-Seed:` trailers, and has Claude write the
-`CHANGELOG.md` section from each seed's title, description, and notes and from
+`scripts/compile-changelog.sh` reads the commits since the previous release and
+groups them by their `Attn-Seed:` trailers. It then has Claude write the
+`CHANGELOG.md` section from each seed's title, description, and notes, and from
 the commit messages. For a commit without a seed, and for a seed the script
-cannot read, the script uses only the commit messages, so write commit messages
+cannot read, the script uses only the commit messages. Write commit messages
 that say what users observe. Run the release inside attn, in the profile that
 holds attn's seeds, so the script can read them.
 
@@ -36,7 +36,8 @@ green. The merged commit is the release commit. When its Acceptance is green,
 CI tags and publishes it.
 
 `main` may keep moving while the release PR is open. Changes that land after
-the release was cut ship with it, and the next release's notes cover them.
+the release was cut ship in the release, but this release's notes do not list
+them. The next release's notes do.
 
 If the automated app acceptance cannot cover the release PR or the merged
 release commit, record a manual receipt for that exact commit with the command
@@ -52,8 +53,9 @@ Fix forward: land the fix on `main`, then release a patch version.
 ## After publishing
 
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
-`attn-linux-amd64`, and `attn-linux-arm64`, then check
-`brew upgrade --cask victorarias/attn/attn`. A failed publication leaves a draft
+`attn-linux-amd64`, and `attn-linux-arm64`, then run
+`brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
+version. A failed publication leaves a draft
 and a `Release health` issue. After you fix the failure, retry the tag:
 
 ```bash

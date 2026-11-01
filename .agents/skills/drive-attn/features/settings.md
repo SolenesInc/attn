@@ -33,7 +33,7 @@ Appearance.
   - Connectivity: Mobile and hosts (`connectivity`), Tailscale Serve for a phone's browser (`tailscale_enabled`) and the GitHub hosts attn found for [pull-requests.md](pull-requests.md). No other file covers Tailscale, so this one does. Outposts (`outposts`), shown while Outposts is on, [outposts.md](outposts.md).
   - Extensions: Plugins (`plugins`), [harnesses.md](harnesses.md).
   - System: Experimental (`experimental`), each switch with its feature. Task runner (`backgroundTasks`) and Event bus (`eventBus`), [diagnostics.md](diagnostics.md). Analytics (`analytics`), shown while analytics is on, [telemetry.md](telemetry.md).
-- Where people see what agents do: a setting an agent changes with `attn settings set` shows in the open dialog, as the toggle that reads its value.
+- Where people see what agents do: a setting an agent changes with `attn settings set` shows in the open dialog as the toggle's new value. `theme` and `uiScale` are the exceptions, because the open app reads them from the daemon only once (see Gotchas).
 - Their own shell: `attn settings`, below.
 
 ### Agents

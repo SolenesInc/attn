@@ -57,9 +57,10 @@ worktree when you are done.
   or paths.
 - Does the test reach config paths without the test safety setup in
   `AGENTS.md`?
-- Does a harness change model something outside attn, or does the harness change set attn's own state? A pause or crash point is the one allowed reach inside,
-  when the promise is a moment between two steps of one action and the point
-  sets no state.
+- Does a harness change model something outside attn, or does it set attn's
+  own state? A pause or crash point is the one allowed reach inside, when the
+  promise is a moment between two steps of one action and the point sets no
+  state.
 - For a deleted test, does another test keep the coverage of its promise?
 
 ## Report

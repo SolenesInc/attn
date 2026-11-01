@@ -37,10 +37,10 @@ previous version with `attn seed rollback s-7k3f9m`, or a named version with
 
 ## Planting a plot
 
-Keep the shared plan in the parent. In each child, name the child's own work
-and tell the reader which parent section, sibling result or artifact the child
-needs, and why. Read those references before you start. A delegation does not
-include related bodies automatically.
+Keep the shared plan in the parent. In each child, name the child's own work.
+Also name each parent section, sibling result, or artifact the child needs, and
+say why. The agent that tends the child reads those sources before it starts,
+because a delegation does not include related bodies automatically.
 
 `attn seed plot -f <payload.json>` plants a plot and its children in one move.
 The example in `attn seed guide` shows complete bodies and dependencies. In a
@@ -51,19 +51,21 @@ Give each by id or slug. Pass `-` as the payload file to read from stdin.
 
 ## Checks
 
-A check is a numbered statement (C1) that a seed must prove. attn keeps the
-check on the seed as data, with its latest report and verdict. The body cites
-the check by id. Define checks with `checks` in plot JSON, with
+A check is a numbered statement (C1) that a seed must prove. attn stores the
+check on the seed as data, with its latest report and verdict. Cite the check
+by id in the body. Define checks with `checks` in plot JSON, with
 `--check "<statement>"` on plant, or later with
-`attn seed check add <id> -m "<statement>"`. `attn seed plant` and `attn seed check add` each give a check the next free id in the plot tree and print that id. Every seed below
-the plot that has no children must prove a plot check marked shared, each with
-its own report. `attn seed show` lists a seed's checks, including inherited
-ones, as open, reported, confirmed or rejected.
+`attn seed check add <id> -m "<statement>"`. Both `attn seed plant` and
+`attn seed check add` give the check the next free id in the plot tree and
+print that id. A plot check marked shared applies to every seed below the plot
+that has no children, and each of those seeds needs its own report for it.
+`attn seed show` lists a seed's checks, including inherited ones, as open,
+reported, confirmed or rejected.
 
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-Whoever does the work reports each check, as [Report each check as you prove it](delegated-agent.md#report-each-check-as-you-prove-it) describes. Whoever judges the work confirms or rejects. Checks never block a move. Harvest lists the checks still open or rejected. Add `--ring` when the other side must act now.
+Whoever does the work reports each check, as [Report each check as you prove it](delegated-agent.md#report-each-check-as-you-prove-it) describes. Whoever judges the work confirms or rejects. Checks never block a move. The harvest command lists the checks that are still open or rejected. Add `--ring` to a check command when the other side must act now.
 
 ## Speaking of seeds
 
@@ -107,10 +109,11 @@ Everyone else needs `--force`, which the log also records. A call without a live
 ## Closing a plot
 
 Harvest and wither refuse while any direct child is planted, growing or dormant,
-even with `--force` or `--when-merged`. The refusal names each open child.
-If your part is done, replant hands the plot back. Otherwise close the plot's
-children or move follow-ups out first. Closing the last open child leaves a ringing note
-on the plot and names the plot in the output. The plot keeps its state.
+even with `--force` or `--when-merged`. The refusal names each open child. To
+close the plot, first close each open child or move its follow-ups out. To give
+up your claim on the plot without closing it, run `attn seed replant <plot>`.
+When the last open child closes, attn adds a ringing note to the plot and names
+the plot in the output. The plot keeps its state.
 
 ## Harvesting on a merge
 
@@ -122,12 +125,12 @@ let attn close it:
 
 With no url, the command takes this session's single open pull request, and
 names the pull requests when there is more than one. A seed you were growing
-goes dormant and releases your claim. Every surface then reads
+goes dormant, and attn releases your claim. Every surface then reads
 `harvests when owner/repo#n merges`. The command merges nothing. When the merge
 lands, attn harvests the seed as the member `attn`, with your reason. Without
 `-m`, attn uses `PR #n merged: <title>`. If a pull request closes without
 merging, attn clears the arming and rings instead, and the seed stays where it
-was. If the seed has gained open children, a merge also clears the arming and
+was. If the seed has gained open children, attn clears the arming at the merge and
 explains why.
 
 Use `--when-merged` only when the merge is genuinely the last step. Review notes to
@@ -152,7 +155,7 @@ including children planted later. A crew member's watch belongs to the member
 and lasts across the member's sessions. A new delegation starts the same watch
 on the seed it binds.
 
-`attn seed unwatch <id>` removes that subscription. It drops a queued update
+`attn seed unwatch <id>` removes that subscription. The command also drops a queued update
 only when the session is not a current tender, not a covering tender, and not
 covered by another watch. Separate child watches remain. An ancestor watch can
 still cover the seed. `attn seed show <id>` and `unwatch` name those

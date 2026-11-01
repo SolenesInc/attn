@@ -17,7 +17,7 @@ You need:
 
 ### Mac (Apple Silicon)
 
-Use Homebrew or the direct installer. We recommend Homebrew.
+Use Homebrew or the DMG. We recommend Homebrew.
 
 ```bash
 brew tap victorarias/attn https://github.com/victorarias/attn
@@ -44,8 +44,7 @@ update at any time.
 The Linux app is still in progress, and releases don't package it yet, so build
 it from source. We test on Ubuntu 24.04.
 
-You need Go 1.27.1 or newer, Rust through rustup (the repository pins the
-version it builds with), Node.js 26 or newer, pnpm 9 or newer, bun 1.3.14 or
+You need Go 1.27.1 or newer, Rust through rustup (the repository pins the Rust version to use), Node.js 26 or newer, pnpm 9 or newer, bun 1.3.14 or
 newer, and these packages:
 
 ```bash
@@ -139,6 +138,6 @@ done by orchestrating dozens of agents at the same time.
 - Arrange your work on [desktops](../reference/desktops.md), and find, resume
   and close agents with [sessions](../reference/sessions.md).
 - Hand work off to other agents with [delegation](../reference/delegation.md).
-- Get much more done with delegation roles:
+- Take on larger work with delegation roles:
   [building with roles](building-with-roles.md).
 - Go further with the agent [queue](../reference/queue.md).

@@ -30,15 +30,15 @@ examples. Put branching in Go. Markdown accepts `{{name}}` substitutions.
 
 | Construct | Behavior |
 | --- | --- |
-| `Use(id, path, bindings...)`, `Bind(name, node)` | Name a fragment and bind its placeholders. |
-| `TextField`, `FlagField`, `Input` | Declare inputs and insert literal values once. Template-looking input stays literal. |
+| `Use(id, path, bindings...)`, `Bind(name, node)` | `Use` names a fragment, and `Bind` binds its placeholders. |
+| `TextField`, `FlagField`, `Input` | `TextField` and `FlagField` declare inputs, and `Input` inserts a literal value once. Template-looking input stays literal. |
 | `ProducedBy(field, "recipient/event")` | Identify an input's producer for inspection and scenario bindings. |
 | `When`, `Choose`, `Present`, `Enabled` | Select branches. Blank text is absent. Omitted flags are false. Selected inputs need a value, which may be empty. |
-| `Compose` | Join nonempty results with a blank line. |
-| `Join(separator, ...)` | Preserve empty positions and use the explicit separator. |
-| `Trim`, `Trimmed`, `Quoted` | Trim a result, trim a field, or quote an input using Go string syntax. |
+| `Compose` | Joins nonempty results with a blank line. |
+| `Join(separator, ...)` | Preserves empty positions and uses the explicit separator. |
+| `Trim`, `Trimmed`, `Quoted` | `Trim` trims a result, `Trimmed` trims a field, and `Quoted` quotes an input using Go string syntax. |
 | `Exact`, `Document` | Ordinary sources lose one final newline. `Exact` keeps it. `Document` also disables substitution. |
-| `Part(node, marker, index)` | Select a side of a required marker before substitution. |
+| `Part(node, marker, index)` | Selects a side of a required marker before substitution. |
 
 Validation checks all branches for missing files, unused or undeclared bindings,
 conflicting fragment IDs, and invalid input types.
@@ -100,8 +100,8 @@ go run ./cmd/prompt-editor watch --review REVIEW_ID --after 0 --timeout 30s --js
 ```
 
 Read feedback with `review get`. Add feedback with `review comment`.
-`watch --after N` counts review comments or, with `--draft`, uses the draft
-revision. If the timeout passes, `watch` returns `changed: false`.
+`watch --after N` returns when the review has more than N comments or, with
+`--draft`, when the draft revision is above N. If the timeout passes, `watch` returns `changed: false`.
 
 ## Show the user in the browser
 
@@ -124,10 +124,8 @@ go run ./cmd/prompt-editor show --review REVIEW_ID --open
 ```
 
 `show` prints the URL. `--open` opens the browser. Before you create a review
-from a draft, set the draft's scenario, source, and base with `draft focus`. The
-review opens that frozen selection. Existing draft tabs follow navigation only
-when the user enables **Follow shared focus**. Read comments with `review get`
-or `watch`.
+from a draft, set the draft's scenario, source, and base with `draft focus`. The review shows that frozen selection. Existing draft tabs follow navigation only
+when the user enables **Follow shared focus**.
 
 ## Verify
 
