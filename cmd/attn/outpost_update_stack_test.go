@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -158,6 +160,18 @@ func TestSSHUpdateKeepsShellAndReconnectNeverInstalls(t *testing.T) {
 	t.Log("Remove stopped the remote instance and retained both binaries and its data")
 }
 
+func recordMigrationFromANewerBuild(t *testing.T, dbPath string) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))`, store.LatestSchemaVersion()+1); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 	for _, tc := range []struct{ name, reason string }{
 		{"platform", "Linux amd64 or arm64"}, {"staged-build", "staged build"}, {"newer-schema", "contains migration"}, {"shared-pty-host", "pty_shared_host_enabled"},
@@ -166,9 +180,6 @@ func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 			ssh := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
 			old := testworld.AttnUpdateBinary(t, "before-update", "source", "")
-			if tc.name == "newer-schema" {
-				old = testworld.AttnOutpostFixture(t, "newer-schema")
-			}
 			remote.RunFrom(old)
 			if tc.name == "shared-pty-host" {
 				remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
@@ -176,6 +187,8 @@ func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 				requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
 			} else if tc.name == "newer-schema" {
 				remote.Start()
+				remote.Stop()
+				recordMigrationFromANewerBuild(t, filepath.Join(remote.Dir, "attn.db"))
 			}
 			ssh.Use(home.World)
 			ssh.Route("refused-outpost", remote)
