@@ -89,12 +89,12 @@ new tender of a handover, or the chief that received the seed.
 | plant, body edit, artifact change, edge link or unlink | no |
 
 A seed update contains the seed, the kind of event, and the command that shows
-what changed: "s-x moved: parked — read what changed with `attn seed show s-x
+what changed: "s-x moved: parked. Read what changed with `attn seed show s-x
 --since 2711491`". The number is the bookmark just before the event, so the
 command returns the event's log entries and those of every later event on the
 seed or the seeds below it. For a check move, the update gives the move and who
-made it in place of the kind: "s-x moved: check C4 rejected by c9b177e1 — …".
-An update stored before attn added the bookmark ends "read it with `attn seed
+made it in place of the kind: "s-x moved: check C4 rejected by c9b177e1. …".
+An update stored before attn added the bookmark ends "Read it with `attn seed
 show s-x`" instead.
 
 The reply to a lifecycle move, a ringing note or a check move lists who gets

@@ -15,10 +15,10 @@ Keep production out of every run. Never point a daemon, app, recipe, harness
 or test at `~/.attn` or the production app. For a feature that needs
 realistic data, copy the data out read-only. Use the `attn` on `PATH` only
 for your own garden work on your stake, from your own session, as
-[Evidence](#evidence) shows and `AGENTS.md` allows. Never stop a process
-yourself, by PID or by name. `attn instance clean` stops everything an
-instance runs, and you end every run with `attn instance clean`, as
-[Cleanup](#cleanup) says.
+[Evidence](#evidence) shows and `AGENTS.md` allows. Stop a process
+yourself only by a PID you captured when you started it, never any other
+process. `attn instance clean` stops everything else an instance runs, and you
+end every run with `attn instance clean`, as [Cleanup](#cleanup) says.
 
 ## Launch
 
@@ -228,8 +228,8 @@ PTY hosts and plugin drivers, and removes the app and the data folder.
 `clean`. If `clean` reports a live app, run `./attn instance stop-app` in the
 instance shell and run `clean.sh` again. If `clean` reports anything else it
 could not stop, leave the process alone and bring `clean`'s output to the
-user. Never stop the process by PID or name, and never delete a data folder
-by hand.
+user. Never stop that process by a PID you looked up or by its name, and never
+delete a data folder by hand.
 
 `clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`, in
 place, with whatever the run wrote to the notebook or attached to seeds. A

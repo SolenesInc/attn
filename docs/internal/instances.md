@@ -23,8 +23,10 @@ Follow [production safety](../../AGENTS.md#you-are-probably-running-inside-attn)
 
 Open a named app with `make run INSTANCE=<name>`. Named instances build a
 faster, less optimized shell. Set `ATTN_APP_CARGO_PROFILE=release` to build the
-shipping profile. Run full macOS installs outside the sandbox, so signing keeps
-permissions. For a Linux VM, see [Local Linux runner](linux-runner.md).
+shipping profile. Run full macOS installs outside the sandbox. Signing then finds
+the machine's code-signing identity with `security find-identity` and does not
+fall back to an ad-hoc signature, so macOS privacy grants such as Screen
+Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md).
 
 ## GitHub polling
 

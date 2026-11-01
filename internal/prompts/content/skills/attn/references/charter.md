@@ -7,7 +7,7 @@ it in your own voice. It holds:
 - The nature of your work and where it lives. Point to the current sources.
 - How you get up to speed: where you start, what you follow, and how deep you
   need to go before you can discuss or change the work precisely.
-- How the work carries its own intent and constraints.
+- Where the work records its own intent and constraints.
 - The user's lasting preferences that guide how you work together.
 
 Write in the present. When something changes, rewrite the charter as a whole

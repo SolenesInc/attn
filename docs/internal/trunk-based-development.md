@@ -32,45 +32,16 @@ landing changes, and pushes:
 - `app/`: typecheck and lint.
 - `scripts/`: run the shell script tests.
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
-  push, not a suite. The choice has three parts. The first is the baseline: the
-  groups in `scripts/landing-tests` whose path pattern matches the changes. The
-  second is the tests the landing changes. The third is every test that failed
-  on `main` and has since passed there. A test of the third kind stays in the
-  choice until it has passed on 30 later commits of `main`. The script prints
-  each test it added and why, each test's result (skipped tests included), and
-  the command that reruns a failed test.
+  push, not a suite: the groups of `scripts/landing-tests` that match the
+  changed paths, the tests the landing changes, and every test that failed on
+  `main` and has since passed there, until it clears. A test that is still red
+  on `main` is listed, not run. `land.sh` prints each test it added and why.
+  [Test history](test-history.md#selection) specifies the choice, and
+  `scripts/land.sh --baseline` lands with the baseline groups alone.
 
 When only protocol types or prompt catalogs conflict, `land.sh` regenerates
 them. When `main` moves during landing, `land.sh` rebases, runs the gate again
 on the new combination, and pushes.
-
-### How the landing tests evolve
-
-attn's test runners record every run, and a shared test history collects the
-runs of CI and of every machine. `land.sh` syncs the history before it chooses
-the tests and again after it pushes. [Test history](test-history.md) is the
-specification.
-
-- A test that fails on a clean commit of `main`, in CI or on any machine, is
-  red. A red test blocks no landing, unless the test is in the baseline or the
-  landing changes the test. `land.sh` lists a red test and leaves it to the
-  sheriff. Once the test has passed on `main` again, it joins every landing that
-  runs landing tests.
-- A formerly red test stops joining landings once it has passed afresh on 30
-  later commits of `main`, in the lane where it failed. A commit where the test did not run
-  does not count, and a new failure starts the count over.
-- Runs of unlanded or uncommitted work never count as `main`'s health.
-- `land.sh` prints only the number of failed tests that are gone from the
-  checkout and runs none of them. Native scenarios have no landing recipe and stay with CI. `land.sh` lists a
-  native scenario that has not cleared as unavailable.
-- The baseline still grows from red `main`. When the test that caught the
-  failure runs in seconds, the sheriff's repair adds the test to its group in
-  `scripts/landing-tests` in the same landing.
-
-Without a synced history, `land.sh` runs the baseline and says so.
-`scripts/land.sh --baseline` lands with the baseline alone. Use `--baseline`
-when the history or the choice of tests misbehaves, and never to skip a failing
-test.
 
 ## Verifying before landing
 

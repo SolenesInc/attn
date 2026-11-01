@@ -70,7 +70,7 @@ Preconditions:
 - **Profiles**: desktops, the ledger, crew, automations and the garden belong to one profile, and so does every session for life. Settings, shortcuts, outposts, worktrees and the GitHub pull request list belong to the daemon and are the same in every profile. A session or desktop of another profile is refused as if it did not exist, a seed of another profile is refused by name (`seed <id> belongs to profile "<name>"`), and resuming another profile's conversation opens a new session here.
 - **Keyboard and native input**: ⌘⇧U opens the switcher with focus on its list, and N, R, ⌫, arrows, Enter and Escape reach every action without the pointer. No macOS menu item claims ⌘⇧U.
 - **Compatibility across versions**: an install from before profiles migrates once, through the picker. `attn profile` and `attn profile-env` are not about profiles: they are the retired names of `attn instance` and `attn instance-env`, print the new command and exit 2.
-- **Flow**: flow is one daemon-wide setting today, so switching profiles keeps the flow, though the glossary gives each profile its own.
+- **Flow**: flow is one daemon-wide setting for all profiles, so switching profiles keeps the flow.
 
 ## Tests
 

@@ -221,10 +221,8 @@ session or the re-land seed.
   newer push arrives while another push is waiting, the waiting push's run
   concludes `cancelled` with no jobs. A red run therefore covers every commit
   since the last green run.
-- A landing lists a test that is still red on `main` and does not run the
-  test. You own that test. Once the test passes on `main`, it runs in every
-  landing that runs landing tests, until it has passed on 30 later `main`
-  commits.
+- You own a test that is still red on `main`. The
+  [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
 - "is not on this daemon" from `attn agent msg` means the session is gone:
   plant the re-land seed.
 - This clone holds no work: never commit in it.

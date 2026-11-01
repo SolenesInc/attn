@@ -26,7 +26,7 @@ the tiles still on the old Codex.
 
 ### People
 
-- Settings, Experimental (`app/src/components/SettingsModalSections.tsx`): "Shared Codex", `[data-testid="settings-shared-codex-toggle"]` (setting `codex_shared_enabled`), and "Show hidden sessions in the queue" (`[data-testid="settings-queue-hidden-sessions-toggle"]`, setting `queue_show_hidden_sessions`, on by default).
+- **Settings → Experimental** (`app/src/components/SettingsModalSections.tsx`): "Shared Codex", `[data-testid="settings-shared-codex-toggle"]` (setting `codex_shared_enabled`), and "Show hidden sessions in the queue" (`[data-testid="settings-queue-hidden-sessions-toggle"]`, setting `queue_show_hidden_sessions`, on by default).
 - The banner at the top of the window, `[aria-label="Codex updates"]`, with Install, Restart now, Retry or Reload tiles as each applies, and a confirm prompt before a restart or a reload (`app/src/components/SharedCodexBanner.tsx`, `app/src/components/SharedCodexPrompts.tsx`). After the user closes the banner, the same offer stays under the bell in the sidebar.
 - Palette, while each applies (`app/src/application/useSharedCodex.tsx`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
 - In a shared Codex terminal, `/new`, `/resume <id>` and `/agents` switch the terminal's conversation.

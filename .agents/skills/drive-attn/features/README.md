@@ -80,7 +80,8 @@ In the index, "both" means people and agents.
   mock GitHub, `file`, `stat`, `pbpaste`, `python3 -m http.server` for a
   local page, and the repository's own scripts a file names. A recipe that
   starts a process in the background keeps the PID from `$!` in the env file
-  and stops the process by that PID.
+  and stops the process by that PID. A recipe never stops a process it did not
+  start, and never by name or by a PID it looked up.
 - A verb that calls a harness CLI itself, outside the daemon, never reaches
   the mock agent. The recipe for such a verb puts a stand-in on `PATH`, as
   [vision-check.md](vision-check.md) does.

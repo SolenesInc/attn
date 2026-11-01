@@ -19,7 +19,7 @@ them on.
 
 ### People
 
-- Settings, Experimental, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
+- **Settings → Experimental**, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
 - The callout card (`app/src/callouts/CalloutOverlay.tsx`) shows the pointing agent's name and the step count, the text, and "↵ Next", or on the last step "↵ Done", or "↵ Go there" when that step names an agent or desktop. It also shows "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
 - Where people see what agents do: the card names the agent that points, and the ring marks what it points at.
 - Their own shell: `attn settings set callouts_enabled true`, and `attn callout show --session <id>` to point from a session.

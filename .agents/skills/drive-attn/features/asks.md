@@ -31,7 +31,7 @@ the seed. Asks are an experimental setting, off by default.
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
-- Settings, Experimental: the "Asks" switch (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`).
+- **Settings → Experimental**: the "Asks" switch (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 

@@ -101,8 +101,10 @@ On a `fakeagent.Run`:
 - For behavior on a timer, write the test as
   `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world
   under `synctest`, and move the clock with `w.advance(d)`.
-- A world from `inBubble` cannot run agents or watch folders. Its notebook at
-  `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
+- A world from `inBubble` cannot run agents or watch folders. Every world sets
+  its notebook root to `<w.Dir>/notebook` and does not create the folder. A
+  test that needs the folder creates it, as `inCrewBubble` does for the crew
+  homes.
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
   that clock fire only when the test calls `w.advance(d)`. Examples are a
   terminal's kill escalation, a folder watch's window, the background job

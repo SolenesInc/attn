@@ -114,8 +114,8 @@ Three rules hold for the whole step:
   `mktemp -d /tmp/drive-attn-audit.XXXX`. After each cleanup, check that the
   folder is still there.
 - **Clean up as you go.** When a drive fails, remove what the drive left on
-  the instance before the next drive. Stop processes only with drive-attn's
-  `clean.sh`.
+  the instance before the next drive. Stop a process only by a PID you captured when
+  you started it. Stop everything else with drive-attn's `clean.sh`.
 
 When the doctor fails because drive-attn's instructions are out of date, fix
 the instructions and try once more. If the doctor still fails, the pass is

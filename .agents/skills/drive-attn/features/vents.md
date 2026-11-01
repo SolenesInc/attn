@@ -6,8 +6,6 @@ contradict each other or a capability it had to work around sends a vent and
 keeps working. Nobody replies. The user reads vents in **Settings → Analytics**.
 There the user can open the session or transcript behind a vent, dismiss it, or
 plant a seed from it. The user can also send attn vents to attn's maintainers.
-A session can vent only while usage analytics is on, both when the session
-launches and when it vents.
 
 ## Sub-features
 
@@ -67,7 +65,7 @@ Preconditions:
 `<terminal>` below is the agent's terminal id from `wsctl list`. `<vent>` is the first vent's id from the agent's reply. Send the prompts in this order: the list shows new vents newest first.
 
 - **Guidance at launch.** Run `wsctl add-session --cwd $A --agent claude --label vent-agent --id vent-agent --cols 200` and re-run `ls $A/.attn-mock-agent/` until it lists a `.jsonl` file, with a deadline that fails the run. `grep -c "attn vent --about attn" $A/.attn-mock-agent/*.jsonl` prints 1, and so does `grep -c "attn vent --about tools"` on the same file.
-- **Send, and the one-per-turn limit.** Run `wsctl input --id <terminal> --text "vent twice" --enter`. `./attn agent peek vent-agent` shows `vent <vent> recorded. Keep working; nobody replies to vents.`, then a `mock agent error:` block that ends with `vent refused: the limit is 1 vent per turn, and this turn already has <vent>. Withdraw it (attn vent wit`. `wsctl add-session` places the session in a tile on the current desktop, and the tile resizes the session to the tile's width (106 columns in the parked window), so the refusal wraps. Match the refusal's first words.
+- **Send, and the one-per-turn limit.** Run `wsctl input --id <terminal> --text "vent twice" --enter`. `./attn agent peek vent-agent` shows `vent <vent> recorded. Keep working; nobody replies to vents.`, then a `mock agent error:` block that ends with `vent refused: the limit is 1 vent per turn, and this turn already has <vent>. Withdraw it (attn vent wit`. Match the refusal's first words (see Gotchas).
 - **Withdraw.** Run `wsctl input --id <terminal> --text "withdraw <vent>" --enter`. Peek shows `Withdrew <vent>.`
 - **A tool vent, then a new attn vent.** Run `wsctl input --id <terminal> --text "tools" --enter`, then `wsctl input --id <terminal> --text "settle" --enter`. Peek shows a `recorded` line with a new id after each prompt.
 - **As a session from the shell.** `./attn vent --about attn --session vent-agent "x"` acts as `vent-agent`: it is refused with `vent refused: the limit is 1 vent per turn, and this turn already has` that session's last vent.

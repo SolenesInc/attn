@@ -190,10 +190,12 @@ runs:
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
   its runner. A test still red on `main`, with no pass since its last failure,
-  is listed as `RED` and not run. The sheriff owns it.
+  is listed as `RED` and not run. The sheriff owns it. A red test blocks no
+  landing, unless the test is in the baseline or the landing changes the test.
 
 `land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
-failure stops the push.
+failure stops the push. `land.sh` prints each test's result, skipped tests
+included, and the command that reruns a failed test.
 
 - `land` prints each added test with the commit and lane where it failed, its
   passes since, and how many more passes clear it. `land` also prints each red test, each missing baseline unit, and each unavailable test with its reason, the baseline's size, and how many failures have cleared or are gone from the checkout. `land`
@@ -209,7 +211,12 @@ failure stops the push.
 - When `land` fails or chooses nothing, `land.sh` prints that it is running the
   baseline groups, and runs them.
 - `scripts/land.sh --baseline` runs the baseline groups without syncing or
-  choosing. Use it when the history or the choice misbehaves.
+  choosing. Use it when the history or the choice misbehaves, and never to
+  skip a failing test.
+
+The baseline still grows from red `main`. When the test that caught the
+failure runs in seconds, the sheriff's repair adds the test to its group in
+`scripts/landing-tests` in the same landing.
 
 ```sh
 go tool test-history land --units-out units --group go  # what land.sh would run
