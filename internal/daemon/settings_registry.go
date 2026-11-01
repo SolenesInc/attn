@@ -77,6 +77,8 @@ const (
 	SettingActivityPresenceIdleSeconds   = settingkeys.SettingActivityPresenceIdleSeconds
 	SettingGardenAdvisor                 = settingkeys.SettingGardenAdvisor
 	SettingDictationRefinementAgent      = settingkeys.SettingDictationRefinementAgent
+	SettingDictationShortcut             = settingkeys.SettingDictationShortcut
+	SettingDictationInteraction          = settingkeys.SettingDictationInteraction
 	SettingCrewHeartbeatEnabled          = settingkeys.SettingCrewHeartbeatEnabled
 	SettingCrewAutoSleepEnabled          = settingkeys.SettingCrewAutoSleepEnabled
 	SettingCrewCacheTTLSeconds           = settingkeys.SettingCrewCacheTTLSeconds
@@ -233,6 +235,14 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingDictationRefinementAgent), scope: daemonScope, description: "Harness whose light model cleans up dictated text: claude or codex. Empty uses claude.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseDictationRefinementAgent(value)
 		return err
+	}},
+	{key: string(SettingDictationShortcut), scope: daemonScope, description: "Shortcut that starts and stops dictation while an attn window is focused. Unset uses Control+Shift+Space; empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: string(SettingDictationInteraction), scope: daemonScope, description: "What happens when dictation finishes: insert_at_cursor inserts the transcript and then its refinement, compare_first shows both before inserting. Empty uses insert_at_cursor.", validate: func(d *Daemon, key, value string) error {
+		switch value {
+		case "", "insert_at_cursor", "compare_first":
+			return nil
+		}
+		return fmt.Errorf("dictation.interaction must be insert_at_cursor or compare_first, got %q", value)
 	}},
 	{key: string(SettingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)

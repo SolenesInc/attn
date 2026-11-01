@@ -12,6 +12,8 @@ import { useQuickCaptureHistory } from '../quickCapture/useQuickCaptureHistory';
 import { quickCaptureDraftCache, newQuickCaptureDraft } from '../quickCapture/draft';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { parseKeybindingsConfig, setShortcutOverrides } from '../shortcuts/resolver';
+import { WindowDictation } from '../dictation/DictationLayer';
+import { relayRefiner } from '../dictation/refiner';
 
 const automationEnabled = (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
 type Attachment = QuickCaptureAttachment;
@@ -30,8 +32,13 @@ export function QuickCapture({ client: suppliedClient, hostState, workQueue }: Q
   }, [suppliedClient]);
   useEffect(() => { if (hostState) setHost(hostState); }, [hostState]);
   const client = useMemo(() => suppliedClient ?? bridge?.forProfile(host.profileId), [suppliedClient, bridge, host.profileId]);
+  const [refiner] = useState(relayRefiner);
+  useEffect(() => () => refiner.dispose(), [refiner]);
   if (!client || !host.profileId) return <main className="capture" aria-busy="true">Connecting Quick Capture…</main>;
-  return <QuickCaptureForProfile key={host.profileId} client={client} hostState={host} workQueue={workQueue} refresh={bridge?.refresh} />;
+  return <>
+    <QuickCaptureForProfile key={host.profileId} client={client} hostState={host} workQueue={workQueue} refresh={bridge?.refresh} />
+    <WindowDictation enabled={host.dictation?.enabled ?? false} profileId={host.profileId} interaction={host.dictation?.interaction ?? 'insertAtCursor'} refiner={refiner} />
+  </>;
 }
 
 function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQueue: suppliedQueue, refresh }: Required<Pick<QuickCaptureProps, 'client' | 'hostState'>> & Pick<QuickCaptureProps, 'workQueue'> & { refresh?: () => Promise<void> }) {

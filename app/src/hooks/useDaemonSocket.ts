@@ -17,6 +17,7 @@ import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOu
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import { handleQuickCaptureDaemonEvent } from './daemonQuickCaptureEvents';
+import { DICTATION_REFINE, dictationRefineKey, handleDictationDaemonEvent } from './daemonDictationEvents';
 import type { QuickCaptureAttachmentDiscardMessage, QuickCaptureAttachmentGetMessage, QuickCaptureAttachmentPutMessage, QuickCaptureGetMessage, QuickCaptureListMessage, QuickCaptureSendMessage, QuickCaptureResultObject } from '../types/generated';
 import {
   handleCrewDaemonEvent,
@@ -28,6 +29,7 @@ import {
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 import type { AgentCatalogResult, DelegationPreferences, OutpostInfo } from '../types/generated';
+import { DictationRefineCancelMessageCmd, DictationRefineMessageCmd, type DictationRefineMessage, type DictationRefineResultMessage } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -2329,6 +2331,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
+            if (handleDictationDaemonEvent(data, pending)) break;
             if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
             if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
@@ -2373,6 +2376,7 @@ export function useDaemonSocket({
       setIsReady(false);
       const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
+      rejectPendingByPredicate(key => key.startsWith(`${DICTATION_REFINE}:`), new Error('The daemon disconnected before refinement answered. Original kept.'));
       rejectPendingByPredicate(key => key.startsWith(`${INSTALL_CODEX_UPDATE}:`), new CodexInstallUntracked());
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
@@ -3169,6 +3173,18 @@ export function useDaemonSocket({
   const sendQuickCaptureRequest = useCallback((command: QuickCaptureCommand): Promise<QuickCaptureResultObject> => {
     return sendRequest(command.cmd, command, 'Quick capture request timed out. Your draft is retained.');
   }, [sendRequest]);
+
+  const sendDictationRefine = useCallback((request: Omit<DictationRefineMessage, 'cmd'>): Promise<DictationRefineResultMessage> => {
+    return sendKeyedRequest(dictationRefineKey(request.request_id), { cmd: DictationRefineMessageCmd.DictationRefine, ...request }, 'Refinement did not answer. Original kept.', null);
+  }, [sendKeyedRequest]);
+
+  const sendDictationRefineCancel = useCallback((requestId: string) => {
+    const key = dictationRefineKey(requestId);
+    pendingActionsRef.current.get(key)?.reject(new Error('Refinement canceled. Original kept.'));
+    pendingActionsRef.current.delete(key);
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: DictationRefineCancelMessageCmd.DictationRefineCancel, request_id: requestId }));
+  }, []);
 
   const sendGetSettings = useCallback(() => {
     const ws = wsRef.current;
@@ -4239,6 +4255,8 @@ export function useDaemonSocket({
     sendDeleteWorktree,
     sendSetSetting,
     sendQuickCaptureRequest,
+    sendDictationRefine,
+    sendDictationRefineCancel,
     sendSaveSetting,
     sendGetSettings,
     outposts,

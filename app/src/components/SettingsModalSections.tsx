@@ -7,6 +7,8 @@ import { ModelTier } from '../types/generated';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { DICTATION_ENABLED_SETTING, speechSupported, useSpeechStatus, type SpeechStatus } from '../dictation/speechHelper';
+import { DICTATION_INTERACTION_SETTING, dictationInteraction, dictationShortcut, formatNativeShortcut } from '../dictation/settings';
+import { useSettings } from '../contexts/SettingsContext';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
 import { ASKS_SETTING } from '../utils/asks';
@@ -1596,6 +1598,7 @@ function DictationSetting({ enabled, onSetSetting }: { enabled: boolean; onSetSe
   const run = (action: () => Promise<unknown>) => { setActionError(null); action().catch(error => setActionError(String(error))); };
   const progress = status ? speechProgress(status) : '';
   return (
+    <>
     <div className="settings-row-card">
       <div>
         <p className="settings-row-title">Dictation</p>
@@ -1617,6 +1620,32 @@ function DictationSetting({ enabled, onSetSetting }: { enabled: boolean; onSetSe
           className="settings-action" onClick={() => onSetSetting(DICTATION_ENABLED_SETTING, enabled ? 'false' : 'true')}>
           {enabled ? 'Disable' : 'Enable'}
         </button>
+      </div>
+    </div>
+    {enabled && <DictationInteractionSetting onSetSetting={onSetSetting} />}
+    </>
+  );
+}
+
+function DictationInteractionSetting({ onSetSetting }: { onSetSetting: SettingsModalState['onSetSetting'] }) {
+  const { settings } = useSettings();
+  const interaction = dictationInteraction(settings);
+  const shortcut = dictationShortcut(settings);
+  const choose = (value: 'insert_at_cursor' | 'compare_first') => onSetSetting(DICTATION_INTERACTION_SETTING, value);
+  return (
+    <div className="settings-row-card">
+      <div>
+        <p className="settings-row-title">When dictation finishes</p>
+        <p className="settings-row-copy" id="dictation-interaction-description">
+          {interaction === 'insertAtCursor'
+            ? 'Insert at cursor types the transcript where you started, then swaps in the refined text as its own undo step.'
+            : 'Compare first shows the transcript and the refined text side by side, and inserts only the one you choose.'}
+          {' '}{shortcut ? `Press ${formatNativeShortcut(shortcut)} in any attn text field to start and stop.` : 'The dictation shortcut is off; set one in Keyboard Shortcuts.'}
+        </p>
+      </div>
+      <div className="settings-segmented" role="group" aria-label="When dictation finishes" aria-describedby="dictation-interaction-description">
+        <button type="button" className={`settings-segmented-option ${interaction === 'insertAtCursor' ? 'active' : ''}`} aria-pressed={interaction === 'insertAtCursor'} onClick={() => choose('insert_at_cursor')}>Insert at cursor</button>
+        <button type="button" className={`settings-segmented-option ${interaction === 'compareFirst' ? 'active' : ''}`} aria-pressed={interaction === 'compareFirst'} onClick={() => choose('compare_first')}>Compare first</button>
       </div>
     </div>
   );

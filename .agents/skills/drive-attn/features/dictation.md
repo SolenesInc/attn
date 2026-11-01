@@ -9,8 +9,11 @@ model, and `attn instance clean` removes the copy. The helper keeps the model re
 runs and exits when dictation turns off or the app quits. After transcribing,
 the daemon asks a harness's light model, with tools off, to fix punctuation,
 fillers and explicit self-corrections without changing what was said. The
-original stays available. Recording and inserting text come in later slices of
-the dictation plan. This file covers setup and refinement.
+original stays available. The dictation shortcut (Control+Shift+Space by
+default) starts and stops a recording in the focused text field of an attn
+window: an input or textarea in the main window or Quick Capture. The app owns
+the microphone only while recording. Editors, terminals and browser pages come
+in a later slice of the dictation plan.
 
 ## Sub-features
 
@@ -22,13 +25,22 @@ the dictation plan. This file covers setup and refinement.
 - `dictation-refine-limit`: each refinement must answer within 15 s plus a quarter of the recording's duration, or it fails naming both and the original is kept.
 - `dictation-refine-cancel`: the app cancels a pending refinement, or closes its connection, and the harness process stops.
 - `dictation-refine-harness`: the `dictation.refinement_agent` setting picks Claude (the default) or Codex. Refinement uses that harness's light model and respects `headless_tasks.enabled`.
+- `dictation-record`: the shortcut toggles a recording for the focused text field; the pill shows Starting the microphone…, Listening with a clock, Transcribing… and Refining…, with Stop and Cancel while recording; Escape cancels too, before any other Escape handler. A recording keeps going when the person switches windows or leaves attn; while it records, the shortcut works in every app, so it stops from anywhere. Without a writable field the pill says why and nothing records.
+- `dictation-microphone`: the first recording asks macOS for microphone access. When access is off, the pill names it and offers Open Privacy Settings. A microphone that changes or disconnects mid-recording ends the recording and transcribes what was recorded.
+- `dictation-insert`: Insert at cursor (setting `dictation.interaction` = `insert_at_cursor`, the default) types the transcript where the recording started, through the field's own editing, then replaces only that text with the refined version as its own undo step. Edits elsewhere, the caret and the focused field are kept. Editing, deleting or undoing the dictated text turns the refined version into an offer card.
+- `dictation-compare`: Compare first (`compare_first`) shows the original and the refined text with their differences, and inserts only the version chosen.
+- `dictation-offer`: a card with Use original / Use refined (or Insert at cursor), Copy and Discard, shown when the field changed, was replaced or closed before the text could go in.
+- `dictation-refine-failure`: a failed or timed-out refinement shows the daemon's text, which ends "Original kept", with Retry and Dismiss; Keep original cancels a pending refinement.
+- `dictation-shortcut`: Keyboard Shortcuts lists "Dictation · in attn windows" with Change, Reset and Turn off; setting `dictation.shortcut`, where empty turns it off.
 
 ## How to get to it
 
 ### People
 
-- **Settings → Experimental** (`app/src/components/SettingsModalSections.tsx`, `DictationSetting`): the "Dictation" switch, the status `[data-testid="settings-dictation-status"]`, `[data-testid="settings-dictation-retry"]` and `[data-testid="settings-dictation-remove"]`. Only a packaged macOS app shows the row.
-- Their own shell: `attn settings set dictation_enabled true|false`, and `attn settings set dictation.refinement_agent claude|codex`, where empty restores Claude.
+- **Settings → Experimental** (`app/src/components/SettingsModalSections.tsx`, `DictationSetting`): the "Dictation" switch, the status `[data-testid="settings-dictation-status"]`, `[data-testid="settings-dictation-retry"]` and `[data-testid="settings-dictation-remove"]`. Only a packaged macOS app shows the row. While dictation is on, "When dictation finishes" picks Insert at cursor or Compare first.
+- **Keyboard Shortcuts** (`app/src/components/ShortcutEditorModal.tsx`, `NativeShortcutEditor`): "Dictation · in attn windows".
+- **The dictation shortcut** in any attn text field: press to start, press again to stop. The pill (`[data-testid="dictation-pill"]`) has Stop (`dictation-stop`), Cancel (`dictation-cancel`), Keep original (`dictation-keep-original`) and Retry (`dictation-retry`); the card (`[data-testid="dictation-card"]`) has `dictation-use-original`, `dictation-use-refined` and `dictation-discard`. Card and pill buttons never take focus from the field.
+- Their own shell: `attn settings set dictation_enabled true|false`, `attn settings set dictation.refinement_agent claude|codex` (empty restores Claude), `attn settings set dictation.interaction insert_at_cursor|compare_first` and `attn settings set dictation.shortcut <chord>`.
 
 ### Agents
 
@@ -38,7 +50,8 @@ the dictation plan. This file covers setup and refinement.
 
 - An app that starts with `dictation_enabled` on starts the helper and prepares the model (`app/src/dictation/speechHelper.ts`, `useSpeechHelperLifecycle`).
 - When the app exits, it closes the helper's stdin and waits for the helper to exit (`app/src-tauri/core/src/speech.rs`, `shutdown`).
-- The trusted app's `dictation_refine` and `dictation_refine_cancel` WebSocket commands, answered by `dictation_refine_result` (`internal/protocol/schema/main.tsp`, `internal/daemon/dictation.go`). No app code sends them yet. The refinement prompt is the `dictation-refiner` recipient (`internal/prompts/dictation.go`).
+- The trusted app's `dictation_refine` and `dictation_refine_cancel` WebSocket commands, answered by `dictation_refine_result` (`internal/protocol/schema/main.tsp`, `internal/daemon/dictation.go`). The main window sends them for its own fields and relays them for Quick Capture (`app/src/dictation/refiner.ts`). The refinement prompt is the `dictation-refiner` recipient (`internal/prompts/dictation.go`).
+- The native recorder (`app/src-tauri/core/src/dictation.rs`): a press while idle asks the key window for its target (`dictation-request`); the window starts the recording (`dictation_start`); a press while recording stops it natively. Updates reach the owning window as the `dictation` event: listening, stopped, transcript (with its timeline), failed, canceled.
 
 ## Driving it
 
@@ -52,6 +65,15 @@ Preconditions: the baseline instance with its app (`bridge --launch --wait-ready
 - **Remove the model.** Turn dictation off and click Remove model: the status line disappears and the instance's `speech-models` folder is gone.
 - **The helper alone.** `python3 -I scripts/verify-speech-helper.py check <app>/Contents/MacOS/attn-speech <workdir> <clips>` runs the helper's process checks: download, resume, cancel, crash, lease exit and fixture dictation. The `idle` mode of the same script measures the helper's idle CPU, wakeups and memory, and the first dictation after an idle period. `python3 -I scripts/measure-speech-latency.py dictate <helper> <cache> <clip>` replays 5, 10, 20 and 30 s recordings in real time and prints stop-to-text with the load average. The `idle` mode of `measure-speech-latency.py` times dictations after an idle period, with or without `--warm-first`.
 - **Proof.** Keep each status text with the command that produced it, the helper's `ps` line, and `bridge capture_screenshot` at Ready and after a stop.
+
+### Recording
+
+Preconditions: the baseline instance with its app, dictation on and Ready, and a text field focused with `bridge dom_focus '{"selector":"..."}'`. A shared Mac cannot press the Carbon shortcut, so press it through `bridge hotkey_press '{"window":"main"}'`, which enters the same dispatch as the Carbon handler (the `dictation-routing` scenario proves the Carbon side on a dedicated display).
+
+- **Repeatable audio.** `bridge dictation_clip '{"path":"<clip>.f32"}'` makes the next recordings stream a 16 kHz mono f32 clip in real time instead of opening the microphone (`ffmpeg -i in.aiff -ac 1 -ar 16000 -f f32le out.f32`); Add `"stopAtEnd":true` to stop the recording at the clip's last sample, as a person who stops right after the last word. `{"path":null}` returns to the microphone. Automation instances only.
+- **One dictation.** `hotkey_press`, wait for Listening, wait the clip's length, `hotkey_press` again. The field shows the transcript, then the refined text. `bridge dictation_get_state` returns the pending dictations and the receipts: `stopToRawPaintMs`, `stopToTranscriptMs`, `pressToListeningMs`, the helper's `asrMs`/`finishMs`/`segments` and the recorded `audioMs`.
+- **Latency.** `scripts/measure-dictation-paint.sh` runs the clips through the packaged app and prints stop-to-raw-paint beside the helper's stop-to-text and the load average.
+- **The real microphone.** Without `dictation_clip`, the first recording asks macOS for access (a person clicks Allow once per bundle id). Play speech near the Mac with `say` and check that the first word survives.
 
 ### Refinement
 
@@ -71,15 +93,17 @@ Codex reads its login from the scratch tool home, so copy the credential in. Cla
 ## Contexts
 
 - **Durability across restarts**: the helper belongs to one app process. An app restart starts a new helper from the cache. A daemon restart does not touch it. A daemon restart or a closed connection ends pending refinements. The app keeps the original and starts a new request to retry.
-- **Profiles**: the settings are home-wide. Each named instance has its own model cache. The production app's cache is the Mac's. A refinement request names the profile the app shows and is refused for any other.
+- **Profiles**: the settings are home-wide. Each named instance has its own model cache. The production app's cache is the Mac's. A refinement request names the profile the app shows and is refused for any other. A profile change discards that window's pending dictations; text already inserted stays in its field.
 - **Harnesses**: refinement runs on Claude or Codex, the harnesses with tool-free headless tasks. Their light tier comes from model discovery, falling back to `haiku` and `gpt-6-luna`.
 - **Performance and idle cost**: an idle prepared helper uses about 1 ms of CPU a minute and wakes about once every 3 seconds. macOS reclaims the model's pages while idle, so the first dictation after a long idle period takes extra time to bring them back. While a recording streams in, the helper transcribes each segment that ends in a pause. When the recording stops, the helper transcribes only the speech since the last pause. Machine load stretches that time.
 - **Linux**: no app dictation. The row is hidden and the helper is not bundled. The daemon's refinement builds and runs on Linux.
-- **Microphone**: setup never opens the microphone. The helper links no audio framework.
+- **Microphone**: setup never opens the microphone. The helper links no audio framework. The app opens the microphone at the press and closes it at stop, cancel, failure, disable and quit.
+- **Windows**: the main window and Quick Capture each run their own dictation for their own fields. One recording at a time across the app; earlier dictations keep refining while a new one records.
 
 ## Tests
 
 - App: `app/src/App.dictationSetup.test.tsx`.
+- Fields: `app/e2e/dictation-fields.spec.ts` drives real controlled fields in WebKit with fake native and refinement ports (`app/test-harness/harnesses/DictationFieldsHarness.tsx`).
 - Helper: `cargo test --manifest-path app/speech/Cargo.toml` (the stdio protocol before prepare) and `scripts/verify-speech-helper.py check` (download, resume, verification, dictation, cancel, crash and lease exit against the real model).
 - Wire: `internal/daemon/dictation_wire_test.go` (refinement).
 - Live corpus: `scripts/dictationrefineprobe`, run by hand against real harnesses.

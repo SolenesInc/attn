@@ -21,7 +21,10 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { useKeybindings } from '../contexts/KeybindingsContext';
 import { KeyCaptureInput } from './KeyCaptureInput';
 import './ShortcutEditorModal.css';
-import { QuickCaptureShortcutEditor } from './QuickCaptureShortcutEditor';
+import { NativeShortcutEditor, type NativeShortcut } from './NativeShortcutEditor';
+import { useDictationShortcutController } from '../dictation/ShortcutContext';
+import { DEFAULT_DICTATION_SHORTCUT } from '../dictation/settings';
+import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { useCaptureShortcut } from '../quickCapture/ShortcutContext';
 import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 
@@ -65,10 +68,25 @@ function overrideValue(id: ShortcutId, change: BindingChange): Binding | undefin
 
 export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProps) {
   const capture = useCaptureShortcut();
+  const dictation = useDictationShortcutController();
   const kb = useKeybindings();
+  const nativeShortcuts: (NativeShortcut & { id: 'quickCapture' | 'dictation'; search: string })[] = [
+    ...(capture?.state.enabled ? [{
+      id: 'quickCapture' as const, search: 'quick capture system-wide', label: 'Global Quick Capture shortcut', title: 'Quick Capture · system-wide',
+      description: 'Open Quick Capture over the current app. Escape keeps your draft.',
+      binding: capture.state.binding, active: capture.state.activeBinding, error: capture.state.shortcutError,
+      defaultBinding: DEFAULT_QUICK_CAPTURE_SHORTCUT, setBinding: capture.setBinding,
+    }] : []),
+    ...(dictation?.enabled ? [{
+      id: 'dictation' as const, search: 'dictation speech voice', label: 'Dictation shortcut', title: 'Dictation · in attn windows',
+      description: 'Start and stop dictation in the focused attn text field.',
+      binding: dictation.binding, active: dictation.active, error: dictation.error,
+      defaultBinding: DEFAULT_DICTATION_SHORTCUT, setBinding: dictation.setBinding,
+    }] : []),
+  ];
   const groups = useMemo(groupedByCategory, []);
 
-  const [recordingId, setRecordingId] = useState<ShortcutId | 'quickCapture' | null>(null);
+  const [recordingId, setRecordingId] = useState<ShortcutId | 'quickCapture' | 'dictation' | null>(null);
   const [recordingMode, setRecordingMode] = useState<'combo' | 'chord'>('combo');
   const [pending, setPending] = useState<PendingReassign | null>(null);
   const [rowError, setRowError] = useState<{ id: ShortcutId; message: string } | null>(null);
@@ -78,7 +96,8 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
 
   useEffect(() => {
     if (!capture?.state.enabled) setRecordingId(id => id === 'quickCapture' ? null : id);
-  }, [capture?.state.enabled]);
+    if (!dictation?.enabled) setRecordingId(id => id === 'dictation' ? null : id);
+  }, [capture?.state.enabled, dictation?.enabled]);
 
   useEffect(() => {
     setShortcutCaptureSuspended(recording);
@@ -201,16 +220,18 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
           </div>
 
           <div className="shortcut-editor-body">
-            {capture?.state.enabled && (q === '' || 'quick capture system-wide'.includes(q)) && (
-              <QuickCaptureShortcutEditor
-                recording={recordingId === 'quickCapture'}
+            {nativeShortcuts.filter(shortcut => q === '' || shortcut.search.includes(q)).map(shortcut => (
+              <NativeShortcutEditor
+                key={shortcut.id}
+                shortcut={shortcut}
+                recording={recordingId === shortcut.id}
                 onStart={() => {
                   clearTransient();
-                  setRecordingId('quickCapture');
+                  setRecordingId(shortcut.id);
                 }}
                 onCancel={() => setRecordingId(null)}
               />
-            )}
+            ))}
             {q === '' && (
             <section className="shortcut-editor-category shortcut-editor-dock">
               <h3 className="shortcut-editor-category-title">Dock</h3>

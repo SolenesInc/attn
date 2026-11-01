@@ -68,6 +68,8 @@ const (
 	SettingActivityPresenceIdleSeconds   HomeSetting    = "activity.presence_idle_seconds"
 	SettingGardenAdvisor                 HomeSetting    = "garden.advisor"
 	SettingDictationRefinementAgent      HomeSetting    = "dictation.refinement_agent"
+	SettingDictationShortcut             HomeSetting    = "dictation.shortcut"
+	SettingDictationInteraction          HomeSetting    = "dictation.interaction"
 	SettingCrewHeartbeatEnabled          HomeSetting    = "crew.heartbeat_enabled"
 	SettingCrewAutoSleepEnabled          HomeSetting    = "crew.autosleep_enabled"
 	SettingCrewCacheTTLSeconds           HomeSetting    = "crew.cache_ttl_seconds"

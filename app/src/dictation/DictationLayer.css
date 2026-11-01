@@ -1,0 +1,112 @@
+.dictation-layer {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, calc(100vw - 32px));
+  pointer-events: none;
+  font-size: var(--font-size-md, 13px);
+  color: var(--color-text-primary, #e8e8e8);
+}
+
+.dictation-pill,
+.dictation-card {
+  pointer-events: auto;
+  background: var(--color-bg-elevated, #1a1a1d);
+  border: 1px solid var(--color-border-hover, #3a3a3d);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.dictation-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+}
+
+.dictation-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted, #666);
+  flex-shrink: 0;
+}
+
+.dictation-pill[data-phase='recording'] .dictation-dot {
+  background: var(--color-error, #ef4444);
+}
+
+.dictation-pill-text {
+  white-space: pre-wrap;
+}
+
+.dictation-pill[data-tone='error'] .dictation-pill-text {
+  color: var(--color-warning, #f59e0b);
+}
+
+.dictation-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dictation-actions button {
+  font: inherit;
+  font-size: var(--font-size-sm, 11px);
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border-hover, #3a3a3d);
+  background: var(--color-bg-button, #252528);
+  color: inherit;
+  cursor: pointer;
+}
+
+.dictation-actions button:hover {
+  border-color: var(--color-border-focus, #4a4a4d);
+}
+
+.dictation-actions button[data-primary='true'] {
+  border-color: var(--color-accent, #5b8cff);
+}
+
+.dictation-card {
+  width: 100%;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dictation-card-note {
+  color: var(--color-text-tertiary, #888);
+  font-size: var(--font-size-sm, 11px);
+}
+
+.dictation-card-label {
+  color: var(--color-text-tertiary, #888);
+  font-size: var(--font-size-sm, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dictation-card-text {
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow: auto;
+  user-select: text;
+}
+
+.dictation-card-text del {
+  color: var(--color-text-muted, #666);
+}
+
+.dictation-card-text ins {
+  text-decoration: none;
+  background: rgba(63, 185, 80, 0.18);
+}

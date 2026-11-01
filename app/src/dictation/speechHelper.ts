@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { isMacLikePlatform } from '../shortcuts/platform';
+import { DICTATION_SHORTCUT_SETTING, dictationShortcut } from './settings';
 
 export const DICTATION_ENABLED_SETTING = 'dictation_enabled';
 const STATUS_EVENT = 'speech-status';
@@ -47,5 +48,39 @@ export function useSpeechStatus() {
     status,
     retry: () => changeHelper('speech_enable').then(setStatus),
     remove: () => changeHelper('speech_remove').then(setStatus),
+  };
+}
+
+export function useDictationShortcut(settings: Record<string, string>, connected: boolean, save: (key: string, value: string) => Promise<void>) {
+  const enabled = settings[DICTATION_ENABLED_SETTING] === 'true';
+  const binding = dictationShortcut(settings);
+  const [error, setError] = useState<string>();
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    if (!speechSupported() || !connected) return;
+    let disposed = false;
+    const wanted = enabled ? binding : null;
+    invoke('dictation_bind', { binding: wanted }).then(
+      () => { if (!disposed) { setActive(wanted); setError(undefined); } },
+      failure => { if (!disposed) setError(String(failure)); },
+    );
+    return () => { disposed = true; };
+  }, [enabled, binding, connected]);
+  return {
+    enabled,
+    binding,
+    active,
+    error,
+    setBinding: async (next: string | null) => {
+      await invoke('dictation_bind', { binding: next });
+      try {
+        await save(DICTATION_SHORTCUT_SETTING, next ?? '');
+      } catch (failure) {
+        await invoke('dictation_bind', { binding: active });
+        throw failure;
+      }
+      setActive(next);
+      setError(undefined);
+    },
   };
 }
