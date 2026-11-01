@@ -31,7 +31,12 @@ export async function workInFolder({ observer, binary, env, cwd }) {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  const closed = observer.waitForMessage(
+    (message) => message.event === 'session_unregistered' && message.session?.id === id,
+    `agent session ${id} in ${cwd} to close`,
+    CLOSE_TIMEOUT_MS,
+  );
   observer.unregisterSession(id);
-  await observer.waitFor(() => (observer.getSession(id) ? null : true), `agent session ${id} in ${cwd} to close`, CLOSE_TIMEOUT_MS);
+  await closed;
   return id;
 }
