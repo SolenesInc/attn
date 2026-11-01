@@ -37,7 +37,7 @@ None. Agents do not read or change telemetry. attn records their `attn` commands
 ### Triggers
 
 - While recording, the daemon mirrors every event bus fact except `vent.*` into the outbox (`internal/daemon/analytics_mirror.go`). It records app actions, `attn` command outcomes and socket command outcomes (`internal/daemon/analytics_records.go`). It takes a resource sample of the daemon every 5 minutes (`internal/daemon/analytics_samples.go`).
-- While sharing, the daemon uploads every 5 minutes and once when sharing turns on (`internal/daemon/analytics_ship.go`). It uploads to the URL in `ATTN_ANALYTICS_INGEST_URL` from the daemon's environment, or to `https://attn-telemetry.caketroll.cloud` without that variable.
+- While sharing, the daemon uploads every 5 minutes and once when sharing turns on (`internal/daemon/analytics_ship.go`). It uploads to the URL in `ATTN_ANALYTICS_INGEST_URL` from the daemon's environment. Without that variable, the default instance on the default data folder uploads to `https://attn-telemetry.caketroll.cloud`, and every other instance to `http://127.0.0.1:1`, where nothing listens (`config.AnalyticsIngestURL`). The Share row in Machine settings says where uploads go, and why nowhere on an instance other than production. `wsctl request --json '{"cmd":"get_analytics_status","request_id":"s"}' --event get_analytics_status_result` prints the same from the daemon (`ingest_url`, `ingest_off_reason`), with the last refusal.
 - Records older than 7 days leave the outbox. While sharing is on, records not yet sent wait up to 30 days.
 
 ## Driving it
@@ -46,8 +46,7 @@ Preconditions:
 
 - Use the baseline instance with its app. Check that `bridge --launch --wait-ready ping` answers, then run `bridge dismiss_whats_new` to dismiss What's new.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- Keep the baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started without the env file lacks the variable. Stop the daemon and start it again in the instance shell.
-- For the sharing steps only, start a local attn-ingest on `127.0.0.1:8080` as the "Running locally" section of `docs/internal/attn-ingest.md` describes (`make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and start the daemon with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both of these, skip the sharing step and report it skipped.
+- For the sharing steps only, start a local attn-ingest on `127.0.0.1:8080` as the "Running locally" section of `docs/internal/attn-ingest.md` describes (`make ingest-clickhouse` needs Docker, and `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), then append `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` to the env file and start the daemon again in the instance shell. Without both of these, skip the sharing step and report it skipped.
 
 - **Turn recording on in the app.** Press ⌘, (`ui.openSettings`) with `bridge native_key '{"key":",","modifiers":["command"]}'`. `bridge settings_get_state` shows `open: true`. Click `[data-testid="settings-nav-experimental"]` natively, then `[data-testid="settings-analytics-toggle"]`. `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","timeoutMs":5000}'` matches, and `./attn settings get analytics.enabled` prints `true`.
 - **Off and on from the shell.** Run `./attn settings set analytics.enabled false`. It prints `analytics.enabled = false`, and `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","absent":true,"timeoutMs":5000}'` matches. Run `./attn settings set analytics.enabled true` to bring the section back.
@@ -80,7 +79,7 @@ Preconditions:
 
 ## Gotchas
 
-- A named instance has no guard of its own against the real service. Turning sharing on, "Forget this install…" and "Delete from server" all reach `https://attn-telemetry.caketroll.cloud` unless the daemon was started with `ATTN_ANALYTICS_INGEST_URL`, which the baseline exports. `make install` and `./attn daemon ensure` start the daemon with the instance shell's environment, so a daemon started without the env file lacks the variable.
+- An instance on a copy of production data keeps production's `analytics.sharing_enabled`. It still uploads nowhere, because the instance, not the data, picks the URL. Exporting `ATTN_ANALYTICS_INGEST_URL` to the real service in the instance shell would send it there.
 - With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and **Settings → Analytics** is absent.
 - The "Usage analytics" switch sits low in **Settings → Experimental**. `dom_native_point` scrolls it into view before returning its point.
 - A click that removes the focused control, such as a "Clear…" or "Forget…" confirm, or `m` pressed on a Machine settings button, leaves the page without focus. The page's keys do nothing until you click a row or button inside the page.

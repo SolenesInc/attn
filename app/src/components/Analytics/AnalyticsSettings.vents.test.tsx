@@ -57,7 +57,7 @@ function serveVents(daemon: ScriptedDaemon) {
       { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
     ];
   });
-  daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0 }));
+  daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0, ingest_url: 'https://attn-telemetry.caketroll.cloud' }));
 }
 
 async function openVents() {

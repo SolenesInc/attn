@@ -57,9 +57,7 @@ the file, the daemon launches the mock agent for `claude` and `codex`,
 refuses headless model tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME`
 gives the instance a scratch harness home, so a mock conversation that a
 fixture makes resumable lands there and not in your `~/.claude` or
-`~/.codex`. `ATTN_ANALYTICS_INGEST_URL` points
-analytics uploads at an address that goes nowhere, so turning sharing on
-cannot reach the real telemetry service. The file also defines `wsctl`,
+`~/.codex`. The file also defines `wsctl`,
 `bridge` and `DRIVE_ENV`, the path of the file itself, which recipes append
 their variables to ([features/README.md](features/README.md)). Running
 `write-env.sh` again starts the file over.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -133,6 +134,10 @@ func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.Get
 		}
 		if refusal := d.analyticsUpload.lastRefusal(); refusal != "" {
 			result.LastRefusal = &refusal
+		}
+		result.IngestURL = config.AnalyticsIngestURL()
+		if reason := config.AnalyticsIngestOffReason(); reason != "" {
+			result.IngestOffReason = &reason
 		}
 	}
 	d.sendToClient(client, result)

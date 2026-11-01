@@ -5854,15 +5854,17 @@ export enum GetAnalyticsStatusMessageCmd {
 }
 
 export interface GetAnalyticsStatusResultMessage {
-    bytes:         number;
-    error?:        string;
-    event:         GetAnalyticsStatusResultMessageEvent;
-    last_refusal?: string;
-    last_sent_at?: string;
-    records:       number;
-    request_id:    string;
-    success:       boolean;
-    waiting:       number;
+    bytes:              number;
+    error?:             string;
+    event:              GetAnalyticsStatusResultMessageEvent;
+    ingest_off_reason?: string;
+    ingest_url:         string;
+    last_refusal?:      string;
+    last_sent_at?:      string;
+    records:            number;
+    request_id:         string;
+    success:            boolean;
+    waiting:            number;
     [property: string]: any;
 }
 
@@ -23314,6 +23316,8 @@ const typeMap: any = {
         { json: "bytes", js: "bytes", typ: 0 },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("GetAnalyticsStatusResultMessageEvent") },
+        { json: "ingest_off_reason", js: "ingest_off_reason", typ: u(undefined, "") },
+        { json: "ingest_url", js: "ingest_url", typ: "" },
         { json: "last_refusal", js: "last_refusal", typ: u(undefined, "") },
         { json: "last_sent_at", js: "last_sent_at", typ: u(undefined, "") },
         { json: "records", js: "records", typ: 0 },

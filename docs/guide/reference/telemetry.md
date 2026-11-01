@@ -74,8 +74,13 @@ profile the vent belongs to.
 ## What is sent
 
 While sharing is on, Attn uploads to `https://attn-telemetry.caketroll.cloud`
-every 5 minutes, and once right away when you turn sharing on. Each upload is
-one batch of at most 5,000 unsent records, oldest first, preceded by the details of the build that sent it:
+every 5 minutes, and once right away when you turn sharing on. Only the default
+instance on the default data folder uploads there. Any other instance uploads
+to `http://127.0.0.1:1`, where nothing listens, unless its daemon starts with
+`ATTN_ANALYTICS_INGEST_URL` naming another service. The Share row in
+**Settings → Analytics** says where uploads go. Each upload is one batch of at
+most 5,000 unsent records, oldest first, preceded by the details of the build
+that sent it:
 
 ```json
 {"build":{"version":"0.42.1","commit":"a3f9e1c","channel":"release","build_time":"...","fingerprint":"...",

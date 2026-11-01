@@ -114,6 +114,11 @@ ATTN_INGEST_LISTEN=127.0.0.1:8080 go run ./cmd/attn-ingest
 make ingest-clickhouse-stop
 ```
 
+An instance other than production uploads nowhere by default. Start its daemon
+with `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` to upload to this local
+service. Only the default instance on the default data folder uploads to
+`https://attn-telemetry.caketroll.cloud` without the variable.
+
 ## Testing
 
 The stack tests in `cmd/attn-ingest` and the analytics upload wire tests in

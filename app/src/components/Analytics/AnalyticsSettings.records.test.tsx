@@ -29,6 +29,7 @@ function serveRecords(daemon: ScriptedDaemon) {
     records: stored.length,
     bytes: stored.reduce((sum, r) => sum + r.record.length, 0),
     waiting: stored.length,
+    ingest_url: 'https://attn-telemetry.caketroll.cloud',
   }));
   daemon.on('clear_analytics_records', () => {
     const records = stored.length;

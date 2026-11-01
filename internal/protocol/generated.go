@@ -5563,6 +5563,12 @@ type GetAnalyticsStatusResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// IngestOffReason corresponds to the JSON schema field "ingest_off_reason".
+	IngestOffReason *string `json:"ingest_off_reason,omitempty,omitzero"`
+
+	// IngestURL corresponds to the JSON schema field "ingest_url".
+	IngestURL string `json:"ingest_url"`
+
 	// LastRefusal corresponds to the JSON schema field "last_refusal".
 	LastRefusal *string `json:"last_refusal,omitempty,omitzero"`
 

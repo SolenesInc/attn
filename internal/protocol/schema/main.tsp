@@ -1349,7 +1349,8 @@ model GetAnalyticsStatusMessage {
 // text. waiting counts rows not yet sent. last_sent_at is when the newest sent
 // row still kept went to attn-ingest. last_refusal says why the last upload
 // failed, naming the limit when attn-ingest refused it; it clears once a batch
-// is accepted.
+// is accepted. ingest_url is where uploads go; ingest_off_reason says why a
+// non-production instance uploads nowhere.
 model GetAnalyticsStatusResultMessage {
   event: "get_analytics_status_result";
   request_id: string;
@@ -1360,6 +1361,8 @@ model GetAnalyticsStatusResultMessage {
   waiting: safeint;
   last_sent_at?: string;
   last_refusal?: string;
+  ingest_url: string;
+  ingest_off_reason?: string;
 }
 
 // Delete everything attn-ingest holds for this install, then start a new

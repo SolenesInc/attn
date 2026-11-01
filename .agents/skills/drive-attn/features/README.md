@@ -21,9 +21,8 @@ In the index, "both" means people and agents.
 
 - A fresh named instance, launched as [../SKILL.md](../SKILL.md) describes:
   built from this checkout, the mock agent for `claude` and `codex`, headless
-  model tasks off, the mock GitHub, a scratch tool home (`ATTN_TOOL_HOME`)
-  and an analytics upload address that goes nowhere
-  (`ATTN_ANALYTICS_INGEST_URL`). The doctor passes before the first action.
+  model tasks off, the mock GitHub and a scratch tool home (`ATTN_TOOL_HOME`).
+  The doctor passes before the first action.
 - On a fresh app, What's new covers the home screen and holds the palette
   and most shortcuts. Run `bridge dismiss_whats_new` first.
 - If a feature needs realistic data, its file says so in the preconditions.

@@ -17,7 +17,7 @@ $selection
 cd '$root'
 unset ATTN_INSIDE_APP ATTN_TERMINAL_ID ATTN_SESSION_ID ATTN_AGENT ATTN_WRAPPER_PATH ATTN_CODEX_SHARED_PROFILE CODEX_THREAD_ID CODEX_HOME
 export ATTN_CLAUDE_EXECUTABLE='$mock_agent' ATTN_CODEX_EXECUTABLE='$mock_agent' ATTN_HEADLESS_TASKS=off
-export ATTN_TOOL_HOME=$tool_home ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1
+export ATTN_TOOL_HOME=$tool_home
 export ATTN_MOCK_GH_URL=http://127.0.0.1:$mock_github_port ATTN_MOCK_GH_TOKEN=test-token ATTN_MOCK_GH_HOST=mock.github.local
 DRIVE_ENV=$env_file
 wsctl() { go run ./scripts/wsctl "\$@"; }

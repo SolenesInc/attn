@@ -45,9 +45,11 @@ function Confirmable({ asking, label, onYes, onDone, children }: {
 
 function shareCopy(sharing: boolean, status: AnalyticsStatus | null, offeringDelete: boolean): ReactNode {
   if (offeringDelete) return 'Sharing is off. Delete what the server already holds?';
-  if (!sharing) return status && `${recordCount(status.waiting)} would be sent.`;
-  if (status?.lastRefusal) return <span className="settings-warning">{status.lastRefusal}</span>;
-  return sharingLine(status);
+  if (status?.ingestOffReason) return <span className="settings-warning">{status.ingestOffReason}</span>;
+  if (sharing && status?.lastRefusal) return <span className="settings-warning">{status.lastRefusal}</span>;
+  if (!status) return null;
+  const to = <code>{status.ingestUrl}</code>;
+  return sharing ? <>{sharingLine(status)} · uploads go to {to}</> : <>{recordCount(status.waiting)} would be sent to {to}.</>;
 }
 
 const toggled = (on: boolean) => (on ? 'false' : 'true');

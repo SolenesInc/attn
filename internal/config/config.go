@@ -243,7 +243,7 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CONFIG_PATH")
 	os.Unsetenv("ATTN_PLUGIN_DIR")
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
-	os.Setenv(AnalyticsIngestURLEnv, unreachableAnalyticsIngest)
+	os.Unsetenv(AnalyticsIngestURLEnv)
 	unsetInheritedGitConfig()
 }
 
@@ -280,7 +280,36 @@ func AnalyticsIngestURL() string {
 	if url := strings.TrimSpace(os.Getenv(AnalyticsIngestURLEnv)); url != "" {
 		return strings.TrimRight(url, "/")
 	}
+	if nonProductionInstance() != "" {
+		return unreachableAnalyticsIngest
+	}
 	return defaultAnalyticsIngestURL
+}
+
+func AnalyticsIngestOffReason() string {
+	if strings.TrimSpace(os.Getenv(AnalyticsIngestURLEnv)) != "" {
+		return ""
+	}
+	instance := nonProductionInstance()
+	if instance == "" {
+		return ""
+	}
+	return fmt.Sprintf("Uploads go to %s, where nothing listens, because this is %s, not production. Start its daemon with %s=<url> to upload to an attn-ingest.",
+		unreachableAnalyticsIngest, instance, AnalyticsIngestURLEnv)
+}
+
+func nonProductionInstance() string {
+	if instance := Instance(); instance != "" {
+		return "instance " + instance
+	}
+	production := defaultAttnDir("")
+	if dir := filepath.Clean(filepath.Dir(SocketPath())); dir != production {
+		return "data folder " + dir
+	}
+	if db := filepath.Clean(DBPath()); db != filepath.Join(production, "attn.db") {
+		return "database " + db
+	}
+	return ""
 }
 
 func DataDir() string {
