@@ -10,10 +10,7 @@ func (m *Monitor) react(view View) {
 	m.reacted = view
 	m.mu.Unlock()
 	state := view.State.V
-	if state.Sequence != previous.State.V.Sequence && !state.Quiet {
-		m.UpdateTranscriptState(state.State)
-		if state.Resolve {
-			m.ResolveSoon()
-		}
+	if state.Sequence != previous.State.V.Sequence && !state.Quiet && state.Resolve {
+		m.ResolveSoon()
 	}
 }

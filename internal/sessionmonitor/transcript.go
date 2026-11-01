@@ -45,7 +45,6 @@ type transcriptWatcher struct {
 	detail         string
 	transcriptPath string
 	window         *transcript.AssistantWindow
-	sessionState   protocol.SessionState
 }
 
 type AssistantWindow struct {
@@ -120,16 +119,10 @@ func (w *transcriptWatcher) applyEvents(events []transcript.Event) bool {
 	return w.window.Apply(events)
 }
 
-func (w *transcriptWatcher) state() protocol.SessionState {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.sessionState
-}
-
-func (w *transcriptWatcher) setState(state protocol.SessionState) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.sessionState = state
+func (m *Monitor) sessionState() protocol.SessionState {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.state.State
 }
 
 func isDuplicateAssistantEvent(lastContent string, lastAt time.Time, content string, now time.Time) bool {
@@ -259,7 +252,6 @@ func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
 	}
 	watcher := newTranscriptWatcher(m, agent, cwd, startedAt, behavior)
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
-	watcher.setState(m.state.State)
 
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
 	if !m.registry.host.Go("runTranscriptWatcher", watcher.run) {
@@ -275,18 +267,6 @@ func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
 		close(previous.stopCh)
 	}
 	m.logf("transcript watcher: started session=%s agent=%s cwd=%s", label, agent, cwd)
-}
-
-func (m *Monitor) UpdateTranscriptState(state protocol.SessionState) {
-	if m == nil {
-		return
-	}
-	m.mu.Lock()
-	watcher := m.transcriptWatch
-	m.mu.Unlock()
-	if watcher != nil {
-		watcher.setState(state)
-	}
 }
 
 func (w *transcriptWatcher) applyUsageAvailability(batch transcript.FollowBatch) {
@@ -505,7 +485,7 @@ func (w *transcriptWatcher) run() {
 
 		discoveryDeadline = w.discoveryDeadline(clock.Now())
 		fallbackAttempted bool
-		usageState        = w.state()
+		usageState        = m.sessionState()
 	)
 	defer func() {
 		if w.usageTracker != nil {
@@ -531,7 +511,7 @@ func (w *transcriptWatcher) run() {
 			}
 		}
 
-		sessionState := w.state()
+		sessionState := m.sessionState()
 		usageSettled := usageState == protocol.SessionStateWorking && sessionState != protocol.SessionStateWorking
 		usageState = sessionState
 		windowChanged := false
@@ -673,9 +653,7 @@ func (w *transcriptWatcher) run() {
 			!lastAssistantAt.IsZero() &&
 			!quietSince.IsZero() &&
 			clock.Now().Sub(quietSince) >= TranscriptQuietWindow {
-			m.mu.Lock()
-			current := m.state.State
-			m.mu.Unlock()
+			current := m.sessionState()
 			if skip, reason := w.behavior.SkipClassification(current, m.lastSeen(), time.Now()); skip {
 				if strings.TrimSpace(reason) == "" {
 					reason = "transcript watcher: skipping classification"
