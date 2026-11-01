@@ -63,7 +63,7 @@ In the index, "both" means people and agents.
 ### Entrypoints and harnesses
 
 - People: `bridge` with native input (`native_key`, `native_text`,
-  `native_mouse`) for shortcuts, the palette and controls; `./attn` for the
+  `native_mouse`) for shortcuts, the palette and controls, and `./attn` for the
   person's own shell.
 - Agents: a mock agent whose fixture runs the verb with an `attn` action.
   `./attn` from the instance shell stands in for an agent only on a verb
@@ -135,7 +135,7 @@ In the index, "both" means people and agents.
 - The palette: press ⌘⇧K (`ui.commandPalette`), wait for
   `[role="combobox"][aria-label="Commands"]` to take focus, type the
   command's title with `bridge native_text`, then press Enter. The map names
-  the command id; you type its title.
+  the command id, and you type its title.
 - Settings: press ⌘, (`ui.openSettings`, which closes the dialog when the
   dialog is open), clear any `search` that `bridge settings_get_state` shows,
   then click the section's nav button,
@@ -207,7 +207,7 @@ In the index, "both" means people and agents.
   /tmp/drive-attn-<feature>.XXXX)`. The recipe's preconditions make the folder
   and append `P` to the env file as above. `bridge` JSON is single-quoted, so
   a path in the JSON is written out. `<P>` stands for the path of that folder.
-- Drive each way in once, in the file that owns the way in. Other files link
+- Drive each way in once, in the file that documents the way in. Other files link
   to that file. A way in that the harnesses cannot reach keeps its step. The
   step says so and fails, and the reason goes in that file's Gotchas.
 
@@ -259,7 +259,7 @@ Every feature file has these sections, in this order:
    the person or agent does. Run `<command>`. <What you see>." Chain the
    commands for an action that needs setup, a native action and a read in one
    bullet. Use only the harnesses and conventions above. Cover every way in
-   the file owns, and end with a **Proof.** bullet naming what to capture.
+   the file documents, and end with a **Proof.** bullet naming what to capture.
 5. `## Contexts`: only the contexts below that apply, one bullet each saying
    how the feature behaves under it. A context left out does not apply.
 6. `## Tests`: pointers by kind, as paths or scenario ids, and nothing else.
@@ -318,13 +318,13 @@ HEAD.
 
 How the recipes were checked: the Driving it section of
 [garden.md](garden.md) ran live on a named instance, for the daemon and the
-CLI only, at commit `b3d0df90a`. Every step that ran did so from the instance shell and from the agents' entrypoints, where the mock agent tended, watched, armed a
+CLI only, at commit `b3d0df90a`. Every step that ran used the instance shell and the agents' entrypoints. In those steps the mock agent tended, watched, armed a
 harvest on merge and harvested. Three groups of steps come from reading the
 source and the CLI's help and have not run yet: the garden.md steps that arm
 a harvest without a url and take the arming back, the garden.md `bridge`
 steps, and the Driving it section of every other file. The env file and its
-prefix replaced the shell that the run used. They were checked with a
-stand-in `attn`, not on an instance. A file whose recipe runs live says so
+prefix replaced the shell that the run used. The check of the env file and its
+prefix used a stand-in `attn`, not an instance. A file whose recipe runs live says so
 here.
 
 ### Agents and sessions

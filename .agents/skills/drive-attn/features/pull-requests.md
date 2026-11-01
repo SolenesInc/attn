@@ -38,7 +38,7 @@ and mute.
 ### Agents
 
 - `attn pr` (`cmd/attn/pr.go`, `cmd/attn/pr_session.go`): `record`, `forget`, `ls`, `watch` (`--mode green|codex|formal-review`, `--reviewer`), `unwatch`, `status`, and `wait-ready` (with `--repo`, `--mode`, `--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`). Inside a session, the session is implied. Outside a session, `--session <id>` names the session. `wait-ready` exits 0 ready, 1 checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error, merged or closed, and 124 timeout.
-- Prompts: the self-report guidance for harnesses without hooks, which tells the agent to run `attn pr record` (`internal/prompts/content/session/pull-request-guidance.md`). A watch's update reaches the agent as an inbox notice, "Pull request monitor: <what happened> for <pull request>." (`internal/daemon/session_pull_request_refresh.go`). [inbox.md](inbox.md) covers how the agent reads the notice.
+- Prompts: the self-report guidance for harnesses without hooks, which tells the agent to run `attn pr record` (`internal/prompts/content/session/pull-request-guidance.md`). A watch's update reaches the agent as an inbox notice, "Pull request monitor: <what happened> for <pull request>." (`internal/daemon/session_pull_request_refresh.go`). See [inbox.md](inbox.md) for how the agent reads the notice.
 
 ### Triggers
 
@@ -76,7 +76,7 @@ Preconditions:
 ]}
 ```
 
-`<url>` below is `https://mock.github.local/northwind/atlas/pull/418`; `<terminal>` is the agent's terminal id from `wsctl list`.
+`<url>` below is `https://mock.github.local/northwind/atlas/pull/418`. `<terminal>` is the agent's terminal id from `wsctl list`.
 
 - **The home screen lists the user's pull requests.** Press ⌘⇧H (`bridge native_key '{"key":"h","modifiers":["command","shift"]}'`) so the home screen shows, then run `bridge home_get_state`. Away from home, the `prs` sections read `null`. `prs.yours.rows` lists the fixture's own pull requests by number, `#412` and `#418` among them, and `prs.review.repoGroups` names the repositories with review requests.
 - **Open the drawer with the shortcut.** Press ⌘⇧P: `bridge native_key '{"key":"p","modifiers":["command","shift"]}'`, then `bridge dom_wait '{"selector":".attention-drawer[aria-hidden=\"false\"]","timeoutMs":5000}'`. `bridge dom_text '{"selector":".attention-drawer-panel"}'` reads "Needs Attention", "Your PRs" and the fixture's titles. Press ⌘⇧P again: `bridge dom_wait '{"selector":".attention-drawer[aria-hidden=\"true\"]","timeoutMs":5000}'` matches.
@@ -95,7 +95,15 @@ Preconditions:
 - **From the person's shell.** `./attn pr record <url>` exits 2 with `pr record: no session — pass --session <id>, or run inside an attn session`. `./attn pr record <url> --session pr-agent` prints `recorded <url> for session pr-agent`. `./attn pr wait-ready 418` exits 2 with `pr wait-ready: --repo is required when the target is a number`.
 - **Guidance.** Run `./attn prompts render session pull-request-guidance`. It prints the text that asks an agent to run `attn pr record <url>` right after `gh pr create`.
 - **Open a pull request in a worktree session.** Set Settings, Files and locations, Projects Directory to a folder holding a clone of the pull request's repository, press ⌘⇧H (`session.goToDashboard`, `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`) to return to the home screen, then click a home screen card's `[data-testid="open-button"]` ("New worktree session") natively. The launcher shows its steps, and a session starts in a new worktree on the pull request's branch. [worktrees.md](worktrees.md) owns the worktree. On the baseline this fails, as Gotchas says. Wait for `.open-pr-launcher` to leave with `bridge dom_wait '{"selector":".open-pr-launcher","absent":true,"timeoutMs":30000}'`, then capture the native alert with `bridge capture_native_window_screenshot '{"path":"<P>/pr-worktree-alert.png"}'`. A web screenshot does not include that alert.
-- **Proof.** In `$P`, keep each `./attn pr` command's output with its exit code; `bridge home_get_state` before and after the refresh, the approve, the merge and the mutes; `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge; `./attn agent peek pr-agent` after each agent turn and after the ring; `./attn pr ls --session pr-agent --json` after the record and the forget; `bridge capture_screenshot '{"path":"<P>/pr-drawer.png"}'` with the drawer open and `<P>/pr-header.png` with the agent's tile, where `<P>` is the folder's path written out. Name each file for its way in, such as `pr-shortcut-drawer.txt`.
+- **Proof.** In `$P`, keep these:
+  - each `./attn pr` command's output with its exit code
+  - `bridge home_get_state` before and after the refresh, the approve, the merge and the mutes
+  - `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge
+  - `./attn agent peek pr-agent` after each agent turn and after the ring
+  - `./attn pr ls --session pr-agent --json` after the record and the forget
+  - `bridge capture_screenshot '{"path":"<P>/pr-drawer.png"}'` with the drawer open and `<P>/pr-header.png` with the agent's tile, where `<P>` is the folder's path written out
+
+  Name each file for its way in, such as `pr-shortcut-drawer.txt`.
 
 ## Contexts
 
@@ -109,7 +117,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go`, `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`; shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go`, `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attn/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `internal/hooks/pullrequest_test.go`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`.
@@ -126,5 +134,5 @@ Preconditions:
 - ⌘R and `wsctl refresh-prs` poll the GitHub list only. A session's recorded pull request refreshes on its own 30-second tick.
 - "New worktree session" needs a Projects Directory holding a clone it can fetch. The mock serves no Git, so on the baseline it fails with an alert naming the clone or fetch (`git worktree add failed: fatal: invalid reference: origin/fixture-head` for an empty clone). Focus-free input cannot dismiss that alert, and a native click aimed at its OK goes through to the page beneath, where it can hit a card's buttons. Quit the app with `./attn instance stop-app` and launch it again with `bridge --launch --wait-ready ping` to clear the alert. `projects_directory` cannot be set back to empty afterwards.
 - The mock GitHub keeps a merged pull request open. The merged row leaves the list for this run of the app, and comes back after a relaunch.
-- Approve and Merge on the baseline reach only the mock; prove them through its `/__control` `requests`, not through GitHub. Their ✓ (`data-success="true"`) shows for 1.5 seconds, so start the `dom_wait` right after the click.
+- Approve and Merge on the baseline reach only the mock, so prove them through its `/__control` `requests`, not through GitHub. Their ✓ (`data-success="true"`) shows for 1.5 seconds, so start the `dom_wait` right after the click.
 - Working but wrong: a muted pull request has no way back. Settings lists muted repositories and authors, never single pull requests. The drawer's footer shows the agent palette's key (⌘K) as the drawer's toggle, while the real toggle is ⌘⇧P. The same drawer is "PRs drawer" in the shortcut list and "Open attention drawer" in the palette, and its own title reads "Needs Attention".

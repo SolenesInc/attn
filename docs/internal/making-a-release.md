@@ -6,16 +6,17 @@ Release notes come from the commits that land on `main`.
 `scripts/compile-changelog.sh` reads the commits since the previous release,
 groups them by their `Attn-Seed:` trailers, and has Claude write the
 `CHANGELOG.md` section from each seed's title, description, and notes and from
-the commit messages. The script uses only the messages of commits without a seed, and of seeds the script cannot read, so write commit messages that say what
-users observe. Run the release inside attn, in the profile that holds attn's
-seeds, so the script can read them.
+the commit messages. For a commit without a seed, and for a seed the script
+cannot read, the script uses only the commit messages, so write commit messages
+that say what users observe. Run the release inside attn, in the profile that
+holds attn's seeds, so the script can read them.
 
 The section ends with a marker that names the commits the section covers. The
 release checks require the marker, so no commit is skipped or covered twice. A
 pull request from a fork needs nothing extra, because its squashed commit
 carries the pull request's title and description. Fragments left in
-`changelog.d` from before reach Claude with the commits that added them, and
-the next release deletes the fragments.
+`changelog.d` from before go to Claude together with the commits that added
+them, and the next release deletes the fragments.
 
 ## Release
 

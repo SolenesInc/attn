@@ -128,7 +128,7 @@ tried. The usual reasons:
 - It needs a real external service.
 - The permissions denied a step.
 
-Don't get around any of these to reach the feature. If the feature file
+Don't work around any of these to reach the feature. If the feature file
 doesn't say what the feature needs, fix the file.
 
 After you fix drive-attn's scripts, drive the affected features again to

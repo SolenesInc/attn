@@ -134,8 +134,8 @@ you the next agent that needs you, so you decide less and get more done. See
 
 ## Where next
 
-You can now use Attn as a basic orchestrator, congrats! Now comes the fun part:
-getting a lot more done by orchestrating dozens of agents at the same time.
+You can now use Attn as a basic orchestrator. The next step is to get a lot more
+done by orchestrating dozens of agents at the same time.
 
 - Arrange your work on [desktops](../reference/desktops.md), and find, resume
   and close agents with [sessions](../reference/sessions.md).

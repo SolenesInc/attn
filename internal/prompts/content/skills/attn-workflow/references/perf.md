@@ -16,7 +16,7 @@ Profile the run or read counters during it, and map what bounds the result to th
 
 ## Change one thing
 
-Test one hypothesis at a time, and make each hypothesis name one mechanism. Make the smallest change that tests the hypothesis, measure before and after with the frozen command, and run the regression tests. Keep the change only when the metric moves past the noise and behavior holds. Otherwise, revert the change in full. Do not keep a tweak that might help. Commit each accepted change on its own, so each commit keeps the before-and-after measurement that justified it.
+Test one hypothesis at a time, and make each hypothesis name one mechanism. Make the smallest change that tests the hypothesis, measure before and after with the frozen command, and run the regression tests. Keep the change only when the metric moves past the noise and behavior holds. Otherwise, revert the change in full. Do not keep a tweak that might help. Commit each accepted change on its own, and record the before-and-after measurement that justified it in that commit.
 
 When the assignment is to keep improving one metric toward a target, work in a loop. First, state the stop predicate: a target and a floor on attempts, so a lucky early win cannot end the run. Keep a decision log as a file attached to the seed, with one line per attempt: hypothesis, change, before, after, kept or reverted. Read the log before each attempt. The seed's notes record what you kept, not every attempt. On a stall, change category or combine near misses before you conclude that no further gain is available. Correctness and simplicity outrank the number. Revert a win that breaks behavior, and keep a simplification that holds behavior. Do not relax the stop predicate so that a result meets it.
 

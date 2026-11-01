@@ -56,9 +56,9 @@ revert.
 Never act twice on the same failure. Match a failure by its job, test and
 error, not by its run: the same failure in a newer run is the same failure.
 
-- A recorded failure with an owner and no landed repair continues with that
-  owner. Add the new run to the failure's record.
-- A failure that a landed repair covers waits for that repair's push CI. A run
+- If a recorded failure has an owner and no landed repair, leave the failure
+  with that owner. Add the new run to the failure's record.
+- If a landed repair covers the failure, wait for that repair's push CI. A run
   whose `headSha` does not contain the repair
   (`git merge-base --is-ancestor <repair-sha> <head-sha>` fails) is expected to
   fail the same way. Record the run and dispatch nothing.
@@ -125,7 +125,7 @@ Use `--role pathfinder` to investigate. Link the delegation's seed with
 `attn seed link <new-seed> discovered-from <seed>` for each of the culprit's
 `Attn-Seed:` trailers. In every brief, name the failing run, the failing jobs
 and tests with their log lines, the culprit commit and its trailers, and the
-path you chose and why. A Builder's brief also tells the Builder to:
+path you chose and why. In a Builder's brief, also tell the Builder to:
 
 - Reproduce the failure before the fix and show the test passing after the
   fix. Run the test through `scripts/test-go.sh --packages`,

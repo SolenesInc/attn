@@ -1,11 +1,11 @@
 # Sidebar
 
 The sidebar is the window's list of what the user works with, and its shape
-follows the profile's flow. In desktop flow it is the desktop sidebar: each
-desktop with its agents and tiles, which collapses to a thin column of desktop
-chips. In queue flow it is the queue sidebar: Home, the crew, the turns the
-user owes, the rest of the agents, automation runs and desktop chips, which
-collapses into the queue bar across the top. The sidebar's header holds the profile,
+follows the profile's flow. In desktop flow it is the desktop sidebar, which shows each
+desktop with its agents and tiles. Collapsed, it becomes a thin column of desktop
+chips. In queue flow it is the queue sidebar, which shows Home, the crew, the turns the
+user owes, the rest of the agents, automation runs and desktop chips. Collapsed, it
+becomes the queue bar across the top. The sidebar's header holds the profile,
 Commands, the flow switch and the buttons for the garden, the notebook, the
 ledger, automations, notifications and asks.
 
@@ -26,11 +26,11 @@ ledger, automations, notifications and asks.
 
 - Keys (`app/src/shortcuts/registry.ts`): ⌘B (`session.toggleSidebar`) collapses and expands the sidebar. ⌘⇧A (`sidebar.agentList`) opens and closes the agent list. Where the queue sidebar is not showing, ⌘⇧A opens the agent palette instead (`app/src/application/useAppController.tsx`).
 - Palette (`app/src/application/useAppCommands.tsx`): `toggle-sidebar` ("Hide the sidebar" or "Show the sidebar").
-- Header (`app/src/components/SidebarHeader.tsx`): `[aria-label="Collapse sidebar"]`, `[aria-label="New agent"]`, `button[aria-label="Commands"]`, the flow button, and the profile pill. The header buttons are named by what they do, such as "Show the garden" and "Show Notifications" (`app/src/application/useAppSidebarActions.tsx`). Each button's feature owns what the button opens.
+- Header (`app/src/components/SidebarHeader.tsx`): `[aria-label="Collapse sidebar"]`, `[aria-label="New agent"]`, `button[aria-label="Commands"]`, the flow button, and the profile pill. The header buttons are named by what they do, such as "Show the garden" and "Show Notifications" (`app/src/application/useAppSidebarActions.tsx`). What each button opens is described in that button's feature file.
 - Desktop sidebar and rail (`app/src/components/Sidebar.tsx`, `app/src/components/SidebarChrome.tsx`, `app/src/components/SidebarDesktops.tsx`, `app/src/components/SidebarRows.tsx`): rows `[data-testid="sidebar-session-<session>"]` with `[aria-label="Open <name>"]` and the actions button `[data-testid="session-actions-<session>"]`, which queue rows carry too. Desktop groups are `[data-testid="sidebar-desktop-<desktop>"]`, and the rail has `button[title="Expand sidebar"]`.
 - Queue sidebar and bar (`app/src/components/QueueSidebar.tsx`, `app/src/components/QueueBar.tsx`, `app/src/components/QueueRows.tsx`): `[data-testid="queue-agents-toggle"]` and the filter `[aria-label="Filter agents"]`. ↑ and ↓ walk the rows, a letter typed with the list open filters it, and Escape clears the filter, then closes the list, then returns to the agent on screen. On the bar, `[aria-label="Show sidebar"]` expands it, and the waiting pill `[data-testid="queue-bar-pill"]` opens the agent palette. Hovering the pill shows a peek of the agents.
-- Every row's actions menu: "Mark priority", "Rename session", "Make chief of staff", "Reload session" and "Close session" (`app/src/components/SessionActionsPopover.tsx`). [queue-flow.md](queue-flow.md), [ledger.md](ledger.md), [crew.md](crew.md) and [agent-launch.md](agent-launch.md) own what each does.
-- Driven in other files: ⌘↑ and ⌘↓ step through what the sidebar lists, desktops in desktop flow ([desktops.md](desktops.md)) and the queue in queue flow ([queue-flow.md](queue-flow.md)). People switch, rename, close and drag between desktops here ([desktops.md](desktops.md)). The flow button changes the shape ([queue-flow.md](queue-flow.md)). The dock of shortcut chips sits at the foot of the desktop sidebar ([shortcuts.md](shortcuts.md)). [harnesses.md](harnesses.md) covers the harness logos on each row, and [instances.md](instances.md) owns the instance marker in the header.
+- Every row's actions menu: "Mark priority", "Rename session", "Make chief of staff", "Reload session" and "Close session" (`app/src/components/SessionActionsPopover.tsx`). See [queue-flow.md](queue-flow.md), [ledger.md](ledger.md), [crew.md](crew.md) and [agent-launch.md](agent-launch.md) for what each does.
+- Driven in other files: ⌘↑ and ⌘↓ step through what the sidebar lists, desktops in desktop flow ([desktops.md](desktops.md)) and the queue in queue flow ([queue-flow.md](queue-flow.md)). People switch, rename, close and drag between desktops here ([desktops.md](desktops.md)). The flow button changes the shape ([queue-flow.md](queue-flow.md)). The dock of shortcut chips sits at the foot of the desktop sidebar ([shortcuts.md](shortcuts.md)). See [harnesses.md](harnesses.md) for the harness logos on each row, and see [instances.md](instances.md) for the instance marker in the header.
 - Where people see what agents do: each row's state dot, harness mark, priority flag and turn age, the waiting count, and the waiting dot on desktop chips.
 
 ### Agents

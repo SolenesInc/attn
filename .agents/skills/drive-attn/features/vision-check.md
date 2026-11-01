@@ -41,10 +41,10 @@ chmod +x $P/bin/claude
 printf 'PNG pixels' > $P/shot.png
 ```
 
-- **Ask.** Run `PATH="$P/bin:$PATH" ./attn vision-check $P/shot.png "What color is the button?"`. The command prints `the button is blue` on stdout and `vision-check: model=sonnet cost_usd=0.0234 turns=1` on stderr, and exits 0. `$P/argv` holds `-p`, `--model`, `sonnet`, `--max-turns` and `1`; `$P/stdin` holds one JSON user message with the question and the image as base64 `image/png`.
+- **Ask.** Run `PATH="$P/bin:$PATH" ./attn vision-check $P/shot.png "What color is the button?"`. The command prints `the button is blue` on stdout and `vision-check: model=sonnet cost_usd=0.0234 turns=1` on stderr, and exits 0. `$P/argv` holds `-p`, `--model`, `sonnet`, `--max-turns` and `1`. `$P/stdin` holds one JSON user message with the question and the image as base64 `image/png`.
 - **JSON.** Add `--json` to the same command. The command prints `{"answer":"the button is blue","model":"sonnet","cost_usd":0.0234,"num_turns":1,"is_error":false}` on stdout and nothing on stderr.
 - **Another model.** Add `--model opus --timeout 30s`. `$P/argv` shows `opus` after `--model`.
-- **Refusals.** `./attn vision-check $P/shot.bmp "x"` exits 1 with `vision-check: unsupported image extension ".bmp" (supported: .png, .jpg, .jpeg, .gif, .webp)`. `./attn vision-check $P/shot.png` exits 2 with `vision-check: usage: attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]`. A model error, the stand-in edited to answer `"is_error":true`, prints its `result` text on stderr and exits 1.
+- **Refusals.** `./attn vision-check $P/shot.bmp "x"` exits 1 with `vision-check: unsupported image extension ".bmp" (supported: .png, .jpg, .jpeg, .gif, .webp)`. `./attn vision-check $P/shot.png` exits 2 with `vision-check: usage: attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]`. To see a model error, edit the stand-in to answer `"is_error":true`. The command then prints the `result` text on stderr and exits 1.
 - **Proof.** In `$P`, keep each command with its stdout, stderr and exit code, and keep `argv` and `stdin` after the first ask. Name each file for its way in, such as `vision-check-shell-json.txt`.
 
 ## Contexts

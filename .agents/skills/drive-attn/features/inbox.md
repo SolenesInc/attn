@@ -2,15 +2,14 @@
 
 Messages, seed updates and quick captures addressed to an agent or a mailbox.
 A ring prompts the agent to read them, like a push notification. A sender saves
-an item for an address. An address is a session, or a mailbox (a crew member,
-the chief, a seed's tender) that whichever session holds that job reads. attn
+an item for an address. An address is either a session or a mailbox. A mailbox is a crew member,
+the chief or a seed's tender, and whichever session holds that job reads it. attn
 then decides when to ring. A ring types what the user wrote into the
-conversation as the user's message, and ends with a 📬 line for everything
-else. The agent reads those items with `attn agent inbox`. Items are durable
+conversation as the user's message. It ends with a 📬 line for the other items. The agent reads those items with `attn agent inbox`. Items are durable
 and stay unread until read, typed, withdrawn or replaced.
 `docs/internal/inbox.md` holds the rules. This file shows how to drive them.
-[agent-state.md](agent-state.md) covers reading another agent's screen with
-`attn agent peek`, and [queue-flow.md](queue-flow.md) covers what a ring's run
+See [agent-state.md](agent-state.md) for reading another agent's screen with
+`attn agent peek`, and see [queue-flow.md](queue-flow.md) for what a ring's run
 does to the queue.
 
 ## Sub-features

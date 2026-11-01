@@ -7,7 +7,7 @@ description: Use when an assigned role refers to this skill, the user asks you t
 
 ## Start
 
-Match the task to one process in the table, read its reference and the principles it names, and load further references as the work requires. When you leave out a part of the process, say which part and why, in the conversation and on the seed when there is one. That makes the omission visible instead of silent. A follow-up in the same conversation continues the same process. Match the task again when the user names a new task. When the assignment came through a noisy channel, such as a long discussion or a vague report, restate the problem and the outcome in your own words before you act. Then a misreading costs one message instead of one wrong change.
+Match the task to one process in the table, read its reference and the principles it names, and load further references as the work requires. When you leave out a part of the process, say which part and why, in the conversation and on the seed when there is one. Saying so makes the omission visible instead of silent. A follow-up in the same conversation continues the same process. Match the task again when the user names a new task. When the assignment came through a noisy channel, such as a long discussion or a vague report, restate the problem and the outcome in your own words before you act. Then a misreading costs one message instead of one wrong change.
 
 | Task | Reference |
 |---|---|

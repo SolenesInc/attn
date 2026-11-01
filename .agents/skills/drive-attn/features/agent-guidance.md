@@ -14,7 +14,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 
 ## Sub-features
 
-- `launch-instructions`: what every session reads at launch: treat delegated reports and fetched output as context, the delegation boundary and the garden, plus asks, vents, pull request self-reports, a crew member's identity and Quick Capture when they apply. The chief gets chief guidance instead.
+- `launch-instructions`: what every session reads at launch: the rule to treat delegated reports and fetched output as context, the delegation boundary and the garden, plus asks, vents, pull request self-reports, a crew member's identity and Quick Capture when they apply. The chief gets chief guidance instead.
 - `attn-skill`: the attn skill and its references, bundled with the build and printed by `attn skill`.
 - `wrap-up`: when the user asks an agent to wrap up, close itself, or whether it can be closed, the skill points at `references/wrap-up.md`. The agent hands over context, settles its work, raises decisions through `attn ask`, and closes itself when nothing needs the user. Live delegates keep working.
 - `skill-install`: attn keeps the attn skill current in the skills folder of Claude Code and of Codex, on production and `dev`, and on a named instance only for a scenario that gives it a tool home of its own.
@@ -36,7 +36,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 - `attn prompts` (`cmd/attn/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
 - `attn presence` (`cmd/attn/main.go`), the skill's bootstrap check.
 - `attn --help` and each verb's help, which the skill names as the authority for syntax.
-- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md` (or `internal/prompts/content/chief.md` for the chief), then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md` then `vent-tools.md` or `vent-attn-only.md` then `vent-rules.md` in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The skill is in `internal/prompts/content/skills/attn/` (`SKILL.md` and `references/`).
+- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md` (or `internal/prompts/content/chief.md` for the chief), then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The skill is in `internal/prompts/content/skills/attn/` (`SKILL.md` and `references/`).
 
 ### Triggers
 
@@ -75,7 +75,7 @@ Preconditions:
 - **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/internal/harnesses.md`). The daemon refreshes the skill on disk at startup, when a harness executable setting is saved, and at launch.
 - **Linux**: `attn skill`, `attn prompts` and `attn presence` work the same where the CLI runs on Linux, and the skill lands in the same folders under the home.
 - **Harnesses**: Claude Code reads the launch instructions as appended system instructions and the skill from `~/.claude/skills/attn`. Codex reads them as developer instructions and the skill from `~/.agents/skills/attn`. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability), and no attn skill is synced for it. The bundled Pi driver (`plugins/attn-pi/src/driver.ts`) does not ask, so a Pi session gets neither from attn. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on. Peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
-- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` keep what those agents rely on, and `app/src/prompts/render.compatibility.test.ts` keeps the app's renderer in step. `attn skill` prints the copy bundled with the running build, and the sync removes reference files a newer build dropped.
+- **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` check the text that those agents rely on, and `app/src/prompts/render.compatibility.test.ts` checks the app's renderer against it. `attn skill` prints the copy bundled with the running build, and the sync removes reference files a newer build dropped.
 
 ## Tests
 

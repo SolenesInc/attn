@@ -27,13 +27,13 @@ restarts.
 - Palette (`app/src/application/useAppCommands.tsx`): `keyboard-shortcuts` ("Keyboard shortcuts") and `customize-shortcuts` ("Customize keyboard shortcuts").
 - What's new: "View all shortcuts →" on every step opens the cheat sheet (`app/src/components/WhatsNewModal.tsx`).
 - The editor (`app/src/components/ShortcutEditorModal.tsx`) has "Filter shortcuts", and per row the key button to record ("Press keys…", Esc to cancel), "Record a chord", ☆ "Add to dock" or ★ "Remove from dock", ↺ to reset, ✕ to unbind, and the badges Customized, Required, Menu bar and Needs terminal. It also has a Dock section with "Move <label> up", "Move <label> down" and "Remove <label> from dock", and "Restore Defaults". Key recording is `app/src/components/KeyCaptureInput.tsx`.
-- The sidebar's dock: chips for the docked shortcuts, clickable where the action allows, and "Hide dock" or "Show dock" (`app/src/components/SidebarChrome.tsx`). [sidebar.md](sidebar.md) covers the sidebar.
+- The sidebar's dock: chips for the docked shortcuts, clickable where the action allows, and "Hide dock" or "Show dock" (`app/src/components/SidebarChrome.tsx`). See [sidebar.md](sidebar.md) for the sidebar.
 - After a chord's leader, a hint shows "then…" until the second key or the timeout (`app/src/components/ChordLeaderHud.tsx`).
 - Their own shell: `attn settings get keybindings_config` reads the rebinds and the dock as JSON, and `attn settings set keybindings_config ""` restores every default ([settings.md](settings.md)).
 
 ### Agents
 
-None. An agent can only read or reset `keybindings_config` as a setting, which [settings.md](settings.md) covers.
+None. An agent can only read or reset `keybindings_config` as a setting. See [settings.md](settings.md) for that setting.
 
 ## Driving it
 
@@ -62,7 +62,7 @@ Preconditions:
 ## Contexts
 
 - **Durability across restarts**: rebinds and the dock live in the daemon's `keybindings_config` and come back after any restart, in every window.
-- **Linux**: `LINUX_SHORTCUTS` holds the Linux defaults. Plain Ctrl and a letter belong to the shell, so app actions use Ctrl+Shift, or Ctrl+Alt where the macOS binding already has Shift: `ui.showShortcuts` is Ctrl+Shift+/ there. The editor stores a recorded ⌘ as the accelerator, which is Ctrl on Linux.
+- **Linux**: `LINUX_SHORTCUTS` holds the Linux defaults. Plain Ctrl and a letter belong to the shell, so app actions use Ctrl+Shift, or Ctrl+Alt where the macOS binding already has Shift: `ui.showShortcuts` is Ctrl+Shift+/ there. The editor stores a recorded ⌘ as the accelerator. On Linux the accelerator is Ctrl.
 - **Profiles**: one set of shortcuts and one dock serve every profile.
 - **Keyboard and native input**: macOS menu items take some keys before the app sees them. ⌘. belongs to the File menu's Stop Countdown, so `session.cancelCountdown` shows the Menu bar badge and cannot be rebound. ⌘W belongs to the File menu's item for closing the active tile. That item closes the tile whatever `session.close` is bound to. Quit (⌘Q), Hide (⌘H) and Minimize (⌘M) stay with the menu. While a row records, every app shortcut pauses, so ⌘, records instead of opening Settings. A focused editor or input keeps ⌘F, ⌘↑, ⌘↓, ⌘B, ⌘⇧Z and ⌘Enter for itself. On macOS the editor refuses Control as a modifier.
 - **Compatibility across versions**: `board.open` keeps its id, so saved rebinds of the garden's key still apply. Rebinds saved under the desktop switch keys' earlier ids load under `desktop.select1` to `desktop.select9`, and the app drops ids that no longer exist.
@@ -81,5 +81,5 @@ Preconditions:
 - `shortcut_binding` reports what the app resolved, not what a key does. Prove a rebind by pressing the new keys and the old ones.
 - `dispatch_shortcut` and `open_shortcut_editor` skip native input. Use them only as setup.
 - Chips for split, zoom and new-session shortcuts appear in the dock only while an agent is shown.
-- Typing in the editor's filter while a row records would record the keys. Click the filter first, which stops the recording.
-- Working but wrong: the editor accepts keys a macOS menu owns, such as ⌘M or ⌘H, and the action never fires. Rebinding `session.close` away from ⌘W leaves ⌘W closing tiles through the menu. The cheat sheet builds its rows once per app launch, so after a rebind it can show the old keys until the app relaunches. The cheat sheet and the editor label the same actions differently in places, and keep older words for tiles and queue flow.
+- Typing in the editor's filter while a row records would record the keys. Click the filter first. The click stops the recording.
+- Working but wrong: the editor accepts keys that a macOS menu handles first, such as ⌘M or ⌘H, and the action never fires. Rebinding `session.close` away from ⌘W leaves ⌘W closing tiles through the menu. The cheat sheet builds its rows once per app launch, so after a rebind it can show the old keys until the app relaunches. The cheat sheet and the editor label the same actions differently in places, and keep older words for tiles and queue flow.

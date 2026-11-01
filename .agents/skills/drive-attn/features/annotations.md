@@ -15,7 +15,7 @@ marked passage with what the user said about it.
 - `annotation-drafts`: marks are saved as drafts, and survive an app relaunch and the agent's next turn.
 - `review-notes`: the list of a tile's marks, to open a mark again, edit it or remove it.
 - `send-batch`: ⌘↩ or the send button sends every mark, with the note, as one message, and clears what went.
-- `send-destination`: a markdown tile sends to its bound session or another session on the desktop. A seed tile sends to the seed's tender, or leaves a note on the seed when nobody tends it ([garden.md](garden.md) owns the seed).
+- `send-destination`: a markdown tile sends to its bound session or another session on the desktop. A seed tile sends to the seed's tender, or leaves a note on the seed when nobody tends it (see [garden.md](garden.md) for the seed).
 
 ## How to get to it
 
@@ -75,7 +75,7 @@ Preconditions:
 - **Outposts**: while an outpost's host is offline, its agent's terminal refuses new marks and says `<host> is unreachable`.
 - **Profiles**: marks go to a session of the profile the app shows, and a seed's marks only to a seed in that profile.
 - **Harnesses**: terminal marks attach to the agent's messages as its harness records them, so a mark lands only on a finished message's prose. A shell has none. Markdown marks work the same for every harness.
-- **Keyboard and native input**: ⌘↩ sends from the active tile, and only one tile owns the key at a time. Inside a comment box it saves the comment, and inside the terminal's note it sends. In a focused document, Escape closes the review notes and the comment box before it leaves focus.
+- **Keyboard and native input**: ⌘↩ sends from the active tile, and only one tile receives the key at a time. Inside a comment box it saves the comment, and inside the terminal's note it sends. In a focused document, Escape closes the review notes and the comment box before it leaves focus.
 
 ## Tests
 

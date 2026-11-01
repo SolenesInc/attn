@@ -17,7 +17,7 @@ the need. Take the first one that works:
    prints the current value.
 3. Derive the value when you need it instead of storing it.
 
-Keep a derived thing only when it holds what the work cannot carry: why a
+Keep a derived thing only when it holds what the work cannot express: why a
 design was chosen, a constraint set outside the codebase, the vocabulary the
 user and agents share, a guide a person reads before touching the work.
 

@@ -31,7 +31,7 @@ the machine. For vents, which live in the same section, see
 
 ### Agents
 
-None. Agents do not read or change telemetry. attn records their `attn` commands (Triggers), and [vents.md](vents.md) covers their vents.
+None. Agents do not read or change telemetry. attn records their `attn` commands (Triggers). See [vents.md](vents.md) for their vents.
 
 ### Triggers
 

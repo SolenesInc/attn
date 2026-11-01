@@ -6,19 +6,19 @@ A seed body is a prompt for the agent who will do the work. A new delegation
 stores its brief as the body. A delegation at an existing seed names that seed,
 and the agent reads the seed with `attn seed show`. Handover adds a short
 next-step note and transfers ownership before the successor starts.
-Write every body, including the bodies of plot children, for someone without this conversation.
-Do this even when you plan to do the work yourself.
+Write every body, including the bodies of plot children, for a reader who has not seen this conversation.
+Write it that way even when you plan to do the work yourself.
 
 - Lead with the task and outcome: what to do and what done looks like.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
   Point to shared context and say what the reader needs from it.
-- Define scope: what this seed owns, what it may change and what it must leave
-  alone, which decisions need the user, and which actions wait for the user, such
-  as a deployment outside the authorized delivery step. Follow the
+- Define scope. Say what this seed owns, what it may change, and what it must
+  leave alone. Say which decisions need the user. Say which actions wait for the
+  user, such as a deployment outside the authorized delivery step. Follow the
   `attn-workflow` skill's Delivery reference for repository delivery.
-- Specify completion: the checks that verify the result, defined on the seed as
-  CHECKS below describes and cited in the body by id, where to leave the
-  deliverable, and what the report back contains.
+- Specify completion. Define the checks that verify the result on the seed, as
+  CHECKS below describes, and cite each check in the body by id. Say where to
+  leave the deliverable and what the report back contains.
 
 Include an agreed design when there is one. Leave implementation choices open
 where they are still for the tender to make. Scale the detail to the task. A few
@@ -81,7 +81,7 @@ before the app child starts.
   "title": "Search moves to the daemon",
   "body": "Move session search from the app to the daemon, so every client gets the same results from one ranking. Out of scope: changing what matches or how results rank.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nD1. Ranking moves to the daemon with matching, so the app renders results in the order it receives them. Open: whether search also covers ended sessions. The endpoint tender may decide, and nothing waits on it.\n\n## Tradeoffs accepted\nWe accept two search implementations between the two delivery steps, in exchange for each child landing on its own. The client index stays until the app uses daemon results.\n\n## Findings\nRead at a1b2c3d.\nF1. The app breaks match ties by recency (app/src/search/rank.ts). An experiment that ranked by match score alone reordered equal matches. The endpoint keeps recency as the tie-breaker. Dropping recency looks harmless and changes results.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message and its generated types\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message needs an edit to main.tsp and a run of make generate-types. Commit the generated types and the protocol schema hash.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query, and the keyboard moves the selection\n      on reply:    the app drops a reply for an older query_id\n      on failure:  the query and selection stay, and the results show the error until the next query\n      on restart:  starts empty and persists nothing\n    daemon: none added, and each query reads the live session set\n\n## Execution\nLand the endpoint child first, and record the contract on its seed. Land the app child afterwards, in its own delivery step.\n\n## Completion\nThe checks are on the seeds. Attach the recording for C2 to the app child, and cite it in that child's report.\n\n## Alternatives rejected\nD1. The daemon matches and the app keeps ranking: each client would rank on its own, and removing per-client ranking is the point of this plot.",
   "checks": [
-    {"id": "C3", "shared": true, "text": "The child is delivered as the repository delivers changes, with that step's own checks passing. The report links the pull request or the landed commits."}
+    {"id": "C3", "shared": true, "text": "The child is delivered through the repository's own delivery process, and that step's own checks pass. The report links the pull request or the landed commits."}
   ],
   "children": [
     {
@@ -141,12 +141,11 @@ that child. A plot check without `shared` is the plot's own.
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
 If you do the work, report each check as you prove it, in one call. The
-first line of `-m` is the summary line that `attn seed show` prints, at most 400
-characters. The lines after it are detail, and attn keeps them in the report's
+first line of `-m` is the summary line that `attn seed show` prints. The summary line is at most 400 characters, and attn refuses a longer one. The lines after it are detail, and attn keeps them in the report's
 check note.
 `--evidence` takes a local file, which attn copies onto the seed, an artifact
-already on the seed, or an http(s) URL. A later run is a new report. It
-replaces the last report and clears the verdict. Citing a changed file under the
+already on the seed, or an http(s) URL. A later run is a new report. The
+new report replaces the last report and clears the verdict. Citing a changed file under the
 same name replaces the old file. `attn seed show` marks a report whose cited
 file changed after the report, until the next report. For a check that does not
 apply, report why and cite what shows it. If you judge the work, confirm or

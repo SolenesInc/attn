@@ -12,10 +12,7 @@ Plan in pull requests. Name the changes in each pull request and their order.
 Commits inside a branch may break intermediate states, but what merges must
 work.
 
-Open the pull request and finish its checks before you hand off the merge. CI
-must be green on the pull request head, the required repository checks must
-pass, and you must address review. Answer review on the pull request. Evidence
-counts for the pull request head.
+Open the pull request and finish its checks before you hand off the merge. Fix failing checks until CI is green on the pull request head and the required repository checks pass. Address review, and answer it on the pull request. Evidence is valid for the pull request head.
 
 When only the merge remains, report the pull request and arm harvest with
 `attn seed harvest <seed-id> --when-merged <pr-url> -m "<outcome and verification>"`.
@@ -30,10 +27,7 @@ Every landing must keep the main line working. Leave unfinished work unwired or
 behind an off-by-default setting.
 
 Run the checks for your change, then run the repository's landing step and its
-gate. Within the task's scope, the landing step is the authorized push. Evidence
-counts for the commit the checks ran on. A landing that only rebases those
-commits keeps the evidence valid. Cite the landed commits beside the tested
-revision. When the rebase changes the work, resolve conflicts and rerun the
+gate. Within the task's scope, the landing step is the authorized push. Evidence is valid for the commit the checks ran on. If the landing step only rebases those commits, the evidence stays valid. Cite the landed commits beside the commit the checks ran on. When the rebase changes the work, resolve conflicts and rerun the
 affected checks.
 
 Your work ends when the landing step pushes. Report the seed's checks with the

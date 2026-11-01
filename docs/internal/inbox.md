@@ -152,8 +152,9 @@ key depends on the kind of item.
 
 Seed updates merge. The key is the seed, so an address has at most one unread
 update per seed. A later event on that seed leaves the unread update as it is,
-with the same attempts and no new ring. The update keeps the first event's
-kind, or its check move, unless the later event is `unblocked`. The update also
+with the same attempts and no new ring. The update keeps the kind of the first
+event, or the check move when the first event was a check move, unless the
+later event is `unblocked`. The update also
 keeps the first event's bookmark, so the read command returns the later events
 too. Once a seed update has used its 3 attempts, later events on that seed stay
 silent until the agent reads the update. The seed's log still has every event.
@@ -167,7 +168,7 @@ and gets fresh attempts.
   reopened threads are separate items.
 - An auto-sleep request replaces the older unread auto-sleep request.
 
-Rings coalesce too. One ring covers every unread item at an address; see
+Rings coalesce too. One ring covers every unread item at an address. See
 [Rings](#rings).
 
 ## Rings
@@ -272,10 +273,14 @@ prompt.
 `attn agent inbox <message-id>` reads one peer message once attn has rung it,
 whether or not the session read the message before.
 
-`attn agent msg` replies at once with what happens next: attn rang the agent,
-the message waits for a safe prompt or for an outstanding ring to be read, attn
-is waking a member, the message waits for a tender or a chief, or the wake
-limit is used up (the reply also names the setting to change).
+`attn agent msg` replies at once with what happens next. The reply says one of
+these:
+
+- attn rang the agent.
+- The message waits for a safe prompt or for an outstanding ring to be read.
+- attn is waking a member.
+- The message waits for a tender or a chief.
+- The wake limit is used up. The reply also names the setting to change.
 `attn agent msg-status <id>` shows the sender whether the message is queued,
 notified or read.
 

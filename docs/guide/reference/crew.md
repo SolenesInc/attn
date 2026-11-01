@@ -20,12 +20,14 @@ read and edit the member's charter and letters there. The home starts with an
 empty `CHARTER.md`. The member's first session agrees a charter with you, then
 writes the file in the member's own words.
 
-A home folder you make yourself also works: `~/.attn/crew/<key>/CHARTER.md`
-(for a named instance, `~/.attn-<instance>/crew/<key>/`), where the folder name
-is lowercase letters, digits and `-`. The daemon adds the member to the roster when the daemon next starts
-(`attn daemon stop`, then `attn daemon ensure`). The member's name starts as
-the key with a capital letter, so `fern` is Fern, and the member joins the
-profile you used most recently.
+A home folder you make yourself also works. The folder is `~/.attn/crew/<key>/`
+(for a named instance, `~/.attn-<instance>/crew/<key>/`), it holds a
+`CHARTER.md`, and its name is lowercase letters, digits and `-`. After
+`attn daemon stop` and `attn daemon ensure`, the daemon adds the member to the
+roster.
+
+The member's name starts as the key with a capital letter, so `fern` is Fern,
+and the member joins the profile you used most recently.
 
 A member wakes only in its profile. `attn crew list` shows the members of your
 profile, with their state, harness, model, launch desktop and home folder.
@@ -68,9 +70,9 @@ named instance, `~/.attn-<instance>/crew/<key>/`) and run
 ## The Crew section
 
 The sidebar has a Crew section. In [queue flow](queue.md) it lists every
-member that is not retired, asleep or awake. In desktop flow it lists the
-members who are asleep and not retired. Awake members are tiles on their
-desktops.
+member who is not retired, whether the member is asleep or awake. In desktop
+flow it lists the members who are asleep and not retired. Awake members are
+tiles on their desktops.
 
 - A sleeping member's row shows a sun. Click it once to arm it and again to
   wake the member.
@@ -120,9 +122,7 @@ wakes the member. The one exception is a letter asked for by a harness change
 you applied, which starts the next session on the new harness (see below).
 
 If the session cannot end or the next one cannot start, the letter stays filed
-and the session keeps running. `attn handoff --retry` tries again with that
-letter. To give up on a harness switch, ask the member to sleep first. The
-retry then ends the session with the member asleep.
+and the session keeps running. `attn handoff --retry` tries again with that letter. To give up on a harness switch instead, ask the member to sleep first. The retry then ends the session and leaves the member asleep.
 
 ## Configuring a member
 

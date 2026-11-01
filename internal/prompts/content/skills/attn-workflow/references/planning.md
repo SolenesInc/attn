@@ -18,7 +18,7 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 
 Write for an implementer starting fresh and a user reviewing the direction. The body states the current design. It is not a record of the conversation. Put who decided what, when, through which question, and what the user authorized in seed notes. A body that reads as meeting minutes is not a plan. What you learned is not history. It is the evidence the design rests on, and it belongs in the body.
 
-A plan is one document that needs several modes, so it keeps one mode per section instead of the one mode per document that technical writing asks for. Terms and Design are reference. Task and outcome, Decisions, Tradeoffs accepted, Findings, and Alternatives rejected are explanation, so a finding can say what it requires and what it rules out. Execution and Completion are how-to. Keep the section names below as written, even where technical writing would have a heading carry its point. Orchestration and child briefs find a plan's parts by these names.
+A plan is one document that needs several modes, so it keeps one mode per section instead of the one mode per document that technical writing asks for. Terms and Design are reference. Task and outcome, Decisions, Tradeoffs accepted, Findings, and Alternatives rejected are explanation, so a finding can say what it requires and what it rules out. Execution and Completion are how-to. Keep the section names below as written, even where technical writing would have a heading carry its point. Orchestrators and the authors of child briefs look up a plan's parts by these names.
 
 The body has these sections in this order. Each design part is required. If a part does not apply, write one line with the reason in its place.
 
@@ -28,7 +28,7 @@ The body has these sections in this order. Each design part is required. If a pa
 - **Tradeoffs accepted**: one line each, in the form "we accept X in exchange for Y". Cite the decision it comes from (D2) when there is one, instead of restating the decision. Name every choice a later reader could mistake for an oversight: a duplicated write, a cost paid for a reason stated elsewhere, a behavior change, a simplification that looks premature. If a cost has no stated exchange, the next agent may remove the cost.
 - **Findings**: what spikes and investigation established that the design depends on, written as described under Findings below. When nothing was learned beyond what the code shows, write one line saying so.
 - **Design**, in four parts:
-  - **Ownership**: show each file or package that changes as a shallow file tree, with one comment per entry that says what the entry is responsible for.
+  - **Ownership**: show each file or package that changes as a shallow file tree, with one comment per entry that says what that file or package does.
   - **Interfaces**: sketch the types, signatures, wire messages, and persisted data that the change adds or alters, in the codebase's language, with the schema, generation, and migration steps that a wire or storage change requires. For an interface the change adds or reshapes, write a representative call site first and derive the types from it. If the call site and the types disagree, change the types. Check both with [Design](design.md). Name the invariants a later change could silently break, and say what enforces each invariant: a type, a check at the boundary, or the test of the promise the invariant protects.
   - **Behavior**: show how control and data flow through the changed parts: a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
   - **State**: for each piece of state, give its one owner, what sets it, what reads it, what happens on failure and on restart, and, for state that a retried or interruptible step writes, what a second or half-finished run leaves. In-memory state counts as state and gets the same entry. State with two writers is a design problem to resolve, as Design describes, not an entry to record.
@@ -53,7 +53,7 @@ Write each finding so an implementer can act on it without the spike:
 - what it requires of the design
 - what it rules out: the approach that looks simpler or more natural, and why it fails
 
-Name code by symbol and file. State the commit the findings describe once, at the top of Findings. Line numbers move with every change and make the body wrong. Do not survey code the implementer can read. A finding is something the design depends on.
+Name code by symbol and file. State the commit the findings describe once, at the top of Findings. Do not cite line numbers. A line number goes stale with the next edit, and the body is then wrong. Do not survey code the implementer can read. A finding is something the design depends on.
 
 Number findings (F1, F2) and cite them where the design depends on them and in the child briefs whose work they constrain, so each child brief names the findings that apply without repeating them. When implementation overturns a finding, correct it in the body and record the reason in a note.
 
@@ -209,7 +209,7 @@ app child waits for the daemon child's wire fields.>
 ## Completion
 
 <The checks are on the seeds. C4's recording and scenario output go on the app
-child as one attachment, which its report cites. The pi child changes no daemon
+child as one attachment, and the child's report cites that attachment. The pi child changes no daemon
 code, so the Linux build the verification guidance asks of daemon changes does
 not apply to it.>
 

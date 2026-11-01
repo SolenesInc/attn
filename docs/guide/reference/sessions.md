@@ -66,16 +66,16 @@ Resume brings a closed session back as itself, in a tile, with its
 conversation. The ledger labels this action **Reopen**. The session opens on
 its last desktop, or on the current one.
 
-Attn keeps its own copy of conversations a harness would delete. Keep a copy
-forever with Keep conversation on the session in the ledger, and forget a copy
-from the Conversations tab.
+Attn keeps its own copy of conversations a harness would delete. To keep a
+copy forever, click Keep conversation on the session in the ledger. To forget a
+copy, use the Conversations tab.
 
 ## Reload
 
-"Reload this agent" in the command palette (Cmd+Shift+K, or Ctrl+Alt+K on
-Linux), or Reload session in the ••• menu on its sidebar row, restarts an agent
-in place with its saved conversation. Running work is interrupted and
-non-persistent state may be lost.
+To restart an agent in place with its saved conversation, run "Reload this
+agent" in the command palette (Cmd+Shift+K, or Ctrl+Alt+K on Linux), or choose
+Reload session in the ••• menu on its sidebar row. Reload interrupts running
+work, and non-persistent state may be lost.
 
 Agents can do the same with `attn agent reload <session-or-member>...`. A
 session may reload itself and the agents it delegated to, including delegates
@@ -101,13 +101,23 @@ Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or C
 <details>
 <summary>Why can't I resume a closed session?</summary>
 
-Resume starts the session's own harness with the model and effort it launched with, in its saved directory, and warns you when that directory is on a different branch now. The ledger refuses and says why when the harness isn't installed or can't resume, when Attn saved no launch settings or conversation id for the session, when the harness no longer has the conversation and Attn has no copy (the reason says when a copy was deleted), or when the session's profile was deleted. When the directory is gone, the ledger offers "Recreate the worktree" while the branch is still local, or "Fetch, recreate, reopen" when only a remote has it, and offers nothing when the directory wasn't a worktree, or when the branch is gone or checked out somewhere else. `attn session show <id>` prints the same verdict, and `attn session reopen <id> --action recreate_worktree_and_reopen` (or `fetch_recreate_and_reopen`) runs those actions from the terminal.
+Resume starts the session's own harness with the model and effort it launched with, in its saved directory, and warns you when that directory is on a different branch now. The ledger refuses and says why when the harness isn't installed or can't resume, when Attn saved no launch settings or conversation id for the session, when the harness no longer has the conversation and Attn has no copy (the reason says when a copy was deleted), or when the session's profile was deleted. When the directory is gone, the ledger offers "Recreate the worktree" while the branch is still local, or "Fetch, recreate, reopen" when only a remote has it, and offers neither action when the directory wasn't a worktree, when the branch is gone, or when the branch is checked out somewhere else. `attn session show <id>` prints the same verdict, and `attn session reopen <id> --action recreate_worktree_and_reopen` (or `fetch_recreate_and_reopen`) runs those actions from the terminal.
 </details>
 
 <details>
 <summary>Why is Attn keeping my worktree?</summary>
 
-The worktree's row in the Worktrees tab, and `attn worktree list`, name the first thing keeping the worktree, and selecting the row shows the full reason. In order, Attn checks whether you kept the worktree forever, an agent is running in it, an open seed points at it, the worktree has uncommitted, untracked or stashed changes, a detached HEAD holds commits that are on no branch, the worktree's branch hasn't merged, or the worktree has commits the merge doesn't account for. A branch counts as merged when GitHub shows its pull request merged, or when its work is already in the branch the repository merges into (named next to the repository), squash merges included. Idle time starts at the newest file change, commit, or creation. A younger worktree shows a "removing in" countdown. The countdown only means that Attn looks more closely when it ends, so anything above can still keep the worktree.
+The worktree's row in the Worktrees tab, and `attn worktree list`, name the first thing keeping the worktree, and selecting the row shows the full reason. Attn checks these conditions in order:
+
+1. You kept the worktree forever.
+2. An agent is running in the worktree.
+3. An open seed points at the worktree.
+4. The worktree has uncommitted, untracked or stashed changes.
+5. A detached HEAD holds commits that are on no branch.
+6. The worktree's branch hasn't merged.
+7. The worktree has commits the merge doesn't account for.
+
+A branch counts as merged when GitHub shows its pull request merged, or when its work is already in the branch the repository merges into (named next to the repository), squash merges included. Idle time starts at the newest file change, commit, or creation. A younger worktree shows a "removing in" countdown. The countdown only means that Attn looks more closely when it ends, so anything above can still keep the worktree.
 </details>
 
 <details>
@@ -127,13 +137,23 @@ If a crew member's home or letters cannot be read, Attn keeps copying and listin
 <details>
 <summary>How do I keep a worktree forever, or let it go again?</summary>
 
-Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it, and Unpin (`attn worktree unkeep <path>`) lets the next pass decide again. Turning off Worktree sweep in Settings > Files and locations stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then say "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a pass now instead of waiting for the hourly one.
+Keep on the worktree's row in the Worktrees tab, or `attn worktree keep <path>`, pins the worktree so the sweep never removes it, and Unpin (`attn worktree unkeep <path>`) lets the next sweep decide again. Turning off Worktree sweep in Settings > Files and locations stops automatic removals everywhere and keeps your pins. Worktrees the sweep would remove then say "eligible now; the sweep is off". The refresh link at the bottom of the Worktrees tab, or `attn worktree refresh`, runs a sweep now instead of waiting for the hourly one.
 </details>
 
 <details>
 <summary>How do I find an old session in the ledger?</summary>
 
-The Sessions tab shows Live, Closed or All, and the filter narrows it with `repo:name`, `profile:name`, `today`, `yesterday`, `7d`, `30d`, `from:2026-09-01 to:2026-09-05`, `dir:path` or plain words. Words and `dir:` search only the rows already loaded, so load older rows from the "older" link in the status bar first. Your Live, Closed or All choice, repository, profile and dates stay set the next time you open the ledger, and `attn session list --closed --last 7d` reads the same ledger from the terminal. Inside the ledger, / jumps to the filter, [ and ] switch tabs, Enter runs a row's main action, . shows its other actions, 1 to 9 run the nth action, y copies the row's path, and ? lists every key.
+The Sessions tab shows Live, Closed or All, and the filter narrows it with `repo:name`, `profile:name`, `today`, `yesterday`, `7d`, `30d`, `from:2026-09-01 to:2026-09-05`, `dir:path` or plain words. Words and `dir:` search only the rows already loaded, so load older rows from the "older" link in the status bar first. Your Live, Closed or All choice, repository, profile and dates stay set the next time you open the ledger, and `attn session list --closed --last 7d` reads the same ledger from the terminal.
+
+Keys in the ledger:
+
+- `/` jumps to the filter.
+- `[` and `]` switch tabs.
+- `Enter` runs a row's main action.
+- `.` shows the row's other actions.
+- `1` to `9` run the nth action.
+- `y` copies the row's path.
+- `?` lists every key.
 </details>
 
 <details>

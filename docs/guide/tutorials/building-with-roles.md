@@ -19,8 +19,8 @@ to to work as a Pathfinder, and it takes the role right there.
 ## Before you start
 
 Open Settings > Delegation and click "Add Attn roles", or run
-`attn delegate roles install`. This adds the five roles and installs the
-attn-workflow skill. The skill tells each role how to work.
+`attn delegate roles install`. Either action adds the five roles and installs
+the attn-workflow skill. Each role reads the skill to learn how to work.
 See [delegation](../reference/delegation.md#roles) for what each role is.
 
 The roles arrive without a model, and agents can't pick a role until it has one.
@@ -49,8 +49,8 @@ When the interview ends, the Pathfinder puts the plan in the garden: one seed
 for a single task, or a plot with a child per piece of work, saying which pieces
 become which pull requests (or landings, in a repository that pushes straight to
 its main branch). Before building starts, the Pathfinder tells you how it
-understood the work and what it assumed, so you can correct it, and waits for
-you to choose between adjusting the plan and dispatching it.
+understood the work and what it assumed, so you can correct the Pathfinder. It
+then waits for you to choose between adjusting the plan and dispatching it.
 
 ## Hand it off
 
@@ -58,9 +58,10 @@ Tell the Pathfinder to dispatch work on the plan. It recommends an Orchestrator
 when the work needs coordinating or reviewing, or a single Builder when the work
 doesn't, and hands the seed over.
 
-The Orchestrator starts a Builder for each piece, each on its own seed, often on
-a cheaper model, though not always. Check your delegation roles. Builders
-bring surprises to the Orchestrator instead of working around them.
+The Orchestrator starts a Builder for each piece, each on its own seed. A
+Builder often runs on a cheaper model, though not always, so check your
+delegation roles. When a Builder meets something unexpected, it brings the
+problem to the Orchestrator instead of working around it.
 
 ## Follow along
 

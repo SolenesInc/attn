@@ -25,7 +25,7 @@ most one browser tile, and the tile's cookies and storage outlive restarts.
 - In the tile (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `BrowserAddressForm.tsx`, `BrowserTileBody.tsx`): the "Browser address" field (Enter navigates), "Reload browser", "Close tile", and the page itself, clicked and typed into like any browser.
 - File → "Close Pane" (⌘W) closes the browser tile while the page has focus (`app/src-tauri/core/src/lib.rs`).
 - The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`): "Reload <title>" and "Close <title>" buttons, which take clicks while the pointer is over the row.
-- Where people see what agents do: the tile shows the page the agent drives as it changes, beside the agent's tile. The user types credentials themselves; agents are told not to.
+- Where people see what agents do: the tile shows the page the agent drives as it changes, beside the agent's tile. The user types credentials themselves. Agents are told not to.
 - Their own shell: the same `attn browser` verbs agents use, below. Without a session, the verbs act on the current desktop of the profile used most recently.
 
 ### Agents
@@ -85,7 +85,7 @@ Preconditions:
 - **Keys and scroll.** Run `wsctl input --id <agent> --text "web-keys" --enter`. Peek shows both commands answered without error.
 - **History.** Run `wsctl input --id <agent> --text "web-history" --enter`. The link click, back, forward and reload each wait for the page they land on. Peek ends with `Other page` from `get_title`, and `wsctl list` shows `tile_params` on `other.html`.
 - **Cookies.** Run `wsctl input --id <agent> --text "web-cookies" --enter`: peek shows the cookie list, empty for this page.
-- **Captures.** Run `wsctl input --id <agent> --text "web-capture" --enter`. Peek shows two absolute paths ending in `/shot.png` and `/page.pdf`; `file $A/shot.png` says PNG, `file $A/page.pdf` says PDF, and `stat -f %Lp $A/shot.png` prints `600`.
+- **Captures.** Run `wsctl input --id <agent> --text "web-capture" --enter`. Peek shows two absolute paths ending in `/shot.png` and `/page.pdf`. `file $A/shot.png` prints PNG, `file $A/page.pdf` prints PDF, and `stat -f %Lp $A/shot.png` prints `600`.
 - **The person navigates.** Select `web-agent` for setup with `bridge select_session '{"sessionId":"web-agent"}'` and check that `bridge get_state` shows `view: "session"`. Resolve the point of `[data-tile-kind="browser"] [aria-label="Browser address"]` with `bridge dom_native_point`, click it with `bridge native_mouse`, then run `bridge native_text '{"text":"http://127.0.0.1:8765/page.html"}'` and `bridge native_key '{"key":"Enter"}'`. The field selects its text on focus, so the typed address replaces the old one. `wsctl list` shows `tile_params` on `page.html`, and `wsctl input --id <agent> --text "web-snapshot" --enter` shows `"title": "Drive page"`. Click `[data-tile-kind="browser"] [aria-label="Reload browser"]` natively: the page reloads and stays on `page.html`.
 - **The person's shell.** Run `./attn browser open http://127.0.0.1:8765/other.html`. It prints `opened http://127.0.0.1:8765/other.html` and exits 0, the same tile navigates to `other.html`, and `wsctl list` shows `tile_params` there. `./attn browser snapshot --session web-agent` prints the snapshot, titled `Other page`, from the instance shell.
 - **Close with ⌘W.** Resolve the center of `[data-tile-kind="browser"] .browser-tile-host`, the page area, with `bridge dom_native_point` and click it natively: `bridge get_browser_focus_state` shows a `label`. Run `bridge native_key '{"key":"w","modifiers":["command"]}'`: `bridge dom_wait '{"selector":"[data-tile-kind=\"browser\"]","absent":true,"timeoutMs":5000}'` matches and the agent's tile is still there. A further agent `web-snapshot` fails with an error that ends `browser_control: no browser tile is open for that session`.
@@ -125,6 +125,6 @@ Preconditions:
 - A verb that follows `open` or a navigation can reach a page that has not loaded. Wait on something the new page shows (`attn browser wait --using css --value h1 --state visible`) before reading the page. A text wait checks the first element with that text, which can be the page's `<title>`, so wait on text that only the body holds.
 - Going back can restore the page as it was left, edits included. Wait on an element that tells the pages apart, not on text the page changes itself.
 - `screenshot` and `pdf` write to the folder `attn` runs in, `attn-browser.png` or `attn-browser.pdf` by default, and replace a file of that name.
-- A recipe that points at a public site depends on the network; serve local pages instead.
+- A recipe that points at a public site depends on the network, so serve local pages instead.
 - `bridge capture_native_window_screenshot` needs macOS Screen Recording permission for the instance's app or your terminal. Without the permission, the capture fails.
 - Working but wrong: no key, palette command or sidebar control opens a browser tile, so a person without a shell has no way in, and once a person closes the tile in the app, they cannot open it again from the app.

@@ -21,7 +21,7 @@ plugin. The sidebar can mark each agent with its harness's logo.
 
 ### People
 
-- The new-agent picker's "Session agent" choice, ⌥1 to ⌥9 and ⌥T for a shell (`app/src/components/NewSessionDialog/SessionControls.tsx`). [agent-launch.md](agent-launch.md) covers the picker itself.
+- The new-agent picker's "Session agent" choice, ⌥1 to ⌥9 and ⌥T for a shell (`app/src/components/NewSessionDialog/SessionControls.tsx`). See [agent-launch.md](agent-launch.md) for the picker itself.
 - Settings, Agents and models (section `agents`, `app/src/components/SettingsModalSections.tsx`): "Default session agent", each harness's executable ("Empty uses the executable on PATH."), default model and effort, "Auto-approve", and what each harness supports.
 - Settings, Models (section `models`, `app/src/components/ModelTierSettings.tsx`): the tiers mapped to each harness's models.
 - Settings, Plugins (section `plugins`): the "Plugin source" field with Browse and "Install Plugin", a card per plugin with its version, Bundled, Installed or Available, its runtime state and health, an Install button for a bundled plugin, and a priority field.
@@ -33,7 +33,7 @@ plugin. The sidebar can mark each agent with its harness's logo.
 
 - `attn plugin install --path <dir>`, `link --path <dir>`, `install-bundled <name>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attn/plugin.go`), each printing JSON.
 - `attn settings get|set` for `new_session_agent`, `claude_executable`, `codex_executable` and `sidebar_harness_logos_enabled` ([settings.md](settings.md)).
-- Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/daemon/plugin_launch_instructions.go`). [agent-guidance.md](agent-guidance.md) covers what attn tells every harness, and [auto-mode.md](auto-mode.md) covers Pi's sandbox and Guardian prompts.
+- Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/daemon/plugin_launch_instructions.go`). See [agent-guidance.md](agent-guidance.md) for what attn tells every harness, and see [auto-mode.md](auto-mode.md) for Pi's sandbox and Guardian prompts.
 
 ### Triggers
 

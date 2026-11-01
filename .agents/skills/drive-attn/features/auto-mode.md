@@ -8,8 +8,8 @@ and a sandbox mode set the rest. When a command needs approval, exactly one revi
 answers it: the user, or, with auto mode on, the Guardian model. Agents and
 people propose rules, hosts and policies from the CLI, and nothing they
 propose takes effect until the user promotes it in Settings. Agents and
-people edit the environment, which is what the Guardian knows about this
-machine, directly.
+people edit the environment directly. The environment is what the Guardian
+knows about this machine.
 
 ## Sub-features
 
@@ -82,7 +82,7 @@ Preconditions:
 - **Promote in Settings.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-autoMode"]` natively. `bridge dom_wait '{"selector":"[data-testid=\"automode-promote-<n>\"]","timeoutMs":5000}'` matches. Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"automode-promote-<n>\"]"}'` for setup, then click the Promote button natively. `./attn automode show` lists `allow  inherit  go vet` under the rules, and proposal `<n>` is no longer pending.
 - **Discard in Settings.** Run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"automode-discard-<m>\"]"}'` for setup, then click `[data-testid="automode-discard-<m>"]` natively. `./attn automode show` no longer lists `<m>`, and `network allowed` does not include `example.com`.
 - **Change the policy and rules in Settings.** Scroll `[data-testid="automode-approval-policy"]` into view, click it natively and run `bridge native_text '{"text":"u"}'`: `./attn automode show` prints `approval policy     untrusted`. Click the select again and type `o` to put `on-request` back. Do the same on `[data-testid="automode-sandbox-mode"]` with `r`, then `w`. With the promoted `go vet` rule showing, click `[data-testid="automode-rules-remove"]` natively: `go vet` leaves the rules. Click `[data-testid="automode-refresh"]` under Recent denials natively.
-- **Edit a slot in Settings.** Scroll `[data-testid="automode-slot-edit-domains"]` into view and click it natively: `[data-testid="automode-slot-input-domains"]` takes the keyboard. Type `ui.example` with `native_text` and press Enter: `./attn automode env` prints `domains          ui.example`. Click `[aria-label^="Remove ui.example"]` natively: it prints `(unset: …)` again.
+- **Edit a slot in Settings.** Scroll `[data-testid="automode-slot-edit-domains"]` into view and click it natively: `[data-testid="automode-slot-input-domains"]` takes focus. Type `ui.example` with `native_text` and press Enter: `./attn automode env` prints `domains          ui.example`. Click `[aria-label^="Remove ui.example"]` natively: it prints `(unset: …)` again.
 - **Edit the environment.** Run `./attn automode env set domains internal.example`. It prints `environment:` with `domains  internal.example`. With Settings still open on Auto mode, `bridge automode_get_state` shows `present: true` and the slot with that value. The reply is empty while the section is closed. `./attn automode env clear domains` puts the slot back to `(unset: …)`. `printf 'Audit notes.\n' | ./attn automode env notes` prints them under `notes (no rule reads these):`. An empty stdin clears them.
 - **Removals are proposals too.** `./attn automode rule remove go vet` prints `recorded proposal <k>: rule_remove remove rule go vet`, and `./attn automode host remove example.com` records a `host_remove`. A built-in rule or host is refused: `./attn automode rule remove attn automode policy` exits 1 naming it built-in. Discard both proposals in Settings.
 - **What the folder's repository adds.** From the repository root, `./attn automode show` prints `trusted_repo     (detected here: <root>, <remote>)`. In a scratch git checkout holding `.attn/rules.json`, such as `{"rules":[{"pattern":["make","check"],"decision":"allow","sandbox":"inherit"}]}`, it prints `repository rules (<path>):` with `allow  inherit  make check`, and the rule again under `effective rules:`. `repo_visibility` stays unset on the baseline: it is read from the GitHub host's repository API, and the mock GitHub does not answer it.
@@ -110,7 +110,7 @@ Preconditions:
 ## Gotchas
 
 - Installing the bundled plugin is enough to expose Pi and its auto mode switch. No Pi session needs to start. Wait for the plugin to connect before selecting Pi.
-- On the baseline at `b292a5aa5`, Guardian model selection remains unreachable after the plugin connects: `[aria-label="Guardian model"]` contains only `Follow session model`. The section reports `harness "pi" is not available. Refresh models after fixing the harness.` ArrowDown and Enter leave the Guardian unset. This verifies no Guardian decision.
+- On the baseline at `b292a5aa5`, Guardian model selection remains unreachable after the plugin connects: `[aria-label="Guardian model"]` contains only `Follow session model`. The section reports `harness "pi" is not available. Refresh models after fixing the harness.` ArrowDown and Enter leave the Guardian unset. Nothing in this run shows a Guardian decision.
 - A select's native menu does not open in the parked app: ArrowDown and Enter leave its value as it was. With the select holding the keyboard, type the option's first letters with `native_text`. A select is disabled while its change saves. Click the select again before the next letters.
 - `bridge capture_screenshot` draws Settings from its top even after `dom_scroll_into_view`. Read the proposals with `dom_text` or `automode_get_state`.
 - Proposals sit below the baseline window's viewport. Scroll each Promote or Discard button into view before resolving its point and clicking natively.

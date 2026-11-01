@@ -34,7 +34,7 @@ Every record is one line of JSON:
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
 | `vent` | An attn vent you chose to send |
 
-`seq` counts records within a stream, so the server stores each record once.
+`seq` counts records within a stream. The server uses it to store each record once.
 
 attn redacts records on the `bus`, `app`, `cli` and `sample` streams before
 it stores them:

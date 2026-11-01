@@ -6,7 +6,7 @@ Use this process for a change to structure or shape that preserves behavior: a r
 
 ## Pin the behavior
 
-Before you move anything, learn the contract of the affected code: its callers, what the callers observe, and the tests that already guard it. Pin the behavior at a boundary the move leaves alone, such as what the callers' own callers observe, so the pin survives the move. Where coverage is missing at that boundary, capture current behavior first, as a characterization test, a recorded baseline, or an equivalence check that diffs old and new outputs. A type check or lint is not a pin. The repository's testing guidance decides whether you commit the pin. A scratch pin is enough to hold behavior during the move.
+Before you move anything, learn the contract of the affected code: its callers, what the callers observe, and the tests that already guard it. Pin the behavior at a boundary the move leaves alone, such as what the callers' own callers observe, so the pin survives the move. Where coverage is missing at that boundary, capture current behavior first, as a characterization test, a recorded baseline, or an equivalence check that diffs old and new outputs. A type check or lint is not a pin. The repository's testing guidance says whether to commit the pin. A scratch pin is enough to hold behavior during the move.
 
 ## Name the target shape
 
@@ -18,6 +18,6 @@ Before you introduce the new shape, delete dead code, collapse one-caller wrappe
 
 ## Prove behavior is unchanged
 
-Verify on the real artifact, not on compilation: rerun the pin, replay the baseline against the new code, or exercise the affected flow on the surface the flow serves. Then judge whether the change is worth keeping. The measure is reader load: can a new reader answer "where does this value come from" and "what can change it" faster than before? For a refactor that precedes a feature, the measure is what the refactor gives the shared path. The feature can now land on the shared path with no parallel mechanism, and the refactor is the smallest one that lets the feature land on the shared path with no parallel mechanism. If the diff meets neither measure, revert it.
+Verify on the real artifact, not on compilation: rerun the pin, replay the baseline against the new code, or exercise the affected flow on the surface the flow serves. Then judge whether the change is worth keeping. The measure is reader load: can a new reader answer "where does this value come from" and "what can change it" faster than before? For a refactor that precedes a feature, the measure is whether the feature now lands on the shared path with no parallel mechanism, and whether the refactor is the smallest one that allows this. If the diff meets neither measure, revert it.
 
 Sequence the work as [Sequence verifiable units](../principles/sequence-verifiable-units.md) describes: first the subtraction, then the reshape, then any follow-on cleanup. Hold each step against the pin before the next step starts. Report the structure that changed, the pin you held it against, the equivalence evidence, and what you reverted.

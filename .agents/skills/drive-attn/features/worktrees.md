@@ -34,12 +34,12 @@ sweep never takes it, delete a worktree now, and read what the sweep removed.
 ### Agents
 
 - `attn worktree` (`cmd/attn/worktree.go`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
-- `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`). Delegation owns the verb.
+- `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`). [delegation.md](delegation.md) covers the verb.
 - What agents read: when attn removes a worktree, the daemon adds the note "attn <removed|deleted> the worktree <path> (branch <branch> of <repository>): <reason>." to the log of each seed that worked there (`internal/daemon/worktree_sweep.go`).
 
 ### Triggers
 
-- The sweep runs every hour on each tracked repository: it refreshes every worktree, keeps the ones a pin, a live session, an open seed, local changes, stashes, unpushed or unmerged commits or a recent change hold, and removes the rest once idle for 14 days (`internal/daemon/worktree_sweep.go`). `ATTN_WORKTREE_SWEEP_INTERVAL` and `ATTN_WORKTREE_SWEEP_IDLE_DAYS` in the daemon's environment change the hour and the 14 days.
+- The sweep runs every hour on each tracked repository. It refreshes every worktree. It keeps a worktree that has any of these: a pin, a live session, an open seed, local changes, stashes, unpushed commits, unmerged commits, or a recent change. It removes every other worktree once the worktree has been idle for 14 days (`internal/daemon/worktree_sweep.go`). `ATTN_WORKTREE_SWEEP_INTERVAL` and `ATTN_WORKTREE_SWEEP_IDLE_DAYS` in the daemon's environment change the hour and the 14 days.
 - Foreground work in a repository, such as creating or deleting a worktree, preempts an automatic removal there (`internal/daemon/worktree_maintenance.go`).
 
 ## Driving it
@@ -82,17 +82,26 @@ Preconditions:
 - **Projects Directory.** In Settings, Files and locations, scroll `[data-testid="settings-projects-directory-input"]` into view, click it natively, press ⌘A, type `$W` written out and press Enter: `[data-testid="settings-projects-directory-saved"]` appears and `./attn settings get projects_directory` prints it. The field cannot be set back to empty, so set `projects_directory` back to its earlier value from the shell.
 - **The hourly sweep.** Append `export ATTN_WORKTREE_SWEEP_INTERVAL=15s` to the env file and restart the daemon as the preconditions do. Add `git -C $W/repo worktree add -q -b drive-tick $W/wt-tick main` and run no refresh: within about 15 seconds `./attn worktree log --repo $W/repo` lists `$W/wt-tick` as `removed`, `merged (ancestor) and clean, idle 0 days`.
 - **An existing branch at a chosen path.** A second agent's fixture runs `delegate --agent codex --model default --new-worktree --existing-branch drive-wt --worktree-path <W>/wt-existing --cwd . --name wt-existing --brief ...` once `drive-wt` has no worktree: its result shows `"branch": "drive-wt"`, `"worktree_created": true` and that `directory`. Delete it with `--force` afterwards.
-- **A new worktree from a pull request.** [pull-requests.md](pull-requests.md) drives the home screen's "New worktree session". On the baseline it fails before any worktree exists, because the mock GitHub serves no Git.
-- **Proof.** In `$P`, keep each `./attn worktree` command's output with its exit code; `./attn agent peek wt-owner` after the delegation; `./attn seed notes <seed>` after the delete; `./attn worktree list --repo $W/repo --json` after each refresh, keep and delete; `./attn worktree log --repo $W/repo --json` at the end; `bridge worktrees_get_state` after each app action; and `bridge capture_screenshot '{"path":"<P>/worktrees.png"}'` with the list open, where `<P>` is the folder's path written out. Name each file for its way in, such as `worktrees-palette-state.json`.
+- **A new worktree from a pull request.** The recipe for the home screen's "New worktree session" is in [pull-requests.md](pull-requests.md). On the baseline it fails before any worktree exists, because the mock GitHub serves no Git.
+- **Proof.** In `$P`, keep these:
+  - each `./attn worktree` command's output with its exit code
+  - `./attn agent peek wt-owner` after the delegation
+  - `./attn seed notes <seed>` after the delete
+  - `./attn worktree list --repo $W/repo --json` after each refresh, keep and delete
+  - `./attn worktree log --repo $W/repo --json` at the end
+  - `bridge worktrees_get_state` after each app action
+  - `bridge capture_screenshot '{"path":"<P>/worktrees.png"}'` with the list open, where `<P>` is the folder's path written out
+
+  Name each file for its way in, such as `worktrees-palette-state.json`.
 
 ## Contexts
 
 - **Durability across restarts**: tracked repositories, pins, verdicts and the removal log are daemon records and come back after any restart. A repository stays tracked after its last worktree is gone.
 - **Linux**: `attn worktree` and the sweep work the same where the daemon runs on Linux. `sessions.open` is Ctrl+Alt+L there (`LINUX_SHORTCUTS`).
-- **Outposts**: `worktree_sweep_enabled` is a machine setting, so each machine decides for itself. A delegation with `--host` creates its worktree on that outpost, which checks the folder, refs and worktree path. Resuming a closed outpost session whose worktree was deleted can recreate it on that outpost: Reopen offers "Recreate the worktree" (`recreate_worktree_and_reopen`), or "Fetch, recreate, reopen" (`fetch_recreate_and_reopen`) when the branch is only on a remote. [ledger.md](ledger.md) owns resume. The Worktrees list covers only the home's repositories, so it never shows a worktree on an outpost, and an outpost session's ledger row has no "Show worktree".
+- **Outposts**: `worktree_sweep_enabled` is a machine setting, so each machine decides for itself. A delegation with `--host` creates its worktree on that outpost, which checks the folder, refs and worktree path. Resuming a closed outpost session whose worktree was deleted can recreate it on that outpost: Reopen offers "Recreate the worktree" (`recreate_worktree_and_reopen`), or "Fetch, recreate, reopen" (`fetch_recreate_and_reopen`) when the branch is only on a remote. For resume, see [ledger.md](ledger.md). The Worktrees list covers only the home's repositories, so it never shows a worktree on an outpost, and an outpost session's ledger row has no "Show worktree".
 - **Profiles**: worktrees belong to the machine, not to a profile. The list covers every tracked repository, and a live session in any profile keeps the worktree it runs in.
 - **Performance and idle cost**: a pass reads git state for every worktree of every tracked repository. The pass does not inspect a worktree younger than the idle floor deeply. Scenario `worktree-surface` times one refresh over a repository of tens of thousands of files.
-- **Harnesses**: a plugin can create and remove worktrees in place of git. [harnesses.md](harnesses.md) covers plugins.
+- **Harnesses**: a plugin can create and remove worktrees in place of git. See [harnesses.md](harnesses.md) for plugins.
 - **Keyboard and native input**: in the list, ↑ and ↓ (or j and k) move, Enter runs the first verb (Keep or Unpin), `.` or → opens the other verbs, 1 to 9 pick the nth verb, `/` filters, `y` copies the path, `[` and `]` switch lists, and Escape backs out. In the new session dialog's new worktree form, Ctrl+R picks another name and Tab switches the starting branch.
 
 ## Tests

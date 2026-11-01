@@ -12,7 +12,7 @@ renders:
     mermaid-ascii -f <name>.mmd > <name>.txt
 
 Read the `.txt` after rendering. When it doesn't read well, simplify the
-diagram; the page's prose carries the detail.
+diagram. The page's prose carries the detail.
 
 Pages show the image with `![alt](../diagrams/<name>.svg)`. Write alt text that
 says what the diagram shows.

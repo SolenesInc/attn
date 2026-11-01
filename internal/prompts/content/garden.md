@@ -4,7 +4,7 @@ A seed is one unit of work. It has a short id like `s-7k3f9m`, a slug like `merm
 
 Write every seed body as a work prompt for an agent starting without this conversation, including work you plan to do yourself. State the task and outcome, starting context and constraints, and how to verify completion.
 
-A plot is a seed with children. The plot's body holds the shared plan, and each child has its own work prompt. Keep shared decisions in the parent. In each child's work prompt, name the parent section, sibling result, or artifact to read, and say why. A delegation does not include related bodies automatically. Children run in parallel unless one waits for a sibling. To make a child wait, use `after` in a plot payload or a `blocks` link. Before you write a plot, read `attn seed guide`. Any seed can be a plot. Seed packets are templates for plots, and the attn skill explains them.
+A plot is a seed with children. The plot's body holds the shared plan, and each child has its own work prompt. Keep shared decisions in the parent. In each child's work prompt, name the parent section, sibling result, or artifact to read, and say why. A delegation does not include related bodies automatically. Children run in parallel unless a child waits for a sibling. To make a child wait, use `after` in a plot payload or a `blocks` link. Before you write a plot, read `attn seed guide`. Any seed can be a plot. Seed packets are templates for plots. The attn skill explains seed packets.
 
 Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = epic, harvested = done. Use the Garden word by default. When the user uses one of those Jira words, use the same word for that concept for the rest of the exchange. Do not correct the user. Do not switch the other concepts unless the user does.
 
@@ -15,24 +15,23 @@ A delegation assigns its seed to the new agent as that agent's stake: the seed t
 The loop:
 
     attn seed ready                  what you can pick up now: seeds that are open, not parked, not blocked, and held by nobody.
-                                     When you report to a plot, the list covers only that plot. A plot itself is never ready, and only its children can be
+                                     When you report to a plot, the list covers only that plot. A plot itself is never ready. Only its children can be ready
     attn seed ready --all            the same list across your profile's whole garden. Use it to look past your plot
     attn seed show <id>              news first: state, tender and a bookmark, the newest entries, edges, the outline of
                                      the plot the seed is part of, a plot's open children as a board, checks, then the body
     attn seed tend <id>              claim the seed. A seed has one tender at a time, and when someone else tends it, attn refuses you and names the tender
-    attn seed note <id> -m "…"       what happened and what you learned, whether or not you tend the seed. `--handoff` addresses the next tender
-                                     `--ring` tells watchers to look
+    attn seed note <id> -m "…"       record what happened and what you learned, whether or not you tend the seed. `--handoff` addresses the next tender. `--ring` tells watchers to look
     attn seed check report <id> <C#> -m "…" --evidence <file|artifact|url>    the proof for one of the seed's checks. attn copies a local file onto the seed. `attn seed check --help` lists the other check moves
-    attn seed harvest <id> -m "…"    done. The reason is required and at most 400 characters. Put the long version in a note
+    attn seed harvest <id> -m "…"    mark the seed done. The reason is required and at most 400 characters. Put the long version in a note
     attn seed harvest <id> --when-merged [pr-url] [-m "<outcome and verification>"]    use only when a merge is all that is left: attn releases the claim and harvests the seed when that pull request merges
                                      with no url, attn uses this session's single open pull request. `-m` keeps your reason for the harvest. This command merges nothing
                                      `--when-merged --clear` takes the arming back
-    attn seed wither <id> [-m "…"]   abandoned: nobody will pick it up
+    attn seed wither <id> [-m "…"]   mark the seed abandoned because nobody will pick it up
     attn seed park <id>              stop work and release your claim. Tend the seed again to resume
     attn seed replant <id>           move a harvested or withered seed back to planted
     attn seed search <words>         find seeds by keyword across your profile's garden, closed ones included. The line that
                                      matched prints under each hit. Run it before you plant
-    attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed. The command prints the id
+    attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    create a seed and print its id
 
 Each of `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither`, and `attn seed replant` checks who tends the seed. The tender, the sessions above the tender in the delegation chain, and the profile's chief can act on the claim. When a session above the tender, or the chief, acts, attn records who moved the seed and whose claim ended, and the delegate hears about it through the delegate's delegation watch. Everyone else needs `--force`, which also records the move. A call without a live session cannot act as the tender, as a session above the tender, or as the chief. A crew member's claim lasts across the member's sessions. A session's claim lapses when the session ends and holds again when the session resumes. `attn seed tend <id> --for <name>` assigns a seed to a crew member.
 
@@ -63,7 +62,7 @@ Keeping up:
 
 attn writes an entry in the seed's log for every change: notes, handoffs, moves, links, edits, checks, attachments, and answers. `show` prints a bookmark under the header, and a `notes` or `--since` read ends with a bookmark. Keep the bookmark from your last read, and read the entries since that bookmark instead of reading the whole seed again.
 
-When attn sends an update notification, run the read that the notification names. Reading acknowledges the update and keeps you aware. It does not authorize or require you to act on the update. Act or interrupt the user only when attention is genuinely needed.
+When attn sends an update notification, run the read that the notification names. Reading acknowledges the update and keeps you aware. It does not authorize or require you to act on the update. Act on an update, or interrupt the user, only when the update genuinely requires your action or the user's attention.
 
     attn seed show <id> --since <N>  only the entries saved after bookmark N, on the seed and every seed below it
     attn seed notes <id>             the whole log, newest first. It takes `--since <N>`, and `--kind <kind>` for one kind

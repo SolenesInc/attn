@@ -23,15 +23,17 @@ Add installs your home's Linux build at:
 - Named instance: `~/.local/share/attn-outpost-instances/<instance>/attn`.
 
 The outpost needs `sh`, `uname`, `cat`, `mkdir`, `mv`, `chmod`, and `busctl`.
-First run `ssh <destination>` in your terminal and answer any authentication
-or host-key prompts. attn's background commands never prompt.
+Before you add the outpost, run `ssh <destination>` in your terminal and answer
+any authentication or host-key prompts. attn's background commands never
+prompt.
 
 The home and the outpost use the same [instance](../../internal/instances.md)
 name. A named home starts only its same-named instance on the outpost.
 
-On the home, turn on **Outposts** in Settings → Experimental. Open Settings →
-Outposts, enter the **ssh destination**, and click **Add outpost**. Name is
-optional and defaults to the destination. The name `home` is reserved.
+To add the outpost, turn on **Outposts** in Settings → Experimental on the home.
+Then open Settings → Outposts, enter the **ssh destination**, and click **Add
+outpost**. Name is optional and defaults to the destination. The name `home` is
+reserved.
 
 attn starts the daemon over ssh and keeps it running when ssh disconnects.
 The machine must have logind's `KillUserProcesses` off, or attn refuses and
@@ -194,9 +196,10 @@ remaining work is known. The row also shows a count of conflict copies.
 Concurrent edits keep both versions as an original and a
 `*.sync-conflict-*` copy. Each new conflict copy produces one notification at
 the home. Compare the files, merge the content you need, and remove the copy to
-clear the count. Received deletions and replacements go to
-`<data-dir>/notebook-trash/` on the receiving machine for 30 days. This trash
-keeps the latest received replacement at each path.
+clear the count. attn moves a file that a sync deletes or
+replaces on the receiving machine to `<data-dir>/notebook-trash/` and keeps it
+there for 30 days. For each path, the trash keeps the latest received
+replacement.
 
 From an outpost shell, `attn seed attach <seed> --path <file> --move` or
 `--copy` reads that outpost's file and replaces the seed's file of the same
@@ -267,8 +270,7 @@ terminal's sidebar, queue and home screen rows keep their usual appearance.
 A stalled outpost's tiles say "<name> not responding". The connection stays open
 and still sends typing, without waiting for earlier keys to be answered. If the
 connection ends before a key's answer arrives, attn cannot tell whether that key
-ran. attn does not flash the tile for that key. Keys handed to the bridge may
-reach the outpost when the outpost comes back, so look at the shell before you
+ran. attn does not flash the tile for that key. A key that attn handed to the bridge may still reach the outpost when the outpost comes back, so look at the shell before you
 retype.
 
 A tile flashes red for a key only when attn refuses the key before handing it to
@@ -326,8 +328,8 @@ refused, keeps its enrollment and its running daemon. Remove keeps the binary,
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
 With none, attn removes the outpost immediately. If ssh cannot reach the
 outpost, **Remove and forget N terminals** closes only their tiles at the home.
-To stop what remains there, run the outpost's binary with the matching
-`ATTN_INSTANCE`, followed by `enrollment leave` and `daemon stop`.
+To stop what remains there, set the matching `ATTN_INSTANCE` and run these with
+the outpost's binary: `enrollment leave`, then `daemon stop`.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.

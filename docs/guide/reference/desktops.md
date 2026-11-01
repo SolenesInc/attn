@@ -33,8 +33,9 @@ editor and browsers all appear in a tile.
 
 Cmd+N (Ctrl+Shift+N on Linux) opens a new agent or shell on the current desktop,
 and Cmd+T (Ctrl+Shift+T on Linux) starts with a shell picked. To open a shell
-next to the agent or shell you're looking at, split it: Cmd+D (Ctrl+Shift+D on
-Linux) opens one beside it, Cmd+Shift+D (Ctrl+Alt+D on Linux) opens one below.
+next to the agent or shell you're looking at, split the tile: Cmd+D (Ctrl+Shift+D on
+Linux) opens the new shell beside the tile, Cmd+Shift+D (Ctrl+Alt+D on Linux)
+opens it below.
 
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.

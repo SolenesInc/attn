@@ -4,7 +4,7 @@ Principles this process relies on: [Prove it works](../principles/prove-it-works
 
 Use this process to build a feature map for a product: a skill in the repository that tells an agent how to start the product on an isolated instance, drive each feature through every way in, and keep the evidence. With the map, an agent checks a change the way the product is used, through every way in, without rediscovering how to drive it.
 
-Name the skill `drive-<app>`, also when the user asks for a verification skill, and put the skill in the skill folder the repository already uses, such as `.claude/skills/` or `.agents/skills/`. Write the skill for an agent that reads it cold, in the middle of a task, and has never seen the product.
+Name the skill `drive-<app>`, also when the user asks for a verification skill, and put the skill in the skill folder the repository already uses, such as `.claude/skills/` or `.agents/skills/`. Write the skill for an agent that reads it with no prior context, in the middle of a task, and has never seen the product.
 
 ## Learn how the product runs
 
@@ -21,7 +21,7 @@ If the checkout does not build or start, fix it or report exactly why before you
 
 ## Ask the user what the features are
 
-The user owns what each feature means. Before you write any description, ask them which features exist and what each is for, in their words. Give them a suggested list built from source to answer from: the ways in with their paths, candidate sub-features, and where the tests live. A subagent can build that list.
+The user owns what each feature means. Before you write any description, ask them which features exist and what each is for, in their words. Give them a suggested list built from the source, so they can answer by correcting it: the ways in with their paths, candidate sub-features, and where the tests live. A subagent can build that list.
 
 When the user asks you to draft instead, draft from their own existing words, such as product docs, the glossary or the README, and present it as a draft for their review. Match the style of the first map when you add later features. Follow the existing entries, and make each addition a small diff for the user to review.
 
@@ -30,7 +30,7 @@ When the user asks you to draft instead, draft from their own existing words, su
 Write `SKILL.md` with frontmatter: `name: drive-<app>`, and a `description` that names the product, its ways in, and when to use the skill. Without frontmatter the skill never registers. Then write these sections from what you found, with real commands and no placeholders:
 
 - **Launch.** The commands that start a fresh isolated instance with fakes at the outside boundaries, and how to tell it is ready to use, not only that a process answers. Ready includes migrations and seed data. For a short-lived CLI, build the CLI once in Launch and run each drive in its own isolated session.
-- **Doctor.** One read-only command that reports whether the instance is worth driving. It confirms that the process is up, runs this checkout's build, and owns its port and data folder, and that the fakes are the ones answering. Run it first, and again whenever something looks wrong.
+- **Doctor.** One read-only command that reports whether the instance is worth driving. It confirms four things: the process is up, the process runs this checkout's build, the process owns its port and data folder, and the fakes are the ones answering. Run it first, and again whenever something looks wrong.
 - **Drive.** For each audience's way in, the harness that drives it and what it reaches. Prefer stable handles, such as accessible names, test ids, command names and entity ids, over coordinates and tab order. When the product runs on the user's machine, drive it without taking their focus or covering their screen. A way in that the harness cannot drive without taking the user's focus or covering their screen is a gap in the harness. Fix the harness and never skip the step.
 - **Evidence.** Drive the real path, never internal setters or test-only endpoints. Capture the action and the resulting state, and check side effects from a second view. Use fakes only where the product already meets the outside. When a safe mode, such as a dry run, stands in for the real path, observe what the safe mode skips instead of trusting its name. Name the folder where evidence goes.
 - **Cleanup.** Stop what the run started, never by process name or pattern. Remove instances and scratch state, never the evidence.
@@ -73,7 +73,7 @@ Run the skill's own instructions once on an isolated instance: launch, run the d
 Two traps are common. When a trap applies, put a guard against it in the skill's Launch section:
 
 - A build in the same checkout, by you or another agent, can replace the binary under a run. Keep one live driver per checkout.
-- An agent that drives a product it runs inside can inherit that product's identity variables, and the instance then mistakes the agent's shell for one of its own sessions. Check what the instance's environment sets, and clear what the shell inherits.
+- An agent that drives a product it runs inside can inherit that product's identity variables. The instance then treats the agent's shell as one of its own sessions. Check what the instance's environment sets, and clear what the shell inherits.
 
 When you ran the skill in a stand-in, such as a local stack instead of a remote machine, list each step the stand-in did that a real run would not. Those steps stay unproven until a real run covers them.
 

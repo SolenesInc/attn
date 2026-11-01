@@ -1,1 +1,1 @@
-Deliver a verified change as the repository delivers changes, within the authorized scope.
+Deliver a verified change through the repository's own delivery process, within the authorized scope.

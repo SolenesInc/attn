@@ -33,16 +33,24 @@ whole profile.
 Codex asks whether to trust a folder before it works there. A shared Codex
 terminal accepts only trust saved for that exact folder, so it asks in every new
 worktree, even of a repository you trusted, unless the repository has a
-`.codex/` folder. attn answers yes to the trust question when an agent session
-in attn already started a conversation in that folder. For a folder at the top
-of a worktree, a session at the top of any other worktree of the same repository
-that still exists counts too, and the repository's main checkout counts as one
-of those worktrees. A shell, or a launch that stopped before the conversation
-started, doesn't count. attn also answers for every automation. Any other folder
-still asks. attn writes nothing to your Codex config when it answers. A folder
-you marked untrusted stays untrusted. Codex itself saves a folder you never
-answered for as trusted when a conversation that can write there starts, and
-saves the whole repository when the folder is in one.
+`.codex/` folder.
+
+attn answers yes to the trust question in these cases:
+
+- An agent session in attn already started a conversation in that folder. A
+  shell, or a launch that stopped before the conversation started, doesn't
+  count.
+- The folder is at the top of a worktree, and an agent session in attn already
+  started a conversation at the top of any other worktree of the same
+  repository that still exists. The repository's main checkout counts as one of
+  those worktrees.
+- The question comes from an automation.
+
+Any other folder still asks. attn writes nothing to your Codex config when it
+answers. A folder you marked untrusted stays untrusted. Codex itself saves a
+folder you never answered for as trusted when a conversation that can write
+there starts. If the folder is inside a repository, Codex saves the whole
+repository.
 
 ## One conversation, one session
 

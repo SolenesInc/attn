@@ -43,7 +43,7 @@ instance, or the app. The drive-attn skill's feature map lists every way into
 a feature. Do not run a full suite. CI runs the full suites on `main` after
 landing, as `AGENTS.md` "Commands and verification" says.
 
-When the machine can take it, you may run the scenarios that cover an
+When the machine has the capacity, you may run the scenarios that cover an
 app-observable change on a non-production instance. When no scenario covers
 the change, add one or tell the user.
 

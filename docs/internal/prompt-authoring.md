@@ -25,7 +25,7 @@ consumers. `authoring` prints the workflow alone. Use `help` for syntax and
 
 ## DSL rules
 
-See ../internal/prompts/model.go and neighboring definitions for
+See ../../internal/prompts/model.go and neighboring definitions for
 examples. Put branching in Go. Markdown accepts `{{name}}` substitutions.
 
 | Construct | Behavior |

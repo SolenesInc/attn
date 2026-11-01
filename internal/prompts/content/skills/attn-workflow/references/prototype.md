@@ -2,7 +2,7 @@
 
 Principles this process relies on: [Compare options before committing](../principles/compare-options-before-committing.md), [Experience first](../principles/experience-first.md), [Refactor first](../principles/refactor-first.md). Read them before you start. [The skill's index](../SKILL.md#principles) lists the rest.
 
-Prototype when comparing options settles a decision more easily than describing the options does. The decisions are a screen, a flow, an interaction, or the shape of an interface, as [Design](design.md) defines it. A prototype is a spike whose product is a set of options, so the spike rules in [Discuss](discuss.md) apply. The prototype's code is disposable. What carries forward is the choice and what the options revealed.
+Prototype when comparing options settles a decision more easily than describing the options does. The decisions concern a screen, a flow, an interaction, or the shape of an interface, as [Design](design.md) defines it. A prototype is a spike whose product is a set of options, so the spike rules in [Discuss](discuss.md) apply. The prototype's code is disposable. What carries forward is the choice and what the options revealed.
 
 ## Frame the decision
 
@@ -19,13 +19,13 @@ Make each option concrete enough to judge the decision, and no more concrete. Bu
 
 ## Independent candidates
 
-Options built by one agent share that agent's assumptions. When the decision is costly to reverse and the Prototyper role's choices that fit the decision offer more than one model, the agent that presents the options to the user can propose independent candidates instead. Delegate one Prototyper per model, each building one candidate, as the `attn` skill's delegation reference describes. Start the delegations only after the user agrees to candidates. A delegated Prototyper does not start candidates of its own. When the fitting choices offer one model, one Prototyper builds every option, as above.
+Options built by one agent share that agent's assumptions. The agent that presents the options to the user can propose independent candidates instead when two things hold. The decision is costly to reverse, and the Prototyper role's choices that fit the decision offer more than one model. Delegate one Prototyper per model, each building one candidate, as the `attn` skill's delegation reference describes. Start the delegations only after the user agrees to candidates. A delegated Prototyper does not start candidates of its own. When the fitting choices offer one model, one Prototyper builds every option, as above.
 
 Give every delegation the same brief. The brief states the decision, what is fixed, the call sites or states each candidate must show, and what will decide between the candidates. For an interface, the deciding factor is the [Design](design.md) checks that apply. For a UI, it is the states and interactions the decision turns on. Tell each Prototyper that other candidates exist, without showing them. Give each candidate its own output location, so no candidate can read another's work: its own worktree when it needs the code, its own folder otherwise.
 
 When you build one candidate, build the best design you can, not a safe middle. The comparison depends on the differences between candidates.
 
-The agent that started the candidates combines them. Read every candidate in full. Judge the candidates point by point against what the brief said would decide, not on overall feel. Candidates that converge agree, and need no grafts. Candidates that address different questions show that the brief left the decision open. In that case, sharpen the brief and, with the user's agreement, run the candidates again instead of averaging them. Otherwise, pick a base, name what each graft takes from which candidate, and fold each graft in so the result reads as one design. Then recommend the design as below.
+The agent that started the candidates combines them. Read every candidate in full. Judge the candidates point by point against what the brief said would decide, not on overall feel. Candidates that converge agree, and need no grafts. Candidates that address different questions show that the brief left the decision open. In that case, sharpen the brief and, with the user's agreement, run the candidates again instead of averaging them. Otherwise, pick a base. Name each part you take from another candidate, which is a graft, and the candidate it comes from. Fold each graft into the base so the result reads as one design. Then recommend the design as below.
 
 ## Compare and recommend
 

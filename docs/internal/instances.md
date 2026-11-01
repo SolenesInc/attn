@@ -67,9 +67,16 @@ workers, and plugin drivers, and removes the instance's data. `clean` takes the
 instance from its argument alone, never from routing variables, and refuses the
 default (production) instance without `--force`.
 Never delete a data directory by hand, because cleanup needs the worker registry.
-If `clean` reports a live app, quit the app and rerun `clean`. If `clean` reports
-a process it could not confirm or stop, leave that process alone. An agent brings the output of `clean` to the user. A person checks the process with `ps -p <pid>`,
-stops it only if it is a stale attn worker, then reruns `clean`.
+
+If `clean` reports a live app, quit the app and rerun `clean`.
+
+If `clean` reports a process it could not confirm or stop:
+
+- If you are an agent, leave that process alone and bring the output of `clean`
+  to the user.
+- If you are a person, check the process with `ps -p <pid>`. Stop it only if it
+  is a stale attn worker, then rerun `clean`.
+
 Worker removal waits for the worker's child to exit. If a worker cannot be
 removed, `clean` exits non-zero and keeps the instance data and worker registry
 for diagnosis.

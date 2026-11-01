@@ -14,10 +14,10 @@ turns into conflicts. Unfinished work lands unwired, or behind an experimental
 setting that is off by default. The `land-on-main` skill is the
 procedure, from the working branch to the report after the push.
 
-After the push, everything is automatic: `main`'s CI runs the full test suites
-and scenario matrix, the sheriff gets `main` green again when a landing breaks
-it, the review automation reviews the commits and messages their author or
-dispatches a fixer, and release notes are written from the commits.
+After the push, these run without you. `main`'s CI runs the full test suites and
+the scenario matrix. When a landing breaks `main`, the sheriff gets `main` green
+again. The review automation reviews the commits and messages their author or
+dispatches a fixer. The release process writes release notes from the commits.
 
 ### What land.sh does
 
@@ -52,12 +52,12 @@ specification.
 
 - A test that fails on a clean commit of `main`, in CI or on any machine, is
   red. A red test blocks no landing, unless the test is in the baseline or the
-  landing changes the test. Landings list a red test and leave it to the
+  landing changes the test. `land.sh` lists a red test and leaves it to the
   sheriff. Once the test has passed on `main` again, it joins every landing that
   runs landing tests.
-- The test leaves that set once it has passed afresh on 30 later commits of
-  `main`, in the lane where it failed. A commit where the test did not run says
-  nothing, and a new failure starts the count over.
+- The test stops joining landings once it has passed afresh on 30 later commits
+  of `main`, in the lane where it failed. A commit where the test did not run
+  does not count, and a new failure starts the count over.
 - Runs of unlanded or uncommitted work never count as `main`'s health.
 - A landing only counts a failed test that is gone from the checkout. Native
   scenarios have no landing recipe and stay with CI. A landing lists a native

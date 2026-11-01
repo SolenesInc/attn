@@ -170,10 +170,11 @@ arguments name the groups whose path pattern matched the change. `land.sh`
 runs:
 
 - the baseline: every unit of those groups in `scripts/landing-tests`
-- the tests the change touches: top-level Go tests whose function overlaps a
-  changed line in a `_test.go` file outside `testdata`, and changed Vitest
-  files (those `include` in `app/vite.config.ts` names) and Playwright files
-  (`app/e2e/**/*.spec.ts`)
+- the tests the change touches:
+  - top-level Go tests whose function overlaps a changed line in a `_test.go`
+    file outside `testdata`
+  - changed Vitest files that `app/vite.config.ts` lists under `include`
+  - changed Playwright files (`app/e2e/**/*.spec.ts`)
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
   its runner. A test still red on `main`, with no pass since its last failure,
@@ -228,8 +229,9 @@ and main revision:
 - The revision passed when the unit's own result is a `pass` that was not
   replayed from the Go test cache, and the revision did not fail.
 - `skip`, `expected-failure`, `interrupted`, cached passes and revisions where
-  the unit did not run are neither. Silence never clears a failure.
-- Many receipts at one revision are one vote. Go package results (`go ./pkg`),
+  the unit did not run are neither. A revision where the unit did not run never
+  clears a failure.
+- Many receipts at one revision count once. Go package results (`go ./pkg`),
   such as build failures, are not schedulable tests and carry no health.
 
 Tool versions and machine class are not part of the lane.

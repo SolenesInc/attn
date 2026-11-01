@@ -13,7 +13,7 @@ agent that started it, without taking your focus, or on whichever desktop you
 ask for.
 
 Attn keeps track of your delegation chain. Cmd+Shift+Up (Ctrl+Alt+O on Linux)
-takes you from a delegate back to the agent that started it. To go the other way, the chain button on an agent's sidebar row lists everyone in the chain, and picking one goes there.
+takes you from a delegate back to the agent that started it. To go the other way, click the chain button on an agent's sidebar row. The button lists everyone in the chain, and clicking an agent in the list takes you to that agent.
 
 ### The `attn delegate` command
 
@@ -115,9 +115,9 @@ their own.
 Attn bundles its own delegation roles. Add them with "Add Attn roles" in
 Settings > Delegation, or with `attn delegate roles install`. Each role arrives
 without a model, so pick a model for each role you want agents to use. Adding the
-roles also installs the attn-workflow skill for your harnesses. The bundled
-roles need the skill. Any agent on your computer can use the skill, although it
-is designed for use inside Attn. To change how a bundled role works, use "Make
+roles also installs the attn-workflow skill for your harnesses. The
+bundled roles need the skill. Any agent on your computer can use the skill,
+although the skill is built for use inside Attn. To change how a bundled role works, use "Make
 an editable copy".
 
 Agents can read and change the saved table for you with `attn delegate roles`

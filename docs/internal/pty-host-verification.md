@@ -15,10 +15,11 @@ daemon records the result, so ordinary restarts do not repeat the check.
 
 At startup the daemon recovers sessions first, then checks a newly installed
 build in the background. Until the new build passes, new sessions use the
-last-known-good build, or Go when no build has passed yet. For a failing build,
-a failing build produces one in-app notification and the daemon does not check the build again
-until the build changes or the user turns the setting on again. The daemon does
-not count a check cut short by its time limit or by daemon shutdown as a failure.
+last-known-good build, or Go workers when no build has passed yet. When a build
+fails, the daemon shows one in-app notification and does not check that build
+again until the build changes or the user turns the setting on again. The daemon
+does not count a check as a failure when its time limit or a daemon shutdown
+cuts the check short.
 
 Every host process has its own socket and control token. A host retires 45
 seconds after its last terminal closes, or after it starts without a terminal.

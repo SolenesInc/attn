@@ -111,7 +111,7 @@ Preconditions:
 - **Profiles**: each profile has its own desktops and current desktop. Desktop refs in `attn terminal move`, `--launch-desktop` and callouts resolve only in the caller's profile, and terminals in another profile are not found.
 - **Performance and idle cost**: the app keeps only the current desktop, the previous desktop and a drag's source desktop mounted, and a hidden terminal releases its drawing surface. `app/e2e/split-paint.spec.ts` checks repainting while splitting. When a change touches tile layout or switching, measure it with `docs/internal/perf-testing.md`.
 - **Keyboard and native input**: every desktop and tile action has a key, and the overview runs on arrows, ↵, ⇧↵, digits and Esc. ⌘W reaches attn through File → "Close Pane", so a rebind of `terminal.close` or `session.close` does not move it. After a switch, typing goes straight to the shown desktop's active tile.
-- **Compatibility across versions**: a later version reads today's desktops through the store's migrations. An arrangement from before desktops opens the migration picker before any shell (scenario `desktop-migration`). [profiles.md](profiles.md) owns the profile migration.
+- **Compatibility across versions**: a later version reads today's desktops through the store's migrations. An arrangement from before desktops opens the migration picker before any shell (scenario `desktop-migration`). For the profile migration, see [profiles.md](profiles.md).
 - **Flow**: in desktop flow the sidebar lists each desktop with its tiles, and ⌘↑ and ⌘↓ step through desktops. In queue flow the sidebar shows desktop chips and ⌘↑ and ⌘↓ walk the queue instead ([queue-flow.md](queue-flow.md)).
 
 ## Tests
@@ -129,7 +129,7 @@ Preconditions:
 - ⌘W on a terminal tile ends what runs in it: a split shell closes, and an agent's session closes too. Press it on a shell in a recipe, never on the agent you still need.
 - `attn delegate` without a role needs `--model` and `--cwd`. The mock agent answers to `--model mock-agent-1`, and `--agent` defaults to the caller's harness. Without `--model` the delegation step stops at `--model is required`.
 - `attn terminal` needs a session: from the instance shell it exits 1 with the caller rule. Drive moves through the mock agent.
-- What's new on a fresh app takes the keys; dismiss it first.
+- What's new on a fresh app takes the keys. Dismiss it first.
 - ⌘D and ⌘⇧D split only from a terminal tile. With a markdown, browser, seed or editor tile active they do nothing.
 - `move-with-delegates-*` appears only while the agent on screen has a delegate on the current desktop. The baseline has no delegate until the delegation step runs.
 - The overview's ⇧↵ and "Send focused pane here" do nothing for the current desktop's card.

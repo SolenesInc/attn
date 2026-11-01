@@ -431,21 +431,22 @@ Probed on 0.163.0 with a real model:
 Probed on 0.162.1 against the app-server alone:
 
 - `thread/start` and `thread/resume` take `approvalPolicy`,
-  `approvalsReviewer` and `sandbox`. Like the `config` it takes,
-  `thread/resume` applies them only when it loads the conversation. It loads a
-  conversation that is not loaded, and loads again a conversation that is
-  loaded with no subscriber. While any connection is subscribed, the resuming
-  connection included, `thread/resume` ignores them and the conversation keeps
-  its own. `thread/resume` also ignores them while a turn runs. This last case
-  is read in the source at rust-v0.160.0 and not probed
+  `approvalsReviewer` and `sandbox`. `thread/resume` also takes `config`.
+  `thread/resume` applies these values and the `config` only when it loads the
+  conversation. It loads a conversation that is not loaded, and it loads again a
+  conversation that is loaded and has no subscriber. While any connection is
+  subscribed, the resuming connection included, `thread/resume` ignores these
+  values and the conversation keeps its own. `thread/resume` also ignores them
+  while a turn runs. The case of a running turn is read in the source at
+  rust-v0.160.0 and not probed
   (`app-server/src/request_processors/thread_processor.rs`).
-- A `thread/resume` without them that loads the conversation restores the
-  approval policy and reviewer that the conversation last ran with, but
-  restores a sandbox only from a permission profile (the reviewer is read in
-  the source at rust-v0.160.0,
+- When `thread/resume` loads a conversation and receives none of these values,
+  it restores the approval policy and reviewer that the conversation last ran
+  with, but restores a sandbox only from a permission profile (the reviewer is
+  read in the source at rust-v0.160.0,
   `app-server/src/request_processors/persisted_resume_settings.rs`). A
   conversation that ran under a `sandbox` mode loads under the server's
-  configured sandbox: a conversation started with `never` and
+  configured sandbox. For example, a conversation started with `never` and
   `danger-full-access` comes back `never` and `read-only` in an untrusted
   folder.
 - Codex never raises its open-file limit (openai/codex#44682): the app-server
@@ -623,9 +624,9 @@ reviewer:
   the agent's next tool call, 214 s later, while the TUI kept reporting
   `working`.
 
-Read in the source at openai/codex rust-v0.162.1, and the switches probed on
-it with a model on a closed port. A shared Codex tile follows the conversation
-its Codex shows on these:
+Read in the source at openai/codex rust-v0.162.1, with the switches probed on
+it using a model on a closed port. These behaviors decide which conversation a
+shared Codex tile follows:
 
 - A `--remote` TUI starts, forks or resumes a conversation on its own
   connection only to show the conversation, or starts an `ephemeral`
@@ -638,9 +639,9 @@ its Codex shows on these:
 - `/agents` reads the root conversation picked with `thread/read` and resumes
   the conversation with `thread/resume`, even a conversation the TUI showed
   before. The exception is a conversation the TUI started itself and has not
-  prompted yet. The TUI stays subscribed to that conversation when it leaves
-  and goes back to the conversation without a request, so the first sign is
-  the `turn/start` of the next prompt there (`tui/src/app/agents_overview.rs`,
+  prompted yet. When the TUI leaves that conversation, it stays subscribed to
+  it and goes back to it without a request, so attn first sees the
+  `turn/start` of the next prompt there (`tui/src/app/agents_overview.rs`,
   `tui/src/app/thread_routing.rs`).
 - Picking a subagent that is not attached resumes the subagent
   (`tui/src/app/session_lifecycle.rs`). On reconnect, the TUI resumes the

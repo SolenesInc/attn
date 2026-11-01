@@ -4,7 +4,7 @@ In queue flow, Attn removes the need to pick the next agent to prompt. Attn
 takes you to the next agent that needs you, and repeats that until all of them
 are settled and doing their work.
 
-The flow is simple:
+The loop has three steps:
 
 1. Attn shows you the agent that has been waiting the longest.
 2. You prompt the agent, then settle it with Cmd+Shift+E (Ctrl+Alt+E on Linux).
@@ -58,7 +58,7 @@ Cmd+Shift+E on an agent that's on its own turn takes you to the front of the
 queue.
 
 A snooze settles an agent for a period of time. Use it when you don't want to
-close the agent but can't make a decision yet. Cmd+Shift+S (Ctrl+Alt+S on Linux), the snooze button on the agent's row, and "Snooze this agent…" in the command palette each offer the choices: 30 minutes, an hour, 2, 4 or 8 hours, or until
+close the agent but can't make a decision yet. Three controls open the snooze choices: Cmd+Shift+S (Ctrl+Alt+S on Linux), the snooze button on the agent's row, and "Snooze this agent…" in the command palette. The choices are 30 minutes, an hour, 2, 4 or 8 hours, or until
 tomorrow, Saturday or Monday at 9:00. Snoozed agents wait at the end of the full
 agent list ("N more agents" in the sidebar, or Cmd+Shift+A, Ctrl+Alt+A on
 Linux), each with the time its snooze ends. To unsnooze an agent, click the unsnooze

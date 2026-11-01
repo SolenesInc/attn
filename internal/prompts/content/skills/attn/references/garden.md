@@ -28,7 +28,7 @@ Export the body, edit the file with any tool, then submit it:
     # edit s-7k3f9m.md; keep its first line
     attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
 
-The stamp names the seed and its body hash. If another edit changed the body,
+The first line of the exported file is a stamp that names the seed and its body hash. If another edit changed the body,
 export again and reapply your change. attn refuses an empty body. Each edit saves
 an undoable body version and one log entry. `--note` adds your explanation to
 the log entry. Read the entries with `attn seed notes s-7k3f9m`. Restore the
@@ -47,7 +47,7 @@ The example in `attn seed guide` shows complete bodies and dependencies. In a
 child, `after` names the siblings the child waits for, by slug or full title.
 Leave independent children parallel. `part_of` plants the plot inside another
 plot, and `discovered_from` records the seed whose work turned up the plot.
-Give each by id or slug. Pass `-` to read from stdin.
+Give each by id or slug. Pass `-` as the payload file to read from stdin.
 
 ## Checks
 
@@ -55,8 +55,7 @@ A check is a numbered statement (C1) that a seed must prove. attn keeps the
 check on the seed as data, with its latest report and verdict. The body cites
 the check by id. Define checks with `checks` in plot JSON, with
 `--check "<statement>"` on plant, or later with
-`attn seed check add <id> -m "<statement>"`. Plant and add number each
-check with the next free id in the plot tree and print the id. Every seed below
+`attn seed check add <id> -m "<statement>"`. `attn seed plant` and `attn seed check add` each give a check the next free id in the plot tree and print that id. Every seed below
 the plot that has no children must prove a plot check marked shared, each with
 its own report. `attn seed show` lists a seed's checks, including inherited
 ones, as open, reported, confirmed or rejected.
@@ -110,7 +109,7 @@ the audit note and who the move rang. A delegate hears the move through the
 delegate's delegation watch. Everyone else needs `--force`, which the log also
 records. A call without a live session has no standing. A crew member's claim
 lasts across the member's sessions. A session's claim lapses when the session
-ends, and a move then needs no override. The claim holds again if the session
+ends, and a move then needs no `--force`. The claim holds again if the session
 resumes.
 
 ## Closing a plot
@@ -119,7 +118,7 @@ Harvest and wither refuse while any direct child is planted, growing or dormant,
 even with `--force` or `--when-merged`. The refusal names each open child.
 If your part is done, replant hands the plot back. Otherwise close the plot's
 children or move follow-ups out first. Closing the last open child leaves a ringing note
-on the plot and names it in the output. The plot keeps its state.
+on the plot and names the plot in the output. The plot keeps its state.
 
 ## Harvesting on a merge
 
@@ -153,8 +152,7 @@ A plot's tender hears updates from every seed under the plot, including
 grandchildren, without a watch. When the claim ends, that coverage ends and
 attn withdraws unread updates unless a watch still covers them. Lifecycle moves
 ring current and covering tenders and watching sessions, and print who they
-rang. Harvesting or withering a blocker also rings the parties of each seed
-that it sets free. Notes stay quiet unless you add `--ring`. A successful
+rang. Harvesting or withering a blocker also rings the parties of each seed that the blocker was blocking and that no other open blocker still holds. Notes stay quiet unless you add `--ring`. A successful
 action never rings the session that caused it. Automation acceptance is quiet,
 and its bell waits until the work is ready or the attempt needs attention.
 `attn seed watch <id>` subscribes this session to the seed and its descendants,
@@ -202,5 +200,5 @@ ownership explicitly with Move or Copy. A failed transfer leaves the link alone.
 ## Packets
 
 A packet is a plot flagged as a template with declared variables.
-Nothing sows a packet yet.
+attn cannot yet create seeds from a packet.
 `attn seed show` says `packet yes`, and `attn seed ready` skips the packet's subtree.

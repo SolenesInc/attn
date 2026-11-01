@@ -25,8 +25,7 @@ or attaches a session. Never probe a mutating command by omitting its
 arguments.
 
 If a command reports an unknown subcommand or version, check `attn --version`
-and `which -a attn`. When `ATTN_WRAPPER_PATH` is set, recover with
-`"$ATTN_WRAPPER_PATH"`. `attn skill` prints the bundled copy of this skill and
+and `which -a attn`. When `ATTN_WRAPPER_PATH` is set, recover by running `"$ATTN_WRAPPER_PATH"`. `attn skill` prints the bundled copy of this skill and
 its references.
 
 Read and change daemon settings with `attn settings list`, `get` and `set`.

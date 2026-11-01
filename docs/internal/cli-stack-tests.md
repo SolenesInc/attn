@@ -19,11 +19,10 @@ returns `testworld.Main(m)`.
   `s.PauseAt(point)` to hold the daemon or a worker the first time it reaches a
   pause point named in its code (`internal/pausepoint`, `ATTN_PAUSE_AT`).
   `s.PauseEvery` holds the process each time. Arm the pause before `Start`, or
-  start with `s.StartHeldAt(pause)`. `Await` returns the held process's pid and
-  `Release` lets the process go. This is the same `testworld.Pause` a daemon
-  wire test gets. Its `Await` fails at once with the step's error when the step
-  of a `Done` point failed. `s.Stop()` releases every hold before the daemon
-  stops, and the next start holds afresh.
+  start with `s.StartHeldAt(pause)`. `s.PauseAt` and `s.PauseEvery` return the same `testworld.Pause` that a daemon wire test gets. `Await` returns the held
+  process's pid, and fails at once with the step's error when the step of a
+  `Done` point failed. `Release` lets the process go. `s.Stop()` releases every
+  hold before the daemon stops, and the next start holds again.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once the daemon has
@@ -42,18 +41,22 @@ returns `testworld.Main(m)`.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
-  the daemon started. The clock drives the bridge's stall, loss, retry, and
-  dial-answer timers, a terminal's kill escalation, a folder watch's window, the
-  background job runner's schedule, the transcript watchers' discovery grace and
-  quiet window, and the daemon's periodic loops: database backup, GitHub hosts
-  refresh, PR poll, and branch monitor. Each transcript write a fake agent
-  makes fires the transcript poll without moving the clock, so the daemon
-  reads the write with no advance. Every stack uses this stepped clock. The
-  shared PTY host is not Go and keeps real time. A test that waits for one of
-  those timers without advancing fails at the hang guard.
-  Heartbeats and kernel socket deadlines keep real time, so a dial may still
-  fail without an advance. Await the connected or stalled row before you
-  advance the liveness timers.
+  the daemon started. Every stack uses this stepped clock. The clock drives
+  these timers:
+  - the bridge's stall, loss, retry, and dial-answer timers
+  - a terminal's kill escalation
+  - a folder watch's window
+  - the background job runner's schedule
+  - the transcript watchers' discovery grace and quiet window
+  - the daemon's periodic loops: database backup, GitHub hosts refresh, PR
+    poll, and branch monitor
+
+  Each transcript write a fake agent makes fires the transcript poll without
+  moving the clock, so the daemon reads the write with no advance. The shared
+  PTY host is not Go and keeps real time. A test that waits for one of those
+  timers without advancing fails at the hang guard. Heartbeats and kernel
+  socket deadlines keep real time, so a dial may still fail without an advance.
+  Await the connected or stalled row before you advance the liveness timers.
 - `s.AwaitTimer(name)` waits until the timer with that `stepclock.Name`, such
   as `bridge.RetryTimer` or `pty.KillDeadlineTimer`, is pending in the daemon or
   one of its workers. The timer must have been armed or reset after the last

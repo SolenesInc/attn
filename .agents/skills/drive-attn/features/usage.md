@@ -29,7 +29,7 @@ compacts at a budget they choose.
 
 ### Agents
 
-- `attn session show <id>` prints a `usage` line, and `attn session list --json` carries the same (`cmd/attn/session_ledger.go`). [ledger.md](ledger.md) covers the verbs.
+- `attn session show <id>` prints a `usage` line, and `attn session list --json` carries the same (`cmd/attn/session_ledger.go`). See [ledger.md](ledger.md) for the verbs.
 - `attn settings set session_cost.price.<model> '<json>'` sets a price, and `""` clears it (`cmd/attn/settings.go`). The JSON needs `input_usd_per_mtok`, `output_usd_per_mtok`, `cache_read_usd_per_mtok`, `cache_write_5m_usd_per_mtok` and `cache_write_1h_usd_per_mtok`. `headless_context_window_cap` and `chief_context_window_cap` set the background caps. No verb sets a session's context cap.
 
 ### Triggers
@@ -64,7 +64,7 @@ Preconditions:
 - **Durability across restarts**: usage is kept per session and survives every restart, and an upgrade carries over what an earlier version measured. A resumed conversation counts only the usage after the resume, so nothing is counted twice.
 - **Profiles**: prices are settings and apply across all profiles. Each session's usage stays with it in its profile's ledger.
 - **Performance and idle cost**: `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading usage from transcripts.
-- **Harnesses**: Claude Code's usage comes from each assistant message, Codex's from its token counts with its tier and context length, Pi's through its plugin. Only Claude Code and Codex agents take a context cap. A shell or out-of-range value is refused.
+- **Harnesses**: attn reads Claude Code's usage from each assistant message. It reads Codex's usage from the Codex token counts together with the tier and the context length. It reads Pi's usage through the Pi plugin. Only Claude Code and Codex agents take a context cap. attn refuses a cap on a shell session, and it refuses a cap value outside the allowed range.
 - **Keyboard and native input**: the badge takes focus, ↓ pins the receipt and Escape closes it. The palette reaches the receipt and the cap without a pointer.
 - **Compatibility across versions**: an older version's single cost cursor upgrades without losing unread usage.
 

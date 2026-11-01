@@ -6,8 +6,8 @@ says which app flow such a test follows.
 
 Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
 can reach the daemon only through the protocol, the CLI client, and the hooks
-`export_test.go` exposes. Those hooks fault the outside. The one reach inside is
-a pause point, below.
+`export_test.go` exposes. Those hooks make the things the daemon depends on outside itself fail.
+The one way to reach inside is a pause point, below.
 
 ## The world
 
@@ -57,7 +57,7 @@ On a `fakeagent.Run`:
   to the agent's current conversation. In Claude, `/clear` starts a new
   conversation and `/resume <id>` switches to the conversation `<id>`. Codex
   switches on the first prompt after `/new`, `/clear` or `/resume <id>`. In Pi,
-  `/new` and `/resume <id>` switch conversations, and Pi says hello to the
+  `/new` and `/resume <id>` switch conversations, and Pi sends its hello to the
   driver again, as a reloaded suite does.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
@@ -74,7 +74,7 @@ On a `fakeagent.Run`:
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
   are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
   returns the next task's `Harness`, `Model`, `Effort` and `Prompt` to `Answer`
-  or `Fail`, and a task the test never takes fails it. The task also carries
+  or `Fail`, and a task the test never takes fails the test. The task also carries
   the `Argv`, `Env` and working `Dir` the harness process was started with.
 
 ## Waiting for results

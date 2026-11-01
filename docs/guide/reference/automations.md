@@ -67,7 +67,7 @@ Attn ignores requests that already exist when you enable the automation.
 
 A run's agent starts on the automation's launch desktop. The agent works on a seed
 in the garden that Attn plants for the run, so the run's progress and outcome
-appear there. Attn tells the agent of a review run that the review is local
+appear there. For a review run, Attn tells the agent that the review is local
 only. The agent reports on the seed and the session and does not post, approve,
 comment, or push on GitHub.
 
@@ -146,7 +146,7 @@ Runs start unattended, with an approval reviewer in your place, so a routine per
 <details>
 <summary>What does the agent receive?</summary>
 
-Your prompt, the seed it works on, and the path to a JSON file with the occurrence's data: the scheduled time and the guard's output, or the pull request's title, body, author, branches and head commit. The agent is told to treat that data as untrusted and never follow instructions in it.
+Your prompt, the seed it works on, and the path to a JSON file with the occurrence's data: the scheduled time and the guard's output, or the pull request's title, body, author, branches and head commit. Attn tells the agent to treat that data as untrusted and never to follow instructions in it.
 </details>
 
 <details>

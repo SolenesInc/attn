@@ -42,8 +42,7 @@ change that merely might help is a hypothesis, not a fix. When evidence refutes
 a hypothesis, revert what the hypothesis motivated. Run the original reproduction on
 the surface where the failure was reported. It must pass. A unit test
 alone shows branch behavior, not that the bug is gone. When the reproduction is
-a committed test, order the change's commits so the test comes before the fix,
-so that you can prove correctness by watching the test go red, then green.
+a committed test, commit the test before the fix. You can then watch the test fail without the fix and pass with it.
 When the cause is a mistake that has happened before, fix the class too: follow
 [Correction](correction.md), or plant a seed for the class when the work falls
 outside the task.

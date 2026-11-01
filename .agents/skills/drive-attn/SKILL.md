@@ -49,8 +49,9 @@ is shared with other work and installs the attn skill into your harness
 homes. Keep a list of every name you start. Clean each name as
 [Cleanup](#cleanup) says, including when you abandon the run.
 
-Sourcing the env file selects the instance with `attn instance-env <name>`,
-which clears inherited routing, and moves to this checkout. The file's
+Sourcing the env file does two things. It runs `attn instance-env <name>`,
+which selects the instance and clears inherited routing. It also changes the
+directory to this checkout. The file's
 `unset` line drops the identity of the session you run in, so the instance
 does not mistake your shell for one of its terminals. With the exports in
 the file, the daemon launches the mock agent for `claude` and `codex`,
@@ -88,8 +89,8 @@ input failure is a bridge or harness bug to diagnose, not permission to take
 focus. A scenario that requires activation or system input needs a dedicated
 display. Such a scenario cannot prove a shared-Mac recipe. On macOS,
 `make run INSTANCE=<name>` opens the app through Launch Services instead,
-which drops these variables. If the
-daemon started without them (the doctor shows a real agent's executable), or
+and Launch Services does not pass the env file's exports to the app. If the
+daemon started without those exports (the doctor shows a real agent's executable), or
 a recipe needs another variable in the daemon's environment, quit the app
 with `./attn instance stop-app`, stop the daemon with
 `"$(./attn instance resolve --field appDaemon)" daemon stop`, append the
@@ -112,9 +113,10 @@ mock, not a real Claude) and `headless.tasks daemon headless tasks off`.
 Most verbs, `seed`, `agent`, `daemon` and `preflight` among them, also print
 `[attn instance=<name> ...]` on stderr. On those verbs, no banner means no
 instance is selected. `./attn instance` shows the selection instead. To check
-the build, the `version --json` of the same binary must show the
-`sourceFingerprint` that `bash scripts/source-fingerprint.sh` prints for your
-tree, and `bridge --wait-ready` refuses an app built from other source. For a
+the build, run `version --json` on the same binary and compare its
+`sourceFingerprint` with the output of `bash scripts/source-fingerprint.sh`
+for your tree. The two must match. `bridge --wait-ready` refuses an app built
+from other source. For a
 daemon-only instance, run the check through `./attn`:
 
 ```bash

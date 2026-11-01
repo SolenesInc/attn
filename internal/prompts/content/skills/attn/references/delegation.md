@@ -38,7 +38,7 @@ attn delegate --seed s-example --handover --role orchestrator \
   -m "The user approved the plan in this seed. Execute it, coordinating implementation and review."
 ```
 
-Attn saves the note and transfers ownership before it starts the successor. The previous agent keeps running. Handover is the explicit transfer choice, so it has no extra force or confirm flag. Handover does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover. If the holder changes during preparation, or the seed closes, reconsider the request.
+Attn saves the note and transfers ownership before it starts the successor. The previous agent keeps running. Handover is the explicit transfer choice, so it has no extra force or confirm flag. Handover does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover. If the tender changes during preparation, or the seed closes, reconsider the request.
 
 For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise recommend a Builder. Follow the planning process's checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Skip the checkpoint only when the user explicitly said to dispatch without reviewing the plan, as that process describes.
 
@@ -144,10 +144,8 @@ Launch failures leave transferred ownership and created worktrees and branches i
 When the delegate's work is complete, you can harvest the delegate's seed
 without `--force`, even while the delegate's session is live. Tend, park,
 wither and replant follow the same delegation-chain rule. The profile's chief
-can also act on another session's seed. The log records the move and whose
-claim ended, and the delegate's watch delivers the seed update. Everyone else
+can also act on another session's seed. The log records the move and whose claim the move ended, and the delegate's watch delivers the seed update. Everyone else
 still needs `--force`.
 
-When you no longer need the delegate's session, read the seed and use the
-close rules in attn's conversation reference. Closing a session is immediate
+When you no longer need the delegate's session, read the seed and use the closing rules in [converse-and-observe.md](converse-and-observe.md). Closing a session is immediate
 and separate from harvesting the session's assignment.

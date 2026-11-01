@@ -17,7 +17,7 @@ queue, but the user settles a run's turn the same way in either flow.
 - `jump-to-waiting`: open the turn at the head of the queue.
 - `walk`: step through the queue's agents in order: the turns, then the working agents, then the snoozed ones.
 - `settle`: close a turn. The user moves on to the next turn, or home when none is left.
-- `run-settle`: close an automation run's turn, in either flow. The user stays on the run ([automations.md](automations.md) owns runs).
+- `run-settle`: close an automation run's turn, in either flow. The user stays on the run (see [automations.md](automations.md) for runs).
 - `settle-move-on`: in queue flow, ⌘⇧E on an agent of the queue that owes no turn settles nothing and moves the user to the head of the queue, or home.
 - `auto-settle`: close a turn once the user steered the agent and the agent kept working, after a visible countdown.
 - `countdown-cancel`: stop the countdown and keep the turn. A second press lets the turn settle again.
@@ -39,8 +39,8 @@ queue, but the user settles a run's turn the same way in either flow.
 - An automation run's row, while the run owes a turn, has ✓ `[data-testid="session-settle-<session>"]`, titled "Settle this run (⌘⇧E)": in desktop flow on the run's launch desktop in the sidebar, and in queue flow inside the run's automation group in the queue sidebar. `[data-testid="sidebar-automation-header-<automation-id>"]` opens that group (`app/src/components/SidebarRows.tsx`, `app/src/components/SidebarDesktops.tsx`).
 - The snooze menu `[data-testid="snooze-menu"]`, with choices `snooze-choice-30m`, `1h`, `2h`, `4h`, `8h`, `tomorrow`, `saturday` and `monday` (`app/src/components/SnoozeMenu.tsx`).
 - The tile header during a countdown: "Settling…" `[data-testid="settling-indicator"]`, labelled "Keep this turn", and after a cancel the "Turn kept" chip `[data-testid="settle-kept-chip"]` (`app/src/components/SettlingIndicator.tsx`).
-- Settings, Attention queue (`[data-testid="settings-nav-hygiene"]`): the auto-settle switch `[data-testid="settings-auto-settle-toggle"]`, the arm delay and the countdown. Settings, Experimental (`[data-testid="settings-nav-experimental"]`): "Quiet notifications in the queue" (`settings-queue-quiet-notifications-toggle`), and "Show hidden sessions in the queue", which [shared-codex.md](shared-codex.md) drives (`app/src/components/SettingsModalSections.tsx`).
-- Home shows the turns under "Your turn", snoozed agents with their unsnooze button, and "All settled" when nothing is owed. [home.md](home.md) drives them.
+- Settings, Attention queue (`[data-testid="settings-nav-hygiene"]`): the auto-settle switch `[data-testid="settings-auto-settle-toggle"]`, the arm delay and the countdown. Settings, Experimental (`[data-testid="settings-nav-experimental"]`): "Quiet notifications in the queue" (`settings-queue-quiet-notifications-toggle`), and "Show hidden sessions in the queue", whose recipe is in [shared-codex.md](shared-codex.md) (`app/src/components/SettingsModalSections.tsx`).
+- Home shows the turns under "Your turn", snoozed agents with their unsnooze button, and "All settled" when nothing is owed. The recipe for them is in [home.md](home.md).
 - Where people see what agents do: the waiting count, each turn's age, the priority flag, the countdown on the tile and the order of the rows.
 - Their own shell: `attn settings set queue_mode_enabled true`, and the `attn session` verbs below, which work from a plain shell.
 
@@ -182,7 +182,7 @@ EOF
 ## Gotchas
 
 - Settings keeps its search text between visits. After the quiet-notifications step leaves `Experimental` in the search, the next ⌘, shows only the Experimental section, and `[data-testid="settings-nav-hygiene"]` is not in the page until the search is cleared.
-- `bridge native_key` with ⌘⇧A (`sidebar.agentList`) can answer `handledBy: ["menu"]` and leave the agent list closed (seed `diagnose-native-input-failures-found-drive`), so this recipe opens the list with `[data-testid="queue-agents-toggle"]`. [sidebar.md](sidebar.md) drives the key.
+- `bridge native_key` with ⌘⇧A (`sidebar.agentList`) can answer `handledBy: ["menu"]` and leave the agent list closed (seed `diagnose-native-input-failures-found-drive`), so this recipe opens the list with `[data-testid="queue-agents-toggle"]`. The recipe for the key is in [sidebar.md](sidebar.md).
 - The quiet-notifications switch starts below the baseline window's visible Settings content. `dom_native_point` scrolls the switch into view before returning its point. Clicking section navigation after focusing Search clears keyboard focus.
 - A mock agent owes a turn as soon as it finishes booting, in either flow. Expect `owed` before any prompt.
 - Typing into an agent does not settle its turn. Only a settle, a snooze or auto-settle does. A turn the agent did not open is the user's: `attn turn settle` from the agent exits 1 with `only the user settles it`. The agent can settle a turn that the agent opened with `attn turn open`.
