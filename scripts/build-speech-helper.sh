@@ -7,6 +7,20 @@ source "$repo/scripts/lib/build-cache.sh"
 crate=app/speech
 binary="$repo/$crate/target/release/attn-speech"
 
+cargo_configs() {
+  local dir="$repo/$crate" name
+  while :; do
+    for name in config config.toml; do
+      if [[ -f "$dir/.cargo/$name" ]]; then cat "$dir/.cargo/$name"; fi
+    done
+    [[ "$dir" == / ]] && break
+    dir="$(dirname "$dir")"
+  done
+  for name in config config.toml; do
+    if [[ -f "${CARGO_HOME:-$HOME/.cargo}/$name" ]]; then cat "${CARGO_HOME:-$HOME/.cargo}/$name"; fi
+  done
+}
+
 source_key() {
   cd "$repo"
   {
@@ -18,7 +32,8 @@ source_key() {
       shasum -a 256 "$path"
     done
     (cd "$crate" && rustc -vV)
-    env | grep -E '^(RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|CC|CXX|CFLAGS|CXXFLAGS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|CMAKE_ARGS|TRANSCRIBE_CMAKE_ARGS|TRANSCRIBE_DIR)=' | LC_ALL=C sort || true
+    cargo_configs
+    env | grep -E '^(CARGO_[A-Z0-9_]*|RUSTFLAGS|CC|CXX|CFLAGS|CXXFLAGS|SDKROOT|MACOSX_DEPLOYMENT_TARGET|CMAKE_ARGS|TRANSCRIBE_CMAKE_ARGS|TRANSCRIBE_DIR)=' | LC_ALL=C sort || true
     if [[ "$(uname -s)" == Darwin ]]; then
       xcrun --show-sdk-version
       cc --version | head -n1

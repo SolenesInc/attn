@@ -4,7 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-speech-cache-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
-export XDG_CACHE_HOME="$work/cache with spaces" SPEECH_TEST_BUILDS="$work/builds"
+export XDG_CACHE_HOME="$work/cache with spaces" SPEECH_TEST_BUILDS="$work/builds" CARGO_HOME="$work/cargo-home"
 : > "$SPEECH_TEST_BUILDS"
 mkdir -p "$work/bin" "$work/repo/scripts/lib" "$work/repo/app/speech/src"
 cp "$root/scripts/build-speech-helper.sh" "$work/repo/scripts/"
@@ -52,4 +52,12 @@ git -C "$work/second" checkout -q -- app/speech/src/main.rs
 
 TRANSCRIBE_CMAKE_ARGS=-DGGML_NATIVE=ON "$work/second/scripts/build-speech-helper.sh" > /dev/null
 [[ "$(builds)" == 3 ]] || { echo 'a native build setting reused a binary built without it' >&2; exit 1; }
+
+CARGO_PROFILE_RELEASE_OPT_LEVEL=0 "$work/second/scripts/build-speech-helper.sh" > /dev/null
+[[ "$(builds)" == 4 ]] || { echo 'a Cargo profile override reused a binary built without it' >&2; exit 1; }
+
+mkdir -p "$work/second/.cargo"
+printf '[profile.release]\nlto = false\n' > "$work/second/.cargo/config.toml"
+"$work/second/scripts/build-speech-helper.sh" > /dev/null
+[[ "$(builds)" == 5 ]] || { echo 'a Cargo config file reused a binary built without it' >&2; exit 1; }
 echo 'speech helper cache: OK'
