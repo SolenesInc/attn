@@ -48,11 +48,11 @@ func (d *Daemon) gardenTenderSession(seed garden.Seed) (string, error) {
 		return "", nil
 	}
 	if d.store != nil && (d.store.Get(sessionID) != nil || d.store.DelegationSessionReserved(sessionID)) {
-		profileID, err := d.store.GardenSessionProfileID(sessionID)
+		profiles, err := d.store.GardenSessionProfileIDs([]protocol.SessionID{sessionID})
 		if err != nil {
 			return "", err
 		}
-		if profileID != seed.ProfileID {
+		if profiles[sessionID] != seed.ProfileID {
 			return "", nil
 		}
 		return string(sessionID), nil
@@ -174,21 +174,24 @@ func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
+	var sessions []protocol.SessionID
+	for _, watch := range watches {
+		if id, ok := watch.Watcher.Session(); ok {
+			sessions = append(sessions, id)
+		}
+	}
+	sessionProfiles, err := d.store.GardenSessionProfileIDs(sessions)
+	if err != nil {
+		return gardenSubscriptions{}, err
+	}
+	seedProfiles := make(map[string]string, len(read.seeds))
+	for _, seed := range read.seeds {
+		seedProfiles[seed.ID] = seed.ProfileID
+	}
 	eligible := watches[:0]
 	for _, watch := range watches {
-		seed, ok := read.docs[watch.SeedID]
-		if !ok {
-			continue
-		}
-		owner, err := garden.Decode(seed.Body)
-		if err != nil {
-			return gardenSubscriptions{}, err
-		}
-		profileID, err := d.watcherProfileID(watch.Watcher)
-		if err != nil {
-			return gardenSubscriptions{}, err
-		}
-		if profileID == owner.ProfileID {
+		seedProfile, ok := seedProfiles[watch.SeedID]
+		if ok && d.watcherProfileID(watch.Watcher, sessionProfiles) == seedProfile {
 			eligible = append(eligible, watch)
 		}
 	}
@@ -210,12 +213,12 @@ func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) 
 	return coverage, nil
 }
 
-func (d *Daemon) watcherProfileID(watcher who.Party) (string, error) {
+func (d *Daemon) watcherProfileID(watcher who.Party, sessionProfiles map[protocol.SessionID]string) string {
 	if key, member := watcher.Member(); member {
-		return d.crewProfileID(key.String()), nil
+		return d.crewProfileID(key.String())
 	}
 	id, _ := watcher.Session()
-	return d.store.GardenSessionProfileID(id)
+	return sessionProfiles[id]
 }
 
 func (d *Daemon) consumeSeedBell(sessionID protocol.SessionID, seedID string) {
