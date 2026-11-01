@@ -69,6 +69,19 @@ func TestADelegationsAuthorizationIsSavedOnTheSeedAndDeliveredInEveryOpening(t *
 	}
 	assertOneAuthorizationEntry(t, cli, seed, words)
 
+	if _, err := cli.WithGardenProfile("", "caller").SeedAuthorization(seed, "", true); err != nil {
+		t.Fatal(err)
+	}
+	afterClear := delegateAtSeed("caller", cwd, seed)
+	afterClear.Assignment.Handover = &protocol.DelegateHandover{Note: protocol.Ptr("Take it from here.")}
+	third, err := cli.Delegate(afterClear)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opening := w.Launched(string(third.SessionID)).Prompted(); strings.Contains(opening, "Authorization from the user") {
+		t.Errorf("a handover after the words were cleared opened with %q; want no authorization line", opening)
+	}
+
 	fresh := delegateFrom("caller", cwd, "Tidy the README", fakeagent.Codex)
 	fresh.Label, fresh.Authorization = protocol.Ptr("readme"), protocol.Ptr("Ask me before pushing.")
 	readme, err := cli.Delegate(fresh)

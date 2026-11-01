@@ -676,7 +676,7 @@ func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle, guidance stri
 	if err != nil {
 		return "", err
 	}
-	if seed.Authorization == nil {
+	if seed.Authorization.Words() == "" {
 		return opening, nil
 	}
 	line := prompts.RenderText("delegation", "authorization", prompts.Values{

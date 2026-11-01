@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { Seed, SeedAuthorization as Authorization } from '../types/generated';
-import { GardenCompose } from './GardenCompose';
 import { whoName, type SessionLabels } from './gardenBoardModel';
 import './SeedAuthorization.css';
 
@@ -38,11 +37,13 @@ export function SeedAuthorization({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const editButtonRef = useRef<HTMLButtonElement | null>(null);
   const wasEditing = useRef(false);
   const focusEditOnChange = useRef(false);
+  const composing = useRef(false);
   const authorization = seed.authorization;
+  const words = authorization?.text ?? '';
 
   useEffect(() => {
     if (!focusEditOnChange.current) return;
@@ -60,7 +61,7 @@ export function SeedAuthorization({
       wasEditing.current = true;
       const input = inputRef.current;
       if (input) {
-        input.value = authorization?.text ?? '';
+        input.value = words;
         input.focus();
         input.select();
       }
@@ -90,7 +91,7 @@ export function SeedAuthorization({
   const commit = () => {
     const text = (inputRef.current?.value ?? '').trim();
     if (!text) {
-      setFailure(authorization
+      setFailure(words
         ? 'Write the new words, or press Clear to remove the authorization.'
         : 'Write the words that authorize this task.');
       inputRef.current?.focus();
@@ -108,9 +109,9 @@ export function SeedAuthorization({
         {daemon && !editing && (
           <span className="seed-authorization__actions">
             <button ref={editButtonRef} type="button" onClick={() => setEditing(true)} disabled={busy}>
-              {authorization ? 'Change' : 'Set'}
+              {words ? 'Change' : 'Set'}
             </button>
-            {authorization && (
+            {words && (
               <button
                 type="button"
                 onClick={() => {
@@ -125,32 +126,48 @@ export function SeedAuthorization({
           </span>
         )}
       </div>
-      {authorization ? (
-        <>
-          <p className="seed-authorization__text">{authorization.text}</p>
-          <p className="seed-authorization__meta">
-            <span>set by {setterName(authorization, sessionLabels)}</span>
-            <time dateTime={authorization.set_at}>{formatTime(authorization.set_at)}</time>
-            {delivery && <span className={authorization.update?.typed_at ? '' : 'is-waiting'}>{delivery}</span>}
-          </p>
-        </>
+      {words ? (
+        <p className="seed-authorization__text">{words}</p>
       ) : (
         !editing && <p className="seed-authorization__empty">No authorization from the user for this task.</p>
       )}
+      {authorization && (
+        <p className="seed-authorization__meta">
+          <span>{words ? 'set' : 'cleared'} by {setterName(authorization, sessionLabels)}</span>
+          <time dateTime={authorization.set_at}>{formatTime(authorization.set_at)}</time>
+          {delivery && <span className={authorization.update?.typed_at ? '' : 'is-waiting'}>{delivery}</span>}
+        </p>
+      )}
       {editing && (
-        <GardenCompose
-          verb="Authorize"
-          target={seed.id}
-          prompt="what the user allows for this task"
-          required
-          busy={busy}
-          inputRef={inputRef}
-          onCommit={commit}
-          onCancel={() => {
-            setEditing(false);
-            setFailure('');
-          }}
-        />
+        <div className="seed-authorization__editor">
+          <textarea
+            ref={inputRef}
+            className="seed-authorization__input"
+            rows={3}
+            spellCheck={false}
+            disabled={busy}
+            placeholder="what the user allows for this task"
+            aria-label={`Authorize ${seed.id}: what the user allows for this task`}
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={() => { composing.current = false; }}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              const confirmsComposition = event.nativeEvent.isComposing || composing.current || event.keyCode === 229;
+              if (event.key === 'Enter' && !event.shiftKey && !confirmsComposition) {
+                event.preventDefault();
+                commit();
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setEditing(false);
+                setFailure('');
+              }
+            }}
+          />
+          <span className="seed-authorization__keys">
+            <kbd>⏎</kbd> save <kbd>⇧⏎</kbd> new line <kbd>esc</kbd> cancel
+          </span>
+        </div>
       )}
       {failure && <p className="seed-authorization__error" role="alert">{failure}</p>}
     </section>

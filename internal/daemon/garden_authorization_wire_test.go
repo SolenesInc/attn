@@ -113,7 +113,7 @@ If this applies to work you delegated, update those seeds with attn seed authori
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !cleared.Changed || cleared.Seed.Authorization != nil || cleared.Update == nil || cleared.Update.TypedAt == nil {
+		if a := cleared.Seed.Authorization; !cleared.Changed || a == nil || a.Text != "" || a.Update == nil || a.Update.TypedAt == nil {
 			t.Fatalf("clearing returned %+v; want the words gone and the cleared form typed", cleared)
 		}
 		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint", set by dispatcher. These words no longer apply: "The user said I may push this branch."
@@ -197,8 +197,11 @@ If this applies to work you delegated, update those seeds with attn seed authori
 		w.advance(0)
 
 		cleared := fromApp("clear", protocol.SeedAuthorizationMessage{Clear: protocol.Ptr(true)})
-		if !cleared.Success || cleared.Result == nil || !cleared.Result.Changed || cleared.Result.Seed.Authorization != nil {
-			t.Fatalf("the user clearing the words from the app got %+v; want them gone", cleared)
+		if !cleared.Success || cleared.Result == nil || !cleared.Result.Changed {
+			t.Fatalf("the user clearing the words from the app got %+v; want a change", cleared)
+		}
+		if a := cleared.Result.Seed.Authorization; a == nil || a.Text != "" || a.SetBy.Ref != "user" || a.Update == nil || protocol.Deref(a.Update.Recipient.SessionID) != delegated.SessionID {
+			t.Fatalf("after the clear the seed holds authorization %+v; want no words, cleared by the user, with the removal sent to %s", a, delegated.SessionID)
 		}
 		w.advance(0)
 		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint". These words no longer apply: "You may land on main."

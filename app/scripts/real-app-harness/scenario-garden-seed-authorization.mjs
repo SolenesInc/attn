@@ -10,7 +10,8 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
-const WORDS = 'You may land on main. Ask me before releasing.';
+const FIRST_LINE = 'You may land on main.';
+const SECOND_LINE = 'Ask me before releasing.';
 
 // Tripwire: each wait here settles within a second on a healthy app.
 async function poll(read, description, timeoutMs = 20_000) {
@@ -89,13 +90,17 @@ async function main() {
 
     await runner.step('set_the_words_from_the_keyboard', async () => {
       await pressButton(1);
-      await client.request('dom_wait', { selector: `${section()} .garden-compose__input`, focused: true, timeoutMs: 5_000 });
-      await driver.typeText(WORDS);
+      await client.request('dom_wait', { selector: `${section()} .seed-authorization__input`, focused: true, timeoutMs: 5_000 });
+      await driver.typeText(FIRST_LINE);
+      await driver.pressEnter({ shift: true });
+      await driver.typeText(SECOND_LINE);
       await driver.pressEnter();
       const text = await poll(async () => {
         const current = await sectionText();
-        return { done: current.includes(WORDS) && current.includes('set by you'), value: current };
-      }, 'the page to show the words set by the user');
+        return { done: current.includes(FIRST_LINE) && current.includes(SECOND_LINE) && current.includes('set by you'), value: current };
+      }, 'the page to show both lines set by the user');
+      const stored = JSON.parse(runAttn(['seed', 'show', seedId, '--json'])).seed.authorization;
+      runner.assert(stored?.text === `${FIRST_LINE}\n${SECOND_LINE}`, 'Shift+Enter keeps the line break in the saved words', { stored });
       runner.writeText('authorization-set.txt', text);
       await client.request('dom_wait', { selector: `${section()} .seed-authorization__actions button:nth-child(1)`, focused: true, textIncludes: 'Change', timeoutMs: 5_000 });
       const typed = await poll(async () => {
@@ -113,8 +118,8 @@ async function main() {
       await pressButton(2);
       const text = await poll(async () => {
         const current = await sectionText();
-        return { done: current.includes('No authorization from the user'), value: current };
-      }, 'the page to show the words cleared');
+        return { done: current.includes('No authorization from the user') && current.includes('cleared by you') && current.includes('typed into'), value: current };
+      }, 'the page to show the words cleared by the user and the removal typed into the delegate');
       runner.writeText('authorization-cleared.txt', text);
       await client.request('dom_wait', { selector: `${section()} .seed-authorization__actions button:nth-child(1)`, focused: true, textIncludes: 'Set', timeoutMs: 5_000 });
       const typed = await poll(async () => {

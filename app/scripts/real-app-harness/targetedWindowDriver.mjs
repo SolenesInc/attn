@@ -118,8 +118,8 @@ export class TargetedWindowDriver {
     return this.#keys({ kind: 'keycode', keyCode, modifiers }, 1, `pressKeyCode(${keyCode}, ${JSON.stringify(modifiers)})`, opts);
   }
 
-  async pressEnter(opts = {}) {
-    return this.pressKeyCode(ENTER_KEY_CODE, {}, opts);
+  async pressEnter(modifiers = {}, opts = {}) {
+    return this.pressKeyCode(ENTER_KEY_CODE, modifiers, opts);
   }
 
   async typeText(text, opts = {}) {

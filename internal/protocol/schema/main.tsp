@@ -5488,6 +5488,7 @@ model SeedHarvestCondition {
 }
 
 model SeedAuthorization {
+  // Empty after a clear: set_by and set_at then say who cleared it and when.
   "text": string;
   "set_by": ActorView;
   "set_at": string;

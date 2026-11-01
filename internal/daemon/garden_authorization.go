@@ -111,16 +111,14 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			return authorizationChange{}, err
 		}
 		previous := seed.Authorization
-		if (previous == nil && text == "") || (previous != nil && previous.Text == text) {
+		if previous.Words() == text {
 			return authorizationChange{seed: seed, doc: doc}, nil
 		}
 		change := authorizationChange{changed: true}
 		next := seed
-		next.Authorization = nil
+		next.Authorization = &garden.Authorization{Text: text, SetBy: setter, SetAt: formatGardenTime(d.gardenTime())}
 		entryBody := text
-		if text != "" {
-			next.Authorization = &garden.Authorization{Text: text, SetBy: setter, SetAt: formatGardenTime(d.gardenTime())}
-		} else {
+		if text == "" {
 			entryBody = fmt.Sprintf("Cleared the authorization. These words no longer apply: %q", previous.Text)
 		}
 		if typeIntoTender {
@@ -145,10 +143,8 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 					Source: seed.ID, Key: seed.ID, Text: d.authorizationUpdateText(seed, replaced, text, setter),
 				}
 				change.typed = &item
-				if next.Authorization != nil {
-					next.Authorization.TypedUpdate = item.ID
-					next.Authorization.TenderLastReceived = received
-				}
+				next.Authorization.TypedUpdate = item.ID
+				next.Authorization.TenderLastReceived = received
 			}
 		}
 		entry := seedMoveNote{

@@ -74,3 +74,30 @@
   font-size: var(--font-size-sm);
   margin: 0;
 }
+
+.seed-authorization__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seed-authorization__input {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.seed-authorization__input:focus-visible {
+  border-color: var(--color-border-focus);
+  outline: none;
+}
+
+.seed-authorization__keys {
+  color: var(--color-text-dimmed);
+  font-size: var(--font-size-sm);
+}

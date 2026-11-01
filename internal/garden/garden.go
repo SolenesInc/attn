@@ -78,6 +78,13 @@ type Authorization struct {
 	TenderLastReceived string    `json:"tender_last_received,omitempty"`
 }
 
+func (a *Authorization) Words() string {
+	if a == nil {
+		return ""
+	}
+	return a.Text
+}
+
 type HarvestCondition struct {
 	Reason      string    `json:"reason,omitempty"`
 	PullRequest string    `json:"pull_request"`

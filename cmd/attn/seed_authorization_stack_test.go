@@ -38,6 +38,15 @@ func TestSeedAuthorizationSaysWhereEachChangeWent(t *testing.T) {
 	if got := seedAs(t, s, tender, "authorization", seed.ID, "--clear"); got != seed.ID+" authorization cleared. You tend "+seed.ID+", so nothing is typed.\n" {
 		t.Errorf("clearing printed %q", got)
 	}
+	if got := seedAs(t, s, "", "authorization", seed.ID, "Ask me before landing."); !strings.HasPrefix(got, seed.ID+" authorization set. ") {
+		t.Errorf("setting the words again printed %q", got)
+	}
+	if got := seedAs(t, s, "", "authorization", seed.ID, "--clear"); !strings.HasPrefix(got, seed.ID+" authorization cleared. ") || !strings.Contains(got, tender[:8]) {
+		t.Errorf("the user clearing the words while %s tends the seed printed %q; want where the removal went", tender, got)
+	}
+	if got := seedAs(t, s, "", "authorization", seed.ID); !strings.HasPrefix(got, seed.ID+" has no authorization: cleared by the user at ") || !strings.Contains(got, tender[:8]) {
+		t.Errorf("reading a cleared authorization printed %q; want who cleared it and where the removal went", got)
+	}
 	both := s.Run(testworld.Invocation{Session: tender, Args: []string{"seed", "authorization", seed.ID, "words", "--clear"}})
 	if both.Code != 2 || !strings.Contains(both.Stderr, "not both") {
 		t.Errorf("words with --clear exited %d: %s", both.Code, both.Stderr)

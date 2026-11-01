@@ -86,14 +86,37 @@ describe('App garden seed authorization', () => {
       ...tended,
       authorization: { text: 'You may land on main.', set_by: USER_ACTOR, set_at: '2026-11-01T10:42:00Z' },
     });
-    answerAuthorization(garden, () => ({ ...tended }));
+    answerAuthorization(garden, () => ({
+      ...tended,
+      authorization: { text: '', set_by: USER_ACTOR, set_at: '2026-11-01T10:50:00Z', update: { recipient: BUILDER, typed_at: '2026-11-01T10:50:01Z' } },
+    }));
 
     await gesture(garden.daemon, () => fireEvent.click(authorizationSection().getByRole('button', { name: 'Clear' })));
 
     expect(garden.daemon.sentOf('seed_authorization')).toEqual([expect.objectContaining({ seed_id: 's-auth11', clear: true })]);
-    expect(authorizationSection().queryByText('You may land on main.')).not.toBeInTheDocument();
-    expect(authorizationSection().getByText('No authorization from the user for this task.')).toBeInTheDocument();
+    const section = authorizationSection();
+    expect(section.queryByText('You may land on main.')).not.toBeInTheDocument();
+    expect(section.getByText('No authorization from the user for this task.')).toBeInTheDocument();
+    expect(section.getByText('cleared by you')).toBeInTheDocument();
+    expect(section.getByText(/^typed into builder-a at /)).toBeInTheDocument();
+    expect(section.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
     expect(authorizationSection().getByRole('button', { name: 'Set' })).toHaveFocus();
+  });
+
+  it('keeps words that span lines exactly when they are saved unchanged, and saves nothing on Shift+Enter or the Enter that confirms an IME composition', async () => {
+    const words = 'Ask me before pushing.\nNever release.';
+    const garden = await openSeed({ ...tended, authorization: { text: words, set_by: USER_ACTOR, set_at: '2026-11-01T10:42:00Z' } });
+    answerAuthorization(garden, (text) => ({ ...tended, authorization: { text: text!, set_by: USER_ACTOR, set_at: '2026-11-01T10:44:00Z' } }));
+
+    await gesture(garden.daemon, () => fireEvent.click(authorizationSection().getByRole('button', { name: 'Change' })));
+    const field = authorizationSection().getByRole('textbox', { name: /Authorize s-auth11/ });
+    expect(field).toHaveValue(words);
+    await gesture(garden.daemon, () => fireEvent.keyDown(field, { key: 'Enter', shiftKey: true }));
+    await gesture(garden.daemon, () => fireEvent.keyDown(field, { key: 'Enter', keyCode: 229 }));
+    expect(garden.daemon.sentOf('seed_authorization')).toEqual([]);
+    await gesture(garden.daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
+
+    expect(garden.daemon.sentOf('seed_authorization')).toEqual([expect.objectContaining({ seed_id: 's-auth11', text: words })]);
   });
 
   it('keeps the words in the field and shows the refusal when the daemon refuses', async () => {

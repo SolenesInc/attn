@@ -1252,8 +1252,11 @@ func runSeedAuthorization(args []string) {
 func seedAuthorizationReply(result *protocol.SeedAuthorizationResult, changing, clear bool) string {
 	seed := result.Seed
 	if !changing {
-		if seed.Authorization == nil {
+		switch a := seed.Authorization; {
+		case a == nil:
 			return seed.ID + " has no authorization."
+		case a.Text == "":
+			return fmt.Sprintf("%s has no authorization: %s", seed.ID, authorizationSummary(*a))
 		}
 		return fmt.Sprintf("%s authorization %s", seed.ID, authorizationSummary(*seed.Authorization))
 	}
@@ -1289,6 +1292,9 @@ func seedAuthorizationReply(result *protocol.SeedAuthorizationResult, changing, 
 
 func authorizationSummary(a protocol.SeedAuthorization) string {
 	summary := fmt.Sprintf("%q  set by %s at %s", a.Text, actorLabel(a.SetBy), shortStamp(a.SetAt))
+	if a.Text == "" {
+		summary = fmt.Sprintf("cleared by %s at %s", actorLabel(a.SetBy), shortStamp(a.SetAt))
+	}
 	if a.Update != nil {
 		summary += " · " + authorizationUpdateState(*a.Update)
 	}
