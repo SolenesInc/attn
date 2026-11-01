@@ -51,7 +51,8 @@ locally. After the landing, `main`'s full scenario matrix verifies it again. See
 
 CI runs the scenario matrix. Run scenarios locally, in a non-production
 instance, to reproduce a CI failure or develop a scenario. When the machine has
-the capacity, run them also to check an app-observable change before landing.
+the capacity, you may also run them to check an app-observable change before
+landing.
 Check the installed build first, not whatever `attn` is on `PATH`:
 
 ```bash
