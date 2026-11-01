@@ -416,6 +416,9 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		&copiedFrom,
 		&commandTerminal,
 	)
+	if errors.Is(err, sql.ErrNoRows) && cached {
+		s.sessionRows.putSession(id, gen, nil, false)
+	}
 	if err != nil {
 		return nil, false
 	}
