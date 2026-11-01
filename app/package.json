@@ -11,7 +11,7 @@
     "build:browser-runtime": "vite build --config vite.browser-runtime.config.ts",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "pnpm run verify:ghostty-vt && go tool test-history capture vitest -- vitest run",
+    "test": "go tool test-history capture vitest -- vitest run",
     "lint": "cd .. && app/node_modules/.bin/oxlint --deny-warnings app sdk",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

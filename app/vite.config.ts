@@ -83,6 +83,7 @@ export default defineConfig(async ({ command }) => ({
     globals: true,
     environment: "happy-dom",
     env: { VITE_ATTN_BUILD_INSTANCE: "", VITE_CLIENT_TOKEN: "" },
+    globalSetup: ["./scripts/vitest-ghostty-vt.mjs"],
     setupFiles: ["./src/test/setup.ts"],
     ...(process.env.ATTN_TEST_RESULTS && {
       reporters: [

@@ -76,7 +76,6 @@ fi
 app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"
 if [ -n "$app_entries" ]; then
   make -s app/node_modules/.attn-installed
-  pnpm --dir app run --silent verify:ghostty-vt
   mkdir -p "$work/data"
   read -r daemon_port vite_port < <(node -e '
     const net = require("net");
