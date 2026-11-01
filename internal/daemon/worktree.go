@@ -317,7 +317,7 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 }
 
 func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, branch string, keepBranch bool) error {
-	deleteBranch := worktreeBranchIsDeletable(d.logf, branch, keepBranch)
+	deleteBranch := d.worktreeBranchIsDeletable(branch, keepBranch)
 	return d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
 		if err := client.PruneWorktrees(runCtx, mainRepo); err != nil {
 			return fmt.Errorf("provider removed a worktree of %s but pruning its registration failed: %w", mainRepo, err)
@@ -330,17 +330,17 @@ func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, br
 }
 
 func (d *Daemon) deleteWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string, keepBranch bool) {
-	if worktreeBranchIsDeletable(d.logf, branch, keepBranch) {
+	if d.worktreeBranchIsDeletable(branch, keepBranch) {
 		d.deleteDeletableWorktreeBranch(ctx, client, mainRepo, branch)
 	}
 }
 
-func worktreeBranchIsDeletable(logf func(string, ...any), branch string, keepBranch bool) bool {
+func (d *Daemon) worktreeBranchIsDeletable(branch string, keepBranch bool) bool {
 	if branch == "" {
 		return false
 	}
 	if keepBranch {
-		logf("Preserved branch %s because an open seed can continue from it", branch)
+		d.logf("Preserved branch %s because an open seed can continue from it", branch)
 		return false
 	}
 	return true
