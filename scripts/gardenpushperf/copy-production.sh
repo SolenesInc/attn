@@ -10,18 +10,17 @@ if [ "$data" = "$HOME/.attn" ]; then
   echo "copy-production.sh: $name resolves to the production data directory" >&2
   exit 1
 fi
-if [ -e "$data/attn.sock" ]; then
-  echo "copy-production.sh: $name is running; run attn instance clean $name first" >&2
+if [ -e "$data/attn.db" ] || [ -e "$data/attn.sock" ]; then
+  echo "copy-production.sh: $name already has data in $data; run attn instance clean $name first" >&2
   exit 1
 fi
 
 mkdir -p "$data/notebook-scratch"
-rm -f "$data/attn.db" "$data/attn.db-wal" "$data/attn.db-shm"
-sqlite3 "file:$HOME/.attn/attn.db?mode=ro" ".backup '$data/attn.db'"
+sqlite3 "file:$HOME/.attn/attn.db?mode=ro" ".backup '$data/attn.db.copying'"
 
-drops=$(sqlite3 "$data/attn.db" "SELECT 'DROP TRIGGER ' || name || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
-creates=$(sqlite3 "$data/attn.db" "SELECT sql || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
-sqlite3 "$data/attn.db" <<SQL
+drops=$(sqlite3 "$data/attn.db.copying" "SELECT 'DROP TRIGGER ' || name || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
+creates=$(sqlite3 "$data/attn.db.copying" "SELECT sql || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
+sqlite3 "$data/attn.db.copying" <<SQL
 BEGIN;
 $drops
 DELETE FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled');
@@ -35,5 +34,7 @@ $creates
 UPDATE automation_definitions SET enabled = 0;
 COMMIT;
 SQL
+sqlite3 "$data/attn.db.copying" ".backup '$data/attn.db'"
+rm -f "$data/attn.db.copying" "$data/attn.db.copying-wal" "$data/attn.db.copying-shm"
 
 sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"
