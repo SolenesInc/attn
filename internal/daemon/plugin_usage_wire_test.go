@@ -177,3 +177,17 @@ func TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession
 	w.readTranscripts()
 	awaitPricedRows(app, session, 17386)
 }
+
+func TestASessionUpdateSaysAPluginAgentStartedAConversationWhenItReportsItsTranscript(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
+	awaitDriverAvailable(app, "snipe")
+	session, run := spawnDriven(w, app, driver, w.Path("shop"))
+	if err := reportTranscript(driver, run.SessionID, run.RunID, w.Path("snipe-session.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.ConversationStarted)
+	})
+}
