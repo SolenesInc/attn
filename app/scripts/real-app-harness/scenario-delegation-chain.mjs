@@ -108,6 +108,9 @@ try {
     await waitForSelector(header, 'Builder header');
     runner.assert((await text(header)) === 'Builder', 'header spells out the assigned role');
     const row = `[data-testid="sidebar-session-${builder}"]`;
+    for (const desktop of await observer.closeLeftoverNumberedDesktops()) {
+      await waitForSelector(`[data-testid="sidebar-desktop-${desktop.id}"]`, `sidebar without numbered desktop ${desktop.shortcut_slot}`, { absent: true });
+    }
     await driver.hover(row);
     await waitForSelector(popup, 'hovered chain');
     await waitForChainFocus(builder, 'row hover focuses the current agent');
