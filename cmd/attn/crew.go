@@ -46,7 +46,7 @@ func runCrew() {
 		recordUsageError("crew", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "crew: unknown command %q\n", os.Args[2])
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -151,16 +151,16 @@ func runCrewPrime(args []string) {
 	if len(args) != 0 {
 		fmt.Fprintln(os.Stderr, "crew prime: takes no arguments")
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").CrewPrime(currentSessionOrExit())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew prime: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if result.Member == nil {
 		fmt.Fprintln(os.Stderr, "crew prime: this session is not a crew member's; nothing to prime")
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Println(protocol.Deref(result.Guidance))
 }
@@ -191,7 +191,7 @@ func runCrewList(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew list: %v\n", err)
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	list := crewClient(parsed.profile).CrewList
 	if parsed.all {
@@ -200,7 +200,7 @@ func runCrewList(args []string) {
 	result, err := list()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew list: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result.Members)
@@ -253,12 +253,12 @@ func runCrewWake(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := crewClient(parsed.profile).CrewWake(parsed.member, parsed.agent, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -288,7 +288,7 @@ func runCrewSleep(args []string) {
 	result, err := crewClient(parsed.profile).CrewSleep(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew sleep: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -320,7 +320,7 @@ func runCrewApply(args []string) {
 	result, err := crewClient(parsed.profile).CrewApply(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew apply: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -426,7 +426,7 @@ func runCrewSet(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := crewClient(parsed.profile).CrewSetMessage(protocol.CrewSetMessage{
 		Member: parsed.member, Cwd: parsed.cwd, Agent: parsed.agent, Model: parsed.model, Effort: parsed.effort,
@@ -434,7 +434,7 @@ func runCrewSet(args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew set: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result.Member)
@@ -522,12 +522,12 @@ func runCrewRename(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew rename: %v\n", err)
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := crewClient(parsed.profile).CrewRename(parsed.member, parsed.name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew rename: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -549,7 +549,7 @@ func runCrewMoveHome(args []string) {
 	result, err := crewClient(parsed.profile).CrewMoveHome(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew move-home: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -581,7 +581,7 @@ func parsedCrewMemberArgsOrExit(verb string, args []string) crewMemberArgs {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", verb, err)
 		writeCrewHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	return parsed
 }
@@ -591,7 +591,7 @@ func runCrewCreate(args []string) {
 	result, err := crewClient(parsed.profile).CrewCreate(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew create: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result.Member)
@@ -607,7 +607,7 @@ func runCrewRetire(args []string) {
 	result, err := crewClient(parsed.profile).CrewRetire(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew retire: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -638,7 +638,7 @@ func runCrewRestore(args []string) {
 	result, err := crewClient(parsed.profile).CrewRestore(parsed.member)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew restore: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

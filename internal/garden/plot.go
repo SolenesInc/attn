@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type Progress struct {
@@ -147,7 +149,7 @@ func ParsePlotSpec(raw []byte) (PlotSpec, error) {
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&spec); err != nil {
-		return PlotSpec{}, fmt.Errorf("this is not a plot payload: %w (the shape is %s)", err, plotPayloadShape)
+		return PlotSpec{}, protocol.Refuse(protocol.RefusalInvalidInput, "this is not a plot payload: %w (the shape is %s)", err, plotPayloadShape)
 	}
 	if err := ValidatePlotSpec(spec); err != nil {
 		return PlotSpec{}, err
@@ -173,7 +175,7 @@ func refuseBlocksInPlotPayload(raw []byte) error {
 		if len(*child.Blocks) > 0 {
 			rewrite = fmt.Sprintf(`add "after": [%q] to %s`, StepSlug(child.Title), strings.Join(quoted(*child.Blocks), " and "))
 		}
-		return fmt.Errorf(`child %d (%q) has "blocks", which plot payloads do not take; a child names the siblings it waits for with "after". Here: %s`, i+1, child.Title, rewrite)
+		return protocol.Refuse(protocol.RefusalInvalidInput, `child %d (%q) has "blocks", which plot payloads do not take; a child names the siblings it waits for with "after". Here: %s`, i+1, child.Title, rewrite)
 	}
 	return nil
 }
@@ -194,7 +196,7 @@ func ValidatePlotSpec(spec PlotSpec) error {
 		return err
 	}
 	if len(spec.Children) == 0 {
-		return fmt.Errorf("a plot is a crown with children and this payload has none; to plant one seed use `attn seed plant`")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a plot is a crown with children and this payload has none; to plant one seed use `attn seed plant`")
 	}
 	slugs := make(map[string]int, len(spec.Children))
 	for i, child := range spec.Children {
@@ -203,19 +205,19 @@ func ValidatePlotSpec(spec PlotSpec) error {
 		}
 		slug := StepSlug(child.Title)
 		if prev, taken := slugs[slug]; taken {
-			return fmt.Errorf("children %d and %d both derive the step slug %q; after addresses siblings by slug, so retitle one", prev+1, i+1, slug)
+			return protocol.Refuse(protocol.RefusalInvalidInput, "children %d and %d both derive the step slug %q; after addresses siblings by slug, so retitle one", prev+1, i+1, slug)
 		}
 		slugs[slug] = i
 	}
 	for i, child := range spec.Children {
 		for _, sibling := range child.After {
 			if _, known := slugs[StepSlug(sibling)]; !known {
-				return fmt.Errorf("child %d waits for %q, which is no sibling's title or step slug; the slugs here are %s", i+1, sibling, strings.Join(slugList(spec.Children), ", "))
+				return protocol.Refuse(protocol.RefusalInvalidInput, "child %d waits for %q, which is no sibling's title or step slug; the slugs here are %s", i+1, sibling, strings.Join(slugList(spec.Children), ", "))
 			}
 		}
 	}
 	if from, to, cyclic := afterCycle(spec.Children, slugs); cyclic {
-		return fmt.Errorf("%q and %q wait for each other through after, so neither child would ever be ready; sequence one way only", from, to)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "%q and %q wait for each other through after, so neither child would ever be ready; sequence one way only", from, to)
 	}
 	return nil
 }
@@ -234,7 +236,7 @@ func validatePlotChecks(spec PlotSpec) error {
 		}
 		for _, check := range child.Checks {
 			if owner, taken := usedBy[check.ID]; taken {
-				return fmt.Errorf("child %d and %s both define %s; one id names one statement in a plot tree", i+1, owner, check.ID)
+				return protocol.Refuse(protocol.RefusalConflict, "child %d and %s both define %s; one id names one statement in a plot tree", i+1, owner, check.ID)
 			}
 			usedBy[check.ID] = fmt.Sprintf("child %d", i+1)
 		}
@@ -294,6 +296,8 @@ type OpenChildrenError struct {
 	PlotID   string
 	Children []Seed
 }
+
+func (e *OpenChildrenError) Refusal() protocol.Refusal { return protocol.RefusalWrongState }
 
 func (e *OpenChildrenError) Error() string {
 	children := make([]string, len(e.Children))

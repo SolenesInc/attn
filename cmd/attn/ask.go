@@ -17,7 +17,7 @@ import (
 )
 
 func runAsk() {
-	os.Exit(executeAsk(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	exit(executeAsk(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func executeAsk(args []string, stdin io.Reader, stdout, stderr io.Writer) int {

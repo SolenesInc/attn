@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -282,6 +283,11 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 
 	if !resp.Ok {
+		refusal := protocol.RefusalUnclassified
+		if resp.Refusal != nil {
+			refusal = *resp.Refusal
+		}
+		lastRefusal.Store(&refusal)
 		return nil, &DaemonError{
 			Code:     protocol.Deref(resp.ErrorCode),
 			Message:  protocol.Deref(resp.Error),
@@ -290,6 +296,16 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 
 	return &resp, nil
+}
+
+var lastRefusal atomic.Pointer[protocol.Refusal]
+
+func LastRefusal() (protocol.Refusal, bool) {
+	refusal := lastRefusal.Load()
+	if refusal == nil {
+		return "", false
+	}
+	return *refusal, true
 }
 
 type DaemonError struct {

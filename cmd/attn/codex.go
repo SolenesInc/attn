@@ -41,7 +41,7 @@ Inside an attn session the profile is the session's; elsewhere pass
 }
 
 func runCodex() {
-	os.Exit(executeCodex(os.Args[2:], os.Stdout, os.Stderr))
+	exit(executeCodex(os.Args[2:], os.Stdout, os.Stderr))
 }
 
 func executeCodex(args []string, stdout, stderr io.Writer) int {

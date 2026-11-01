@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type OutlinePart struct {
@@ -120,7 +122,7 @@ func Section(body, ref string) (string, error) {
 		if items := itemsStartingWith(lines, parts, id); items != "" {
 			return items, nil
 		}
-		return "", fmt.Errorf("no item starts with %s; the parts are: %s", id, DescribeOutline(Outline(body)))
+		return "", protocol.Refuse(protocol.RefusalNotFound, "no item starts with %s; the parts are: %s", id, DescribeOutline(Outline(body)))
 	}
 	var prefixed []bodyPart
 	for _, part := range parts {
@@ -135,13 +137,13 @@ func Section(body, ref string) (string, error) {
 	case 1:
 		return joinLines(lines[prefixed[0].start:prefixed[0].end]), nil
 	case 0:
-		return "", fmt.Errorf("no part matches %q; the parts are: %s", ref, DescribeOutline(Outline(body)))
+		return "", protocol.Refuse(protocol.RefusalNotFound, "no part matches %q; the parts are: %s", ref, DescribeOutline(Outline(body)))
 	}
 	headings := make([]string, len(prefixed))
 	for i, part := range prefixed {
 		headings[i] = part.heading
 	}
-	return "", fmt.Errorf("%q begins %d headings: %s; give more of the one you want", ref, len(prefixed), strings.Join(headings, ", "))
+	return "", protocol.Refuse(protocol.RefusalInvalidInput, "%q begins %d headings: %s; give more of the one you want", ref, len(prefixed), strings.Join(headings, ", "))
 }
 
 func itemsStartingWith(lines []bodyLine, parts []bodyPart, id string) string {

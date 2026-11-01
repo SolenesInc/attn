@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -24,10 +25,10 @@ func ParseEdgeKind(raw string) (string, error) {
 		return kind, nil
 	}
 	if slices.Contains([]string{EdgeSownFrom, EdgeRelatesTo}, kind) {
-		return "", fmt.Errorf("%q is a real edge kind but nothing links one yet; the kinds you can link are %s",
+		return "", protocol.Refuse(protocol.RefusalInvalidInput, "%q is a real edge kind but nothing links one yet; the kinds you can link are %s",
 			kind, strings.Join(LinkableKinds, " and "))
 	}
-	return "", fmt.Errorf("%q is not how two seeds relate; the kinds are %s", raw, strings.Join(LinkableKinds, " and "))
+	return "", protocol.Refuse(protocol.RefusalInvalidInput, "%q is not how two seeds relate; the kinds are %s", raw, strings.Join(LinkableKinds, " and "))
 }
 
 func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
@@ -40,7 +41,7 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 	}
 	if kind == EdgePartOf {
 		if parent, ok := ParentOf(from); ok {
-			return Seed{}, false, fmt.Errorf(
+			return Seed{}, false, protocol.Refuse(protocol.RefusalWrongState,
 				"%s is already part of %s, and a seed sits in one plot: `attn seed unlink %s part-of %s` first, then link it to %s",
 				from.ID, parent, from.ID, parent, to.ID)
 		}
@@ -50,7 +51,7 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 		moving := tree.checksUnder(from.ID)
 		if checkID, owner, repeated := tree.UsedCheckID(to.ID, moving); repeated {
 			joined := max(highestCheckNumber(tree.checksUnder(tree.root(to.ID))), highestCheckNumber(moving)) + 1
-			return Seed{}, false, fmt.Errorf(
+			return Seed{}, false, protocol.Refuse(protocol.RefusalConflict,
 				"%s and %s would both be in one plot tree with check %s, which %s already uses; one id names one statement in a plot tree, so they cannot share a plot. The next free id across both is %s",
 				from.ID, to.ID, checkID, owner, checkIDNumbered(joined))
 		}
@@ -73,7 +74,7 @@ func Unlink(seeds []Seed, fromID, kind, toID string) (Seed, error) {
 	edge := Edge{Kind: kind, To: to.ID}
 	index := slices.Index(from.Edges, edge)
 	if index < 0 {
-		return Seed{}, fmt.Errorf("%s does not %s %s%s", from.ID, kind, to.ID, edgeInventory(from))
+		return Seed{}, protocol.Refuse(protocol.RefusalNotFound, "%s does not %s %s%s", from.ID, kind, to.ID, edgeInventory(from))
 	}
 	next := from
 	next.Edges = slices.Delete(slices.Clone(from.Edges), index, index+1)
@@ -83,14 +84,14 @@ func Unlink(seeds []Seed, fromID, kind, toID string) (Seed, error) {
 func linkEnds(seeds []Seed, fromID, kind, toID string) (Seed, Seed, error) {
 	from, ok := find(seeds, fromID)
 	if !ok {
-		return Seed{}, Seed{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", fromID)
+		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", fromID)
 	}
 	to, ok := find(seeds, toID)
 	if !ok {
-		return Seed{}, Seed{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", toID)
+		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", toID)
 	}
 	if from.ID == to.ID {
-		return Seed{}, Seed{}, fmt.Errorf("%s cannot %s itself", from.ID, kind)
+		return Seed{}, Seed{}, protocol.Refuse(protocol.RefusalInvalidInput, "%s cannot %s itself", from.ID, kind)
 	}
 	return from, to, nil
 }
@@ -109,12 +110,12 @@ func edgeInventory(seed Seed) string {
 func cycleRefusal(fromID, kind, toID string, path []string) error {
 	chain := strings.Join(append([]string{toID}, path...), " → ")
 	if kind == EdgePartOf {
-		return fmt.Errorf(
+		return protocol.Refuse(protocol.RefusalWrongState,
 			"%s is already inside %s (%s), so making %s part of %s would put the plot inside itself.\n"+
 				"Unlink an edge in that chain first: attn seed unlink %s part-of %s",
 			toID, fromID, chain, fromID, toID, toID, path[0])
 	}
-	return fmt.Errorf(
+	return protocol.Refuse(protocol.RefusalWrongState,
 		"%s already blocks %s (%s), so %s blocking %s would deadlock them — neither would ever be ready.\n"+
 			"Unlink an edge in that chain first: attn seed unlink %s blocks %s",
 		toID, fromID, chain, fromID, toID, toID, path[0])

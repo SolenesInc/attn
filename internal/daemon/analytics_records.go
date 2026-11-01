@@ -3,17 +3,10 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/protocol"
-)
-
-const (
-	cliErrorUnknownCommand = "unknown_command"
-	cliErrorRefused        = "refused"
-	cliErrorNoReply        = "no_reply"
 )
 
 func (d *Daemon) recordAnalytics(stream analytics.Stream, name, subject string, props map[string]any) {
@@ -84,27 +77,6 @@ func (d *Daemon) withAnalyticsCaller(props map[string]any, sessionID protocol.Se
 	return props, sessionID
 }
 
-type analyticsReplyConn struct {
-	net.Conn
-	answered func(failed bool)
-	replied  bool
-}
-
-func (c *analyticsReplyConn) Write(p []byte) (int, error) {
-	if !c.replied {
-		c.replied = true
-		var reply struct {
-			Ok      *bool   `json:"ok"`
-			Success *bool   `json:"success"`
-			Error   *string `json:"error"`
-		}
-		failed := json.Unmarshal(p, &reply) == nil &&
-			(protocol.Deref(reply.Error) != "" || (reply.Ok != nil && !*reply.Ok) || (reply.Success != nil && !*reply.Success))
-		c.answered(failed)
-	}
-	return c.Conn.Write(p)
-}
-
 func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 	var fields struct {
 		Cmd string `json:"cmd"`
@@ -112,33 +84,4 @@ func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 	}
 	_ = json.Unmarshal(frame, &fields)
 	return fields.Cmd, protocol.Deref(fields.CallerID)
-}
-
-func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error, caller protocol.SessionID) (*analyticsReplyConn, func()) {
-	cmd, _ := socketFrameCaller(frame)
-	props, sessionID := d.withAnalyticsCaller(nil, caller)
-	record := func(errorKind string) {
-		props["ok"] = errorKind == ""
-		if errorKind != "" {
-			props["error_kind"] = errorKind
-		}
-		d.recordAnalytics(analytics.StreamCLI, cmd, string(sessionID), props)
-	}
-	reply := &analyticsReplyConn{Conn: conn}
-	reply.answered = func(failed bool) {
-		switch {
-		case parseErr != nil:
-			record(cliErrorUnknownCommand)
-		case failed:
-			record(cliErrorRefused)
-		default:
-			record("")
-		}
-	}
-	unanswered := func() {
-		if !reply.replied {
-			record(cliErrorNoReply)
-		}
-	}
-	return reply, unanswered
 }

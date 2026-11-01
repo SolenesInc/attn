@@ -34,7 +34,7 @@ type pluginListResult struct {
 func runPluginCommand() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: attn plugin <install|link|install-bundled|list|uninstall|remove> ...")
-		os.Exit(1)
+		exit(1)
 	}
 
 	switch os.Args[2] {
@@ -53,7 +53,7 @@ func runPluginCommand() {
 	default:
 		recordUsageError("plugin", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", os.Args[2])
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -72,12 +72,12 @@ func runPluginInstallFromPath(verb string, link bool) {
 	sourcePath := strings.TrimSpace(*path)
 	if sourcePath == "" {
 		fmt.Fprintf(os.Stderr, "plugin %s: --path is required\n", verb)
-		os.Exit(1)
+		exit(1)
 	}
 	sourcePath, err := resolveCLIPath(sourcePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
-		os.Exit(1)
+		exit(1)
 	}
 	var result pluginCommandResult
 	if link {
@@ -87,7 +87,7 @@ func runPluginInstallFromPath(verb string, link bool) {
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "plugin %s: %v\n", verb, err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(result)
 }
@@ -96,13 +96,13 @@ func runPluginList() {
 	event, err := pluginDaemonRequest(map[string]any{"cmd": protocol.CmdListPlugins}, protocol.EventPluginsUpdated, "", 10*time.Second)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "plugin list: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	var result pluginListResult
 	payload, _ := json.Marshal(event)
 	if err := json.Unmarshal(payload, &result); err != nil {
 		fmt.Fprintf(os.Stderr, "plugin list: decode response: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(result)
 }
@@ -110,12 +110,12 @@ func runPluginList() {
 func runPluginInstallBundled() {
 	if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
 		fmt.Fprintln(os.Stderr, "usage: attn plugin install-bundled <name>")
-		os.Exit(1)
+		exit(1)
 	}
 	name := strings.TrimSpace(os.Args[3])
 	if _, err := pluginDaemonRequest(map[string]any{"cmd": protocol.CmdInstallBundledPlugin, "name": name}, protocol.EventPluginActionResult, "install_bundled", 30*time.Second); err != nil {
 		fmt.Fprintf(os.Stderr, "plugin install-bundled: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(pluginCommandResult{OK: true, Name: name})
 }
@@ -123,12 +123,12 @@ func runPluginInstallBundled() {
 func runPluginUninstall() {
 	if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
 		fmt.Fprintln(os.Stderr, "usage: attn plugin uninstall <name>")
-		os.Exit(1)
+		exit(1)
 	}
 	name := strings.TrimSpace(os.Args[3])
 	if _, err := pluginDaemonRequest(map[string]any{"cmd": protocol.CmdUninstallPlugin, "name": name}, protocol.EventPluginActionResult, "uninstall", 30*time.Second); err != nil {
 		fmt.Fprintf(os.Stderr, "plugin uninstall: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(pluginCommandResult{OK: true, Name: name})
 }
@@ -136,13 +136,13 @@ func runPluginUninstall() {
 func runPluginRemove() {
 	if len(os.Args) != 4 || strings.TrimSpace(os.Args[3]) == "" {
 		fmt.Fprintln(os.Stderr, "usage: attn plugin remove <name>")
-		os.Exit(1)
+		exit(1)
 	}
 	name := strings.TrimSpace(os.Args[3])
 	result, err := removePluginViaDaemon(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "plugin remove: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(result)
 }

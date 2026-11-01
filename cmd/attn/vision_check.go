@@ -149,36 +149,36 @@ func runVisionCheck() {
 	imagePath, question, model, timeout, jsonOut, err := parseVisionCheckArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vision-check: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 
 	mediaType, err := mediaTypeForPath(imagePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vision-check: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	data, err := os.ReadFile(imagePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vision-check: read %s: %v\n", imagePath, err)
-		os.Exit(1)
+		exit(1)
 	}
 	encoded := base64.StdEncoding.EncodeToString(data)
 	if len(encoded) > maxVisionCheckBase64Bytes {
 		fmt.Fprintf(os.Stderr, "vision-check: encoded image is %d bytes, over the %d limit; capture with --crop/--max-dim first\n", len(encoded), maxVisionCheckBase64Bytes)
-		os.Exit(1)
+		exit(1)
 	}
 
 	stdinLine, err := buildVisionCheckMessage(question, mediaType, encoded)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vision-check: build message: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	claudeBin, err := resolveClaudeBinary()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vision-check: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -208,12 +208,12 @@ func runVisionCheck() {
 		} else {
 			fmt.Fprintf(os.Stderr, "vision-check: %v\n%s\n", parseErr, stderr.String())
 		}
-		os.Exit(1)
+		exit(1)
 	}
 
 	if result.IsError || result.Subtype != "success" {
 		fmt.Fprintln(os.Stderr, result.Result)
-		os.Exit(1)
+		exit(1)
 	}
 
 	if jsonOut {
@@ -227,7 +227,7 @@ func runVisionCheck() {
 		b, err := json.Marshal(out)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "vision-check: encode json: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(string(b))
 	} else {

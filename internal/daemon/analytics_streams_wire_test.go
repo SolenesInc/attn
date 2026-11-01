@@ -46,44 +46,24 @@ func TestAppActionsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	}
 }
 
-func TestSocketCommandOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
+func TestSocketRequestsWriteNoCLIRecordsAndRefusalsNameTheirReason(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(session)
-	commands := map[string]string{
-		"human query":     `{"cmd":"query"}`,
-		"agent query":     `{"cmd":"query","caller_id":"` + w.Terminal(session) + `"}`,
-		"refused command": `{"cmd":"seed_show","seed_id":"s-zzzzzz"}`,
-		"unknown command": `{"cmd":"no_such_command"}`,
-	}
-	run := func() {
-		for _, frame := range []string{commands["human query"], commands["agent query"], commands["refused command"], commands["unknown command"]} {
-			socketCommand(t, w, frame)
-		}
-	}
-
-	run()
-	if got := streamRecords(t, app, analytics.StreamCLI); len(got) != 0 {
-		t.Fatalf("with analytics off the outbox holds cli records %v", got)
-	}
-
 	setAnalyticsEnabled(app, "true")
-	run()
-	var got []string
-	for _, line := range streamRecords(t, app, analytics.StreamCLI) {
-		if strings.HasPrefix(line, "query ") || strings.HasPrefix(line, "seed_show ") || strings.HasPrefix(line, "no_such_command ") {
-			got = append(got, line)
-		}
+
+	socketCommand(t, w, `{"cmd":"query","caller_id":"`+w.Terminal(session)+`"}`)
+	socketCommand(t, w, `{"cmd":"no_such_command"}`)
+	var refused protocol.Response
+	if err := json.Unmarshal(socketReply(t, w, `{"cmd":"seed_show","seed_id":"s-zzzzzz"}`), &refused); err != nil {
+		t.Fatal(err)
 	}
-	want := []string{
-		`no_such_command {"caller":"human","error_kind":"unknown_command","ok":false}`,
-		`seed_show {"caller":"human","error_kind":"refused","ok":false}`,
-		`query {"caller":"agent","harness":"claude","ok":true}`,
-		`query {"caller":"human","ok":true}`,
+	if refused.Ok || protocol.Deref(refused.Refusal) != protocol.RefusalNotFound {
+		t.Fatalf("seed_show of a missing seed replied ok=%v refusal=%v error=%q, want a not_found refusal", refused.Ok, refused.Refusal, protocol.Deref(refused.Error))
 	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("cli records, newest first:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	if got := streamRecords(t, app, analytics.StreamCLI); len(got) != 0 {
+		t.Fatalf("socket requests wrote cli records %v; the CLI writes one per command", got)
 	}
 }
 
@@ -102,34 +82,17 @@ func TestCLIRecordsCarryTheSameHashedSubjectAsSessionFacts(t *testing.T) {
 			t.Fatalf("session facts carry subject %q, want a hashed session", subject)
 		}
 
-		for _, command := range []struct{ name, frame string }{
-			{"query", `{"cmd":"query"`},
-			{"no_such_command", `{"cmd":"no_such_command"`},
-			{"parse_error", `{"cmd":"record_analytics","stream":"cli","name":"parse_error","props":{"ok":false,"error_kind":"parse"}`},
-		} {
-			for _, caller := range []string{agent.self, ""} {
-				socketCommand(t, w, command.frame+`,"caller_id":"`+caller+`"}`)
-				got := streamOutbox(t, app, analytics.StreamCLI)[0]
-				if got.Name != command.name {
-					t.Fatalf("latest CLI record is %s, want %s", got.Name, command.name)
-				}
-				want := ""
-				if caller != "" {
-					want = subject
-				}
-				if got.Subject != want {
-					t.Errorf("%s from caller %q: subject %q, want %q", got.Name, caller, got.Subject, want)
-				}
-				t.Logf("%s caller=%s subject=%q session_fact_subject=%q", got.Name, caller, got.Subject, subject)
+		for _, caller := range []string{agent.self, ""} {
+			socketCommand(t, w, `{"cmd":"record_analytics","stream":"cli","name":"seed show","props":{"ok":true,"exit_code":0},"caller_id":"`+caller+`"}`)
+			got := streamOutbox(t, app, analytics.StreamCLI)[0]
+			want, wantProps := "", `{"caller":"human","exit_code":0,"ok":true}`
+			if caller != "" {
+				want, wantProps = subject, `{"caller":"agent","exit_code":0,"harness":"claude","ok":true}`
+			}
+			if got.Name != "seed show" || got.Subject != want || string(got.Props) != wantProps {
+				t.Errorf("record from caller %q = %s %s subject %q, want seed show %s subject %q", caller, got.Name, got.Props, got.Subject, wantProps, want)
 			}
 		}
-
-		socketCommand(t, w, `{"cmd":"agent_close","source_session_id":"`+agent.id+`","target_session_id":"`+agent.id+`","reason":"finished","caller_id":"`+agent.self+`"}`)
-		closed := streamOutbox(t, app, analytics.StreamCLI)[0]
-		if closed.Name != "agent_close" || closed.Subject != subject || !strings.Contains(string(closed.Props), `"ok":true`) {
-			t.Fatalf("self-close record = %+v, want agent_close with subject %q and ok=true", closed, subject)
-		}
-		t.Logf("agent_close subject=%q session_fact_subject=%q", closed.Subject, subject)
 	})
 }
 
@@ -218,6 +181,11 @@ func streamSeqs(t *testing.T, app *testworld.Peer, stream analytics.Stream) []in
 
 func socketCommand(t *testing.T, w *world, frame string) {
 	t.Helper()
+	socketReply(t, w, frame)
+}
+
+func socketReply(t *testing.T, w *world, frame string) []byte {
+	t.Helper()
 	conn, err := w.DialUnix()
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +194,9 @@ func socketCommand(t *testing.T, w *world, frame string) {
 	if _, err := io.WriteString(conn, frame+"\n"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := io.Copy(io.Discard, conn); err != nil {
+	reply, err := io.ReadAll(conn)
+	if err != nil {
 		t.Fatalf("read %s until the daemon closed: %v", frame, err)
 	}
+	return reply
 }

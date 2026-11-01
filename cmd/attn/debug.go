@@ -57,7 +57,7 @@ func runDebug() {
 		recordUsageError("debug", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "debug: unknown command %q\n", os.Args[2])
 		writeDebugHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -95,7 +95,7 @@ func runDebugLs(args []string) {
 	fs.SetOutput(io.Discard)
 	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "debug ls: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 
 	debugDir := filepath.Join(config.AppLocalDataDir(), "debug")
@@ -108,7 +108,7 @@ func runDebugLs(args []string) {
 			fmt.Println("  (no such directory)")
 		} else {
 			fmt.Fprintf(os.Stderr, "debug ls: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	} else if len(entries) == 0 {
 		fmt.Println("  (empty)")
@@ -132,7 +132,7 @@ func runDebugLs(args []string) {
 		fmt.Println("  (no such file)")
 	} else {
 		fmt.Fprintf(os.Stderr, "debug ls: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -144,18 +144,18 @@ func runDebugJSONL(fileName, cmdName, kind string, args []string) {
 	_ = fs.Bool("json", false, "no-op alias; JSONL lines are printed raw either way")
 	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", cmdName, err)
-		os.Exit(2)
+		exit(2)
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintf(os.Stderr, "%s: unexpected arguments: %v\n", cmdName, fs.Args())
-		os.Exit(2)
+		exit(2)
 	}
 
 	path := filepath.Join(config.AppLocalDataDir(), "debug", fileName)
 	lines, err := readLinesFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 	if kind != "" {
 		lines = filterDiagnosticKind(lines, kind)
@@ -163,7 +163,7 @@ func runDebugJSONL(fileName, cmdName, kind string, args []string) {
 	lines, err = grepLines(lines, *grep)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", cmdName, err)
-		os.Exit(2)
+		exit(2)
 	}
 	lines = tailLines(lines, *tail)
 	for _, line := range lines {
@@ -179,25 +179,25 @@ func runDebugDaemonLog(args []string) {
 	since := fs.String("since", "", "only lines within this Go duration of now (e.g. 10m, 1h)")
 	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "debug daemon-log: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintf(os.Stderr, "debug daemon-log: unexpected arguments: %v\n", fs.Args())
-		os.Exit(2)
+		exit(2)
 	}
 
 	path := config.LogPath()
 	lines, err := readLinesFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	if sinceStr := *since; sinceStr != "" {
 		dur, err := time.ParseDuration(sinceStr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "debug daemon-log: invalid --since duration %q: %v\n", sinceStr, err)
-			os.Exit(2)
+			exit(2)
 		}
 		lines = filterSinceLines(lines, time.Now().Add(-dur))
 	}
@@ -205,7 +205,7 @@ func runDebugDaemonLog(args []string) {
 	lines, err = grepLines(lines, *grep)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "debug daemon-log: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	lines = tailLines(lines, *tail)
 	for _, line := range lines {

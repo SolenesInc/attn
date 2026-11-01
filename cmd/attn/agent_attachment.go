@@ -63,7 +63,7 @@ func runAgentAttachment(args []string) {
 	}
 	if len(args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: attn agent attachment <capture-id> <attachment-id> --out <path>")
-		os.Exit(2)
+		exit(2)
 	}
 	fs := flag.NewFlagSet("agent attachment", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -71,11 +71,11 @@ func runAgentAttachment(args []string) {
 	profile := fs.String("profile", "", "profile name or id when outside a session")
 	if err := parseFlags(fs, args[2:]); err != nil || *out == "" || fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "agent attachment: --out <path> is required")
-		os.Exit(2)
+		exit(2)
 	}
 	if err := retrieveAgentAttachment(client.New("").WithGardenProfile(strings.TrimSpace(*profile), currentSessionOrExit()), args[0], args[1], *out); err != nil {
 		fmt.Fprintf(os.Stderr, "agent attachment: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Fprintln(os.Stdout, prompts.RenderText("session", "quick-capture-file-saved", prompts.Values{"path": *out}))
 }

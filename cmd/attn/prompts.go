@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 )
 
-func runPrompts() { os.Exit(writePrompts(os.Stdout, os.Stderr, os.Args[2:])) }
+func runPrompts() { exit(writePrompts(os.Stdout, os.Stderr, os.Args[2:])) }
 
 func writePrompts(stdout, stderr io.Writer, args []string) int {
 	fail := func(err error) int {

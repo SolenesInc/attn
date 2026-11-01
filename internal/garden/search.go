@@ -1,12 +1,12 @@
 package garden
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -44,11 +44,11 @@ type Ranked struct {
 func SearchWords(query string) ([]string, error) {
 	trimmed := strings.TrimSpace(query)
 	if n := len([]rune(trimmed)); n > MaxSearchQueryChars {
-		return nil, fmt.Errorf("max_query_chars=%d, asked for %d; search takes the words that name the work, not a whole body", MaxSearchQueryChars, n)
+		return nil, protocol.Refuse(protocol.RefusalLimit, "max_query_chars=%d, asked for %d; search takes the words that name the work, not a whole body", MaxSearchQueryChars, n)
 	}
 	words := docstore.Words(trimmed)
 	if len(words) == 0 {
-		return nil, fmt.Errorf("a search needs words to look for: `attn seed search <words>`")
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "a search needs words to look for: `attn seed search <words>`")
 	}
 	return words, nil
 }

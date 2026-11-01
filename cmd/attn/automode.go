@@ -37,7 +37,7 @@ func runAutoMode() {
 		recordUsageError("automode", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode: unknown command %q\n", os.Args[2])
 		writeAutoModeHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -95,7 +95,7 @@ func autoModeClient() *client.Client {
 
 func autoModeFail(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "automode %s: %v\n", verb, err)
-	os.Exit(1)
+	exit(1)
 }
 
 func runAutoModeShow(args []string) {
@@ -218,7 +218,7 @@ func runAutoModeEnv(args []string) {
 		recordUsageError("automode env", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr,
 			"automode env: unknown command %q (want set, clear or notes)\n", args[0])
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -280,14 +280,14 @@ func runAutoModeEnvSlot(args []string, clear bool) {
 	if len(rest) == 0 {
 		fmt.Fprintf(os.Stderr, "automode %s: needs a slot id (want one of %s)\n",
 			verb, strings.Join(automode.SlotIDs(), ", "))
-		os.Exit(2)
+		exit(2)
 	}
 	id := rest[0]
 	slot, ok := automode.FindSlot(id)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "automode %s: no slot %q (want one of %s)\n",
 			verb, id, strings.Join(automode.SlotIDs(), ", "))
-		os.Exit(2)
+		exit(2)
 	}
 	values := []string{}
 	if !clear {
@@ -302,7 +302,7 @@ func runAutoModeEnvSlot(args []string, clear bool) {
 			fmt.Fprintf(os.Stderr,
 				"automode env set: %s takes at least one value; `env clear %s` leaves it unset (%s)\n",
 				id, id, slot.Unset)
-			os.Exit(2)
+			exit(2)
 		}
 	}
 	result, err := autoModeClient().AutoModeEnvSlot(id, values)
@@ -343,7 +343,7 @@ func printAutoModeEnvResult(result *protocol.AutoModeEnvResult, asJSON bool) {
 func runAutoModeRule(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "automode rule: want `rule add <token>…` or `rule remove <token>…`")
-		os.Exit(2)
+		exit(2)
 	}
 	rest := stripFlags(args[1:])
 	switch args[0] {
@@ -354,7 +354,7 @@ func runAutoModeRule(args []string) {
 	default:
 		recordUsageError("automode rule", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode rule: unknown command %q (want add or remove)\n", args[0])
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -362,7 +362,7 @@ func runAutoModeRuleAdd(tokens []string, args []string) {
 	if len(tokens) == 0 {
 		fmt.Fprintln(os.Stderr,
 			"automode rule add: name the command tokens the rule matches, such as `rule add git push`")
-		os.Exit(2)
+		exit(2)
 	}
 	decision, _ := takeStringFlag(args, "--decision")
 	sandbox, _ := takeStringFlag(args, "--sandbox")
@@ -375,7 +375,7 @@ func runAutoModeRuleAdd(tokens []string, args []string) {
 	})
 	if err := automode.ValidateRule(rule); err != nil {
 		fmt.Fprintf(os.Stderr, "automode rule add: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	value, err := automode.FormatRuleValue(rule)
 	if err != nil {
@@ -387,7 +387,7 @@ func runAutoModeRuleAdd(tokens []string, args []string) {
 func runAutoModeRuleRemove(tokens []string, args []string) {
 	if len(tokens) == 0 {
 		fmt.Fprintln(os.Stderr, "automode rule remove: name the command tokens the rule matches")
-		os.Exit(2)
+		exit(2)
 	}
 	value, err := automode.FormatPatternValue(automode.Tokens(tokens...))
 	if err != nil {
@@ -399,12 +399,12 @@ func runAutoModeRuleRemove(tokens []string, args []string) {
 func runAutoModeHost(args []string) {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "automode host: want `host add <host>` or `host remove <host>`")
-		os.Exit(2)
+		exit(2)
 	}
 	rest := stripFlags(args[1:])
 	if len(rest) != 1 {
 		fmt.Fprintf(os.Stderr, "automode host %s: name exactly one host\n", args[0])
-		os.Exit(2)
+		exit(2)
 	}
 	decision := automode.HostAllow
 	if named, ok := takeStringFlag(args, "--decision"); ok {
@@ -413,7 +413,7 @@ func runAutoModeHost(args []string) {
 	amendment := automode.HostAmendment{Host: strings.TrimSpace(rest[0]), Decision: decision}
 	if err := automode.ValidateHost(amendment); err != nil {
 		fmt.Fprintf(os.Stderr, "automode host %s: %v\n", args[0], err)
-		os.Exit(2)
+		exit(2)
 	}
 	switch args[0] {
 	case "add":
@@ -431,7 +431,7 @@ func runAutoModeHost(args []string) {
 	default:
 		recordUsageError("automode host", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode host: unknown command %q (want add or remove)\n", args[0])
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -449,7 +449,7 @@ func runAutoModePolicy(args []string) {
 			"automode policy: %v; --approval-policy is one of %s, --sandbox-mode one of %s, "+
 				"--allow-local-binding true or false. `automode show` reads what is set today\n",
 			err, strings.Join(automode.Policies(), ", "), strings.Join(automode.SandboxModes(), ", "))
-		os.Exit(2)
+		exit(2)
 	}
 	value, err := automode.FormatPolicyValue(amendment)
 	if err != nil {
@@ -465,7 +465,7 @@ func autoModeLocalBindingFlag(args []string) *bool {
 	if !ok {
 		if hasFlag(args, "--allow-local-binding") {
 			fmt.Fprintln(os.Stderr, "automode policy: --allow-local-binding wants true or false")
-			os.Exit(2)
+			exit(2)
 		}
 		return nil
 	}
@@ -476,7 +476,7 @@ func autoModeLocalBindingFlag(args []string) *bool {
 		return protocol.Ptr(false)
 	}
 	fmt.Fprintf(os.Stderr, "automode policy: --allow-local-binding wants true or false, got %q\n", raw)
-	os.Exit(2)
+	exit(2)
 	return nil
 }
 
@@ -509,13 +509,13 @@ func runAutoModeDenials(args []string) {
 		parsed, err := strconv.Atoi(value)
 		if err != nil || parsed <= 0 {
 			fmt.Fprintf(os.Stderr, "automode denials: --limit wants a positive number, got %q\n", value)
-			os.Exit(2)
+			exit(2)
 		}
 		limit = parsed
 	}
 	if len(rest) > 0 {
 		fmt.Fprintf(os.Stderr, "automode denials: unexpected argument %q\n", rest[0])
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := autoModeClient().AutoModeDenials(limit)
 	if err != nil {

@@ -37,12 +37,12 @@ path in its current conversation.`)
 	}
 	if err != nil || len(positionals) > 1 || (action != protocol.OnboardingActionShow && action != protocol.OnboardingActionDone && action != protocol.OnboardingActionAgain) {
 		fmt.Fprintln(os.Stderr, onboardingUsage)
-		os.Exit(2)
+		exit(2)
 	}
 	response, err := crewClient(*profile).Onboarding(action)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 	if *jsonOut {
 		printJSON(response)

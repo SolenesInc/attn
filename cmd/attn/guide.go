@@ -23,11 +23,11 @@ func runGuide() {
 		if err != nil {
 			recordUsageError("guide", usageErrorUnknownCommand)
 			fmt.Fprintln(os.Stderr, "guide: "+err.Error())
-			os.Exit(1)
+			exit(1)
 		}
 		_, _ = os.Stdout.Write(page)
 	default:
 		fmt.Fprintln(os.Stderr, guideUsage)
-		os.Exit(2)
+		exit(2)
 	}
 }

@@ -58,7 +58,7 @@ func runInstance() {
 		recordUsageError("instance", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown instance subcommand %q\n\n", os.Args[2])
 		printInstanceHelp(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -982,5 +982,5 @@ func ynLabel(ok bool, yes, no string) string {
 
 func instanceFatal(msg string) {
 	fmt.Fprintln(os.Stderr, "attn instance: "+msg)
-	os.Exit(1)
+	exit(1)
 }

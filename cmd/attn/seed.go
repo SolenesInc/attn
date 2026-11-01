@@ -74,7 +74,7 @@ func runSeed() {
 		recordUsageError("seed", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "seed: unknown command %q\n", os.Args[2])
 		fmt.Fprintln(os.Stderr, "usage: attn seed <command> (attn seed --help)")
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -375,7 +375,7 @@ commands:
 func seedUsageError(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
 	fmt.Fprintf(os.Stderr, "usage: attn seed %s (attn seed %s --help)\n", seedVerbNamed(verb).synopsis, verb)
-	os.Exit(2)
+	exit(2)
 }
 
 func (f *seedFlags) client() *client.Client {
@@ -430,7 +430,7 @@ func runSeedPrime(args []string) {
 
 func seedFail(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
-	os.Exit(1)
+	exit(1)
 }
 
 type seedFlags struct {
@@ -522,7 +522,7 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 	positionals, err := parseInterspersedFlagArgs(f.fs, args)
 	if errors.Is(err, flag.ErrHelp) {
 		writeSeedVerbHelp(os.Stdout, verb)
-		os.Exit(0)
+		exit(0)
 	}
 	if err != nil {
 		seedUsageError(verb, err)

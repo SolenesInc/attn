@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -36,7 +35,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
-		return nil, fmt.Errorf("seed_id is required")
+		return nil, protocol.Refuse(protocol.RefusalInvalidInput, "seed_id is required")
 	}
 	expectedRev := int64(0)
 	if review != nil {
@@ -51,10 +50,10 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		return nil, err
 	}
 	if expectedRev > 0 && seedDoc.Rev != expectedRev {
-		return nil, fmt.Errorf("%s changed since you reviewed it; refresh the garden", seedID)
+		return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
 	}
 	if garden.Closed(seed.Status) {
-		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
 	continuation := d.continuationForSeedForeground(seed)
 	var executed protocol.SessionID
@@ -66,20 +65,20 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
-			return nil, fmt.Errorf("%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender))
+			return nil, protocol.Refuse(protocol.RefusalWrongState, "%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender))
 		}
-		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID)
 	}
 	execution := continuation.Execution
 	sessionID := protocol.TrimID(execution.SessionID)
 	if sessionID == "" {
-		return nil, fmt.Errorf("%s has no agent conversation to resume", seedID)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID)
 	}
 	actor := who.Session(sessionID)
 	if existing := d.store.Get(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
 	}
 	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
@@ -98,18 +97,18 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		if reason == "" {
 			reason = "the original conversation is unavailable"
 		}
-		return nil, fmt.Errorf("%s cannot resume: %s", seedID, reason)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: %s", seedID, reason)
 	}
 	recorded := sessionReopenVerdict{SessionID: sessionID}
 	d.planReopenProfile(&recorded)
 	if recorded.ProfileDeleted {
-		return nil, fmt.Errorf("%s cannot resume: its profile was deleted", seedID)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: its profile was deleted", seedID)
 	}
 	profileID := recorded.ProfileID
 	if profileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		target, _ := d.store.GetProfile(profileID)
-		return nil, fmt.Errorf("seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
 	}
 	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 		seedID, garden.VerbTend, garden.Ask{Actor: actor.Actor(), Claimant: actor}, "", d.sessionActive, expectedRev); err != nil {

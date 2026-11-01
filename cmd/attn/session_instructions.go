@@ -89,7 +89,7 @@ func runSession() {
 		recordUsageError("session", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -118,7 +118,7 @@ func runSessionTranscript(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session transcript: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -132,7 +132,7 @@ func runSessionTranscript(args []string) {
 	}
 	code := sessionTranscriptErrorCode(err)
 	fmt.Fprintln(os.Stderr, daemon.SessionTranscriptErrorMessage(code))
-	os.Exit(1)
+	exit(1)
 }
 
 type sessionTranscriptFetcher func(string, string) (*protocol.SessionTranscriptResult, error)
@@ -248,7 +248,7 @@ func runSessionInstructions(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session instructions: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").SessionInstructions(parsed.target, parsed.question)
 	if err != nil {
@@ -259,7 +259,7 @@ func runSessionInstructions(args []string) {
 		} else {
 			fmt.Fprintln(os.Stderr, message)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

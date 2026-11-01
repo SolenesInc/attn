@@ -23,7 +23,7 @@ func runAutomationCommand() {
 		if args[i] == "--profile" {
 			if i+1 == len(args) {
 				fmt.Fprintln(os.Stderr, "automation: --profile needs a name or id")
-				os.Exit(2)
+				exit(2)
 			}
 			profile = strings.TrimSpace(args[i+1])
 			args = append(args[:i], args[i+2:]...)
@@ -36,7 +36,7 @@ func runAutomationCommand() {
 	}
 	if len(args) < 3 {
 		automationUsage()
-		os.Exit(2)
+		exit(2)
 	}
 	c := client.New(client.DefaultSocketPath()).WithGardenProfile(profile, currentSessionOrExit())
 	var err error
@@ -45,12 +45,12 @@ func runAutomationCommand() {
 	case "set", "show", "run", "runs", "enable", "disable", "delete", "cleanup":
 		if len(args) < 4 {
 			automationUsage()
-			os.Exit(2)
+			exit(2)
 		}
 		definitionID, err = strconv.Atoi(args[3])
 		if err != nil || definitionID <= 0 {
 			fmt.Fprintln(os.Stderr, "automation: ID must be a positive number")
-			os.Exit(2)
+			exit(2)
 		}
 	}
 	switch args[2] {
@@ -63,7 +63,7 @@ func runAutomationCommand() {
 		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id")
 		if e := parseFlags(fs, args[4:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *desktop == "" || len(fs.Args()) != 0 {
 			err = fmt.Errorf("--launch-desktop is required")
@@ -87,7 +87,7 @@ func runAutomationCommand() {
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := parseFlags(fs, args[3:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *file == "" {
 			err = fmt.Errorf("--file is required")
@@ -120,7 +120,7 @@ func runAutomationCommand() {
 		fs := flag.NewFlagSet("automation validate", flag.ContinueOnError)
 		file := fs.String("file", "", "definition YAML")
 		if e := parseFlags(fs, args[3:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *file == "" {
 			err = fmt.Errorf("--file is required")
@@ -180,7 +180,7 @@ func runAutomationCommand() {
 		prURL := fs.String("pr-url", "", "resolve one GitHub pull request into structured occurrence input")
 		requestID := fs.String("request-id", "", "stable idempotency key to reuse when retrying an uncertain request")
 		if e := parseFlags(fs, args[4:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if len(fs.Args()) != 0 {
 			err = fmt.Errorf("usage: attn automation run <definition-id> [--input-file <file> | --pr-url <url>] [--request-id <id>]")
@@ -269,6 +269,6 @@ func runAutomationCommand() {
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "automation: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }

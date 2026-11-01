@@ -23,7 +23,7 @@ func (d *Daemon) resolveGardenProfile(sessionID protocol.SessionID, requested st
 				return profiles.Profile{}, err
 			}
 			if chosen.ID != caller.ID {
-				return profiles.Profile{}, fmt.Errorf("source session belongs to profile %q (%s); --profile names profile %q (%s)", caller.Name, caller.ID, chosen.Name, chosen.ID)
+				return profiles.Profile{}, protocol.Refuse(protocol.RefusalInvalidInput, "source session belongs to profile %q (%s); --profile names profile %q (%s)", caller.Name, caller.ID, chosen.Name, chosen.ID)
 			}
 		}
 		return caller, nil
@@ -49,7 +49,7 @@ func (d *Daemon) resolveGardenProfile(sessionID protocol.SessionID, requested st
 	for _, profile := range live {
 		choices = append(choices, fmt.Sprintf("%q (%s)", profile.Name, profile.ID))
 	}
-	return profiles.Profile{}, fmt.Errorf("choose --profile <name|id>; available profiles: %s", strings.Join(choices, ", "))
+	return profiles.Profile{}, protocol.Refuse(protocol.RefusalInvalidInput, "choose --profile <name|id>; available profiles: %s", strings.Join(choices, ", "))
 }
 
 func (d *Daemon) requireSeedInProfile(id, profileID string, archive bool) error {
@@ -71,7 +71,7 @@ func (d *Daemon) requireSeedInProfile(id, profileID string, archive bool) error 
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("seed %s belongs to profile %q (%s); caller belongs to profile %q (%s)", id, owner.Name, owner.ID, caller.Name, caller.ID)
+	return protocol.Refuse(protocol.RefusalNotFound, "seed %s belongs to profile %q (%s); caller belongs to profile %q (%s)", id, owner.Name, owner.ID, caller.Name, caller.ID)
 }
 
 func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error {
@@ -106,7 +106,7 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
 	}
 	archive := cmd == protocol.CmdSeedShow || cmd == protocol.CmdSeedNotes || cmd == protocol.CmdSeedDocumentGet || cmd == protocol.CmdSeedArtifactTarget
 	resolved := map[string]string{"profile_id": profile.ID}
@@ -183,7 +183,7 @@ func (d *Daemon) resolveSeedRef(ref, profileID string) (string, error) {
 	}
 	switch len(read.Documents) {
 	case 0:
-		return "", fmt.Errorf("%q is neither a seed id nor the slug of a seed in this profile: a seed id is %q followed by 6 characters, like s-7k3f9m; `attn seed search <words>` finds a seed by what it says", ref, "s-")
+		return "", protocol.Refuse(protocol.RefusalNotFound, "%q is neither a seed id nor the slug of a seed in this profile: a seed id is %q followed by 6 characters, like s-7k3f9m; `attn seed search <words>` finds a seed by what it says", ref, "s-")
 	case 1:
 		return read.Documents[0].ID, nil
 	}
@@ -195,7 +195,7 @@ func (d *Daemon) resolveSeedRef(ref, profileID string) (string, error) {
 		}
 		fmt.Fprintf(&matches, "\n  %s  %s  %s", seed.ID, seed.Status, seed.Title)
 	}
-	return "", fmt.Errorf("the slug %s names %d seeds in this profile, so name one by its id:%s", ref, len(read.Documents), matches.String())
+	return "", protocol.Refuse(protocol.RefusalInvalidInput, "the slug %s names %d seeds in this profile, so name one by its id:%s", ref, len(read.Documents), matches.String())
 }
 
 func gardenProfileFilters(profileID string) []docstore.Filter {

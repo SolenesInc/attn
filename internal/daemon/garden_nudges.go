@@ -73,7 +73,7 @@ func (d *Daemon) handleSeedWatch(conn net.Conn, msg *protocol.SeedWatchMessage) 
 	}
 	sessionID := protocol.TrimID(msg.SourceSessionID)
 	if sessionID == "" || d.store.Get(sessionID) == nil {
-		d.sendGardenError(conn, verb, fmt.Errorf("watching is for a live attn session; pass --session or run it inside one"))
+		d.sendGardenError(conn, verb, protocol.Refuse(protocol.RefusalInvalidInput, "watching is for a live attn session; pass --session or run it inside one"))
 		return
 	}
 	result, err := d.setSeedWatch(sessionID, seed.ID, watching)

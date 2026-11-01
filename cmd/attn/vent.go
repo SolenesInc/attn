@@ -15,7 +15,7 @@ import (
 )
 
 func runVent() {
-	os.Exit(executeVent(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	exit(executeVent(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func executeVent(args []string, stdin io.Reader, stdout, stderr io.Writer) int {

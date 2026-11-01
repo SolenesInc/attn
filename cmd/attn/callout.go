@@ -16,7 +16,7 @@ import (
 )
 
 func runCallout() {
-	os.Exit(executeCallout(os.Args[2:], os.Stdout, os.Stderr))
+	exit(executeCallout(os.Args[2:], os.Stdout, os.Stderr))
 }
 
 func executeCallout(args []string, stdout, stderr io.Writer) int {

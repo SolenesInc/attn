@@ -9035,6 +9035,16 @@ type RefreshPRsResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type Refusal string
+
+const RefusalConflict Refusal = "conflict"
+const RefusalInvalidInput Refusal = "invalid_input"
+const RefusalLimit Refusal = "limit"
+const RefusalNotFound Refusal = "not_found"
+const RefusalNotTender Refusal = "not_tender"
+const RefusalUnclassified Refusal = "unclassified"
+const RefusalWrongState Refusal = "wrong_state"
+
 type ReloadSessionMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9472,6 +9482,9 @@ type Response struct {
 
 	// RecordVentResult corresponds to the JSON schema field "record_vent_result".
 	RecordVentResult *Vent `json:"record_vent_result,omitempty,omitzero"`
+
+	// Refusal corresponds to the JSON schema field "refusal".
+	Refusal *Refusal `json:"refusal,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

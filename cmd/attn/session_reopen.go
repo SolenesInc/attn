@@ -70,7 +70,7 @@ func runSessionReopen(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session reopen: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 
 	result, err := client.New("").SessionReopen(client.SessionReopenOptions{
@@ -79,7 +79,7 @@ func runSessionReopen(args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session reopen: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

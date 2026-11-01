@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -14,13 +15,77 @@ const (
 	usageErrorUnknownFlag    = "unknown_flag"
 	usageErrorMissingValue   = "missing_value"
 	usageErrorInvalidValue   = "invalid_value"
+	usageErrorUsage          = "usage"
+	cliErrorRefused          = "refused"
+	cliErrorFailed           = "failed"
 )
 
-func recordUsageError(verb, kind string) {
-	_ = client.New("").RecordAnalytics("cli", verb, map[string]any{"ok": false, "error_kind": kind})
+type invocationRecord struct {
+	path       string
+	caller     protocol.TerminalID
+	usageError string
+	unrecorded bool
+}
+
+var invocation = invocationRecord{path: "attn"}
+
+func setCommandPath(path string) {
+	invocation.path = path
+}
+
+func actAsCaller(terminal protocol.TerminalID) {
+	invocation.caller = terminal
+}
+
+func leaveInvocationUnrecorded() {
+	invocation.unrecorded = true
+}
+
+func recordUsageError(path, kind string) {
+	invocation.path, invocation.usageError = path, kind
+}
+
+func exit(code int) {
+	recordInvocation(code)
+	os.Exit(code)
+}
+
+func recordInvocation(code int) {
+	if invocation.unrecorded {
+		return
+	}
+	props := map[string]any{"ok": code == 0, "exit_code": code}
+	if kind, refusal := invocationError(code); kind != "" {
+		props["error_kind"] = kind
+		if refusal != "" {
+			props["refusal"] = refusal
+		}
+	}
+	c := client.New("")
+	if invocation.caller != "" {
+		c = c.WithCaller(invocation.caller)
+	}
+	_ = c.RecordAnalytics("cli", invocation.path, props)
+}
+
+func invocationError(code int) (kind, refusal string) {
+	if invocation.usageError != "" {
+		return invocation.usageError, ""
+	}
+	if code == 0 {
+		return "", ""
+	}
+	if reason, refused := client.LastRefusal(); refused {
+		return cliErrorRefused, string(reason)
+	}
+	if code == 2 {
+		return usageErrorUsage, ""
+	}
+	return cliErrorFailed, ""
 }
 
 func parseFlags(fs *flag.FlagSet, args []string) error {
+	setCommandPath(fs.Name())
 	handling := fs.ErrorHandling()
 	fs.Init(fs.Name(), flag.ContinueOnError)
 	err := fs.Parse(args)
@@ -33,9 +98,9 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	}
 	if handling == flag.ExitOnError {
 		if errors.Is(err, flag.ErrHelp) {
-			os.Exit(0)
+			exit(0)
 		}
-		os.Exit(2)
+		exit(2)
 	}
 	return err
 }

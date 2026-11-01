@@ -184,7 +184,7 @@ func (d *Daemon) readSeed(id string) (garden.Seed, docstore.Document, error) {
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if !found {
-		return garden.Seed{}, docstore.Document{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", id)
+		return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", id)
 	}
 	seed, err := garden.Decode(doc.Body)
 	if err != nil {
@@ -508,7 +508,7 @@ func (d *Daemon) projectGardenUnchanged() {
 }
 
 func (d *Daemon) sendGardenError(conn net.Conn, verb string, err error) {
-	d.sendError(conn, fmt.Sprintf("seed %s: %v", verb, err))
+	d.sendRefusal(conn, fmt.Sprintf("seed %s: %v", verb, err), err)
 }
 
 func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) {
@@ -618,7 +618,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 			return
 		}
 		if checkID, owner, used := read.plots.UsedCheckID(spec.PartOf, checks); used {
-			d.sendGardenError(conn, "plot", fmt.Errorf(
+			d.sendGardenError(conn, "plot", protocol.Refuse(protocol.RefusalConflict,
 				"%s is already used by %s in the plot this payload joins, and one id names one statement in a plot tree; number the payload's checks from %s up",
 				checkID, owner, read.plots.NextCheckID(spec.PartOf)))
 			return
@@ -814,7 +814,7 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 	seeds := read.seeds
 	if plotID := strings.TrimSpace(protocol.Deref(msg.Plot)); plotID != "" {
 		if protocol.Deref(msg.Stale) {
-			d.sendGardenError(conn, "ls", errors.New("--plot lists every child of the plot and --stale narrows the whole garden; pass one of them"))
+			d.sendGardenError(conn, "ls", protocol.Refuse(protocol.RefusalInvalidInput, "--plot lists every child of the plot and --stale narrows the whole garden; pass one of them"))
 			return
 		}
 		plot, _, err := d.readSeed(plotID)
@@ -1173,7 +1173,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 		})
 		return
 	}
-	d.sendGardenError(conn, verb, fmt.Errorf(
+	d.sendGardenError(conn, verb, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
 		from, attempts, verb, from))
 }
@@ -1311,13 +1311,13 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 		return err
 	}
 	if garden.Closed(seed.Status) {
-		return fmt.Errorf(
+		return protocol.Refuse(protocol.RefusalWrongState,
 			"%s is %s, so there is no open work to dispatch at; reopen it first with `attn seed replant %s`",
 			crown, seed.Status, crown)
 	}
 	if seed.ClaimHolds(d.partyHolds) && seed.Tender != d.partyOfSession(sourceSessionID) {
 		tender := d.partyName(seed.Tender)
-		return fmt.Errorf(
+		return protocol.Refuse(protocol.RefusalNotTender,
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
 				"Wait for %s to harvest or park it, plant the work as its own seed, or say what you need on the log: attn seed note %s -m \"…\"",
 			crown, tender, tender, crown)
@@ -1592,7 +1592,7 @@ func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage, verb gar
 		return ask, string(sessionID), nil
 	}
 	if verb != garden.VerbTend {
-		return garden.Ask{}, "", fmt.Errorf("--for names who claims a seed, so only tend takes it: attn seed tend %s --for %s", msg.SeedID, assignee)
+		return garden.Ask{}, "", protocol.Refuse(protocol.RefusalInvalidInput, "--for names who claims a seed, so only tend takes it: attn seed tend %s --for %s", msg.SeedID, assignee)
 	}
 	seed, _, err := d.readSeed(msg.SeedID)
 	if err != nil {
@@ -1666,7 +1666,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	}
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
-		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
 			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", id, verb)
 	}
 	if comment != "" {
@@ -1693,7 +1693,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		if expectedRev > 0 && doc.Rev != expectedRev {
-			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
 				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 		var read gardenRead
@@ -1729,7 +1729,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 					continue
 				}
 				if docstore.IsConflict(err) {
-					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
 						"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 				}
 				if err != nil {
@@ -1868,11 +1868,11 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		if expectedRev > 0 {
-			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
 				"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 	}
-	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
 		id, attempts, verb, id)
 }
@@ -1928,13 +1928,13 @@ func (d *Daemon) handleSeedNote(conn net.Conn, msg *protocol.SeedNoteMessage) {
 func resolveNoteArtifact(kind string, artifact *garden.ArtifactReference, body string) (*garden.ArtifactReference, string, error) {
 	if !garden.CarriesArtifact(kind) {
 		if artifact != nil {
-			return nil, "", fmt.Errorf(
+			return nil, "", protocol.Refuse(protocol.RefusalInvalidInput,
 				"a %s note carries no artifact; `attn seed attach` and `attn seed detach` are what associate a document", kind)
 		}
 		return nil, body, nil
 	}
 	if artifact == nil {
-		return nil, "", fmt.Errorf("a %s note needs the artifact it %ses; the kinds are %s",
+		return nil, "", protocol.Refuse(protocol.RefusalInvalidInput, "a %s note needs the artifact it %ses; the kinds are %s",
 			kind, kind, strings.Join(garden.ArtifactKinds, ", "))
 	}
 	validated, err := garden.ValidateArtifact(*artifact)

@@ -37,7 +37,7 @@ func runAgentReload(args []string) {
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent reload: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	caller := protocol.TrimID(protocol.SessionID(*source))
 	if caller == "" {
@@ -45,12 +45,12 @@ func runAgentReload(args []string) {
 	}
 	if caller == "" {
 		fmt.Fprintln(os.Stderr, "agent reload: no caller; run inside a session or pass --source-session <id>")
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").AgentReload(targets, caller, *all)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent reload: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	failed := false
 	if *jsonOut {
@@ -70,6 +70,6 @@ func runAgentReload(args []string) {
 		}
 	}
 	if failed {
-		os.Exit(1)
+		exit(1)
 	}
 }

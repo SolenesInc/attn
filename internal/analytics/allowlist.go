@@ -35,4 +35,4 @@ var AppSafeValues = map[string]Allowlist{
 	"react_error":      {"kind": true},
 }
 
-var CLISafeValues = Allowlist{"error_kind": true, "caller": true, "harness": true}
+var CLISafeValues = Allowlist{"error_kind": true, "refusal": true, "caller": true, "harness": true}

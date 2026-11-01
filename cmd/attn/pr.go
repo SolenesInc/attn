@@ -174,7 +174,7 @@ type prWaitResult struct {
 func runPRCommand() {
 	code := executePRCommand(os.Args[2:], os.Stdout, os.Stderr)
 	if code != 0 {
-		os.Exit(code)
+		exit(code)
 	}
 }
 

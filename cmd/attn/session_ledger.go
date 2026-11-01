@@ -155,12 +155,12 @@ func runSessionList(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session list: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	if parsed.tree {
 		if err := runSessionTree(os.Stdout, client.New(""), parsed.profile); err != nil {
 			fmt.Fprintf(os.Stderr, "session list --tree: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		return
 	}
@@ -178,7 +178,7 @@ func runSessionList(args []string) {
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session list: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -336,11 +336,11 @@ func runSessionRename(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session rename: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	if err := client.New("").RenameSession(parsed.sessionID, parsed.name); err != nil {
 		fmt.Fprintf(os.Stderr, "session rename: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("%s renamed to %q\n", parsed.sessionID, parsed.name)
 }
@@ -350,13 +350,13 @@ func runSessionShow(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session show: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 
 	result, err := client.New("").SessionShow(protocol.SessionID(target))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session show: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fprintSessionShow(os.Stdout, *result)
 }

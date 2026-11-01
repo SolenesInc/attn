@@ -85,6 +85,19 @@ enum GitOperationStatus {
   failed,
 }
 
+// Why the daemon refused a request, from a fixed set so a refused command can
+// be counted by cause. A refusal the daemon has not classified carries none,
+// and a client reads that as `unclassified`.
+enum Refusal {
+  invalid_input,
+  limit,
+  not_found,
+  wrong_state,
+  not_tender,
+  conflict,
+  unclassified,
+}
+
 // ============================================================================
 // Core Entities
 // ============================================================================
@@ -7015,6 +7028,7 @@ model Response {
   // no code, and a client must treat an unknown code as "broken, stop" rather
   // than matching the message text.
   error_code?: string;
+  refusal?: Refusal;
   error_conflict?: DocumentConflict;
   data?: string;
   delegate_result?: DelegateResult;

@@ -29,7 +29,7 @@ Every record is one line of JSON:
 |---|---|
 | `bus` | Every fact on Attn's event bus, except `vent.*` facts |
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
-| `cli` | The outcome of each `attn` command, whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
+| `cli` | One record per `attn` command, named by its command path as typed (`seed check report`; a harness hook as `_hook-state`): whether it succeeded, its exit code, what kind of error ended it (`refused`, `failed`, `usage`, `unknown_command`, `unknown_flag`, `missing_value`, `invalid_value`), why the daemon refused it (`invalid_input`, `limit`, `not_found`, `wrong_state`, `not_tender`, `conflict`, `unclassified`), whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
 | `vent` | An Attn vent you chose to send |
 

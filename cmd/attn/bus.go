@@ -33,7 +33,7 @@ func runBus() {
 		recordUsageError("bus", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "bus: unknown command %q\n", os.Args[2])
 		writeBusHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -201,7 +201,7 @@ func runBusStatus(args []string) {
 		default:
 			recordUsageError("bus status", usageErrorUnknownFlag)
 			fmt.Fprintf(os.Stderr, "bus status: unknown flag %q\n", a)
-			os.Exit(2)
+			exit(2)
 		}
 	}
 
@@ -217,14 +217,14 @@ func runBusStatus(args []string) {
 	status, err := b.Status()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bus status: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	if asJSON {
 		out, err := json.MarshalIndent(busStatusReport(status), "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "bus status: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(string(out))
 		return
@@ -337,7 +337,7 @@ func runBusTrim(args []string) {
 		default:
 			recordUsageError("bus trim", usageErrorUnknownFlag)
 			fmt.Fprintf(os.Stderr, "bus trim: unknown flag %q\n", a)
-			os.Exit(2)
+			exit(2)
 		}
 	}
 
@@ -347,7 +347,7 @@ func runBusTrim(args []string) {
 	before, _, err := s.BusLogSize()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bus trim: measuring the log: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	b := bus.New(bus.Options{
 		Store:       daemon.NewBusStore(s),
@@ -359,13 +359,13 @@ func runBusTrim(args []string) {
 	after, bytes, err := s.BusLogSize()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bus trim: measuring the log: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("removed %d event(s); log now holds %d of %d, weighing %s\n",
 		removed, after, before, humanBytes(bytes))
 	if passErr != nil {
 		fmt.Fprintf(os.Stderr, "bus trim: %v\n", passErr)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -387,7 +387,7 @@ func runBusSetEnabled(args []string, enabled bool) {
 	}
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn bus %s <consumer>\n", verb)
-		os.Exit(2)
+		exit(2)
 	}
 	name := strings.TrimSpace(args[0])
 
@@ -396,19 +396,19 @@ func runBusSetEnabled(args []string, enabled bool) {
 
 	if _, ok, err := s.GetBusConsumer(name); err != nil {
 		fmt.Fprintf(os.Stderr, "bus %s: %v\n", verb, err)
-		os.Exit(1)
+		exit(1)
 	} else if !ok {
 		fmt.Fprintf(os.Stderr, "bus %s: no consumer named %q (see `attn bus status`)\n", verb, name)
-		os.Exit(1)
+		exit(1)
 	}
 	flipped, err := s.SetBusConsumerEnabled(name, enabled, time.Now())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bus %s: %v\n", verb, err)
-		os.Exit(1)
+		exit(1)
 	}
 	if !flipped {
 		fmt.Fprintf(os.Stderr, "bus %s: consumer %q was removed while this command ran, so nothing was changed (see `attn bus status`)\n", verb, name)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("consumer %q %sd\n", name, verb)
 }
@@ -421,7 +421,7 @@ func openBusStore() (*store.Store, func()) {
 	s, err := store.OpenCurrent(config.DBPath())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bus: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	return s, func() { _ = s.Close() }
 }

@@ -22,7 +22,7 @@ var ticketSignposts = map[string][]string{
 
 func signpostTicketVerb(verb string) {
 	fprintTicketSignpost(os.Stderr, verb)
-	os.Exit(2)
+	exit(2)
 }
 
 func fprintTicketSignpost(w io.Writer, verb string) {

@@ -27,9 +27,9 @@ func runDelegateRoles(args []string) {
 	fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
 	var usage usageError
 	if errors.As(err, &usage) {
-		os.Exit(2)
+		exit(2)
 	}
-	os.Exit(1)
+	exit(1)
 }
 
 type usageError struct{ error }

@@ -2741,11 +2741,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 	}
 	caller := d.callerSession(ctx, data)
-	if cmd != protocol.CmdRecordAnalytics && d.analyticsEnabled() {
-		reply, unanswered := d.recordingCLICommand(conn, data, err, caller)
-		conn = reply
-		defer unanswered()
-	}
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2764,7 +2759,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 	}
 	if err := d.scopeGardenRequest(cmd, msg, ""); err != nil {
-		d.sendError(conn, err.Error())
+		d.sendRefusal(conn, err.Error(), err)
 		return
 	}
 
@@ -3556,6 +3551,10 @@ func (d *Daemon) sendOK(conn net.Conn) {
 func (d *Daemon) sendError(conn net.Conn, errMsg string) {
 	resp := protocol.Response{Ok: false, Error: protocol.Ptr(errMsg)}
 	json.NewEncoder(conn).Encode(resp)
+}
+
+func (d *Daemon) sendRefusal(conn net.Conn, message string, err error) {
+	json.NewEncoder(conn).Encode(protocol.Response{Ok: false, Error: protocol.Ptr(message), Refusal: protocol.RefusalOf(err)})
 }
 
 type successfulPRObservation struct {

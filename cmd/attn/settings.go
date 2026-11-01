@@ -46,7 +46,7 @@ func runSettings() {
 	usage := func(message string) {
 		fmt.Fprintln(os.Stderr, "settings: "+message)
 		writeSettingsHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	for {
 		if err := parseFlags(fs, rest); err != nil {
@@ -76,8 +76,9 @@ func runSettings() {
 		recordUsageError("settings", usageErrorUnknownCommand)
 		usage(fmt.Sprintf("unknown command %q", verb))
 	}
+	setCommandPath("settings " + verb)
 	c := client.New("")
-	refusal := func(err error) { fmt.Fprintln(os.Stderr, "settings: "+err.Error()); os.Exit(1) }
+	refusal := func(err error) { fmt.Fprintln(os.Stderr, "settings: "+err.Error()); exit(1) }
 	session, err := currentSession(c)
 	if err != nil && !errors.Is(err, errNoCurrentSession) {
 		refusal(err)

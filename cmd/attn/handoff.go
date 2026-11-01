@@ -79,21 +79,21 @@ func runHandoff(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
 		writeHandoffHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	note := parsed.note
 	if note == "-" {
 		raw, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "handoff: reading stdin: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		note = string(raw)
 	}
 	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -110,7 +110,7 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 	}
 	if successorErr := strings.TrimSpace(protocol.Deref(result.SuccessorError)); successorErr != "" {
 		fmt.Fprintf(os.Stderr, "handoff: the next session did not start: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` tries again. The letter above is filed, so do not write another.\n", successorErr, result.Name)
-		os.Exit(1)
+		exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
 		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", result.Name)

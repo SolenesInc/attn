@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"fmt"
 	"net"
 
 	"github.com/victorarias/attn/internal/docstore"
@@ -17,11 +16,11 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 	}
 	limit := protocol.Deref(msg.Limit)
 	if limit < 0 {
-		d.sendGardenError(conn, "search", fmt.Errorf("asked for %d hits; a count of hits cannot be negative", limit))
+		d.sendGardenError(conn, "search", protocol.Refuse(protocol.RefusalInvalidInput, "asked for %d hits; a count of hits cannot be negative", limit))
 		return
 	}
 	if limit > garden.MaxSearchResults {
-		d.sendGardenError(conn, "search", fmt.Errorf(
+		d.sendGardenError(conn, "search", protocol.Refuse(protocol.RefusalLimit,
 			"max_results=%d, asked for %d; use a smaller limit or narrow the query",
 			garden.MaxSearchResults, limit))
 		return

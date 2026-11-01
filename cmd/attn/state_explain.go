@@ -34,7 +34,7 @@ func runState() {
 		recordUsageError("state", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "state: unknown command %q\n", os.Args[2])
 		writeStateHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -60,12 +60,12 @@ func runStateExplain(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "state explain: %v\n", err)
 		writeStateHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").StateExplain(parsed.target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "state explain: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

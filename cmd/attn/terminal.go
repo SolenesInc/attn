@@ -262,7 +262,7 @@ func runTerminal() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "terminal:", err)
 		writeTerminalHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	caller := currentSessionOrExit()
 	cli := client.New("")
@@ -276,12 +276,12 @@ func runTerminal() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "terminal:", err)
 		if errors.Is(err, context.DeadlineExceeded) {
-			os.Exit(124)
+			exit(124)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	if code != 0 {
-		os.Exit(code)
+		exit(code)
 	}
 }
 

@@ -32,7 +32,7 @@ func runDB() {
 		recordUsageError("db", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "db: unknown command %q\n", os.Args[2])
 		writeDBHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -72,7 +72,7 @@ func runDBRestore(args []string) {
 	restoredFrom, preservedAs, err := restoreDatabase(dbPath, backupsDir, source, pidPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn db restore: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	fmt.Printf("restored attn.db from: %s\n", restoredFrom)

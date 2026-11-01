@@ -126,7 +126,7 @@ func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMess
 		}
 		return outcome, nil
 	}
-	return seedCheckOutcome{}, fmt.Errorf(
+	return seedCheckOutcome{}, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to %s a check; read it again with `attn seed show %s` and decide from what it says now",
 		seedID, attempts, verb, seedID)
 }

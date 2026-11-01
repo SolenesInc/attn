@@ -45,7 +45,7 @@ func currentSessionOrExit() protocol.SessionID {
 		} else {
 			fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	return sessionID
 }

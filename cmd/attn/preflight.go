@@ -21,7 +21,7 @@ func runPreflight() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "preflight: %v\n", err)
 		writePreflightHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 
 	report := preflight.Run(context.Background(), opts)
@@ -30,13 +30,13 @@ func runPreflight() {
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(report); err != nil {
 			fmt.Fprintf(os.Stderr, "preflight: encode result: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	} else {
 		writePreflightReport(os.Stdout, report)
 	}
 	if !report.OK() {
-		os.Exit(1)
+		exit(1)
 	}
 }
 

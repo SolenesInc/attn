@@ -31,7 +31,7 @@ func runConversation() {
 	args := os.Args[2:]
 	if len(args) == 0 {
 		fmt.Fprint(os.Stderr, conversationUsage)
-		os.Exit(1)
+		exit(1)
 	}
 	if args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		fmt.Print(conversationUsage)
@@ -45,14 +45,14 @@ func runConversation() {
 	case "keep", "unkeep":
 		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
 			fmt.Fprint(os.Stderr, conversationUsage)
-			os.Exit(1)
+			exit(1)
 		}
 		warnIfDaemonVersionMismatch()
 		cli := client.New("")
 		err := cli.KeptConversationKeep(args[1], args[0] == "keep")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		switch args[0] {
 		case "keep":
@@ -63,7 +63,7 @@ func runConversation() {
 	default:
 		recordUsageError("conversation", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown conversation command: %s\n\n%s", args[0], conversationUsage)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -73,19 +73,19 @@ func conversationForget(args []string) {
 	_ = parseFlags(fs, args)
 	if fs.NArg() == 0 || strings.TrimSpace(fs.Arg(0)) == "" {
 		fmt.Fprint(os.Stderr, conversationUsage)
-		os.Exit(1)
+		exit(1)
 	}
 	id, rest := fs.Arg(0), fs.Args()[1:]
 	_ = parseFlags(fs, rest)
 	if fs.NArg() != 0 {
 		fmt.Fprint(os.Stderr, conversationUsage)
-		os.Exit(1)
+		exit(1)
 	}
 	warnIfDaemonVersionMismatch()
 	result, err := client.New("").KeptConversationForget(id, *unlink)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("deleted attn's copy of conversation %s; Claude's own files are untouched\n", id)
 	if len(result.UnlinkedCrewLetters) > 0 {
@@ -103,13 +103,13 @@ func conversationList(args []string) {
 	_ = parseFlags(fs, args)
 	if fs.NArg() != 0 {
 		fmt.Fprint(os.Stderr, conversationUsage)
-		os.Exit(1)
+		exit(1)
 	}
 	warnIfDaemonVersionMismatch()
 	result, err := client.New("").KeptConversationList(*all)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if *asJSON {
 		printWorktreeJSON(result)
