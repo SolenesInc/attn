@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -33,8 +34,9 @@ func writeNotebookFile(t *testing.T, stack *testworld.Stack, name, content strin
 	writeFileAt(t, notebookPath(stack, name), content)
 }
 
-func outpostCopyPlacement(outpost *testworld.Stack, homeFolder string) string {
-	return notebook.OutpostCopyRoot(notebookPath(outpost), notebook.CopyName(homeFolder), notebook.FolderKey(homeFolder))
+func outpostCopyPlacement(outpost *testworld.Stack, name, homeFolder string) string {
+	sum := sha256.Sum256([]byte(homeFolder))
+	return notebookPath(outpost) + "-" + name + "-" + hex.EncodeToString(sum[:])[:8]
 }
 
 func reportedCopy(t *testing.T, outpost *testworld.Stack, seed string, profile ...string) string {
@@ -102,7 +104,7 @@ func TestNotebookSyncKeepsBothMachinesFilesAndMovesAsideAnUnknownOutpost(t *test
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	writeNotebookFile(t, home, "index.md", "home index")
 	writeNotebookFile(t, home, "nested/first.md", "first version")
-	placement := outpostCopyPlacement(outpost, notebookPath(home))
+	placement := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
 	writeFileAt(t, filepath.Join(placement, "index.md"), "stale outpost copy")
 	writeNotebookFile(t, outpost, "index.md", "the outpost's own Notebook")
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -253,7 +255,7 @@ func TestAnOutpostWorksInItsProfilesOwnNotebookFolder(t *testing.T) {
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	seed := plant(t, home, "Profile notebook", "-m", "Its files sync with the outpost")
 	copied := reportedCopy(t, outpost, seed.ID)
-	if want := outpostCopyPlacement(outpost, own); copied != want {
+	if want := outpostCopyPlacement(outpost, "profile-notebook", own); copied != want {
 		t.Fatalf("the outpost keeps the profile's folder at %s, want %s", copied, want)
 	}
 	if data, err := os.ReadFile(filepath.Join(copied, "from-home.md")); err != nil || string(data) != "written at the home" {

@@ -22,11 +22,12 @@ const runner = createScenarioRunner(options, { scenarioId: 'NotebookSync', tier:
 const root = fs.mkdtempSync(path.join(os.platform() === 'darwin' ? '/private/tmp' : os.tmpdir(), 'attn-nb-'));
 const homeRoot = path.join(root, 'home-notebook');
 const outpostRoot = path.join(root, 'outpost-data', 'notebook');
+const outpostCopy = `${outpostRoot}-home-notebook-${crypto.createHash('sha256').update(homeRoot).digest('hex').slice(0, 8)}`;
 fs.mkdirSync(path.dirname(outpostRoot), { mode: 0o700 });
 fs.mkdirSync(homeRoot);
-fs.mkdirSync(outpostRoot);
+fs.mkdirSync(outpostCopy);
 fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'baseline');
-fs.writeFileSync(path.join(outpostRoot, 'old.md'), 'saved before first sync');
+fs.writeFileSync(path.join(outpostCopy, 'old.md'), 'saved before first sync');
 const payload = crypto.randomBytes(16 * 1024 * 1024);
 for (let file = 0; file < 16; file++) fs.writeFileSync(path.join(homeRoot, `payload-${file}.bin`), payload);
 const ssh = await outpostSsh(root);
@@ -126,7 +127,7 @@ try {
     outpost.kill('SIGCONT');
     await synced;
     await wait({ textIncludes: 'Notebook: in sync' });
-    runner.assert(fs.readFileSync(path.join(outpostRoot, 'conflict.md'), 'utf8') === 'baseline', 'first sync reached outpost disk');
+    runner.assert(fs.readFileSync(path.join(outpostCopy, 'conflict.md'), 'utf8') === 'baseline', 'first sync reached outpost disk');
     await shot('02-in-sync');
   });
   await runner.step('conflicting_offline_edits_keep_both_versions', async () => {
@@ -134,7 +135,7 @@ try {
     await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
 
     fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'home edit');
-    fs.writeFileSync(path.join(outpostRoot, 'conflict.md'), 'outpost edit');
+    fs.writeFileSync(path.join(outpostCopy, 'conflict.md'), 'outpost edit');
     const conflicted = receive(notebook => notebook?.conflicts === 1);
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
@@ -156,7 +157,7 @@ try {
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
     await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
-    fs.unlinkSync(path.join(outpostRoot, '.attn', 'notebook-sync'));
+    fs.unlinkSync(path.join(outpostCopy, '.attn', 'notebook-sync'));
     const failed = receive(notebook => notebook?.state === 'error' && notebook.error?.includes('folder marker missing'));
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
