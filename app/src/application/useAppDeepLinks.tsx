@@ -18,11 +18,12 @@ export function useAppDeepLinks({
   selectAgent,
   launchAgent,
 }: Options) {
-  const handledDeepLinks = useRef(new Set<string>());
+  const launchingDeepLinks = useRef(new Set<string>());
+  const coldStartRead = useRef(false);
 
   const handleDeepLinkUrl = useCallback(
     (urlStr: string) => {
-      if (handledDeepLinks.current.has(urlStr)) {
+      if (launchingDeepLinks.current.has(urlStr)) {
         return;
       }
 
@@ -36,15 +37,16 @@ export function useAppDeepLinks({
             const profileId = useProfilesStore.getState().selectedProfileId;
             const existingSession = currentSessions.find((s) => s.cwd === cwd && s.profileId === profileId);
             if (existingSession) {
-              handledDeepLinks.current.add(urlStr);
               selectAgent(existingSession.id);
             } else {
-              handledDeepLinks.current.add(urlStr);
+              launchingDeepLinks.current.add(urlStr);
               void currentDesktopArrived()
                 .then(() => launchAgent(label, cwd))
                 .catch((error) => {
-                  handledDeepLinks.current.delete(urlStr);
                   console.error('[DeepLink] spawn failed:', error);
+                })
+                .finally(() => {
+                  launchingDeepLinks.current.delete(urlStr);
                 });
             }
           }
@@ -57,6 +59,10 @@ export function useAppDeepLinks({
   );
 
   useEffect(() => {
+    if (coldStartRead.current) {
+      return;
+    }
+    coldStartRead.current = true;
     getCurrent()
       .then((urls) => {
         if (urls && urls.length > 0) {
