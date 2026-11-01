@@ -348,6 +348,16 @@ def check(BINARY, WORK, CLIPS, PREPARED):
            garbage["event"] == "error" and "f32" in garbage["message"] and canceled["event"] == "error"
            and "canceled" in canceled["message"] and h.finish(h.send("warm"))["event"] == "warmed",
            answer=strip(garbage), canceled=strip(canceled))
+    recording = h.dictate(b"", end=False)
+    h.audio(recording, struct.pack("<f", float("nan")) * 512)
+    failed = h.finish(recording)
+    h.post({"op": "finish", "target": recording})
+    closed = h.finish(recording)
+    after = h.finish(h.dictate(clip_pcm(os.path.join(CLIPS, "Daniel", "short.wav"))))
+    report("a recording that fails while listening is closed with its error, and the next one works",
+           failed["event"] == "error" and closed["event"] == "error" and "not open" in closed["message"]
+           and after["event"] == "transcript" and after["text"] != "",
+           failed=strip(failed), finish=strip(closed), next=strip(after))
 
     xlong = clip_pcm(os.path.join(CLIPS, "Daniel", "xlong.wav"))
     request = h.dictate(xlong, end=False)

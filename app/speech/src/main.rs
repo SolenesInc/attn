@@ -246,12 +246,12 @@ impl Worker {
         if open.stop.triggered() {
             return Ok(());
         }
-        let heard = audio::samples(body)
-            .and_then(|samples| engine.hear(&mut open.recording, &samples, &open.stop.token));
+        let samples = audio::samples(body)?;
+        let heard = engine.hear(&mut open.recording, &samples, &open.stop.token);
         if open.stop.triggered() {
             return Ok(());
         }
-        heard
+        heard.inspect_err(|_| self.stop_listening())
     }
 
     fn finish(&mut self) -> Result<Value, String> {
