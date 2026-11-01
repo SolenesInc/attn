@@ -9941,6 +9941,9 @@ type SeedAuthorizationMessage struct {
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 
@@ -9963,6 +9966,23 @@ type SeedAuthorizationResult struct {
 
 	// Update corresponds to the JSON schema field "update".
 	Update *SeedAuthorizationUpdate `json:"update,omitempty,omitzero"`
+}
+
+type SeedAuthorizationResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Result corresponds to the JSON schema field "result".
+	Result *SeedAuthorizationResult `json:"result,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SeedAuthorizationUpdate struct {

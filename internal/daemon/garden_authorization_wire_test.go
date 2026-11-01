@@ -145,6 +145,56 @@ If this applies to work you delegated, update those seeds with attn seed authori
 	}
 }
 
+func TestTheUserChangesATendedSeedsAuthorizationFromTheApp(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		dispatcher := w.Spawn(app, fakeagent.Claude, w.Path("dispatcher"))
+		seed := plantDelegationSeed(t, cli, dispatcher, "Search endpoint")
+		request := delegateAtSeed(dispatcher, w.Path("dispatcher"), seed)
+		request.Agent = protocol.Ptr("claude")
+		delegated, err := cli.Delegate(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tender := w.bootBubbleClaude(t, string(delegated.SessionID))
+		tender.reply("Started on the endpoint. <!-- attn:state=waiting_input -->")
+		w.advance(0)
+
+		fromApp := func(requestID string, msg protocol.SeedAuthorizationMessage) protocol.SeedAuthorizationResultMessage {
+			msg.Cmd, msg.RequestID, msg.SeedID = protocol.CmdSeedAuthorization, protocol.Ptr(requestID), seed
+			return testworld.Request(app, msg, protocol.EventSeedAuthorizationResult, func(m protocol.SeedAuthorizationResultMessage) bool { return m.RequestID == requestID })
+		}
+
+		set := fromApp("set", protocol.SeedAuthorizationMessage{Text: protocol.Ptr("You may land on main.")})
+		if !set.Success || set.Result == nil || !set.Result.Changed {
+			t.Fatalf("the user setting the words from the app got %+v; want a change", set)
+		}
+		if a := set.Result.Seed.Authorization; a == nil || a.Text != "You may land on main." || a.SetBy.Ref != "user" {
+			t.Fatalf("the seed holds authorization %+v; want the words set by the user", a)
+		}
+		w.advance(0)
+		want := `The user changed the authorization for seed ` + seed + ` "Search endpoint":
+"You may land on main."
+If this applies to work you delegated, update those seeds with attn seed authorization.`
+		if typed := typedAuthorizations(tender); len(typed) != 1 || typed[0] != want {
+			t.Fatalf("the tender was typed %q; want\n%s", typed, want)
+		}
+		tender.reply("Read the new authorization. <!-- attn:state=waiting_input -->")
+		w.advance(0)
+
+		cleared := fromApp("clear", protocol.SeedAuthorizationMessage{Clear: protocol.Ptr(true)})
+		if !cleared.Success || cleared.Result == nil || !cleared.Result.Changed || cleared.Result.Seed.Authorization != nil {
+			t.Fatalf("the user clearing the words from the app got %+v; want them gone", cleared)
+		}
+		w.advance(0)
+		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint". These words no longer apply: "You may land on main."
+If this applies to work you delegated, update those seeds with attn seed authorization.`
+		if typed := typedAuthorizations(tender); len(typed) != 2 || typed[1] != wantCleared {
+			t.Fatalf("the tender was typed %q; want the set, then the cleared form:\n%s", typed, wantCleared)
+		}
+	})
+}
+
 func typedAuthorizations(agent *bubbleClaude) []string {
 	synctest.Wait()
 	var typed []string

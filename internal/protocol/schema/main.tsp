@@ -6025,6 +6025,8 @@ model SeedAuthorizationMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
   "cmd": "seed_authorization";
+  // Set by a WebSocket caller, which correlates the answer by request_id.
+  "request_id"?: string;
   "seed_id": string;
   "text"?: string;
   "clear"?: boolean;
@@ -6299,6 +6301,15 @@ model SeedTransitionMessage {
 // the source session's open pull requests.
 model SeedHarvestWhenMerged {
   "pull_request_url"?: string;
+}
+
+// SeedAuthorizationResultMessage replies to a WebSocket seed_authorization.
+model SeedAuthorizationResultMessage {
+  "event": "seed_authorization_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedAuthorizationResult;
 }
 
 // SeedTransitionResultMessage replies to a WebSocket seed_transition,
@@ -8659,6 +8670,7 @@ alias DaemonEvent =
   | SeedDocumentGetResultMessage
   | SeedArtifactTransferResultMessage
   | SeedArtifactTargetResultMessage
+  | SeedAuthorizationResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | SeedCheckResultMessage

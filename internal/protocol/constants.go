@@ -523,6 +523,7 @@ const (
 	EventSeedSendToChiefResult           = "seed_send_to_chief_result"
 	EventSeedReviewResult                = "seed_review_result"
 	EventSeedReviewDraftResult           = "seed_review_draft_result"
+	EventSeedAuthorizationResult         = "seed_authorization_result"
 	EventSeedTransitionResult            = "seed_transition_result"
 	EventSeedNoteResult                  = "seed_note_result"
 	EventSeedCheckResult                 = "seed_check_result"

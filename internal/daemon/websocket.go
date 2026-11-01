@@ -1328,6 +1328,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 	case protocol.CmdSeedNote:
 		d.handleSeedNoteWS(client, msg.(*protocol.SeedNoteMessage))
+	case protocol.CmdSeedAuthorization:
+		d.handleSeedAuthorizationWS(client, msg.(*protocol.SeedAuthorizationMessage))
 	case protocol.CmdSeedCheck:
 		d.handleSeedCheckWS(client, msg.(*protocol.SeedCheckMessage))
 	case protocol.CmdSessionMessagesGet:

@@ -32,6 +32,20 @@ func (d *Daemon) handleSeedAuthorization(conn net.Conn, msg *protocol.SeedAuthor
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedAuthorizationResult: result})
 }
 
+func (d *Daemon) handleSeedAuthorizationWS(client *wsClient, msg *protocol.SeedAuthorizationMessage) {
+	reply := protocol.SeedAuthorizationResultMessage{
+		Event:     protocol.EventSeedAuthorizationResult,
+		RequestID: protocol.Deref(msg.RequestID),
+	}
+	result, err := d.seedAuthorizationRequest(msg)
+	if err != nil {
+		reply.Error = protocol.Ptr(err.Error())
+	} else {
+		reply.Success, reply.Result = true, result
+	}
+	d.sendToClient(client, reply)
+}
+
 func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage) (*protocol.SeedAuthorizationResult, error) {
 	text := strings.TrimSpace(protocol.Deref(msg.Text))
 	clear := protocol.Deref(msg.Clear)
