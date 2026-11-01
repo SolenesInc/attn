@@ -31,6 +31,7 @@ export interface DictationReceipt {
   reason: string;
   pressToListeningMs: number | null;
   stopToTranscriptMs: number | null;
+  stopToRawInDomMs: number | null;
   stopToRawPaintMs: number | null;
   helper: { asrMs?: number; finishMs?: number; segments?: number };
   rawPaintedAt: number;
@@ -221,6 +222,7 @@ export class DictationController {
 
   private paintReceipt(update: Extract<NativeUpdate, { kind: 'transcript' }>) {
     const { timeline } = update;
+    const inDom = Date.now();
     requestAnimationFrame(() => setTimeout(() => {
       const painted = Date.now();
       const receipt: DictationReceipt = {
@@ -229,6 +231,7 @@ export class DictationController {
         reason: update.reason,
         pressToListeningMs: timeline.pressed != null && timeline.firstAudio != null ? timeline.firstAudio - timeline.pressed : null,
         stopToTranscriptMs: timeline.stopped != null && timeline.transcribed != null ? timeline.transcribed - timeline.stopped : null,
+        stopToRawInDomMs: timeline.stopped != null ? inDom - timeline.stopped : null,
         stopToRawPaintMs: timeline.stopped != null ? painted - timeline.stopped : null,
         helper: update.helper,
         rawPaintedAt: painted,
