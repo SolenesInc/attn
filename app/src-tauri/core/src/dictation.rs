@@ -46,7 +46,6 @@ pub enum StopReason {
     Shortcut,
     Button,
     DeviceChanged,
-    LeftWindow,
 }
 
 #[derive(Clone, Serialize)]
@@ -375,7 +374,12 @@ fn take_active<R: Runtime>(app: &AppHandle<R>, recording: Option<u64>) -> Option
     {
         return None;
     }
-    state.active.take()
+    let active = state.active.take();
+    drop(state);
+    if active.is_some() {
+        let _ = crate::hotkeys::dictating(app, false);
+    }
+    active
 }
 
 fn on_main<R: Runtime>(app: &AppHandle<R>, action: impl FnOnce() + Send + 'static) {
@@ -540,6 +544,8 @@ pub async fn dictation_start<R: Runtime>(
             },
             answers,
         });
+        drop(state);
+        let _ = crate::hotkeys::dictating(app, true);
         Ok(())
     });
     match opened {
@@ -604,19 +610,6 @@ fn cancel<R: Runtime>(app: &AppHandle<R>, recording: Option<u64>, window: Option
             recording: active.recording,
         },
     );
-}
-
-pub fn left_window<R: Runtime>(app: &AppHandle<R>, label: &str) {
-    let recording = app
-        .state::<Dictation>()
-        .lock()
-        .active
-        .as_ref()
-        .filter(|active| active.window == label)
-        .map(|active| active.recording);
-    if let Some(recording) = recording {
-        stop_recording(app, recording, StopReason::LeftWindow);
-    }
 }
 
 pub fn use_clip<R: Runtime>(app: &AppHandle<R>, clip: Option<Clip>) {

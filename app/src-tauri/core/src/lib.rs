@@ -1258,15 +1258,6 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             std::process::exit(1);
         })
         .run(|_handle, event| {
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::WindowEvent {
-                label,
-                event: tauri::WindowEvent::Focused(false),
-                ..
-            } = &event
-            {
-                dictation::left_window(_handle, label);
-            }
             if matches!(event, tauri::RunEvent::Exit) {
                 #[cfg(target_os = "macos")]
                 dictation::release(_handle, "attn is quitting.");

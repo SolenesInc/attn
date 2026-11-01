@@ -60,6 +60,7 @@ pub struct Hotkeys {
     manager: Option<GlobalHotKeyManager>,
     routes: Vec<Route>,
     attn_window_is_key: bool,
+    dictating: bool,
     presses: Vec<Press>,
 }
 
@@ -96,7 +97,9 @@ impl Hotkeys {
     fn wants_registration(&self, action: Action) -> bool {
         match action.scope() {
             Scope::Systemwide => true,
-            Scope::WhileAttnWindowIsKey => self.attn_window_is_key,
+            Scope::WhileAttnWindowIsKey => {
+                self.attn_window_is_key || (action == Action::Dictation && self.dictating)
+            }
         }
     }
 
@@ -194,6 +197,16 @@ impl Hotkeys {
             .find(|route| route.registered && route.hotkey.id() == id)
             .map(|route| route.action)
     }
+}
+
+pub fn dictating<R: Runtime>(app: &AppHandle<R>, live: bool) -> Result<(), String> {
+    let hotkeys = app.state::<Mutex<Hotkeys>>();
+    let mut hotkeys = hotkeys.lock().unwrap();
+    hotkeys.dictating = live;
+    let synced = hotkeys.sync(Action::Dictation);
+    drop(hotkeys);
+    changed(app);
+    synced
 }
 
 fn changed<R: Runtime>(app: &AppHandle<R>) {
@@ -296,6 +309,7 @@ pub fn install(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         manager: Some(GlobalHotKeyManager::new()?),
         routes: Vec::new(),
         attn_window_is_key: NSApplication::sharedApplication(mtm).keyWindow().is_some(),
+        dictating: false,
         presses: Vec::new(),
     }));
     app.manage(Changed(Condvar::new()));
