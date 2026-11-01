@@ -267,6 +267,17 @@ jobs:
             ${{ steps.go-cache-paths.outputs.modules }}
           key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
+      - name: Cache pty-host test builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pty-host -> target/test-formats
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
