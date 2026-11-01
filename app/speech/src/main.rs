@@ -17,9 +17,9 @@ use serde_json::{Value, json};
 use transcribe_cpp::CancelToken;
 
 use artifacts::{Cache, PARAKEET_UNIFIED_ENGLISH, REQUIRED, SILERO_VAD};
-use engine::{Engine, Outcome};
+use engine::{Engine, Recording};
 
-const PROTOCOL: u32 = 1;
+const PROTOCOL: u32 = 2;
 const USAGE: &str = "usage: attn-speech serve --cache DIR";
 
 #[derive(Deserialize)]
@@ -27,14 +27,19 @@ const USAGE: &str = "usage: attn-speech serve --cache DIR";
 enum Request {
     Prepare { id: u64 },
     Warm { id: u64 },
-    Transcribe { id: u64, bytes: usize },
+    Listen { id: u64 },
+    Audio { target: u64, bytes: usize },
+    Finish { target: u64 },
     Cancel { target: u64 },
 }
 
 enum Job {
-    Prepare,
-    Warm,
-    Transcribe(Vec<u8>),
+    Prepare(Stop),
+    Warm(Stop),
+    Listen(Stop),
+    Audio(Vec<u8>),
+    Finish,
+    Cancel,
 }
 
 #[derive(Clone)]
@@ -93,7 +98,7 @@ fn serve(cache: Cache) {
         "model": PARAKEET_UNIFIED_ENGLISH.name,
     }));
     let pending: Pending = Arc::default();
-    let (jobs, queue) = mpsc::channel::<(u64, Stop, Job)>();
+    let (jobs, queue) = mpsc::channel::<(u64, Job)>();
     {
         let pending = Arc::clone(&pending);
         thread::spawn(move || work(&cache, &queue, &pending));
@@ -102,7 +107,7 @@ fn serve(cache: Cache) {
     std::process::exit(0);
 }
 
-fn read_requests(jobs: &mpsc::Sender<(u64, Stop, Job)>, pending: &Pending) {
+fn read_requests(jobs: &mpsc::Sender<(u64, Job)>, pending: &Pending) {
     let mut stdin = io::stdin().lock();
     let mut line = String::new();
     loop {
@@ -127,52 +132,150 @@ fn read_requests(jobs: &mpsc::Sender<(u64, Stop, Job)>, pending: &Pending) {
                 {
                     stop.trigger();
                 }
-                continue;
+                (target, Job::Cancel)
             }
-            Request::Prepare { id } => (id, Job::Prepare),
-            Request::Warm { id } => (id, Job::Warm),
-            Request::Transcribe { id, bytes } => {
+            Request::Prepare { id } => (id, Job::Prepare(watch(pending, id))),
+            Request::Warm { id } => (id, Job::Warm(watch(pending, id))),
+            Request::Listen { id } => (id, Job::Listen(watch(pending, id))),
+            Request::Audio { target, bytes } => {
                 let mut body = vec![0; bytes];
                 if stdin.read_exact(&mut body).is_err() {
                     return;
                 }
-                (id, Job::Transcribe(body))
+                (target, Job::Audio(body))
             }
+            Request::Finish { target } => (target, Job::Finish),
         };
-        let stop = Stop::new();
-        pending
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(id, stop.clone());
-        if jobs.send((id, stop, job)).is_err() {
+        if jobs.send((id, job)).is_err() {
             return;
         }
     }
 }
 
-fn work(cache: &Cache, queue: &mpsc::Receiver<(u64, Stop, Job)>, pending: &Pending) {
-    let mut engine: Option<Engine> = None;
-    for (id, stop, job) in queue {
-        let result = if stop.triggered() {
-            Err("canceled before it started".to_string())
-        } else {
-            emit(&json!({"event": "started", "id": id}));
-            match job {
-                Job::Prepare => prepare(cache, &mut engine, id, &stop),
-                Job::Warm => warm(engine.as_mut()),
-                Job::Transcribe(body) => transcribe(engine.as_mut(), &body, &stop),
-            }
-        };
-        pending
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&id);
-        let mut message = match result {
+fn watch(pending: &Pending, id: u64) -> Stop {
+    let stop = Stop::new();
+    pending
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(id, stop.clone());
+    stop
+}
+
+struct Listening {
+    id: u64,
+    recording: Recording,
+    stop: Stop,
+}
+
+#[derive(Default)]
+struct Worker {
+    engine: Option<Engine>,
+    listening: Option<Listening>,
+}
+
+fn work(cache: &Cache, queue: &mpsc::Receiver<(u64, Job)>, pending: &Pending) {
+    let mut worker = Worker::default();
+    for (id, job) in queue {
+        let answer = worker.run(cache, id, job);
+        if worker.listening.as_ref().is_none_or(|open| open.id != id) {
+            pending
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(&id);
+        }
+        let Some(answer) = answer else { continue };
+        let mut message = match answer {
             Ok(message) => message,
             Err(error) => json!({"event": "error", "message": error}),
         };
         message["id"] = json!(id);
         emit(&message);
+    }
+}
+
+impl Worker {
+    fn run(&mut self, cache: &Cache, id: u64, job: Job) -> Option<Result<Value, String>> {
+        let open = self.listening.as_ref().is_some_and(|open| open.id == id);
+        match job {
+            Job::Prepare(stop) | Job::Warm(stop) | Job::Listen(stop) if stop.triggered() => {
+                Some(Err("canceled before it started".to_string()))
+            }
+            Job::Prepare(stop) => {
+                started(id);
+                Some(prepare(cache, &mut self.engine, id, &stop))
+            }
+            Job::Warm(_) => {
+                started(id);
+                Some(warm(self.engine.as_mut()))
+            }
+            Job::Listen(stop) => {
+                started(id);
+                self.listen(id, stop).err().map(Err)
+            }
+            Job::Audio(body) if open => self.hear(&body).err().map(Err),
+            Job::Finish if open => Some(self.finish()),
+            Job::Finish => Some(Err(format!("recording {id} is not open"))),
+            Job::Cancel if open => {
+                self.stop_listening();
+                Some(Err("recording canceled".to_string()))
+            }
+            Job::Audio(_) | Job::Cancel => None,
+        }
+    }
+
+    fn listen(&mut self, id: u64, stop: Stop) -> Result<(), String> {
+        let engine = self.engine.as_mut().ok_or_else(not_prepared)?;
+        if let Some(open) = &self.listening {
+            return Err(format!(
+                "recording {} is still open; finish or cancel it first",
+                open.id
+            ));
+        }
+        self.listening = Some(Listening {
+            id,
+            recording: engine.listen(),
+            stop,
+        });
+        Ok(())
+    }
+
+    fn hear(&mut self, body: &[u8]) -> Result<(), String> {
+        let (Some(engine), Some(open)) = (self.engine.as_mut(), self.listening.as_mut()) else {
+            return Ok(());
+        };
+        if open.stop.triggered() {
+            return Ok(());
+        }
+        let heard = audio::samples(body)
+            .and_then(|samples| engine.hear(&mut open.recording, &samples, &open.stop.token));
+        if open.stop.triggered() {
+            return Ok(());
+        }
+        heard
+    }
+
+    fn finish(&mut self) -> Result<Value, String> {
+        let (Some(engine), Some(open)) = (self.engine.as_mut(), self.listening.take()) else {
+            return Err(not_prepared());
+        };
+        let started = Instant::now();
+        let transcript = engine.finish(open.recording, &open.stop.token)?;
+        Ok(json!({
+            "event": "transcript",
+            "text": transcript.text,
+            "speech": transcript.speech,
+            "audio_ms": transcript.audio_ms,
+            "segments": transcript.segments,
+            "asr_ms": transcript.asr_ms,
+            "finish_ms": started.elapsed().as_millis(),
+        }))
+    }
+
+    fn stop_listening(&mut self) {
+        if let Some(engine) = self.engine.as_mut() {
+            engine.stop_listening();
+        }
+        self.listening = None;
     }
 }
 
@@ -216,6 +319,10 @@ fn prepare(
     Ok(json!({"event": "ready", "load_ms": load_ms, "warm_ms": warm_ms}))
 }
 
+fn started(id: u64) {
+    emit(&json!({"event": "started", "id": id}));
+}
+
 fn not_prepared() -> String {
     "the speech model is not prepared; send prepare first".into()
 }
@@ -225,25 +332,4 @@ fn warm(engine: Option<&mut Engine>) -> Result<Value, String> {
     let started = Instant::now();
     engine.warm()?;
     Ok(json!({"event": "warmed", "ms": started.elapsed().as_millis()}))
-}
-
-fn transcribe(engine: Option<&mut Engine>, body: &[u8], stop: &Stop) -> Result<Value, String> {
-    let engine = engine.ok_or_else(not_prepared)?;
-    let started = Instant::now();
-    let clip = audio::decode_wav(body)?;
-    let decode_ms = started.elapsed().as_millis();
-    let timed = engine.transcribe(clip.samples, &stop.token)?;
-    let (text, speech) = match timed.outcome {
-        Outcome::Text(text) => (text.trim().to_string(), true),
-        Outcome::NoSpeech => (String::new(), false),
-    };
-    Ok(json!({
-        "event": "transcript",
-        "text": text,
-        "speech": speech,
-        "audio_ms": clip.duration_ms,
-        "decode_ms": decode_ms,
-        "vad_ms": timed.vad_ms,
-        "asr_ms": timed.asr_ms,
-    }))
 }

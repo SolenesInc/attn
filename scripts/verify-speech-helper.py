@@ -8,19 +8,22 @@ pinned model into empty caches under WORKDIR; PREPARED_CACHE, when given, is clo
 checks that start from a published model. CLIPS_DIR holds <voice>/<name>.wav with a
 <name>.wav.txt reference transcript beside each clip.
 
-`idle` prepares a helper, transcribes CLIP, then samples proc_pid_rusage counters every
-INTERVAL_SECONDS for IDLE_SECONDS and times one request after the idle period;
---warm-first sends warm, as a recording start would, before that request.
+`idle` prepares a helper, dictates CLIP, then samples proc_pid_rusage counters every
+INTERVAL_SECONDS for IDLE_SECONDS and times one dictation after the idle period;
+--warm-first sends warm, as a recording start would, before that dictation.
+
+Clips are 16 kHz mono 16-bit WAVs. A dictation sends listen, the clip as audio chunks of
+little-endian f32 samples, and finish, all at once rather than in real time.
 """
 import ctypes
 import hashlib
-import io
 import json
 import os
 import queue
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import threading
@@ -57,9 +60,24 @@ class Helper:
         self.proc.stdin.flush()
         return self.next_id
 
-    def cancel(self, target):
-        self.proc.stdin.write((json.dumps({"op": "cancel", "target": target}) + "\n").encode())
+    def post(self, request, body=b""):
+        self.proc.stdin.write((json.dumps(request) + "\n").encode() + body)
         self.proc.stdin.flush()
+
+    def cancel(self, target):
+        self.post({"op": "cancel", "target": target})
+
+    def audio(self, target, pcm, chunk_bytes=16000):
+        for start in range(0, len(pcm), chunk_bytes):
+            chunk = pcm[start:start + chunk_bytes]
+            self.post({"op": "audio", "target": target, "bytes": len(chunk)}, chunk)
+
+    def dictate(self, pcm, end=True):
+        recording = self.send("listen")
+        self.audio(recording, pcm)
+        if end:
+            self.post({"op": "finish", "target": recording})
+        return recording
 
     def wait(self, predicate, timeout=600, on_event=None):
         deadline = time.monotonic() + timeout
@@ -141,6 +159,18 @@ def sample(pid):
     }
 
 
+def pcm(samples):
+    return b"".join(struct.pack("<f", sample / 32768) for sample in samples)
+
+
+def clip_pcm(path):
+    with wave.open(path) as clip:
+        if (clip.getframerate(), clip.getnchannels(), clip.getsampwidth()) != (16000, 1, 2):
+            sys.exit(f"{path} is not 16 kHz mono 16-bit")
+        frames = clip.readframes(clip.getnframes())
+    return pcm(struct.unpack(f"<{len(frames) // 2}h", frames))
+
+
 def check(BINARY, WORK, CLIPS, PREPARED):
     MODEL_SHA = "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795"
     VAD_SHA = "0d871a800c420fdd5d1b17a3aea4296d1c39608f0ff4a9295eb76457eb1c88e6"
@@ -168,16 +198,6 @@ def check(BINARY, WORK, CLIPS, PREPARED):
 
     def strip(event):
         return {k: v for k, v in event.items() if k != "_t"}
-
-
-    def wav_bytes(samples, rate=16000):
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as out:
-            out.setnchannels(1)
-            out.setsampwidth(2)
-            out.setframerate(rate)
-            out.writeframes(b"".join(int(s).to_bytes(2, "little", signed=True) for s in samples))
-        return buffer.getvalue()
 
 
     NUMBER_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7",
@@ -298,8 +318,8 @@ def check(BINARY, WORK, CLIPS, PREPARED):
 
     cache = prepared_cache("prepared")
     h = Helper(BINARY, cache)
-    unprepared = h.finish(h.send("transcribe", wav_bytes([0] * 16000)))
-    report("transcribe before prepare is refused clearly", unprepared["event"] == "error" and "not prepared" in unprepared["message"], answer=strip(unprepared))
+    unprepared = h.finish(h.send("listen"))
+    report("listen before prepare is refused clearly", unprepared["event"] == "error" and "not prepared" in unprepared["message"], answer=strip(unprepared))
     ready = h.finish(h.send("prepare"))
     report("prepare from a published cache loads and warms", ready["event"] == "ready", ready=strip(ready))
     fixtures = []
@@ -310,47 +330,52 @@ def check(BINARY, WORK, CLIPS, PREPARED):
             path = os.path.join(CLIPS, voice, name)
             reference = open(path + ".txt").read()
             sent = time.monotonic()
-            answer = h.finish(h.send("transcribe", open(path, "rb").read()))
+            answer = h.finish(h.dictate(clip_pcm(path)))
             fixtures.append({"clip": f"{voice}/{name}", "audio_ms": answer.get("audio_ms"), "wall_ms": round((answer["_t"] - sent) * 1000, 1),
-                             "vad_ms": answer.get("vad_ms"), "asr_ms": answer.get("asr_ms"), "wer": round(wer(reference, answer.get("text", "")), 3),
+                             "segments": answer.get("segments"), "asr_ms": answer.get("asr_ms"), "wer": round(wer(reference, answer.get("text", "")), 3),
                              "text": answer.get("text"), "event": answer["event"]})
-    report("every batch fixture transcribes", all(f["event"] == "transcript" and f["wer"] < 0.25 for f in fixtures), fixtures=fixtures)
-    silence = h.finish(h.send("transcribe", wav_bytes([0] * 48000)))
-    hum = h.finish(h.send("transcribe", wav_bytes([int(300 * ((i * 7919) % 101 - 50) / 50) for i in range(48000)])))
+    report("every fixture dictates", all(f["event"] == "transcript" and f["wer"] < 0.25 for f in fixtures), fixtures=fixtures)
+    silence = h.finish(h.dictate(pcm([0] * 16000 * 30)))
+    hum = h.finish(h.dictate(pcm([int(300 * ((i * 7919) % 101 - 50) / 50) for i in range(16000 * 30)])))
     report("audio without speech returns no text", silence.get("speech") is False and silence.get("text") == "" and hum.get("speech") is False,
            silence=strip(silence), noise=strip(hum))
-    garbage = h.finish(h.send("transcribe", b"not a wav"))
-    report("a malformed recording is refused by name and the helper keeps serving", garbage["event"] == "error" and "WAV" in garbage["message"]
-           and h.finish(h.send("warm"))["event"] == "warmed", answer=strip(garbage))
+    recording = h.dictate(b"", end=False)
+    h.post({"op": "audio", "target": recording, "bytes": 3}, b"odd")
+    garbage = h.finish(recording)
+    h.cancel(recording)
+    canceled = h.finish(recording)
+    report("a malformed audio chunk is refused by name, cancel closes the recording, and the helper keeps serving",
+           garbage["event"] == "error" and "f32" in garbage["message"] and canceled["event"] == "error"
+           and "canceled" in canceled["message"] and h.finish(h.send("warm"))["event"] == "warmed",
+           answer=strip(garbage), canceled=strip(canceled))
 
-    xlong = open(os.path.join(CLIPS, "Daniel", "xlong.wav"), "rb").read()
-    request = h.send("transcribe", xlong)
+    xlong = clip_pcm(os.path.join(CLIPS, "Daniel", "xlong.wav"))
+    request = h.dictate(xlong, end=False)
     wait_started(h, request)
     canceled_at = time.monotonic()
     h.cancel(request)
     settled = h.finish(request)
-    after = h.finish(h.send("transcribe", open(os.path.join(CLIPS, "Daniel", "short.wav"), "rb").read()))
-    report("cancel stops an in-flight transcription and the helper keeps serving",
-           settled["event"] == "error" and settled["message"] == "transcription canceled" and after["event"] == "transcript",
+    after = h.finish(h.dictate(clip_pcm(os.path.join(CLIPS, "Daniel", "short.wav"))))
+    report("cancel drops a recording and its queued segments while they transcribe, and the helper keeps serving",
+           settled["event"] == "error" and settled["message"] == "recording canceled" and after["event"] == "transcript",
            settle_ms=round((settled["_t"] - canceled_at) * 1000, 1), settled=strip(settled), next=strip(after))
 
-    request = h.send("transcribe", xlong)
-    wait_started(h, request)
+    wait_started(h, h.dictate(xlong, end=False))
     closed = time.monotonic()
     h.proc.stdin.close()
     h.proc.wait(timeout=30)
-    report("closing the lease mid-transcription stops the inference and exits", h.proc.returncode == 0,
+    report("closing the lease mid-recording stops the inference and exits", h.proc.returncode == 0,
            exit_ms=round((time.monotonic() - closed) * 1000, 1), code=h.proc.returncode)
 
     h = Helper(BINARY, cache)
     h.finish(h.send("prepare"))
-    wait_started(h, h.send("transcribe", xlong))
+    wait_started(h, h.dictate(xlong, end=False))
     h.proc.send_signal(signal.SIGKILL)
     eof = h.wait(lambda e: e["event"] == "eof", timeout=10)
     h = Helper(BINARY, cache)
     ready = h.finish(h.send("prepare"))
-    answer = h.finish(h.send("transcribe", open(os.path.join(CLIPS, "Samantha", "short.wav"), "rb").read()))
-    report("a helper crash mid-transcription is seen as EOF and a new helper serves from the intact cache",
+    answer = h.finish(h.dictate(clip_pcm(os.path.join(CLIPS, "Samantha", "short.wav"))))
+    report("a helper crash mid-recording is seen as EOF and a new helper serves from the intact cache",
            eof["event"] == "eof" and ready["event"] == "ready" and ready["load_ms"] > 0 and answer["event"] == "transcript",
            ready=strip(ready), answer=strip(answer))
     h.close_lease()
@@ -368,13 +393,13 @@ def idle(binary, cache, clip, idle_s, interval, warm_first):
     h = Helper(binary, cache)
     pid = h.proc.pid
     ready = h.finish(h.send("prepare"))
-    body = open(clip, "rb").read()
+    body = clip_pcm(clip)
 
 
     def timed_request():
         started = time.monotonic()
-        r = h.finish(h.send("transcribe", body))
-        return {"wall_ms": round((r["_t"] - started) * 1000, 1), "asr_ms": r.get("asr_ms"), "vad_ms": r.get("vad_ms")}
+        r = h.finish(h.dictate(body))
+        return {"wall_ms": round((r["_t"] - started) * 1000, 1), "asr_ms": r.get("asr_ms"), "finish_ms": r.get("finish_ms")}
 
 
     print(json.dumps({"ready": {k: v for k, v in ready.items() if k != "_t"}, "after_prepare": sample(pid)}), flush=True)

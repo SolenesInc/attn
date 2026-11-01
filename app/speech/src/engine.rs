@@ -3,13 +3,16 @@ use std::time::Instant;
 
 use transcribe_cpp::{
     Backend, CancelToken, DeviceType, Model, ModelOptions, RunOptions, Session, SessionOptions,
-    TimestampKind, VadOptions, VadSession,
+    TimestampKind, VadSession, VadSessionOptions,
 };
 
 use crate::audio;
 
-const VAD_THRESHOLD: f64 = 0.4;
-const VAD_MIN_SPEECH_MS: i32 = 160;
+const SPEECH_PROBABILITY: f32 = 0.4;
+const QUIET_PROBABILITY: f32 = SPEECH_PROBABILITY - 0.15;
+const MIN_SPEECH_MS: usize = 160;
+const PAUSE_MS: usize = 160;
+const MIN_SEGMENT_SAMPLES: usize = 3 * audio::SAMPLE_RATE as usize;
 const EXPECTED_ARCHITECTURE: &str = "parakeet";
 const EXPECTED_VARIANT: &str = "unified-en-0.6b";
 
@@ -20,17 +23,49 @@ pub struct Engine {
     run_options: RunOptions,
     max_chunk_samples: Option<usize>,
     vad: VadSession,
+    frame_samples: usize,
 }
 
-pub enum Outcome {
-    Text(String),
-    NoSpeech,
+#[derive(Default)]
+pub struct Recording {
+    open: Vec<f32>,
+    heard: usize,
+    voice: Voice,
+    texts: Vec<String>,
+    segments: usize,
+    speech: bool,
+    asr_ms: u128,
 }
 
-pub struct Timed {
-    pub outcome: Outcome,
-    pub vad_ms: u128,
+#[derive(Default)]
+struct Voice {
+    speech_frames: usize,
+    quiet_frames: usize,
+    speech: bool,
+}
+
+pub struct Transcript {
+    pub text: String,
+    pub speech: bool,
+    pub audio_ms: u64,
+    pub segments: usize,
     pub asr_ms: u128,
+}
+
+impl Voice {
+    fn observe(&mut self, probability: f32, speech_frames_needed: usize) {
+        self.speech_frames = if probability >= SPEECH_PROBABILITY {
+            self.speech_frames + 1
+        } else {
+            0
+        };
+        self.speech |= self.speech_frames >= speech_frames_needed;
+        self.quiet_frames = if probability < QUIET_PROBABILITY {
+            self.quiet_frames + 1
+        } else {
+            0
+        };
+    }
 }
 
 impl Engine {
@@ -68,15 +103,30 @@ impl Engine {
         let session = model
             .session_with(&session_options)
             .map_err(|error| error.to_string())?;
-        let vad = Model::load_with(
+        let (vad, frame_samples) = Model::load_with(
             vad_path,
             &ModelOptions {
                 backend: Backend::Cpu,
                 ..Default::default()
             },
         )
-        .and_then(|vad| vad.vad_session())
+        .and_then(|vad| {
+            let frame_samples = vad.vad_info()?.frame_samples;
+            Ok((
+                vad.vad_session_with(&VadSessionOptions { n_threads: 1 })?,
+                frame_samples,
+            ))
+        })
         .map_err(|error| format!("could not load {}: {error}", vad_path.display()))?;
+        let frame_samples = usize::try_from(frame_samples)
+            .ok()
+            .filter(|samples| *samples > 0)
+            .ok_or_else(|| {
+                format!(
+                    "{} reports {frame_samples} samples per frame",
+                    vad_path.display()
+                )
+            })?;
         let max_chunk_samples = usize::try_from(capabilities.max_audio_ms)
             .ok()
             .filter(|ms| *ms > 0)
@@ -92,6 +142,7 @@ impl Engine {
             },
             max_chunk_samples,
             vad,
+            frame_samples,
         })
     }
 
@@ -101,42 +152,95 @@ impl Engine {
         self.run(&silence, &CancelToken::new()).map(|_| ())
     }
 
-    pub fn transcribe(&mut self, samples: Vec<f32>, cancel: &CancelToken) -> Result<Timed, String> {
-        let started = Instant::now();
-        let speech = self.detect_speech(&samples)?;
-        let vad_ms = started.elapsed().as_millis();
-        if !speech {
-            return Ok(Timed {
-                outcome: Outcome::NoSpeech,
-                vad_ms,
-                asr_ms: 0,
-            });
+    pub fn listen(&mut self) -> Recording {
+        self.vad.stream_reset();
+        Recording::default()
+    }
+
+    pub fn hear(
+        &mut self,
+        recording: &mut Recording,
+        samples: &[f32],
+        cancel: &CancelToken,
+    ) -> Result<(), String> {
+        let scored = self
+            .vad
+            .stream_feed(samples)
+            .map_err(|error| format!("speech detection failed: {error}"))?;
+        recording.open.extend_from_slice(samples);
+        recording.heard += samples.len();
+        let first_frame = usize::try_from(scored.first_frame).unwrap_or_default();
+        for (index, probability) in scored.probs.iter().enumerate() {
+            recording
+                .voice
+                .observe(*probability, self.frames(MIN_SPEECH_MS));
+            let pause_middle = first_frame + index + 1 - recording.voice.quiet_frames / 2;
+            let length =
+                pause_middle * self.frame_samples - (recording.heard - recording.open.len());
+            if recording.voice.quiet_frames >= self.frames(PAUSE_MS)
+                && length >= MIN_SEGMENT_SAMPLES
+            {
+                let rest = recording.open.split_off(length);
+                let segment = std::mem::replace(&mut recording.open, rest);
+                self.close_segment(recording, segment, cancel)?;
+            }
         }
-        let started = Instant::now();
-        let text = self.recognize(samples, cancel)?;
-        Ok(Timed {
-            outcome: Outcome::Text(text),
-            vad_ms,
-            asr_ms: started.elapsed().as_millis(),
+        Ok(())
+    }
+
+    pub fn finish(
+        &mut self,
+        mut recording: Recording,
+        cancel: &CancelToken,
+    ) -> Result<Transcript, String> {
+        let scored = self
+            .vad
+            .stream_flush()
+            .map_err(|error| format!("speech detection failed: {error}"))?;
+        for probability in scored.probs {
+            recording
+                .voice
+                .observe(probability, self.frames(MIN_SPEECH_MS));
+        }
+        let tail = std::mem::take(&mut recording.open);
+        self.close_segment(&mut recording, tail, cancel)?;
+        Ok(Transcript {
+            text: recording.texts.join(" "),
+            speech: recording.speech,
+            audio_ms: (recording.heard * 1000 / audio::SAMPLE_RATE as usize) as u64,
+            segments: recording.segments,
+            asr_ms: recording.asr_ms,
         })
     }
 
-    fn detect_speech(&mut self, samples: &[f32]) -> Result<bool, String> {
-        if samples.is_empty() {
-            return Ok(false);
+    pub fn stop_listening(&mut self) {
+        self.vad.stream_reset();
+    }
+
+    fn frames(&self, ms: usize) -> usize {
+        (ms * audio::SAMPLE_RATE as usize / 1000).div_ceil(self.frame_samples)
+    }
+
+    fn close_segment(
+        &mut self,
+        recording: &mut Recording,
+        segment: Vec<f32>,
+        cancel: &CancelToken,
+    ) -> Result<(), String> {
+        let speech = std::mem::take(&mut recording.voice).speech;
+        if !speech {
+            return Ok(());
         }
-        let speech = self
-            .vad
-            .run(
-                samples,
-                &VadOptions {
-                    threshold: VAD_THRESHOLD,
-                    min_speech_ms: VAD_MIN_SPEECH_MS,
-                    ..VadOptions::default()
-                },
-            )
-            .map_err(|error| format!("speech detection failed: {error}"))?;
-        Ok(!speech.segments.is_empty())
+        let started = Instant::now();
+        let text = self.recognize(segment, cancel)?;
+        recording.asr_ms += started.elapsed().as_millis();
+        recording.segments += 1;
+        recording.speech = true;
+        let text = text.trim();
+        if !text.is_empty() {
+            recording.texts.push(text.to_string());
+        }
+        Ok(())
     }
 
     fn recognize(&mut self, mut samples: Vec<f32>, cancel: &CancelToken) -> Result<String, String> {

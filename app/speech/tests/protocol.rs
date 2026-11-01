@@ -19,7 +19,7 @@ fn the_helper_greets_refuses_work_before_prepare_and_exits_when_its_lease_closes
 
     let hello = next();
     assert_eq!(hello["event"], "hello");
-    assert_eq!(hello["protocol"], 1);
+    assert_eq!(hello["protocol"], 2);
     assert_eq!(hello["model"], "Parakeet Unified English");
 
     writeln!(stdin, "not json").unwrap();
@@ -32,14 +32,7 @@ fn the_helper_greets_refuses_work_before_prepare_and_exits_when_its_lease_closes
             .starts_with("unreadable request")
     );
 
-    let body = b"RIFF";
-    writeln!(
-        stdin,
-        r#"{{"op":"transcribe","id":7,"bytes":{}}}"#,
-        body.len()
-    )
-    .unwrap();
-    stdin.write_all(body).unwrap();
+    writeln!(stdin, r#"{{"op":"listen","id":7}}"#).unwrap();
     writeln!(stdin, r#"{{"op":"warm","id":8}}"#).unwrap();
     for id in [7, 8] {
         let started = next();

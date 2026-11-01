@@ -43,22 +43,22 @@ Preconditions: the baseline instance with its app (`bridge --launch --wait-ready
 - **A helper that stops.** End the helper (it is a child of this instance's app): the status names the exit, `The speech helper stopped unexpectedly (signal: 9 (SIGKILL)). Retry to start it again.`, and the app keeps answering `bridge ping`. Retry reaches `Ready.`.
 - **Quit and start with it on.** `./attn instance stop-app` ends the helper with the app. `bridge --launch --wait-ready ping` starts a new helper that reaches `Ready.` without any action.
 - **Remove the model.** Turn dictation off and click Remove model: the status line goes and the instance's `speech-models` folder is gone.
-- **The helper alone.** `python3 -I scripts/verify-speech-helper.py check <app>/Contents/MacOS/attn-speech <workdir> <clips>` runs the helper's process checks: download, resume, cancel, crash, lease exit and fixture transcription. `idle` measures the helper's idle CPU, wakeups and memory, and the first request after an idle period.
+- **The helper alone.** `python3 -I scripts/verify-speech-helper.py check <app>/Contents/MacOS/attn-speech <workdir> <clips>` runs the helper's process checks: download, resume, cancel, crash, lease exit and fixture dictation. `idle` measures the helper's idle CPU, wakeups and memory, and the first dictation after an idle period. `python3 -I scripts/measure-speech-latency.py dictate <helper> <cache> <clip>` replays 5, 10, 20 and 30 s recordings in real time and prints stop-to-text with the load average; its `idle` mode times dictations after an idle period, with or without `--warm-first`.
 - **Proof.** Keep each status text with the command that produced it, the helper's `ps` line, and `bridge capture_screenshot` at Ready and after a stop.
 
 ## Contexts
 
 - **Durability across restarts**: the helper belongs to one app process. An app restart starts a new helper from the cache. A daemon restart does not touch it.
 - **Profiles**: the setting is home-wide. Each named instance has its own model cache; the production app's cache is the Mac's.
-- **Performance and idle cost**: an idle prepared helper uses about 1 ms of CPU a minute and wakes about once every 3 seconds. macOS reclaims the model's pages while idle, so the first request after a long idle pays to bring them back.
+- **Performance and idle cost**: an idle prepared helper uses about 1 ms of CPU a minute and wakes about once every 3 seconds. macOS reclaims the model's pages while idle, so the first dictation after a long idle pays to bring them back. While a recording streams in, the helper transcribes each segment that ends in a pause, so the stop pays only for the speech since the last pause; machine load stretches that time.
 - **Linux**: no app dictation. The row is hidden and the helper is not bundled.
 - **Microphone**: setup never opens the microphone. The helper links no audio framework.
 
 ## Tests
 
 - App: `app/src/App.dictationSetup.test.tsx`.
-- Helper: `cargo test --manifest-path app/speech/Cargo.toml` (cache download, resume and verification, audio decoding, and the stdio protocol).
+- Helper: `cargo test --manifest-path app/speech/Cargo.toml` (the stdio protocol before prepare) and `scripts/verify-speech-helper.py check` (download, resume, verification, dictation, cancel, crash and lease exit against the real model).
 
 ## Gotchas
 
-- `bridge` calls take about a second each, so times measured through `bridge` include it. Use the helper's own `load_ms` and `warm_ms` (the `check` and `idle` output) for preparation receipts.
+- `bridge` calls take about a second each, so times measured through `bridge` include it. Use the helper's own `load_ms` and `warm_ms` (the `check` and `idle` output) for preparation receipts, and `measure-speech-latency.py` for stop-to-text.
