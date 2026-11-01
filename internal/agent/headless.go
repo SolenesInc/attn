@@ -58,6 +58,7 @@ func runHeadlessCommand(
 	args []string,
 	workDir string,
 	provider string,
+	reportedFailure func(stdout []byte) string,
 ) (HeadlessTaskResult, []byte, error) {
 	if !headless.Enabled() {
 		return HeadlessTaskResult{}, nil, headless.Refusal(provider + " headless task")
@@ -72,7 +73,7 @@ func runHeadlessCommand(
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		diagnostics := classifyHeadlessFailure(stdout.String() + "\n" + stderr.String())
+		diagnostics := classifyHeadlessFailure(reportedFailure(stdout.Bytes()) + "\n" + stderr.String())
 		return HeadlessTaskResult{
 			Diagnostics:   diagnostics,
 			FailureOutput: headlessFailureOutput(stdout.String(), stderr.String()),
@@ -177,6 +178,9 @@ func headlessEnvironment(provider string) []string {
 func classifyHeadlessFailure(output string) string {
 	lower := strings.ToLower(output)
 	switch {
+	case strings.Contains(lower, "connection refused"),
+		strings.Contains(lower, "connection_failed"):
+		return "headless agent could not reach its model provider"
 	case strings.Contains(lower, "authentication_failed"),
 		strings.Contains(lower, "not logged in"),
 		strings.Contains(lower, "unauthorized"),
@@ -186,7 +190,9 @@ func classifyHeadlessFailure(output string) string {
 		(strings.Contains(lower, "not found") ||
 			strings.Contains(lower, "invalid") ||
 			strings.Contains(lower, "unavailable") ||
-			strings.Contains(lower, "unsupported")):
+			strings.Contains(lower, "unsupported") ||
+			strings.Contains(lower, "not supported") ||
+			strings.Contains(lower, "not exist")):
 		return "headless agent model is invalid or unavailable"
 	case strings.Contains(lower, "mcp"),
 		strings.Contains(lower, "tool server"),

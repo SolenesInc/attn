@@ -6709,6 +6709,47 @@ model GardenReviewUpdatedMessage {
 }
 
 // ============================================================================
+// Dictation refinement
+// ============================================================================
+
+// Where the refined text will be inserted: plain fields and terminals take
+// plain text; Markdown editors also accept paragraphs and lists.
+enum DictationTextFormat {
+  plain,
+  markdown,
+}
+
+// Asks the daemon to clean up one dictated transcript with the dictation
+// refinement harness, tool-free. The request is answered once, unless it is
+// cancelled or its connection closes first. The caller keeps the original.
+model DictationRefineMessage {
+  "cmd": "dictation_refine";
+  "request_id": string;
+  "profile_id": string;
+  "raw_text": string;
+  "recording_duration_ms": safeint;
+  "format": DictationTextFormat;
+}
+
+// Stops a pending refinement. No result follows.
+model DictationRefineCancelMessage {
+  "cmd": "dictation_refine_cancel";
+  "request_id": string;
+}
+
+// limit_ms is set when the refinement did not answer within its limit:
+// 15 s plus a quarter of the recording duration.
+model DictationRefineResultMessage {
+  "event": "dictation_refine_result";
+  "request_id": string;
+  "profile_id": string;
+  "success": boolean;
+  "refined_text"?: string;
+  "error"?: string;
+  "limit_ms"?: safeint;
+}
+
+// ============================================================================
 // Auto mode
 // ============================================================================
 //
@@ -8665,6 +8706,7 @@ alias DaemonEvent =
   | GardenReviewUpdatedMessage
   | SeedReviewResultMessage
   | SeedReviewDraftResultMessage
+  | DictationRefineResultMessage
   | SeedResumeResultMessage
   | SeedSendToChiefResultMessage
   | SeedDocumentGetResultMessage

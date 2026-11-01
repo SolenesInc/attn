@@ -90,16 +90,20 @@ func claudePrint(args parsedArgs) headlessRun {
 			}
 			result["structured_output"] = json.RawMessage(text)
 		}
-		return printJSONLines(result)
+		return printJSONLines([]any{claudeInit(run.model), result})
 	}
 	run.fail = func(message string) {
 		if !asJSON {
 			fmt.Fprintln(os.Stderr, message)
 			return
 		}
-		_ = printJSONLines(claudeResult(true, message))
+		_ = printJSONLines([]any{claudeInit(run.model), claudeResult(true, message)})
 	}
 	return run
+}
+
+func claudeInit(model string) map[string]any {
+	return map[string]any{"type": "system", "subtype": "init", "tools": []string{}, "mcp_servers": []string{}, "model": model}
 }
 
 func claudeResult(failed bool, text string) map[string]any {

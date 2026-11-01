@@ -78,6 +78,7 @@ const (
 	SettingActivityIntervals             = settingkeys.SettingActivityIntervals
 	SettingActivityPresenceIdleSeconds   = settingkeys.SettingActivityPresenceIdleSeconds
 	SettingGardenAdvisor                 = settingkeys.SettingGardenAdvisor
+	SettingDictationRefinementAgent      = settingkeys.SettingDictationRefinementAgent
 	SettingCrewHeartbeatEnabled          = settingkeys.SettingCrewHeartbeatEnabled
 	SettingCrewAutoSleepEnabled          = settingkeys.SettingCrewAutoSleepEnabled
 	SettingCrewCacheTTLSeconds           = settingkeys.SettingCrewCacheTTLSeconds
@@ -232,6 +233,10 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	}},
 	{key: string(SettingGardenAdvisor), scope: daemonScope, description: "Garden advisor harness and model as JSON. Empty uses the default advisor.", validate: func(d *Daemon, key, value string) error {
 		return d.validateGardenAdvisorSetting(value)
+	}},
+	{key: string(SettingDictationRefinementAgent), scope: daemonScope, description: "Harness whose light model cleans up dictated text: claude or codex. Empty uses claude.", validate: func(d *Daemon, key, value string) error {
+		_, err := parseDictationRefinementAgent(value)
+		return err
 	}},
 	{key: string(SettingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)

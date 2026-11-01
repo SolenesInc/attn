@@ -212,6 +212,8 @@ type Daemon struct {
 
 	emptyDesktops emptyDesktopRemoval
 
+	dictationRefinements dictationRefinements
+
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}

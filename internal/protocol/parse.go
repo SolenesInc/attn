@@ -155,6 +155,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSeedReviewRetry:               decodeInto[SeedReviewRetryMessage],
 	CmdSeedReviewKeep:                decodeInto[SeedReviewKeepMessage],
 	CmdSeedReviewDraft:               decodeInto[SeedReviewDraftMessage],
+	CmdDictationRefine:               decodeInto[DictationRefineMessage],
+	CmdDictationRefineCancel:         decodeInto[DictationRefineCancelMessage],
 	CmdStop:                          decodeInto[StopMessage],
 	CmdFilesEdited:                   decodeInto[FilesEditedMessage],
 	CmdPullRequestCreated:            decodeInto[PullRequestCreatedMessage],

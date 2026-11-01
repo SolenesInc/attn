@@ -363,7 +363,7 @@ instance. A file whose recipe ran live says so here.
 - [Crew](crew.md) (both): Permanent agents with charters, who leave letters for their next session. The chief coordinates the profile.
 - [Automations](automations.md) (both): attn starts a steerable agent on a schedule or an event.
 - [Quick capture](quick-capture.md) (people): Send a message with attachments to the chief or crew from anywhere, with a global shortcut, like macOS Quick Note.
-- [Dictation](dictation.md) (people): Speak instead of typing, with a speech model that runs on the Mac. Experimental, with setup only so far.
+- [Dictation](dictation.md) (people): Speak instead of typing, with a speech model that runs on the Mac and a tool-free model that cleans up the words, keeping the original. Experimental, with setup and refinement only so far.
 
 ### Code
 

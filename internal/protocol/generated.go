@@ -4491,6 +4491,63 @@ type DetachSessionMessage struct {
 	ID TerminalID `json:"id"`
 }
 
+type DictationRefineCancelMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type DictationRefineMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Format corresponds to the JSON schema field "format".
+	Format DictationTextFormat `json:"format"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RawText corresponds to the JSON schema field "raw_text".
+	RawText string `json:"raw_text"`
+
+	// RecordingDurationMs corresponds to the JSON schema field
+	// "recording_duration_ms".
+	RecordingDurationMs int `json:"recording_duration_ms"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type DictationRefineResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// LimitMs corresponds to the JSON schema field "limit_ms".
+	LimitMs *int `json:"limit_ms,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RefinedText corresponds to the JSON schema field "refined_text".
+	RefinedText *string `json:"refined_text,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type DictationTextFormat string
+
+const DictationTextFormatMarkdown DictationTextFormat = "markdown"
+const DictationTextFormatPlain DictationTextFormat = "plain"
+
 type DirectoryEntry struct {
 	// IsDir corresponds to the JSON schema field "is_dir".
 	IsDir bool `json:"is_dir"`

@@ -85,6 +85,8 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSeedReviewRetry:               commandMetadata(false, true),
 	protocol.CmdSeedReviewKeep:                commandMetadata(false, true),
 	protocol.CmdSeedReviewDraft:               commandMetadata(false, true),
+	protocol.CmdDictationRefine:               commandMetadata(false, true),
+	protocol.CmdDictationRefineCancel:         commandMetadata(false, true),
 	protocol.CmdCrewList:                      commandMetadata(false, true),
 	protocol.CmdCrewCharterGet:                commandMetadata(false, true),
 	protocol.CmdCrewCharterSet:                commandMetadata(false, true),
