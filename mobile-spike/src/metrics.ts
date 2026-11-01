@@ -16,6 +16,14 @@ export const counters: SpikeCounters = {
 
 ;(globalThis as any).__spike = counters
 
+// Native shells have no console to evaluate window.__spike from, so a build can log the counters on a timer.
+declare const __ATTN_SPIKE_STATS_MS__: number
+if (__ATTN_SPIKE_STATS_MS__ > 0) {
+  setInterval(() => {
+    console.log(`SPIKE_STATS t=${Math.round(performance.now())}ms paints=${counters.paints} paintSkips=${counters.paintSkips} framesWritten=${counters.framesWritten}`)
+  }, __ATTN_SPIKE_STATS_MS__)
+}
+
 export function mark(name: string): void {
   if (counters.marks[name] !== undefined) return
   const t = Math.round(performance.now())

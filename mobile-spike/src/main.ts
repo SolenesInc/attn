@@ -67,6 +67,7 @@ export const Message = defineMessageUnion({
   ChangedComposer: { value: Schema.String },
   SubmittedComposer: {},
   ClickedToggleLog: {},
+  ClickedHideKeyboard: {},
   ChangedKeyboard: { height: Schema.Number },
   ChangedViewport: { height: Schema.Number },
   ChangedTerminalStatus: { text: Schema.String },
@@ -121,6 +122,16 @@ const SubmitPrompt = Command.define('SubmitPrompt', {
   messages: [Message.CompletedCommand],
   execute: ({ text }) => Effect.promise(async () => {
     await activeTerminal?.submit(text)
+    return Message.CompletedCommand()
+  }),
+})
+
+// iOS gives a WKWebView no gesture that closes the keyboard, so the keys bar carries one.
+const HideKeyboard = Command.define('HideKeyboard', {
+  messages: [Message.CompletedCommand],
+  execute: Effect.promise(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    if (Capacitor.isNativePlatform()) await Keyboard.hide()
     return Message.CompletedCommand()
   }),
 })
@@ -192,6 +203,7 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, { composer: () => '' }),
       commands: [SubmitPrompt({ text: model.composer })],
     }),
+    ClickedHideKeyboard: () => ({ model, commands: [HideKeyboard()] }),
     ClickedToggleLog: () => ({ model: modifyFields(model, { showLog: (s) => !s }) }),
     ChangedKeyboard: ({ height }) => ({ model: modifyFields(model, { keyboardHeight: () => height }) }),
     ChangedViewport: ({ height }) => ({ model: modifyFields(model, { viewportHeight: () => height }) }),
@@ -382,6 +394,7 @@ const modeButtons = (model: Model, h: HtmlBuilder<Message>): Html[] => [
 
 const keysBar = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div([h.Class('keys'), h.OnMount(KeepInputFocus())], [
+    h.button([h.Attribute('aria-label', 'Hide keyboard'), h.OnClick(Message.ClickedHideKeyboard())], ['⌄']),
     ...KEYS.map(([label, key]) => h.button([h.Key(key), h.OnClick(Message.ClickedKey({ key }))], [label])),
     h.button([h.Class(model.ctrlLatched ? 'on' : ''), h.OnClick(Message.ClickedCtrl())], ['Ctrl']),
   ])
@@ -429,7 +442,7 @@ const terminalView = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'attn spike',
-  body: h.div([h.Class('app'), h.Style({ height: `${Math.round(model.viewportHeight)}px` })], [
+  body: h.div([h.Class('app'), h.Style({ height: `calc(${Math.round(model.viewportHeight)}px - env(safe-area-inset-top))` })], [
     model.screen === 'connect' ? connectView(model, h)
       : model.screen === 'sessions' ? sessionsView(model, h)
         : terminalView(model, h),

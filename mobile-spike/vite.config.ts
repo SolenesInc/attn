@@ -9,6 +9,7 @@ export default defineConfig({
   build: { target: 'es2022', sourcemap: false, reportCompressedSize: true },
   define: {
     __ATTN_WS_URL__: JSON.stringify(process.env.ATTN_SPIKE_WS_URL ?? ''),
+    __ATTN_SPIKE_STATS_MS__: JSON.stringify(Number(process.env.ATTN_SPIKE_STATS_MS ?? 0)),
     __ATTN_CLIENT_TOKEN__: JSON.stringify(process.env.ATTN_SPIKE_CLIENT_TOKEN ?? ''),
   },
 })
