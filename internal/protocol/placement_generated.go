@@ -130,6 +130,7 @@ var Placements = map[string][]Placement{
 	"monitor_transcript_page":          {Placement{LocatorSession, "session_id"}},
 	"mute_pr":                          {Placement{LocatorHome, ""}},
 	"mute_repo":                        {Placement{LocatorHome, ""}},
+	"notebook_folders":                 {Placement{LocatorHere, ""}},
 	"notebook_guide":                   {Placement{LocatorHome, ""}},
 	"notebook_sync_report":             {Placement{LocatorHome, ""}},
 	"onboarding":                       {Placement{LocatorHome, ""}},
@@ -1518,6 +1519,18 @@ func (m MuteRepoMessage) Placement() Placement {
 }
 
 func (m MuteRepoMessage) Locate() string {
+	return ""
+}
+
+func (NotebookFoldersMessage) CommandName() string {
+	return "notebook_folders"
+}
+
+func (m NotebookFoldersMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m NotebookFoldersMessage) Locate() string {
 	return ""
 }
 

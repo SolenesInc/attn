@@ -271,11 +271,8 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingCrewWakeLimitWindowSeconds), scope: daemonScope, description: "Crew automatic wake accounting window in seconds.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
-	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Shared folder for the Notebook, journal and seed artifacts, used by every profile without notebook.profile_root and synced with outposts. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
-		if err := validateNotebookRoot(key, value); err != nil {
-			return err
-		}
-		return d.notebookRootChangeAllowed()
+	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Shared folder for the Notebook, journal and seed artifacts, used by every profile without notebook.profile_root. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
+		return validateNotebookRoot(key, value)
 	}},
 	{key: string(SettingNotebookProfileRoot), scope: profileScope, description: "This profile's Notebook folder, used instead of notebook.root. Absolute or ~/ path outside attn's data folder. Changing it repoints without moving files. Empty uses notebook.root.", validate: func(d *Daemon, key, value string) error {
 		if config.HarnessNotebookRoot() != "" && strings.TrimSpace(value) != "" {

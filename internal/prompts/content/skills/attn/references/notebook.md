@@ -16,10 +16,9 @@ one folder, `~/attn-notebook` by default. A profile can set its own folder with
 `notebook.profile_root`, and a non-default instance adds its name to the folder
 name. Paths below are relative to `<root>`.
 
-On an outpost, `notebook.root.effective` is that machine's copy of the shared
-Notebook, and the copy syncs with the home. A folder that a profile set for
-itself does not sync. `attn seed show <seed>` prints that machine's artifact
-folder.
+On an outpost, `notebook.root.effective` is that machine's copy of your
+profile's Notebook folder, and the copy syncs with the home. `attn seed show
+<seed>` prints that machine's artifact folder.
 
 `<root>/crew/` holds crew members' homes: a folder per member with the member's
 charter and letters. attn owns that folder and records where each home is, so

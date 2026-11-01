@@ -67,7 +67,11 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	if key != "" && spec.scope == profileScope && profileErr != nil {
 		return nil, nil, profileErr
 	}
-	values := d.settingsSnapshot(profile.ID)
+	notebookProfile := profile.ID
+	if d.enrollmentStatus().IsOutpost() && msg.SourceSessionID != nil {
+		notebookProfile, _ = d.sessionNotebookProfile(*msg.SourceSessionID)
+	}
+	values := d.settingsSnapshot(notebookProfile)
 	if key != "" {
 		entry := d.settingEntry(spec, key, d.settingValue(spec, key, values, profile.ID))
 		return nil, &entry, nil

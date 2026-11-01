@@ -30,7 +30,6 @@ type outpostDial struct {
 	lastErrorAt    string
 	connectable    bool
 	notebook       *protocol.OutpostNotebook
-	notebookRoot   string
 }
 
 const maxOutpostRetryDelay = 128 * time.Second
@@ -344,6 +343,7 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 	}
 	defer d.setOutpostConn(id, run, nil)
 	d.life.Go("notebookStream:"+id, func() { d.openNotebookSync(conn) })
+	d.life.Go("notebookFolders:"+id, func() { d.pushNotebookFolders(conn) })
 	sending := make(chan struct{})
 	if !d.life.Go("outpostCopy:"+id, func() {
 		defer close(sending)

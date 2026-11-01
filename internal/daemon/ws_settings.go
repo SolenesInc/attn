@@ -57,6 +57,9 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if err := spec.validate(d, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
+	if err := d.refuseNestedNotebookSetting(msg); err != nil {
+		return nil, err
+	}
 	if spec.scope == profileScope {
 		return d.applyProfileSetting(spec, msg)
 	}
@@ -83,7 +86,7 @@ func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMe
 		return nil, err
 	}
 	if msg.Key == string(SettingNotebookProfileRoot) {
-		d.pruneRootWatchers()
+		d.notebookFoldersChanged()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
 	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, profile.ID))
@@ -95,7 +98,7 @@ func (d *Daemon) settingChanged(key, value string) {
 		d.configureOutposts()
 	}
 	if key == string(SettingNotebookRoot) {
-		d.pruneRootWatchers()
+		d.notebookFoldersChanged()
 	}
 
 	if harness, ok := isAgentExecutableSettingKey(key); ok {

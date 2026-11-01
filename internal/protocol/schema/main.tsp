@@ -366,6 +366,19 @@ model NotebookSyncReportMessage {
   report: string;
 }
 
+model NotebookSyncFolder {
+  id: string;
+  key: string;
+  name: string;
+  profiles: string[];
+}
+
+@extension("x-on", #{ here: true })
+model NotebookFoldersMessage {
+  cmd: "notebook_folders";
+  folders: NotebookSyncFolder[];
+}
+
 model OutpostInfo {
   connectable?: boolean;
   id: string;
@@ -6132,6 +6145,7 @@ model SeedArtifactTransferHereMessage {
   cmd: "seed_artifact_transfer_here";
   host: string;
   transfer: SeedArtifactTransferMessage;
+  "notebook_folder"?: string;
 }
 
 model SeedArtifactTransferResult {

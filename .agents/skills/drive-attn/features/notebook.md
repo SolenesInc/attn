@@ -19,7 +19,7 @@ writers never collide. The chief treats the notebook as its home.
 - `editor-undo`: native ⌘Z and ⇧⌘Z undo and redo in the editor.
 - `notebook-root`: the shared folder, the machine setting `notebook.root`.
 - `profile-notebook`: a profile's own folder, `notebook.profile_root`, used instead of the shared one. An empty setting falls back to the shared folder.
-- `notebook-sync`: an outpost's notebook syncs with the home's shared one.
+- `notebook-sync`: an outpost keeps a synced copy of every Notebook folder the home's profiles use.
 
 ## How to get to it
 
@@ -37,12 +37,12 @@ writers never collide. The chief treats the notebook as its home.
 ### Agents
 
 - `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
-- `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (an outpost's copy of the shared folder on an outpost). `attn settings set notebook.profile_root <path> [--profile <name|id>]` sets a profile's own folder. Inside a session, both commands use the session's profile.
+- `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (on an outpost, the copy of that folder, inside a session only). `attn settings set notebook.profile_root <path> [--profile <name|id>]` sets a profile's own folder. Inside a session, both commands use the session's profile.
 - Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`), and the attn skill's notebook reference covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
 
 ### Triggers
 
-- An outpost's notebook syncs with the home's while Outposts is on (`internal/daemon/notebook_sync.go`).
+- An outpost's copies sync with the home's folders while Outposts is on (`internal/daemon/notebook_sync.go`). The home pushes the folder list on connect and when a profile's folder, or the set of profiles, changes (`internal/daemon/notebook_folders.go`).
 
 ## Driving it
 
@@ -98,9 +98,9 @@ Preconditions:
 
 - **Durability across restarts**: the notebook is files on disk and does not depend on attn running. An edit that the app had not saved yet is the only thing a crash can lose, and the save status shows when an edit is unsaved. The open editor tile comes back with its desktop.
 - **Linux**: `attn journal append` and the files work the same where the daemon and CLI run on Linux. The editor tile is Ctrl+Shift+Alt+N and fullscreen Ctrl+Shift+Alt+F there (`LINUX_SHORTCUTS`).
-- **Outposts**: an outpost keeps its own copy at its `notebook.root.effective`, synced with the home's, and conflict copies appear on the outpost's row in Settings. Agents on an outpost append to the journal with `attn journal append`, which writes at the home. While the outpost is offline its copy waits for the next sync.
+- **Outposts**: an outpost keeps a copy of each Notebook folder at `~/attn-notebook-<name>-<key>`, synced with the home's, and conflict copies appear on the outpost's row in Settings. An agent there works in the copy of its profile's folder, its `notebook.root.effective`, and `attn seed attach`, `detach` and `check report --evidence` for that profile's seeds land in the profile's folder at the home. Agents on an outpost append to the journal with `attn journal append`, which writes at the home. While the outpost is offline its copies wait for the next sync.
 - **Profiles**: profiles share the instance's folder unless one sets `notebook.profile_root`. The app's notebook, editor tiles, the chief's launch guidance, `attn journal append` and seed artifacts all follow the profile: the window's profile for the app, the session's profile for agents, the seed's profile for its files. After switching the window's profile, the notebook opens on that profile's folder. Repointing a profile never moves files. An editor tile rooted at another profile's folder keeps following the disk when that profile repoints or clears its folder from a shell (`attn settings set notebook.profile_root "" --profile <name>`). To open the tile on that folder, place a terminal there first, since Browse opens a native dialog.
-- **Outposts and a profile's own folder**: only the shared folder syncs. For seeds of a profile with its own folder, `attn seed attach`, `detach` and `check report --evidence` refuse on an outpost, naming the folder, and `attn seed show` there prints no artifact folder.
+- **Outposts and a folder change**: changing a profile's folder while paired syncs the new folder into its own copy and leaves the old copy unsynced. Pointing back moves the old copy to `<copy>.before-sync-<date>` and syncs it fresh. A profile folder inside another profile's folder is refused while an outpost is paired, and pairing is refused while such folders exist.
 - **Performance and idle cost**: the open notebook and each editor tile watch their folder for changes. Nothing measures the cost of a large notebook or of an idle open editor. When a change touches either, check with `docs/internal/perf-testing.md`.
 - **Harnesses**: any harness reads and edits the files with its own tools and appends with the same `attn journal append`.
 - **Keyboard and native input**: ⌥⌘N, ⇧⌥⌘N, ⌘P inside the notebook, Esc to close fullscreen. ⌘Z and ⇧⌘Z reach the editor because attn removes the Edit menu's Undo and Redo, which would take them first. attn leaves ⌘E free for inline code.

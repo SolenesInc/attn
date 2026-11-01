@@ -121,8 +121,9 @@ front, the editor tile and the file opener (Cmd+P) start at your notebook root.
 
 Install and log in to Claude Code or Codex on the outpost. Each machine uses its own harness executable and credentials, because harness executables are machine settings. See [Read and change settings](#read-and-change-settings).
 
-The outpost's first Notebook sync must finish before an agent can start.
-Attn refuses an agent start that comes too early and names the remaining work. From a home agent,
+An agent starts on an outpost once the first sync of its profile's Notebook
+folder finishes. Attn refuses an earlier start and names the folder and the
+remaining work. From a home agent,
 delegate onto an outpost with:
 
 ```sh
@@ -204,28 +205,41 @@ the reason. A start on a stalled outpost waits.
 
 ## Notebook sync
 
-Pairing an outpost starts two-way sync of the shared Notebook. Each machine has
-its own folder, selected by its machine setting `notebook.root`. Read the
-resolved path with `attn settings get notebook.root.effective` on that machine.
-A profile that sets its own folder with `notebook.profile_root` keeps that folder at the home and does not sync it. That profile's agents on an outpost see the shared Notebook. For that profile's seeds, `attn seed attach`, `detach` and `check report --evidence` refuse to run on an outpost and name the folder. Run the commands from a shell at the home. Files edited, created or deleted on one machine reach the
-others. Knowledge notes and seed artifacts stay ordinary files you can read and
-edit with native tools. Append journal entries with
+Pairing an outpost starts two-way sync of every Notebook folder the home's
+profiles use. A profile uses its `notebook.profile_root`, or the shared
+`notebook.root` when that is blank. Profiles on the same folder sync it once.
+The outpost keeps a copy of each folder at `~/attn-notebook-<name>-<key>`.
+`<name>` is the folder's name at the home, lowercased, and `<key>` is 8 hex
+digits derived from the folder's path at the home. A non-default instance puts
+its name after `attn-notebook`. An agent on an outpost works in the copy of its
+profile's folder, and `attn settings get notebook.root.effective` inside that
+agent prints the copy. Files edited, created or deleted on either machine reach
+the other. Knowledge notes and seed artifacts stay ordinary files you can read
+and edit with native tools. Append journal entries with
 `attn journal append --entry '<text>'`, so concurrent appends share the home's
 writer and date.
 
-Before the first sync, Attn moves a non-empty outpost folder it has no index for
-to `<root>.before-sync-<date>`. The outpost row names that saved folder. The
-home supplies the initial contents. Later connections resume from the existing
-index. Attn refuses to change `notebook.root` while paired sync is active, and
-names the peers. Turn Outposts off at the home before changing the home's root.
-On an outpost, run `attn enrollment leave` before changing the outpost's root.
+Before a folder's first sync, Attn moves a non-empty outpost copy it has no
+index for to `<copy>.before-sync-<date>`. The outpost row names that saved
+folder. The home supplies the initial contents. Later connections resume from
+the existing index.
 
-**Settings → Outposts** shows first sync, syncing with the bytes and items left,
-in sync, or the error and its reason. Byte and item counts appear once the
-remaining work is known. The row also shows a count of conflict copies.
+You can change a profile's folder while paired. The new folder syncs into its
+own copy. The old copy keeps its files and stops syncing. If you later point the
+profile back to the old folder, Attn moves the old copy aside and syncs it fresh,
+as on a first sync. While an outpost is paired, Attn refuses a profile folder
+inside another profile's folder, and it refuses to pair an outpost while such
+folders exist. The refusal names both profiles and both folders.
+
+**Settings → Outposts** shows one Notebook state per outpost: first sync,
+syncing with the bytes and items left, in sync, or the error and its reason. The
+row shows the state of the folder furthest from in sync, with an error first.
+The counts add up every folder, and each error starts with its folder's path at
+the home. Byte and item counts appear
+once the remaining work is known. The row also shows a count of conflict copies.
 Sync keeps both versions of concurrent edits, as the original and a
-`*.sync-conflict-*` copy. Attn sends one notification at
-the home for each new conflict copy. Compare the files, merge the content you need, and remove the copy to
+`*.sync-conflict-*` copy. Attn sends one notification at the home for each new
+conflict copy. Compare the files, merge the content you need, and remove the copy to
 clear the count. Attn moves a file that a sync deletes or
 replaces on the receiving machine to `<data-dir>/notebook-trash/` and keeps it
 there for 30 days. For each path, the trash holds only the latest received
@@ -252,8 +266,8 @@ The sync engine runs at the home while Outposts is on and a paired outpost remai
 On an outpost it runs while enrolled, including while disconnected. Turning the
 home switch off stops the home's engine and keeps the home's index. Removing an
 outpost drops that device from the home. `attn enrollment leave` stops the
-outpost's engine and drops the outpost's index, and keeps the outpost's Notebook
-files. At the next pairing, Attn treats that folder as a first sync again. On the
+outpost's engine and drops the outpost's index, and keeps the files of each
+copy. At the next pairing, Attn treats each copy as a first sync again. On the
 outpost, `attn settings list --all` includes `notebook_sync_state` and
 `notebook_sync_last_error`.
 

@@ -7467,6 +7467,14 @@ type NotebookEntry struct {
 	Updated *string `json:"updated,omitempty,omitzero"`
 }
 
+type NotebookFoldersMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Folders corresponds to the JSON schema field "folders".
+	Folders []NotebookSyncFolder `json:"folders"`
+}
+
 type NotebookGuideMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7551,6 +7559,20 @@ type NotebookReadResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type NotebookSyncFolder struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Profiles corresponds to the JSON schema field "profiles".
+	Profiles []string `json:"profiles"`
 }
 
 type NotebookSyncReportMessage struct {
@@ -9891,6 +9913,9 @@ type SeedArtifactTransferHereMessage struct {
 
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
+
+	// NotebookFolder corresponds to the JSON schema field "notebook_folder".
+	NotebookFolder *string `json:"notebook_folder,omitempty,omitzero"`
 
 	// Transfer corresponds to the JSON schema field "transfer".
 	Transfer SeedArtifactTransferMessage `json:"transfer"`

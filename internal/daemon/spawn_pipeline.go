@@ -143,11 +143,6 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		if _, _, err = d.outpostConn(row.ID); err != nil {
 			return nil, &spawnRejection{err: err}
 		}
-		if !isShell {
-			if err := d.NotebookReady(row.ID); err != nil {
-				return nil, &spawnRejection{err: err}
-			}
-		}
 	}
 	if !isShell && !hasPluginDriver {
 		explicit := strings.TrimSpace(protocol.Deref(msg.Executable))
@@ -186,6 +181,11 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	profile, err := d.liveLaunchProfile(msg.ProfileID)
 	if err != nil {
 		return nil, &spawnRejection{err: err}
+	}
+	if host := protocol.Deref(msg.Host); host != "" && !isShell {
+		if err := d.NotebookReady(host, profile.ID); err != nil {
+			return nil, &spawnRejection{err: err}
+		}
 	}
 	addsTerminal := d.addsTerminal(msg, policy)
 	placement := requestedLaunchPlacement(msg.Placement)

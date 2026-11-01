@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -66,10 +67,38 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 }
 
 func (d *Daemon) notebookRoot(profileID string) (string, error) {
-	if own := d.profileNotebookRoot(profileID); own != "" {
+	if status := d.enrollmentStatus(); status.IsOutpost() {
+		return d.outpostNotebookRoot(status, profileID)
+	}
+	return homeNotebookRoot(d.profileNotebookRoot(profileID), d.machineSetting(SettingNotebookRoot))
+}
+
+func homeNotebookRoot(own, shared string) (string, error) {
+	if own = strings.TrimSpace(own); own != "" {
 		return expandProfileNotebookRoot(own)
 	}
-	return d.sharedNotebookRoot()
+	if root := config.HarnessNotebookRoot(); root != "" {
+		return root, nil
+	}
+	if shared = strings.TrimSpace(shared); shared != "" {
+		return expandNotebookRoot(shared)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return notebook.DefaultRoot(home, config.Instance()), nil
+}
+
+func outpostNotebookBase() (string, error) {
+	if root := config.HarnessNotebookRoot(); root != "" {
+		return root, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return notebook.DefaultRoot(home, config.Instance()), nil
 }
 
 func expandProfileNotebookRoot(configured string) (string, error) {
@@ -90,20 +119,6 @@ func (d *Daemon) profileNotebookRoot(profileID string) string {
 	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookProfileRoot)))
 }
 
-func (d *Daemon) sharedNotebookRoot() (string, error) {
-	if root := config.HarnessNotebookRoot(); root != "" {
-		return root, nil
-	}
-	if configured := strings.TrimSpace(d.machineSetting(SettingNotebookRoot)); configured != "" {
-		return expandNotebookRoot(configured)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return notebook.DefaultRoot(home, config.Instance()), nil
-}
-
 func expandNotebookRoot(configured string) (string, error) {
 	if strings.HasPrefix(configured, "~/") {
 		home, err := os.UserHomeDir()
@@ -117,21 +132,23 @@ func expandNotebookRoot(configured string) (string, error) {
 
 func (d *Daemon) notebookRoots() map[string]struct{} {
 	roots := map[string]struct{}{}
-	if shared, err := d.sharedNotebookRoot(); err == nil {
-		roots[shared] = struct{}{}
-	}
-	if !d.enrollmentStatus().IsHome() {
+	if d.enrollmentStatus().IsOutpost() {
+		d.notebookSync.mu.Lock()
+		for _, entry := range d.notebookSync.disk.Folders {
+			roots[entry.Root] = struct{}{}
+		}
+		d.notebookSync.mu.Unlock()
 		return roots
 	}
-	own, err := d.store.LiveProfileSettingValues(string(SettingNotebookProfileRoot))
+	if root, err := d.notebookRoot(""); err == nil {
+		roots[root] = struct{}{}
+	}
+	notebooks, err := d.profileNotebooks(d.notebookRoot)
 	if err != nil {
 		d.logf("notebook roots: %v", err)
-		return roots
 	}
-	for _, configured := range own {
-		if root, err := expandProfileNotebookRoot(strings.TrimSpace(configured)); err == nil {
-			roots[root] = struct{}{}
-		}
+	for _, nb := range notebooks {
+		roots[nb.path] = struct{}{}
 	}
 	return roots
 }
@@ -162,8 +179,11 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 }
 
 func (d *Daemon) sessionNotebookProfile(sessionID protocol.SessionID) (string, error) {
-	if !d.enrollmentStatus().IsHome() {
-		return "", nil
+	if d.enrollmentStatus().IsOutpost() {
+		if protocol.TrimID(sessionID) == "" {
+			return "", errors.New("on an outpost the Notebook belongs to the calling session's profile; run this inside an attn session")
+		}
+		return d.store.SessionProfileID(protocol.TrimID(sessionID))
 	}
 	profile, err := d.callerProfile(sessionID)
 	if err != nil {

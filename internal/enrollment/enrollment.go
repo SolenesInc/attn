@@ -38,6 +38,10 @@ func (s Status) IsHome() bool {
 	return s.DaemonID != "" && s.DaemonID == s.HomeDaemonID
 }
 
+func (s Status) IsOutpost() bool {
+	return s.HomeDaemonID != "" && !s.IsHome()
+}
+
 // CheckHome refuses homeID when this daemon is enrolled to another home.
 func (s Status) CheckHome(homeID string) error {
 	if s.HomeDaemonID == "" || s.HomeDaemonID == s.DaemonID || s.HomeDaemonID == homeID {

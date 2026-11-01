@@ -387,12 +387,18 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 	syncing := home.PauseAt(pausepoint.NotebookStreamOpen)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
+	outpost.Start()
+	home.Start()
+	own := home.Path("profile-notebook")
+	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", own))
+	pair.Connect()
 	syncing.Await()
 	withHost := func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) }
 	early, _, _ := home.RequestSpawn(pair.App, fakeagent.Claude, outpost.Path("agent"), withHost)
-	if early.Success || !strings.Contains(protocol.Deref(early.Error), "first sync") {
-		t.Fatalf("first sync gate: success=%v error=%q", early.Success, protocol.Deref(early.Error))
+	for _, want := range []string{"outpost's first sync of the Notebook folder " + own + " has not completed", "remaining work has not been reported yet"} {
+		if early.Success || !strings.Contains(protocol.Deref(early.Error), want) {
+			t.Fatalf("first sync gate: success=%v error=%q, want %q", early.Success, protocol.Deref(early.Error), want)
+		}
 	}
 	t.Logf("first sync gate: %s", protocol.Deref(early.Error))
 	for _, limit := range []struct {
@@ -417,7 +423,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "chief runs only at the home") {
 		t.Fatalf("chief toggle: %+v", refused)
 	}
-	t.Log("chief/crew and plugin launch limits named; chief toggle refused; first-sync completion permits Claude")
+	t.Log("chief/crew and plugin launch limits named; chief toggle refused; the profile folder's first-sync completion permits Claude")
 }
 
 func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {

@@ -74,6 +74,7 @@ const (
 	CmdPlantVentSeed                 = "plant_vent_seed"
 	CmdUnplantVentSeed               = "unplant_vent_seed"
 	CmdNotebookSyncReport            = "notebook_sync_report"
+	CmdNotebookFolders               = "notebook_folders"
 	CmdSeedArtifactTransferHere      = "seed_artifact_transfer_here"
 	CmdNotebookList                  = "notebook_list"
 	CmdNotebookRead                  = "notebook_read"

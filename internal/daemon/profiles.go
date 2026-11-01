@@ -372,6 +372,7 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 			d.ensureChiefs()
 		}
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
+			d.notebookFoldersChanged()
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
 	})
@@ -415,7 +416,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		})
 		return profileActionOutcome{arranges: true, publish: func() {
-			d.pruneRootWatchers()
+			d.notebookFoldersChanged()
 			d.announceClosedAsks(closedAsks)
 			d.publishFact(FactProfileDeleted, deleted.ID, nil)
 		}}, nil

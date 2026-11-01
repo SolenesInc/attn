@@ -33,6 +33,9 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if err := validateOutpostDestination(address); err != nil {
 			return err
 		}
+		if err := d.refuseNestedNotebooksAtHome(); err != nil {
+			return err
+		}
 		row, err := d.store.AddOutpost(name, address)
 		if err != nil {
 			return fmt.Errorf("add outpost %s (%s): %w", name, address, err)
