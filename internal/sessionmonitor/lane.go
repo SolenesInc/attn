@@ -36,9 +36,16 @@ const (
 	originMaintenance
 )
 
+type Maintenance string
+
+const (
+	InboxRing     Maintenance = "inbox-ring"
+	CrewHeartbeat Maintenance = "crew-heartbeat"
+)
+
 type inputOrigin struct {
 	kind   originKind
-	source string
+	source Maintenance
 }
 
 func (o inputOrigin) voice() harness.Voice {
@@ -73,11 +80,11 @@ type Delivery struct {
 	BypassInitialGate bool
 }
 
-func MaintenanceInput(domain string, key string, text string, placement Placement) Delivery {
+func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
 	return Delivery{
-		ID:        NewAttemptID(domain, key),
+		ID:        NewAttemptID(string(domain), key),
 		Text:      text,
-		origin:    inputOrigin{kind: originMaintenance, source: strings.TrimSpace(domain)},
+		origin:    inputOrigin{kind: originMaintenance, source: domain},
 		Placement: placement,
 	}
 }
@@ -113,11 +120,11 @@ type Attempt struct {
 type runState struct {
 	ref          runRef
 	credited     bool
-	notification bool
+	notification Maintenance
 }
 
 func (r *runState) startedByNotification() bool {
-	return r.notification && !r.credited
+	return r.notification != "" && !r.credited
 }
 
 type lane struct {
@@ -128,7 +135,7 @@ type lane struct {
 	placing                  bool
 	placed                   map[string]Attempt
 	creditNextRun            bool
-	notifyNextRun            bool
+	notifyNextRun            Maintenance
 	stoppedAfterNotification bool
 	epoch                    uint64
 	userSubmit               bool
@@ -286,7 +293,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Atte
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.
 func (l *lane) tookLocked(delivery Delivery) runRef {
 	if delivery.origin.kind == originMaintenance && l.run == nil {
-		l.notifyNextRun = true
+		l.notifyNextRun = delivery.origin.source
 	}
 	if delivery.origin.kind != originUserConversation {
 		return runRef{}
@@ -357,7 +364,7 @@ func (l *lane) ensureRunLocked() *runState {
 	}
 	l.epoch++
 	l.run = &runState{ref: runRef{epoch: l.epoch}, credited: l.claimNextLocked(), notification: l.notifyNextRun}
-	l.notifyNextRun = false
+	l.notifyNextRun = ""
 	l.stoppedAfterNotification = false
 	return l.run
 }

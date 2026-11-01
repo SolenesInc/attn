@@ -254,7 +254,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		if !d.crewMemo().heartbeatDue(sessionID, generation, now, d.crewHeartbeatLead()) {
 			return
 		}
-		delivery := sessionmonitor.MaintenanceInput("crew-heartbeat", string(sessionID)+"/"+generation, crewHeartbeatPrompt, sessionmonitor.WhenPromptReady)
+		delivery := sessionmonitor.MaintenanceInput(sessionmonitor.CrewHeartbeat, string(sessionID)+"/"+generation, crewHeartbeatPrompt, sessionmonitor.WhenPromptReady)
 		attempt := d.placeDelivery(context.Background(), sessionID, delivery)
 		if attempt.Stage != sessionmonitor.Placed {
 			if after, retry := sessionmonitor.RetryDelay(attempt.Err); retry {

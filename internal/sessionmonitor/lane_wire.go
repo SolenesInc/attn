@@ -14,13 +14,13 @@ func (delivery Delivery) Message(session protocol.SessionID) protocol.SessionPla
 	if delivery.origin.kind == originUserConversation {
 		origin = protocol.SessionPlaceOriginUserConversation
 	}
-	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(delivery.origin.source), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer)}
+	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer)}
 }
 
 func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
 	domain, key, _ := strings.Cut(msg.DeliveryID, "/")
 	phases := map[protocol.SessionPlacePhase]Placement{protocol.SessionPlacePhasePromptReady: WhenPromptReady, protocol.SessionPlacePhaseWorkingOrPromptReady: WhenWorkingOrPromptReady, protocol.SessionPlacePhaseTurnBoundary: AtTurnBoundary}
-	origin := inputOrigin{kind: originMaintenance, source: protocol.Deref(msg.Source)}
+	origin := inputOrigin{kind: originMaintenance, source: Maintenance(protocol.Deref(msg.Source))}
 	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
 		origin.kind = originUserConversation
 	}

@@ -290,7 +290,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if paste.notified {
 			when = sessionmonitor.WhenPromptReady
 		}
-		input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, when)
+		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
 		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil}
 		state.pending = pending
