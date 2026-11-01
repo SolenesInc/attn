@@ -70,27 +70,17 @@ func (d *Daemon) notebookRoot(profileID string) (string, error) {
 	if status := d.enrollmentStatus(); status.IsOutpost() {
 		return d.outpostNotebookRoot(status, profileID)
 	}
-	return homeNotebookRoot(d.profileNotebookRoot(profileID), d.machineSetting(SettingNotebookRoot))
+	return homeNotebookRoot(d.profileNotebookRoot(profileID))
 }
 
-func homeNotebookRoot(own, shared string) (string, error) {
-	if own = strings.TrimSpace(own); own != "" {
-		return expandProfileNotebookRoot(own)
+func homeNotebookRoot(configured string) (string, error) {
+	if configured = strings.TrimSpace(configured); configured != "" {
+		return expandProfileNotebookRoot(configured)
 	}
-	if root := config.HarnessNotebookRoot(); root != "" {
-		return root, nil
-	}
-	if shared = strings.TrimSpace(shared); shared != "" {
-		return expandNotebookRoot(shared)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return notebook.DefaultRoot(home, config.Instance()), nil
+	return defaultNotebookRoot()
 }
 
-func outpostNotebookBase() (string, error) {
+func defaultNotebookRoot() (string, error) {
 	if root := config.HarnessNotebookRoot(); root != "" {
 		return root, nil
 	}
@@ -106,7 +96,7 @@ func expandProfileNotebookRoot(configured string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := config.RequireWithinHarness(string(SettingNotebookProfileRoot), root); err != nil {
+	if err := config.RequireWithinHarness(string(SettingNotebookRoot), root); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -116,7 +106,7 @@ func (d *Daemon) profileNotebookRoot(profileID string) string {
 	if profileID == "" || !d.enrollmentStatus().IsHome() {
 		return ""
 	}
-	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookProfileRoot)))
+	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookRoot)))
 }
 
 func expandNotebookRoot(configured string) (string, error) {
@@ -139,9 +129,6 @@ func (d *Daemon) notebookRoots() map[string]struct{} {
 		}
 		d.notebookSync.mu.Unlock()
 		return roots
-	}
-	if root, err := d.notebookRoot(""); err == nil {
-		roots[root] = struct{}{}
 	}
 	notebooks, err := d.profileNotebooks(d.notebookRoot)
 	if err != nil {

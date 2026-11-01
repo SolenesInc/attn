@@ -85,7 +85,7 @@ func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMe
 	if err := d.store.SetProfileSetting(profile.ID, msg.Key, strings.TrimSpace(msg.Value)); err != nil {
 		return nil, err
 	}
-	if msg.Key == string(SettingNotebookProfileRoot) {
+	if msg.Key == string(SettingNotebookRoot) {
 		d.notebookFoldersChanged()
 	}
 	d.publishSettingsFact(FactSettingChanged, msg.Key)
@@ -97,10 +97,6 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(settingOutpostsEnabled) {
 		d.configureOutposts()
 	}
-	if key == string(SettingNotebookRoot) {
-		d.notebookFoldersChanged()
-	}
-
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 		d.ensureAvailableAgentSkills()
@@ -195,7 +191,7 @@ func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID stri
 		settings[k] = v
 	}
 	if own := d.profileNotebookRoot(profileID); own != "" {
-		settings[string(SettingNotebookProfileRoot)] = own
+		settings[string(SettingNotebookRoot)] = own
 	}
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[string(SettingNotebookRootEffective)] = root

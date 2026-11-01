@@ -68,8 +68,7 @@ act as my thinking partner.
 ```
 
 To keep the Notebook in the same folder, open **Settings → Notebook Folder**
-and point **This profile** at `chief-of-staff/notebook`, or point **Shared** at that
-folder to use it for every profile without a folder of its own. Add
+and point **Notebook folder** at `chief-of-staff/notebook`. Add
 `notebook/.attn/` to `.gitignore` if the folder is a repository, because
 `notebook/.attn/` holds machine state. Changing a
 Notebook folder doesn't move existing notes.

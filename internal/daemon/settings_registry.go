@@ -71,7 +71,6 @@ const (
 	SettingDefaultEffortPrefix           = settingkeys.SettingDefaultEffortPrefix
 	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
 	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
-	SettingNotebookProfileRoot           = settingkeys.SettingNotebookProfileRoot
 	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
 	SettingActivityConfig                = settingkeys.SettingActivityConfig
 	SettingActivityIntervals             = settingkeys.SettingActivityIntervals
@@ -268,10 +267,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingCrewWakeLimitWindowSeconds), scope: daemonScope, description: "Crew automatic wake accounting window in seconds.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
-	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Shared folder for the Notebook, journal and seed artifacts, used by every profile without notebook.profile_root. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
-		return validateNotebookRoot(key, value)
-	}},
-	{key: string(SettingNotebookProfileRoot), scope: profileScope, description: "This profile's Notebook folder, used instead of notebook.root. Absolute or ~/ path outside attn's data folder. Changing it repoints without moving files. Empty uses notebook.root.", validate: func(d *Daemon, key, value string) error {
+	{key: string(SettingNotebookRoot), scope: profileScope, description: "This profile's folder for the Notebook, journal and seed artifacts, synced with outposts. Absolute or ~/ path outside attn's data folder. Changing it repoints without moving files. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
 		if config.HarnessNotebookRoot() != "" && strings.TrimSpace(value) != "" {
 			root, err := expandNotebookRoot(strings.TrimSpace(value))
 			if err != nil {

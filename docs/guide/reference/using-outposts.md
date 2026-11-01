@@ -52,11 +52,13 @@ outpost. Each outpost keeps a read-only copy and reads it locally, including
 while the home is unreachable. `attn settings set` on an outpost changes a home
 setting at the home. The copy updates when the bridge delivers the change.
 `attn settings list --all` marks the outpost's home settings read-only.
+Profile settings, such as a profile's Notebook folder `notebook.root`, also live
+at the home.
 
 Machine settings describe one computer: harness executables, the terminal
-backend and shared terminal host, worktree sweep, analytics recording,
-`notebook.root` and `outposts_enabled`. Changing a machine setting on an
-outpost changes only that outpost. Computed machine values, such as harness
+backend and shared terminal host, worktree sweep, analytics recording and
+`outposts_enabled`. Changing a machine setting on an outpost changes only that
+outpost. Computed machine values, such as harness
 availability and connection status, also describe the computer where you read
 them.
 
@@ -205,8 +207,8 @@ the reason. A start on a stalled outpost waits.
 ## Notebook sync
 
 Pairing an outpost starts two-way sync of every Notebook folder the home's
-profiles use. A profile uses its `notebook.profile_root`, or the shared
-`notebook.root` when that is blank. Profiles on the same folder sync it once.
+profiles use. A profile uses its `notebook.root`, or `~/attn-notebook` when
+that is blank. Profiles on the same folder sync it once.
 The outpost keeps a copy of each folder at `~/attn-notebook-<name>-<key>`.
 `<name>` is the folder's name at the home, lowercased, and `<key>` is 8 hex
 digits derived from the folder's path at the home. A non-default instance puts

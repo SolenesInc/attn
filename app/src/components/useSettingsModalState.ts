@@ -132,7 +132,6 @@ export function useSettingsModalState({
 
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
-  const actualNotebookProfileRoot = settings['notebook.profile_root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
   const {
     tailscaleEnabled,
@@ -279,11 +278,6 @@ export function useSettingsModalState({
     actual: actualNotebookRoot,
     settingKey: 'notebook.root',
   });
-  const notebookProfileRootDraft = useSettingDraft({
-    ...draftDeps,
-    actual: actualNotebookProfileRoot,
-    settingKey: 'notebook.profile_root',
-  });
   const editorDraft = useSettingDraft({
     ...draftDeps,
     actual: actualEditorExecutable,
@@ -405,21 +399,17 @@ export function useSettingsModalState({
   }, [onSetSetting, openSentFilesEnabled]);
 
   const { set: setNotebookRoot } = notebookRootDraft;
-  const { set: setNotebookProfileRoot } = notebookProfileRootDraft;
-  const handleBrowseNotebookRoot = useCallback(
-    async (settingKey: 'notebook.root' | 'notebook.profile_root') => {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Notebook Folder',
-      });
-      if (selected && typeof selected === 'string') {
-        (settingKey === 'notebook.root' ? setNotebookRoot : setNotebookProfileRoot)(selected);
-        onSetSetting(settingKey, selected);
-      }
-    },
-    [onSetSetting, setNotebookRoot, setNotebookProfileRoot],
-  );
+  const handleBrowseNotebookRoot = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: 'Select Notebook Folder',
+    });
+    if (selected && typeof selected === 'string') {
+      setNotebookRoot(selected);
+      onSetSetting('notebook.root', selected);
+    }
+  }, [onSetSetting, setNotebookRoot]);
 
   const handleToggleAutoApprove = useCallback(() => {
     onSetSetting('auto_approve_enabled', autoApproveEnabled ? 'false' : 'true');
@@ -671,7 +661,6 @@ export function useSettingsModalState({
     handleToggleWorktreeSweep,
     worktreeSweepEnabled,
     notebookRootDraft,
-    notebookProfileRootDraft,
     effectiveNotebookRoot,
     handleBrowseNotebookRoot,
     handleToggleOpenSentFiles,

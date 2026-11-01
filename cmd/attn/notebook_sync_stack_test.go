@@ -250,7 +250,7 @@ func TestAnOutpostWorksInItsProfilesOwnNotebookFolder(t *testing.T) {
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	own := filepath.Join(home.Dir, "Profile Notebook")
 	writeFileAt(t, filepath.Join(own, "from-home.md"), "written at the home")
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", own), "notebook.profile_root = "+own)
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", own), "notebook.root = "+own)
 	pair.App = home.App()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	seed := plant(t, home, "Profile notebook", "-m", "Its files sync with the outpost")
@@ -295,7 +295,7 @@ func TestChangingANotebookFolderWhilePairedStartsAFreshSyncedFolder(t *testing.T
 
 	second := filepath.Join(home.Dir, "second")
 	writeFileAt(t, filepath.Join(second, "second.md"), "in the second folder")
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", second))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", second))
 	pair.App = home.App()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	moved := reportedCopy(t, outpost, seed.ID)
@@ -319,7 +319,7 @@ func TestChangingANotebookFolderWhilePairedStartsAFreshSyncedFolder(t *testing.T
 	}
 	t.Logf("changed folder synced into %s; old copy %s kept its files and stopped syncing", moved, first)
 
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", ""))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", ""))
 	pair.App = home.App()
 	state := awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	if back := reportedCopy(t, outpost, seed.ID); back != first {
@@ -359,7 +359,7 @@ func TestNestedNotebookFoldersAreRefusedWhilePaired(t *testing.T) {
 		t.Fatalf("create Side: %+v", created)
 	}
 	inner := notebookPath(home, "inner")
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", inner, "--profile", "Side"))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
 	pair.SSH.Route(pair.Destination, outpost)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
@@ -371,14 +371,14 @@ func TestNestedNotebookFoldersAreRefusedWhilePaired(t *testing.T) {
 	}
 	t.Logf("pairing refused: %s", protocol.Deref(refused.Error))
 
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", notebookPath(home), "--profile", "Side"))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", notebookPath(home), "--profile", "Side"))
 	pair.Connect()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	copies, err := filepath.Glob(notebookPath(outpost) + "-*-*")
 	if err != nil || len(copies) != 1 {
 		t.Fatalf("two profiles on one folder made copies %v (%v), want one", copies, err)
 	}
-	nested := home.Attn("settings", "set", "notebook.profile_root", inner, "--profile", "Side")
+	nested := home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side")
 	requireFailure(t, nested, "settings: ", "Side", inner, "Default", notebookPath(home))
 	t.Logf("an equal folder synced once into %s; nesting while paired refused: %s", copies[0], strings.TrimSpace(nested.Stderr))
 }

@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -278,7 +279,7 @@ func TestAnEditorWatchingAnotherProfilesNotebookKeepsHearingItAfterThatProfileMo
 	setup := w.App()
 	owner, browsing := createProfile(setup, "Owner"), createProfile(setup, "Browsing")
 	ownerApp, browsingApp := w.AppOn(owner.ID), pickerAppOn(w, browsing.ID)
-	if saved := notebookSetting(ownerApp, "notebook.profile_root", folder); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(ownerApp, "notebook.root", folder); !protocol.Deref(saved.Success) {
 		t.Fatalf("setting Owner's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(ownerApp, folder)
@@ -288,7 +289,7 @@ func TestAnEditorWatchingAnotherProfilesNotebookKeepsHearingItAfterThatProfileMo
 		return m.Root == folder && m.Origin == "external" && slices.Contains(m.Paths, "while-owned.txt")
 	})
 
-	if _, err := w.Client().SetSetting(client.SettingsCaller{Profile: owner.ID}, "notebook.profile_root", ""); err != nil {
+	if _, err := w.Client().SetSetting(client.SettingsCaller{Profile: owner.ID}, "notebook.root", ""); err != nil {
 		t.Fatalf("clearing Owner's Notebook folder from outside attn: %v", err)
 	}
 	notebookEffectiveRoot(ownerApp, fsNotebookRoot(t, w))
@@ -305,7 +306,7 @@ func TestAFolderAnEditorWatchesStillTellsItsOwnSavesApartWhenItBecomesANotebook(
 	ownerApp, browsingApp := w.AppOn(owner.ID), pickerAppOn(w, browsing.ID)
 	fsMustWatch(t, browsingApp, folder)
 
-	if saved := notebookSetting(ownerApp, "notebook.profile_root", folder); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(ownerApp, "notebook.root", folder); !protocol.Deref(saved.Success) {
 		t.Fatalf("setting Owner's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(ownerApp, folder)
@@ -318,5 +319,31 @@ func TestAFolderAnEditorWatchesStillTellsItsOwnSavesApartWhenItBecomesANotebook(
 		return m.Root == folder && m.Origin == "external" && (slices.Contains(m.Paths, "own.txt") || slices.Contains(m.Paths, "sentinel.txt"))
 	}); slices.Contains(external.Paths, "own.txt") || !slices.Contains(external.Paths, "sentinel.txt") {
 		t.Fatalf("the first external change was %v, want the outside edit without attn's own write", external.Paths)
+	}
+}
+
+func TestANotebookViewHearsItsProfilesNewFolderAndNotTheOldOne(t *testing.T) {
+	w, folder := newFsWorldWithAFolderBesideIt(t)
+	app := w.App()
+	previous := fsNotebookRoot(t, w)
+	notebookAskList(app, "")
+	if saved := notebookSetting(app, "notebook.root", folder); !protocol.Deref(saved.Success) {
+		t.Fatalf("repointing the Notebook folder: %s", protocol.Deref(saved.Error))
+	}
+	notebookEffectiveRoot(app, folder)
+	if listed := notebookAskList(app, ""); len(listed.Entries) != 0 {
+		t.Fatalf("after repointing to an empty folder the Notebook lists %v", notebookEntryPaths(listed.Entries))
+	}
+
+	fsWriteFile(t, filepath.Join(previous, "old.md"), []byte("# old\n"))
+	fsWriteFile(t, filepath.Join(folder, "new.md"), []byte("# new\n"))
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		return m.Root == folder && m.Origin == "external" && slices.Contains(m.Paths, "new.md")
+	})
+	for _, event := range app.Log() {
+		var changed protocol.FsChangedMessage
+		if json.Unmarshal(event, &changed) == nil && changed.Event == protocol.EventFsChanged && slices.Contains(changed.Paths, "old.md") {
+			t.Fatalf("an edit in the folder the profile left was still reported: %+v", changed)
+		}
 	}
 }

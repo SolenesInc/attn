@@ -390,7 +390,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 	outpost.Start()
 	home.Start()
 	own := home.Path("profile-notebook")
-	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", own))
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", own))
 	pair.Connect()
 	syncing.Await()
 	withHost := func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) }

@@ -199,45 +199,37 @@ describe('SettingsModal', () => {
 });
 
 describe('SettingsModal notebook folder', () => {
-  it('shows the profile folder, the shared folder and the folder this profile resolves to', async () => {
+  it('shows one folder field for the profile and the folder it resolves to', async () => {
     await openSection('desktop', {
-      settings: {
-        'notebook.root': '~/my-notes',
-        'notebook.profile_root': '~/work-notes',
-        'notebook.root.effective': '/Users/me/work-notes',
-      },
+      settings: { 'notebook.root': '~/work-notes', 'notebook.root.effective': '/Users/me/work-notes' },
     });
 
-    expect(screen.getByTestId('settings-notebook-profile-root-input')).toHaveValue('~/work-notes');
-    expect(screen.getByTestId('settings-notebook-root-input')).toHaveValue('~/my-notes');
+    expect(screen.getAllByRole('textbox', { name: /notebook folder/i })).toHaveLength(1);
+    expect(screen.getByTestId('settings-notebook-root-input')).toHaveValue('~/work-notes');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('This profile uses: /Users/me/work-notes');
   });
 
-  it('leaves the profile folder empty when the profile uses the shared folder', async () => {
+  it('leaves the field empty when the profile uses the default folder', async () => {
     await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
 
-    const input = screen.getByTestId('settings-notebook-profile-root-input');
+    const input = screen.getByTestId('settings-notebook-root-input');
     expect(input).toHaveValue('');
-    expect(input).toHaveAttribute('placeholder', 'Shared folder');
+    expect(input).toHaveAttribute('placeholder', '~/attn-notebook');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('This profile uses: /Users/me/attn-notebook');
   });
 
-  it('persists each folder on blur and an empty value to fall back', async () => {
-    const daemon = await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
-    const profileInput = screen.getByTestId('settings-notebook-profile-root-input');
-    const sharedInput = screen.getByTestId('settings-notebook-root-input');
+  it('persists the folder on blur and an empty value to use the default', async () => {
+    const daemon = await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
+    const input = screen.getByTestId('settings-notebook-root-input');
 
-    fireEvent.change(profileInput, { target: { value: '/Users/me/work' } });
-    await gesture(daemon, () => fireEvent.blur(profileInput));
-    fireEvent.change(profileInput, { target: { value: '' } });
-    await gesture(daemon, () => fireEvent.blur(profileInput));
-    fireEvent.change(sharedInput, { target: { value: '/Users/me/elsewhere' } });
-    await gesture(daemon, () => fireEvent.blur(sharedInput));
+    fireEvent.change(input, { target: { value: '/Users/me/work' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    fireEvent.change(input, { target: { value: '' } });
+    await gesture(daemon, () => fireEvent.blur(input));
 
     expect(savedSettings(daemon)).toEqual([
-      ['notebook.profile_root', '/Users/me/work'],
-      ['notebook.profile_root', ''],
-      ['notebook.root', '/Users/me/elsewhere'],
+      ['notebook.root', '/Users/me/work'],
+      ['notebook.root', ''],
     ]);
   });
 });

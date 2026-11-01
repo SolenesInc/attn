@@ -11,10 +11,10 @@ There is no `attn notebook` CLI.
 
 Your operating guidance gives you the Notebook root, and the chief of staff
 gets that guidance at launch. `attn settings get notebook.root.effective`
-prints the root. All profiles share
-one folder, `~/attn-notebook` by default. A profile can set its own folder with
-`notebook.profile_root`, and a non-default instance adds its name to the folder
-name. Paths below are relative to `<root>`.
+prints the root. Each profile sets its folder with `notebook.root`. A blank
+value uses `~/attn-notebook`, and a non-default instance adds its name to that
+folder name. Profiles on the same folder share its files. Paths below are
+relative to `<root>`.
 
 On an outpost, `notebook.root.effective` is that machine's copy of your
 profile's Notebook folder, and the copy syncs with the home. `attn seed show

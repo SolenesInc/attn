@@ -92,29 +92,22 @@ func (d *Daemon) refuseNestedNotebooksAtHome() error {
 }
 
 func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) error {
-	if msg.Key != string(SettingNotebookRoot) && msg.Key != string(SettingNotebookProfileRoot) || !d.enrollmentStatus().IsHome() {
+	if msg.Key != string(SettingNotebookRoot) || !d.enrollmentStatus().IsHome() {
 		return nil
 	}
 	rows, err := d.store.ListOutposts()
 	if err != nil || len(rows) == 0 {
 		return err
 	}
-	shared, target := d.machineSetting(SettingNotebookRoot), ""
-	if msg.Key == string(SettingNotebookRoot) {
-		shared = msg.Value
-	} else {
-		profile, err := d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
-		if err != nil {
-			return err
-		}
-		target = profile.ID
+	target, err := d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
+	if err != nil {
+		return err
 	}
 	notebooks, err := d.profileNotebooks(func(profileID string) (string, error) {
-		own := d.profileNotebookRoot(profileID)
-		if profileID == target {
-			own = msg.Value
+		if profileID == target.ID {
+			return homeNotebookRoot(msg.Value)
 		}
-		return homeNotebookRoot(own, shared)
+		return d.notebookRoot(profileID)
 	})
 	if err != nil {
 		return err
@@ -194,7 +187,7 @@ func (d *Daemon) receiveNotebookFolders(_ context.Context, msg protocol.Notebook
 	if status.IsHome() {
 		return struct{}{}, errors.New("only the home sends the Notebook folder list")
 	}
-	base, err := outpostNotebookBase()
+	base, err := defaultNotebookRoot()
 	if err != nil {
 		return struct{}{}, err
 	}

@@ -60,9 +60,8 @@ const (
 	SettingChiefEffortPrefix             HomeSetting    = "chief_effort_"
 	SettingDefaultModelPrefix            HomeSetting    = "default_model_"
 	SettingDefaultEffortPrefix           HomeSetting    = "default_effort_"
-	SettingNotebookRoot                  MachineSetting = "notebook.root"
+	SettingNotebookRoot                  ProfileSetting = "notebook.root"
 	SettingNotebookRootEffective         MachineSetting = "notebook.root.effective"
-	SettingNotebookProfileRoot           ProfileSetting = "notebook.profile_root"
 	SettingActivityEnabled               HomeSetting    = "activity.enabled"
 	SettingActivityConfig                HomeSetting    = "activity.config"
 	SettingActivityIntervals             HomeSetting    = "activity.intervals"
@@ -104,7 +103,7 @@ func ClassOf(key string) Class {
 		}
 	}
 	switch key {
-	case string(SettingOutpostsEnabled), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRoot), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
+	case string(SettingOutpostsEnabled), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
 		return Machine
 	}
 	if strings.HasSuffix(key, "_available") || strings.Contains(key, "_cap_") || strings.HasPrefix(key, "tailscale_") && key != string(SettingTailscaleEnabled) {

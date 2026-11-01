@@ -166,7 +166,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           handleToggleWorktreeSweep={state.handleToggleWorktreeSweep}
           worktreeSweepEnabled={state.worktreeSweepEnabled}
           notebookRootDraft={state.notebookRootDraft}
-          notebookProfileRootDraft={state.notebookProfileRootDraft}
           effectiveNotebookRoot={state.effectiveNotebookRoot}
           handleBrowseNotebookRoot={state.handleBrowseNotebookRoot}
           handleToggleOpenSentFiles={state.handleToggleOpenSentFiles}
