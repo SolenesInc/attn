@@ -74,9 +74,12 @@ row or **Update outposts** in the banner. Update also retries a failed first
 install when nothing is installed yet.
 
 The home builds or downloads its matching Linux binary, sends it over ssh,
-verifies it, and reconnects. Running shells keep their processes. The old
-binary stays at `<install path>.previous`. Installation refuses if the
-outpost has `pty_shared_host_enabled` on or its database needs a newer build.
+verifies it, and reconnects. A home built from source cross-compiles the Linux
+binary, for Add as well as Update. Its first build takes about a minute; later
+builds reuse the build cache and take seconds. Running shells keep their
+processes. The old binary stays at `<install path>.previous`. Installation
+refuses if the outpost has `pty_shared_host_enabled` on or its database needs a
+newer build.
 
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row says why and offers Update.

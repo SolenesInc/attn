@@ -14,7 +14,7 @@ export function outpostIsUpdating(row: OutpostInfo): boolean {
 export function outpostUpdateText(row: OutpostInfo): string {
   if (!row.update) return '';
   return row.update.outcome || {
-    building: 'Building the Linux daemon…',
+    building: 'Building the Linux daemon… The first build takes about a minute.',
     downloading: 'Downloading the Linux daemon…',
     sending: 'Sending the update…',
     verifying: 'Verifying the update…',

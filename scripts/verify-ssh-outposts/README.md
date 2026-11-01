@@ -3,8 +3,10 @@
 Use a fresh named instance on the Mac and the same instance on a Linux outpost.
 Keep production data and production outposts out of the run.
 
-Build the Mac binary from this repository. Add installs the matching Linux
-build on the outpost, so the instance must have no files there: the harness
+Install the app's packages with `pnpm --dir app install`: the harness drives
+the home daemon through the app's real-app harness. Build the Mac binary from
+this repository. Add installs the matching Linux build on the outpost, so the
+instance must have no files there: the harness
 refuses an existing install path, instance data, Notebook folder or scratch
 folder. It removes the instances, the installed binary, and the remote scratch
 and Notebook folders when finished.

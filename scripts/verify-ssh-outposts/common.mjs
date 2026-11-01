@@ -7,6 +7,12 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 export const quote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
 
+export const { DaemonObserver } = await import('../../app/scripts/real-app-harness/daemonObserver.mjs').catch(error => {
+  if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  console.error(`The outpost checks drive the home daemon through the app's real-app harness, which needs the app's packages: ${error.message}\nRun: pnpm --dir app install`);
+  process.exit(1);
+});
+
 export async function world(o) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(o.instance) || o.instance === 'default') throw new Error('a named instance is required');
   fs.mkdirSync(o.out, { recursive: true });
@@ -15,7 +21,6 @@ export async function world(o) {
     ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'worker' };
   for (const key of Object.keys(process.env)) if (key.startsWith('ATTN_')) delete process.env[key];
   Object.assign(process.env, env);
-  const { DaemonObserver } = await import('../../app/scripts/real-app-harness/daemonObserver.mjs');
   const started = performance.now();
   const receipts = [];
   const receipt = (what, data = {}) => {
