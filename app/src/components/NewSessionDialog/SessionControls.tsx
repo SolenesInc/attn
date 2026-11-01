@@ -12,6 +12,7 @@ import {
   resolvePreferredAgent,
 } from '../../utils/agentAvailability';
 import { keyCombo } from '../../shortcuts/formatShortcut';
+import { modifierGlyphs } from '../../shortcuts/platform';
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: true,
@@ -381,16 +382,22 @@ export function SessionControls({
               </button>
             </span>
           )}
+          {compact && (
+            <span className="launcher-key-legend" aria-hidden="true">
+              {modifierGlyphs().alt}
+            </span>
+          )}
           <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
             {orderedAgentList.map((candidate) => {
               const available = isAgentAvailable(effectiveAgentAvailability, candidate);
               const shortcutNumber = agentShortcutByName.get(candidate);
-              const shortcut =
+              const key =
                 candidate === TERMINAL_AGENT
-                  ? keyCombo('alt', 'T')
+                  ? 'T'
                   : shortcutNumber && shortcutNumber <= 9
-                    ? keyCombo('alt', String(shortcutNumber))
+                    ? String(shortcutNumber)
                     : null;
+              const shortcut = key && (compact ? key : keyCombo('alt', key));
               const label = pickerAgentLabel(candidate);
               return (
                 <button

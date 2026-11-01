@@ -12,6 +12,7 @@ import {
   repoDestinationSettingKey,
 } from './NewSessionDialog/destinationMemory';
 import { generateWorktreeName } from './NewSessionDialog/worktreeNames';
+import { LauncherIcon } from './NewSessionDialog/LauncherIcon';
 import { WhereList, locationAge, type WhereRow } from './NewSessionDialog/WhereList';
 import {
   expandDisplayPath,
@@ -63,7 +64,7 @@ export function NewSessionLauncher({
   initialAgent,
   variant = 'dialog',
   active = true,
-  title = 'New session',
+  title = 'New agent',
   onClose,
   onSelect,
   onGetRecentLocations,
@@ -519,7 +520,7 @@ export function NewSessionLauncher({
       </div>
       <div className="picker-header">
         <div className="picker-title" data-testid="location-picker-title">
-          {initialAgent === 'shell' ? 'New terminal' : title}
+          {controls.agent === 'shell' ? 'New terminal' : title}
         </div>
         <PathInput
           value={where ? branch : query}
@@ -600,9 +601,9 @@ export function NewSessionLauncher({
                   void launch(row);
                 }}
               >
-                <span className="launcher-icon">
-                  {row.kind === 'recent' ? '◷' : row.repoRoot ? '⎇' : '▸'}
-                </span>
+                <LauncherIcon
+                  kind={row.kind === 'recent' ? 'recent' : row.repoRoot ? 'repo' : 'folder'}
+                />
                 <div className="picker-info">
                   <div className="picker-name">
                     {row.name}
