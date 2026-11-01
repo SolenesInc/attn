@@ -11280,6 +11280,10 @@ type Session struct {
 	// ContextWindowCap corresponds to the JSON schema field "context_window_cap".
 	ContextWindowCap *int `json:"context_window_cap,omitempty,omitzero"`
 
+	// ConversationRecorded corresponds to the JSON schema field
+	// "conversation_recorded".
+	ConversationRecorded *bool `json:"conversation_recorded,omitempty,omitzero"`
+
 	// ConversationSharedWith corresponds to the JSON schema field
 	// "conversation_shared_with".
 	ConversationSharedWith []SessionID `json:"conversation_shared_with,omitempty,omitzero"`

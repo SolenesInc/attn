@@ -237,7 +237,7 @@ async function main() {
     });
 
     await runner.step('work_in_the_automation_folder', async () => {
-      await workInFolder({ observer, binary, env: daemonEnv, cwd: fixturePath });
+      await workInFolder({ observer, cwd: fixturePath });
     });
 
     await runner.step('leg1_apply_manual_and_panel_shows_it', async () => {

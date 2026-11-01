@@ -313,7 +313,7 @@ async function main() {
       const observer = new DaemonObserver({ wsUrl: options.wsUrl });
       await observer.connect();
       try {
-        await workInFolder({ observer, binary, env: daemonEnv, cwd: fixtureRoot });
+        await workInFolder({ observer, cwd: fixtureRoot });
       } finally {
         await observer.close();
       }

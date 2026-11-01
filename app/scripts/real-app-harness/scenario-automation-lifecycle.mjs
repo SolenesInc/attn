@@ -346,7 +346,7 @@ async function main() {
 
     await runner.step('work_in_the_automation_folders', async () => {
       for (const cwd of [editFixture, deleteFixture, cleanupFixture.repo]) {
-        await workInFolder({ observer, binary, env: daemonEnv, cwd });
+        await workInFolder({ observer, cwd });
       }
     });
 

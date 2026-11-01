@@ -381,11 +381,12 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host, copiedFrom string
 	var isWorktree, priority, commandTerminal int
+	var conversationRecorded bool
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, transcript_path != ''
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -415,6 +416,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		&host,
 		&copiedFrom,
 		&commandTerminal,
+		&conversationRecorded,
 	)
 	if errors.Is(err, sql.ErrNoRows) && cached {
 		s.sessionRows.putSession(id, gen, nil, false)
@@ -432,6 +434,9 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 
 	if commandTerminal != 0 {
 		session.CommandTerminal = protocol.Ptr(true)
+	}
+	if conversationRecorded {
+		session.ConversationRecorded = protocol.Ptr(true)
 	}
 	if priority != 0 {
 		session.Priority = protocol.Ptr(true)
@@ -571,11 +576,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, transcript_path != ''
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, transcript_path != ''
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -590,6 +595,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
 		var isWorktree, priority, commandTerminal int
+		var conversationRecorded bool
 		var contextWindowCap int
 		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
@@ -621,6 +627,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&priority,
 			&host,
 			&commandTerminal,
+			&conversationRecorded,
 		)
 		if err != nil {
 			continue
@@ -635,6 +642,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 		if commandTerminal != 0 {
 			session.CommandTerminal = protocol.Ptr(true)
+		}
+		if conversationRecorded {
+			session.ConversationRecorded = protocol.Ptr(true)
 		}
 		if priority != 0 {
 			session.Priority = protocol.Ptr(true)
