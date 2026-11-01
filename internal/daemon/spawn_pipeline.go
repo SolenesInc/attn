@@ -551,7 +551,7 @@ func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
 	return d.removeTerminalRuntime(context.Background(), terminal)
 }
 
-func (d *Daemon) commitSpawn(ctx context.Context, req *spawnRequest, plan *spawnPlan) *spawnOutcome {
+func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
 	current := d.store.Get(session.ID)
 	if current == nil {
@@ -590,31 +590,42 @@ func (d *Daemon) commitSpawn(ctx context.Context, req *spawnRequest, plan *spawn
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
-	d.recordRecentLocation(ctx, protocol.Deref(msg.Host), req.cwd)
 	d.publishFact(fact, string(session.ID), nil)
 	plan.commit()
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
+	d.recordRecentLocation(protocol.Deref(msg.Host), req.cwd)
 	return &spawnOutcome{}
 }
 
-func (d *Daemon) recordRecentLocation(ctx context.Context, host, cwd string) {
+// Outpost checkout_inspect round trips took 35-89ms in the bridge receipts.
+const remoteRecentInspectTripwire = 10 * time.Second
+
+func (d *Daemon) recordRecentLocation(host, cwd string) {
 	if host == "" {
 		d.store.UpsertRecentLocation("", cwd, "")
 		return
 	}
+	d.life.Go("recordRemoteRecentLocation", func() {
+		folder, repoRoot := d.resolveRemoteRecentLocation(host, cwd)
+		d.store.UpsertRecentLocation(host, folder, repoRoot)
+		pausepoint.At(pausepoint.RemoteRecentRecorded)
+	})
+}
+
+func (d *Daemon) resolveRemoteRecentLocation(host, cwd string) (folder, repoRoot string) {
+	ctx, cancel := context.WithTimeout(context.Background(), remoteRecentInspectTripwire)
+	defer cancel()
 	inspection, err := Call[protocol.CheckoutInspection](ctx, d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
 	if err != nil {
 		d.logf("recent location %s on %s recorded unresolved: %v", cwd, host, err)
-		d.store.UpsertRecentLocation(host, cwd, "")
-		return
+		return cwd, ""
 	}
 	if inWorktree := inspection.MainRepo != inspection.RepoRoot; inWorktree {
-		d.store.UpsertRecentLocation(host, inspection.MainRepo, inspection.MainRepo)
-		return
+		return inspection.MainRepo, inspection.MainRepo
 	}
-	d.store.UpsertRecentLocation(host, inspection.Cwd, inspection.RepoRoot)
+	return inspection.Cwd, inspection.RepoRoot
 }
 
 func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session *protocol.Session) *spawnOutcome {
@@ -692,7 +703,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	} else if outcome.alreadyLive {
 		return placementOutcome{session: msg.ID}, nil
 	}
-	if outcome := d.commitSpawn(ctx, req, plan); outcome.err != nil {
+	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
 	req.placed.session = msg.ID

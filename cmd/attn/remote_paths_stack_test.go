@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -16,6 +17,7 @@ import (
 func TestARemoteShellsDirectoryIsNeverReadOnTheHomesDisk(t *testing.T) {
 	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	recentRecorded := home.PauseEvery(pausepoint.RemoteRecentRecorded)
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -38,9 +40,15 @@ func TestARemoteShellsDirectoryIsNeverReadOnTheHomesDisk(t *testing.T) {
 		t.Fatalf("create worktree: %s", protocol.Deref(created.Error))
 	}
 	elsewhere, local := home.Path("remote-only"), home.Path("local")
-	remoteInWorktree := home.Spawn(app, shell, worktree, onOutpost)
+	spawnOnOutpost := func(cwd string) string {
+		id := home.Spawn(app, shell, cwd, onOutpost)
+		recentRecorded.Await()
+		recentRecorded.Release()
+		return id
+	}
+	remoteInWorktree := spawnOnOutpost(worktree)
 	localInWorktree := home.Spawn(app, shell, worktree)
-	remoteElsewhere := home.Spawn(app, shell, elsewhere, onOutpost)
+	remoteElsewhere := spawnOnOutpost(elsewhere)
 	localElsewhere := home.Spawn(app, shell, local)
 	for _, id := range []string{remoteInWorktree, localInWorktree, remoteElsewhere, localElsewhere} {
 		app.TypeLine(id, "echo up-$((1+1))")

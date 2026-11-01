@@ -79,6 +79,7 @@ const (
 	DatabaseBackupCopied          = "database-backup-copied"
 	AutomationRunReserved         = "automation-run-reserved"
 	AutomationRunFinalizing       = "automation-run-finalizing"
+	RemoteRecentRecorded          = "remote-recent-recorded"
 )
 
 type armed struct {
