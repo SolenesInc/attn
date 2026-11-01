@@ -32,12 +32,14 @@ When `reviewed` does not contain the head yet, the script stops. Run the
 Otherwise the script cuts `release/vX.Y.Z` from that commit, compiles the
 commits since the last release into `CHANGELOG.md`, bumps every version, and
 opens a PR to `main`. Merge the PR once `PR gate` and `App acceptance` are
-green. The merged commit is the release commit. When its Acceptance is green,
-CI tags and publishes it.
+green. The merged commit is the release commit. CI tags and publishes it once
+its Acceptance is green and `reviewed` contains it, whichever comes last: CI
+finishing on the release commit, or a review moving `reviewed` to contain it.
 
 `main` may keep moving while the release PR is open. Changes that land after
 the release was cut ship in the release, but this release's notes do not list
-them. The next release's notes do.
+them. The next release's notes do. They are reviewed with the release commit
+before it ships.
 
 If the automated app acceptance cannot cover the release PR or the merged
 release commit, record a manual receipt for that exact commit with the command
@@ -55,8 +57,9 @@ Fix forward: land the fix on `main`, then release a patch version.
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
 `attn-linux-amd64`, and `attn-linux-arm64`, then run
 `brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
-version. A failed publication leaves a draft
-and a `Release health` issue. After you fix the failure, retry the tag:
+version. A failed publication leaves a draft and a `Release health` issue.
+After you fix the failure, retry the tag. The retry, like every release run,
+refuses a tag that `reviewed` does not contain:
 
 ```bash
 gh api --method POST repos/victorarias/attn/dispatches \

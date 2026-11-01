@@ -35,6 +35,13 @@ if ! git merge-base --is-ancestor "$tag_sha" 'origin/main'; then
   exit 1
 fi
 
+reviewed_sha="$(git rev-parse --verify 'origin/reviewed^{commit}')"
+if ! git merge-base --is-ancestor "$tag_sha" "$reviewed_sha"; then
+  echo "release tag gate: reviewed $reviewed_sha does not contain $tag at $tag_sha" >&2
+  echo "run the review-main skill, or wait until reviewed reaches $tag_sha" >&2
+  exit 1
+fi
+
 validated_tag="$(go run ./cmd/release-train accepted-main validate --head "$tag_sha")"
 if [[ "$validated_tag" != "$tag" ]]; then
   echo "release tag gate: manifest authorizes $validated_tag, not $tag" >&2

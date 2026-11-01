@@ -33,22 +33,27 @@ if [[ "$1 $2 $3" == "api --method POST" ]] && [[ "$*" == *'/git/refs '* ]]; then
   $REAL_GIT --git-dir="$FAKE_ORIGIN" update-ref "$tag_ref" "$tag_sha"
   exit 0
 fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
-  printf '%s\t%s\t%s\n' completed "$FAKE_ACCEPTANCE_CONCLUSION" \
-    'https://github.com/example/attn/actions/runs/42/job/7'
+if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?event=push'* ]]; then
+  if [[ "$FAKE_CI_STATUS" == completed ]]; then
+    ci_conclusion=success
+  else
+    ci_conclusion=none
+  fi
+  printf '2026-08-29T10:00:00Z\t42\t%s\t%s\t%s\t%s\n' "$FAKE_EXPECTED_SHA" \
+    "$FAKE_CI_STATUS" "$ci_conclusion" 'https://github.com/example/attn/actions/runs/42'
   exit 0
 fi
-if [[ "$1" == api ]] && [[ "$*" == *'/actions/workflows/ci.yml/runs?event=push'* ]]; then
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]] && \
+  [[ "$*" == *'App acceptance'* ]]; then
   if [[ "${FAKE_CI_APP_MODE:-missing}" != missing ]]; then
-    printf '2026-08-29T10:00:00Z\t45\t%s\tcompleted\t%s\t%s\n' "$FAKE_EXPECTED_SHA" \
-      "${FAKE_CI_APP_CONCLUSION:-success}" \
-      'https://github.com/example/attn/actions/runs/45'
+    printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
+      'https://github.com/example/attn/actions/runs/42/job/10'
   fi
   exit 0
 fi
-if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/45/jobs?'* ]]; then
-  printf 'completed\t%s\t%s\n' "${FAKE_CI_APP_CONCLUSION:-success}" \
-    'https://github.com/example/attn/actions/runs/45/job/10'
+if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/runs/42/jobs?'* ]]; then
+  printf '%s\t%s\t%s\n' completed "$FAKE_ACCEPTANCE_CONCLUSION" \
+    'https://github.com/example/attn/actions/runs/42/job/7'
   exit 0
 fi
 if [[ "$1 $2" == "api --paginate" ]] && [[ "$*" == *'/actions/workflows/release.yml/runs?'* ]]; then
@@ -106,6 +111,7 @@ export FAKE_RELEASE_RUN_PAGE_2=0
 export FAKE_RELEASE_RUN_STATUS=completed
 export FAKE_RELEASE_RUN_CONCLUSION=success
 export FAKE_CREATE_RACE_TAG=0
+export FAKE_CI_STATUS=completed
 
 template="$work/template"
 init_release_fixture "$root" "$template"
@@ -139,19 +145,32 @@ setup_fixture() {
   export FAKE_RELEASE_RUN_STATUS=completed
   export FAKE_RELEASE_RUN_CONCLUSION=success
   export FAKE_CREATE_RACE_TAG=0
+  export FAKE_CI_STATUS=completed
 
   git clone -q --bare "$template" "$fixture_origin"
   git clone -q "$fixture_origin" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   export FAKE_ORIGIN="$fixture_origin"
+  set_reviewed "$candidate_sha"
+}
+
+set_reviewed() {
+  git -C "$fixture_repo" push -q -f origin "$1:refs/heads/reviewed"
+  git -C "$fixture_repo" fetch -q origin +refs/heads/reviewed:refs/remotes/origin/reviewed
 }
 
 run_release_after_acceptance() (
   cd "$fixture_repo"
-  "$script" "$(git rev-parse HEAD)" 42 \
-    'https://github.com/example/attn/actions/runs/42'
+  "$script"
 )
+
+expect_untagged() {
+  if git --git-dir="$fixture_origin" show-ref --verify --quiet "refs/tags/$candidate_tag"; then
+    echo "$1 created a tag" >&2
+    exit 1
+  fi
+}
 
 expect_failure() {
   local expected="$1"
@@ -249,87 +268,82 @@ if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; t
 fi
 
 setup_fixture success
-export FAKE_ACCEPTANCE_CONCLUSION=success
 run_release_after_acceptance >"$work/success.out"
-tag_sha="$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")"
-[[ "$tag_sha" == "$candidate_sha" ]]
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
 grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
-export FAKE_TAG_SHA="$candidate_sha"
-run_release_after_acceptance >"$work/duplicate.out"
-[[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
-grep -q 'not dispatching again' "$work/duplicate.out"
+land_after_release() {
+  printf '%s\n' 'work after the release' >"$fixture_repo/after-release.txt"
+  git -C "$fixture_repo" add after-release.txt
+  git -C "$fixture_repo" commit -q -m 'fix: ordinary work after the release'
+  git -C "$fixture_repo" push -q origin main
+}
 
-printf '%s\n' 'work after the release' >"$fixture_repo/after-release.txt"
-git -C "$fixture_repo" add after-release.txt
-git -C "$fixture_repo" commit -q -m 'fix: ordinary work after the release'
-git -C "$fixture_repo" push -q origin main
-later_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+land_after_release
+set_reviewed "$(git -C "$fixture_repo" rev-parse HEAD)"
 : >"$FAKE_GH_LOG"
 run_release_after_acceptance >"$work/after-release.out"
-grep -Fq "$later_sha is not a release commit" "$work/after-release.out"
+grep -Fq "release commit $candidate_sha is already tagged $candidate_tag; nothing to release" "$work/after-release.out"
 if [ -s "$FAKE_GH_LOG" ]; then
-  echo "an ordinary main commit called GitHub" >&2
+  echo "a released commit called GitHub again" >&2
   cat "$FAKE_GH_LOG" >&2
   exit 1
 fi
 
-setup_fixture paginated-release-run
-git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
-export FAKE_TAG_SHA="$candidate_sha"
-export FAKE_RELEASE_RUN_PAGE_2=1
-run_release_after_acceptance >"$work/paginated-release-run.out"
-grep -q 'not dispatching again' "$work/paginated-release-run.out"
-if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
-  echo "page-two release run was dispatched again" >&2
+setup_fixture unreviewed
+previous_release_sha="$(git -C "$fixture_repo" rev-list --max-parents=0 HEAD)"
+previous_tag="$(cd "$fixture_repo" && go run ./cmd/release-train accepted-main tag --head "$previous_release_sha")"
+git --git-dir="$fixture_origin" update-ref "refs/tags/$previous_tag" "$previous_release_sha"
+set_reviewed "$baseline_sha"
+run_release_after_acceptance >"$work/unreviewed.out"
+grep -Fq "release commit $previous_release_sha is already tagged $previous_tag; nothing to release" "$work/unreviewed.out"
+expect_untagged 'an unreviewed release commit'
+if [ -s "$FAKE_GH_LOG" ]; then
+  echo "an unreviewed release commit called GitHub" >&2
+  cat "$FAKE_GH_LOG" >&2
   exit 1
 fi
-grep -Fq 'api --paginate repos/example/attn/actions/workflows/release.yml/runs?event=repository_dispatch&per_page=100' "$FAKE_GH_LOG"
-export FAKE_RELEASE_RUN_PAGE_2=0
-
-setup_fixture failed-release-run
-git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
-export FAKE_TAG_SHA="$candidate_sha"
-export FAKE_RELEASE_RUN_PAGE_2=1
-export FAKE_RELEASE_RUN_CONCLUSION=failure
-run_release_after_acceptance >"$work/failed-release-run.out"
+land_after_release
+set_reviewed "$(git -C "$fixture_repo" rev-parse HEAD)"
+run_release_after_acceptance >"$work/reviewed-retry.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
 grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
 
-setup_fixture active-release-run
-git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$candidate_sha"
-export FAKE_TAG_SHA="$candidate_sha"
-export FAKE_RELEASE_RUN_PAGE_2=1
-export FAKE_RELEASE_RUN_STATUS=in_progress
-export FAKE_RELEASE_RUN_CONCLUSION=
-run_release_after_acceptance >"$work/active-release-run.out"
-grep -q 'not dispatching again' "$work/active-release-run.out"
+setup_fixture reviewed-before-ci
+export FAKE_CI_STATUS=in_progress
+run_release_after_acceptance >"$work/reviewed-before-ci.out"
+grep -Fq 'CI run 42 is in_progress; release commit stays untagged until it completes' "$work/reviewed-before-ci.out"
+expect_untagged 'a release commit whose CI is running'
+export FAKE_CI_STATUS=completed
+run_release_after_acceptance >"$work/ci-after-review.out"
+[[ "$(git --git-dir="$fixture_origin" rev-parse "refs/tags/$candidate_tag")" == "$candidate_sha" ]]
+grep -Fq "api --method POST repos/example/attn/dispatches -f event_type=release -F client_payload[tag]=$candidate_tag" "$FAKE_GH_LOG"
+
+setup_fixture existing-tag-elsewhere
+git --git-dir="$fixture_origin" update-ref "refs/tags/$candidate_tag" "$baseline_sha"
+expect_failure "$candidate_tag already points to $baseline_sha, not release commit $candidate_sha" run_release_after_acceptance
 if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
-  echo "active release run was dispatched again" >&2
+  echo "a tag on another commit was dispatched" >&2
   exit 1
 fi
 
-setup_fixture forged-tag
+setup_fixture forged-manifest
 (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.96 >/dev/null)
 (cd "$fixture_repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main HEAD >/dev/null)
 git -C "$fixture_repo" add app .github/release-candidate.yml
 git -C "$fixture_repo" commit -q -m 'forge accepted main versions'
 git -C "$fixture_repo" push -q origin main
-forged_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-git --git-dir="$fixture_origin" tag "$candidate_tag" "$forged_sha"
-export FAKE_TAG_SHA="$forged_sha"
+set_reviewed "$(git -C "$fixture_repo" rev-parse HEAD)"
 expect_failure 'expected 99.98.97' run_release_after_acceptance
-if grep -q '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG"; then
-  echo "pre-existing exact tag bypassed accepted-main validation" >&2
-  exit 1
-fi
+expect_untagged 'a forged release manifest'
 
 for value in \
   'workflows: [CI]' \
   'branches: [main]' \
+  'branches: [reviewed]' \
   'checks: read' \
   'pull-requests: read' \
-  'ref: ${{ github.event.workflow_run.head_sha }}' \
-  './scripts/release-after-acceptance.sh'; do
+  'run: ./scripts/release-after-acceptance.sh'; do
   grep -Fq "$value" "$root/.github/workflows/release-after-acceptance.yml"
 done
 grep -Fq 'run-name: ${{ github.event.client_payload.tag }}' "$root/.github/workflows/release.yml"
