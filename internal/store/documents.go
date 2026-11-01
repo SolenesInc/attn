@@ -730,22 +730,25 @@ func createCollectionTable(tx *sql.Tx, table string, fields []docstore.FieldSpec
 	if err := docstore.ValidateTableName(table); err != nil {
 		return err
 	}
+	var generatedColumns strings.Builder
+	for _, f := range fields {
+		generatedColumns.WriteString(", " + generatedColumnDefinition(f))
+	}
 	if _, err := tx.Exec(fmt.Sprintf(`CREATE TABLE %s (
     id         TEXT NOT NULL PRIMARY KEY,
     body       TEXT NOT NULL,
     rev        INTEGER NOT NULL DEFAULT %d,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-) WITHOUT ROWID`, table, docstore.FirstRev)); err != nil {
+%s) WITHOUT ROWID`, table, docstore.FirstRev, generatedColumns.String())); err != nil {
 		return err
 	}
-	for _, col := range []string{docstore.FieldCreatedAt, docstore.FieldUpdatedAt} {
-		if err := createFieldIndex(tx, table, col); err != nil {
-			return err
-		}
-	}
+	columns := []string{docstore.FieldCreatedAt, docstore.FieldUpdatedAt}
 	for _, f := range fields {
-		if err := addFieldColumn(tx, table, f); err != nil {
+		columns = append(columns, docstore.FieldColumn(f.Name))
+	}
+	for _, col := range columns {
+		if err := createFieldIndex(tx, table, col); err != nil {
 			return err
 		}
 	}
@@ -787,13 +790,16 @@ func alterCollectionTable(tx *sql.Tx, table string, before, after []docstore.Fie
 }
 
 func addFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
-	col := quoteIdent(docstore.FieldColumn(f.Name))
-	_, err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s GENERATED ALWAYS AS (%s) VIRTUAL`,
-		table, col, docstore.ColumnAffinity(f.Type), docstore.FieldExpression(f.Name)))
+	_, err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, table, generatedColumnDefinition(f)))
 	if err != nil {
 		return err
 	}
 	return createFieldIndex(tx, table, docstore.FieldColumn(f.Name))
+}
+
+func generatedColumnDefinition(f docstore.FieldSpec) string {
+	return fmt.Sprintf(`%s %s GENERATED ALWAYS AS (%s) VIRTUAL`,
+		quoteIdent(docstore.FieldColumn(f.Name)), docstore.ColumnAffinity(f.Type), docstore.FieldExpression(f.Name))
 }
 
 func dropFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
