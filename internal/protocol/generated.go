@@ -5303,6 +5303,21 @@ type GetSettingsMessage struct {
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
+type GitFailure string
+
+const GitFailureCancelled GitFailure = "cancelled"
+const GitFailureDirtyWorktree GitFailure = "dirty_worktree"
+const GitFailureExited GitFailure = "exited"
+const GitFailureGitUnavailable GitFailure = "git_unavailable"
+const GitFailureIntegrationRefUnresolved GitFailure = "integration_ref_unresolved"
+const GitFailureMissingDirectory GitFailure = "missing_directory"
+const GitFailureProviderError GitFailure = "provider_error"
+const GitFailureQueueFull GitFailure = "queue_full"
+const GitFailureStashUnreadable GitFailure = "stash_unreadable"
+const GitFailureTimeout GitFailure = "timeout"
+const GitFailureUnclassified GitFailure = "unclassified"
+const GitFailureWorktreeNotFound GitFailure = "worktree_not_found"
+
 type GitHubHostsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -5321,6 +5336,12 @@ type GitOperation struct {
 
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
+
+	// ExitCode corresponds to the JSON schema field "exit_code".
+	ExitCode *int `json:"exit_code,omitempty,omitzero"`
+
+	// Failure corresponds to the JSON schema field "failure".
+	Failure *GitFailure `json:"failure,omitempty,omitzero"`
 
 	// FinishedAt corresponds to the JSON schema field "finished_at".
 	FinishedAt *string `json:"finished_at,omitempty,omitzero"`
@@ -5352,9 +5373,7 @@ type GitOperationFinishedMessage struct {
 type GitOperationKind string
 
 const GitOperationKindDeleteWorktree GitOperationKind = "delete_worktree"
-const GitOperationKindInspectBranch GitOperationKind = "inspect_branch"
 const GitOperationKindRefreshRepository GitOperationKind = "refresh_repository"
-const GitOperationKindRefreshWorktree GitOperationKind = "refresh_worktree"
 
 type GitOperationStartedMessage struct {
 	// Event corresponds to the JSON schema field "event".

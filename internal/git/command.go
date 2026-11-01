@@ -129,10 +129,19 @@ func launchGit(parent context.Context, op Operation, timeout time.Duration, proc
 		return out, cause
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return out, fmt.Errorf("git %s timed out after %s: git %s", op, timeout, strings.Join(redactGitArgs(args), " "))
+		return out, describedError{fmt.Sprintf("git %s timed out after %s: git %s", op, timeout, strings.Join(redactGitArgs(args), " ")), context.DeadlineExceeded}
 	}
 	return out, err
 }
+
+type describedError struct {
+	message string
+	cause   error
+}
+
+func (e describedError) Error() string { return e.message }
+
+func (e describedError) Unwrap() error { return e.cause }
 
 func gitHTTPAuthorizationEnv(authorizationURL, authorization string) map[string]string {
 	env := map[string]string{"GIT_TERMINAL_PROMPT": "0"}

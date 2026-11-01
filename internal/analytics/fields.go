@@ -17,7 +17,7 @@ var BusFields = map[string]Fields{
 	"garden.seed.withered":                {"caused_by_session_id": ID},
 	"garden.seed.work.ready":              {"caused_by_session_id": ID, "automation_run_id": ID},
 	"git.operation.started":               {"kind": Safe, "status": Safe, "id": ID},
-	"git.operation.finished":              {"kind": Safe, "status": Safe, "id": ID},
+	"git.operation.finished":              {"kind": Safe, "status": Safe, "failure": Safe, "id": ID},
 	"notebook.file.changed":               {"origin": Safe},
 	"profile.arrangement.changed": {
 		"from_desktop_id": ID, "from_leaf_id": ID, "to_desktop_id": ID, "to_leaf_id": ID,

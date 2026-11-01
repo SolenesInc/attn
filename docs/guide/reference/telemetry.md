@@ -50,6 +50,10 @@ it stores them:
   so a record can be joined to the records about the thing it names. A field
   that names who acted, such as who closed a session (`closed_by`), keeps
   `user` and `attn` as they are and hashes any other actor the same way.
+- A failed git operation says why it failed without its error text: `failure`
+  names the reason from a fixed set, such as `missing_directory`, `timeout` or
+  `exited`, and `exit_code` gives git's exit code when git itself exited
+  non-zero. The error text becomes its length.
 - `setting.changed` names the setting in plain text, because setting names come
   from a fixed set. A setting whose name carries a value, such as
   `new_session_destination_<repository>`, is named by that pattern, never by

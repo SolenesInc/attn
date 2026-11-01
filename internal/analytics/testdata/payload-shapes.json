@@ -80,6 +80,9 @@
   },
   "git.operation.finished": {
     "duration_ms": 0,
+    "error": "string",
+    "exit_code": 0,
+    "failure": "string",
     "finished_at": "string",
     "id": "string",
     "kind": "string",

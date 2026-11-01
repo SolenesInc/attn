@@ -72,11 +72,27 @@ enum AttachPolicy {
 
 enum GitOperationKind {
   delete_worktree,
-  inspect_branch,
-  // The background worktree refresh: one per repository for the list, the
-  // integration branch and the stash and tree probes, one per worktree row.
+  // The background worktree sweep: one for a repository's worktree list, one
+  // for its integration branch and its stash and tree probes.
   refresh_repository,
-  refresh_worktree,
+}
+
+// Why a git operation failed. The first that applies, in this order, names
+// it: what ended the operation around git, then the step attn was taking,
+// then git's own exit.
+enum GitFailure {
+  cancelled,                   // the caller stopped waiting: a preempted sweep, daemon stop
+  queue_full,                  // attn's git queue was saturated
+  missing_directory,           // the working directory does not exist
+  git_unavailable,             // the git binary could not start
+  timeout,                     // git, or the caller, ran past its deadline
+  integration_ref_unresolved,  // the repository's integration branch did not resolve
+  stash_unreadable,            // the stash list could not be read
+  dirty_worktree,              // the worktree has local changes
+  worktree_not_found,          // no worktree at that path
+  provider_error,              // the checkout provider refused the removal
+  exited,                      // git exited non-zero; exit_code says how
+  unclassified,                // none of the above: a new failure to name
 }
 
 enum GitOperationStatus {
@@ -435,6 +451,8 @@ model GitOperation {
   finished_at?: string; // ISO timestamp
   duration_ms?: int32;
   error?: string;
+  failure?: GitFailure; // set exactly when status is failed
+  exit_code?: int32;    // set when failure is exited
 }
 
 model RepoState {

@@ -167,7 +167,7 @@ func (c *Client) DeleteWorktree(ctx context.Context, repoDir, path string, force
 	path = CanonicalizePath(path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if out, err := c.Combined(ctx, OpWorktree, repoDir, "worktree", "prune"); err != nil {
-			return fmt.Errorf("git worktree prune failed: %s", out)
+			return describedError{fmt.Sprintf("git worktree prune failed: %s", out), err}
 		}
 		return nil
 	}
@@ -178,7 +178,7 @@ func (c *Client) DeleteWorktree(ctx context.Context, repoDir, path string, force
 	}
 	args = append(args, path)
 	if out, err := c.Combined(ctx, OpWorktree, repoDir, args...); err != nil {
-		return fmt.Errorf("git worktree remove failed: %s", out)
+		return describedError{fmt.Sprintf("git worktree remove failed: %s", out), err}
 	}
 
 	_ = c.NoOutput(ctx, OpWorktree, repoDir, "worktree", "prune")

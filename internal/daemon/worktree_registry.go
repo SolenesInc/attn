@@ -15,7 +15,10 @@ import (
 
 const integrationBranchTTL = 24 * time.Hour
 
-var errWorktreeStashCounts = errors.New("worktree stash counts unavailable")
+var (
+	errWorktreeStashCounts      = errors.New("worktree stash counts unavailable")
+	errIntegrationRefUnresolved = errors.New("resolve integration ref")
+)
 
 type repositoryFacts struct {
 	repo              string
@@ -92,7 +95,7 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 	observed, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (gitFacts, error) {
 		integrationSHA, resolveErr := client.Output(runCtx, git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}")
 		if resolveErr != nil {
-			return gitFacts{}, fmt.Errorf("resolve integration ref %s: %w", facts.integrationBranch, resolveErr)
+			return gitFacts{}, fmt.Errorf("%w %s: %w", errIntegrationRefUnresolved, facts.integrationBranch, resolveErr)
 		}
 		sha := strings.TrimSpace(string(integrationSHA))
 		treeHashes, treeErr := client.TreeHashesOnHistory(runCtx, repo, sha)
@@ -101,7 +104,7 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 		}
 		stashes, stashErr := client.StashCountsByBranch(runCtx, repo)
 		if stashErr != nil {
-			return gitFacts{}, fmt.Errorf("%w for %s: %v", errWorktreeStashCounts, repo, stashErr)
+			return gitFacts{}, fmt.Errorf("%w for %s: %w", errWorktreeStashCounts, repo, stashErr)
 		}
 		return gitFacts{integrationSHA: sha, treeHashes: treeHashes, stashes: stashes, treeErr: treeErr}, nil
 	})

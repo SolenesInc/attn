@@ -224,3 +224,28 @@ func TestLengtheningTheIntervalLeavesAnArmedEntryAlone(t *testing.T) {
 		t.Fatalf("a lengthened interval moved the next fire from %s to %s", armed.ScheduledAt, after.ScheduledAt)
 	}
 }
+
+func TestAHandlerPastItsTimeoutSeesADeadlineAndACancelledOneSeesACancel(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
+		started, causes := make(chan string, 2), make(chan error, 2)
+		hang := func(ctx context.Context, job *Job) (any, error) {
+			started <- job.ID
+			<-ctx.Done()
+			causes <- context.Cause(ctx)
+			return nil, context.Cause(ctx)
+		}
+		if err := r.RegisterCron(cronKind, time.Minute, hang, HandlerConfig{Timeout: 10 * time.Second}); err != nil {
+			t.Fatalf("register cron: %v", err)
+		}
+		mustStart(t, r)
+		<-started
+		if cause := <-causes; !errors.Is(cause, context.DeadlineExceeded) {
+			t.Errorf("a handler past its timeout saw %v, want a deadline", cause)
+		}
+		r.Cancel(<-started)
+		if cause := <-causes; !errors.Is(cause, context.Canceled) {
+			t.Errorf("a cancelled handler saw %v, want a cancel", cause)
+		}
+	})
+}
