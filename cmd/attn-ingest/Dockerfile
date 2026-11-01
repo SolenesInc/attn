@@ -1,4 +1,4 @@
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY attn-ingest /attn-ingest
 USER 65532:65532
 EXPOSE 8080
