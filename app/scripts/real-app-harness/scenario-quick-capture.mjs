@@ -407,6 +407,8 @@ try {
     assert.equal((await state()).text, before, 'Command-Z undoes the typing');
     await key('z', ['command', 'shift']);
     assert.equal((await state()).text, before + ' undo me', 'Shift-Command-Z redoes it');
+    await key('z', ['command']);
+    assert.equal((await state()).text, before, 'The step leaves the draft as it found it');
   });
   await runner.step('panel_surface_drags_the_panel', async () => {
     await driver.click(captureEditor, { windowTitle: 'Quick Capture' });
