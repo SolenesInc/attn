@@ -6,8 +6,9 @@ over long ones, and a sketch wherever it says more than the sentences it
 replaces. Pick the smallest view that makes the key point clear, and
 skip the preamble.
 
-Every surface that shows this text renders markdown and mermaid, so all of
-these forms work everywhere.
+A seed and a markdown file render markdown and Mermaid. A reply in the terminal
+conversation shows plain text, so draw pictures there as text and use Mermaid
+only in a seed or a markdown file.
 
 - Show logic or an algorithm as pseudocode:
 
@@ -48,7 +49,7 @@ src/
 └── transport/      # sends API requests
 ```
 
-- Show component interaction, control flow, or data flow with Mermaid:
+- In a seed or a markdown file, show component interaction, control flow, or data flow with Mermaid. In a reply in the terminal, draw the same as labeled arrows or a text sequence:
 
 ```mermaid
 sequenceDiagram

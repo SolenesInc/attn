@@ -30,7 +30,7 @@ When the answer comes:
 
 Withdraw a question that work has overtaken the same way, and say why in the note.
 
-Review each Builder's completed work against the plan yourself, check by check. On a trunk, [Delivery](delivery.md) puts this review after the Builder's work lands. You did not write the Builder's code, so your review is the independent one. A change you make yourself has no independent review, and you say so when you report it. `attn seed show <seed-id>` lists the child's checks, the shared ones included, each with its report and verdict. For each report, open the evidence the report cites and compare its revision with what was delivered, using [Delivery](delivery.md)'s evidence rules. Evidence marked `(changed since this report)` was replaced after the report, so the file you open is not the file the report cited. Ask for a new report. Then record the verdict:
+Review each Builder's completed work against the plan yourself, check by check, at the point where [Delivery](delivery.md) sets the review for the repository's flow. You did not write the Builder's code, so your review is the independent one. A change you make yourself has no independent review, and you say so when you report it. `attn seed show <seed-id>` lists the child's checks, the shared ones included, each with its report and verdict. For each report, open the evidence the report cites and compare its revision with what was delivered, using [Delivery](delivery.md)'s evidence rules. Evidence marked `(changed since this report)` was replaced after the report, so the file you open is not the file the report cited. Ask for a new report. Then record the verdict:
 
 ```sh
 attn seed check confirm <seed-id> <C#>

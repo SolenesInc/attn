@@ -63,12 +63,12 @@ Show each design part instead of describing it. A part with prose alone is incom
 
 When the shape already exists in the codebase, show its change as a diff of that shape: `+` and `-` lines on the file tree, the type, the call tree or the sequence. Show the whole shape when most of it is new, when a diff would hide ownership or order, or when the implementer needs a copyable target. A diff shows what changes where prose would describe it.
 
-Scale each picture to the change. Give it enough detail that the reader can judge the design without reconstructing it from the code, and no more. Use names from the codebase. Put each picture beside the short explanation it supports, in a fenced or indented code block so it renders in the terminal and in the Garden. Keep pictures narrow, and split a wide picture into smaller views. Show separate production and test wiring when the distinction matters.
+Scale each picture to the change. Give it enough detail that the reader can judge the design without reconstructing it from the code, and no more. Use names from the codebase. Put each picture beside the short explanation it supports, in a fenced code block, or in a Mermaid block for component interaction and data flow, because the Garden renders both. Keep pictures narrow, and split a wide picture into smaller views. Show separate production and test wiring when the distinction matters.
 
 Choose the smallest view that explains the point. The `attn` skill's [showing reference](../../attn/references/showing.md) gives the forms for logic, call trees, component trees, file trees, and diffs. A plan also shows:
 
-- component interaction or data flow as labeled arrows
-- messages between processes as a sequence
+- component interaction or data flow as a Mermaid diagram
+- messages between processes as a Mermaid sequence diagram
 - a UI layout or state comparison as an ASCII wireframe
 
 ## Template
