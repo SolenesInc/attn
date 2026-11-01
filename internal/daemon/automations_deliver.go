@@ -128,7 +128,7 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(persistErr, err)
 	}
-	if _, confirming := d.automationLaunchWaits.Load(run.ID); confirming {
+	if req, err := d.automationRunRequest(run); err == nil && d.automationRunAgentStarted(run, req) {
 		return d.store.GetAutomationRun(run.ID)
 	}
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
@@ -240,36 +240,17 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if _, confirming := d.automationLaunchWaits.Load(run.ID); confirming {
 		return nil
 	}
+	req, err := d.automationRunRequest(run)
+	if err != nil {
+		return err
+	}
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
 	if err != nil {
 		return err
 	}
-	if definition == nil || !definition.Enabled {
+	if (definition == nil || !definition.Enabled) && !d.automationRunAgentStarted(run, req) {
 		return errors.New("automation definition is disabled; refusing pending delivery")
 	}
-	var snapshot automation.Snapshot
-	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
-		return err
-	}
-	snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
-	if err := snapshot.Launch.Validate(); err != nil {
-		return fmt.Errorf("invalid unattended launch contract: %w", err)
-	}
-	occurrence, err := d.store.GetAutomationOccurrence(run.OccurrenceID)
-	if err != nil {
-		return err
-	}
-	if occurrence == nil {
-		return errors.New("automation occurrence missing")
-	}
-	continuityKey := ""
-	switch snapshot.Continuity {
-	case "per_subject":
-		continuityKey = occurrence.SubjectKey
-	case "singleton":
-		continuityKey = "singleton"
-	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
@@ -282,6 +263,51 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	}
 	d.automationLaunchResults.Store(run.ID, result)
 	return d.finalizeAutomationRun(run, result)
+}
+
+func (d *Daemon) automationRunRequest(run *store.AutomationRun) (automation.WorkRequest, error) {
+	var snapshot automation.Snapshot
+	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
+		return automation.WorkRequest{}, err
+	}
+	snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
+	if err := snapshot.Launch.Validate(); err != nil {
+		return automation.WorkRequest{}, fmt.Errorf("invalid unattended launch contract: %w", err)
+	}
+	occurrence, err := d.store.GetAutomationOccurrence(run.OccurrenceID)
+	if err != nil {
+		return automation.WorkRequest{}, err
+	}
+	if occurrence == nil {
+		return automation.WorkRequest{}, errors.New("automation occurrence missing")
+	}
+	continuityKey := ""
+	switch snapshot.Continuity {
+	case "per_subject":
+		continuityKey = occurrence.SubjectKey
+	case "singleton":
+		continuityKey = "singleton"
+	}
+	return automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}, nil
+}
+
+func (d *Daemon) automationRunAgentStarted(run *store.AutomationRun, req automation.WorkRequest) bool {
+	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
+		return false
+	}
+	origin, err := d.automationContinuationOrigin(req)
+	if err != nil || !d.automationSessionOpens(origin, req.IDs.SessionID) {
+		return false
+	}
+	return d.automationSessionIsLive(req.IDs.SessionID) || d.automationSessionExitSince(req.IDs.SessionID, run) != nil
+}
+
+func (d *Daemon) automationSessionExitSince(sessionID protocol.SessionID, run *store.AutomationRun) *store.SessionExitScreen {
+	exit := d.store.GetSessionExitScreen(sessionID)
+	if exit == nil || protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt) {
+		return nil
+	}
+	return exit
 }
 
 func (d *Daemon) confirmAutomationLaunch(run *store.AutomationRun, agent string, result automation.DeliveryResult, launch *launchWatch) error {
@@ -784,13 +810,13 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, di
 		return nil, errors.Join(errors.New("automation run missing"), err)
 	}
 	launch := d.watchLaunch(sessionID)
-	exit := d.store.GetSessionExitScreen(sessionID)
+	exit := d.automationSessionExitSince(sessionID, run)
 	switch {
 	case d.automationSessionIsLive(sessionID):
 		if d.launchReported(sessionID) {
 			d.noteLaunchStarted(sessionID)
 		}
-	case exit != nil && !protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt):
+	case exit != nil:
 		if d.launchReported(sessionID) {
 			d.noteLaunchStarted(sessionID)
 		} else {

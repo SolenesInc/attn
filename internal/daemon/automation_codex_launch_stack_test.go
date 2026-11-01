@@ -134,3 +134,35 @@ func TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunch
 		t.Fatalf("the next prompt was %q, want only what was typed and no relaunched opening prompt", next)
 	}
 }
+
+func TestTurningOffACodexAutomationLeavesARunWhoseAgentStartedPendingAcrossARestartToItsFirstTurn(t *testing.T) {
+	s := codexAutomationStack(t)
+	app := s.App()
+	s.RequireEnterAtNextBoot(codexStuckOnAModal)
+	answered := runAutomationFromApp(app, "started")
+	if !answered.Success || answered.Run == nil || answered.Run.State != "pending" {
+		t.Fatalf("a run whose Codex sits on a modal answered %s, want it pending", describeRunAnswer(answered))
+	}
+	session := string(protocol.Deref(answered.Run.SessionID))
+	app.AwaitScreen(session, "A new version of Codex")
+
+	setAutomationEnabled(t, s.Client(), 1, false)
+	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after turning the automation off the runs are %+v, want the started run still pending", runs)
+	}
+	s.Stop()
+	s.Start()
+	app = s.App()
+	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after a restart with the automation off the runs are %+v, want the started run still pending", runs)
+	}
+
+	app.TypeLine(session, "")
+	if opening := s.Launched(session).Prompted(); !strings.Contains(opening, "Check the code.") {
+		t.Fatalf("once past the modal the agent was prompted %q, want its opening prompt", opening)
+	}
+	delivered := awaitStackRun(t, s, app, answered.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if delivered.State != "delivered" {
+		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
+	}
+}
