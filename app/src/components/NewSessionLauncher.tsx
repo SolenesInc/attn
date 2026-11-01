@@ -44,6 +44,7 @@ type Row = {
   lastSeen?: string;
 };
 type Problem = { message: string; reason?: string };
+type Placement = { host?: string; desktopId?: string };
 export interface NewSessionLauncherProps extends Omit<
   LocationPickerProps,
   | 'onSelect'
@@ -53,13 +54,14 @@ export interface NewSessionLauncherProps extends Omit<
   | 'onGetRepoInfo'
   | 'onDeleteWorktree'
 > {
+  desktopId?: string;
   onSelect: (
     path: string,
     agent: SessionAgent,
-    yolo?: boolean,
-    chief?: boolean,
-    auto?: boolean,
-    host?: string,
+    yolo: boolean,
+    chief: boolean,
+    auto: boolean | undefined,
+    placement: Placement,
   ) => Promise<unknown>;
   onCreateWorktreeSession: (
     repo: string,
@@ -69,7 +71,7 @@ export interface NewSessionLauncherProps extends Omit<
     yolo: boolean,
     auto: boolean | undefined,
     chief: boolean | undefined,
-    options: { host?: string; onCreated?: (path: string) => void },
+    options: Placement & { onCreated?: (path: string) => void },
   ) => Promise<unknown>;
   onGetRecentLocations?: (
     limit?: number,
@@ -115,6 +117,7 @@ export function NewSessionLauncher({
   onCreateWorktreeSession,
   onDeleteWorktree,
   onError,
+  desktopId,
   agentAvailability,
   chiefExists,
 }: NewSessionLauncherProps) {
@@ -446,6 +449,7 @@ export function NewSessionLauncher({
     if (busy) return;
     const agent = terminal ? 'shell' : controls.agent;
     const host = where ? where.host : row?.host;
+    const placement: Placement = { host, desktopId };
     const refused = refusal(host, agent);
     if (refused) {
       setError(refused);
@@ -495,10 +499,10 @@ export function NewSessionLauncher({
         }
         const key = `${generatedKey}:${branchName}:${startingFrom}`;
         const existing = created.current.get(key);
-        if (existing) await onSelect(existing, agent, yolo, chief, auto, host);
+        if (existing) await onSelect(existing, agent, yolo, chief, auto, placement);
         else
           await onCreateWorktreeSession(repo, branchName, startingFrom, agent, yolo, auto, chief, {
-            host,
+            ...placement,
             onCreated: (path) => created.current.set(key, path),
           });
         destinationMemory = 'new_worktree';
@@ -506,7 +510,7 @@ export function NewSessionLauncher({
         const target =
           action?.kind === 'existing' ? action.path : action?.kind === 'main' ? repo : path;
         if (!target) return;
-        await onSelect(target, agent, yolo, chief, auto, host);
+        await onSelect(target, agent, yolo, chief, auto, placement);
         if (action?.kind === 'main') destinationMemory = 'main_repo';
       }
       const memoryKey = repo && repoDestinationSettingKey(repo, host);

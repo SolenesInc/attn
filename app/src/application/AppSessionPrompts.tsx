@@ -6,6 +6,7 @@ import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
 import { SharedCodexPrompts } from '../components/SharedCodexPrompts';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useProfilesStore } from '../store/profiles';
 import {
   useAppErrorsContext,
   useAppInputs,
@@ -49,6 +50,7 @@ export function AppSessionPrompts() {
     setChiefTransferTarget,
   } = useChiefOfStaffContext();
   const experimental = settings.new_session_launcher_enabled === 'true';
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const pickerProps = {
     initialAgent: locationPickerInitialAgent,
     isOpen: locationPickerOpen,
@@ -77,12 +79,9 @@ export function AppSessionPrompts() {
       {experimental ? (
         <NewSessionLauncher
           {...pickerProps}
-          onSelect={(path, agent, yolo, chief, auto, host) =>
-            startLocation(path, agent, yolo, chief, auto, { host })
-          }
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, options) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, options)
-          }
+          desktopId={currentDesktopId ?? undefined}
+          onSelect={startLocation}
+          onCreateWorktreeSession={startWorktreeSession}
         />
       ) : (
         <LocationPicker

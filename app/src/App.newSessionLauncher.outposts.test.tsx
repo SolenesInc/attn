@@ -4,6 +4,7 @@ import { gesture, pressShortcut } from './test/renderApp';
 import { HOLD, answerInTurn, type ScriptedDaemon } from './test/scriptedDaemon';
 import { HOME, openPicker, pathInput, press, repoInfo, typePath } from './test/locations';
 import type { EventMessage } from './test/protocol';
+import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 
 type OutpostInfo = EventMessage<'outposts_updated'>['outposts'][number];
 type RecentLocation = EventMessage<'recent_locations_result'>['recent_locations'][number];
@@ -86,10 +87,11 @@ async function open(
   extra: Record<string, string> = {},
   outposts: OutpostInfo[] = [sandbox, piLab],
   sandboxHarnesses?: string[],
+  initialState: Partial<EventMessage<'initial_state'>> = {},
 ) {
   const view = await openPicker(
     {},
-    { settings: { ...settings, ...extra }, outposts },
+    { settings: { ...settings, ...extra }, outposts, ...initialState },
   );
   await press(view.daemon, 'Escape');
   serveOutposts(view.daemon, sandboxHarnesses);
@@ -277,6 +279,40 @@ describe('launcher with outposts attached', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Starting on ai-sandbox failed: ai-sandbox is unreachable; this needs it now',
     );
+  });
+
+  it('places a backgrounded start on the desktop it was picked on after the user moves', async () => {
+    const { daemon } = await open(
+      { [`new_session_destination_${sandbox.id}_${REPO}`]: 'new_worktree' },
+      [sandbox, piLab],
+      undefined,
+      {
+        sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
+        desktops: [
+          soloDesktop('s1', { shortcut_slot: 1 }),
+          emptyDesktop('other', { shortcut_slot: 2 }),
+        ],
+      },
+    );
+    const pickedOn = daemon.arrangement.profile.current_desktop_id;
+    answerInTurn(daemon, 'get_repo_info', [HOLD]);
+    await press(daemon, 'Enter');
+    await gesture(daemon, () =>
+      daemon.emit({
+        event: 'outposts_updated',
+        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date().toISOString() }, piLab],
+      }),
+    );
+    await press(daemon, 'Escape');
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    expect(daemon.arrangement.profile.current_desktop_id).not.toBe(pickedOn);
+    const [read] = daemon.sentOf('get_repo_info');
+    await gesture(daemon, () =>
+      daemon.replyTo(read, { event: 'get_repo_info_result', success: true, info: INFO }),
+    );
+    expect(
+      daemon.sentOf('spawn_session').map(({ host, placement }) => [host, placement?.desktop_id]),
+    ).toEqual([[sandbox.id, pickedOn]]);
   });
 });
 
