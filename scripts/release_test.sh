@@ -111,7 +111,8 @@ setup_fixture() {
   git -C "$fixture_repo" add candidate-fixture.txt
   git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture' -m 'Attn-Seed: seed-fixture'
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
-  git -C "$fixture_repo" push -q -u origin main main:reviewed
+  git -C "$fixture_repo" push -q -u origin main
+  git --git-dir="$fixture_origin" update-ref refs/heads/reviewed refs/heads/main
 }
 
 export PATH="$work/bin:$PATH"
