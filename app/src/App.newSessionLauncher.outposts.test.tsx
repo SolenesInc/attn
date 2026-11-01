@@ -21,10 +21,10 @@ const sandbox: OutpostInfo = {
   reach: 'reachable',
   state_since: AT,
 };
-const piLab: OutpostInfo = {
-  id: 'outpost-pi',
-  name: 'pi-lab',
-  destination: 'pi-lab:2200',
+const fieldLab: OutpostInfo = {
+  id: 'outpost-field',
+  name: 'field-lab',
+  destination: 'field-lab:2200',
   state: 'lost',
   reach: 'unreachable',
   state_since: AT,
@@ -39,7 +39,7 @@ const INFO = repoInfo(REPO, [{ path: `${REPO}--feature`, branch: 'feature' }]);
 const recents: RecentLocation[] = [
   { host: sandbox.id, path: REPO, repo_root: REPO, last_seen: '2026-05-16T16:03:00Z', use_count: 1 },
   { path: REPO, repo_root: REPO, last_seen: '2026-05-16T16:02:00Z', use_count: 1 },
-  { host: piLab.id, path: SENSOR, last_seen: '2026-05-16T16:01:00Z', use_count: 1 },
+  { host: fieldLab.id, path: SENSOR, last_seen: '2026-05-16T16:01:00Z', use_count: 1 },
   { path: NOTES, last_seen: AT, use_count: 1 },
 ];
 
@@ -56,7 +56,7 @@ function serveOutposts(daemon: ScriptedDaemon, sandboxHarnesses = ['claude', 'co
     host,
     catalog: {
       machine: host,
-      harnesses: ['claude', 'codex', 'pi'].map((id) => ({
+      harnesses: ['claude', 'codex'].map((id) => ({
         id,
         name: id,
         available: sandboxHarnesses.includes(id),
@@ -85,7 +85,7 @@ function serveOutposts(daemon: ScriptedDaemon, sandboxHarnesses = ['claude', 'co
 
 async function open(
   extra: Record<string, string> = {},
-  outposts: OutpostInfo[] = [sandbox, piLab],
+  outposts: OutpostInfo[] = [sandbox, fieldLab],
   sandboxHarnesses?: string[],
   initialState: Partial<EventMessage<'initial_state'>> = {},
 ) {
@@ -121,7 +121,7 @@ describe('launcher with outposts attached', () => {
     expect(machines()).toEqual([
       { name: 'shop', machine: 'ai-sandbox' },
       { name: 'shop', machine: 'This Mac' },
-      { name: 'sensor-hub', machine: 'pi-lab' },
+      { name: 'sensor-hub', machine: 'field-lab' },
       { name: 'notes', machine: 'This Mac' },
     ]);
     const opening = sinceOpening();
@@ -140,7 +140,7 @@ describe('launcher with outposts attached', () => {
   });
 
   it('shows an unreachable machine recent relative to the home it last reported', async () => {
-    await open({}, [sandbox, { ...piLab, home: HOME }]);
+    await open({}, [sandbox, { ...fieldLab, home: HOME }]);
     expect(
       screen.getAllByRole('option').map((row) => row.querySelector('.picker-path')?.textContent),
     ).toEqual(['~/projects/shop', '~/projects/shop', '~/projects/sensor-hub', '~/notes']);
@@ -200,10 +200,10 @@ describe('launcher with outposts attached', () => {
   });
 
   it.each([
-    [piLab, 'Lost for 5m.'],
+    [fieldLab, 'Lost for 5m.'],
     [
-      { ...piLab, state: 'refused' as const, last_error: 'pi-lab runs attn 0.41.2 and this Mac runs 0.43.0. Update it in Settings → Outposts.' },
-      'pi-lab runs attn 0.41.2 and this Mac runs 0.43.0. Update it in Settings → Outposts.',
+      { ...fieldLab, state: 'refused' as const, last_error: 'field-lab runs attn 0.41.2 and this Mac runs 0.43.0. Update it in Settings → Outposts.' },
+      'field-lab runs attn 0.41.2 and this Mac runs 0.43.0. Update it in Settings → Outposts.',
     ],
   ])('refuses a start on an unreachable machine without a request ($state)', async (row, reason) => {
     const lostAt = new Date(Date.now() - 5 * 60_000).toISOString();
@@ -213,7 +213,7 @@ describe('launcher with outposts attached', () => {
       const before = daemon.sent.length;
       await press(daemon, 'Enter', init);
       expect(screen.getByRole('alert')).toHaveTextContent(
-        `pi-lab is unreachable; this needs it now${reason}`,
+        `field-lab is unreachable; this needs it now${reason}`,
       );
       expect(daemon.sent.slice(before)).toEqual([]);
     }
@@ -222,7 +222,7 @@ describe('launcher with outposts attached', () => {
   });
 
   it('strikes through a harness the target machine lacks and refuses it', async () => {
-    const { daemon } = await open({}, [sandbox, piLab], ['codex']);
+    const { daemon } = await open({}, [sandbox, fieldLab], ['codex']);
     const claude = screen.getByRole('radio', { name: /Claude/ });
     expect(claude).toHaveClass('agent-option--missing');
     await press(daemon, 'Enter');
@@ -239,23 +239,23 @@ describe('launcher with outposts attached', () => {
   });
 
   it('lets a harness installed only on the outpost be picked there and refuses it on This Mac', async () => {
-    const { daemon } = await open({ pi_available: 'false' }, [sandbox, piLab], ['claude', 'pi']);
-    const pi = screen.getByRole('radio', { name: /Pi/ });
-    expect(pi).toBeEnabled();
-    expect(pi).not.toHaveClass('agent-option--missing');
-    await press(daemon, '3', { altKey: true, code: 'Digit3' });
-    expect(pi).toHaveAttribute('aria-checked', 'true');
+    const { daemon } = await open({ codex_available: 'false' });
+    const codex = screen.getByRole('radio', { name: /Codex/ });
+    expect(codex).toBeEnabled();
+    expect(codex).not.toHaveClass('agent-option--missing');
+    await press(daemon, '2', { altKey: true, code: 'Digit2' });
+    expect(codex).toHaveAttribute('aria-checked', 'true');
     await highlight(daemon, 1);
-    expect(pi).toHaveClass('agent-option--missing');
-    expect(pi).toHaveAttribute('aria-checked', 'true');
+    expect(codex).toHaveClass('agent-option--missing');
+    expect(codex).toHaveAttribute('aria-checked', 'true');
     await press(daemon, 'Enter');
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Pi is not installed on This Mac. Pick another harness (⌥1–⌥9) or machine.',
+      'Codex is not installed on This Mac. Pick another harness (⌥1–⌥9) or machine.',
     );
     expect(spawns(daemon)).toEqual([]);
     await press(daemon, 'ArrowUp');
     await press(daemon, 'Enter');
-    expect(spawns(daemon)).toEqual([{ cwd: REPO, agent: 'pi', host: sandbox.id }]);
+    expect(spawns(daemon)).toEqual([{ cwd: REPO, agent: 'codex', host: sandbox.id }]);
   });
 
   it('waits on a stalled machine and lets Esc finish the start in the background', async () => {
@@ -266,7 +266,7 @@ describe('launcher with outposts attached', () => {
     await gesture(daemon, () =>
       daemon.emit({
         event: 'outposts_updated',
-        outposts: [{ ...sandbox, state: 'stalled', state_since: stalledAt }, piLab],
+        outposts: [{ ...sandbox, state: 'stalled', state_since: stalledAt }, fieldLab],
       }),
     );
     await act(() => vi.advanceTimersByTimeAsync(4_000));
@@ -294,7 +294,7 @@ describe('launcher with outposts attached', () => {
   it('places a backgrounded start on the desktop it was picked on after the user moves', async () => {
     const { daemon } = await open(
       { [`new_session_destination_${sandbox.id}_${REPO}`]: 'new_worktree' },
-      [sandbox, piLab],
+      [sandbox, fieldLab],
       undefined,
       {
         sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
@@ -310,7 +310,7 @@ describe('launcher with outposts attached', () => {
     await gesture(daemon, () =>
       daemon.emit({
         event: 'outposts_updated',
-        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date().toISOString() }, piLab],
+        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date().toISOString() }, fieldLab],
       }),
     );
     await press(daemon, 'Escape');
@@ -440,7 +440,7 @@ function status() {
 describe('launcher addresses', () => {
   async function openWithDisks(
     disks: Record<string, Disk> = { '': macDisk, [sandbox.id]: sandboxDisk },
-    outposts: OutpostInfo[] = [sandbox, piLab],
+    outposts: OutpostInfo[] = [sandbox, fieldLab],
   ) {
     const view = await openPicker({}, { settings, outposts });
     await press(view.daemon, 'Escape');
@@ -561,7 +561,7 @@ describe('launcher addresses', () => {
       { name: '~/scratch/ is on ai-sandbox', machine: 'ai-sandbox', selected: false },
     ]);
     expect(screen.getByText('Enter browses ai-sandbox:~/scratch/')).toBeInTheDocument();
-    expect(browses(daemon).filter(({ host }) => host === piLab.id)).toEqual([]);
+    expect(browses(daemon).filter(({ host }) => host === fieldLab.id)).toEqual([]);
     await press(daemon, 'ArrowDown');
     await press(daemon, 'Enter');
     expect(pathInput()).toHaveValue('ai-sandbox:~/scratch/');
@@ -585,7 +585,7 @@ describe('launcher addresses', () => {
     await press(daemon, 'Escape');
     serveOutposts(daemon);
     serveDisks(daemon, { '': macDisk, [sandbox.id]: sandboxDisk });
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [sandbox, piLab] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [sandbox, fieldLab] }));
     daemon.on('browse_directory', ({ input_path, host }) =>
       host && input_path !== '~/nope/'
         ? undefined
@@ -643,7 +643,7 @@ describe('launcher addresses', () => {
     await gesture(daemon, () =>
       daemon.emit({
         event: 'outposts_updated',
-        outposts: [{ ...sandbox, state: 'lost', reach: 'unreachable', state_since: lostAt }, piLab],
+        outposts: [{ ...sandbox, state: 'lost', reach: 'unreachable', state_since: lostAt }, fieldLab],
       }),
     );
     await typePath(daemon, 'ai-sandbox:~/');
@@ -651,8 +651,8 @@ describe('launcher addresses', () => {
     expect(rowNames().map(({ name }) => name)).toEqual(['shop', 'projects/']);
 
     const before = daemon.sent.length;
-    await typePath(daemon, 'pi-lab:~/');
-    expect(status()).toBe('pi-lab unreachable · no folders cached for ~');
+    await typePath(daemon, 'field-lab:~/');
+    expect(status()).toBe('field-lab unreachable · no folders cached for ~');
     expect(daemon.sent.slice(before)).toEqual([]);
   });
 
@@ -665,7 +665,7 @@ describe('launcher addresses', () => {
     await gesture(daemon, () =>
       daemon.emit({
         event: 'outposts_updated',
-        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date(Date.now()).toISOString() }, piLab],
+        outposts: [{ ...sandbox, state: 'stalled', state_since: new Date(Date.now()).toISOString() }, fieldLab],
       }),
     );
     await act(() => vi.advanceTimersByTimeAsync(4_000));
