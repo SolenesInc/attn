@@ -49,8 +49,9 @@ func TestARemoteShellsDirectoryIsNeverReadOnTheHomesDisk(t *testing.T) {
 	remoteInWorktree := spawnOnOutpost(worktree)
 	localInWorktree := home.Spawn(app, shell, worktree)
 	remoteElsewhere := spawnOnOutpost(elsewhere)
+	remoteElsewhereAgain := spawnOnOutpost(elsewhere)
 	localElsewhere := home.Spawn(app, shell, local)
-	for _, id := range []string{remoteInWorktree, localInWorktree, remoteElsewhere, localElsewhere} {
+	for _, id := range []string{remoteInWorktree, localInWorktree, remoteElsewhere, remoteElsewhereAgain, localElsewhere} {
 		app.TypeLine(id, "echo up-$((1+1))")
 		app.AwaitScreen(id, "up-2")
 	}
@@ -73,6 +74,11 @@ func TestARemoteShellsDirectoryIsNeverReadOnTheHomesDisk(t *testing.T) {
 	}
 	if !maps.Equal(recorded, want) {
 		t.Errorf("recent locations = %v, want %v: each machine's folders with their host, the worktree folded into its repo, and the remote folder kept though it is gone from the home's disk", recorded, want)
+	}
+	homeOnly := testworld.Request(app, protocol.GetRecentLocationsMessage{Cmd: protocol.CmdGetRecentLocations, Limit: protocol.Ptr(1), HomeOnly: protocol.Ptr(true), RequestID: protocol.Ptr("home-only")},
+		protocol.EventRecentLocationsResult, func(r protocol.RecentLocationsResultMessage) bool { return protocol.Deref(r.RequestID) == "home-only" })
+	if len(homeOnly.RecentLocations) != 1 || homeOnly.RecentLocations[0].Host != nil {
+		t.Errorf("the home's top recent = %+v, want one home row though the outpost folder used twice outranks it", homeOnly.RecentLocations)
 	}
 
 	deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktree},

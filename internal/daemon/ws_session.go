@@ -55,7 +55,7 @@ func (d *Daemon) handleGetRecentLocationsWS(client *wsClient, msg *protocol.GetR
 		limit = int(*msg.Limit)
 	}
 	d.logf("Getting recent locations (limit=%d)", limit)
-	locations := d.store.GetRecentLocations(limit)
+	locations := d.store.GetRecentLocations(limit, protocol.Deref(msg.HomeOnly))
 	homePath, _ := os.UserHomeDir()
 	d.sendToClient(client, &protocol.RecentLocationsResultMessage{
 		Event:           protocol.EventRecentLocationsResult,

@@ -1,4 +1,4 @@
-import { harnesses, serveHarnessCatalogs } from './test/harnessCatalogs';
+import { harnesses } from './test/harnessCatalogs';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandMessage } from './test/protocol';
@@ -245,23 +245,10 @@ describe('App location picker', () => {
       });
       expect(highlighted()).toEqual([row(0)]);
     });
-    it('lists this machine\'s recents and none from an outpost, however many outpost recents outrank them', async () => {
-      const outpostRecents = Array.from({ length: 25 }, (_, index) => ({ host: 'outpost-1', path: `/srv/remote-${index}`, last_seen: '2026-05-16T16:00:00Z', use_count: 9 }));
-      const ranked = [...outpostRecents, { path: RECENT, last_seen: '2026-05-16T16:00:00Z', use_count: 1 }];
-      const { daemon } = await renderApp();
-      serveHarnessCatalogs(daemon, harnesses);
-      serveMachine(daemon);
-      daemon.on('get_recent_locations', ({ limit }) => ({
-        event: 'recent_locations_result',
-        success: true,
-        home_path: HOME,
-        recent_locations: ranked.slice(0, limit ?? 20),
-      }));
-      serveLaunches(daemon);
-      serveSettings(daemon);
-      await gesture(daemon, () => pressShortcut('session.new'));
+    it('asks the daemon for this machine\'s recents only', async () => {
+      const { daemon } = await openPicker({ recent: [RECENT] });
 
-      expect(suggestions()).toEqual([RECENT.split('/').pop()]);
+      expect(daemon.sentOf('get_recent_locations').map(({ home_only }) => home_only)).toEqual([true]);
     });
   });
 

@@ -1908,6 +1908,7 @@ model InjectTestSessionMessage {
 model GetRecentLocationsMessage {
   cmd: "get_recent_locations";
   limit?: int32;  // Default 20
+  home_only?: boolean;  // only the home machine's recents, limited after filtering
   request_id?: string;
 }
 

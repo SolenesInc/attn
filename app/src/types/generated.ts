@@ -5926,6 +5926,7 @@ export enum GetKittyImageMessageCmd {
 
 export interface GetRecentLocationsMessage {
     cmd:         GetRecentLocationsMessageCmd;
+    home_only?:  boolean;
     limit?:      number;
     request_id?: string;
     [property: string]: any;
@@ -23333,6 +23334,7 @@ const typeMap: any = {
     ], "any"),
     "GetRecentLocationsMessage": o([
         { json: "cmd", js: "cmd", typ: r("GetRecentLocationsMessageCmd") },
+        { json: "home_only", js: "home_only", typ: u(undefined, true) },
         { json: "limit", js: "limit", typ: u(undefined, 0) },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),

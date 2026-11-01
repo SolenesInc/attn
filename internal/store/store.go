@@ -2091,7 +2091,7 @@ func nonEmptyPtr(value string) *string {
 	return protocol.Ptr(value)
 }
 
-func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
+func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentLocation {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -2100,14 +2100,18 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	var raw []*protocol.RecentLocation
 	if s.db == nil {
 		raw = make([]*protocol.RecentLocation, 0, len(s.recentLocations))
-		for _, loc := range s.recentLocations {
+		for key, loc := range s.recentLocations {
+			if homeOnly && key.host != "" {
+				continue
+			}
 			cloned := *loc
 			raw = append(raw, &cloned)
 		}
 	} else {
 		rows, err := s.db.Query(`
 			SELECT host, path, COALESCE(repo_root, ''), last_seen, use_count
-			FROM recent_locations`)
+			FROM recent_locations
+			WHERE host = '' OR NOT ?`, homeOnly)
 		if err != nil {
 			s.mu.RUnlock()
 			return nil

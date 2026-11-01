@@ -5642,6 +5642,9 @@ type GetRecentLocationsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// HomeOnly corresponds to the JSON schema field "home_only".
+	HomeOnly *bool `json:"home_only,omitempty,omitzero"`
+
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
 
