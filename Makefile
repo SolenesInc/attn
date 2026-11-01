@@ -199,6 +199,11 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 	pnpm --dir app install --frozen-lockfile
 	@touch $@
 
+SCHEMA_NODE_MODULES := internal/protocol/schema/node_modules/.attn-installed
+$(SCHEMA_NODE_MODULES): internal/protocol/schema/package.json internal/protocol/schema/pnpm-lock.yaml
+	pnpm --dir internal/protocol/schema install --frozen-lockfile
+	@touch $@
+
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
@@ -401,7 +406,7 @@ ensure-go-jsonschema:
 # ~1200-line diff that says nothing. Generating under C makes the output depend
 # only on the schemas.
 generate-types: export LC_ALL = C
-generate-types: ensure-go-jsonschema
+generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 	rm -rf internal/protocol/schema/tsp-output/json-schema
 	cd internal/protocol/schema && pnpm exec tsp compile .
 	$(GO_JSONSCHEMA) -p protocol --only-models --tags json --resolve-extension json \
