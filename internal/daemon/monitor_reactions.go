@@ -39,13 +39,15 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if turn.OpenedAt.After(previous.Turn.V.OpenedAt) || (stateChanged && attention.OpensTurn(state.State) && turn.SnoozedUntil.IsZero()) {
 		d.enqueueSessionActivity(session)
 	}
+	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
 	if stateChanged && !state.Quiet {
 		d.kickSessionInbox(session, string(state.State))
-		if state.Broadcast {
-			d.broadcastSessionStateChanged(session)
-		}
+		broadcast = broadcast || state.Broadcast
 	}
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
+		broadcast = true
+	}
+	if broadcast {
 		d.broadcastSessionStateChanged(session)
 	}
 	if exit := view.Exit.V; exit != nil && !exit.Held && !sameAppliedExit(exit, previous.Exit.V) {

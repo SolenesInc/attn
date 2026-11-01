@@ -138,13 +138,7 @@ func TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts(t *testing.T)
 			default:
 				w.Launched(w.Spawn(app, fakeagent.Claude, repo))
 			}
-			applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-name: Nightly check
-trigger: {type: manual}
-prompt: Report the flaky tests.
-launch: {driver: codex}
-location: {type: directory, path: %q}
-`, folder))
+			applyAutomation(t, cli, manualCodexAutomationIn(folder))
 			awaitAutomationChanged(app, 1)
 
 			answered := runAutomationFromApp(app, "trusted")
@@ -162,4 +156,39 @@ location: {type: directory, path: %q}
 			}
 		})
 	}
+}
+
+func TestAPlainCodexAutomationStartsInARepositoryAPluginAgentStartedAConversationIn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
+	awaitDriverAvailable(app, "snipe")
+	repo := newRepo(t, "shop")
+	session, run := spawnDriven(w, app, driver, repo)
+	if err := driver.report("session.report_transcript_path", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "path": w.Path("snipe-session.jsonl")}); err != nil {
+		t.Fatalf("the plugin's transcript report was refused: %v", err)
+	}
+	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.ConversationStarted)
+	})
+	applyAutomation(t, cli, manualCodexAutomationIn(repo))
+	awaitAutomationChanged(app, 1)
+
+	answered := runAutomationFromApp(app, "trusted")
+	if !answered.Success || answered.Run == nil || protocol.Deref(answered.Run.SessionID) == "" {
+		t.Fatalf("the run answered %s, want it started", describeRunAnswer(answered))
+	}
+	if got := w.CodexFolderTrust(repo); got != "trusted" {
+		t.Errorf("Codex saves the repository %s as %q, want trusted before Codex starts", repo, got)
+	}
+}
+
+func manualCodexAutomationIn(folder string) string {
+	return fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Nightly check
+trigger: {type: manual}
+prompt: Report the flaky tests.
+launch: {driver: codex}
+location: {type: directory, path: %q}
+`, folder)
 }

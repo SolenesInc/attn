@@ -198,6 +198,7 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		LastModelRequestAt:         view.LastModelRequestAt.V,
 		Driver:                     store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
 		DriverMetadata:             driver.Metadata,
+		DriverTranscript:           driver.TranscriptPath,
 		Branch:                     view.Branch.V,
 		HarnessTitle:               view.HarnessTitle.V,
 		LastSeen:                   view.LastSeen.V,

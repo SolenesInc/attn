@@ -28,28 +28,29 @@ type Store struct {
 
 	durable bool
 
-	sessions          map[protocol.SessionID]*protocol.Session
-	turnStamps        map[protocol.SessionID]TurnStamps
-	activityCursors   map[protocol.SessionID]string
-	sessionCosts      map[protocol.SessionID]sessioncost.Checkpoint
-	sessionLabels     map[protocol.SessionID]SessionLabels
-	agentDriverRuns   map[protocol.SessionID]AgentDriverReportCursor
-	teardownIntents   map[protocol.SessionID]SessionTeardownIntent
-	sessionCloses     map[protocol.SessionID]sessionCloseMark
-	agentMetadata     map[protocol.SessionID]string
-	recentLocations   map[recentLocationKey]*protocol.RecentLocation
-	settings          map[string]string
-	settingCopies     map[string]map[string]string
-	writes            *tableWrites
-	delegationChanges changeSignal
-	sessionRows       sessionRows
-	touchedAt         map[protocol.SessionID]time.Time
-	runtimeRecords    map[protocol.SessionID]SessionRuntimeRecords
-	costMu            sync.Mutex
-	liveCosts         map[protocol.SessionID]*sessionCostEntry
-	profilesSeq       int64
-	emptyDesktop      func(emptiedAt time.Time)
-	terminalBindings  func([]TerminalBinding)
+	sessions               map[protocol.SessionID]*protocol.Session
+	turnStamps             map[protocol.SessionID]TurnStamps
+	activityCursors        map[protocol.SessionID]string
+	sessionCosts           map[protocol.SessionID]sessioncost.Checkpoint
+	sessionLabels          map[protocol.SessionID]SessionLabels
+	agentDriverRuns        map[protocol.SessionID]AgentDriverReportCursor
+	agentDriverTranscripts map[protocol.SessionID]string
+	teardownIntents        map[protocol.SessionID]SessionTeardownIntent
+	sessionCloses          map[protocol.SessionID]sessionCloseMark
+	agentMetadata          map[protocol.SessionID]string
+	recentLocations        map[recentLocationKey]*protocol.RecentLocation
+	settings               map[string]string
+	settingCopies          map[string]map[string]string
+	writes                 *tableWrites
+	delegationChanges      changeSignal
+	sessionRows            sessionRows
+	touchedAt              map[protocol.SessionID]time.Time
+	runtimeRecords         map[protocol.SessionID]SessionRuntimeRecords
+	costMu                 sync.Mutex
+	liveCosts              map[protocol.SessionID]*sessionCostEntry
+	profilesSeq            int64
+	emptyDesktop           func(emptiedAt time.Time)
+	terminalBindings       func([]TerminalBinding)
 }
 
 type AgentDriverReportCursor struct {
@@ -381,7 +382,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, transcript_path != ''
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -571,11 +572,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, transcript_path != ''
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, transcript_path != ''
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -696,8 +697,8 @@ func (s *Store) StartedConversationDirectories(profileID string) []string {
 		return nil
 	}
 	rows, err := s.db.Query(`
-		SELECT DISTINCT s.directory FROM sessions s
-		WHERE s.profile_id = ? AND s.agent != ? AND s.transcript_path != ''`, profileID, protocol.AgentShellValue)
+		SELECT DISTINCT s.directory FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
+		WHERE s.profile_id = ? AND s.agent != ? AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, profileID, protocol.AgentShellValue)
 	if err != nil {
 		return nil
 	}
@@ -731,9 +732,9 @@ func (s *Store) HasStartedConversationIn(profileID string, directories []string)
 	var started bool
 	err := s.db.QueryRow(`
 		SELECT EXISTS(
-			SELECT 1 FROM sessions s
+			SELECT 1 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
 			WHERE s.profile_id = ? AND s.agent != ?
-				AND s.transcript_path != ''
+				AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')
 				AND s.directory IN (?`+strings.Repeat(", ?", len(directories)-1)+`))`, args...).Scan(&started)
 	return err == nil && started
 }
@@ -1200,6 +1201,22 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 		runs = append(runs, run)
 	}
 	return runs
+}
+
+func (s *Store) GetAgentDriverTranscriptPath(id protocol.SessionID) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return strings.TrimSpace(s.agentDriverTranscripts[id])
+	}
+	var path string
+	if err := s.db.QueryRow(
+		"SELECT agent_driver_transcript_path FROM sessions_with_runtime WHERE id = ?", id,
+	).Scan(&path); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(path)
 }
 
 func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor {
