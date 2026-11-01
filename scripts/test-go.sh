@@ -5,7 +5,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
+cli_package="github.com/victorarias/attn/cmd/attn"
 shard_count="${ATTN_GO_TEST_SHARDS:-5}"
+cli_shard_count=3
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
 # -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
@@ -124,14 +126,21 @@ if [ "$short_mode" = false ]; then
 fi
 
 packages_file="$test_root/packages"
-"$go_bin" list ./... | awk -v daemon="$daemon_package" '$0 != daemon' >"$packages_file"
+"$go_bin" list ./... | awk -v daemon="$daemon_package" -v cli="$cli_package" '$0 != daemon && $0 != cli' >"$packages_file"
 
-tests_file="$test_root/daemon-tests"
-"$go_bin" test -list '^Test' ./internal/daemon | awk '/^Test/ { print }' >"$tests_file"
-if [ ! -s "$tests_file" ]; then
-  echo "no daemon tests discovered" >&2
-  exit 1
-fi
+list_tests() {
+  local package_dir="$1" tests_file="$2"
+  "$go_bin" test -list '^Test' "$package_dir" | awk '/^Test/ { print }' >"$tests_file"
+  if [ ! -s "$tests_file" ]; then
+    echo "no tests discovered in $package_dir" >&2
+    exit 1
+  fi
+}
+
+daemon_tests_file="$test_root/daemon-tests"
+list_tests ./internal/daemon "$daemon_tests_file"
+cli_tests_file="$test_root/cli-tests"
+list_tests ./cmd/attn "$cli_tests_file"
 
 pids=()
 names=()
@@ -156,18 +165,25 @@ run_job packages -timeout "$test_timeout" -p "$package_parallelism" "$@" "${pack
 # Race-check document queries for lost wakes/torn reads.
 run_job race -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
 
-shard=0
-while [ "$shard" -lt "$shard_count" ]; do
-  regex="$(awk -v count="$shard_count" -v target="$shard" '
-    (NR - 1) % count == target {
-      if (tests != "") tests = tests "|"
-      tests = tests $0
-    }
-    END { print "^(" tests ")$" }
-  ' "$tests_file")"
-  run_job "daemon-$((shard + 1))" -timeout "$test_timeout" "$@" -run "$regex" ./internal/daemon
-  shard=$((shard + 1))
-done
+run_shards() {
+  local name_prefix="$1" count="$2" tests_file="$3" package_dir="$4"
+  shift 4
+  local shard=0 regex
+  while [ "$shard" -lt "$count" ]; do
+    regex="$(awk -v count="$count" -v target="$shard" '
+      (NR - 1) % count == target {
+        if (tests != "") tests = tests "|"
+        tests = tests $0
+      }
+      END { print "^(" tests ")$" }
+    ' "$tests_file")"
+    run_job "$name_prefix-$((shard + 1))" -timeout "$test_timeout" "$@" -run "$regex" "$package_dir"
+    shard=$((shard + 1))
+  done
+}
+
+run_shards daemon "$shard_count" "$daemon_tests_file" ./internal/daemon "$@"
+run_shards attn "$cli_shard_count" "$cli_tests_file" ./cmd/attn "$@"
 
 failed=0
 index=0
