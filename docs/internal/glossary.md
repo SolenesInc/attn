@@ -277,7 +277,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - handoff (crew) → letter
 - day (crew) → session
 - continuity thread → continuity
-- dormant → parked
 - dock panel → drawer
 - active leaf, active pane → active tile
 - leaf history → tile history
