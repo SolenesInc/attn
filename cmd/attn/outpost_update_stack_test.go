@@ -160,7 +160,7 @@ func TestSSHUpdateKeepsShellAndReconnectNeverInstalls(t *testing.T) {
 
 func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 	for _, tc := range []struct{ name, reason string }{
-		{"staged-build", "staged build"}, {"newer-schema", "contains migration"}, {"shared-pty-host", "pty_shared_host_enabled"},
+		{"platform", "Linux amd64 or arm64"}, {"staged-build", "staged build"}, {"newer-schema", "contains migration"}, {"shared-pty-host", "pty_shared_host_enabled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ssh := testworld.NewSSH(t)
@@ -184,6 +184,9 @@ func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 				asset = old
 			}
 			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+asset)
+			if tc.name == "platform" {
+				ssh.MachineCommand(remote, "uname", "echo Darwin arm64")
+			}
 			before, err := os.ReadFile(ssh.InstallPath(remote))
 			if err != nil {
 				t.Fatal(err)

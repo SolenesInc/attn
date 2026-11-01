@@ -68,7 +68,6 @@
           {
             "allowed": {
               "app/src/App.desktops.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
-              "app/src/App.moveLeaf.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/application/useAppDeepLinks.test.tsx": "polls with Testing Library's waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/application/useSessionLaunch.placement.test.tsx": "polls with vi.waitFor; settle with gesture or daemon.idle under the scripted daemon's fake timers",
               "app/src/components/LocationPicker.test.tsx": "polls with Testing Library's waitFor and findBy; settle with gesture or daemon.idle under the scripted daemon's fake timers",
@@ -89,7 +88,6 @@
           {
             "allowed": {
               "app/src/App.desktops.test.tsx": "mocks 14 of attn's own modules; use the real ones",
-              "app/src/App.moveLeaf.test.tsx": "mocks attn's own components/GhosttyTerminal, pty/bridge; use the real module",
               "app/src/application/useAppDiagnostics.test.tsx": "mocks attn's own utils/diagnosticReport; use the real module",
               "app/src/application/useSessionLaunch.placement.test.tsx": "mocks attn's own pty/bridge; use the real module",
               "app/src/components/LocationPicker.test.tsx": "mocks attn's own hooks/useFilesystemSuggestions; use the real module",
