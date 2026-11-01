@@ -76,6 +76,14 @@ export const scenarioCatalog = [
     timeoutMs: 600_000,
   },
   {
+    id: 'dictation-routing',
+    runnerId: 'DICTATION-ROUTING',
+    label: 'Dictation hotkey: registered only while an attn window is key, routed to main, a browser tile or Quick Capture',
+    command: ['node', 'scripts/real-app-harness/scenario-dictation-routing.mjs'],
+    skipOn: { linux: 'The dictation hotkey is a macOS Carbon registration' },
+    timeoutMs: 300_000,
+  },
+  {
     id: 'chief-slot',
     runnerId: 'CHIEF-SLOT',
     label: 'Chief slot: fresh-profile setup that fits without scroll bars, keyboard-only Notebook pick and first wake',

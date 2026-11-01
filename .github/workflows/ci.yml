@@ -984,7 +984,7 @@ jobs:
           archive: ${{ steps.build-app.outputs.archive }}
 
       - name: Run native clipboard, keyboard and capture scenarios
-        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture --scenario dictation-routing
 
       - name: Upload test receipts
         if: always()
@@ -1002,6 +1002,7 @@ jobs:
             { id: 'terminal-block-copy', code: 0, skipped: false },
             { id: 'terminal-input', code: 0, skipped: false },
             { id: 'quick-capture', code: 0, skipped: false },
+            { id: 'dictation-routing', code: 0, skipped: false },
           ]);
           NODE
 
