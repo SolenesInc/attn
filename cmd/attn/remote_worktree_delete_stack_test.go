@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,9 +14,35 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func giveTheHomeItsOwnCheckoutAt(t *testing.T, home *testworld.Stack, pattern, checkout string) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := home.Path("home-bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := fmt.Sprintf("#!/bin/sh\ncase \"$PWD\" in %s) cd %q ;; esac\nexec %q \"$@\"\n", pattern, checkout, real)
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := os.Getenv("PATH")
+	for _, v := range home.Vars {
+		if after, ok := strings.CutPrefix(v, "PATH="); ok {
+			path = after
+		}
+	}
+	home.Vars = append(home.Vars, "PATH="+bin+string(os.PathListSeparator)+path)
+}
+
 func TestDeletingAWorktreeOnAnOutpostAnswersToTheHome(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")
+	homesOwnCheckout := home.Path("home-checkout")
+	gitRepo(t, homesOwnCheckout)
+	giveTheHomeItsOwnCheckoutAt(t, home, "*/shop--feat", homesOwnCheckout)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
 	app, host := pair.App, pair.Host

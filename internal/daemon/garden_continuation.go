@@ -78,7 +78,7 @@ func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Ex
 
 func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
 	execution := snapshotGardenExecution(session, now)
-	if execution.Cwd == "" {
+	if execution.Cwd == "" || d.sessionHost(session.ID) != "" {
 		return execution
 	}
 	var checkoutRoot, mainRepo, branch string
