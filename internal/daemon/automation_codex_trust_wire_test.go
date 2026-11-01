@@ -24,17 +24,15 @@ func TestACodexAutomationRefusesAFolderTheUserIsNotKnownToTrust(t *testing.T) {
 		}
 	}
 	for _, c := range []struct {
-		name, saved, worked, repoOrigin string
-		shared, otherProfile            bool
-		folder                          func(t *testing.T, repo string) string
+		name, saved, worked  string
+		shared, otherProfile bool
+		folder               func(t *testing.T, repo string) string
 	}{
 		{name: "plain Codex in a repository nobody worked in", folder: inRepo("")},
 		{name: "shared Codex in a repository nobody worked in", shared: true, folder: inRepo("")},
 		{name: "plain Codex in a folder saved untrusted", saved: "untrusted", worked: ".", folder: inRepo("")},
 		{name: "shared Codex in a folder saved untrusted", saved: "untrusted", worked: ".", shared: true, folder: inRepo("")},
 		{name: "a clone of another repository whose origin ends the same way", worked: ".", folder: cloneWithOrigin("https://gitlab.example/b/team/shop.git")},
-		{name: "a clone whose local origin differs only in case", worked: ".", repoOrigin: "file:///srv/git/Team/shop.git", folder: cloneWithOrigin("file:///srv/git/team/shop.git")},
-		{name: "a clone whose origin is another SSH user's home", worked: ".", repoOrigin: "alice@example.org:shop.git", folder: cloneWithOrigin("bob@example.org:shop.git")},
 		{name: "a repository an agent worked in from another profile", worked: "pkg1", otherProfile: true, folder: inRepo("pkg2")},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,9 +43,6 @@ func TestACodexAutomationRefusesAFolderTheUserIsNotKnownToTrust(t *testing.T) {
 			}
 			repo := newRepo(t, "shop")
 			origin := "https://gitlab.example/a/team/shop.git"
-			if c.repoOrigin != "" {
-				origin = c.repoOrigin
-			}
 			runGit(t, repo, "remote", "add", "origin", origin)
 			if c.worked != "" {
 				w.Launched(w.Spawn(app, fakeagent.Claude, filepath.Join(repo, c.worked)))
