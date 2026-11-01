@@ -45,6 +45,19 @@ func (d *Daemon) saveSeedAuthorization(seedID, text string, setter who.Actor, ca
 	return fmt.Errorf("%s was rewritten under all %d attempts to save its authorization; delegate again", seedID, attempts)
 }
 
+func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) error {
+	if _, isParty := setter.Party(); !isParty {
+		return nil
+	}
+	standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
+	held := seed.Tender
+	if !seed.ClaimHolds(standing.Holds) || held.Actor() == setter || standing.Oversees(setter, held) {
+		return nil
+	}
+	tender := standing.Name(held)
+	return fmt.Errorf("%s is tended by %s; only %s, the sessions above %s in the delegation chain, the chief or the user can set its authorization", seed.ID, tender, tender, tender)
+}
+
 func (d *Daemon) seedAuthorizationView(a *garden.Authorization) *protocol.SeedAuthorization {
 	if a == nil {
 		return nil

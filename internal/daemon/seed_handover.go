@@ -48,6 +48,11 @@ func (d *Daemon) prepareSeedHandover(
 		plan.alreadyBound = true
 		return plan, nil
 	}
+	if msg.Authorization != "" {
+		if err := d.checkAuthorizationStanding(seed, d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID)))); err != nil {
+			return nil, err
+		}
+	}
 	if request.Review != nil {
 		item, reviewErr := d.validateGardenReviewAction(request.Review, seedID, "handover")
 		if reviewErr != nil {

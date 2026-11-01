@@ -63,8 +63,10 @@ keeps them: the next agent's opening carries the seed's current words without
 anyone passing them again. `attn seed show` prints them under the header, with
 who set them and when.
 
-Attn doesn't check that the words are yours. The agent that sets them answers
-for them, and the seed's log records who set what.
+Only the seed's tender, the sessions above the tender in the delegation chain,
+the chief or you can set them while the seed is claimed. Attn doesn't check
+that the words are yours. The agent that sets them answers for them, and the
+seed's log records who set what.
 
 ## Steering a delegate
 

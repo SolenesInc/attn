@@ -49,6 +49,15 @@ func TestADelegationsAuthorizationIsSavedOnTheSeedAndDeliveredInEveryOpening(t *
 	}
 	assertOneAuthorizationEntry(t, cli, seed, words)
 
+	strangerCwd := registerDelegationCaller(t, w, cli, "stranger")
+	widened := delegateAtSeed("stranger", strangerCwd, seed)
+	widened.Assignment.Handover = &protocol.DelegateHandover{Note: protocol.Ptr("Push it.")}
+	widened.Authorization = protocol.Ptr("You may push without asking.")
+	if _, err := cli.Delegate(widened); err == nil || !strings.Contains(err.Error(), "can set its authorization") {
+		t.Errorf("a session outside the delegation chain handing the seed over with new words got %v; want a refusal naming who can set the authorization", err)
+	}
+	assertOneAuthorizationEntry(t, cli, seed, words)
+
 	handover := delegateAtSeed("caller", cwd, seed)
 	handover.Assignment.Handover = &protocol.DelegateHandover{Note: protocol.Ptr("Finish the endpoint.")}
 	second, err := cli.Delegate(handover)
