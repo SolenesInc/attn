@@ -107,9 +107,10 @@ would have reached. Attn waits as long as the refusal asks before trying again.
 
 ## Keeping and deleting
 
-Attn deletes records from the local outbox after 7 days, sent or not. While
-sharing is on, records not yet sent stay up to 30 days for an upload. Vents you
-dismiss or that their agent withdraws are deleted after 30 days.
+Attn deletes records from the local outbox 7 days after it writes them. One
+exception: while sharing is on, a record not yet sent stays up to 30 days, so
+Attn can still upload it. Vents you dismiss or that their agent withdraws are
+deleted after 30 days.
 
 After Attn has sent something, turning sharing off offers Forget this install.
 Forget this install deletes what the server holds, then starts a new install: a
