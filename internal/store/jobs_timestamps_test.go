@@ -57,8 +57,8 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 		if err := s.UpsertJob(newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))); err != nil {
 			t.Fatalf("upsert %s: %v", r.id, err)
 		}
-		if _, err := s.AddNotification(
-			NotificationRecord{Kind: "task_failed", Title: r.id}, jobBase().Add(r.offset)); err != nil {
+		if _, err := s.db.Exec(
+			`INSERT INTO notifications (id, kind, title, created_at) VALUES (?, 'task_failed', ?, '')`, r.id, r.id); err != nil {
 			t.Fatalf("add notification %s: %v", r.id, err)
 		}
 	}
@@ -114,20 +114,17 @@ func assertMigration94Applied(t *testing.T, s *Store) {
 		t.Fatalf("after migration 94 the jobs claimable at the whole second are %v, want %v", jobIDs(got), want)
 	}
 
-	notes, err := s.ListNotifications()
-	if err != nil {
-		t.Fatal(err)
-	}
+	notes := legacyNotifications(t, s)
 	titles := make([]string, 0, len(notes))
 	for _, n := range notes {
-		titles = append(titles, n.Title)
+		titles = append(titles, n.title)
 	}
 	if want := reversed(chronologicalJobIDs()); !sameOrder(titles, want) {
 		t.Fatalf("after migration 94 the notifications list as %v, want %v", titles, want)
 	}
 	for _, n := range notes {
-		if !n.ReadAt.IsZero() {
-			t.Fatalf("notification %q came back read; read_at must stay the unread sentinel", n.Title)
+		if n.readAt != "" {
+			t.Fatalf("notification %q came back read; read_at must stay the unread sentinel", n.title)
 		}
 	}
 	var unreadable string

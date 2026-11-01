@@ -31,7 +31,7 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		}
 	}
 
-	if _, err := s.ListNotifications(); err == nil {
+	if _, err := s.db.Exec(`SELECT severity FROM notifications`); err == nil {
 		t.Fatal("the planted schema already has severity; this test would pass without the migration")
 	}
 
@@ -42,24 +42,21 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 		t.Fatalf("migrateDB: %v", err)
 	}
 
-	all, err := s.ListNotifications()
-	if err != nil {
-		t.Fatalf("list after migration: %v", err)
-	}
+	all := legacyNotifications(t, s)
 	if len(all) != 2 {
 		t.Fatalf("carried %d rows, want 2", len(all))
 	}
+	unread := 0
 	for _, got := range all {
-		if got.Severity != NotificationInfo {
-			t.Fatalf("carried row %q has severity %q, want info", got.Title, got.Severity)
+		if got.severity != string(NotificationInfo) {
+			t.Fatalf("carried row %q has severity %q, want info", got.title, got.severity)
 		}
-		if got.Body != "body" || got.Detail != "detail" || got.SourceID != "t1" {
-			t.Fatalf("carried row %q lost fields: %+v", got.Title, got)
+		if got.body != "body" || got.detail != "detail" || got.sourceID != "t1" {
+			t.Fatalf("carried row %q lost fields: %+v", got.title, got)
 		}
-	}
-	unread, err := s.UnreadNotificationCount()
-	if err != nil {
-		t.Fatalf("unread count: %v", err)
+		if got.readAt == "" {
+			unread++
+		}
 	}
 	if unread != 1 {
 		t.Fatalf("unread = %d, want 1", unread)
@@ -71,7 +68,32 @@ func TestMigration100CarriesPreSeverityNotifications(t *testing.T) {
 	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("re-run migrateDB: %v", err)
 	}
-	if again, err := s.ListNotifications(); err != nil || len(again) != 2 {
-		t.Fatalf("re-run changed the feed: %v (err %v)", again, err)
+	if again := legacyNotifications(t, s); len(again) != 2 {
+		t.Fatalf("re-run changed the feed: %v", again)
 	}
+}
+
+type legacyNotification struct {
+	title, severity, body, detail, sourceID, readAt string
+}
+
+func legacyNotifications(t *testing.T, s *Store) []legacyNotification {
+	t.Helper()
+	rows, err := s.db.Query(`SELECT title, severity, body, detail, source_id, read_at FROM notifications ORDER BY created_at DESC, id DESC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []legacyNotification
+	for rows.Next() {
+		var n legacyNotification
+		if err := rows.Scan(&n.title, &n.severity, &n.body, &n.detail, &n.sourceID, &n.readAt); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

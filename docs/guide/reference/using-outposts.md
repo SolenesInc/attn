@@ -246,11 +246,10 @@ The counts add up every folder that syncs, and each error starts with its folder
 the home. Byte and item counts appear
 once the remaining work is known. The row also shows a count of conflict copies.
 Sync keeps both versions of concurrent edits, as the original and a
-`*.sync-conflict-*` copy. Attn sends one notification at the home for each new
-conflict copy. Notifications reach every profile, so for a folder that only some
-profiles use, the notification names neither the files nor the profiles.
-Compare the files, merge the content you need, and remove the copy to clear the
-count. Attn moves a file that a sync deletes or
+`*.sync-conflict-*` copy. For each new conflict copy, attn sends a notification
+at the home to every profile that uses the folder. The notification names the
+original and the copy, and other profiles never see it. Compare the files, merge
+the content you need, and remove the copy to clear the count. Attn moves a file that a sync deletes or
 replaces on the receiving machine to `<data-dir>/notebook-trash/` and keeps it
 there for 30 days. For each path, the trash holds only the latest received
 replacement.

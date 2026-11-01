@@ -1463,11 +1463,11 @@ model SocketCaller {
   caller_id?: TerminalID;
 }
 
-// Notifications surface: a global, daemon-level feed of durable notifications.
-// The producer is the task
-// runner, which adds one when a background task reaches terminal `dead`. The
-// frontend lists them, marks them read, and re-lists on the notifications_updated
-// broadcast; the unread count drives a sidebar badge.
+// Notifications surface: a feed of durable notifications for the client's
+// selected profile. A notification belongs to one profile, such as a Notebook
+// conflict in a folder that profile uses, or to none, which every profile sees.
+// The frontend lists them, marks them read, and re-lists on
+// notifications_updated; the unread count drives a sidebar badge.
 model NotificationListMessage {
   cmd: "notification_list";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -8051,9 +8051,10 @@ model NotificationMarkReadResultMessage {
   unread_count: int32;
 }
 
-// Broadcast (no request_id) whenever the feed changes — a new notification is
-// added or one/all are marked read — so every client updates its badge and any
-// open panel re-lists. unread_count is the authoritative post-change count.
+// Sent to every client (no request_id) whenever the feed changes — a new
+// notification is added or one/all are marked read — and to a client when its
+// selected profile changes, so its badge updates and any open panel re-lists.
+// The counts are for the client's selected profile.
 model NotificationsUpdatedMessage {
   event: "notifications_updated";
   unread_count: int32;

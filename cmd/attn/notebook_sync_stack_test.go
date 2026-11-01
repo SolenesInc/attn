@@ -746,7 +746,7 @@ func TestNotebookConflictsUnderDotDirectoriesFollowTheFiles(t *testing.T) {
 	}
 }
 
-func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *testing.T) {
+func TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCopies(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	outpost.Start()
@@ -771,21 +771,32 @@ func TestOneProfilesNotebookFolderFailsAloneAndKeepsItsFileNamesToItself(t *test
 	defaultCopy := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
 	writeFileAt(t, filepath.Join(defaultCopy, "from-outpost.md"), "written in Default's copy")
 	awaitHomeFile(t, home.AppOn(defaultProfile), home, notebookPath(home, "from-outpost.md"), "written in Default's copy", false)
-	notifications := testworld.Request(pair.App, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr("conflicts")}, protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == "conflicts" })
-	found := false
-	for _, notification := range notifications.Notifications {
-		if notification.Kind != "notebook_sync_conflict" {
-			continue
+	conflictCopy := filepath.Join(side, "secret plan.sync-conflict-20261027-120000-device.md")
+	conflictNotifications := func(app *testworld.Peer, requestID string) []protocol.Notification {
+		listed := testworld.Request(app, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr(requestID)}, protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == requestID })
+		var conflicts []protocol.Notification
+		for _, notification := range listed.Notifications {
+			if notification.Kind == "notebook_sync_conflict" {
+				conflicts = append(conflicts, notification)
+			}
 		}
-		found = true
-		if strings.Contains(notification.Title+notification.Body+notification.SourceID, "secret plan") || strings.Contains(notification.Body, side) || strings.Contains(notification.Body, "Side") {
-			t.Fatalf("a conflict in Side's own folder notifies every profile with %+v", notification)
-		}
+		return conflicts
 	}
-	if !found {
-		t.Fatal("no notification for the conflict copy in Side's folder")
+	sideConflicts := conflictNotifications(home.AppOn(created.Profile.ID), "side-conflicts")
+	if len(sideConflicts) != 1 || !strings.Contains(sideConflicts[0].Body, filepath.Join(side, "secret plan.md")) || !strings.Contains(sideConflicts[0].Body, conflictCopy) {
+		t.Fatalf("Side's notifications do not name its original and conflict copy: %+v", sideConflicts)
 	}
-	t.Logf("Side's blocked copy failed alone (%s); Default's folder synced; the conflict notification names neither the file nor the profile", protocol.Deref(state.Error))
+	if defaultConflicts := conflictNotifications(home.AppOn(defaultProfile), "default-conflicts"); len(defaultConflicts) != 0 {
+		t.Fatalf("a conflict in Side's own folder reached Default: %+v", defaultConflicts)
+	}
+	marked := testworld.Request(home.AppOn(defaultProfile), protocol.NotificationMarkReadMessage{Cmd: protocol.CmdNotificationMarkRead, RequestID: protocol.Ptr("default-read-all")}, protocol.EventNotificationMarkReadResult, func(r protocol.NotificationMarkReadResultMessage) bool { return r.RequestID == "default-read-all" })
+	if !marked.Success || marked.UnreadCount != 0 {
+		t.Fatalf("Default marking all read: %+v", marked)
+	}
+	if sideConflicts := conflictNotifications(home.AppOn(created.Profile.ID), "side-after-default-read"); len(sideConflicts) != 1 || sideConflicts[0].ReadAt != "" {
+		t.Fatalf("Default marking all read changed Side's conflict notification: %+v", sideConflicts)
+	}
+	t.Logf("Side's blocked copy failed alone (%s); Default's folder synced; Side's notification reads %q, Default lists none, and Default marking all read leaves it unread", protocol.Deref(state.Error), sideConflicts[0].Body)
 
 	if err := os.Remove(blocked); err != nil {
 		t.Fatal(err)

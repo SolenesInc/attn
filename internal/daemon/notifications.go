@@ -55,12 +55,13 @@ func (d *Daemon) sendNotificationListWSResult(client *wsClient, requestID string
 		})
 		return
 	}
-	list, err := d.store.ListNotifications()
-	unread, unreadErr := d.store.UnreadNotificationCount()
+	profileID := client.selectedProfile()
+	list, err := d.store.ListNotifications(profileID)
+	unread, unreadErr := d.store.UnreadNotificationCount(profileID)
 	if err == nil {
 		err = unreadErr
 	}
-	criticalCount, criticalTitle, criticalErr := d.store.UnreadCriticalNotifications()
+	criticalCount, criticalTitle, criticalErr := d.store.UnreadCriticalNotifications(profileID)
 	if err == nil {
 		err = criticalErr
 	}
@@ -94,26 +95,27 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 		fail("notification store unavailable")
 		return
 	}
+	profileID := client.selectedProfile()
 	var markedIDs []string
 	var markErr error
 	if notificationID != nil && *notificationID != "" {
 		markedIDs = []string{*notificationID}
 		markErr = d.store.MarkNotificationRead(*notificationID, time.Now())
 	} else {
-		if all, err := d.store.ListNotifications(); err == nil {
+		if all, err := d.store.ListNotifications(profileID); err == nil {
 			for _, rec := range all {
 				if rec.ReadAt.IsZero() {
 					markedIDs = append(markedIDs, rec.ID)
 				}
 			}
 		}
-		_, markErr = d.store.MarkAllNotificationsRead(time.Now())
+		_, markErr = d.store.MarkAllNotificationsRead(profileID, time.Now())
 	}
 	if markErr != nil {
 		fail(markErr.Error())
 		return
 	}
-	unread, err := d.store.UnreadNotificationCount()
+	unread, err := d.store.UnreadNotificationCount(profileID)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -260,24 +262,36 @@ func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord
 }
 
 func (d *Daemon) projectNotificationsUpdated() {
+	if d.wsHub == nil {
+		return
+	}
 	d.projectSnapshot(snapshotNotifs, func() {
-		unread, criticalCount, criticalTitle := 0, 0, ""
-		if d.store != nil {
-			if n, err := d.store.UnreadNotificationCount(); err == nil {
-				unread = n
+		messages := map[string]protocol.NotificationsUpdatedMessage{}
+		d.wsHub.ForEachClient(func(client *wsClient) {
+			profileID := client.selectedProfile()
+			msg, ok := messages[profileID]
+			if !ok {
+				msg = d.notificationsUpdated(profileID)
+				messages[profileID] = msg
 			}
-			if n, title, err := d.store.UnreadCriticalNotifications(); err == nil {
-				criticalCount, criticalTitle = n, title
-			}
-		}
-		msg := protocol.NotificationsUpdatedMessage{
-			Event:               protocol.EventNotificationsUpdated,
-			UnreadCount:         unread,
-			UnreadCriticalCount: criticalCount,
-		}
-		if criticalTitle != "" {
-			msg.CriticalTitle = protocol.Ptr(criticalTitle)
-		}
-		d.broadcastMessage(msg)
+			d.sendToClient(client, msg)
+		})
 	})
+}
+
+func (d *Daemon) notificationsUpdated(profileID string) protocol.NotificationsUpdatedMessage {
+	msg := protocol.NotificationsUpdatedMessage{Event: protocol.EventNotificationsUpdated}
+	if d.store == nil {
+		return msg
+	}
+	if n, err := d.store.UnreadNotificationCount(profileID); err == nil {
+		msg.UnreadCount = n
+	}
+	if n, title, err := d.store.UnreadCriticalNotifications(profileID); err == nil {
+		msg.UnreadCriticalCount = n
+		if title != "" {
+			msg.CriticalTitle = protocol.Ptr(title)
+		}
+	}
+	return msg
 }

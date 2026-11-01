@@ -710,22 +710,25 @@ func (d *Daemon) notebookConflictCopies(folder, root string) (map[string]struct{
 
 func (d *Daemon) notifyNotebookConflict(folder, root, rel string) error {
 	path := filepath.Join(root, filepath.FromSlash(rel))
-	sum := sha256.Sum256([]byte(root + "\x00" + rel))
-	body, source := fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path), rel
-	if shared, err := d.notebookFolderSharedByEveryProfile(folder); err != nil {
-		return err
-	} else if !shared {
-		body, source = "Both versions were kept in a Notebook folder. Open your Notebook, compare the file with its .sync-conflict- copy, merge what you need, then remove the copy.", folder
+	d.notebookSync.mu.Lock()
+	users := slices.Clone(d.notebookSync.disk.Folders[folder].Profiles)
+	d.notebookSync.mu.Unlock()
+	for _, profileID := range users {
+		sum := sha256.Sum256([]byte(profileID + "\x00" + root + "\x00" + rel))
+		notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
+			ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
+			Title:      "Notebook conflict copy",
+			Body:       fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path),
+			SourceKind: "notebook", SourceID: rel, ProfileID: profileID,
+		}, time.Now())
+		if err != nil {
+			return err
+		}
+		if inserted {
+			d.publishFact(FactNotificationCreated, notification.ID, nil)
+		}
 	}
-	notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
-		ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
-		Title: "Notebook conflict copy", Body: body,
-		SourceKind: "notebook", SourceID: source,
-	}, time.Now())
-	if err == nil && inserted {
-		d.publishFact(FactNotificationCreated, notification.ID, nil)
-	}
-	return err
+	return nil
 }
 
 func (d *Daemon) updateNotebookConflicts(run *notebookSyncRun, folder string, paths []string) {
@@ -1411,22 +1414,6 @@ func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string
 		root = copied
 	}
 	return filepath.Join(root, "seeds", seed), nil
-}
-
-func (d *Daemon) notebookFolderSharedByEveryProfile(folder string) (bool, error) {
-	d.notebookSync.mu.Lock()
-	users := slices.Clone(d.notebookSync.disk.Folders[folder].Profiles)
-	d.notebookSync.mu.Unlock()
-	live, err := d.store.ListProfiles(false)
-	if err != nil {
-		return false, err
-	}
-	for _, profile := range live {
-		if !slices.Contains(users, profile.ID) {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 func notebookConflictOriginal(path string) string {
