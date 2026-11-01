@@ -1,7 +1,7 @@
 """Verify a real attn-speech helper: process checks, and idle cost with post-idle latency.
 
   python3 -I scripts/verify-speech-helper.py check BINARY WORKDIR CLIPS_DIR [PREPARED_CACHE]
-  python3 -I scripts/verify-speech-helper.py idle BINARY CACHE CLIP IDLE_SECONDS INTERVAL_SECONDS
+  python3 -I scripts/verify-speech-helper.py idle BINARY CACHE CLIP IDLE_SECONDS INTERVAL_SECONDS [--warm-first]
 
 `check` prints one JSON line per check and exits nonzero when any fails. It downloads the
 pinned model into empty caches under WORKDIR; PREPARED_CACHE, when given, is cloned for the
@@ -9,7 +9,8 @@ checks that start from a published model. CLIPS_DIR holds <voice>/<name>.wav wit
 <name>.wav.txt reference transcript beside each clip.
 
 `idle` prepares a helper, transcribes CLIP, then samples proc_pid_rusage counters every
-INTERVAL_SECONDS for IDLE_SECONDS and times one request after the idle period.
+INTERVAL_SECONDS for IDLE_SECONDS and times one request after the idle period;
+--warm-first sends warm, as a recording start would, before that request.
 """
 import ctypes
 import hashlib
@@ -360,7 +361,7 @@ def check(BINARY, WORK, CLIPS, PREPARED):
     sys.exit(0 if all(r["pass"] for r in results) else 1)
 
 
-def idle(binary, cache, clip, idle_s, interval):
+def idle(binary, cache, clip, idle_s, interval, warm_first):
     h = Helper(binary, cache)
     pid = h.proc.pid
     ready = h.finish(h.send("prepare"))
@@ -392,6 +393,10 @@ def idle(binary, cache, clip, idle_s, interval):
             "pageins": current["pageins"],
         }), flush=True)
         previous = current
+    if warm_first:
+        started = time.monotonic()
+        warmed = h.finish(h.send("warm"))
+        print(json.dumps({"post_idle_warm_ms": round((warmed["_t"] - started) * 1000, 1)}), flush=True)
     print(json.dumps({"post_idle_request": timed_request(), "after": sample(pid)}), flush=True)
     print(json.dumps({"next_request": timed_request()}), flush=True)
     print(json.dumps({"lease_exit_s": round(h.close_lease(), 3), "rc": h.proc.returncode}), flush=True)
@@ -402,6 +407,6 @@ if __name__ == "__main__":
     if command == "check":
         sys.exit(check(args[0], args[1], args[2], args[3] if len(args) > 3 else None))
     if command == "idle":
-        idle(args[0], args[1], args[2], float(args[3]), float(args[4]))
+        idle(args[0], args[1], args[2], float(args[3]), float(args[4]), args[5:] == ["--warm-first"])
         sys.exit(0)
     sys.exit(__doc__)

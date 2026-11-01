@@ -291,6 +291,7 @@ export function useSettingsModalState({
   const queueQuietNotifications = settings.queue_quiet_notifications === 'true';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
+  const dictationEnabled = settings.dictation_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
@@ -755,6 +756,7 @@ export function useSettingsModalState({
     queueQuietNotifications,
     directAgentLaunchEnabled,
     quickCaptureEnabled,
+    dictationEnabled,
     onSetSetting,
     settings,
     activityAgents,

@@ -108,6 +108,8 @@ jobs:
           mkdir -p app/src-tauri/binaries
           cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-aarch64-apple-darwin"
+          make build-speech-helper
+          cp app/speech/target/release/attn-speech "app/src-tauri/binaries/attn-speech-aarch64-apple-darwin"
 
       - name: Read bun pin
         id: bun

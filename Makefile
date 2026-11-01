@@ -459,9 +459,10 @@ check-schema:
 # instance::automation_enabled) — an instanced build sees its ATTN_INSTANCE and
 # enables automation for any named instance (dev, ticketqa, agent7, …); prod (the
 # empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
-build-app: ensure-codesign-identity build build-pty-host
+build-app: ensure-codesign-identity build build-pty-host $(if $(filter Darwin,$(UNAME_S)),build-speech-helper)
 	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
+		ATTN_SPEECH_HELPER_BIN="$(CURDIR)/$(SPEECH_HELPER_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
 		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
@@ -495,6 +496,7 @@ sign-app: ensure-codesign-identity
 		if [ -z "$$identity" ]; then identity="-"; fi; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn-pty-host; \
+		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn-speech; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app; \
 		echo "Signed ~/Applications/attn.app with identity $$identity"; \
 	else \

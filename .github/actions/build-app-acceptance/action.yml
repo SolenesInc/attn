@@ -82,6 +82,7 @@ runs:
       with:
         workspaces: |
           app/src-tauri
+          app/speech
           pty-host
 
     - name: Build the packaged app

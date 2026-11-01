@@ -244,6 +244,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           queueQuietNotifications={state.queueQuietNotifications}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           quickCaptureEnabled={state.quickCaptureEnabled}
+          dictationEnabled={state.dictationEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
           crewV2Enabled={state.crewV2Enabled}

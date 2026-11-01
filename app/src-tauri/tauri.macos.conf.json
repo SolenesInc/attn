@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "externalBin": ["binaries/attn", "binaries/attn-pty-host", "binaries/attn-speech"],
+    "resources": {
+      "bundled-plugins/": "plugins/",
+      "../speech/LICENSES/": "speech-licenses/"
+    }
+  }
+}

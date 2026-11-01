@@ -57,6 +57,7 @@ const (
 	SettingAsksEnabled                   = settingkeys.SettingAsksEnabled
 	SettingCaptureShortcut               = settingkeys.SettingCaptureShortcut
 	SettingQuickCaptureEnabled           = settingkeys.SettingQuickCaptureEnabled
+	SettingDictationEnabled              = settingkeys.SettingDictationEnabled
 	SettingCrewV2Enabled                 = settingkeys.SettingCrewV2Enabled
 	SettingCalloutsEnabled               = settingkeys.SettingCalloutsEnabled
 	SettingAutoSettleArmSeconds          = settingkeys.SettingAutoSettleArmSeconds
@@ -139,6 +140,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: string(SettingCaptureShortcut), scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
+	{key: string(SettingDictationEnabled), scope: daemonScope, experimental: true, description: "Enable experimental dictation: true or false. Enabling downloads the English speech model on this Mac. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingQuickCaptureEnabled), scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCrewV2Enabled), scope: daemonScope, experimental: true, description: "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingNewSessionLauncherEnabled), scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

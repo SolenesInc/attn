@@ -1,3 +1,4 @@
+import { useSpeechHelperLifecycle } from './dictation/speechHelper';
 import { Toast } from './components/Toast';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { emitTo } from '@tauri-apps/api/event';
@@ -129,6 +130,7 @@ function App() {
   });
 
   const captureHost = useQuickCaptureHost(daemon, settings);
+  useSpeechHelperLifecycle(settings);
   const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const { sendRecordAnalytics } = daemon;
   useEffect(() => {

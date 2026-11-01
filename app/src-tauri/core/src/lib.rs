@@ -9,6 +9,7 @@ mod native_input_diagnostics;
 #[cfg(target_os = "macos")]
 mod native_keyboard;
 mod quick_capture;
+mod speech;
 mod ui_automation;
 mod wake;
 
@@ -1094,7 +1095,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init());
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(speech::Speech::default());
     // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
     // so only macOS gets a menu.
     #[cfg(target_os = "macos")]
@@ -1154,6 +1156,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quick_capture::quick_capture_draft_file_chunk,
             quick_capture::quick_capture_download_find,
             quick_capture::quick_capture_download_append,
+            speech::speech_enable,
+            speech::speech_disable,
+            speech::speech_status,
+            speech::speech_remove,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
@@ -1241,6 +1247,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         })
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                speech::shutdown(_handle);
                 #[cfg(target_os = "macos")]
                 hotkeys::shutdown(_handle);
                 instance::remove_app_pid_file();

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
@@ -5,6 +6,7 @@ import { routeFromStored } from '../hooks/useHarnessRoute';
 import { ModelTier } from '../types/generated';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
+import { DICTATION_ENABLED_SETTING, speechSupported, useSpeechStatus, type SpeechStatus } from '../dictation/speechHelper';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
 import { ASKS_SETTING } from '../utils/asks';
@@ -684,6 +686,7 @@ export function PluginSettings({
 
 export function ExperimentalSettings({
   quickCaptureEnabled,
+  dictationEnabled,
   outpostsEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
@@ -701,6 +704,7 @@ export function ExperimentalSettings({
 }: Pick<
   SettingsModalState,
   | 'quickCaptureEnabled'
+  | 'dictationEnabled'
   | 'outpostsEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
@@ -734,6 +738,7 @@ export function ExperimentalSettings({
             {quickCaptureEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
+        <DictationSetting enabled={dictationEnabled} onSetSetting={onSetSetting} />
         <div className="settings-row-card">
           <div>
             <p className="settings-row-title">Launcher 2.0</p>
@@ -1650,5 +1655,52 @@ export function DesktopStatusPills({
         {openSentFilesEnabled ? 'sent files open' : 'sent files ignored'}
       </span>
     </>
+  );
+}
+
+const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000)} MB`;
+
+function speechProgress(status: SpeechStatus): string {
+  switch (status.phase) {
+    case 'off': return status.cacheBytes > 0 ? `Speech model downloaded (${megabytes(status.cacheBytes)}).` : '';
+    case 'starting': return 'Starting the speech model…';
+    case 'downloading': return `Downloading ${status.artifact}: ${megabytes(status.bytes)} of ${megabytes(status.total)}`;
+    case 'verifying': return `Verifying ${status.artifact}…`;
+    case 'loading': return 'Loading the speech model…';
+    case 'ready': return 'Ready.';
+    case 'failed': return status.message;
+  }
+}
+
+function DictationSetting({ enabled, onSetSetting }: { enabled: boolean; onSetSetting: SettingsModalState['onSetSetting'] }) {
+  const { status, retry, remove } = useSpeechStatus();
+  const [actionError, setActionError] = useState<string | null>(null);
+  if (!speechSupported()) return null;
+  const run = (action: () => Promise<unknown>) => { setActionError(null); action().catch(error => setActionError(String(error))); };
+  const progress = status ? speechProgress(status) : '';
+  return (
+    <div className="settings-row-card">
+      <div>
+        <p className="settings-row-title">Dictation</p>
+        <p className="settings-row-copy" id="dictation-description">
+          Speak instead of typing. Enabling downloads the English speech model (about 730 MB) to this Mac and keeps it ready while attn runs.
+        </p>
+        {(progress || actionError) && (
+          <p className="settings-row-copy" role="status" data-testid="settings-dictation-status">{actionError ?? progress}</p>
+        )}
+      </div>
+      <div className="settings-row-actions">
+        {enabled && status?.phase === 'failed' && (
+          <button type="button" className="settings-action" data-testid="settings-dictation-retry" onClick={() => run(retry)}>Retry</button>
+        )}
+        {!enabled && status?.phase === 'off' && status.cacheBytes > 0 && (
+          <button type="button" className="settings-action" data-testid="settings-dictation-remove" onClick={() => run(remove)}>Remove model</button>
+        )}
+        <button type="button" role="switch" aria-label="Dictation" aria-checked={enabled} aria-describedby="dictation-description"
+          className="settings-action" onClick={() => onSetSetting(DICTATION_ENABLED_SETTING, enabled ? 'false' : 'true')}>
+          {enabled ? 'Disable' : 'Enable'}
+        </button>
+      </div>
+    </div>
   );
 }
