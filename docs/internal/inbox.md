@@ -41,7 +41,7 @@ The sender picks the address:
 - A seed update addresses a crew member tender as the member. It addresses a
   session tender and every watcher as their session.
 - Crew sleep and auto-sleep requests address the session, because each request
-  concerns that one session. A wake to deliver one makes no sense.
+  concerns that one session. A wake to deliver a request makes no sense.
 
 A session reads all its addresses together: its own, its member's, the chief's
 when it is the chief, and those of the seeds it tends.

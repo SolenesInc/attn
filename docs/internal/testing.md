@@ -52,8 +52,7 @@ as the instant before a step's first effect. `pausepoint.Done(name, err)` marks
 a finished step. It holds only when the step succeeded, and otherwise fails the
 waiting test at once with the step's error. To fault an operation, hold the
 operation at its own point, arm the fault, then release the hold. A hold on
-something the operation might wait for, such as a fake agent's boot, does not
-order the test's steps unless the operation waits for that thing every time.
+something the operation might wait for, such as a fake agent's boot, orders nothing unless the operation waits for that thing every time.
 Arm only points that some daemon run or worker reaches at least once during the
 test. If no run reaches an armed point, the test fails at cleanup and names the
 point, because a hold that nothing reached cannot order any step.

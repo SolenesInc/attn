@@ -79,8 +79,7 @@ frontend suites and the scenario matrix, macOS included, run in CI on `main`
 after landing, and so do the combinations of changes that landed together.
 
 Reviewers catch a defect before landing, while the author still remembers the
-work and before other slices build on the defect. The review on `main` still
-covers every commit afterwards, with the slices of a plan side by side.
+work and before other slices build on the defect. The review on `main` still reads every commit afterwards, with the slices of a plan side by side.
 
 The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones. It is
 not a landing step.
@@ -89,7 +88,7 @@ not a landing step.
 
 Commits made inside attn carry an `Attn-Session:` trailer and one `Attn-Seed:`
 per seed the session works on. Work users will observe has a seed. The
-trailers let reviewers, the sheriff on a red `main`, and the release notes find
+trailers let reviewers, the sheriff on a red `main`, and whoever writes the release notes find
 the work and the session behind a commit.
 
 ## Review on main
