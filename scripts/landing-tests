@@ -50,6 +50,7 @@ go ./internal/classifier TestLegacyPromptCompatibility
 go ./internal/sessioninstructions TestLegacyPromptCompatibility
 go ./internal/agent TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
+go ./cmd/attn TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 
 group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall

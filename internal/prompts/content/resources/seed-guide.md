@@ -96,9 +96,11 @@ before the app child starts.
 }
 ```
 
-The plot's C3 is shared, so each child proves it with its own report. The
-garden instructions list the plot payload fields `part_of`, `discovered_from`,
-and `after`, and how to read the payload from stdin.
+The plot's C3 is shared, so each child proves it with its own report. A
+child's `after` names the siblings the child waits for, by slug or full title.
+To plant the plot inside another plot, add `"part_of": "<plot>"`. To record the
+seed whose work led to this plot, add `"discovered_from": "<seed>"`. Both take
+an id or a slug. To read the payload from stdin, pass `-` instead of a file.
 
     attn seed plant "..." --part-of <plot>   add another child
     attn open <plot>                        read the rendered plan
