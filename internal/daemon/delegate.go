@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -688,18 +689,10 @@ func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatu
 func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessage) {
 	operation, err := d.startDelegation(context.Background(), msg)
 	if err == nil {
-		for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-			// A delegation interrupted by stop stays preparing on purpose; the next daemon resumes it.
-			select {
-			case <-time.After(100 * time.Millisecond):
-			case <-d.life.Done():
-				d.sendCommandError(client, protocol.CmdDelegate, errDaemonStopping.Error())
-				return
-			}
-			operation, err = d.delegationOperation(operation.OperationID)
-			if err != nil {
-				break
-			}
+		operation, err = d.awaitDelegationSettled(operation.OperationID)
+		if errors.Is(err, errDaemonStopping) {
+			d.sendCommandError(client, protocol.CmdDelegate, err.Error())
+			return
 		}
 	}
 	var result *protocol.DelegateResult

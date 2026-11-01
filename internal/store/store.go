@@ -42,6 +42,7 @@ type Store struct {
 	settings               map[string]string
 	settingCopies          map[string]map[string]string
 	writes                 *tableWrites
+	delegationChanges      changeSignal
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
 	runtimeRecords         map[protocol.SessionID]SessionRuntimeRecords

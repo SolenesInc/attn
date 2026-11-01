@@ -254,6 +254,9 @@ func (s *Store) RecordDelegationResolution(id, seedID, directory, branch, baseCo
 		updated_at = ? WHERE request_id = ? OR operation_id = ?`,
 		seedID, seedID, directory, directory, branch, branch, baseCommit, baseCommit,
 		handoffNoteID, handoffNoteID, stamp, id, id)
+	if err == nil {
+		s.delegationChanges.notify()
+	}
 	return err
 }
 
@@ -263,6 +266,9 @@ func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Tim
 	stamp := now.UTC().Format(sortableTimeFormat)
 	_, err := s.db.Exec(`UPDATE delegation_operations SET worktree_path = ?, worktree_owned = 1, worktree_token = ?, updated_at = ?
 		WHERE request_id = ? OR operation_id = ?`, path, token, stamp, id, id)
+	if err == nil {
+		s.delegationChanges.notify()
+	}
 	return err
 }
 
@@ -308,7 +314,15 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		string(state), progress, profileID, profileID, seedID, seedID,
 		resultDirectory, resultDirectory, resultBranch, resultBranch,
 		worktreePath, worktreePath, resultJSON, errorText, failureCode, stamp, id, id)
+	if err == nil {
+		s.delegationChanges.notify()
+	}
 	return err
+}
+
+// DelegationOperationsChanged closes when a delegation operation is next updated.
+func (s *Store) DelegationOperationsChanged() <-chan struct{} {
+	return s.delegationChanges.wait()
 }
 
 func delegationFailureCode(message string) string {

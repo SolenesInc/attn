@@ -1513,15 +1513,15 @@ func sqliteDSN(dbPath string) string {
 type tableWrites struct {
 	sessions    atomic.Uint64
 	commitFault atomic.Bool
-	outbox      outboxSignal
+	outbox      changeSignal
 }
 
-type outboxSignal struct {
+type changeSignal struct {
 	mu      sync.Mutex
 	changed chan struct{}
 }
 
-func (o *outboxSignal) wait() <-chan struct{} {
+func (o *changeSignal) wait() <-chan struct{} {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.changed == nil {
@@ -1530,7 +1530,7 @@ func (o *outboxSignal) wait() <-chan struct{} {
 	return o.changed
 }
 
-func (o *outboxSignal) notify() {
+func (o *changeSignal) notify() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.changed != nil {

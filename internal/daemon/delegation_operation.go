@@ -401,6 +401,25 @@ func (d *Daemon) endDelegationRun(id string) {
 	d.delegationMu.Unlock()
 }
 
+func delegationSettled(operation *protocol.DelegationOperation) bool {
+	return operation.State != protocol.DelegationOperationStateAccepted && operation.State != protocol.DelegationOperationStatePreparing
+}
+
+func (d *Daemon) awaitDelegationSettled(id string) (*protocol.DelegationOperation, error) {
+	for {
+		changed := d.store.DelegationOperationsChanged()
+		operation, err := d.delegationOperation(id)
+		if err != nil || delegationSettled(operation) {
+			return operation, err
+		}
+		select {
+		case <-changed:
+		case <-d.life.Done():
+			return nil, errDaemonStopping
+		}
+	}
+}
+
 func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, error) {
 	record, err := d.store.GetDelegationOperation(strings.TrimSpace(id))
 	if errors.Is(err, sql.ErrNoRows) {
