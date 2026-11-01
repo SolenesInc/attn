@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -319,8 +320,13 @@ func delegateRolesApply(w io.Writer, args []string) error {
 		return err
 	}
 	var preferences protocol.DelegationPreferences
-	if err := json.Unmarshal(raw, &preferences); err != nil {
-		return fmt.Errorf("read %s: %w", positionals[0], err)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&preferences); err != nil {
+		return fmt.Errorf("read %s: %w; the table takes the fields attn delegate roles show --json prints", positionals[0], err)
+	}
+	if decoder.More() {
+		return fmt.Errorf("read %s: content follows the table; apply takes the one table attn delegate roles show --json prints", positionals[0])
 	}
 	saved, err := client.New("").DelegationPreferencesCommit(preferences, *message)
 	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
