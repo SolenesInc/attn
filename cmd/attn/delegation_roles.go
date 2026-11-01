@@ -325,7 +325,7 @@ func delegateRolesApply(w io.Writer, args []string) error {
 	if err := decoder.Decode(&preferences); err != nil {
 		return fmt.Errorf("read %s: %w; the table takes the fields attn delegate roles show --json prints", positionals[0], err)
 	}
-	if decoder.More() {
+	if decoder.Decode(&json.RawMessage{}) != io.EOF {
 		return fmt.Errorf("read %s: content follows the table; apply takes the one table attn delegate roles show --json prints", positionals[0])
 	}
 	saved, err := client.New("").DelegationPreferencesCommit(preferences, *message)

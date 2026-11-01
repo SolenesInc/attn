@@ -302,6 +302,13 @@ func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	refused(`unknown field "stopping_point"`, "apply", edited)
+	current := strings.Replace(string(raw), `"revision":3`, `"revision":4`, 1)
+	for _, trailing := range []string{"}", "]", " {}", "\n" + current, "x"} {
+		if err := os.WriteFile(edited, []byte(current+trailing), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		refused("content follows the table", "apply", edited)
+	}
 
 	requireLines(t, "roles rollback", roles("rollback"), "revision 5 restores revision 3", "build: reordered alternatives")
 	requireLines(t, "roles rollback", roles("rollback"), "revision 6 restores revision 2", "build: claude sonnet → claude opus high")
