@@ -1567,6 +1567,9 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 		}
 		fmt.Fprintf(w, "PR last checked\t%s\n", checkedAt)
 	}
+	if a := seed.Authorization; a != nil {
+		fmt.Fprintf(w, "authorization\t%q  set by %s at %s\n", a.Text, actorLabel(a.SetBy), shortStamp(a.SetAt))
+	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
 	}

@@ -211,11 +211,13 @@ const (
 	NoteKindMove    = "move"
 	NoteKindLink    = "link"
 	NoteKindAnswer  = "answer"
+
+	NoteKindAuthorization = "authorization"
 )
 
 var NoteKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach}
 
-var EntryKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach, NoteKindCheck, NoteKindEdit, NoteKindMove, NoteKindLink, NoteKindAnswer}
+var EntryKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach, NoteKindCheck, NoteKindEdit, NoteKindMove, NoteKindLink, NoteKindAnswer, NoteKindAuthorization}
 
 func ParseEntryKind(raw string) (string, error) {
 	kind := strings.TrimSpace(strings.ToLower(raw))
@@ -248,6 +250,9 @@ func ParseNoteKind(raw string) (string, error) {
 	}
 	if kind == NoteKindAnswer {
 		return "", fmt.Errorf("an answer entry is written when the user answers an ask; a plain note keeps kind note")
+	}
+	if kind == NoteKindAuthorization {
+		return "", fmt.Errorf("an authorization entry is written when a delegation sets the seed's authorization; a plain note keeps kind note")
 	}
 	return "", fmt.Errorf("%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }

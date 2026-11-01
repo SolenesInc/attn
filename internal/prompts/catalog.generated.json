@@ -2519,6 +2519,71 @@
           }
         },
         {
+          "id": "authorization",
+          "delivery": "message_fragment",
+          "description": "The seed's authorization, after the role block of a delegation or handover opening.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "set_by",
+                "kind": "text",
+                "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+              },
+              "test": "present"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "delegation.authorization",
+                "source": "content/delegation/authorization.md",
+                "bindings": [
+                  {
+                    "name": "set_by",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "set_by",
+                        "kind": "text",
+                        "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                      }
+                    }
+                  },
+                  {
+                    "name": "authorization",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "authorization",
+                        "kind": "text",
+                        "description": "The user's words for the task, stored on the seed."
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "delegation.authorization-from-user",
+                "source": "content/delegation/authorization-from-user.md",
+                "bindings": [
+                  {
+                    "name": "authorization",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "authorization",
+                        "kind": "text",
+                        "description": "The user's words for the task, stored on the seed."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
           "id": "identity",
           "delivery": "message_fragment",
           "description": "Delegation identity shared by delegation and automation.",
@@ -6302,5 +6367,5 @@
       ]
     }
   ],
-  "definitions_hash": "12bbdb14fed3bb6f020a4335e297157429182637697e17974b07e26b722fc9da"
+  "definitions_hash": "89d369688b82a459766052e6916bd335befbb639f048541e4ee0a184c8417345"
 }

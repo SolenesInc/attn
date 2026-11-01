@@ -241,12 +241,9 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 }
 
 func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID protocol.SessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (placementOutcome, error) {
-	initialPrompt, err := d.delegatedSeedPrompt(profileID, seedID, seedTitle)
+	initialPrompt, err := d.delegatedSeedPrompt(profileID, seedID, seedTitle, guidance)
 	if err != nil {
 		return placementOutcome{}, err
-	}
-	if guidance != "" {
-		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
@@ -409,6 +406,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				return nil, err
 			}
 		}
+		if err := d.saveDelegationAuthorization(msg, seedID); err != nil {
+			return nil, err
+		}
 		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (recovered.settled() || d.sessionHasLiveWorker(sessionID)) {
 			watch = recovered
 		} else if !d.sessionHasLiveWorker(sessionID) {
@@ -523,6 +523,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	}
 
+	if err := d.saveDelegationAuthorization(msg, seedID); err != nil {
+		return nil, err
+	}
 	if operationID != "" {
 		if err := d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 			"assembling the session", profile.ID, "", operationWorktreePath, nil, nil, time.Now()); err != nil {
@@ -657,12 +660,34 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, worktreeCr
 	return result
 }
 
-func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle string) (string, error) {
+func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle, guidance string) (string, error) {
 	checkIDs, err := d.seedCheckIDs(profileID, seedID)
 	if err != nil {
 		return "", err
 	}
-	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle, "check_ids": checkIDs}), nil
+	opening := prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle, "check_ids": checkIDs})
+	if guidance != "" {
+		opening = prompts.DelegationOpeningWithGuidance(opening, guidance)
+	}
+	if seedID == "" {
+		return opening, nil
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	if seed.Authorization == nil {
+		return opening, nil
+	}
+	line := prompts.RenderText("delegation", "authorization", prompts.Values{
+		"authorization": seed.Authorization.Text, "set_by": d.authorizationSetterName(*seed.Authorization),
+	})
+	return opening + "\n\n" + line, nil
+}
+
+func (d *Daemon) saveDelegationAuthorization(msg *resolvedDelegationLaunch, seedID string) error {
+	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	return d.saveSeedAuthorization(seedID, msg.Authorization, d.actorOfSession(source), source)
 }
 
 func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protocol.DelegateMessage) {

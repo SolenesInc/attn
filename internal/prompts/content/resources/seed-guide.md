@@ -10,8 +10,10 @@ conversation. Write it that way even when you plan to do the work yourself.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
   Point to shared context and say what the reader needs from it.
 - Define scope. Say what the work covers, what the tender may change, and what
-  the tender must leave alone. Say which decisions need the user. Say which actions wait for the
-  user, such as a deployment outside the authorized delivery step. Follow the
+  the tender must leave alone. Say which decisions need the user. What the tender
+  may do without asking, and which actions wait for the user, is the seed's
+  authorization, which `attn delegate --authorization` sets from the user's
+  words, so leave it out of the body. Follow the
   `attn-workflow` skill's Delivery reference for repository delivery.
 - Specify completion. Define the checks that verify the result on the seed, as
   CHECKS below describes, and cite each check in the body by id. Say where to

@@ -426,6 +426,7 @@ func (d *Daemon) seedToProtocol(seed garden.Seed, doc docstore.Document, ready b
 		}
 		out.HarvestWhen = &condition
 	}
+	out.Authorization = d.seedAuthorizationView(seed.Authorization)
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
 	}

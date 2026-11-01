@@ -47,9 +47,24 @@ The flags you'll reach for most:
   desktop's shortcut digit, name, or id.
 - `--name` names the session. The default is the title of the brief or seed.
 - `--priority` puts the delegate's turns first in your queue.
+- `--authorization TEXT` carries your words for the task: what the delegate
+  may do without asking and where it stops, such as "You may land on main. Ask
+  me before releasing." See [Authorization](#authorization).
 
 `attn delegate --help` lists every flag, and `attn delegate roles` prints the
 roles agents choose from.
+
+### Authorization
+
+When you tell an agent what its delegate may do, the agent passes your words
+with `--authorization`. Attn saves them on the seed, with the agent that set
+them, and puts them in the delegate's opening message as yours. A handover
+keeps them: the next agent's opening carries the seed's current words without
+anyone passing them again. `attn seed show` prints them under the header, with
+who set them and when.
+
+Attn doesn't check that the words are yours. The agent that sets them answers
+for them, and the seed's log records who set what.
 
 ## Steering a delegate
 
@@ -71,7 +86,8 @@ lets the recipient know it's there.
 
 A handover gives a seed, and the seed's claim, to a new agent. The agent handing
 over the seed runs `attn delegate --seed <id> --handover -m "<what comes next>"`,
-plus a role and a folder, as in any delegation. The note goes on the seed. The
+plus a role and a folder, as in any delegation. The note goes on the seed, and
+the new agent's opening carries the seed's [authorization](#authorization). The
 previous agent keeps running until you close it or it closes itself.
 
 Handovers are how a Pathfinder passes an agreed plan to an Orchestrator or a

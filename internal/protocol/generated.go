@@ -3608,6 +3608,9 @@ type DelegateMessage struct {
 	// Assignment corresponds to the JSON schema field "assignment".
 	Assignment DelegateAssignment `json:"assignment"`
 
+	// Authorization corresponds to the JSON schema field "authorization".
+	Authorization *string `json:"authorization,omitempty,omitzero"`
+
 	// Checkout corresponds to the JSON schema field "checkout".
 	Checkout *DelegateCheckout `json:"checkout,omitempty,omitzero"`
 
@@ -9634,6 +9637,9 @@ type RuntimeRespawnedMessage struct {
 }
 
 type Seed struct {
+	// Authorization corresponds to the JSON schema field "authorization".
+	Authorization *SeedAuthorization `json:"authorization,omitempty,omitzero"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
@@ -9886,6 +9892,17 @@ type SeedArtifactTransferResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SeedAuthorization struct {
+	// SetAt corresponds to the JSON schema field "set_at".
+	SetAt string `json:"set_at"`
+
+	// SetBy corresponds to the JSON schema field "set_by".
+	SetBy ActorView `json:"set_by"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
 }
 
 type SeedBoardRow struct {

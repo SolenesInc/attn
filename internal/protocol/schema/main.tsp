@@ -1242,6 +1242,9 @@ model DelegateMessage {
   provider?: string;
   review?: SeedReviewActionContext;
   desktop?: string; // Desktop of the caller's profile for the delegate: shortcut digit, name or id; empty = beside the caller
+  // The user's words for this task. Saved on the seed before the opening
+  // renders; absent keeps the seed's current authorization.
+  authorization?: string;
 }
 
 model SeedHandoverRequest {
@@ -5415,6 +5418,9 @@ model Seed {
   "reason"?: string;
   // Present while the seed is armed to harvest itself when a pull request merges.
   "harvest_when"?: SeedHarvestCondition;
+  // The user's words for this task: what agents may do without asking and
+  // where they stop. Delegation openings deliver it.
+  "authorization"?: SeedAuthorization;
   // The document's own revision and stamps. `rev` is what a conditional write
   // hands back; the stamps are the store's, not a copy kept in the body.
   "rev": safeint;
@@ -5432,6 +5438,12 @@ model SeedHarvestCondition {
   "set_at": string;
   "set_by": ActorView;
   "checked_at"?: string;
+}
+
+model SeedAuthorization {
+  "text": string;
+  "set_by": ActorView;
+  "set_at": string;
 }
 
 model KeptConversationSeed {

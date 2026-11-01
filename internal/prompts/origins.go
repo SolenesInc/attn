@@ -13,6 +13,11 @@ var (
 		Bind("completion", Choose(Present(checkIDs),
 			Use("delegation.seed-checks", "content/delegation/seed-checks.md", Bind("check_ids", Input(checkIDs))),
 			Use("delegation.seed-no-checks", "content/delegation/seed-no-checks.md"))))
+	authorization       = TextField("authorization", "The user's words for the task, stored on the seed.")
+	authorizationSetter = TextField("set_by", "Name of the session or crew member that set the authorization; blank when the user set it in the app.")
+	authorizationLine   = Choose(Present(authorizationSetter),
+		Use("delegation.authorization", "content/delegation/authorization.md", Bind("set_by", Input(authorizationSetter)), Bind("authorization", Input(authorization))),
+		Use("delegation.authorization-from-user", "content/delegation/authorization-from-user.md", Bind("authorization", Input(authorization))))
 	automationTarget = template("automation.target", "content/automation/target.md",
 		TextField("definition", "Quoted automation name."),
 		TextField("repository", "Repository identity."), TextField("number", "Pull request number."),
@@ -43,6 +48,7 @@ func originRecipients() []Recipient {
 			On("handover-brief", "message_fragment", "Seed reference for a handover opening.", seedContract),
 			On("opening", "opening_message", "Delegation identity and seed reference.", leafOpening(seedContract)),
 			On("brief", "message_fragment", "Seed reference for the delegated opening.", seedContract),
+			On("authorization", "message_fragment", "The seed's authorization, after the role block of a delegation or handover opening.", authorizationLine),
 			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
 		}},
 		{ID: "automation", Description: "Scheduled or event-triggered visible session.", Events: []Event{

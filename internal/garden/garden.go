@@ -64,8 +64,16 @@ type Seed struct {
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
 
+	Authorization *Authorization `json:"authorization,omitempty"`
+
 	Checks       []Check                `json:"checks,omitempty"`
 	CheckResults map[string]CheckResult `json:"check_results,omitempty"`
+}
+
+type Authorization struct {
+	Text  string    `json:"text"`
+	SetBy who.Actor `json:"set_by,omitzero"`
+	SetAt string    `json:"set_at"`
 }
 
 type HarvestCondition struct {

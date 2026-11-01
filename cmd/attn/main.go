@@ -868,7 +868,12 @@ assignment:
   --seed ID                          use an existing seed
   --priority                         put the delegate's owed turns first
   --handover                         transfer that seed to a new agent
-  -m TEXT                            optional handover note
+  -m TEXT                            optional handover note: the next step
+  --authorization TEXT               the user's words for this task: what the
+                                     agent may do without asking and where it
+                                     stops. Saved on the seed; the opening
+                                     delivers it. Without it, a delegation or
+                                     handover keeps the seed's current words
 
 folder and Git:
   --host NAME                        target outpost name/id; home selects the home
@@ -1045,6 +1050,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	priority := fs.Bool("priority", false, "mark the delegate as priority")
 	handover := fs.Bool("handover", false, "transfer an existing seed to the new agent")
 	handoffNote := fs.String("m", "", "optional handover note")
+	authorization := fs.String("authorization", "", "the user's words for this task, saved on the seed")
 	ticketID := fs.String("ticket", "", "retired: delegations bind a seed, not a ticket")
 	confirm := fs.Bool("confirm", false, "retired: went with --ticket")
 	agentName := fs.String("agent", "", "target agent (defaults to the source session agent)")
@@ -1244,6 +1250,9 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, CwdBase: &cwdBase, Checkout: checkout, Host: nonEmpty(strings.TrimSpace(*host))}
 	if *priority {
 		request.Priority = protocol.Ptr(true)
+	}
+	if text := strings.TrimSpace(*authorization); text != "" {
+		request.Authorization = protocol.Ptr(text)
 	}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
