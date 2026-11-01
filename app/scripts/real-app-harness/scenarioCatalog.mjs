@@ -285,6 +285,13 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'garden-seed-authorization',
+    runnerId: 'GardenSeedAuthorization',
+    label: 'Seed authorization: the user sets and clears it from the keyboard on a tended seed, and the delegate is typed each change',
+    command: ['node', 'scripts/real-app-harness/scenario-garden-seed-authorization.mjs'],
+    timeoutMs: 180_000,
+  },
+  {
     id: 'crew-seed-header',
     runnerId: 'CrewSeedHeader',
     label: 'Crew header: member claim, latest note and a fresh wake session',
