@@ -52,7 +52,8 @@ Sourcing the env file does two things. It runs `attn instance-env <name>`,
 which selects the instance and clears inherited routing. It also changes the
 directory to this checkout. The file's
 `unset` line drops the identity of the session you run in, so the instance
-does not mistake your shell for one of its terminals. With the exports in
+does not mistake your shell for one of its terminals. It also drops an
+inherited `ATTN_ANALYTICS_INGEST_URL`, so analytics uploads go nowhere. With the exports in
 the file, the daemon launches the mock agent for `claude` and `codex`,
 refuses headless model tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME`
 gives the instance a scratch harness home, so a mock conversation that a
