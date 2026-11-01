@@ -30,7 +30,7 @@ func TestRoleStoppingPointsFoldIntoInstructionsOnUpgrade(t *testing.T) {
 	}
 
 	for run := 1; run <= 2; run++ {
-		upgraded, err := NewWithDB(path)
+		upgraded, err := newStoreAtVersion(path, 1793534250941634)
 		if err != nil {
 			t.Fatal(err)
 		}
