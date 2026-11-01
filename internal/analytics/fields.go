@@ -2,6 +2,7 @@ package analytics
 
 var BusFields = map[string]Fields{
 	"garden.seed.artifact.changed":        {"caused_by_session_id": ID},
+	"garden.seed.body.edited":             {"caused_by_session_id": ID},
 	"garden.seed.edge.linked":             {"edge_kind": Safe, "caused_by_session_id": ID, "target_seed_id": ID},
 	"garden.seed.edge.unlinked":           {"edge_kind": Safe, "target_seed_id": ID},
 	"garden.seed.harvest_when.cleared":    {"caused_by_session_id": ID, "pull_request_id": ID},
@@ -21,7 +22,9 @@ var BusFields = map[string]Fields{
 	"profile.arrangement.changed": {
 		"from_desktop_id": ID, "from_leaf_id": ID, "to_desktop_id": ID, "to_leaf_id": ID,
 	},
+	"quick_capture.read":           {"profile_id": ID},
 	"ratelimit.hit":                {"reset_at": Safe},
+	"seed_authorization.typed":     {"profile_id": ID},
 	"session.background.launch":    {"event": Safe, "kind": Safe, "session_id": ID, "profile_id": ID, "desktop_id": ID},
 	"session.pull_request.changed": {"pr_id": ID},
 	"session.closed": {

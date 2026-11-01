@@ -20,7 +20,9 @@
   "garden.seed.artifact.changed": {
     "caused_by_session_id": "string"
   },
-  "garden.seed.body.edited": null,
+  "garden.seed.body.edited": {
+    "caused_by_session_id": "string"
+  },
   "garden.seed.edge.linked": {
     "caused_by_session_id": "string",
     "edge_kind": "string",
@@ -114,8 +116,16 @@
   },
   "profile.created": null,
   "profile.migration.changed": null,
+  "quick_capture.read": {
+    "profile_id": "string",
+    "read_at": "string"
+  },
   "ratelimit.hit": {
     "reset_at": "string"
+  },
+  "seed_authorization.typed": {
+    "profile_id": "string",
+    "read_at": "string"
   },
   "session.activity.changed": null,
   "session.assistant_window.changed": null,
