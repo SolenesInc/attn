@@ -141,6 +141,21 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 			t.Errorf("the desktop lost the seed tile %s: %+v", protocol.Deref(opened.TileID), tiles)
 		}
 	})
+
+	t.Run("a seed whose tender closed is bound to the opener", func(t *testing.T) {
+		seed := plantSeedAs(t, cli, opener.session, "Left growing")
+		lifeMove(t, cli, tender.session, seed, "tend", "", "")
+		closeSessions(t, app, tender.session)
+
+		opened := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, SessionID: protocol.Ptr(protocol.SessionID(opener.session))})
+		if !opened.Success {
+			t.Fatalf("opening a seed whose tender closed = %+v", opened)
+		}
+		seedReaderTileIs(t, w, opener.desktop, protocol.Deref(opened.TileID), seed, opener.session)
+		if standalone := seedReaderOpen(app, protocol.OpenSeedMessage{SeedID: seed, Standalone: protocol.Ptr(true)}); !standalone.Success {
+			t.Errorf("a standalone open of a seed whose tender closed = %+v", standalone)
+		}
+	})
 }
 
 func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
