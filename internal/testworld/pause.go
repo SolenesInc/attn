@@ -248,7 +248,6 @@ func (p *Pause) Await() int {
 	return paused.pid
 }
 
-// AwaitBefore holds the next arrival and reports true, or reports false once settled closes first.
 func (p *Pause) AwaitBefore(settled <-chan struct{}) bool {
 	p.t.Helper()
 	if p.paused != nil {

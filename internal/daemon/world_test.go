@@ -342,8 +342,6 @@ func (w *world) tickSchedulesUntil(what string, done func() bool) {
 	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
 }
 
-// tickSchedulesUntilPaused steps the schedule clock like tickSchedulesUntil until a scheduled job reaches pause, and
-// leaves it held there.
 func (w *world) tickSchedulesUntilPaused(what string, pause *testworld.Pause) {
 	w.T.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
