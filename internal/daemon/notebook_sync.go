@@ -107,7 +107,7 @@ type notebookSyncRuntime struct {
 	loaded         bool
 	folders        []notebookFolder
 	foldersChanged chan struct{}
-	rejections     map[string]notebookSyncStream
+	rejections     map[string]string
 	run            *notebookSyncRun
 	error          string
 	changed        chan struct{}
@@ -795,7 +795,7 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) protocol.OutpostNote
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr(r.error)
 		return info
 	}
-	if reason := r.rejections[peer].error; reason != "" {
+	if reason := r.rejections[peer]; reason != "" {
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr(name+" rejected the Notebook folder list: "+reason)
 		return info
 	}
@@ -887,7 +887,7 @@ func (d *Daemon) notebookFolderStateLocked(run *notebookSyncRun, id, peer, name 
 func (d *Daemon) recordNotebookCompletionLocked(peer, name string) error {
 	r := &d.notebookSync
 	run := r.run
-	if run == nil || r.error != "" || r.rejections[peer].error != "" || run.streams[peer].error != "" || run.remote[peer].Error != "" {
+	if run == nil || r.error != "" || r.rejections[peer] != "" || run.streams[peer].error != "" || run.remote[peer].Error != "" {
 		return nil
 	}
 	var done []string
@@ -1280,6 +1280,7 @@ func (d *Daemon) forgetNotebookSyncPeer(peer string) {
 	defer r.configure.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	delete(r.rejections, peer)
 	run := r.run
 	if run != nil {
 		delete(run.remote, peer)

@@ -172,7 +172,6 @@ func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 const NotebookFoldersRetryTimer stepclock.Name = "notebook-folders-retry"
 
 func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
-	defer d.setNotebookFoldersRejection(conn, "")
 	var sent []protocol.NotebookSyncFolder
 	pushed := false
 	backoff := bridge.ReconnectInterval
@@ -196,7 +195,9 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 				sent, pushed, backoff = folders, true, bridge.ReconnectInterval
 			case conn.Context().Err() == nil:
 				d.logf("Notebook folders for %s: %v", conn.Peer().Name, err)
-				d.setNotebookFoldersRejection(conn, err.Error())
+				if rejected := (*bridge.CallRejected)(nil); errors.As(err, &rejected) {
+					d.setNotebookFoldersRejection(conn, rejected.Reason)
+				}
 				retry = d.clock.NewTimer(NotebookFoldersRetryTimer, backoff)
 				backoff = min(2*backoff, bridge.RefusedRetryInterval)
 			}
@@ -229,9 +230,7 @@ func (d *Daemon) setNotebookFoldersRejection(conn *bridge.Conn, reason string) {
 	r := &d.notebookSync
 	peer := conn.Peer().DaemonID
 	r.mu.Lock()
-	current, known := r.rejections[peer]
-	owned := known && current.conn == conn
-	if reason == "" && !owned || reason != "" && owned && current.error == reason {
+	if conn.Context().Err() != nil || r.rejections[peer] == reason {
 		r.mu.Unlock()
 		return
 	}
@@ -239,9 +238,9 @@ func (d *Daemon) setNotebookFoldersRejection(conn *bridge.Conn, reason string) {
 		delete(r.rejections, peer)
 	} else {
 		if r.rejections == nil {
-			r.rejections = map[string]notebookSyncStream{}
+			r.rejections = map[string]string{}
 		}
-		r.rejections[peer] = notebookSyncStream{conn: conn, error: reason}
+		r.rejections[peer] = reason
 	}
 	d.notebookSyncChangedLocked()
 	r.mu.Unlock()
