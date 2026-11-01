@@ -9,6 +9,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -192,7 +193,9 @@ func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAf
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == session })
 	setAutomationEnabled(t, cli, id, true)
+	graceEnds := w.fireTimers(daemon.CodexLaunchGraceTimer)
 	resumedRun := awaitDelivered(first.ID, live.ID)
+	graceEnds()
 	resumed := w.Launched(string(session))
 	if protocol.Deref(resumedRun.SessionID) != session || protocol.Deref(resumedRun.SeedID) != protocol.Deref(first.SeedID) || !resumed.Resumed || resumed.ConversationID != conversation {
 		t.Fatalf("after stopping, the singleton ran on %s/%s as %+v, want session %s resumed on conversation %s", protocol.Deref(resumedRun.SessionID), protocol.Deref(resumedRun.SeedID), resumed, session, conversation)

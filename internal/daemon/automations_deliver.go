@@ -25,6 +25,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -767,6 +768,9 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return d.ensureConfirmedAutomationSession(req, directory, inputPath)
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
+		if !d.sessionMonitor(req.IDs.SessionID).Snapshot().FirstReportAt.V.IsZero() {
+			return nil, nil
+		}
 		return nil, d.verifyUnattendedLaunch(req)
 	}
 	if !opening {
@@ -1029,6 +1033,16 @@ func stripANSIForPromptMatch(data []byte) string {
 	return string(out)
 }
 
+const (
+	codexLaunchGateWithin = 10 * time.Second
+	codexLaunchGraceAfter = 5 * time.Second
+)
+
+const (
+	CodexLaunchGateTimer  stepclock.Name = "codex-launch-gate"
+	CodexLaunchGraceTimer stepclock.Name = "codex-launch-grace"
+)
+
 func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest, launch *launchWatch) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil
@@ -1037,38 +1051,63 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest, launch *la
 	if !ok {
 		return errors.New("automation launch cannot verify Codex directory trust gate")
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	acknowledged := false
-	for time.Now().Before(deadline) && !d.stopping() {
+	terminal := d.primaryTerminal(req.IDs.SessionID)
+	_, stream, err := d.ptyBackend.Attach(d.life.Context(), terminal, "codex-launch-gate:"+string(req.IDs.SessionID), ptybackend.AttachOptions{OmitReplay: true})
+	if err != nil {
+		return fmt.Errorf("automation launch cannot watch the Codex screen: %w", err)
+	}
+	defer stream.Close()
+	output := stream.Events()
+	deadline := d.clock.NewTimer(CodexLaunchGateTimer, codexLaunchGateWithin)
+	defer deadline.Stop()
+	grace := d.clock.NewTimer(CodexLaunchGraceTimer, codexLaunchGraceAfter)
+	defer grace.Stop()
+	var launched <-chan struct{}
+	if launch != nil {
+		launched = launch.done
+	}
+	acknowledged, graceOver := false, false
+	for {
 		if launch != nil && launch.settled() {
 			return nil
 		}
-		info, err := snapshots.ScreenSnapshot(context.Background(), d.primaryTerminal(req.IDs.SessionID))
+		info, err := snapshots.ScreenSnapshot(d.life.Context(), terminal)
 		if err == nil {
 			var payload []byte
 			if info.Screen != nil {
 				payload = info.Screen.Payload
 			}
-			screen := stripANSIForPromptMatch(payload)
-			if strings.Contains(screen, codexDirectoryTrustPrompt) {
+			switch {
+			case strings.Contains(stripANSIForPromptMatch(payload), codexDirectoryTrustPrompt):
 				if !acknowledged {
 					if err := d.writeSessionPTY(req.IDs.SessionID, []byte("\r"), "automation"); err != nil {
 						return fmt.Errorf("accept Codex directory trust: %w", err)
 					}
 					acknowledged = true
 				}
-			} else if acknowledged {
+			case acknowledged:
 				return nil
-			} else if time.Until(deadline) < 5*time.Second && len(payload) > 0 {
+			case graceOver && len(payload) > 0:
 				return nil
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case _, open := <-output:
+			if !open {
+				output = nil
+			}
+		case <-grace.C():
+			graceOver = true
+		case <-launched:
+		case <-deadline.C():
+			if acknowledged {
+				return errors.New("automation launch: Codex directory trust prompt did not clear")
+			}
+			return errors.New("automation launch did not produce a verifiable Codex screen")
+		case <-d.life.Context().Done():
+			return errors.New("automation launch: the daemon stopped before the Codex screen was verified")
+		}
 	}
-	if acknowledged {
-		return errors.New("automation launch: Codex directory trust prompt did not clear")
-	}
-	return errors.New("automation launch did not produce a verifiable Codex screen")
 }
 func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.WorkRequest, directory string) error {
 	seed, _, err := d.readSeed(req.IDs.SeedID)
