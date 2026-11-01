@@ -1256,6 +1256,7 @@ model DelegateStatusMessage {
   source_session_id?: SessionID;
   cmd: "delegate_status";
   id: string; // Request id or daemon-issued operation id
+  wait_past?: string; // The updated_at the caller last saw; the reply waits until the operation changes from it or settles
 }
 
 model NotebookListMessage {

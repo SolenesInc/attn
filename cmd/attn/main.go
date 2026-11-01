@@ -834,17 +834,14 @@ func waitDelegationCLI(
 	progress io.Writer,
 ) (*protocol.DelegationOperation, error) {
 	lastProgress := ""
-	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-		if operation.Progress != "" && operation.Progress != lastProgress {
-			fmt.Fprintf(progress, "delegation progress: %s\n", operation.Progress)
-			lastProgress = operation.Progress
+	operation, err := c.AwaitDelegation(operation, func(seen *protocol.DelegationOperation) {
+		if seen.Progress != "" && seen.Progress != lastProgress {
+			fmt.Fprintf(progress, "delegation progress: %s\n", seen.Progress)
+			lastProgress = seen.Progress
 		}
-		time.Sleep(250 * time.Millisecond)
-		next, err := c.DelegationStatus(operation.OperationID)
-		if err != nil {
-			return nil, fmt.Errorf("outcome unknown; inspect or retry with --request-id %s: %w", requestID, err)
-		}
-		operation = next
+	})
+	if err != nil {
+		return nil, fmt.Errorf("outcome unknown; inspect or retry with --request-id %s: %w", requestID, err)
 	}
 	if operation.State == protocol.DelegationOperationStateFailed {
 		message := "unknown failure"

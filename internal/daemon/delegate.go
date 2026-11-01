@@ -678,7 +678,7 @@ func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protoco
 }
 
 func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
+	operation, err := d.delegationStatus(msg, "")
 	if err != nil {
 		d.sendError(conn, "delegate status: "+err.Error())
 		return

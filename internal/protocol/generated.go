@@ -3713,6 +3713,9 @@ type DelegateStatusMessage struct {
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// WaitPast corresponds to the JSON schema field "wait_past".
+	WaitPast *string `json:"wait_past,omitempty,omitzero"`
 }
 
 type DelegateWorktreeRequest struct {

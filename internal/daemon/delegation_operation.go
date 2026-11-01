@@ -512,8 +512,24 @@ func (d *Daemon) resumePendingDelegations() {
 	}
 }
 
+func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected string) (*protocol.DelegationOperation, error) {
+	seen := strings.TrimSpace(protocol.Deref(msg.WaitPast))
+	for {
+		changed := d.store.DelegationOperationsChanged()
+		operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), selected)
+		if err != nil || seen == "" || operation.UpdatedAt != seen || delegationSettled(operation) {
+			return operation, err
+		}
+		select {
+		case <-changed:
+		case <-d.life.Done():
+			return nil, errDaemonStopping
+		}
+	}
+}
+
 func (d *Daemon) handleDelegateStatusWS(client *wsClient, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), client.selectedProfile())
+	operation, err := d.delegationStatus(msg, client.selectedProfile())
 	response := protocol.DelegationOperationMessage{
 		Event:     protocol.EventDelegationOperation,
 		Success:   err == nil,

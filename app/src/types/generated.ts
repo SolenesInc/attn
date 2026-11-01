@@ -3992,6 +3992,7 @@ export interface DelegateStatusMessage {
     id:                 string;
     profile_id?:        string;
     source_session_id?: string;
+    wait_past?:         string;
     [property: string]: any;
 }
 
@@ -22065,6 +22066,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
+        { json: "wait_past", js: "wait_past", typ: u(undefined, "") },
     ], "any"),
     "DelegateWorktreeRequest": o([
         { json: "branch", js: "branch", typ: "" },

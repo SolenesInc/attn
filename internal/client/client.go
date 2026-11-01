@@ -733,7 +733,28 @@ func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.Delega
 }
 
 func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, error) {
-	resp, err := c.send(protocol.DelegateStatusMessage{Cmd: protocol.CmdDelegateStatus, ID: strings.TrimSpace(id)})
+	return c.delegationStatus(protocol.DelegateStatusMessage{Cmd: protocol.CmdDelegateStatus, ID: strings.TrimSpace(id)})
+}
+
+func (c *Client) AwaitDelegation(op *protocol.DelegationOperation, changed func(*protocol.DelegationOperation)) (*protocol.DelegationOperation, error) {
+	for op.State == protocol.DelegationOperationStateAccepted || op.State == protocol.DelegationOperationStatePreparing {
+		changed(op)
+		next, err := c.delegationStatus(protocol.DelegateStatusMessage{
+			Cmd: protocol.CmdDelegateStatus, ID: op.OperationID, WaitPast: protocol.Ptr(op.UpdatedAt),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if next.UpdatedAt == op.UpdatedAt && next.State == op.State {
+			return nil, errors.New("the running daemon answered delegate_status without waiting, so it predates this attn; restart it with `attn daemon ensure`")
+		}
+		op = next
+	}
+	return op, nil
+}
+
+func (c *Client) delegationStatus(msg protocol.DelegateStatusMessage) (*protocol.DelegationOperation, error) {
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -756,12 +777,9 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	if err != nil {
 		return nil, err
 	}
-	for op.State == protocol.DelegationOperationStateAccepted || op.State == protocol.DelegationOperationStatePreparing {
-		time.Sleep(100 * time.Millisecond)
-		op, err = c.DelegationStatus(op.OperationID)
-		if err != nil {
-			return nil, err
-		}
+	op, err = c.AwaitDelegation(op, func(*protocol.DelegationOperation) {})
+	if err != nil {
+		return nil, err
 	}
 	if op.State == protocol.DelegationOperationStateFailed {
 		message := "unknown failure"
