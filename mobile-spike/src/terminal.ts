@@ -11,12 +11,13 @@ import {
 import { daemon } from './daemon'
 import { counters, logInput, mark } from './metrics'
 
-export type SizeMode = 'fit' | 'native'
+export type SizeMode = 'fit' | 'fitStable' | 'native'
 export type InputMode = 'direct' | 'composer'
 export type SpecialKey = 'Esc' | 'Tab' | 'Up' | 'Down' | 'Left' | 'Right' | 'CtrlC' | 'Enter' | 'ShiftTab' | '1' | '2' | '3'
 
 export interface TerminalOptions {
   sessionId: string
+  translateSoftKeyboard: boolean
   sizeMode: SizeMode
   inputMode: InputMode
   fontSize: number
@@ -90,6 +91,7 @@ export function mountTerminal(element: HTMLElement, opts: TerminalOptions, onSta
   let panY = 0
   let userZoomed = false
   let firstPaintLogged = false
+  const translateSoftKeyboard = opts.translateSoftKeyboard
 
   const terminalId = daemon.terminalBySession.get(opts.sessionId) ?? opts.sessionId
   const send = (data: string) => {
@@ -150,17 +152,28 @@ export function mountTerminal(element: HTMLElement, opts: TerminalOptions, onSta
     schedulePaint(true)
   }
 
+  let stableWidth = 0
+  let stableHeight = 0
   const fitPty = () => {
     if (!renderer || !terminal) return
-    const dims = renderer.fitDimensions(viewport.clientWidth, viewport.clientHeight)
+    if (viewport.clientWidth !== stableWidth) { stableWidth = viewport.clientWidth; stableHeight = 0 }
+    stableHeight = Math.max(stableHeight, viewport.clientHeight)
+    const height = opts.sizeMode === 'fitStable' ? stableHeight : viewport.clientHeight
+    if (opts.sizeMode === 'fitStable') {
+      scale = 1
+      panX = 0
+      panY = Math.min(0, viewport.clientHeight - renderer.fitDimensions(stableWidth, height).rows * renderer.cellHeight)
+      applyTransform()
+    }
+    const dims = renderer.fitDimensions(viewport.clientWidth, height)
     if (dims.cols === terminal.cols && dims.rows === terminal.rows) return
     resizeModel(dims.cols, dims.rows)
     daemon.resize(terminalId, dims.cols, dims.rows)
-    onStatus(`PTY ${dims.cols}x${dims.rows} (fit)`)
+    onStatus(`PTY ${dims.cols}x${dims.rows} (${opts.sizeMode})`)
   }
 
   const onViewportResize = () => {
-    if (opts.sizeMode === 'fit') fitPty()
+    if (opts.sizeMode !== 'native') fitPty()
     else if (userZoomed) { clampPan(); applyTransform() } else fitToWidth()
   }
 
@@ -233,7 +246,16 @@ export function mountTerminal(element: HTMLElement, opts: TerminalOptions, onSta
     }
     const diagEvents = ['keydown', 'keyup', 'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend']
     for (const t of diagEvents) el.addEventListener(t, diag, { capture: true })
-    const beforeInput = (e: InputEvent) => e.preventDefault()
+    const beforeInput = (e: InputEvent) => {
+      e.preventDefault()
+      if (!translateSoftKeyboard) return
+      if (e.inputType === 'insertText' && e.data) {
+        const c = ctrlLatched ? ctrlChar(e.data.slice(-1)) : null
+        if (c) { ctrlLatched = false; document.dispatchEvent(new CustomEvent('spike-ctrl-unlatched')); send(c); return }
+        send(e.data)
+      } else if (e.inputType === 'deleteContentBackward') send('\x7f')
+      else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') send('\r')
+    }
     el.addEventListener('beforeinput', beforeInput)
     const detachInput = attachTerminalInput({
       element: el,
@@ -258,10 +280,15 @@ export function mountTerminal(element: HTMLElement, opts: TerminalOptions, onSta
   }
 
   const unsubscribe = daemon.onEvent((e) => {
-    if (e.event === 'pty_resized' && e.id === terminalId && opts.sizeMode === 'native') {
+    if (e.event === 'pty_resized' && e.id === terminalId && terminal && (e.cols !== terminal.cols || e.rows !== terminal.rows)) {
       resizeModel(e.cols, e.rows)
-      onStatus(`PTY ${e.cols}x${e.rows} (desktop size)`)
-      if (!userZoomed) fitToWidth()
+      if (opts.sizeMode === 'native') {
+        onStatus(`PTY ${e.cols}x${e.rows} (desktop size)`)
+        if (!userZoomed) fitToWidth()
+      } else {
+        onStatus(`PTY ${e.cols}x${e.rows} (resized by another client)`)
+        fitToWidth()
+      }
     }
   })
   cleanups.push(unsubscribe)
@@ -306,7 +333,7 @@ export function mountTerminal(element: HTMLElement, opts: TerminalOptions, onSta
     for (const f of pending) if (f.seq > snapshotSeq) terminal.write(f.data)
     pending.length = 0
 
-    if (opts.sizeMode === 'fit') fitPty()
+    if (opts.sizeMode !== 'native') fitPty()
     else { fitToWidth(); onStatus(`PTY ${terminal.cols}x${terminal.rows} (desktop size)`) }
     schedulePaint(true)
   }

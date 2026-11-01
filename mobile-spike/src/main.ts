@@ -22,8 +22,8 @@ const Session = Schema.Struct({
   directory: Schema.String,
 })
 
-const InputMode = Schema.Literals(['direct', 'composer'])
-const SizeMode = Schema.Literals(['fit', 'native'])
+const InputMode = Schema.Literals(['direct', 'directFixed', 'composer'])
+const SizeMode = Schema.Literals(['fit', 'fitStable', 'native'])
 
 export const Model = Schema.Struct({
   screen: Schema.Literals(['connect', 'sessions', 'terminal']),
@@ -219,8 +219,8 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => {
       error: '',
       sessions: [],
       sessionId: '',
-      inputMode: (params.get('input') as 'direct' | 'composer') ?? 'composer',
-      sizeMode: (params.get('size') as 'fit' | 'native') ?? 'native',
+      inputMode: (params.get('input') as 'direct' | 'directFixed' | 'composer') ?? 'composer',
+      sizeMode: (params.get('size') as 'fit' | 'fitStable' | 'native') ?? 'native',
       fontSize: 13,
       composer: '',
       ctrlLatched: false,
@@ -313,7 +313,7 @@ const TerminalMount = Mount.defineStream('TerminalMount', {
   execute: ({ element, sessionId, sizeMode, inputMode, fontSize }) =>
     Stream.callback<typeof Message.ChangedTerminalStatus.Type>((queue) =>
       Effect.acquireRelease(
-        Effect.sync(() => mountTerminal(element as HTMLElement, { sessionId, sizeMode, inputMode, fontSize }, (text) =>
+        Effect.sync(() => mountTerminal(element as HTMLElement, { sessionId, sizeMode, inputMode: inputMode === 'composer' ? 'composer' : 'direct', translateSoftKeyboard: inputMode === 'directFixed', fontSize }, (text) =>
           Queue.offerUnsafe(queue, Message.ChangedTerminalStatus({ text })))),
         (dispose) => Effect.sync(dispose),
       ).pipe(Effect.flatMap(() => Effect.never)),
@@ -375,8 +375,10 @@ const sessionsView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const modeButtons = (model: Model, h: HtmlBuilder<Message>): Html[] => [
   h.button([h.Class(model.inputMode === 'direct' ? 'on' : ''), h.OnClick(Message.ClickedInputMode({ mode: 'direct' }))], ['(a) direct']),
+  h.button([h.Class(model.inputMode === 'directFixed' ? 'on' : ''), h.OnClick(Message.ClickedInputMode({ mode: 'directFixed' }))], ['(a+) direct+IME']),
   h.button([h.Class(model.inputMode === 'composer' ? 'on' : ''), h.OnClick(Message.ClickedInputMode({ mode: 'composer' }))], ['(b) composer']),
   h.button([h.Class(model.sizeMode === 'fit' ? 'on' : ''), h.OnClick(Message.ClickedSizeMode({ mode: 'fit' }))], ['fit PTY']),
+  h.button([h.Class(model.sizeMode === 'fitStable' ? 'on' : ''), h.OnClick(Message.ClickedSizeMode({ mode: 'fitStable' }))], ['fit, stable rows']),
   h.button([h.Class(model.sizeMode === 'native' ? 'on' : ''), h.OnClick(Message.ClickedSizeMode({ mode: 'native' }))], ['desktop size']),
 ]
 
@@ -400,7 +402,7 @@ const composerView = (model: Model, h: HtmlBuilder<Message>): Html =>
       h.OnKeyDownPreventDefault((key, mods) =>
         key === 'Enter' && !mods.shiftKey ? Option.some(Message.SubmittedComposer()) : Option.none()),
     ]),
-    h.button([h.Type('submit')], ['Send']),
+    h.button([h.Type('submit'), h.OnMount(KeepInputFocus())], ['Send']),
   ])
 
 const terminalView = (model: Model, h: HtmlBuilder<Message>): Html => {
