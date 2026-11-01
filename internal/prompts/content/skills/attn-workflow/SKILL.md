@@ -26,7 +26,7 @@ Match the task to one process in the table, read its reference and the principle
 | Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
 
-Work ends at delivery, within the task's authorization. Read [Delivery](references/delivery.md) for the repository's flow and stopping point.
+Work ends at delivery, within the task's authorization. Read the `attn` skill's [Delivery](../attn/references/delivery.md) reference for the repository's flow and stopping point.
 
 When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
 

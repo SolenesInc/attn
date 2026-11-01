@@ -12,4 +12,4 @@ Verify the affected behavior as [Prove it works](../principles/prove-it-works.md
 
 Report each check on the seed as you prove it, adding the commit when the check ran against a Git revision, as [Report each check as you prove it](../../attn/references/delegated-agent.md#report-each-check-as-you-prove-it) describes.
 
-Return a reviewable change. Include the revision, each check with the current evidence that proves it, how to rerun the checks, and the remaining limits. Report the result in the conversation and record it in the seed. Deliver as [Delivery](delivery.md) describes, within the task's authorization.
+Return a reviewable change. Include the revision, each check with the current evidence that proves it, how to rerun the checks, and the remaining limits. Report the result in the conversation and record it in the seed. Deliver as [Delivery](../../attn/references/delivery.md) describes, within the task's authorization.

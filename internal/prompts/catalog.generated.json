@@ -3664,6 +3664,18 @@
           }
         },
         {
+          "id": "delivery",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.delivery",
+            "source": "content/skills/attn/references/delivery.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "garden",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",
@@ -4290,18 +4302,6 @@
             "kind": "text",
             "id": "attn-workflow-skill.debugging",
             "source": "content/skills/attn-workflow/references/debugging.md",
-            "verbatim": true,
-            "keep_final_newline": true
-          }
-        },
-        {
-          "id": "delivery",
-          "delivery": "reference",
-          "description": "Loaded on demand through the installed attn-workflow skill.",
-          "body": {
-            "kind": "text",
-            "id": "attn-workflow-skill.delivery",
-            "source": "content/skills/attn-workflow/references/delivery.md",
             "verbatim": true,
             "keep_final_newline": true
           }

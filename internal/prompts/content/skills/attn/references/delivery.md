@@ -14,7 +14,7 @@ work.
 Open the pull request and finish its checks before you hand off the merge. Fix failing checks until CI is green on the pull request head and the required repository checks pass. Address review, and answer it on the pull request. Evidence is valid for the pull request head.
 
 When only the merge remains, report the pull request and arm harvest with
-`--when-merged`, as [Harvesting on a merge](../../attn/references/garden.md#harvesting-on-a-merge)
+`--when-merged`, as [Harvesting on a merge](garden.md#harvesting-on-a-merge)
 describes. Wait for the user before you merge or push to the main line, unless
 the task authorizes you to merge or push.
 
@@ -32,10 +32,8 @@ affected checks.
 Your work ends when the landing step pushes. Report the seed's checks with the
 landed commits, and harvest.
 
-An Orchestrator reviews a Builder's work after the work lands. When a
-reviewer rejects a check with `--ring`, attn rings the Builder through the
-Builder's delegation watch, as [Orchestration](orchestration.md) describes for harvested
-seeds. Land each fix as a new landing.
+Review on trunk happens after the work lands. When a reviewer rejects a check,
+land each fix as a new landing.
 
 ## A trunk declaration
 

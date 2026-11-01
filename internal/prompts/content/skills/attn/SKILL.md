@@ -57,6 +57,9 @@ For delegation mechanics and configured role selection, read [references/delegat
   [references/delegation-roles.md](references/delegation-roles.md).
 - **Report on an assigned delegation:** read
   [references/delegated-agent.md](references/delegated-agent.md).
+- **Deliver finished work through the repository's pull requests or trunk,
+  and know where your part ends:** read
+  [references/delivery.md](references/delivery.md).
 - **See what other sessions are running here, watch a session without
   interrupting it, send a session a message, snooze a session's turn, reload a
   session, close a session you are done with, or learn what a message you

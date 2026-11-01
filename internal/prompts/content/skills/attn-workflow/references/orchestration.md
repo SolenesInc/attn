@@ -30,7 +30,7 @@ When the answer comes:
 
 When the work makes a question moot, withdraw the question with the same steps, and say why in the note.
 
-Review each Builder's completed work against the plan yourself, check by check, at the point where [Delivery](delivery.md) sets the review for the repository's flow. You did not write the Builder's code, so your review is the independent one. A change you make yourself has no independent review, and you say so when you report it. `attn seed show <seed-id>` lists the child's checks, the shared ones included, each with its report and verdict. For each report, open the evidence the report cites and compare its revision with what was delivered, using [Delivery](delivery.md)'s evidence rules. Evidence marked `(changed since this report)` was replaced after the report, so the file you open is not the file the report cited. Ask for a new report. Then record the verdict:
+Review each Builder's completed work against the plan yourself, check by check, at the point where [Delivery](../../attn/references/delivery.md) sets the review for the repository's flow. You did not write the Builder's code, so your review is the independent one. A change you make yourself has no independent review, and you say so when you report it. `attn seed show <seed-id>` lists the child's checks, the shared ones included, each with its report and verdict. For each report, open the evidence the report cites and compare its revision with what was delivered, using [Delivery](../../attn/references/delivery.md)'s evidence rules. Evidence marked `(changed since this report)` was replaced after the report, so the file you open is not the file the report cited. Ask for a new report. Then record the verdict:
 
 ```sh
 attn seed check confirm <seed-id> <C#>
@@ -41,6 +41,6 @@ Pass `--ring` when the Builder must act. A rejection does not reopen a harvested
 
 Check how the pieces work together, and return needed corrections to the Builder. When the change adds a parallel mechanism beside an existing one, bring it to the user as a scope question instead of working around it. After a new commit, rerun the checks that the change could affect, reuse the evidence for the rest, and run further checks when gaps or contradictions warrant them. Read where the children stand from their tallies on the plot's rows in `attn seed ls` and `attn seed show <plot>`, and from each shared check's rollup on the plot, which counts harvested children too. You are responsible for getting the plot's own checks proven. Judge the overall outcome complete only when the evidence supports it.
 
-Report the result in the conversation and record it in the seed. Follow [Delivery](delivery.md) within the task's authorization.
+Report the result in the conversation and record it in the seed. Follow [Delivery](../../attn/references/delivery.md) within the task's authorization.
 
 For delegation commands, use the `attn` skill's delegation reference. Create a seed for each new assignment, and reference the plan from it. Choose the folder and the checkout explicitly. Record the returned seed and checkout, so updates and advice use the right context.
