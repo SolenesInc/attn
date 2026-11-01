@@ -110,8 +110,10 @@ script_test_words() {
 }
 
 script_tests_for() {
-  local script_test file name words covered_by selected=()
+  local script_test file name words covered_by covered=$'\n' uncovered="" all=() selected=()
+  compgen -G 'scripts/*_test.sh' >/dev/null || return 0
   for script_test in scripts/*_test.sh; do
+    all+=("$script_test")
     words="$(script_test_words "$script_test")"
     covered_by=""
     while IFS= read -r file; do
@@ -120,6 +122,7 @@ script_tests_for() {
       name="${name%%/*}"
       if [ "$file" = "$script_test" ] || grep -qxF -- "$name" <<<"$words"; then
         covered_by+=" $file"
+        covered+="$file"$'\n'
       fi
     done <<<"$1"
     if [ -n "$covered_by" ]; then
@@ -127,6 +130,13 @@ script_tests_for() {
       echo "land: script test $script_test, for$covered_by" >&2
     fi
   done
+  while IFS= read -r file; do
+    case "$covered" in *$'\n'"$file"$'\n'*) ;; *) uncovered+=" $file" ;; esac
+  done <<<"$1"
+  if [ -n "$uncovered" ]; then
+    echo "land: no script test names$uncovered; running every script test" >&2
+    selected=("${all[@]}")
+  fi
   if [ "${#selected[@]}" -gt 0 ]; then echo "${selected[*]}"; fi
 }
 
@@ -159,7 +169,7 @@ run_checks() {
     if [ -n "$script_tests" ]; then
       targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
     else
-      echo "land: no script test covers the changed scripts"
+      echo "land: the checkout has no script tests"
     fi
   fi
   while read -r _ group pattern; do

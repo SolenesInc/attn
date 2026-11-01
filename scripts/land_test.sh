@@ -111,7 +111,7 @@ printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
 expect_checks check-types check-prompts land --group prompts "${selected_tests[@]}" sync
-expect_output 'no script test covers the changed scripts'
+expect_output 'the checkout has no script tests'
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh
@@ -129,6 +129,22 @@ expect_output 'script test scripts/example_test.sh, for scripts/example.sh'
 printf '\n' >>scripts/lib/shared.sh
 land 'Shared script change'
 expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
+
+printf 'source scripts/lib/deep.sh\n' >scripts/chain.sh
+printf 'true\n' >scripts/lib/deep.sh
+printf 'bash scripts/chain.sh\n' >scripts/chain_test.sh
+land 'Chained script test arrives'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+
+printf '\n' >>scripts/lib/deep.sh
+land 'Change to a script a tested script sources'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+expect_output 'script test scripts/chain_test.sh, for scripts/lib/deep.sh'
+
+printf 'true\n' >scripts/lonely.sh
+land 'Script no test names'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
+expect_output 'no script test names scripts/lonely.sh; running every script test'
 
 printf '\n' >>README.md
 land 'Documentation change'

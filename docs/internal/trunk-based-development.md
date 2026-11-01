@@ -33,11 +33,11 @@ landing changes, and pushes:
   checker. CI on `main` still typechecks with the TypeScript version that
   `app/package.json` pins.
 - `scripts/`: run the shell script tests that cover the changed scripts. A
-  script test covers the files it names, and the files those scripts name in
-  turn, so a change to `scripts/lib/` runs every test that sources it. A test
-  covers itself. `land.sh` prints each test it chose and the changed files that
-  chose it, and says so when no script test covers the change. `make
-  test-scripts` runs them all, as CI does.
+  script test covers itself, the files it names, and the files those scripts
+  name in turn, so a change to `scripts/lib/` runs every test that sources it.
+  When no test names a changed script, `land.sh` runs every script test.
+  `land.sh` prints each test it chose and the changed files that chose it.
+  `make test-scripts` runs them all, as CI does.
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
   push, not a suite: the groups of `scripts/landing-tests` that match the
   changed paths, the tests the landing changes, and every test that failed on
