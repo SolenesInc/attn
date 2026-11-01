@@ -41,7 +41,6 @@ export function SeedAuthorization({
   const editButtonRef = useRef<HTMLButtonElement | null>(null);
   const wasEditing = useRef(false);
   const focusEditOnChange = useRef(false);
-  const composing = useRef(false);
   const authorization = seed.authorization;
   const words = authorization?.text ?? '';
 
@@ -148,12 +147,10 @@ export function SeedAuthorization({
             disabled={busy}
             placeholder="what the user allows for this task"
             aria-label={`Authorize ${seed.id}: what the user allows for this task`}
-            onCompositionStart={() => { composing.current = true; }}
-            onCompositionEnd={() => { composing.current = false; }}
             onKeyDown={(event) => {
               event.stopPropagation();
-              const confirmsComposition = event.nativeEvent.isComposing || composing.current || event.keyCode === 229;
-              if (event.key === 'Enter' && !event.shiftKey && !confirmsComposition) {
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+              if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 commit();
               }

@@ -119,6 +119,24 @@ describe('App garden seed authorization', () => {
     expect(garden.daemon.sentOf('seed_authorization')).toEqual([expect.objectContaining({ seed_id: 's-auth11', text: words })]);
   });
 
+  it('saves on Enter after the editor closed during an input-method composition', async () => {
+    const garden = await openSeed();
+    answerAuthorization(garden, (text) => ({ ...tended, authorization: { text: text!, set_by: USER_ACTOR, set_at: '2026-11-01T10:44:00Z' } }));
+
+    await gesture(garden.daemon, () => fireEvent.click(authorizationSection().getByRole('button', { name: 'Set' })));
+    const composingField = authorizationSection().getByRole('textbox', { name: /Authorize s-auth11/ });
+    fireEvent.compositionStart(composingField);
+    await gesture(garden.daemon, () => fireEvent.keyDown(composingField, { key: 'Escape' }));
+    expect(authorizationSection().queryByRole('textbox')).not.toBeInTheDocument();
+
+    await gesture(garden.daemon, () => fireEvent.click(authorizationSection().getByRole('button', { name: 'Set' })));
+    const field = authorizationSection().getByRole('textbox', { name: /Authorize s-auth11/ });
+    fireEvent.change(field, { target: { value: 'You may push.' } });
+    await gesture(garden.daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
+
+    expect(garden.daemon.sentOf('seed_authorization')).toEqual([expect.objectContaining({ seed_id: 's-auth11', text: 'You may push.' })]);
+  });
+
   it('keeps the words in the field and shows the refusal when the daemon refuses', async () => {
     const garden = await openSeed();
     garden.daemon.on('seed_authorization', ({ request_id }) => ({
