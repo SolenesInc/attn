@@ -1,0 +1,3 @@
+kind: fixed
+area: garden
+change: An agent that delegates work now watches the delegate's seed, so it hears when the delegate harvests, withers, parks or sends a ringing note, even when it tends no plot above that seed.

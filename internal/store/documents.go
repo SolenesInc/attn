@@ -398,14 +398,14 @@ func (s *Store) CommitDocumentWritesWithEvents(
 }
 
 func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch SeedWatch, now time.Time) ([]DocumentWriteResult, error) {
-	results, _, err := s.commitDocumentWrites(commits, nil, now, false, watch.subscribe(now))
+	results, _, err := s.commitDocumentWrites(commits, nil, now, false, subscribe([]SeedWatch{watch}, now))
 	return results, err
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watch SeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, watches []SeedWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, watch.subscribe(now))
+	return s.commitDocumentWrites(commits, events, now, false, subscribe(watches, now))
 }
 
 func (s *Store) commitDocumentWrites(
