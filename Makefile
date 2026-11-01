@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-speech-helper build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -117,6 +117,11 @@ PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
 # Rust source or native archive timestamp changed.
 build-pty-host: pty-host/Cargo.toml pty-host/Cargo.lock pty-host/build.rs $(wildcard pty-host/src/*) $(NATIVE_VT_DEP) ghostty-vt.pin
 	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' cargo build --manifest-path pty-host/Cargo.toml --release --locked
+
+SPEECH_HELPER_BINARY := app/speech/target/release/attn-speech
+
+build-speech-helper:
+	cargo build --manifest-path app/speech/Cargo.toml --release --locked
 
 # Cross-compile the headless Linux daemon from macOS. Recurse into `build` with
 # the target GOOS/GOARCH + zig as the cgo cross-compiler: passing them on the

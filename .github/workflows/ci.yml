@@ -110,6 +110,7 @@ jobs:
               - '.github/actions/setup-toolchains/**'
             tauri:
               - 'app/src-tauri/**'
+              - 'app/speech/**'
               - 'pty-host/**'
               - 'internal/ptyhost/**'
               - 'scripts/rust-zig-linker.sh'
@@ -612,6 +613,7 @@ jobs:
         with:
           workspaces: |
             app/src-tauri
+            app/speech
             pty-host
           # Saving on PRs too would copy this cache into every branch scope and
           # evict the rest of the repo's entries.
@@ -638,6 +640,14 @@ jobs:
           cargo fmt --manifest-path pty-host/Cargo.toml -- --check
           cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path pty-host/Cargo.toml
+
+      - name: Speech helper fmt, clippy, and test
+        if: matrix.os == 'macos-15'
+        run: |
+          cd ../..
+          cargo fmt --manifest-path app/speech/Cargo.toml -- --check
+          cargo clippy --manifest-path app/speech/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path app/speech/Cargo.toml --locked
 
       - name: Cargo fmt
         run: cargo fmt -- --check

@@ -6,11 +6,13 @@ cd "$(git rev-parse --show-toplevel)"
 go_files=()
 tauri_rust_files=()
 pty_host_rust_files=()
+speech_rust_files=()
 while IFS= read -r -d '' file; do
   case "$file" in
     *.go) go_files+=("$file") ;;
     app/src-tauri/*.rs) tauri_rust_files+=("$file") ;;
     pty-host/*.rs) pty_host_rust_files+=("$file") ;;
+    app/speech/*.rs) speech_rust_files+=("$file") ;;
     *) continue ;;
   esac
   if ! git diff --quiet -- "$file"; then
@@ -37,4 +39,8 @@ fi
 
 if [ "${#pty_host_rust_files[@]}" -gt 0 ]; then
   format_rust 2024 "${pty_host_rust_files[@]}"
+fi
+
+if [ "${#speech_rust_files[@]}" -gt 0 ]; then
+  format_rust 2024 "${speech_rust_files[@]}"
 fi

@@ -54,3 +54,32 @@ https://github.com/backnotprop/pstack
 Copyright (c) 2026 Lauren Tan
 
 Licensed under the MIT License. See `LICENSE.pstack`.
+
+## Hex, transcribe.cpp and the speech models
+
+The private speech helper (`app/speech`, bundled as `attn-speech`) is extracted
+from Hex's model preparation, session handling, resampling and speech detection:
+
+https://github.com/anomalyco/hex
+
+Copyright (c) 2026 Christopher Langton
+
+Licensed under the MIT License. See `app/speech/LICENSES/hex.LICENSE`.
+
+The helper statically links transcribe.cpp, which includes ggml and miniz:
+
+https://github.com/handy-computer/transcribe.cpp
+
+Copyright (c) 2026 The transcribe.cpp authors
+
+Licensed under the MIT License. See `app/speech/LICENSES/transcribe.cpp.LICENSE`
+and `app/speech/LICENSES/transcribe.cpp.THIRD-PARTY-LICENSES.md`.
+
+Setup downloads two models into attn's model cache. They are not part of the
+app bundle and carry their own terms:
+
+- Parakeet Unified English (GGUF conversion of NVIDIA's parakeet-unified-en-0.6b),
+  licensed by NVIDIA Corporation under the NVIDIA Open Model License. See
+  `app/speech/LICENSES/parakeet-unified-en-0.6b-gguf.LICENSE` and `.NOTICE`.
+- Silero VAD v6.2 (GGUF conversion), licensed under the MIT License. See
+  `app/speech/LICENSES/silero-vad-v6.2-gguf.LICENSE` and `.NOTICE`.

@@ -1,0 +1,5 @@
+Modifications: handy-computer converted https://github.com/snakers4/silero-vad
+at commit 5cd7945 to GGUF for transcribe.cpp
+(https://github.com/handy-computer/transcribe.cpp). Conversion repackages the
+weights, renaming and re-laying-out tensors. The weights were not retrained or
+fine-tuned.
