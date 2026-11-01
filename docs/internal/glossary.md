@@ -162,6 +162,7 @@ crew member             an agent with a permanent identity
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
 chief                   the crew member that coordinates one profile
+crew v2                 experimental setting: the chief is a crew member
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
 wake                    starts a session for the member
