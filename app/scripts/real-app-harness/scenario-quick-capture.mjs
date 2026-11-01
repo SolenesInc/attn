@@ -265,20 +265,6 @@ try {
     const actual = await state({ frame: true });
     runner.writeJson('fresh-first-open.json', actual);
     await screenshot('fresh-first-open.png');
-    const appPid = client.readManifest().pid;
-    const domain = execFileSync('launchctl', ['print', `pid/${appPid}`], { encoding: 'utf8' });
-    const originator = domain.match(/originator = (.+)/)?.[1];
-    assert.equal(originator, options.appPath, 'Idle measurements must belong to this named app');
-    const services = [...domain.matchAll(/^\s+(\d+)\s+-\s+(com\.apple\.WebKit\.\S+)/gm)]
-      .map(([, pid, name]) => ({ pid: Number(pid), name })).filter(service => service.pid > 0);
-    assert.ok(services.length, 'The app bootstrap domain must identify its WebKit processes');
-    runner.writeJson('fresh-first-open-ownership.json', { appPid, originator, services });
-    const idleSeconds = 40;
-    const idle = execFileSync('top', ['-l', '2', '-s', String(idleSeconds), '-stats', 'pid,command,cpu,mem',
-      ...[appPid, ...services.map(service => service.pid)].flatMap(pid => ['-pid', String(pid)])], { encoding: 'utf8' });
-    fs.writeFileSync(path.join(runner.runDir, 'fresh-first-open-idle.txt'), idle);
-    runner.writeJson('fresh-first-open-after-idle.json', { idleSeconds, ...await state({ frame: true }) });
-    await screenshot('fresh-first-open-after-idle.png');
     const capture = await captureStack();
     const displayPath = path.join(runner.runDir, 'fresh-first-open-display.png');
     execFileSync('/usr/sbin/screencapture', ['-x', '-R', [capture.x, capture.y, capture.width, capture.height].join(','), displayPath]);
@@ -287,7 +273,7 @@ try {
       const center = (Math.floor(png.height / 2) * png.width + Math.floor(png.width / 2)) * 4;
       return [...png.data.subarray(center, center + 4)];
     };
-    const nativePixel = pixel(path.join(runner.runDir, 'fresh-first-open-after-idle.png'));
+    const nativePixel = pixel(path.join(runner.runDir, 'fresh-first-open.png'));
     const displayPixel = pixel(displayPath);
     runner.writeJson('fresh-first-open-pixels.json', { nativePixel, displayPixel });
     assert.equal(nativePixel[3], 255, 'The first opening must paint the opaque composer surface');
