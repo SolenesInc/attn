@@ -8,4 +8,4 @@ Ask whether the state that triggered the symptom is legitimate. If the system ma
 
 Guards, retries, swallowed errors, and clamped values are where bugs usually sit. When a failure appears only after a restart, suspect persisted state first. Fix every instance of the pattern. When finding the deciding fact took a long investigation, propose the cheap, always-on signal that would have shown the fact the first time anyone looked.
 
-When two fixes that share an assumption have failed, [attack the premise](attack-the-premise.md). The process is in [Debugging](../references/debugging.md).
+When two fixes that share an assumption have failed the same check, [attack the premise](attack-the-premise.md). The process is in [Debugging](../references/debugging.md).

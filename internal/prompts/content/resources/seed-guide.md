@@ -2,12 +2,9 @@ The garden holds the work. Syntax: `attn seed <verb> --help`. The catalog is `at
 
 WRITING A BODY
 
-A seed body is a prompt for the agent who will do the work. A new delegation
-stores its brief as the body. A delegation at an existing seed names that seed,
-and the agent reads the seed with `attn seed show`. Handover adds a short
-next-step note and transfers ownership before the successor starts.
-Write every body, including the bodies of plot children, for a reader who has not seen this conversation.
-Write it that way even when you plan to do the work yourself.
+A seed body is a prompt for the agent who will do the work. Write every body,
+including the bodies of plot children, for a reader who has not seen this
+conversation. Write it that way even when you plan to do the work yourself.
 
 - Lead with the task and outcome: what to do and what done looks like.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
@@ -140,18 +137,20 @@ that child. A plot check without `shared` is the plot's own.
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-If you do the work, report each check as you prove it, in one call. The
-first line of `-m` is the summary line that `attn seed show` prints. The summary line is at most 400 characters, and attn refuses a longer one. The lines after it are detail, and attn keeps them in the report's
-check note.
-`--evidence` takes a local file, which attn copies onto the seed, an artifact
-already on the seed, or an http(s) URL. A later run is a new report. The
-new report replaces the last report and clears the verdict. Citing a changed file under the
-same name replaces the old file. `attn seed show` marks a report whose cited
-file changed after the report, until the next report. For a check that does not
-apply, report why and cite what shows it. If you judge the work, confirm or
-reject each report. You may also confirm a check that has no report when you
-verified it yourself. Checks never block a move, but harvest names the ones
-still open or rejected.
+If you do the work, report each check as you prove it, in one call. The first
+line of `-m` is the summary line that `attn seed show` prints. The summary line
+is at most 400 characters, and attn refuses a longer one. The lines after it are
+detail, and attn keeps them in the report's check note. `--evidence` takes a
+local file, which attn copies onto the seed, an artifact already on the seed, or
+an http(s) URL. A later run is a new report. The new report replaces the last
+report and clears the verdict. Citing a changed file under the same name
+replaces the old file. `attn seed show` marks a report whose cited file changed
+after the report, until the next report. For a check that does not apply, report
+why and cite what shows it.
+
+If you judge the work, confirm or reject each report. You may also confirm a
+check that has no report when you verified it yourself. Checks never block a
+move, but harvest names the ones still open or rejected.
 
 WHAT DONE IS, BY DELIVERABLE
 
@@ -175,18 +174,8 @@ Adapt the assignment and its completion check to the work:
                spike whose result is options for the user to choose between.
 
 Harvest when the outcome and required verification in the body are complete.
-If you repeat a move to the same state, the command succeeds without rewriting
-the seed or ringing anyone. If you give a different reason, attn keeps it as a
-quiet note. To change a harvested seed to withered, or a withered seed to
-harvested, replant it first. Moves print who attn rang.
-
-A plot closes after its direct children. Harvest and wither refuse while any
-child is planted, growing, or dormant, including with `--force` or
-`--when-merged`. When your part of a plot is done, replant the plot to hand it
-back. Otherwise, close the plot's children or move follow-ups out first. When
-the last child closes, attn leaves a ringing note on the plot and names it in
-the output. The plot keeps its state. A plot's tender hears updates from the
-plot's descendants without a watch, until the claim ends.
+Your garden instructions cover repeating a move, replanting before you change a
+close, and closing a plot after its direct children.
 
 When the only thing left is a pull request merging, say so once and let attn
 close it:

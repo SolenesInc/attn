@@ -65,12 +65,8 @@ When the shape already exists in the codebase, show its change as a diff of that
 
 Scale each picture to the change. Give it enough detail that the reader can judge the design without reconstructing it from the code, and no more. Use names from the codebase. Put each picture beside the short explanation it supports, in a fenced or indented code block so it renders in the terminal and in the Garden. Keep pictures narrow, and split a wide picture into smaller views. Show separate production and test wiring when the distinction matters.
 
-Choose the smallest view that explains the point:
+Choose the smallest view that explains the point. The `attn` skill's [showing reference](../../attn/references/showing.md) gives the forms for logic, call trees, component trees, file trees, and diffs. A plan also shows:
 
-- logic or an algorithm as pseudocode
-- runtime control flow as a call tree
-- UI structure as a component tree with the state and module boundaries that matter
-- file responsibility or a broad refactor as a shallow file tree
 - component interaction or data flow as labeled arrows
 - messages between processes as a sequence
 - a UI layout or state comparison as an ASCII wireframe

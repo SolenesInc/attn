@@ -51,7 +51,7 @@ func TestDelegationRolesIncludesMaintainedGuidanceAndChoices(t *testing.T) {
 		t.Fatal(opening)
 	}
 	empty := DelegationRolesText(protocol.DelegationRolesResult{})
-	if strings.Contains(empty, "enabled") || strings.Contains(empty, "disabled") || !strings.Contains(empty, "Settings > Delegation") {
+	if strings.Contains(empty, "enabled") || strings.Contains(empty, "disabled") || !strings.Contains(empty, "Settings → Delegation") {
 		t.Fatal(empty)
 	}
 }

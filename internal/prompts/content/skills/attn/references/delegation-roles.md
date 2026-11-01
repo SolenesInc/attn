@@ -1,6 +1,6 @@
 # Delegation roles
 
-Delegation roles are the user's routing table in Settings > Delegation: each role defines the kind of work it covers, how the delegated agent should work, and the harness, model and effort the agent runs on. An alternative names another model that a role uses for conditions its default model should not cover. The fallback is used for work that no role fits.
+Delegation roles are the user's routing table in **Settings → Delegation**: each role defines the kind of work it covers, how the delegated agent should work, and the harness, model and effort the agent runs on. An alternative names another model that a role uses for conditions its default model should not cover. The fallback is used for work that no role fits.
 
 Change the saved table only when the user asks to change it. A model or role the user requests for one delegation is a launch override, not a request to save it. Use `attn delegate roles --help` for the installed command syntax.
 
@@ -15,7 +15,7 @@ Make the smallest change that does what the user asked, one command per change. 
 - Use the exact model ID the user gave. Resolve ambiguous names with the user rather than guessing. Attn checks that a model is available when a delegation launches, not when the table is saved.
 - Write an alternative's condition as a concrete test the delegating agent can apply to a task. An alternative with no condition is never picked.
 - Attn maintains the guidance of its own roles (Pathfinder, Builder, Reviewer, Orchestrator, Prototyper). Change their models directly. To change their guidance, copy the role, edit the copy, and turn off or remove the original if the user wants it replaced.
-- `attn delegate roles install` adds the maintained roles the table lacks, turns the table on and installs the `attn-workflow` skill those roles follow. Until the command runs once, attn refuses to add a maintained role. The user can do the same with Add Attn roles in Settings > Delegation.
+- `attn delegate roles install` adds the maintained roles the table lacks, turns the table on and installs the `attn-workflow` skill those roles follow. Until the command runs once, attn refuses to add a maintained role. The user can do the same with Add Attn roles in **Settings → Delegation**.
 - To restructure most of the table, export it with `show --json`, edit the JSON, and run `apply`. `apply` refuses when the table changed since the export. Export again and redo the edit.
 
 A change is live for the next delegation launch. Delegations already started keep the role and model they launched with.

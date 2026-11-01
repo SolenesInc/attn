@@ -50,13 +50,7 @@ Plans:
     attn seed ls [--flat]            everything planted and who holds it, with children nested under their plot. `--flat` gives one list
     attn seed ls --plot <plot>       every child of one plot, harvested and withered included
 
-Export the body, edit the file with any tool, then submit it:
-
-    attn seed export s-7k3f9m
-    # edit s-7k3f9m.md and keep its first line
-    attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
-
-The first line of the file is a stamp that names the seed and its body hash. If another edit changed the body, export again and reapply your change. attn refuses an empty body. Each edit saves an undoable body version and one log entry, and `--note` adds your explanation to that entry. Read the entries with `attn seed notes s-7k3f9m`. To restore the previous version, run `attn seed rollback s-7k3f9m`. To restore a named version, run `attn seed rollback s-7k3f9m 2`. Rollback saves a new version too.
+To change a seed's body, export the body, edit the file, and submit it with `attn seed edit`. `attn seed guide` gives the steps and explains how to undo an edit.
 
 Keeping up:
 

@@ -2,7 +2,7 @@
 
 Apply when two fixes that share one assumption have failed the same check, or fixes keep arriving in the same shape.
 
-When two fixes that share one assumption have failed the same check, write the assumption down and test it directly before you write a third fix. Each failed fix is evidence against the belief it rested on.
+Write the assumption down and test it directly before you write a third fix. Each failed fix is evidence against the belief it rested on.
 
 Find an observation that would come out differently if the assumption were false, and make that observation with a check you can rerun, as [Build the lever](build-the-lever.md) describes. Look at how the failures are distributed, not only at how large they are.
 

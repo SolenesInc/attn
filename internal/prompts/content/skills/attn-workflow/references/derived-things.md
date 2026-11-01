@@ -30,8 +30,8 @@ current:
    committed copy differs, as `make generate-types` and `make check-types` do.
 2. **Check it mechanically.** A test or lint compares it with the source and
    names the mismatch.
-3. **Check it with an agent when the source changes.** Write a verification
-   skill that agents follow at a step they already take, such as delivering a
+3. **Check it with an agent when the source changes.** Write a
+   `verify-<thing>` skill that agents follow at a step they already take, such as delivering a
    change or editing the file. `verify-docs`, `verify-tests`, and `glossary`
    are examples.
 4. **Check it on a schedule.** When no single change causes the drift, an
@@ -40,7 +40,7 @@ current:
 A derived thing with none of these goes stale without anyone noticing. Delete
 it rather than ask agents to remember it.
 
-## Write a verification skill
+## Write a `verify-<thing>` skill
 
 - **Trigger.** Name the skill `verify-<thing>`, and say in its description which
   change triggers it: "Use before landing or opening a pull request whose
@@ -62,6 +62,6 @@ it rather than ask agents to remember it.
 
 ## Prove it
 
-Show the check catching a real past drift, then passing on the fix. A check
-that nobody has seen fail is not known to work. When the same drift comes back,
-it is a class: fix it with [Correction](correction.md).
+Prove the check as [Correction](correction.md#prove-it) describes: show the
+check failing on a real past drift, then passing on the fix. When the same
+drift comes back, it is a class: fix it with Correction.

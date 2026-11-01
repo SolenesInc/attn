@@ -5,7 +5,7 @@ first day, or when you name another agent the user should go to. A callout is
 short text beside a named part of the app window. The user steps through it.
 
 Callouts are experimental and off unless the user turns them on in
-Settings > Experimental > Agent callouts. `attn callout anchors` and `attn callout show` check that setting each time, except when the Chief runs them while the Chief's onboarding is
+**Settings → Experimental → Agent callouts**. `attn callout anchors` and `attn callout show` check that setting each time, except when the Chief runs them while the Chief's onboarding is
 pending. A refusal names the toggle. Let the user decide whether to enable it.
 
 List the anchors first, then point:
@@ -27,9 +27,8 @@ depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 `agent:<who>` accepts a session id, short id or crew name.
 `desktop:<which>` accepts a slot digit, name or id. Both address only the
 pointing session's profile. The app reveals the target when it can, or shows
-the step with its name. On the last step, Enter or → goes to the target and
-ends the callout. On an earlier step they move on, so put the agent or desktop
-the user should go to last.
+the step with its name. Put the agent or desktop the user should go to on the
+last step, because Enter and → go there only on the last step.
 
 Keep each step short, at most 160 characters. A callout can have at most 20
 steps. If a fixed anchor is missing, the command refuses the whole callout and
@@ -37,8 +36,13 @@ names the anchors on screen. Choose a visible anchor from that answer.
 
 The command returns once the app accepts the callout. Continue your work,
 because there is no completion callback. A new callout replaces the one
-showing. The user advances with Enter or → and ends the callout with Esc or a
-click outside. Another overlay or a profile switch also ends the callout.
+showing.
+
+The user advances with Enter or →, and both keys act the same on every step. On
+an earlier step they move to the next step. On a last step that names an agent
+or desktop, they go to it and end the callout. The user ends the callout with
+Esc or a click outside. Another overlay or a profile switch also ends the
+callout.
 
 The desktop app must be showing your profile. With no such app, `anchors`
 still lists the directory and says so, and `show` refuses. Every refusal exits 1.

@@ -79,7 +79,7 @@ When you ran the skill in a stand-in, such as a local stack instead of a remote 
 
 ## Keep it current
 
-The map is a derived thing, so keep it current as [Derived things](derived-things.md) describes. Nothing generates the map or checks it mechanically, so agents check it at steps they already take. The skill's feature map section and [Implementation](implementation.md) tell agents to update a feature's file in the same change that adds, removes, or alters a way into the feature, and [Review](review.md) tells reviewers to confirm that the change did. Do not write a separate verification skill for the map.
+The map is a derived thing, so keep it current as [Derived things](derived-things.md) describes. Nothing generates the map or checks it mechanically, so agents check it at steps they already take. The skill's feature map section and [Implementation](implementation.md) tell agents to update a feature's file in the same change that adds, removes, or alters a way into the feature, and [Review](review.md) tells reviewers to confirm that the change did. Do not write a separate `verify-<thing>` skill for the map.
 
 When the map and the product disagree, decide which one is wrong. Fix drift in the map. Report a regression in the product, and never edit the map to match the regression.
 

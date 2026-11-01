@@ -105,14 +105,14 @@ personal information is sent." Keep the offer brief. Give details when the user
 asks. Start that answer with "No personal information is sent." Then explain
 three things. attn redacts names, paths and other free text and hashes
 identifiers. The records describe attn activity, commands and app actions, plus
-resource samples. Settings › Analytics shows exactly what is stored and sent.
+resource samples. **Settings → Analytics** shows exactly what is stored and sent.
 
 Wait for the answer. If they agree, set `analytics.enabled` and
 `analytics.sharing_enabled` to `true`.
 
 Then explain vents, an additional layer. A vent is a short report that an
 agent files when attn hinders the agent. A vent includes the agent's own words,
-so the user can read each vent in Settings › Analytics first. While sharing is
+so the user can read each vent in **Settings → Analytics** first. While sharing is
 on, the user can send just the vents they choose, with `x` on a vent, or turn
 on `analytics.share_vents` to send every new attn vent. Ask before you turn
 that setting on.
@@ -127,7 +127,7 @@ local recording: `analytics.enabled` on, `analytics.sharing_enabled` off.
 Turn nothing on without an explicit yes for that item. If the user declines or
 skips, leave the settings as they are. Make agreed changes with `attn settings set`, then
 read back the values with `attn settings get`. Tell the user they can stop
-sharing or delete records in Settings › Analytics.
+sharing or delete records in **Settings → Analytics**.
 
 ## Progress and close
 

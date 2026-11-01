@@ -14,9 +14,9 @@ work.
 Open the pull request and finish its checks before you hand off the merge. Fix failing checks until CI is green on the pull request head and the required repository checks pass. Address review, and answer it on the pull request. Evidence is valid for the pull request head.
 
 When only the merge remains, report the pull request and arm harvest with
-`attn seed harvest <seed-id> --when-merged <pr-url> -m "<outcome and verification>"`.
-attn harvests the seed when the pull request merges. Wait for the user before
-you merge or push to the main line, unless the task authorizes you to merge or push.
+`--when-merged`, as [Harvesting on a merge](../../attn/references/garden.md#harvesting-on-a-merge)
+describes. Wait for the user before you merge or push to the main line, unless
+the task authorizes you to merge or push.
 
 ## Trunk
 

@@ -10,7 +10,7 @@ For a pull request or landed commits, read the description or commit messages an
 
 For changes against a plan, read the agreed plan, its decisions, and the seed notes that record how and why the plan changed. Check that the implementation covers the requirements. Examine departures from the plan, including departures from its findings, and explain their consequences. A departure may be justified by what implementation revealed.
 
-Identify the revision under review, and use [Delivery](delivery.md)'s timing and evidence rules for the repository's flow. Read the relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
+Identify the revision under review, and use [Delivery](delivery.md)'s evidence rules for the repository's flow. Read the relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
 
 ## Inspect and exercise the change
 
@@ -30,6 +30,6 @@ When the reviewed seed carries checks, record a verdict on each check you judged
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 
-Return implementation fixes to the Builder with enough context to address them. In a follow-up review, check the correction and the affected behavior, and reuse prior evidence where it remains valid. When two corrections that shared an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when authorized.
+Return implementation fixes to the Builder with enough context to address them. In a follow-up review, check the correction and the affected behavior, and reuse prior evidence where it remains valid. When two corrections that share an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) and report the assumption as the finding. Publish comments or other external responses only when authorized.
 
 Report the review in the conversation, and record it in the assigned seed with links to the supporting artifacts.

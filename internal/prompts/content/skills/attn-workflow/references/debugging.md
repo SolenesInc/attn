@@ -47,9 +47,9 @@ When the cause is a mistake that has happened before, fix the class too: follow
 [Correction](correction.md), or plant a seed for the class when the work falls
 outside the task.
 
-If two fixes that shared an assumption have failed the same check, [Attack the
-premise](../principles/attack-the-premise.md). Test the assumption before a
-third fix. If the assumption fails, reassess the diagnosis and the approach.
+If two fixes that share an assumption have failed the same check, [Attack the
+premise](../principles/attack-the-premise.md) before the next fix. If the
+assumption fails, reassess the diagnosis and the approach.
 Consider a broader design problem when the evidence supports one, and discuss
 scope changes with the user.
 

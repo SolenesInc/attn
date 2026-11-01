@@ -60,18 +60,10 @@ the plot that has no children must prove a plot check marked shared, each with
 its own report. `attn seed show` lists a seed's checks, including inherited
 ones, as open, reported, confirmed or rejected.
 
-    attn seed check report <id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-Whoever does the work reports each check in one call. The first line of `-m` is
-the summary line, at most 400 characters. The lines after it are detail, which
-attn keeps in the report's check note. attn copies a local `--evidence` file
-onto the seed and replaces a file of the same name. A refused report lists
-every problem at once. A new report replaces the last report and clears the
-verdict. Whoever judges the work confirms or rejects. Checks never block a
-move. Harvest lists the checks still open or rejected. Add `--ring` when the
-other side must act now.
+Whoever does the work reports each check, as [Report each check as you prove it](delegated-agent.md#report-each-check-as-you-prove-it) describes. Whoever judges the work confirms or rejects. Checks never block a move. Harvest lists the checks still open or rejected. Add `--ring` when the other side must act now.
 
 ## Speaking of seeds
 
@@ -102,15 +94,15 @@ included.
 
 ## Moving a seed another agent tends
 
-Tend, park, harvest, wither and replant need no `--force` when the actor is the
-claim's tender, a session above the tender in the delegation chain, or the
-profile's chief. The move records who acted and whose claim ended, and prints
-the audit note and who the move rang. A delegate hears the move through the
-delegate's delegation watch. Everyone else needs `--force`, which the log also
-records. A call without a live session has no standing. A crew member's claim
-lasts across the member's sessions. A session's claim lapses when the session
-ends, and a move then needs no `--force`. The claim holds again if the session
-resumes.
+The moves are tend, park, harvest, wither and replant. A move needs no `--force` when the actor is one of these:
+
+- the claim's tender
+- a session above the tender in the delegation chain
+- the profile's chief
+
+A move also needs no `--force` after the tender's session ends, because a session's claim lapses when the session ends. The claim holds again if the session resumes. A crew member's claim lasts across the member's sessions.
+
+Everyone else needs `--force`, which the log also records. A call without a live session has no standing. A move records who acted and whose claim ended, and prints the audit note and who the move rang. A delegate hears the move through the delegate's delegation watch.
 
 ## Closing a plot
 
