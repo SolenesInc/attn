@@ -63,10 +63,13 @@ try {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'experimental' });
     await driver.activateApp();
-    await client.request('dom_click', { selector: '[role="switch"][aria-label="Quick Capture"]' });
-    await observer.waitFor(() => observer.getSetting('quick_capture_enabled') === 'true', 'Quick Capture enabled in Settings');
-    await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+    const enabled = observer.receive(event => event.event === 'settings_updated' && event.settings?.quick_capture_enabled === 'true', 'Quick Capture enabled in Settings');
+    await driver.click({ selector: '[role="switch"][aria-label="Quick Capture"]' });
+    await enabled;
+    const enabledAt = performance.now();
     const initialBinding = (await state()).binding;
+    runner.log('capture bridge answered after Quick Capture was enabled', { ms: Math.round(performance.now() - enabledAt) });
+    await driver.click({ selector: '[data-testid="settings-close"]' });
     runner.registerCleanup('capture-binding', () => client.request('capture_binding', { binding: initialBinding }));
     await client.request('capture_binding', { binding: testBinding });
     const app = path.join(runner.runDir, 'DictationFixture.app');

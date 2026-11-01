@@ -34,30 +34,17 @@ const section = sectionId => client.request('settings_select_section', { section
 const text = async selector => (await client.request('dom_text', { selector })).text;
 const baseline = new Map();
 
-function receive(predicate) {
-  return new Promise((resolve, reject) => {
-    const signal = AbortSignal.timeout(observer.connectTimeoutMs);
-    const cleanup = () => { observer.ws?.off('message', handler); signal.removeEventListener('abort', abort); };
-    const abort = () => { cleanup(); reject(new Error('Settings receipt did not arrive within the observer connection budget')); };
-    const handler = raw => {
-      const event = JSON.parse(String(raw));
-      if (predicate(event)) { cleanup(); resolve(event); }
-    };
-    observer.ws.on('message', handler);
-    signal.addEventListener('abort', abort, { once: true });
-  });
-}
 async function set(key, value) {
   if (!baseline.has(key)) baseline.set(key, observer.getSetting(key));
   const request_id = crypto.randomUUID();
-  const response = receive(event => event.request_id === request_id);
+  const response = observer.receive(event => event.request_id === request_id, `set_setting ${key} response`);
   observer.send({ cmd: 'set_setting', key, value, request_id });
   const result = await response;
   if (!result.success) throw new Error(result.error);
 }
 async function saved(key, value, action) {
   if (!baseline.has(key)) baseline.set(key, observer.getSetting(key));
-  const receipt = receive(event => event.event === 'settings_updated' && event.settings?.[key] === value);
+  const receipt = observer.receive(event => event.event === 'settings_updated' && event.settings?.[key] === value, `settings_updated for ${key}`);
   await action();
   await receipt;
   runner.assert(observer.getSetting(key) === value, `${key} persisted`);
