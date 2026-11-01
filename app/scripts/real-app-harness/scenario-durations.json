@@ -411,6 +411,14 @@
         "seconds": 7.818,
         "runnerClass": "dedicated SSH Linux x86_64 runner",
         "note": "Green ATTN_VERDICT durationMs=7818, including launch and cleanup. Immediate initial/reopened open-wait and command wait_for after navigation; old-page false probe gates later navigation; zero-timeout results; asynchronous action executes once and retains its element reference. Atomic conditional runtime installation and action execution. Remeasure on hosted CI."
+      },
+      "garden-seed-authorization": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/41349344257",
+        "job": "Acceptance soak garden-seed-authorization, repeat 3",
+        "recordedAt": "2026-11-01",
+        "seconds": 25.933,
+        "runnerClass": "github-hosted 4vcpu/16GB Ubuntu 24.04 amd64",
+        "note": "Slowest of three green ATTN_VERDICT runs (16102, 25933, 25761 ms) at a167ad7df77a00dc2ab56a00844c34c6dbcf9ff7. Covers delegating a tended seed, then setting and clearing its authorization from the keyboard."
       }
     }
   },
@@ -486,6 +494,7 @@
     "outpost-update": 9.022,
     "notebook-sync": 23.742,
     "focusless-native": 9.93,
-    "browser-wait-navigation": 7.818
+    "browser-wait-navigation": 7.818,
+    "garden-seed-authorization": 25.933
   }
 }
