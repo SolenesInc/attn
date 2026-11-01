@@ -94,7 +94,6 @@ real_git="$(resolve_test_git)"
 export PATH="$work/bin:$PATH"
 export REAL_GIT="$real_git"
 export GITHUB_REPOSITORY=example/attn
-export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_ACCEPTANCE_CONCLUSION=success
 export FAKE_TAG_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

@@ -116,7 +116,6 @@ setup_fixture() {
 }
 
 export PATH="$work/bin:$PATH"
-export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_PR_BODY="$work/pr-body.md"
 export FAKE_CLAUDE_ARGC="$work/claude-argc.txt"

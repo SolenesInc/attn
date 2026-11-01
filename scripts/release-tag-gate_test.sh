@@ -50,7 +50,6 @@ chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
 export GITHUB_REPOSITORY=example/attn
-export GOCACHE="$work/go-cache"
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success

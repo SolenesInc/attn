@@ -53,7 +53,6 @@ EOF
 chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
-export GOCACHE="$work/go-cache"
 export GITHUB_REPOSITORY=example/attn
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_CANDIDATES_PAGE_1=
