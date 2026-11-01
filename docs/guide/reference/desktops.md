@@ -67,13 +67,14 @@ unless you ask for another desktop ("put it on desktop 7").
 
 ## Profiles
 
-A profile keeps its own desktops, agents, Chief, crew, automations, garden and
-Notebook folder, separate from other profiles. For example, you might have one
-profile for work and one for personal projects. Nothing can move between
-profiles. Set a profile's Notebook folder in Settings → Notebook Folder or with
-`attn settings set notebook.root <folder>`. Profiles that leave it blank use
-`~/attn-notebook` and share its files. A new crew member's home lives in its
-profile's Notebook folder, under `crew/`.
+A profile keeps its own desktops, agents, Chief, crew, automations, and garden,
+separate from other profiles. For example, you might have one profile for work
+and one for personal projects. Nothing can move between profiles.
+
+Each profile also has its own Notebook folder setting: set it in Settings →
+Notebook Folder or with `attn settings set notebook.root <folder>`. Profiles
+that leave it blank all use `~/attn-notebook` and see each other's notes. A new
+crew member's home lives in its profile's Notebook folder, under `crew/`.
 
 Cmd+Shift+U (Ctrl+Alt+U on Linux) opens your profiles. Pick one to switch to it.
 From the same list, N creates a profile and switches to it, R renames the
