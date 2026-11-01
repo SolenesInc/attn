@@ -280,17 +280,6 @@ func (s *Store) CommitDocumentWritesWithEventsAndInbox(
 	})
 }
 
-func (s *Store) LastKeyedInboxItem(kind inbox.Kind, key string) (InboxItem, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return scanInboxItem(s.db.QueryRow(`
-		SELECT id, address, kind, source_id, coalesce_key,
-		       hint, text, created_at, notified_at, read_at, read_by, attempts, attempted_at, bell_name, after_seq
-		FROM inbox_items WHERE kind = ? AND coalesce_key = ?
-		ORDER BY created_at DESC, id DESC LIMIT 1
-	`, kind, key))
-}
-
 func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
