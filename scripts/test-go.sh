@@ -11,7 +11,7 @@ cli_shard_count=3
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
 # -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
-# the starvation. 1200s is a tripwire past a 143.3s healthy pass (2026-09-01).
+# the starvation. 1200s is a tripwire, also for --packages runs, past a 143.3s healthy pass (2026-09-01).
 test_timeout="${ATTN_GO_TEST_TIMEOUT:-1200s}"
 # -race costs an order of magnitude and contends with the job above; measured
 # 218.3s for internal/store alone, 2026-09-01. Same 1200s tripwire.
@@ -85,7 +85,7 @@ if [ "${1:-}" = "--packages" ]; then
     shift 2
   done
   status=0
-  "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- "$@" || status=$?
+  "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- -timeout "$test_timeout" "$@" || status=$?
   exit "$status"
 fi
 
