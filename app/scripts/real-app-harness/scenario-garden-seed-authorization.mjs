@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, printCommonHelp } from './common.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -13,17 +13,8 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 const FIRST_LINE = 'You may land on main.';
 const SECOND_LINE = 'Ask me before releasing.';
 
-// Tripwire: each wait here settles within a second on a healthy app.
-async function poll(read, description, timeoutMs = 20_000) {
-  const deadline = Date.now() + timeoutMs;
-  let last;
-  while (Date.now() < deadline) {
-    last = await read();
-    if (last?.done) return last.value;
-    await delay(150);
-  }
-  throw new Error(`Timed out waiting for ${description}: ${JSON.stringify(last?.value ?? null)}`);
-}
+// Tripwire: each change below reaches the page or the delegate within a second on a healthy app.
+const SETTLED_MS = 20_000;
 
 async function main() {
   const args = process.argv.slice(2).filter((arg) => arg !== '--');
@@ -42,8 +33,15 @@ async function main() {
     encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: sessionId ? observer.terminalOf(sessionId) : '' }),
   });
   const section = () => `.seed-document[data-seed-id="${seedId}"] .seed-authorization`;
-  const sectionText = async () => (await client.request('dom_text', { selector: section() }).catch(() => null))?.text ?? '';
-  const agentScreen = async () => runAttn(['agent', 'peek', agent]);
+  const sectionText = async () => (await client.request('dom_text', { selector: section() })).text;
+  const pageShows = (textIncludes, part = '') => client.request('dom_wait', { selector: `${section()}${part}`, textIncludes, timeoutMs: SETTLED_MS });
+  const repliedAfterNextTurn = (sessionId, description) => observer.waitForMessage(
+    (event) => event.event === 'session_state_changed' && event.session?.id === sessionId && event.session?.state === 'working',
+    `${description} to start`, SETTLED_MS,
+  ).then(() => observer.waitForMessage(
+    (event) => event.event === 'session_state_changed' && event.session?.id === sessionId && event.session?.state === 'waiting_input',
+    `${description} to finish`, SETTLED_MS,
+  ));
   const pressButton = async (nth) => {
     await client.request('dom_focus', { selector: `${section()} .seed-authorization__actions button:nth-child(${nth})` });
     await driver.pressEnter();
@@ -67,24 +65,19 @@ async function main() {
 
     await runner.step('delegate_a_tended_seed', async () => {
       dispatcher = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Authorization setup', agent: 'shell' });
-      const before = new Set(observer.sessionsById.keys());
-      runAttn(['delegate', '--agent', 'codex', '--model', 'gpt-5.4-mini', '--effort', 'low', '--yolo', '--cwd', cwd,
-        '--name', `builder-${dispatcher.slice(0, 8)}`, '--source-session', dispatcher, '--brief', 'Build the search endpoint']);
-      await observer.waitFor(() => {
-        agent = [...observer.sessionsById.keys()].find((id) => !before.has(id));
-        return Boolean(agent);
-      }, 'the delegate to start', 60_000);
-      await observer.waitFor(() => observer.getSession(agent)?.state === 'waiting_input', 'the delegate to wait for input', 60_000);
+      seedId = runAttn(['seed', 'plant', 'Search endpoint', '-m', 'Build the search endpoint.'], dispatcher).match(/s-[a-z0-9]{6}/)?.[0];
+      runner.assert(Boolean(seedId), 'planting the seed printed its id');
+      const name = `builder-${dispatcher.slice(0, 8)}`;
+      const started = observer.waitForMessage(
+        (event) => event.event === 'session_state_changed' && event.session?.label === name && event.session?.state === 'waiting_input' && event.session.id,
+        'the delegate to finish its first turn', 60_000,
+      );
+      runAttn(['delegate', '--seed', seedId, '--agent', 'codex', '--model', 'gpt-5.4-mini', '--effort', 'low', '--yolo', '--cwd', cwd,
+        '--name', name, '--source-session', dispatcher]);
+      agent = await started;
       await client.request('select_session', { sessionId: agent });
-      seedId = await poll(async () => {
-        const chip = await client.request('session_seed_chip_get_state', { sessionId: agent });
-        return { done: Boolean(chip.id), value: chip.id };
-      }, 'the delegate to tend its seed');
       runAttn(['open', seedId], agent);
-      await poll(async () => {
-        const text = await sectionText();
-        return { done: text.includes('No authorization from the user'), value: text };
-      }, 'the seed tile to show no authorization');
+      await pageShows('No authorization from the user');
       await shoot('authorization-empty.png');
     });
 
@@ -94,41 +87,37 @@ async function main() {
       await driver.typeText(FIRST_LINE);
       await driver.pressEnter({ shift: true });
       await driver.typeText(SECOND_LINE);
+      const delegateRead = repliedAfterNextTurn(agent, "the delegate's turn on the typed update");
       await driver.pressEnter();
-      const text = await poll(async () => {
-        const current = await sectionText();
-        return { done: current.includes(FIRST_LINE) && current.includes(SECOND_LINE) && current.includes('set by you'), value: current };
-      }, 'the page to show both lines set by the user');
+      await pageShows(`${FIRST_LINE}\n${SECOND_LINE}`, ' .seed-authorization__text');
+      await pageShows('set by you');
+      await pageShows('typed into');
       const stored = JSON.parse(runAttn(['seed', 'show', seedId, '--json'])).seed.authorization;
       runner.assert(stored?.text === `${FIRST_LINE}\n${SECOND_LINE}`, 'Shift+Enter keeps the line break in the saved words', { stored });
-      runner.writeText('authorization-set.txt', text);
+      runner.writeText('authorization-set.txt', await sectionText());
       await client.request('dom_wait', { selector: `${section()} .seed-authorization__actions button:nth-child(1)`, focused: true, textIncludes: 'Change', timeoutMs: 5_000 });
-      const typed = await poll(async () => {
-        const screen = await agentScreen();
-        return { done: screen.includes('changed the authorization for seed') && screen.includes('You may land on main.'), value: screen };
-      }, "the delegate's terminal to show the typed update");
+      await delegateRead;
+      const typed = runAttn(['agent', 'peek', agent]);
+      runner.assert(typed.includes('changed the authorization for seed') && typed.includes(FIRST_LINE), "the delegate's terminal shows the typed update", { typed });
       runner.assert(!typed.includes('set by'), 'the typed update names no setter when the user set it in the app', { typed });
       runner.writeText('delegate-after-set.txt', typed);
       runner.writeText('seed-show-after-set.txt', runAttn(['seed', 'show', seedId]));
-      if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1600);
       await shoot('authorization-set.png');
     });
 
     await runner.step('clear_the_words_from_the_keyboard', async () => {
+      const delegateRead = repliedAfterNextTurn(agent, "the delegate's turn on the typed removal");
       await pressButton(2);
-      const text = await poll(async () => {
-        const current = await sectionText();
-        return { done: current.includes('No authorization from the user') && current.includes('cleared by you') && current.includes('typed into'), value: current };
-      }, 'the page to show the words cleared by the user and the removal typed into the delegate');
-      runner.writeText('authorization-cleared.txt', text);
+      await pageShows('No authorization from the user');
+      await pageShows('cleared by you');
+      await pageShows('typed into');
+      runner.writeText('authorization-cleared.txt', await sectionText());
       await client.request('dom_wait', { selector: `${section()} .seed-authorization__actions button:nth-child(1)`, focused: true, textIncludes: 'Set', timeoutMs: 5_000 });
-      const typed = await poll(async () => {
-        const screen = await agentScreen();
-        return { done: screen.includes('removed the authorization for seed'), value: screen };
-      }, "the delegate's terminal to show the cleared update");
+      await delegateRead;
+      const typed = runAttn(['agent', 'peek', agent]);
+      runner.assert(typed.includes('removed the authorization for seed'), "the delegate's terminal shows the typed removal", { typed });
       runner.writeText('delegate-after-clear.txt', typed);
       runner.writeText('seed-notes.txt', runAttn(['seed', 'notes', seedId, '--kind', 'authorization']));
-      if (process.env.ATTN_HARNESS_RECORD === '1') await delay(1600);
       await shoot('authorization-cleared.png');
     });
 
