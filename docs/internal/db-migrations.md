@@ -42,6 +42,9 @@ or restore a backup taken before the upgrade with `attn db restore`.
 - A `schema.sql` conflict on rebase means another PR touched the same table.
   Read both migrations and make yours correct on top of theirs. Give your
   file a fresh timestamp if it must run after theirs, then regenerate `internal/store/schema.sql`.
+- A migration changes every row it matches, including the rows an outpost
+  keeps as read-only copies of its home's. The home runs the same migration on
+  its own rows, so the copy stays in step.
 - Prefer `ALTER TABLE` to rebuilding a table. When you rebuild a table, copy
   the columns from the live table rather than from a hard-coded list.
 - Delete and recreate a dev database that behaves oddly after you switch branches.
