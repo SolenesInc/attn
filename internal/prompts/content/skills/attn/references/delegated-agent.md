@@ -24,13 +24,13 @@ Add `--ring` only when the delegator needs to respond now. A note does not stop 
 
 ## Report each check as you prove it
 
-`attn seed show <seed-id>` lists your seed's checks, including the shared checks of the plot. Report each check in one call when you prove it, with the commit the check ran on, and report every check before you harvest.
+`attn seed show <seed-id>` lists your seed's checks, including the shared checks of the plot. Report each check in one call when you prove it, and report every check before you harvest. When the check ran against a Git revision, add the commit it ran on.
 
 ```sh
-attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
+attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> [--commit <rev>]
 ```
 
-The first line of `-m` is a summary line of at most 400 characters. Put what a reviewer needs beyond the summary on the lines after it. attn keeps those lines in the report's check note. `--evidence` takes a local file, an artifact on the seed, or an http(s) URL. attn copies a local file onto the seed and cites the file in the same call. A refused report lists every problem at once.
+The first line of `-m` is a summary line of at most 400 characters. Put what a reviewer needs beyond the summary on the lines after it. attn keeps those lines in the report's check note. `--evidence` takes a local file, an artifact on the seed, or an http(s) URL. attn copies a local file onto the seed and cites the file in the same call. A refused report lists every problem at once. `--commit` validates a Git revision, so omit it for a check that ran outside Git, such as research, a plan or a Notebook document, and let the evidence carry the proof.
 
 For a check that does not apply, report why and cite what shows it. The reviewer then rules on the check.
 
