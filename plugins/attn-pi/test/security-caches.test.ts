@@ -124,7 +124,7 @@ test("network failures get policy-aware recovery without mislabeling unrelated f
     await protectedBash({ ...policy, network }, new CredentialFilter()).exec(failure, policy.cwd, { onData: (part) => { output += part; } });
     return output;
   };
-  expect(await run("deny")).toContain("The command reported a network error");
-  expect(await run("deny")).toContain("cannot be widened from inside a tool call");
-  expect(await run("allow")).not.toContain("The command reported a network error");
+  expect(await run("deny")).toContain("The command failed with a network error");
+  expect(await run("deny")).toContain("A tool call cannot widen the sandbox");
+  expect(await run("allow")).not.toContain("The command failed with a network error");
 });

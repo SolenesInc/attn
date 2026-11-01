@@ -424,7 +424,7 @@ describe('App session annotations payload', () => {
   const MARKS_IN_READING_ORDER = [
     '## 1. 🔍 Verify this\n\n> parser\n\nThis seems like an assumption. Verify by reading the actual code before proceeding.',
     '## 2. 💯 Exactly this\n\n> CRLF\n',
-    '## 3. 🧾 Show the receipt\n\n> retry\n\nYou asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption.\nwhich test?',
+    '## 3. 🧾 Show the receipt\n\n> retry\n\nYou asserted this as fact. Name what backs it, such as the file and line, the measurement, or the command output. If nothing backs it, say plainly that it is an assumption.\nwhich test?',
     '## 4. 💬 Comment\n\n> wrapper\n\nname it after the verb',
   ].join('\n\n');
 
