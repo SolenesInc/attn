@@ -1718,7 +1718,12 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 		return nil, nil, upgrade, err
 	}
 
-	if dbPath == ":memory:" {
+	empty, err := isEmptyDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, nil, upgrade, err
+	}
+	if empty {
 		if err := copyMigratedSchema(db); err != nil {
 			db.Close()
 			return nil, nil, upgrade, err
@@ -1733,17 +1738,17 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 	return db, writes, upgrade, nil
 }
 
-var migratedSchema struct {
-	once  sync.Once
-	image []byte
-	err   error
+func isEmptyDatabase(db *sql.DB) (bool, error) {
+	var objects int
+	err := db.QueryRow(`SELECT count(*) FROM sqlite_master`).Scan(&objects)
+	return objects == 0, err
 }
 
+var migratedSchemas sync.Map
+
 func migratedSchemaImage() ([]byte, error) {
-	migratedSchema.once.Do(func() {
-		migratedSchema.image, migratedSchema.err = buildMigratedSchemaImage()
-	})
-	return migratedSchema.image, migratedSchema.err
+	build, _ := migratedSchemas.LoadOrStore(LatestSchemaVersion(), sync.OnceValues(buildMigratedSchemaImage))
+	return build.(func() ([]byte, error))()
 }
 
 func buildMigratedSchemaImage() ([]byte, error) {
