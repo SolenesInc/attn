@@ -38,8 +38,8 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 
 		armedAt := time.Now()
 		armed := harvestArm(t, cli, "shipper", seed, url).Seed
-		if armed.Status != "dormant" || tenderSessionOf(armed) != "" || tenderMemberOf(armed) != "" {
-			t.Errorf("arming a growing seed left it %s held by %q/%q, want it dormant and released", armed.Status, tenderSessionOf(armed), tenderMemberOf(armed))
+		if armed.Status != "parked" || tenderSessionOf(armed) != "" || tenderMemberOf(armed) != "" {
+			t.Errorf("arming a growing seed left it %s held by %q/%q, want it parked and released", armed.Status, tenderSessionOf(armed), tenderMemberOf(armed))
 		}
 		condition := armed.HarvestWhen
 		if condition == nil || condition.PullRequest != "github.test:acme/shop#71" || condition.URL != url || whoID(string(condition.SetBy.Ref), "session") != "shipper" {
@@ -61,7 +61,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 			if parked {
 				lifeMove(t, cli, "shipper", other, "tend", "", "")
 				lifeMove(t, cli, "shipper", other, "park", "", "")
-				want = "dormant"
+				want = "parked"
 			}
 			armed := harvestArm(t, cli, "shipper", other, url).Seed
 			if armed.Status != want || armed.HarvestWhen == nil || whoID(string(armed.HarvestWhen.SetBy.Ref), "session") != "shipper" {
@@ -233,8 +233,8 @@ func TestAPullRequestClosedWithoutMergingClearsTheHarvestCondition(t *testing.T)
 		w.advance(protocol.HeatHotInterval)
 
 		got := lifeShow(t, cli, seed).Seed
-		if got.Status != "dormant" || got.HarvestWhen != nil {
-			t.Errorf("after the pull request closed the seed is %s waiting on %+v, want it dormant and unarmed", got.Status, got.HarvestWhen)
+		if got.Status != "parked" || got.HarvestWhen != nil {
+			t.Errorf("after the pull request closed the seed is %s waiting on %+v, want it parked and unarmed", got.Status, got.HarvestWhen)
 		}
 		if notes := lifeNoteBodies(t, cli, seed); len(notes) != notesBefore+1 || notes[0] != "PR #71 closed without merging; harvest-on-merge cleared" {
 			t.Errorf("the log = %q, want one new line saying the pull request closed without merging", notes)
@@ -257,8 +257,8 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 		if err != nil {
 			t.Fatalf("clear: %v", err)
 		}
-		if result.Seed.HarvestWhen != nil || result.Seed.Status != "dormant" {
-			t.Errorf("clearing left the seed %s waiting on %+v, want it dormant and unarmed", result.Seed.Status, result.Seed.HarvestWhen)
+		if result.Seed.HarvestWhen != nil || result.Seed.Status != "parked" {
+			t.Errorf("clearing left the seed %s waiting on %+v, want it parked and unarmed", result.Seed.Status, result.Seed.HarvestWhen)
 		}
 		if notes := lifeNoteBodies(t, cli, cleared); !slices.Contains(notes, "harvest-on-merge cleared") {
 			t.Errorf("the log = %q, want it to say the seed stopped waiting", notes)
@@ -273,7 +273,7 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 		github.merge(71, "Harvest on merge")
 		github.merge(72, "Another merge")
 		w.advance(protocol.HeatHotInterval)
-		if status := lifeShow(t, cli, cleared).Seed.Status; status != "dormant" {
+		if status := lifeShow(t, cli, cleared).Seed.Status; status != "parked" {
 			t.Errorf("the merge of the pull request a cleared seed used to wait on moved it to %s", status)
 		}
 		if got := lifeShow(t, cli, edited).Seed; got.Status != "harvested" || got.Body != "the same promise, a better body" {
@@ -299,8 +299,8 @@ func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("forced arm: %v", err)
 	}
-	if forced.Seed.Status != "dormant" {
-		t.Errorf("a forced arm left the seed %s, want it dormant", forced.Seed.Status)
+	if forced.Seed.Status != "parked" {
+		t.Errorf("a forced arm left the seed %s, want it parked", forced.Seed.Status)
 	}
 	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "parked; harvests when acme/shop#71 merges — "+shipper+" forced `attn seed park "+seed+"`; "+holder+" held the seed.") {
 		t.Errorf("the log = %q, want the takeover recorded", notes)
@@ -547,7 +547,7 @@ func TestAMergeLeavesAPlotOpenWhenNewChildrenNeedWork(t *testing.T) {
 		github.merge(82, "Finish the original work")
 		w.advance(protocol.HeatHotInterval)
 		shown := lifeShow(t, cli, plot).Seed
-		if shown.Status != "dormant" || shown.HarvestWhen != nil {
+		if shown.Status != "parked" || shown.HarvestWhen != nil {
 			t.Fatalf("merge closed the plot or left an impossible condition armed: %+v", shown)
 		}
 		notes := strings.Join(lifeNoteBodies(t, cli, plot), "\n")

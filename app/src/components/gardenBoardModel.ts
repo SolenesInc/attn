@@ -25,7 +25,7 @@ export function heldByOther(seed: Seed, sessionLabels?: SessionLabels): string {
 
 export function columnOf(seed: Seed): ColumnKey {
   if (CLOSED.has(seed.status)) return 'closed';
-  if (seed.status === 'dormant') return 'parked';
+  if (seed.status === 'parked') return 'parked';
   if (seed.status === 'growing') return 'growing';
   return 'ready';
 }
@@ -33,7 +33,7 @@ export function columnOf(seed: Seed): ColumnKey {
 // The garden's own lifecycle table (internal/garden/lifecycle.go) read from the board's side.
 export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
   const status = seed.status;
-  const open = status === 'planted' || status === 'growing' || status === 'dormant';
+  const open = status === 'planted' || status === 'growing' || status === 'parked';
   switch (target) {
     case 'closed':
       return open ? ['harvest', 'wither'] : [];

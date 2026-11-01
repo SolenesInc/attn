@@ -45,26 +45,26 @@ type move struct {
 var moves = map[Verb]move{
 	VerbTend: {
 		to:     StatusGrowing,
-		from:   []string{StatusPlanted, StatusDormant, StatusGrowing},
+		from:   []string{StatusPlanted, StatusParked, StatusGrowing},
 		claims: true,
 	},
 	VerbPark: {
-		to:   StatusDormant,
+		to:   StatusParked,
 		from: []string{StatusPlanted, StatusGrowing},
 	},
 	VerbHarvest: {
 		to:          StatusHarvested,
-		from:        []string{StatusPlanted, StatusGrowing, StatusDormant},
+		from:        []string{StatusPlanted, StatusGrowing, StatusParked},
 		needsReason: true,
 		keepsReason: true,
 	},
 	VerbWither: {
 		to:          StatusWithered,
-		from:        []string{StatusPlanted, StatusGrowing, StatusDormant},
+		from:        []string{StatusPlanted, StatusGrowing, StatusParked},
 		keepsReason: true,
 	},
 	VerbReplant: {
-		from: []string{StatusHarvested, StatusWithered, StatusDormant, StatusGrowing},
+		from: []string{StatusHarvested, StatusWithered, StatusParked, StatusGrowing},
 		to:   StatusPlanted,
 	},
 }

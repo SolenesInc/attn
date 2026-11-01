@@ -5419,7 +5419,7 @@ model Seed {
   "title": string;
   // Markdown. On a crown this is the plan itself.
   "body": string;
-  // planted | growing | harvested | withered | dormant.
+  // planted | growing | harvested | withered | parked.
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
@@ -5646,7 +5646,7 @@ model SeedPlotProgress {
   "done": int32;
   "withered": int32;
   "growing": int32;
-  "dormant": int32;
+  "parked": int32;
   "ready": int32;
   // Open with at least one open blocker.
   "blocked": int32;

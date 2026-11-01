@@ -54,7 +54,7 @@ func (s *Store) AddAsk(a Ask) error {
 			return ErrAskSeedClosed
 		}
 		query += " AND EXISTS (SELECT 1 FROM " + seeds + " WHERE id = ? AND json_extract(body, '$.status') IN (?, ?, ?))"
-		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant)
+		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusParked)
 	}
 	result, err := s.db.Exec(query, args...)
 	if err != nil {

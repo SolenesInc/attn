@@ -718,7 +718,7 @@ func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *
 	}
 }
 
-func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
+func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	home := testworld.NewStack(t)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	outpost.Vars = append(outpost.Vars, "ATTN_HEADLESS_TASKS=")

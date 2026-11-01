@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 test('lifecycle remains visible when the agent releases its seed, with a useful keyboard preview', async ({ page }) => {
   const chip = page.getByTestId('seed-chip-garden-agent');
-  for (const state of ['dormant', 'harvested', 'withered', 'planted', 'growing']) {
+  for (const state of ['parked', 'harvested', 'withered', 'planted', 'growing']) {
     await page.getByRole('button', { name: state, exact: true }).click();
     await expect(chip).toHaveAttribute('data-status', state);
     await expect(chip.locator('.seed-state-label')).toHaveText(new RegExp(state, 'i'));
@@ -58,7 +58,7 @@ test('an unpinned hover leaves Escape with the focused keyboard target', async (
 
 test('reduced motion keeps every state still, including on hover', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const state of ['planted', 'growing', 'dormant', 'harvested', 'withered']) {
+  for (const state of ['planted', 'growing', 'parked', 'harvested', 'withered']) {
     await page.getByRole('button', { name: state, exact: true }).click();
     await page.getByTestId('seed-chip-garden-agent').hover();
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);

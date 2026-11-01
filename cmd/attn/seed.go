@@ -208,7 +208,7 @@ the claim, so picking a seed up primes you. Tending your own claim again
 changes nothing and rings nobody. --for <name> assigns the seed to a crew
 member instead; the user never claims a seed, so a tend from outside an attn
 session needs it.` + seedMoveAuthority, []string{"m", "for", "force", "json"}, false},
-	{`park`, `park <id> [-m "<where you left it>"] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
+	{`park`, `park <id> [-m "<where you left it>"] [--force] [--json]`, `pause the seed deliberately — it is parked and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
 it again picks it back up. Parking it again keeps the state and adds
 only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
@@ -230,7 +230,7 @@ child is open, even with --force; replant hands it back if your part is done.
 Closing its last child leaves a ringing note on the plot and names it here.
 Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
-is free. Reopens a closed seed, un-parks a dormant one, and hands back
+is free. Reopens a closed seed, takes a parked one off hold, and hands back
 one being grown. Replanting an already planted seed changes nothing
 and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
@@ -1686,8 +1686,8 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(actorLabel(seed.Planter)))
 	fmt.Fprintf(w, "tender\t%s\n", orDash(partyLabel(seed.Tender)))
 	if p := seed.PlotProgress; p != nil {
-		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d dormant, %d withered\n",
-			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Dormant, p.Withered)
+		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d parked, %d withered\n",
+			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Parked, p.Withered)
 		if tally := checkTallyLong(plotCheckTally(p)); tally != "" {
 			fmt.Fprintf(w, "plot checks\t%s\n", tally)
 		}

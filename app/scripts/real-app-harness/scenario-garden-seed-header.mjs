@@ -66,7 +66,7 @@ async function main() {
     const selector = () => `[data-testid="seed-chip-${agent}"]`;
     for (const [status, command] of [
       ['growing', null],
-      ['dormant', ['park', seedId]],
+      ['parked', ['park', seedId]],
       ['growing', ['tend', seedId]],
       ['harvested', ['harvest', seedId, '-m', 'All five garden states are clear in the agent header.']],
       ['planted', ['replant', seedId]],

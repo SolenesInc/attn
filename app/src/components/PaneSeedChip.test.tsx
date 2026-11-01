@@ -64,7 +64,7 @@ describe('PaneSeedChip', () => {
     const daemon = await openAgent([
       daemonSeed('s-plot11', {
         title: 'the arc',
-        plot_progress: { done: 2, total: 5, ready: 1, growing: 1, blocked: 1, dormant: 0, withered: 0 },
+        plot_progress: { done: 2, total: 5, ready: 1, growing: 1, blocked: 1, parked: 0, withered: 0 },
       }),
       daemonSeed('s-a', { title: 'first step', ...sessionClaim('s1'), edges: [{ kind: 'part-of', to: 's-plot11' }] }),
       daemonSeed('s-b', { title: 'second step', ...sessionClaim('s1'), edges: [{ kind: 'part-of', to: 's-plot11' }] }),
@@ -132,7 +132,7 @@ function pushSeeds(daemon: ScriptedDaemon, seeds: DaemonSeed[]) {
 }
 
 describe('seed lifecycle and context', () => {
-  it.each(['planted', 'dormant', 'harvested', 'withered'])('keeps %s visible when tending ends', async (status) => {
+  it.each(['planted', 'parked', 'harvested', 'withered'])('keeps %s visible when tending ends', async (status) => {
     const value = daemonSeed('s-work11', { title: 'Garden icons', ...sessionClaim('s1') });
     const daemon = await openAgent([value], { seed_id: value.id });
     pushSeeds(daemon, [{ ...value, status, tender: undefined, claimed: false }]);
@@ -261,7 +261,7 @@ describe('what the chip shows', () => {
     const daemon = await openAgent([
       daemonSeed('s-first', { title: 'first', ...memberClaim('fern', 's1') }),
       daemonSeed('s-second', { title: 'second', ...memberClaim('fern', 's1') }),
-      daemonSeed('s-crown1', { title: 'the plan', status: 'dormant' }),
+      daemonSeed('s-crown1', { title: 'the plan', status: 'parked' }),
     ], { crew_member: 'fern', seed_id: reportsTo });
 
     await showSeeds(daemon);

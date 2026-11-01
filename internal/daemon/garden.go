@@ -346,7 +346,7 @@ func (g gardenRead) progress(id string) *protocol.SeedPlotProgress {
 		Done:     p.Done,
 		Withered: p.Withered,
 		Growing:  p.Growing,
-		Dormant:  p.Dormant,
+		Parked:   p.Parked,
 		Ready:    p.Ready,
 		Blocked:  p.Blocked,
 		Checks:   checkTallyToProtocol(p.Checks),

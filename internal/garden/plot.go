@@ -15,7 +15,7 @@ type Progress struct {
 	Done     int
 	Withered int
 	Growing  int
-	Dormant  int
+	Parked   int
 	Ready    int
 	Blocked  int
 	Checks   CheckTally
@@ -88,8 +88,8 @@ func (t PlotTree) Progress(crownID string, ready map[string]bool) Progress {
 			p.Withered++
 		case seed.Status == StatusGrowing:
 			p.Growing++
-		case seed.Status == StatusDormant:
-			p.Dormant++
+		case seed.Status == StatusParked:
+			p.Parked++
 		}
 		if ready[seed.ID] {
 			p.Ready++

@@ -136,7 +136,7 @@ describe('App garden seeds', () => {
 
   it('reads a seed tile from its status, through its plot, to its plan and a log of what is withheld', async () => {
     const child = daemonSeed('s-step11', { title: 'Build the reader', status: 'harvested' });
-    const plot = { ...PLAN, plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 } };
+    const plot = { ...PLAN, plot_progress: { total: 1, done: 1, withered: 0, growing: 0, parked: 0, ready: 0, blocked: 0 } };
     await openSeedTile(plot, { children: [child], notes: [note('n-one111', { body: 'Verified the **reader**.' })], notes_total: 2 });
 
     const plotHeading = screen.getByRole('heading', { name: 'Plot' });
@@ -177,7 +177,7 @@ describe('App garden seeds', () => {
     ] });
     const crown = daemonSeed('s-plot11', {
       title: 'The monitor plot', body: '# A long plan',
-      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0, checks: { total: 1, reported: 0, confirmed: 0, rejected: 0 } },
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, parked: 0, ready: 0, blocked: 0, checks: { total: 1, reported: 0, confirmed: 0, rejected: 0 } },
       shared_checks: [{ id: 'C4', text: 'CI is green on the head.', removed: false, seeds: [{ seed_id: leaf.id, state: 'open', has_report: false }] }],
     });
     const daemon = await openSeedTile(crown);
@@ -255,7 +255,7 @@ describe('App garden seeds', () => {
 
   it('says the harvest condition beside the state and opens the pull request', async () => {
     const url = 'https://github.com/victorarias/attn/pull/42';
-    await openSeedTile({ ...PLAN, status: 'dormant', tender: undefined, claimed: false, harvest_when: { pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z', set_by: USER_ACTOR } });
+    await openSeedTile({ ...PLAN, status: 'parked', tender: undefined, claimed: false, harvest_when: { pull_request: 'github.com:victorarias/attn#42', url, set_at: '2026-09-02T10:00:00Z', set_by: USER_ACTOR } });
 
     const link = within(seedDetails()).getByRole('link', { name: /harvests when victorarias\/attn#42 merges/ });
     expect(link).toHaveAttribute('href', url);

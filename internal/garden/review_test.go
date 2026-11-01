@@ -64,7 +64,7 @@ func TestReviewCandidateTruthTable(t *testing.T) {
 			name: "parked work is deliberate",
 			observation: func() ReviewObservation {
 				observation := reviewObservation("s-a", old, ReviewDirectoryMissing)
-				observation.Seed.Status = StatusDormant
+				observation.Seed.Status = StatusParked
 				return observation
 			}(),
 		},

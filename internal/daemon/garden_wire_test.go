@@ -404,8 +404,8 @@ func TestParkingASeedKeepsItsExecutionAndItsComment(t *testing.T) {
 	}
 
 	parked := lifeMove(t, cli, worker, seed, "park", "Waiting for the upstream API.", "")
-	if parked.Status != "dormant" || tenderSessionOf(parked) != "" || protocol.Deref(parked.LastExecutionID) != execution {
-		t.Errorf("the parked seed = %+v, want dormant, unclaimed, execution %s", parked, execution)
+	if parked.Status != "parked" || tenderSessionOf(parked) != "" || protocol.Deref(parked.LastExecutionID) != execution {
+		t.Errorf("the parked seed = %+v, want parked, unclaimed, execution %s", parked, execution)
 	}
 	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{})
 	if err != nil {
@@ -642,7 +642,7 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 			}
 		}
 		for _, actor := range []struct{ id, standing string }{{middle, "delegation-chain standing"}, {parent, "delegation-chain standing"}, {chief, "chief standing"}} {
-			for verb, status := range map[string]string{"tend": "growing", "park": "dormant", "harvest": "harvested", "wither": "withered", "replant": "planted"} {
+			for verb, status := range map[string]string{"tend": "growing", "park": "parked", "harvest": "harvested", "wither": "withered", "replant": "planted"} {
 				reset()
 				reason := ""
 				if verb == "harvest" || verb == "wither" {

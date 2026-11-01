@@ -213,7 +213,7 @@ function statusClass(status: string): string {
     case 'growing':
     case 'harvested':
     case 'withered':
-    case 'dormant':
+    case 'parked':
       return `is-${status}`;
     default:
       return 'is-unknown';
@@ -307,7 +307,7 @@ function subtreeOf(index: GardenIndex, rootId: string): Set<string> {
 function signalOf(seed: Seed, blockers: number): { text: string; tone: string } | null {
   if (blockers > 0) return { text: `blocked by ${blockers}`, tone: 'blocked' };
   if (seed.status === 'growing') return { text: 'growing', tone: 'active' };
-  if (seed.status === 'dormant') return { text: 'parked', tone: 'parked' };
+  if (seed.status === 'parked') return { text: 'parked', tone: 'parked' };
   if (seed.status === 'withered') return { text: 'withered', tone: 'closed' };
   if (seed.status === 'harvested') return { text: 'done', tone: 'closed' };
   return null;
@@ -320,7 +320,7 @@ function progressWords(seed: Seed): string {
   if (p.growing) parts.push(`${p.growing} growing`);
   if (p.ready) parts.push(`${p.ready} ready`);
   if (p.blocked) parts.push(`${p.blocked} blocked`);
-  if (p.dormant) parts.push(`${p.dormant} parked`);
+  if (p.parked) parts.push(`${p.parked} parked`);
   return parts.join(' · ');
 }
 
@@ -548,11 +548,11 @@ function ColumnList({
 function ProgressBar({ seed }: { seed: Seed }) {
   const p = seed.plot_progress;
   if (!p || p.total === 0) return null;
-  const rest = Math.max(0, p.total - p.done - p.growing - p.dormant - p.withered);
+  const rest = Math.max(0, p.total - p.done - p.growing - p.parked - p.withered);
   const segments: Array<[string, number]> = [
     ['done', p.done - p.withered > 0 ? p.done - p.withered : p.done],
     ['growing', p.growing],
-    ['parked', p.dormant],
+    ['parked', p.parked],
     ['withered', p.withered],
     ['rest', rest],
   ];

@@ -30,7 +30,7 @@ const drawings: Record<string, ReactNode> = {
       </g>
     </>
   ),
-  dormant: (
+  parked: (
     <>
       <path className="soil" d="M7 28h18" />
       <path d="M16 27v-3" />

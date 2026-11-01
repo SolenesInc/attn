@@ -106,7 +106,7 @@ func TestUnblocks(t *testing.T) {
 		},
 		{
 			name:   "a parked dependent stays put — parking is a pause, not a wait",
-			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), func() Seed { s := seedWith("s-b"); s.Status = StatusDormant; return s }()},
+			seeds:  []Seed{closed(seedWith("s-a", blocks("s-b"))), func() Seed { s := seedWith("s-b"); s.Status = StatusParked; return s }()},
 			closed: "s-a",
 			want:   []string{},
 		},
@@ -204,7 +204,7 @@ func TestReady(t *testing.T) {
 		{
 			name: "a parked blocker still blocks — parking is a pause, not an answer",
 			seeds: []Seed{
-				func() Seed { s := seedWith("s-a", blocks("s-b")); s.Status = StatusDormant; return s }(),
+				func() Seed { s := seedWith("s-a", blocks("s-b")); s.Status = StatusParked; return s }(),
 				seedWith("s-b"),
 			},
 			want: []string{},
@@ -239,7 +239,7 @@ func TestReady(t *testing.T) {
 		},
 		{
 			name:  "a parked seed is never ready",
-			seeds: []Seed{func() Seed { s := seedWith("s-a"); s.Status = StatusDormant; return s }()},
+			seeds: []Seed{func() Seed { s := seedWith("s-a"); s.Status = StatusParked; return s }()},
 			want:  []string{},
 		},
 		{

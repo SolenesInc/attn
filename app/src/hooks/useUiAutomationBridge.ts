@@ -1290,7 +1290,7 @@ function collectGardenUiState() {
     id: row.querySelector('[data-seed-row]')?.getAttribute('data-seed-row') ?? '',
     displayId: row.querySelector('.garden-row__id')?.textContent?.trim() ?? '',
     title: row.querySelector('.garden-row__title')?.textContent?.trim() ?? '',
-    status: (row.className.match(/is-(planted|growing|harvested|withered|dormant|unknown)/) ?? [])[1] ?? '',
+    status: (row.className.match(/is-(planted|growing|harvested|withered|parked|unknown)/) ?? [])[1] ?? '',
     signal: row.querySelector('.garden-row__signal')?.textContent?.trim() ?? '',
     armed: row.querySelector('.garden-row__armed')?.textContent?.trim() ?? '',
     tender: row.querySelector('.garden-row__tender')?.textContent?.trim() ?? '',

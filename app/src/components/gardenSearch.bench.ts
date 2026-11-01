@@ -38,7 +38,7 @@ function tendedBy(member: string): Pick<Seed, 'tender' | 'claimed'> {
 function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[] {
   const rand = lcg(42);
   const members = ['hazel', 'juniper', 'sorrel', ''];
-  const statuses = ['planted', 'growing', 'harvested', 'withered', 'dormant'];
+  const statuses = ['planted', 'growing', 'harvested', 'withered', 'parked'];
   const seeds: Seed[] = [];
   for (let i = 0; i < count; i++) {
     seeds.push({

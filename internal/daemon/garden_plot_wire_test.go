@@ -130,7 +130,7 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Dormant: 1, Ready: 2, Blocked: 1}
+	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Parked: 1, Ready: 2, Blocked: 1}
 	shown, err := cli.SeedShow(protocol.SessionID(planter), planted.Crown.ID)
 	if err != nil {
 		t.Fatal(err)

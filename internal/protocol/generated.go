@@ -10224,11 +10224,11 @@ type SeedPlotProgress struct {
 	// Done corresponds to the JSON schema field "done".
 	Done int `json:"done"`
 
-	// Dormant corresponds to the JSON schema field "dormant".
-	Dormant int `json:"dormant"`
-
 	// Growing corresponds to the JSON schema field "growing".
 	Growing int `json:"growing"`
+
+	// Parked corresponds to the JSON schema field "parked".
+	Parked int `json:"parked"`
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready int `json:"ready"`

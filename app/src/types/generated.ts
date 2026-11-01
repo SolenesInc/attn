@@ -5370,8 +5370,8 @@ export interface PlotProgress {
     blocked:  number;
     checks?:  Checks;
     done:     number;
-    dormant:  number;
     growing:  number;
+    parked:   number;
     ready:    number;
     total:    number;
     withered: number;
@@ -10314,8 +10314,8 @@ export interface SeedPlotProgress {
     blocked:  number;
     checks?:  Checks;
     done:     number;
-    dormant:  number;
     growing:  number;
+    parked:   number;
     ready:    number;
     total:    number;
     withered: number;
@@ -22524,8 +22524,8 @@ const typeMap: any = {
         { json: "blocked", js: "blocked", typ: 0 },
         { json: "checks", js: "checks", typ: u(undefined, r("Checks")) },
         { json: "done", js: "done", typ: 0 },
-        { json: "dormant", js: "dormant", typ: 0 },
         { json: "growing", js: "growing", typ: 0 },
+        { json: "parked", js: "parked", typ: 0 },
         { json: "ready", js: "ready", typ: 0 },
         { json: "total", js: "total", typ: 0 },
         { json: "withered", js: "withered", typ: 0 },
@@ -25696,8 +25696,8 @@ const typeMap: any = {
         { json: "blocked", js: "blocked", typ: 0 },
         { json: "checks", js: "checks", typ: u(undefined, r("Checks")) },
         { json: "done", js: "done", typ: 0 },
-        { json: "dormant", js: "dormant", typ: 0 },
         { json: "growing", js: "growing", typ: 0 },
+        { json: "parked", js: "parked", typ: 0 },
         { json: "ready", js: "ready", typ: 0 },
         { json: "total", js: "total", typ: 0 },
         { json: "withered", js: "withered", typ: 0 },

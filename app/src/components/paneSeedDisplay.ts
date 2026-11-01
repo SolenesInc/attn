@@ -118,10 +118,10 @@ export function plotStateCounts(seed: Seed): Array<[string, number]> {
   if (!progress) return [];
   return Object.entries({
     growing: progress.growing,
-    dormant: progress.dormant,
+    parked: progress.parked,
     harvested: progress.done,
     withered: progress.withered,
-    planted: Math.max(0, progress.total - progress.growing - progress.dormant - progress.done - progress.withered),
+    planted: Math.max(0, progress.total - progress.growing - progress.parked - progress.done - progress.withered),
   }).filter(([, count]) => count > 0);
 }
 

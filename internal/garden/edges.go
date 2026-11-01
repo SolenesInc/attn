@@ -191,7 +191,7 @@ func readiness(seeds []Seed) readinessGraph {
 
 func (g readinessGraph) open(seed Seed) bool {
 	switch {
-	case Closed(seed.Status), seed.Status == StatusDormant:
+	case Closed(seed.Status), seed.Status == StatusParked:
 		return false
 	case g.parents[seed.ID], g.blocked[seed.ID], seed.Gate:
 		return false

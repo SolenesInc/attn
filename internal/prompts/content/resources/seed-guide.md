@@ -189,7 +189,7 @@ close it:
                                                   single open pull request
     attn seed harvest <id> --when-merged --clear      take the arming back
 
-If you were growing the seed, it goes dormant and attn releases your claim.
+If you were growing the seed, attn parks it and releases your claim.
 Either way, the seed points at the pull request, and attn harvests the seed
 with your reason when the merge lands. Without `-m`, the reason is
 "PR #N merged: <title>". The command merges nothing. If the pull request closes

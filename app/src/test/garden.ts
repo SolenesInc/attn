@@ -20,7 +20,7 @@ export function plot(id: string, title: string, parent = '', progress: Partial<P
     title,
     status: 'planted',
     edges: parent ? [{ kind: 'part-of', to: parent }] : [],
-    plot_progress: { total: 1, done: 0, withered: 0, growing: 0, dormant: 0, ready: 1, blocked: 0, ...progress },
+    plot_progress: { total: 1, done: 0, withered: 0, growing: 0, parked: 0, ready: 1, blocked: 0, ...progress },
     ...overrides,
   });
 }

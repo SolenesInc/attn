@@ -1,7 +1,7 @@
 :root {
   --seed-planted: #ceb194;
   --seed-growing: #91c9a2;
-  --seed-dormant: #b0bfdc;
+  --seed-parked: #b0bfdc;
   --seed-harvested: #e5bd6e;
   --seed-withered: #c8978b;
 }
@@ -9,7 +9,7 @@
 [data-theme='light'] {
   --seed-planted: #885f37;
   --seed-growing: #35754d;
-  --seed-dormant: #556ba5;
+  --seed-parked: #556ba5;
   --seed-harvested: #8b610c;
   --seed-withered: #99564b;
 }
@@ -18,7 +18,7 @@
   :root:not([data-theme]) {
     --seed-planted: #885f37;
     --seed-growing: #35754d;
-    --seed-dormant: #556ba5;
+    --seed-parked: #556ba5;
     --seed-harvested: #8b610c;
     --seed-withered: #99564b;
   }
@@ -27,7 +27,7 @@
 [data-seed-state] { --seed-state-color: var(--color-text-tertiary); }
 [data-seed-state='planted'] { --seed-state-color: var(--seed-planted); }
 [data-seed-state='growing'] { --seed-state-color: var(--seed-growing); }
-[data-seed-state='dormant'] { --seed-state-color: var(--seed-dormant); }
+[data-seed-state='parked'] { --seed-state-color: var(--seed-parked); }
 [data-seed-state='harvested'] { --seed-state-color: var(--seed-harvested); }
 [data-seed-state='withered'] { --seed-state-color: var(--seed-withered); }
 

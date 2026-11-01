@@ -25,7 +25,7 @@ const (
 	StatusGrowing   = "growing"
 	StatusHarvested = "harvested"
 	StatusWithered  = "withered"
-	StatusDormant   = "dormant"
+	StatusParked    = "parked"
 )
 
 const HarvestWhenPullRequestField = "harvest_when_pull_request"

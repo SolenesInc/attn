@@ -9,7 +9,7 @@ Out of scope: closing a session and knowing its work is saved (close-session-kno
 ## Terms
 
 - standing: the right to move a seed that another live session tends, without --force. The actor is above the tender in its delegation chain, or is the profile's chief. It is the rule `attn agent close` already uses.
-- open child: a seed whose part-of edge points at the plot and whose state is planted, growing or dormant.
+- open child: a seed whose part-of edge points at the plot and whose state is planted, growing or parked.
 - converge: a move to the state the seed is already in succeeds and changes nothing, except that a new reason is kept as a note.
 - covering tender: the tender of a seed's plot, or of any plot above it.
 

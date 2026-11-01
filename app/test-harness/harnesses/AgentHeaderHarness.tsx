@@ -30,7 +30,7 @@ const partOf = (plot: string) => ({ edges: [{ kind: 'part-of', to: plot }] }) as
 const seeds: Seed[] = [
   seed('s-header', 'Keep header controls aligned across every agent tile', 'release'),
   seed('s-plot', 'Outpost Notebook sync', null, {
-    plot_progress: { blocked: 0, done: 2, dormant: 0, growing: 2, ready: 1, total: 5, withered: 0 },
+    plot_progress: { blocked: 0, done: 2, parked: 0, growing: 2, ready: 1, total: 5, withered: 0 },
   }),
   seed('s-plot-a', 'Sync every profile folder', 'sync', partOf('s-plot')),
   seed('s-plot-b', 'Pin the outpost copy placement', 'sync', partOf('s-plot')),

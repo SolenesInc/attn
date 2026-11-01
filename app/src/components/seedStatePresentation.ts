@@ -1,7 +1,7 @@
 const states: Record<string, { label: string; meaning: string }> = {
   planted: { label: 'Planted', meaning: 'Open, not currently being tended.' },
   growing: { label: 'Growing', meaning: 'Claimed and being worked on.' },
-  dormant: { label: 'Dormant', meaning: 'Paused. Tending it again resumes the work.' },
+  parked: { label: 'Parked', meaning: 'Paused. Tending it again resumes the work.' },
   harvested: { label: 'Harvested', meaning: 'The work is complete.' },
   withered: { label: 'Withered', meaning: 'Closed without a harvest.' },
 };

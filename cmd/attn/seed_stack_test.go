@@ -487,7 +487,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			seedAs(t, s, "shipper", "tend", seed.ID)
 		}
 		requireLines(t, "arm", seedAs(t, s, "shipper", "harvest", first.ID, "--when-merged", "https://github.com/victorarias/attn/pull/118"),
-			first.ID+" ("+first.StepSlug+") is dormant", "\nharvests when victorarias/attn#118 merges\n")
+			first.ID+" ("+first.StepSlug+") is parked", "\nharvests when victorarias/attn#118 merges\n")
 		requireLines(t, "arm", seedAs(t, s, "shipper", "harvest", third.ID, "--when-merged"), "\nharvests when victorarias/attn#118 merges\n")
 		requireLines(t, "arm", seedAs(t, s, "shipper", "harvest", "--when-merged", second.ID, "https://github.com/victorarias/attn/pull/119"),
 			"\nharvests when victorarias/attn#119 merges\n")

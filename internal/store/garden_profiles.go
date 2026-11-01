@@ -93,7 +93,7 @@ func countOpenProfileSeeds(tx *sql.Tx, profileID string) (int, error) {
 		return 0, err
 	}
 	var count int
-	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') IN ('planted', 'growing', 'dormant')`, table), profileID).Scan(&count)
+	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') IN ('planted', 'growing', 'parked')`, table), profileID).Scan(&count)
 	return count, err
 }
 

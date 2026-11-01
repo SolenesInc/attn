@@ -848,7 +848,7 @@ function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedD
   return {
     seed: seedFixture({
       body,
-      plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 },
+      plot_progress: { total: 1, done: 1, withered: 0, growing: 0, parked: 0, ready: 0, blocked: 0 },
     }),
     children: [seedFixture({ id: 's-child1', title: 'Reader child', body: '', status: 'harvested' })],
     notes: [{
@@ -875,7 +875,7 @@ describe('DesktopDockTile seed reader', () => {
       id: 's-plot11',
       title: 'Reader polish',
       body: '# Plot plan',
-      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, parked: 0, ready: 0, blocked: 0 },
     });
     const child = seedFixture({
       id: 's-child1',
@@ -936,14 +936,14 @@ describe('DesktopDockTile seed reader', () => {
       id: 's-root11',
       title: 'Reader polish',
       body: '# Root plan',
-      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, parked: 0, ready: 0, blocked: 0 },
     });
     const nested = seedFixture({
       id: 's-nest11',
       title: 'Nested polish',
       body: '# Nested plan',
       edges: [{ kind: 'part-of', to: root.id }],
-      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0 },
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, parked: 0, ready: 0, blocked: 0 },
     });
     const leaf = seedFixture({
       id: 's-leaf11',
@@ -1006,7 +1006,7 @@ describe('DesktopDockTile seed reader', () => {
       id: 's-plot12',
       title: 'Sparse plot',
       body: '# Previous body',
-      plot_progress: { total: 1, done: 0, withered: 0, growing: 0, dormant: 0, ready: 1, blocked: 0 },
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 0, parked: 0, ready: 1, blocked: 0 },
     });
     const child = seedFixture({ id: 's-child2', title: 'Outside the snapshot', body: '# Next body' });
     const childPending = new Promise<SeedDocument>(() => {});

@@ -139,7 +139,7 @@
   background: var(--color-error);
 }
 
-.seed-document__children .is-dormant .seed-document__child-state {
+.seed-document__children .is-parked .seed-document__child-state {
   background: var(--color-warning);
 }
 
@@ -200,7 +200,7 @@
 }
 
 .seed-document__state.is-growing > span { background: var(--accent); }
-.seed-document__state.is-dormant > span { background: var(--color-warning); }
+.seed-document__state.is-parked > span { background: var(--color-warning); }
 .seed-document__state.is-withered > span { background: var(--color-error); }
 .seed-document__state.is-harvested > span { background: var(--color-text-tertiary); }
 

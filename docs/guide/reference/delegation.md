@@ -281,7 +281,7 @@ Yes. An agent can close itself and any agent below it in its delegation chain, d
 <details>
 <summary>What do the seed states mean, and who can move a seed?</summary>
 
-A planted seed is open and nobody tends it. A seed is growing while an agent or crew member tends it. A parked seed is on hold and has no tender. The app labels it Dormant in some places. A harvested seed (done, with a summary of what got done) and a withered seed (dropped) stay closed until someone replants them. The garden board shows planted, growing, parked and closed seeds as Ready, In progress, Parked and Closed. Any agent can move a seed with `attn seed`. To take a seed that another agent tends, an agent needs `--force`, unless the agent taking it sits above the tender in the delegation chain or is the profile's Chief. In the garden, you can park, harvest, wither or replant any seed, even one an agent tends.
+A planted seed is open and nobody tends it. A seed is growing while an agent or crew member tends it. A parked seed is on hold and has no tender. A harvested seed (done, with a summary of what got done) and a withered seed (dropped) stay closed until someone replants them. The garden board shows planted, growing, parked and closed seeds as Ready, In progress, Parked and Closed. Any agent can move a seed with `attn seed`. To take a seed that another agent tends, an agent needs `--force`, unless the agent taking it sits above the tender in the delegation chain or is the profile's Chief. In the garden, you can park, harvest, wither or replant any seed, even one an agent tends.
 </details>
 
 <details>

@@ -154,7 +154,7 @@
   transform: rotate(45deg);
 }
 
-.terminal-seed-preview__status[data-status='dormant'] i {
+.terminal-seed-preview__status[data-status='parked'] i {
   background: #d7ad70;
   box-shadow: none;
 }

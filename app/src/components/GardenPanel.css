@@ -292,7 +292,7 @@
 .is-growing .garden-row__pip { background: var(--accent); }
 .is-harvested .garden-row__pip { background: var(--color-text-tertiary); }
 .is-withered .garden-row__pip { background: var(--color-error); }
-.is-dormant .garden-row__pip { background: var(--color-warning); }
+.is-parked .garden-row__pip { background: var(--color-warning); }
 
 .garden-row__content {
   display: flex;

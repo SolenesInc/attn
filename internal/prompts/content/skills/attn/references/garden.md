@@ -108,7 +108,7 @@ Everyone else needs `--force`, and the log records that they used it. A call wit
 
 ## Closing a plot
 
-Harvest and wither refuse while any direct child is planted, growing or dormant,
+Harvest and wither refuse while any direct child is planted, growing or parked,
 even with `--force` or `--when-merged`. The refusal names each open child. To
 close the plot, first close each open child or move its follow-ups out. To give
 up your claim on the plot without closing it, run `attn seed replant <plot>`.
@@ -125,7 +125,7 @@ let attn close it:
 
 With no url, the command takes this session's single open pull request, and
 names the pull requests when there is more than one. A seed you were growing
-goes dormant, and attn releases your claim. Every surface then shows
+is parked, and attn releases your claim. Every surface then shows
 `harvests when owner/repo#n merges`. The command merges nothing. When the merge
 lands, attn harvests the seed as the member `attn`, with your reason. Without
 `-m`, attn uses `PR #n merged: <title>`. If a pull request closes without

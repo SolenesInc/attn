@@ -47,13 +47,13 @@ function progressWords(seed: Seed): string {
   if (progress.growing) parts.push(`${progress.growing} growing`);
   if (progress.ready) parts.push(`${progress.ready} ready`);
   if (progress.blocked) parts.push(`${progress.blocked} blocked`);
-  if (progress.dormant) parts.push(`${progress.dormant} parked`);
+  if (progress.parked) parts.push(`${progress.parked} parked`);
   return parts.join(' · ');
 }
 
 function childSignal(seed: Seed): string {
   if (seed.status === 'growing') return 'growing';
-  if (seed.status === 'dormant') return 'parked';
+  if (seed.status === 'parked') return 'parked';
   if (seed.status === 'harvested') return 'done';
   if (seed.status === 'withered') return 'withered';
   return '';
