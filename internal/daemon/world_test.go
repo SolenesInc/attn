@@ -342,6 +342,29 @@ func (w *world) tickSchedulesUntil(what string, done func() bool) {
 	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
 }
 
+// tickSchedulesUntilPaused steps the schedule clock like tickSchedulesUntil until a scheduled job reaches pause, and
+// leaves it held there.
+func (w *world) tickSchedulesUntilPaused(what string, pause *testworld.Pause) {
+	w.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	for range scheduleTickLimit {
+		w.clock.Advance(daemon.AutomationScheduleTick)
+		settled := make(chan struct{})
+		go func() {
+			w.clock.AwaitIdle(ctx)
+			close(settled)
+		}()
+		if pause.AwaitBefore(settled) {
+			return
+		}
+		if ctx.Err() != nil {
+			w.T.Fatalf("%s: the job runner was still busy after %s", what, fakeagent.HangGuard)
+		}
+	}
+	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
+}
+
 // readTranscripts fires every pending transcript poll without moving the clock and returns when their callbacks return.
 // A poll another fire already took reads later, so tests assert what the read shows, not that it finished.
 func (w *world) readTranscripts() { w.clock.Fire(sessionmonitor.TranscriptPoll) }

@@ -248,6 +248,25 @@ func (p *Pause) Await() int {
 	return paused.pid
 }
 
+// AwaitBefore holds the next arrival and reports true, or reports false once settled closes first.
+func (p *Pause) AwaitBefore(settled <-chan struct{}) bool {
+	p.t.Helper()
+	if p.paused != nil {
+		p.t.Fatalf("AwaitBefore(%q): release the process already paused there first", p.name)
+	}
+	select {
+	case paused := <-p.held:
+		if paused.failed != nil {
+			paused.release()
+			p.t.Fatalf("pause point %q: the step failed: %v", p.name, paused.failed)
+		}
+		p.paused = &paused
+		return true
+	case <-settled:
+		return false
+	}
+}
+
 func (p *Pause) next() arrival {
 	p.t.Helper()
 	select {

@@ -519,23 +519,28 @@ func seedOfEditedThreadTx(tx *sql.Tx, definitionID int, continuityKey string) (s
 	return seedID, err
 }
 
-func (s *Store) AutomationRunTakesOverRotatedSeed(definitionID int, runID, seedID string, previous protocol.SessionID) (bool, error) {
+func (s *Store) AutomationSessionAwaitsRotatedSeed(definitionID int, seedID string, session, previous protocol.SessionID) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return false, errors.New("automation persistence unavailable")
 	}
-	var handover int
+	var awaits int
 	err := s.db.QueryRow(`
 		SELECT EXISTS(
 			SELECT 1 FROM automation_continuity_bindings
-			WHERE definition_id=? AND seed_id=? AND origin_run_id=? AND status=?
+			WHERE definition_id=? AND seed_id=? AND session_id=? AND status=?
 		) AND EXISTS(
 			SELECT 1 FROM automation_continuity_bindings
 			WHERE definition_id=? AND seed_id=? AND session_id=? AND released_reason=?
+		) AND NOT EXISTS(
+			SELECT 1 FROM automation_runs
+			WHERE definition_id=? AND seed_id=? AND session_id=? AND state=?
 		)
-	`, definitionID, seedID, runID, AutomationBindingStatusActive, definitionID, seedID, previous, AutomationBindingReleasedContractRotated).Scan(&handover)
-	return handover != 0, err
+	`, definitionID, seedID, session, AutomationBindingStatusActive,
+		definitionID, seedID, previous, AutomationBindingReleasedContractRotated,
+		definitionID, seedID, session, AutomationRunStateDelivered).Scan(&awaits)
+	return awaits != 0, err
 }
 
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID protocol.SessionID) (bool, error) {

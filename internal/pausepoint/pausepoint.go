@@ -77,6 +77,7 @@ const (
 	ProfileActionRan              = "profile-action-ran"
 	DatabaseBackupStarting        = "database-backup-starting"
 	DatabaseBackupCopied          = "database-backup-copied"
+	AutomationRunReserved         = "automation-run-reserved"
 	AutomationRunFinalizing       = "automation-run-finalizing"
 )
 

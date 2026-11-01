@@ -500,7 +500,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			}
 		}
 		if seed.Tender != who.Session(req.IDs.SessionID) || seed.Status != garden.StatusGrowing {
-			if restore, err = d.activateAutomationContinuationSeed(req.DefinitionID, req.RunID, req.IDs.SeedID, req.IDs.SessionID); err != nil {
+			if restore, err = d.activateAutomationContinuationSeed(req.DefinitionID, req.IDs.SeedID, req.IDs.SessionID); err != nil {
 				return false, nil, err
 			}
 		}
@@ -537,7 +537,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	return continuation, restore, nil
 }
 
-func (d *Daemon) activateAutomationContinuationSeed(definitionID int, runID, seedID string, sessionID protocol.SessionID) (func() error, error) {
+func (d *Daemon) activateAutomationContinuationSeed(definitionID int, seedID string, sessionID protocol.SessionID) (func() error, error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
@@ -566,7 +566,7 @@ func (d *Daemon) activateAutomationContinuationSeed(definitionID int, runID, see
 	}
 	tend := quietAsk("")
 	if previous, ok := seed.Tender.Session(); ok && previous != sessionID && d.sessionActive(previous) {
-		handover, err := d.store.AutomationRunTakesOverRotatedSeed(definitionID, runID, seedID, previous)
+		handover, err := d.store.AutomationSessionAwaitsRotatedSeed(definitionID, seedID, sessionID, previous)
 		if err != nil {
 			return nil, err
 		}
