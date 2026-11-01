@@ -47,7 +47,7 @@ agent works in. A scheduled trigger also takes:
   new agent on the same seed. The new agent continues from the seed's state.
   Attn leaves the old agent running, and you can still open it. After a run on
   the new agent succeeds, the new agent is the seed's tender. If the old agent
-  tends the seed again, later runs fail and name the new agent as the tender
+  tends the seed again, later runs fail and name the old agent as the tender
   instead of taking the seed back.
 - **Missed runs**. What Attn does with a scheduled time that passed while Attn
   was off or the automation was disabled. **Skip** starts a run for a missed

@@ -49,11 +49,10 @@ CI on its head. Report missing coverage and ask before merging. Verify a landing
 locally. After the landing, `main`'s full scenario matrix verifies it again. See
 [Verifying before landing](trunk-based-development.md#verifying-before-landing).
 
-CI runs the scenario matrix. Run a scenario locally, in a non-production
-instance, only to reproduce a CI failure or to develop a scenario. To check a
-change before landing, run the change on the surface it touches in a
-non-production instance. Check the installed build first, not whatever `attn`
-is on `PATH`:
+CI runs the scenario matrix. Run scenarios locally, in a non-production
+instance, to reproduce a CI failure or develop a scenario. When the machine has
+the capacity, run them also to check an app-observable change before landing.
+Check the installed build first, not whatever `attn` is on `PATH`:
 
 ```bash
 "$(./attn instance resolve --field appDaemon)" preflight

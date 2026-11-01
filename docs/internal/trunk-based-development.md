@@ -120,7 +120,8 @@ revert is clean. The fix lands like any other, and the next push run on
 the failure's owner and the repair that landed, so the sheriff does not fix a
 failure that already has an owner or a repair. Every revert gets an owner who
 will land the change again: the commit's live session, or a seed that the chief
-receives. When neither owner is clearly right, the sheriff asks the user. The
+receives. When neither fixing forward nor reverting is clearly right, the sheriff asks the
+user. The
 `sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
 release waits for green.
 

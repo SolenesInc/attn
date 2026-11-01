@@ -184,8 +184,9 @@ user saw.
 
 - A wire test finishes well under a second.
 - A stack test finishes in a few seconds.
-- Scenarios run in CI. Run them locally only to reproduce a failure or
-  develop a scenario.
+- Scenarios run in CI. Run them locally to reproduce a failure or develop a
+  scenario, and, when the machine has the capacity, to check an app-observable
+  change before landing.
 
 A test over its budget belongs to a slower kind, or its harness needs work.
 
