@@ -104,7 +104,7 @@ fn serve(cache: Cache) {
         thread::spawn(move || work(&cache, &queue, &pending));
     }
     read_requests(&jobs, &pending);
-    std::process::exit(0);
+    unsafe { libc::_exit(0) }
 }
 
 fn read_requests(jobs: &mpsc::Sender<(u64, Job)>, pending: &Pending) {
