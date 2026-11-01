@@ -72,7 +72,7 @@ export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetS
   };
   return (
     <div className="analytics-machine" data-testid="analytics-machine">
-      <Row title="Record on this machine" copy={<>Redacted bus facts, app actions, CLI outcomes and resource samples. New sessions get <code>attn vent</code>.</>}>
+      <Row title="Record on this machine" copy={<>Redacted bus facts, app actions, CLI outcomes, agent runs and resource samples. New sessions get <code>attn vent</code>.</>}>
         <button type="button" className="settings-action" onClick={onDisableRecording}>Disable</button>
       </Row>
       <Row title="Share with attn's maintainers" copy={shareCopy(sharing, status, confirm === 'deleteServerCopy')}>

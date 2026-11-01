@@ -104,8 +104,8 @@ Ask: "Do you want to help by publishing analytics to attn's maintainers? No
 personal information is sent." Keep the offer brief. Give details when the user
 asks. Start that answer with "No personal information is sent." Then explain
 three things. attn redacts names, paths and other free text and hashes
-identifiers. The records describe attn activity, commands and app actions, plus
-resource samples. **Settings → Analytics** shows exactly what is stored and sent.
+identifiers. The records describe attn activity, commands, app actions and
+agent runs, plus resource samples. **Settings → Analytics** shows exactly what is stored and sent.
 
 Wait for the answer. If they agree, set `analytics.enabled` and
 `analytics.sharing_enabled` to `true`.
