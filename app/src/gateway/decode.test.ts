@@ -58,7 +58,7 @@ describe('decodeGatewayEvent', () => {
   });
 
   it('skips an event this build does not know', () => {
-    expect(decodeGatewayEvent(JSON.stringify({ event: 'terminal_screen', terminal_id: 't1' }))).toBeNull();
+    expect(decodeGatewayEvent(JSON.stringify({ event: 'terminal_mood', terminal_id: 't1' }))).toBeNull();
   });
 
   it('refuses a known event that breaks its shape', () => {

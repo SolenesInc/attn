@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayHello, GatewayPing, GatewayPong, GatewayProfile, GatewayRefused, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome } from "./gatewayGenerated";
+//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayHello, GatewayPing, GatewayPong, GatewayProfile, GatewayRefused, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
 //
 //   const gatewayAsk = Convert.toGatewayAsk(json);
 //   const gatewayAskAnswer = Convert.toGatewayAskAnswer(json);
@@ -25,6 +25,18 @@
 //   const gatewaySessionState = Convert.toGatewaySessionState(json);
 //   const gatewaySessions = Convert.toGatewaySessions(json);
 //   const gatewayWelcome = Convert.toGatewayWelcome(json);
+//   const submitPrompt = Convert.toSubmitPrompt(json);
+//   const submitResult = Convert.toSubmitResult(json);
+//   const terminalAttach = Convert.toTerminalAttach(json);
+//   const terminalCredit = Convert.toTerminalCredit(json);
+//   const terminalDetach = Convert.toTerminalDetach(json);
+//   const terminalEnded = Convert.toTerminalEnded(json);
+//   const terminalError = Convert.toTerminalError(json);
+//   const terminalFocus = Convert.toTerminalFocus(json);
+//   const terminalInput = Convert.toTerminalInput(json);
+//   const terminalResize = Convert.toTerminalResize(json);
+//   const terminalResized = Convert.toTerminalResized(json);
+//   const terminalScreen = Convert.toTerminalScreen(json);
 //
 // These functions will throw an error if the JSON doesn't
 // match the expected interface, even if the JSON is valid.
@@ -276,6 +288,7 @@ export interface GatewaySession {
     id:             string;
     offline:        boolean;
     state:          GatewaySessionState;
+    terminal_id?:   string;
     title:          string;
     waiting_since?: Date;
     [property: string]: any;
@@ -308,6 +321,7 @@ export interface SessionElement {
     id:             string;
     offline:        boolean;
     state:          GatewaySessionState;
+    terminal_id?:   string;
     title:          string;
     waiting_since?: Date;
     [property: string]: any;
@@ -329,6 +343,144 @@ export interface Profile {
     id:   string;
     name: string;
     [property: string]: any;
+}
+
+export interface SubmitPrompt {
+    cmd:        SubmitPromptCmd;
+    request_id: string;
+    session_id: string;
+    text:       string;
+    [property: string]: any;
+}
+
+export enum SubmitPromptCmd {
+    SubmitPrompt = "submit_prompt",
+}
+
+export interface SubmitResult {
+    delivered:  boolean;
+    event:      SubmitResultEvent;
+    message?:   string;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum SubmitResultEvent {
+    SubmitResult = "submit_result",
+}
+
+export interface TerminalAttach {
+    cmd:         TerminalAttachCmd;
+    cols:        number;
+    credit:      number;
+    rows:        number;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalAttachCmd {
+    TerminalAttach = "terminal_attach",
+}
+
+export interface TerminalCredit {
+    bytes:       number;
+    cmd:         TerminalCreditCmd;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalCreditCmd {
+    TerminalCredit = "terminal_credit",
+}
+
+export interface TerminalDetach {
+    cmd:         TerminalDetachCmd;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalDetachCmd {
+    TerminalDetach = "terminal_detach",
+}
+
+export interface TerminalEnded {
+    event:       TerminalEndedEvent;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalEndedEvent {
+    TerminalEnded = "terminal_ended",
+}
+
+export interface TerminalError {
+    event:       TerminalErrorEvent;
+    message:     string;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalErrorEvent {
+    TerminalError = "terminal_error",
+}
+
+export interface TerminalFocus {
+    cmd:         TerminalFocusCmd;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalFocusCmd {
+    TerminalFocus = "terminal_focus",
+}
+
+export interface TerminalInput {
+    cmd:         TerminalInputCmd;
+    data:        string;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalInputCmd {
+    TerminalInput = "terminal_input",
+}
+
+export interface TerminalResize {
+    cmd:         TerminalResizeCmd;
+    cols:        number;
+    rows:        number;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalResizeCmd {
+    TerminalResize = "terminal_resize",
+}
+
+export interface TerminalResized {
+    cols:        number;
+    event:       TerminalResizedEvent;
+    rows:        number;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalResizedEvent {
+    TerminalResized = "terminal_resized",
+}
+
+export interface TerminalScreen {
+    ansi:        string;
+    cols:        number;
+    event:       TerminalScreenEvent;
+    rows:        number;
+    seq:         number;
+    terminal_id: string;
+    [property: string]: any;
+}
+
+export enum TerminalScreenEvent {
+    TerminalScreen = "terminal_screen",
 }
 
 // Converts JSON strings to/from your types
@@ -516,6 +668,102 @@ export class Convert {
 
     public static gatewayWelcomeToJson(value: GatewayWelcome): string {
         return JSON.stringify(uncast(value, r("GatewayWelcome")), null, 2);
+    }
+
+    public static toSubmitPrompt(json: string): SubmitPrompt {
+        return cast(JSON.parse(json), r("SubmitPrompt"));
+    }
+
+    public static submitPromptToJson(value: SubmitPrompt): string {
+        return JSON.stringify(uncast(value, r("SubmitPrompt")), null, 2);
+    }
+
+    public static toSubmitResult(json: string): SubmitResult {
+        return cast(JSON.parse(json), r("SubmitResult"));
+    }
+
+    public static submitResultToJson(value: SubmitResult): string {
+        return JSON.stringify(uncast(value, r("SubmitResult")), null, 2);
+    }
+
+    public static toTerminalAttach(json: string): TerminalAttach {
+        return cast(JSON.parse(json), r("TerminalAttach"));
+    }
+
+    public static terminalAttachToJson(value: TerminalAttach): string {
+        return JSON.stringify(uncast(value, r("TerminalAttach")), null, 2);
+    }
+
+    public static toTerminalCredit(json: string): TerminalCredit {
+        return cast(JSON.parse(json), r("TerminalCredit"));
+    }
+
+    public static terminalCreditToJson(value: TerminalCredit): string {
+        return JSON.stringify(uncast(value, r("TerminalCredit")), null, 2);
+    }
+
+    public static toTerminalDetach(json: string): TerminalDetach {
+        return cast(JSON.parse(json), r("TerminalDetach"));
+    }
+
+    public static terminalDetachToJson(value: TerminalDetach): string {
+        return JSON.stringify(uncast(value, r("TerminalDetach")), null, 2);
+    }
+
+    public static toTerminalEnded(json: string): TerminalEnded {
+        return cast(JSON.parse(json), r("TerminalEnded"));
+    }
+
+    public static terminalEndedToJson(value: TerminalEnded): string {
+        return JSON.stringify(uncast(value, r("TerminalEnded")), null, 2);
+    }
+
+    public static toTerminalError(json: string): TerminalError {
+        return cast(JSON.parse(json), r("TerminalError"));
+    }
+
+    public static terminalErrorToJson(value: TerminalError): string {
+        return JSON.stringify(uncast(value, r("TerminalError")), null, 2);
+    }
+
+    public static toTerminalFocus(json: string): TerminalFocus {
+        return cast(JSON.parse(json), r("TerminalFocus"));
+    }
+
+    public static terminalFocusToJson(value: TerminalFocus): string {
+        return JSON.stringify(uncast(value, r("TerminalFocus")), null, 2);
+    }
+
+    public static toTerminalInput(json: string): TerminalInput {
+        return cast(JSON.parse(json), r("TerminalInput"));
+    }
+
+    public static terminalInputToJson(value: TerminalInput): string {
+        return JSON.stringify(uncast(value, r("TerminalInput")), null, 2);
+    }
+
+    public static toTerminalResize(json: string): TerminalResize {
+        return cast(JSON.parse(json), r("TerminalResize"));
+    }
+
+    public static terminalResizeToJson(value: TerminalResize): string {
+        return JSON.stringify(uncast(value, r("TerminalResize")), null, 2);
+    }
+
+    public static toTerminalResized(json: string): TerminalResized {
+        return cast(JSON.parse(json), r("TerminalResized"));
+    }
+
+    public static terminalResizedToJson(value: TerminalResized): string {
+        return JSON.stringify(uncast(value, r("TerminalResized")), null, 2);
+    }
+
+    public static toTerminalScreen(json: string): TerminalScreen {
+        return cast(JSON.parse(json), r("TerminalScreen"));
+    }
+
+    public static terminalScreenToJson(value: TerminalScreen): string {
+        return JSON.stringify(uncast(value, r("TerminalScreen")), null, 2);
     }
 }
 
@@ -816,6 +1064,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "offline", js: "offline", typ: true },
         { json: "state", js: "state", typ: r("GatewaySessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waiting_since", js: "waiting_since", typ: u(undefined, Date) },
     ], "any"),
@@ -829,6 +1078,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "offline", js: "offline", typ: true },
         { json: "state", js: "state", typ: r("GatewaySessionState") },
+        { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waiting_since", js: "waiting_since", typ: u(undefined, Date) },
     ], "any"),
@@ -841,6 +1091,72 @@ const typeMap: any = {
     "Profile": o([
         { json: "id", js: "id", typ: "" },
         { json: "name", js: "name", typ: "" },
+    ], "any"),
+    "SubmitPrompt": o([
+        { json: "cmd", js: "cmd", typ: r("SubmitPromptCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "session_id", js: "session_id", typ: "" },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "SubmitResult": o([
+        { json: "delivered", js: "delivered", typ: true },
+        { json: "event", js: "event", typ: r("SubmitResultEvent") },
+        { json: "message", js: "message", typ: u(undefined, "") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "TerminalAttach": o([
+        { json: "cmd", js: "cmd", typ: r("TerminalAttachCmd") },
+        { json: "cols", js: "cols", typ: 0 },
+        { json: "credit", js: "credit", typ: 0 },
+        { json: "rows", js: "rows", typ: 0 },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalCredit": o([
+        { json: "bytes", js: "bytes", typ: 0 },
+        { json: "cmd", js: "cmd", typ: r("TerminalCreditCmd") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalDetach": o([
+        { json: "cmd", js: "cmd", typ: r("TerminalDetachCmd") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalEnded": o([
+        { json: "event", js: "event", typ: r("TerminalEndedEvent") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalError": o([
+        { json: "event", js: "event", typ: r("TerminalErrorEvent") },
+        { json: "message", js: "message", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalFocus": o([
+        { json: "cmd", js: "cmd", typ: r("TerminalFocusCmd") },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalInput": o([
+        { json: "cmd", js: "cmd", typ: r("TerminalInputCmd") },
+        { json: "data", js: "data", typ: "" },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalResize": o([
+        { json: "cmd", js: "cmd", typ: r("TerminalResizeCmd") },
+        { json: "cols", js: "cols", typ: 0 },
+        { json: "rows", js: "rows", typ: 0 },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalResized": o([
+        { json: "cols", js: "cols", typ: 0 },
+        { json: "event", js: "event", typ: r("TerminalResizedEvent") },
+        { json: "rows", js: "rows", typ: 0 },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
+    ], "any"),
+    "TerminalScreen": o([
+        { json: "ansi", js: "ansi", typ: "" },
+        { json: "cols", js: "cols", typ: 0 },
+        { json: "event", js: "event", typ: r("TerminalScreenEvent") },
+        { json: "rows", js: "rows", typ: 0 },
+        { json: "seq", js: "seq", typ: 0 },
+        { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "GatewayAskQuestionKind": [
         "any",
@@ -896,5 +1212,41 @@ const typeMap: any = {
     ],
     "GatewayWelcomeEvent": [
         "welcome",
+    ],
+    "SubmitPromptCmd": [
+        "submit_prompt",
+    ],
+    "SubmitResultEvent": [
+        "submit_result",
+    ],
+    "TerminalAttachCmd": [
+        "terminal_attach",
+    ],
+    "TerminalCreditCmd": [
+        "terminal_credit",
+    ],
+    "TerminalDetachCmd": [
+        "terminal_detach",
+    ],
+    "TerminalEndedEvent": [
+        "terminal_ended",
+    ],
+    "TerminalErrorEvent": [
+        "terminal_error",
+    ],
+    "TerminalFocusCmd": [
+        "terminal_focus",
+    ],
+    "TerminalInputCmd": [
+        "terminal_input",
+    ],
+    "TerminalResizeCmd": [
+        "terminal_resize",
+    ],
+    "TerminalResizedEvent": [
+        "terminal_resized",
+    ],
+    "TerminalScreenEvent": [
+        "terminal_screen",
     ],
 };

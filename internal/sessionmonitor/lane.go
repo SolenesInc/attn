@@ -98,7 +98,7 @@ func UserConversationInput(key string, text string, placement Placement) Deliver
 	}
 }
 
-func AnnotationInput(key string, text string) Delivery {
+func ComposedInput(key string, text string) Delivery {
 	delivery := UserConversationInput(key, text, AtTurnBoundary)
 	delivery.AllowUserComposer = true
 	return delivery

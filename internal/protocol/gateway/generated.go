@@ -258,6 +258,9 @@ type GatewaySession struct {
 	// State corresponds to the JSON schema field "state".
 	State GatewaySessionState `json:"state"`
 
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *string `json:"terminal_id,omitempty,omitzero"`
+
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
 
@@ -296,4 +299,154 @@ type GatewayWelcome struct {
 
 	// Profile corresponds to the JSON schema field "profile".
 	Profile GatewayProfile `json:"profile"`
+}
+
+type SubmitPrompt struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type SubmitResult struct {
+	// Delivered corresponds to the JSON schema field "delivered".
+	Delivered bool `json:"delivered"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type TerminalAttach struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cols corresponds to the JSON schema field "cols".
+	Cols int `json:"cols"`
+
+	// Credit corresponds to the JSON schema field "credit".
+	Credit int `json:"credit"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows int `json:"rows"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalCredit struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalDetach struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalEnded struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalError struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalFocus struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalInput struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Data corresponds to the JSON schema field "data".
+	Data string `json:"data"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalResize struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cols corresponds to the JSON schema field "cols".
+	Cols int `json:"cols"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows int `json:"rows"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalResized struct {
+	// Cols corresponds to the JSON schema field "cols".
+	Cols int `json:"cols"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows int `json:"rows"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
+}
+
+type TerminalScreen struct {
+	// Ansi corresponds to the JSON schema field "ansi".
+	Ansi string `json:"ansi"`
+
+	// Cols corresponds to the JSON schema field "cols".
+	Cols int `json:"cols"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows int `json:"rows"`
+
+	// Seq corresponds to the JSON schema field "seq".
+	Seq int `json:"seq"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID string `json:"terminal_id"`
 }

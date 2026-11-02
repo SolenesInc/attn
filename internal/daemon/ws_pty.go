@@ -91,6 +91,12 @@ func (c *wsClient) streamsTo(terminal protocol.TerminalID) bool {
 	return attached
 }
 
+type terminalClient interface {
+	commandOrder() *terminalOrder
+}
+
+func (c *wsClient) commandOrder() *terminalOrder { return &c.terminalOrder }
+
 type terminalCommand struct {
 	run  func()
 	send func(answered func())
@@ -164,27 +170,27 @@ func (o *terminalOrder) runQueued(terminal protocol.TerminalID) {
 	}
 }
 
-func (d *Daemon) sendInTerminalOrder(client *wsClient, terminal protocol.TerminalID, send func(answered func())) {
+func (d *Daemon) sendInTerminalOrder(client terminalClient, terminal protocol.TerminalID, send func(answered func())) {
 	if d.sessionHost(d.terminals().owner(terminal)) == "" {
 		d.inTerminalOrder(client, terminal, func() { send(func() {}) })
 		return
 	}
-	if client.terminalOrder.enqueue(terminal, &terminalCommand{send: send}) {
+	if client.commandOrder().enqueue(terminal, &terminalCommand{send: send}) {
 		d.runTerminalOrder(client, terminal)
 	}
 }
 
-func (d *Daemon) inTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
+func (d *Daemon) inTerminalOrder(client terminalClient, terminal protocol.TerminalID, command func()) {
 	if d.sessionHost(d.terminals().owner(terminal)) != "" {
 		d.offPumpInTerminalOrder(client, terminal, command)
 		return
 	}
-	if !client.terminalOrder.queueBehindRunning(terminal, command) {
+	if !client.commandOrder().queueBehindRunning(terminal, command) {
 		command()
 	}
 }
 
-func (d *Daemon) inSessionOrder(client *wsClient, session protocol.SessionID, command func()) {
+func (d *Daemon) inSessionOrder(client terminalClient, session protocol.SessionID, command func()) {
 	session = protocol.TrimID(session)
 	if d.sessionHost(session) != "" {
 		key := d.primaryTerminal(session)
@@ -197,16 +203,16 @@ func (d *Daemon) inSessionOrder(client *wsClient, session protocol.SessionID, co
 	command()
 }
 
-func (d *Daemon) offPumpInTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
-	if !client.terminalOrder.queue(terminal, command) {
+func (d *Daemon) offPumpInTerminalOrder(client terminalClient, terminal protocol.TerminalID, command func()) {
+	if !client.commandOrder().queue(terminal, command) {
 		return
 	}
 	d.runTerminalOrder(client, terminal)
 }
 
-func (d *Daemon) runTerminalOrder(client *wsClient, terminal protocol.TerminalID) {
-	if !d.life.Go("terminalOrder", func() { client.terminalOrder.runQueued(terminal) }) {
-		client.terminalOrder.runQueued(terminal)
+func (d *Daemon) runTerminalOrder(client terminalClient, terminal protocol.TerminalID) {
+	if !d.life.Go("terminalOrder", func() { client.commandOrder().runQueued(terminal) }) {
+		client.commandOrder().runQueued(terminal)
 	}
 }
 
@@ -223,7 +229,7 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 	}
 }
 
-func (d *Daemon) releasePtySizes(client *wsClient) {
+func (d *Daemon) releasePtySizes(client terminalClient) {
 	for _, next := range d.ptySizes.releaseAll(client) {
 		d.applyPtySize(next.owner, next.terminal)
 	}
@@ -771,7 +777,7 @@ func (d *Daemon) handleTerminalFocus(client *wsClient, msg *protocol.TerminalFoc
 	d.claimPtySize(client, msg.ID)
 }
 
-func (d *Daemon) claimPtySize(client *wsClient, terminal protocol.TerminalID) {
+func (d *Daemon) claimPtySize(client terminalClient, terminal protocol.TerminalID) {
 	if d.ptySizes.claim(client, terminal) {
 		d.applyPtySize(client, terminal)
 	}
@@ -812,7 +818,7 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 	}
 }
 
-func (d *Daemon) applyPtySize(owner *wsClient, terminal protocol.TerminalID) {
+func (d *Daemon) applyPtySize(owner terminalClient, terminal protocol.TerminalID) {
 	d.sendInTerminalOrder(owner, terminal, func(answered func()) {
 		stillOwner := d.ptySizes.applyIfOwner(owner, terminal, func(size protocol.PtyResizeMessage) {
 			d.router().Send(size, func(err error) {

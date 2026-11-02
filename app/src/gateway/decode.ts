@@ -11,6 +11,11 @@ import {
   type GatewayRefused,
   type GatewaySessions,
   type GatewayWelcome,
+  type SubmitResult,
+  type TerminalEnded,
+  type TerminalError,
+  type TerminalResized,
+  type TerminalScreen,
 } from '../types/gatewayGenerated';
 
 export type GatewayEvent =
@@ -22,7 +27,12 @@ export type GatewayEvent =
   | GatewayAsks
   | GatewayAskAnswerResult
   | GatewayAskImageChunk
-  | GatewayAskImageError;
+  | GatewayAskImageError
+  | TerminalScreen
+  | TerminalResized
+  | TerminalError
+  | TerminalEnded
+  | SubmitResult;
 
 const sessionStates = new Set<string>(Object.values(GatewaySessionState));
 
@@ -58,6 +68,16 @@ export function decodeGatewayEvent(frame: string): GatewayEvent | null {
       return Convert.toGatewayRefused(frame);
     case 'pong':
       return Convert.toGatewayPong(frame);
+    case 'terminal_screen':
+      return Convert.toTerminalScreen(frame);
+    case 'terminal_resized':
+      return Convert.toTerminalResized(frame);
+    case 'terminal_error':
+      return Convert.toTerminalError(frame);
+    case 'terminal_ended':
+      return Convert.toTerminalEnded(frame);
+    case 'submit_result':
+      return Convert.toSubmitResult(frame);
     case 'sessions': {
       const sessions = Array.isArray(message.sessions)
         ? message.sessions.map((session: Record<string, unknown>) => ({ ...session, state: knownSessionState(session?.state) }))

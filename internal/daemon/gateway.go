@@ -72,6 +72,7 @@ type gatewayConns struct {
 type gatewayConn struct {
 	device  GatewayDevice
 	stream  GatewayStream
+	sendMu  sync.Mutex
 	changed chan struct{}
 	pinged  chan struct{}
 	api     int
@@ -79,6 +80,10 @@ type gatewayConn struct {
 
 	sentAskIDs []string
 	sentAsks   map[string][]byte
+
+	order       terminalOrder
+	terminalsMu sync.Mutex
+	terminals   map[protocol.TerminalID]*gatewayTerminal
 }
 
 func (g *gatewayConns) add(conn *gatewayConn) {
@@ -123,7 +128,7 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
 	defer stopClosing()
 
-	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), pinged: make(chan struct{}, 1)}
+	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*gatewayTerminal{}}
 	d.gateway.add(conn)
 	defer d.gateway.remove(conn)
 	if err := d.gatewayWelcome(conn); err != nil {
@@ -131,9 +136,15 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 	}
 
 	ended := make(chan error, 1)
-	if !d.life.Go("gatewayReceive", func() { ended <- d.gatewayReceive(conn) }) {
+	received := make(chan struct{})
+	if !d.life.Go("gatewayReceive", func() { defer close(received); ended <- d.gatewayReceive(conn) }) {
 		return errDaemonStopping
 	}
+	defer func() {
+		stream.Close()
+		<-received
+		d.gatewayDetachAll(conn)
+	}()
 	for {
 		select {
 		case <-conn.changed:
@@ -228,6 +239,9 @@ func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
 			}
 			continue
 		}
+		if conn.api >= gatewayTerminalAPI && d.gatewayCommand(conn, message.Cmd, frame) {
+			continue
+		}
 		d.logf("gateway: device %s sent %q, which this home does not serve", conn.device.DeviceID, message.Cmd)
 	}
 }
@@ -264,6 +278,9 @@ func (d *Daemon) gatewaySessions(profileID string) []gateway.GatewaySession {
 		}
 		state := gatewayState(session.State)
 		out := gateway.GatewaySession{ID: string(session.ID), Title: title, Agent: string(session.Agent), State: state}
+		if terminal := d.primaryTerminal(session.ID); terminal != "" {
+			out.TerminalID = protocol.Ptr(string(terminal))
+		}
 		if state == gateway.GatewaySessionStateWaiting || state == gateway.GatewaySessionStateNeedsApproval {
 			if since := protocol.Timestamp(session.StateSince); !since.IsZero() {
 				out.WaitingSince = protocol.Ptr(since.Time().UTC())
@@ -284,7 +301,13 @@ func gatewaySend(conn *gatewayConn, message any) error {
 	if err != nil {
 		return err
 	}
-	return conn.stream.Send(frame)
+	return conn.sendRaw(frame)
+}
+
+func (c *gatewayConn) sendRaw(frame []byte) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return c.stream.Send(frame)
 }
 
 func gatewayMarshal(message any) ([]byte, error) {

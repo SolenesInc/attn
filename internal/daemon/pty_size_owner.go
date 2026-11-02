@@ -16,22 +16,22 @@ type terminalSizes struct {
 type sizeClaims struct {
 	applying           sync.Mutex
 	applies            int
-	owner              *wsClient
+	owner              terminalClient
 	requests           []sizeRequest
-	claimedBeforeAsked *wsClient
+	claimedBeforeAsked terminalClient
 }
 
 type sizeRequest struct {
-	client *wsClient
+	client terminalClient
 	size   protocol.PtyResizeMessage
 }
 
 type handoff struct {
-	owner    *wsClient
+	owner    terminalClient
 	terminal protocol.TerminalID
 }
 
-func (c *sizeClaims) requestOf(client *wsClient) (sizeRequest, bool) {
+func (c *sizeClaims) requestOf(client terminalClient) (sizeRequest, bool) {
 	index := slices.IndexFunc(c.requests, func(r sizeRequest) bool { return r.client == client })
 	if index < 0 {
 		return sizeRequest{}, false
@@ -39,7 +39,7 @@ func (c *sizeClaims) requestOf(client *wsClient) (sizeRequest, bool) {
 	return c.requests[index], true
 }
 
-func (c *sizeClaims) forget(client *wsClient) {
+func (c *sizeClaims) forget(client terminalClient) {
 	c.requests = slices.DeleteFunc(c.requests, func(r sizeRequest) bool { return r.client == client })
 }
 
@@ -60,7 +60,7 @@ func (s *terminalSizes) claimsFor(terminal protocol.TerminalID) *sizeClaims {
 	return claims
 }
 
-func (s *terminalSizes) request(client *wsClient, size protocol.PtyResizeMessage) bool {
+func (s *terminalSizes) request(client terminalClient, size protocol.PtyResizeMessage) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	claims := s.claimsFor(size.ID)
@@ -72,7 +72,7 @@ func (s *terminalSizes) request(client *wsClient, size protocol.PtyResizeMessage
 	return claims.owner == client
 }
 
-func (s *terminalSizes) claim(client *wsClient, terminal protocol.TerminalID) bool {
+func (s *terminalSizes) claim(client terminalClient, terminal protocol.TerminalID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	claims := s.claimsFor(terminal)
@@ -90,7 +90,7 @@ func (s *terminalSizes) claim(client *wsClient, terminal protocol.TerminalID) bo
 	return true
 }
 
-func (s *terminalSizes) applyIfOwner(client *wsClient, terminal protocol.TerminalID, apply func(protocol.PtyResizeMessage)) bool {
+func (s *terminalSizes) applyIfOwner(client terminalClient, terminal protocol.TerminalID, apply func(protocol.PtyResizeMessage)) bool {
 	s.mu.Lock()
 	claims := s.byTerminal[terminal]
 	if claims == nil {
@@ -127,13 +127,13 @@ func (s *terminalSizes) dropIfIdle(terminal protocol.TerminalID, claims *sizeCla
 	}
 }
 
-func (s *terminalSizes) release(client *wsClient, terminal protocol.TerminalID) (handoff, bool) {
+func (s *terminalSizes) release(client terminalClient, terminal protocol.TerminalID) (handoff, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.releaseLocked(client, terminal)
 }
 
-func (s *terminalSizes) releaseAll(client *wsClient) []handoff {
+func (s *terminalSizes) releaseAll(client terminalClient) []handoff {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var handedOn []handoff
@@ -145,7 +145,7 @@ func (s *terminalSizes) releaseAll(client *wsClient) []handoff {
 	return handedOn
 }
 
-func (s *terminalSizes) releaseLocked(client *wsClient, terminal protocol.TerminalID) (handoff, bool) {
+func (s *terminalSizes) releaseLocked(client terminalClient, terminal protocol.TerminalID) (handoff, bool) {
 	claims := s.byTerminal[terminal]
 	if claims == nil {
 		return handoff{}, false

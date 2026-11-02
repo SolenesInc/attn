@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Gateway;
 
-const GATEWAY_API_VERSION = 3;
+const GATEWAY_API_VERSION = 4;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model GatewayHello {
@@ -68,6 +68,8 @@ model GatewaySession {
   host?: string;
   // True while the outpost the session runs on is unreachable.
   offline: boolean;
+  // Since api 4: the session's main terminal, for terminal_attach; absent while it has none.
+  terminal_id?: string;
 }
 
 // Every session of the pairing's profile: after welcome, then on each change.
@@ -195,4 +197,102 @@ model GatewayAskImageError {
   event: "ask_image_error";
   request_id: string;
   message: string;
+}
+
+// Since api 4: a device opens a session's terminal with terminal_attach. The
+// home answers terminal_screen, then the terminal's output as binary frames:
+// 0x01 | id_len u8 | terminal_id | seq u32 BE | bytes. The home sends output
+// only while the device's credit allows; the device grants credit with the
+// attach and with terminal_credit as it renders. Credit counts terminal bytes:
+// a screen's decoded ANSI and each frame's output bytes. A screen waits until
+// the credit covers the largest gateway message (65,514 bytes).
+model TerminalAttach {
+  cmd: "terminal_attach";
+  terminal_id: string;
+  // The size the device asks for; it applies while the device owns the size.
+  cols: int32;
+  rows: int32;
+  // Bytes of screen and output the home may send before the next terminal_credit.
+  credit: int32;
+}
+
+model TerminalCredit {
+  cmd: "terminal_credit";
+  terminal_id: string;
+  bytes: int32;
+}
+
+model TerminalDetach {
+  cmd: "terminal_detach";
+  terminal_id: string;
+}
+
+// Keys the user pressed; makes the device the size owner.
+model TerminalInput {
+  cmd: "terminal_input";
+  terminal_id: string;
+  data: string;
+}
+
+model TerminalResize {
+  cmd: "terminal_resize";
+  terminal_id: string;
+  cols: int32;
+  rows: int32;
+}
+
+// Makes the device the size owner: the PTY takes the device's size, and every
+// other client shows it scaled until one of them claims it back.
+model TerminalFocus {
+  cmd: "terminal_focus";
+  terminal_id: string;
+}
+
+// The home pastes text into the session's agent and presses Enter, when the
+// agent is at a turn boundary.
+model SubmitPrompt {
+  cmd: "submit_prompt";
+  request_id: string;
+  session_id: string;
+  text: string;
+}
+
+model SubmitResult {
+  event: "submit_result";
+  request_id: string;
+  delivered: boolean;
+  // Why the text was not delivered.
+  message?: string;
+}
+
+// The visible screen as ANSI, base64-encoded. The device resets its terminal
+// to cols x rows and writes it; output frames that follow continue from it.
+model TerminalScreen {
+  event: "terminal_screen";
+  terminal_id: string;
+  cols: int32;
+  rows: int32;
+  ansi: string;
+  // The seq of the last output the screen shows; every frame after it has a larger seq.
+  seq: int32;
+}
+
+model TerminalResized {
+  event: "terminal_resized";
+  terminal_id: string;
+  cols: int32;
+  rows: int32;
+}
+
+// The home could not attach, or the terminal refused input; the device shows message.
+model TerminalError {
+  event: "terminal_error";
+  terminal_id: string;
+  message: string;
+}
+
+// The terminal's program exited; no more output follows.
+model TerminalEnded {
+  event: "terminal_ended";
+  terminal_id: string;
 }

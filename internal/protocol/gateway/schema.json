@@ -435,6 +435,9 @@
       "state": {
         "$ref": "GatewaySessionState.json"
       },
+      "terminal_id": {
+        "type": "string"
+      },
       "title": {
         "type": "string"
       },
@@ -507,6 +510,291 @@
       "api",
       "home_name",
       "profile"
+    ],
+    "type": "object"
+  },
+  "SubmitPrompt": {
+    "properties": {
+      "cmd": {
+        "const": "submit_prompt",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "session_id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "session_id",
+      "text"
+    ],
+    "type": "object"
+  },
+  "SubmitResult": {
+    "properties": {
+      "delivered": {
+        "type": "boolean"
+      },
+      "event": {
+        "const": "submit_result",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "delivered"
+    ],
+    "type": "object"
+  },
+  "TerminalAttach": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_attach",
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "credit": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "cols",
+      "rows",
+      "credit"
+    ],
+    "type": "object"
+  },
+  "TerminalCredit": {
+    "properties": {
+      "bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "cmd": {
+        "const": "terminal_credit",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "bytes"
+    ],
+    "type": "object"
+  },
+  "TerminalDetach": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_detach",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalEnded": {
+    "properties": {
+      "event": {
+        "const": "terminal_ended",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalError": {
+    "properties": {
+      "event": {
+        "const": "terminal_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "TerminalFocus": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_focus",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalInput": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_input",
+        "type": "string"
+      },
+      "data": {
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "data"
+    ],
+    "type": "object"
+  },
+  "TerminalResize": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_resize",
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "cols",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "TerminalResized": {
+    "properties": {
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "terminal_resized",
+        "type": "string"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "cols",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "TerminalScreen": {
+    "properties": {
+      "ansi": {
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "terminal_screen",
+        "type": "string"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "seq": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "cols",
+      "rows",
+      "ansi",
+      "seq"
     ],
     "type": "object"
   }

@@ -11,6 +11,10 @@ const BinaryFrameTypeKittyImage byte = 0x02
 
 const binaryPtyHeaderBytes = 1 + 1 + 4
 
+func PtyOutputFrameHeaderBytes(terminalID TerminalID) int {
+	return binaryPtyHeaderBytes + len(terminalID)
+}
+
 const binaryKittyImageHeaderBytes = 1 + 1 + 4 + 8 + 4 + 4 + 1
 
 const (

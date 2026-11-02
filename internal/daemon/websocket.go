@@ -1369,8 +1369,13 @@ func (d *Daemon) sendCommandError(client *wsClient, cmd, errMsg string) {
 	d.sendToClient(client, event)
 }
 
-func (d *Daemon) sendTerminalRefusal(client *wsClient, cmd string, terminal protocol.TerminalID, err error) {
-	d.sendToClient(client, &protocol.CommandErrorMessage{Event: protocol.EventCommandError, Cmd: protocol.Ptr(cmd), Error: err.Error(), TerminalID: protocol.Ptr(string(terminal))})
+func (d *Daemon) sendTerminalRefusal(client terminalClient, cmd string, terminal protocol.TerminalID, err error) {
+	switch client := client.(type) {
+	case *wsClient:
+		d.sendToClient(client, &protocol.CommandErrorMessage{Event: protocol.EventCommandError, Cmd: protocol.Ptr(cmd), Error: err.Error(), TerminalID: protocol.Ptr(string(terminal))})
+	case *gatewayConn:
+		d.gatewayTerminalError(client, terminal, err.Error())
+	}
 }
 
 func (d *Daemon) sendToClient(client *wsClient, message interface{}) bool {
