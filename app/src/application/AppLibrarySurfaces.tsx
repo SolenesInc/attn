@@ -189,6 +189,7 @@ export function AppLibrarySurfaces() {
         draftReviewHandover={sendSeedReviewDraft}
       />
       <NotificationsPanel
+        key={selectedProfileId}
         open={notificationsPanelOpen}
         onClose={closeNotificationsPanel}
         listNotifications={sendNotificationList}

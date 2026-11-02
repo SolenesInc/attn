@@ -99,8 +99,11 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 	var markedIDs []string
 	var markErr error
 	if notificationID != nil && *notificationID != "" {
-		markedIDs = []string{*notificationID}
-		markErr = d.store.MarkNotificationRead(*notificationID, time.Now())
+		var marked bool
+		marked, markErr = d.store.MarkNotificationRead(profileID, *notificationID, time.Now())
+		if marked {
+			markedIDs = []string{*notificationID}
+		}
 	} else {
 		if all, err := d.store.ListNotifications(profileID); err == nil {
 			for _, rec := range all {

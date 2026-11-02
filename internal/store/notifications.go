@@ -166,16 +166,18 @@ func (s *Store) ResolveNotification(id string, now time.Time) (bool, error) {
 	return resolved > 0, err
 }
 
-func (s *Store) MarkNotificationRead(id string, now time.Time) error {
+func (s *Store) MarkNotificationRead(profileID, id string, now time.Time) (bool, error) {
 	if s.db == nil {
-		return fmt.Errorf("store: no database")
+		return false, fmt.Errorf("store: no database")
 	}
-	if _, err := s.db.Exec(
-		`UPDATE notifications SET read_at = ? WHERE id = ? AND read_at = ''`,
-		now.UTC().Format(sortableTimeFormat), id); err != nil {
-		return fmt.Errorf("store: mark notification read %s: %w", id, err)
+	res, err := s.db.Exec(
+		`UPDATE notifications SET read_at = ? WHERE id = ? AND read_at = '' AND `+notificationsSeenBy,
+		now.UTC().Format(sortableTimeFormat), id, profileID)
+	if err != nil {
+		return false, fmt.Errorf("store: mark notification read %s: %w", id, err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 func (s *Store) MarkAllNotificationsRead(profileID string, now time.Time) (int, error) {

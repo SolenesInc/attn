@@ -168,5 +168,16 @@ func TestAGardenReviewFailureWarnsOnlyTheProfileUnderReview(t *testing.T) {
 		if defaultFeed := listNotifications(defaultApp); len(defaultFeed.Notifications) != 0 {
 			t.Fatalf("a failure in Side's Garden review reached Default: %+v", defaultFeed)
 		}
+
+		warning := sideFeed.Notifications[0]
+		if read := markNotificationRead(defaultApp, protocol.Ptr(warning.ID)); !read.Success || read.UnreadCount != 0 {
+			t.Errorf("Default marking Side's warning read = %+v, want it harmless to Default", read)
+		}
+		if after := listNotifications(w.AppOn(side.ID)); after.UnreadCount != 1 || after.Notifications[0].ReadAt != "" {
+			t.Fatalf("Default marked Side's warning read: %+v", after)
+		}
+		if read := markNotificationRead(w.AppOn(side.ID), protocol.Ptr(warning.ID)); !read.Success || read.UnreadCount != 0 {
+			t.Errorf("Side marking its own warning read = %+v, want nothing unread", read)
+		}
 	})
 }
