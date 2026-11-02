@@ -470,13 +470,16 @@ func TestANestedFolderNeverSyncsThroughTheFolderAroundIt(t *testing.T) {
 	if !created.Success {
 		t.Fatalf("create Side: %+v", created)
 	}
-	outer, inner := notebookPath(home), notebookPath(home, "inner[1]\t ")
+	outer, inner := notebookPath(home), notebookPath(home, "inner[1]\r\t ")
+	sibling := filepath.Join("inner[1]x\t ", "sibling.md")
 	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner+"/.", "--profile", "Side"))
 	writeFileAt(t, filepath.Join(inner, "home-inner.md"), "Side's file at the home")
 	writeFileAt(t, filepath.Join(outer, "outer.md"), "the outer folder syncs")
+	writeFileAt(t, filepath.Join(outer, sibling), "a sibling with a similar name syncs")
 	pair.Connect()
 	copied := outpostCopyPlacement(outpost, "notebook", outer)
 	awaitOutpostFile(t, pair, filepath.Join(copied, "outer.md"), "the outer folder syncs", false)
+	awaitOutpostFile(t, pair, filepath.Join(copied, sibling), "a sibling with a similar name syncs", false)
 	awaitNotebookError(t, pair, "Side", inner, "Default", outer)
 	if _, err := os.Stat(filepath.Join(copied, filepath.Base(inner), "home-inner.md")); !os.IsNotExist(err) {
 		t.Fatalf("Side's home file reached the outpost through the outer copy: %v", err)
