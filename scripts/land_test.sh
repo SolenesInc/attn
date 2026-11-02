@@ -130,6 +130,23 @@ printf '\n' >>scripts/lib/shared.sh
 land 'Shared script change'
 expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
 
+mkdir -p .github/workflows fixtures
+printf 'on: push\n' >.github/workflows/example.yml
+printf 'one\n' >fixtures/one.txt
+printf 'grep -q push "$root/.github/workflows/example.yml"\ncp -R "$root/fixtures" "$work"\n' >scripts/reads_test.sh
+land 'Script test that reads checkout files arrives'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+
+printf '\n' >>scripts/example.sh
+printf '\n' >>.github/workflows/example.yml
+land 'Script and workflow change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/reads_test.sh' sync
+expect_output 'script test scripts/reads_test.sh, for .github/workflows/example.yml'
+
+printf 'two\n' >fixtures/two.txt
+land 'Change inside a directory a script test reads'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+
 printf 'source scripts/lib/deep.sh\n' >scripts/chain.sh
 printf 'true\n' >scripts/lib/deep.sh
 printf 'bash scripts/chain.sh\n' >scripts/chain_test.sh
@@ -143,7 +160,7 @@ expect_output 'script test scripts/chain_test.sh, for scripts/lib/deep.sh'
 
 printf 'true\n' >scripts/lonely.sh
 land 'Script no test names'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/reads_test.sh scripts/unrelated_test.sh' sync
 expect_output 'no script test names scripts/lonely.sh; running every script test'
 
 printf '\n' >>README.md

@@ -96,6 +96,7 @@ script_test_words() {
   while [ "$i" -lt "${#files[@]}" ]; do
     file="${files[$i]}"
     i=$((i + 1))
+    grep -oE '(^|[^A-Za-z0-9_])root/[A-Za-z0-9_./-]+' "$file" | sed -E 's#^.?root/#root/#; s#/+$##' || true
     for word in $(grep -oE '[A-Za-z0-9_.-]+' "$file" | sort -u); do
       echo "$word"
       for path in "scripts/$word" "scripts/lib/$word"; do
@@ -109,18 +110,33 @@ script_test_words() {
   done
 }
 
+script_test_covers() {
+  local file="$1" words="$2" name path
+  case "$file" in
+    scripts/*)
+      name="${file#scripts/}"
+      name="${name#lib/}"
+      grep -qxF -- "${name%%/*}" <<<"$words"
+      ;;
+    *)
+      path="$file"
+      while :; do
+        grep -qxF -- "root/$path" <<<"$words" && return 0
+        case "$path" in */*) path="${path%/*}" ;; *) return 1 ;; esac
+      done
+      ;;
+  esac
+}
+
 script_tests_for() {
-  local script_test file name words covered_by covered=$'\n' uncovered="" all=() selected=()
+  local script_test file words covered_by covered=$'\n' uncovered="" all=() selected=()
   compgen -G 'scripts/*_test.sh' >/dev/null || return 0
   for script_test in scripts/*_test.sh; do
     all+=("$script_test")
     words="$(script_test_words "$script_test")"
     covered_by=""
     while IFS= read -r file; do
-      name="${file#scripts/}"
-      name="${name#lib/}"
-      name="${name%%/*}"
-      if [ "$file" = "$script_test" ] || grep -qxF -- "$name" <<<"$words"; then
+      if [ "$file" = "$script_test" ] || script_test_covers "$file" "$words"; then
         covered_by+=" $file"
         covered+="$file"$'\n'
       fi
@@ -131,6 +147,7 @@ script_tests_for() {
     fi
   done
   while IFS= read -r file; do
+    case "$file" in scripts/*) ;; *) continue ;; esac
     case "$covered" in *$'\n'"$file"$'\n'*) ;; *) uncovered+=" $file" ;; esac
   done <<<"$1"
   if [ -n "$uncovered" ]; then
@@ -164,13 +181,11 @@ run_checks() {
   touches '^internal/protocol/schema/' && targets+=(check-types)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
-  if touches '^scripts/'; then
-    script_tests="$(script_tests_for "$(grep '^scripts/' <<<"$changed")")"
-    if [ -n "$script_tests" ]; then
-      targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
-    else
-      echo "land: the checkout has no script tests"
-    fi
+  script_tests="$(script_tests_for "$changed")"
+  if [ -n "$script_tests" ]; then
+    targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
+  elif touches '^scripts/'; then
+    echo "land: the checkout has no script tests"
   fi
   while read -r _ group pattern; do
     touches "$pattern" && landing_groups+=("$group")

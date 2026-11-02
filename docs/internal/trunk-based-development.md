@@ -33,12 +33,15 @@ landing changes, and pushes:
 - `app/`: lint, and typecheck with tsrs, a Rust port of the TypeScript 7
   checker. CI on `main` still typechecks with the TypeScript version that
   `app/package.json` pins.
-- `scripts/`: run the shell script tests that cover the changed scripts. A
-  script test covers itself, the files it names, and the files those scripts
-  name in turn, so a change to `scripts/lib/` runs every test that sources it.
-  When no test names a changed script, `land.sh` runs every script test.
-  `land.sh` prints each test it chose and the changed files that chose it.
-  `make test-scripts` runs them all, as CI does.
+- Script tests: run the shell script tests that cover the changed files. A
+  script test covers itself, the scripts it names, and the scripts those name
+  in turn, so a change to `scripts/lib/` runs every test that sources it. It
+  also covers each file it or those scripts read from the checkout, written as
+  `$root/<path>`, and every file under a directory read that way, so a change
+  to a workflow a test checks runs that test. When no test names a changed
+  script, `land.sh` runs every script test. `land.sh` prints each test it chose
+  and the changed files that chose it. `make test-scripts` runs them all, as
+  CI does.
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
   push, not a suite: the groups of `scripts/landing-tests` that match the
   changed paths, the tests the landing changes, and every test that failed on
