@@ -201,7 +201,7 @@ describe('asks on the phone', () => {
     )
   })
 
-  it('shows why an image cannot be read in its place, and opens a loaded one full screen', () => {
+  it('shows why an image or a diagram cannot be shown, in its place, and does not retry what the home refused', () => {
     Scene.scene(
       { update, view },
       Scene.given(online(personal)),
