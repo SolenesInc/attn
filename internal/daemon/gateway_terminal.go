@@ -68,15 +68,15 @@ func (d *Daemon) gatewayCommand(conn *gatewayConn, cmd string, frame []byte) boo
 			d.gatewayDetach(conn, protocol.TerminalID(message.TerminalID))
 		}
 	case "terminal_input":
-		if message, ok := decodeGatewayCommand[gateway.TerminalInput](d, conn, frame); ok {
+		if message, ok := decodeGatewayCommand[gateway.TerminalInput](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
 			d.gatewayInput(conn, protocol.TerminalID(message.TerminalID), message.Data)
 		}
 	case "terminal_resize":
-		if message, ok := decodeGatewayCommand[gateway.TerminalResize](d, conn, frame); ok {
+		if message, ok := decodeGatewayCommand[gateway.TerminalResize](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
 			d.gatewayRequestSize(conn, protocol.TerminalID(message.TerminalID), message.Cols, message.Rows)
 		}
 	case "terminal_focus":
-		if message, ok := decodeGatewayCommand[gateway.TerminalFocus](d, conn, frame); ok {
+		if message, ok := decodeGatewayCommand[gateway.TerminalFocus](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
 			d.claimPtySize(conn, protocol.TerminalID(message.TerminalID))
 		}
 	case "submit_prompt":
@@ -96,6 +96,14 @@ func decodeGatewayCommand[T any](d *Daemon, conn *gatewayConn, frame []byte) (T,
 		return message, false
 	}
 	return message, true
+}
+
+func (d *Daemon) gatewayAttached(conn *gatewayConn, id string) bool {
+	if conn.terminal(protocol.TerminalID(id)) != nil {
+		return true
+	}
+	d.gatewayTerminalError(conn, protocol.TerminalID(id), fmt.Sprintf("terminal %s is not open on this phone; send terminal_attach first", id))
+	return false
 }
 
 func (c *gatewayConn) terminal(id protocol.TerminalID) *gatewayTerminal {
@@ -158,6 +166,20 @@ func (d *Daemon) gatewayDetach(conn *gatewayConn, id protocol.TerminalID) {
 	d.gatewayReleaseSize(conn, id)
 }
 
+func (d *Daemon) gatewayEnd(terminal *gatewayTerminal) {
+	conn := terminal.conn
+	conn.terminalsMu.Lock()
+	current := conn.terminals[terminal.id] == terminal
+	if current {
+		delete(conn.terminals, terminal.id)
+	}
+	conn.terminalsMu.Unlock()
+	terminal.detach()
+	if current {
+		d.gatewayReleaseSize(conn, terminal.id)
+	}
+}
+
 func (d *Daemon) gatewayDetachAll(conn *gatewayConn) {
 	conn.terminalsMu.Lock()
 	terminals := conn.terminals
@@ -198,10 +220,6 @@ func (d *Daemon) gatewayRequestSize(conn *gatewayConn, id protocol.TerminalID, c
 }
 
 func (d *Daemon) gatewayInput(conn *gatewayConn, id protocol.TerminalID, data string) {
-	if !d.gatewayTerminalOfProfile(conn, id) {
-		d.gatewayTerminalError(conn, id, fmt.Sprintf("terminal %s is not a session terminal of this pairing's profile", id))
-		return
-	}
 	d.claimPtySize(conn, id)
 	d.sendInTerminalOrder(conn, id, func(answered func()) {
 		write := protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: id, Data: data}
@@ -370,12 +388,12 @@ func (d *Daemon) gatewayFlush(terminal *gatewayTerminal) {
 		}
 		message, ended := terminal.nextMessageLocked()
 		terminal.mu.Unlock()
-		if err := terminal.conn.sendRaw(message); err != nil {
+		if err := terminal.send(message); err != nil {
 			terminal.stopFlushing()
 			return
 		}
 		if ended {
-			d.gatewayDetach(terminal.conn, terminal.id)
+			d.gatewayEnd(terminal)
 			return
 		}
 	}
@@ -436,7 +454,7 @@ func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
 	if err != nil {
 		terminal.stopFlushing()
 		d.gatewayTerminalError(terminal.conn, terminal.id, "could not read the terminal's screen: "+err.Error())
-		d.gatewayDetach(terminal.conn, terminal.id)
+		d.gatewayEnd(terminal)
 		return false
 	}
 	terminal.mu.Lock()
@@ -455,11 +473,22 @@ func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
 	}
 	terminal.pending = kept
 	terminal.mu.Unlock()
-	if err := terminal.conn.sendRaw(frame); err != nil {
+	if err := terminal.send(frame); err != nil {
 		terminal.stopFlushing()
 		return false
 	}
 	return true
+}
+
+var errTerminalDetached = errors.New("the phone closed this terminal")
+
+func (t *gatewayTerminal) send(frame []byte) error {
+	t.conn.sendMu.Lock()
+	defer t.conn.sendMu.Unlock()
+	if t.isDetached() {
+		return errTerminalDetached
+	}
+	return t.conn.stream.Send(frame)
 }
 
 func snapshotSize(screen, terminal *int) int {

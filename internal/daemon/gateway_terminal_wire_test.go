@@ -20,16 +20,20 @@ type phoneTerminal struct {
 	id       string
 	screens  int
 	shown    []byte
+	screenAt int
 	lastSeq  int
 	received int
 	granted  int
+	keepUp   bool
 	resized  []gateway.TerminalResized
 }
+
+const shownTail = 64 << 10
 
 func (p *testPhone) attach(terminal string, cols, rows, credit int) *phoneTerminal {
 	p.t.Helper()
 	p.send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: cols, Rows: rows, Credit: credit})
-	return &phoneTerminal{phone: p, id: terminal, lastSeq: -1, granted: credit}
+	return &phoneTerminal{phone: p, id: terminal, screenAt: -1, lastSeq: -1, granted: credit}
 }
 
 func (p *testPhone) frame() []byte {
@@ -64,14 +68,15 @@ func (pt *phoneTerminal) read() string {
 			if pt.screens == 0 {
 				t.Fatalf("an output frame (seq %d) came before the terminal's screen", seq)
 			}
-			if int(seq) <= pt.lastSeq {
-				t.Fatalf("an output frame has seq %d, at or below the %d the device already shows", seq, pt.lastSeq)
+			if int(seq) <= pt.screenAt || int(seq) < pt.lastSeq {
+				t.Fatalf("an output frame has seq %d after a screen at seq %d and a frame at seq %d; want above the screen and never lower than the frame before", seq, pt.screenAt, pt.lastSeq)
 			}
 			if len(frame) > cloudlink.MaxMessageBytes {
 				t.Fatalf("an output frame of %d bytes is past the relay's %d-byte message", len(frame), cloudlink.MaxMessageBytes)
 			}
 			pt.lastSeq = int(seq)
 			pt.shown = append(pt.shown, data...)
+			pt.shown = pt.shown[max(0, len(pt.shown)-shownTail):]
 			pt.consumed(len(data))
 			return "output"
 		}
@@ -83,7 +88,7 @@ func (pt *phoneTerminal) read() string {
 			t.Fatalf("the home sent %q, neither JSON nor an output frame", frame)
 		}
 		switch head.Event {
-		case "sessions":
+		case "sessions", "asks", "ask":
 			continue
 		case "terminal_screen":
 			var screen gateway.TerminalScreen
@@ -94,6 +99,7 @@ func (pt *phoneTerminal) read() string {
 			}
 			pt.screens++
 			pt.shown = ansi
+			pt.screenAt = screen.Seq
 			pt.lastSeq = screen.Seq
 			pt.consumed(len(ansi))
 			return "screen"
@@ -112,6 +118,9 @@ func (pt *phoneTerminal) consumed(bytes int) {
 	pt.received += bytes
 	if pt.received > pt.granted {
 		pt.phone.t.Fatalf("the home sent %d terminal bytes against %d bytes of credit", pt.received, pt.granted)
+	}
+	if pt.keepUp {
+		pt.grant(bytes)
 	}
 }
 
@@ -230,27 +239,28 @@ func TestAPhoneGetsNoMoreOutputThanItsCreditAndAFreshScreenAfterFallingBehind(t 
 	setSetting(t, desktop, "phone_access_enabled", "true")
 	session := w.Spawn(desktop, shellHarness, w.Path("shop"))
 	terminal := desktop.Terminal(session)
-	desktop.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 80, Rows: 24})
-	desktop.TypeLine(session, "echo ready")
-	desktop.AwaitScreen(session, "ready\r\n")
 
-	phone, _ := welcomedPhone(t, w, desktop.SelectedProfile())
-	opened := phone.attach(terminal, 80, 24, cloudlink.MaxMessageBytes)
-	if kind := opened.read(); kind != "screen" {
+	keeping, _ := welcomedPhone(t, w, desktop.SelectedProfile())
+	watching := keeping.attach(terminal, 80, 24, phoneCredit)
+	watching.keepUp = true
+	watching.read()
+	watching.typeLine("echo ready")
+	watching.awaitShown("ready\r\n")
+
+	lagging, _ := welcomedPhone(t, w, desktop.SelectedProfile())
+	behind := lagging.attach(terminal, 80, 24, cloudlink.MaxMessageBytes)
+	if kind := behind.read(); kind != "screen" {
 		t.Fatalf("the first message after attach was %s, want the screen", kind)
 	}
-	flooded := 4 << 20
-	desktop.TypeLine(session, fmt.Sprintf(`head -c %d /dev/zero | tr '\0' x; echo; echo flood-$((1+1))`, flooded))
-	desktop.AwaitScreen(session, "flood-2\r\n")
+	flooded := 2 << 20
+	watching.typeLine(fmt.Sprintf(`head -c %d /dev/zero | tr '\0' x; echo; echo flood-$((1+1))`, flooded))
+	watching.awaitShown("flood-2\r\n")
 
-	opened.grant(phoneCredit)
-	screensBefore := opened.screens
-	opened.awaitShown("flood-2")
-	if opened.screens == screensBefore {
+	behind.grant(phoneCredit)
+	screensBefore := behind.screens
+	behind.awaitShown("flood-2")
+	if behind.screens == screensBefore {
 		t.Fatalf("the phone fell %d bytes behind and caught up by replaying them; want a fresh screen", flooded)
-	}
-	if opened.received > opened.granted {
-		t.Fatalf("received %d bytes against %d of credit", opened.received, opened.granted)
 	}
 }
 
@@ -259,4 +269,41 @@ func awaitPtyResized(p *testworld.Peer, mark int, terminal string, cols, rows in
 	testworld.AwaitSince(p, mark, protocol.EventPtyResized, func(e protocol.WebSocketEvent) bool {
 		return protocol.Deref(e.ID) == terminal && protocol.Deref(e.Cols) == cols && protocol.Deref(e.Rows) == rows
 	})
+}
+
+func TestAPhoneReachesOnlyTheTerminalsOfItsPairingsProfile(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	setSetting(t, app, "phone_access_enabled", "true")
+	side := createProfile(app, "Side")
+	sideApp := w.AppOn(side.ID)
+	theirs := w.Spawn(sideApp, shellHarness, w.Path("theirs"))
+	terminal := sideApp.Terminal(theirs)
+	sideApp.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(terminal), Cols: 120, Rows: 36})
+	sideApp.TypeLine(theirs, `printf 'before=%s.\n' "$(stty size)"`)
+	sideApp.AwaitScreen(theirs, "before=36 120.")
+
+	phone, sessions := welcomedPhone(t, w, app.SelectedProfile())
+	if len(sessions) != 0 {
+		t.Fatalf("the phone of the home profile sees %+v, want no sessions", sessions)
+	}
+	for _, command := range []any{
+		gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: phoneCredit},
+		gateway.TerminalResize{Cmd: "terminal_resize", TerminalID: terminal, Cols: 50, Rows: 30},
+		gateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal},
+		gateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "echo from-the-phone\r"},
+	} {
+		phone.send(command)
+		var refused gateway.TerminalError
+		phone.next("terminal_error", &refused)
+		if refused.TerminalID != terminal {
+			t.Fatalf("terminal_error = %+v after %+v, want one for terminal %s", refused, command, terminal)
+		}
+	}
+
+	sideApp.TypeLine(theirs, `printf 'after=%s.\n' "$(stty size)"`)
+	sideApp.AwaitScreen(theirs, "after=36 120.")
+	if bytes.Contains(sideApp.Screen(theirs), []byte("from-the-phone")) {
+		t.Fatal("a phone paired with another profile typed into this terminal")
+	}
 }
