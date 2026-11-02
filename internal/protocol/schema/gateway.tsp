@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Gateway;
 
-const GATEWAY_API_VERSION = 4;
+const GATEWAY_API_VERSION = 5;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model GatewayHello {
@@ -174,7 +174,9 @@ model GatewayAskAnswerResult {
 // ask_image_chunk, or ask_image_error naming the image and the reason. Every
 // chunk but the last holds the same number of bytes, so after the first chunk
 // a phone can ask for the rest at once; the chunks it has asked for and not
-// received are its credit.
+// received are its credit. Since api 5, src has each HTML character reference
+// decoded once, as the ask's markdown means it, and the home reads exactly that
+// image.
 model GatewayAskImage {
   cmd: "ask_image";
   request_id: string;

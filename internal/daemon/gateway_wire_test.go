@@ -582,7 +582,7 @@ func (p *testPhone) readImage(askID, src string, offset int) (gateway.GatewayAsk
 	}
 }
 
-func TestGatewayReadsAnHTMLImageWhetherThePhoneDecodedItsSourceOrNot(t *testing.T) {
+func TestGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -593,29 +593,56 @@ func TestGatewayReadsAnHTMLImageWhetherThePhoneDecodedItsSourceOrNot(t *testing.
 	image := func(name, data string) protocol.AskImage {
 		return protocol.AskImage{Path: shop + "/" + name, DataBase64: base64.StdEncoding.EncodeToString([]byte(data))}
 	}
-	markdown := `<img src="caf&eacute;.png"> <img src="a&amp;copy;.png"> ![c](a©.png)` + "\n\n" + cacheAsk
-	asked, err := cli.AskOpen(protocol.SessionID(asker), "", markdown, "", shop,
-		image("café.png", "cafe"), image("a&copy;.png", "escaped copy"), image("a©.png", "copyright sign"))
-	if err != nil {
-		t.Fatalf("ask: %v", err)
+	open := func(markdown string, images ...protocol.AskImage) string {
+		t.Helper()
+		asked, err := cli.AskOpen(protocol.SessionID(asker), "", markdown+"\n\n"+cacheAsk, "", shop, images...)
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		return asked.ID
 	}
-	phone := connectPhone(t, w, "phone", app.SelectedProfile())
-	phone.welcomed()
-	phone.askList()
+	named := open(`<img src="caf&eacute;.png"> <img src="a&amp;copy;.png">`, image("café.png", "cafe"), image("a&copy;.png", "escaped copy"))
+	colliding := open(`<img src="a&amp;copy;.png"> <img src="a&copy;.png">`, image("a©.png", "copyright sign"))
 
-	for _, c := range []struct{ src, want string }{
-		{"café.png", "cafe"},
-		{"caf&eacute;.png", "cafe"},
-		{"a&copy;.png", "escaped copy"},
-		{"a©.png", "copyright sign"},
-	} {
-		chunk, failed := phone.readImage(asked.ID, c.src, 0)
-		if failed != nil {
-			t.Errorf("reading %s: %s", c.src, failed.Message)
-			continue
-		}
-		if data, _ := base64.StdEncoding.DecodeString(chunk.DataBase64); string(data) != c.want {
-			t.Errorf("reading %s returned %q, want %q", c.src, data, c.want)
+	type read struct{ askID, src, want, failure string }
+	reads := func(phone *testPhone, cases []read) {
+		t.Helper()
+		for _, c := range cases {
+			chunk, failed := phone.readImage(c.askID, c.src, 0)
+			data, _ := base64.StdEncoding.DecodeString(chunk.DataBase64)
+			switch {
+			case c.failure != "" && (failed == nil || !strings.Contains(failed.Message, c.failure)):
+				t.Errorf("reading %s returned %q and error %+v, want an error containing %q", c.src, data, failed, c.failure)
+			case c.failure == "" && failed != nil:
+				t.Errorf("reading %s: %s", c.src, failed.Message)
+			case c.failure == "" && string(data) != c.want:
+				t.Errorf("reading %s returned %q, want %q", c.src, data, c.want)
+			}
 		}
 	}
+
+	t.Run("a phone that decodes every reference", func(t *testing.T) {
+		phone := connectPhone(t, w, "phone", app.SelectedProfile())
+		phone.welcomed()
+		phone.askList()
+		reads(phone, []read{
+			{named, "café.png", "cafe", ""},
+			{named, "a&copy;.png", "escaped copy", ""},
+			{colliding, "a&copy;.png", "", "holds no copy of " + shop + "/a&copy;.png"},
+			{colliding, "a©.png", "copyright sign", ""},
+		})
+	})
+
+	t.Run("an installed phone that leaves named references other than amp, lt, gt, quot and apos", func(t *testing.T) {
+		phone := connectPhone(t, w, "installed", app.SelectedProfile())
+		phone.hello(4)
+		var welcome gateway.GatewayWelcome
+		phone.next("welcome", &welcome)
+		phone.askList()
+		reads(phone, []read{
+			{named, "caf&eacute;.png", "cafe", ""},
+			{named, "a&copy;.png", "escaped copy", ""},
+			{colliding, "a&copy;.png", "", "shows both " + shop + "/a&copy;.png and " + shop + "/a©.png"},
+		})
+	})
 }

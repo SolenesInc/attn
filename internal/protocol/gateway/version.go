@@ -2,4 +2,4 @@
 
 package gateway
 
-const APIVersion = 4
+const APIVersion = 5

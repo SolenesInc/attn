@@ -21,6 +21,8 @@ const gatewayImageChunkBytes = 40 << 10
 
 const gatewayAsksAPI = 3
 
+const gatewayDecodedImageSourcesAPI = 5
+
 func (d *Daemon) gatewaySendAsks(conn *gatewayConn) error {
 	if conn.api < gatewayAsksAPI {
 		return nil
@@ -164,7 +166,7 @@ func (d *Daemon) gatewayAnswerAsk(conn *gatewayConn, command gateway.GatewayAskA
 }
 
 func (d *Daemon) gatewayAskImage(conn *gatewayConn, command gateway.GatewayAskImage) error {
-	mimeType, data, err := d.gatewayAskImageBytes(conn.device.ProfileID, strings.TrimSpace(command.AskID), command.Src)
+	mimeType, data, err := d.gatewayAskImageBytes(conn, strings.TrimSpace(command.AskID), command.Src)
 	if err == nil && (command.Offset < 0 || command.Offset > len(data)) {
 		err = fmt.Errorf("offset %d is outside %s, which holds %d bytes", command.Offset, command.Src, len(data))
 	}
@@ -182,18 +184,43 @@ func (d *Daemon) gatewayAskImage(conn *gatewayConn, command gateway.GatewayAskIm
 	})
 }
 
-func (d *Daemon) gatewayAskImageBytes(profileID, askID, src string) (string, []byte, error) {
-	stored, err := d.askShownTo(askID, profileID)
+func (d *Daemon) gatewayAskImageBytes(conn *gatewayConn, askID, src string) (string, []byte, error) {
+	stored, err := d.askShownTo(askID, conn.device.ProfileID)
 	if err != nil {
 		return "", nil, err
 	}
-	mimeType, data, err := storedAskImage(stored, src)
-	if decoded := html.UnescapeString(src); err != nil && decoded != src {
-		if mimeType, data, decodedErr := storedAskImage(stored, decoded); decodedErr == nil {
-			return mimeType, data, nil
+	if conn.api < gatewayDecodedImageSourcesAPI {
+		if src, err = partlyDecodedImageSource(stored, src); err != nil {
+			return "", nil, err
 		}
 	}
-	return mimeType, data, err
+	return storedAskImage(stored, src)
+}
+
+func partlyDecodedImageSource(stored store.Ask, src string) (string, error) {
+	decoded := html.UnescapeString(src)
+	if decoded == src {
+		return src, nil
+	}
+	parts, err := ask.Parse(stored.Markdown)
+	if err != nil {
+		return "", err
+	}
+	shown := ask.ImagePaths(parts, stored.BaseDir)
+	asSent, sentShown := shownImage(shown, stored.BaseDir, src)
+	asDecoded, decodedShown := shownImage(shown, stored.BaseDir, decoded)
+	switch {
+	case sentShown && decodedShown:
+		return "", fmt.Errorf("ask %s shows both %s and %s, and this phone's attn sends %s for either; update attn on the phone to tell them apart", stored.ID, asSent, asDecoded, src)
+	case decodedShown:
+		return decoded, nil
+	}
+	return src, nil
+}
+
+func shownImage(shown []string, baseDir, src string) (string, bool) {
+	imagePath, ok := ask.ResolveImage(baseDir, src)
+	return imagePath, ok && slices.Contains(shown, imagePath)
 }
 
 func storedAskImage(stored store.Ask, src string) (string, []byte, error) {
