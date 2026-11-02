@@ -8450,19 +8450,22 @@ export interface Record {
 }
 
 export interface Mailbox {
-    kind:       QuickCaptureMailboxKind;
-    member_id?: string;
+    kind:        QuickCaptureMailboxKind;
+    member_id?:  string;
+    session_id?: string;
     [property: string]: any;
 }
 
 export enum QuickCaptureMailboxKind {
     Chief = "chief",
     CrewMember = "crew_member",
+    Session = "session",
 }
 
 export interface QuickCaptureMailbox {
-    kind:       QuickCaptureMailboxKind;
-    member_id?: string;
+    kind:        QuickCaptureMailboxKind;
+    member_id?:  string;
+    session_id?: string;
     [property: string]: any;
 }
 
@@ -24658,10 +24661,12 @@ const typeMap: any = {
     "Mailbox": o([
         { json: "kind", js: "kind", typ: r("QuickCaptureMailboxKind") },
         { json: "member_id", js: "member_id", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: u(undefined, "") },
     ], "any"),
     "QuickCaptureMailbox": o([
         { json: "kind", js: "kind", typ: r("QuickCaptureMailboxKind") },
         { json: "member_id", js: "member_id", typ: u(undefined, "") },
+        { json: "session_id", js: "session_id", typ: u(undefined, "") },
     ], "any"),
     "QuickCaptureReadMessage": o([
         { json: "capture_id", js: "capture_id", typ: "" },
@@ -28965,6 +28970,7 @@ const typeMap: any = {
     "QuickCaptureMailboxKind": [
         "chief",
         "crew_member",
+        "session",
     ],
     "QuickCaptureReadMessageEvent": [
         "quick_capture_read",

@@ -14,7 +14,26 @@ import (
 )
 
 func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (who.Address, error) {
+	if mailbox.Kind != protocol.QuickCaptureMailboxKindSession && mailbox.SessionID != nil {
+		return who.Address{}, fmt.Errorf("%s mailbox cannot include session_id", mailbox.Kind)
+	}
 	switch mailbox.Kind {
+	case protocol.QuickCaptureMailboxKindSession:
+		if mailbox.MemberID != nil {
+			return who.Address{}, fmt.Errorf("session mailbox cannot include member_id")
+		}
+		id := protocol.TrimID(protocol.Deref(mailbox.SessionID))
+		if id == "" {
+			return who.Address{}, fmt.Errorf("session mailbox requires session_id")
+		}
+		session := d.store.Get(id)
+		if session == nil {
+			return who.Address{}, fmt.Errorf("session %s is not running", id)
+		}
+		if session.ProfileID != profileID {
+			return who.Address{}, fmt.Errorf("session %s belongs to another profile", id)
+		}
+		return who.ToSession(session.ID), nil
 	case protocol.QuickCaptureMailboxKindChief:
 		if mailbox.MemberID != nil {
 			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")

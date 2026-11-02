@@ -86,7 +86,7 @@ func (s *Store) SaveQuickCapture(profileID string, msg protocol.QuickCaptureSend
 		}
 	}
 	inboxID := QuickCaptureInboxID(profileID, msg.CaptureID)
-	_, err = tx.Exec(`INSERT INTO quick_captures(profile_id,id,inbox_item_id,submission,mailbox_kind,mailbox_member_id,body,created_at) VALUES(?,?,?,?,?,?,?,?)`, profileID, msg.CaptureID, inboxID, quickCaptureSubmission(msg), msg.Mailbox.Kind, protocol.Deref(msg.Mailbox.MemberID), msg.Content, at.UTC().Format(sortableTimeFormat))
+	_, err = tx.Exec(`INSERT INTO quick_captures(profile_id,id,inbox_item_id,submission,mailbox_kind,mailbox_member_id,mailbox_session_id,body,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, profileID, msg.CaptureID, inboxID, quickCaptureSubmission(msg), msg.Mailbox.Kind, protocol.Deref(msg.Mailbox.MemberID), protocol.Deref(msg.Mailbox.SessionID), msg.Content, at.UTC().Format(sortableTimeFormat))
 	if err != nil {
 		return err
 	}
@@ -109,13 +109,13 @@ type quickCaptureQuery interface {
 
 var ErrQuickCaptureNotFound = errors.New("quick capture not found")
 
-const quickCaptureSelect = `SELECT u.id,u.mailbox_kind,u.mailbox_member_id,u.body,u.created_at,COALESCE(i.read_at,'')
+const quickCaptureSelect = `SELECT u.id,u.mailbox_kind,u.mailbox_member_id,u.mailbox_session_id,u.body,u.created_at,COALESCE(i.read_at,'')
  FROM quick_captures u LEFT JOIN inbox_items i ON i.id=u.inbox_item_id AND i.kind='quick_capture'`
 
 func scanQuickCapture(row inboxDeliveryScanner) (*protocol.QuickCaptureRecord, error) {
 	var r protocol.QuickCaptureRecord
-	var member, read string
-	err := row.Scan(&r.ID, &r.Mailbox.Kind, &member, &r.Content, &r.CreatedAt, &read)
+	var member, session, read string
+	err := row.Scan(&r.ID, &r.Mailbox.Kind, &member, &session, &r.Content, &r.CreatedAt, &read)
 	if err == sql.ErrNoRows {
 		return nil, ErrQuickCaptureNotFound
 	}
@@ -124,6 +124,9 @@ func scanQuickCapture(row inboxDeliveryScanner) (*protocol.QuickCaptureRecord, e
 	}
 	if member != "" {
 		r.Mailbox.MemberID = protocol.Ptr(member)
+	}
+	if session != "" {
+		r.Mailbox.SessionID = protocol.Ptr(protocol.SessionID(session))
 	}
 	if read != "" {
 		r.ReadAt = protocol.Ptr(read)
@@ -158,7 +161,7 @@ func (s *Store) QuickCaptures(profileID string, limit int, cursor string) ([]pro
 	if limit <= 0 {
 		return nil, nil, fmt.Errorf("quick_capture_list limit must be positive, asked for %d", limit)
 	}
-	where := " WHERE profile_id=?"
+	where := " WHERE profile_id=? AND mailbox_kind!='session'"
 	args := []any{profileID}
 	if cursor != "" {
 		var created string

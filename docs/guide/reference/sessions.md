@@ -88,6 +88,23 @@ every agent there with `--all`. A crew member's name resolves to the member's
 current session, and a sleeping member stays asleep. Attn never reloads shells. Run
 `attn agent reload --help` for the details.
 
+## Send files to an agent from outside Attn
+
+A program or script on the computer that runs Attn can send files and a message
+to any running agent, local or on an outpost:
+
+```sh
+attn capture send --session <id> --file shot.png -m "The arrow marks the broken button" --json
+```
+
+`attn session list --json` gives each live session's id, label and host. Repeat
+`--file` to send more files. Attn types the message into the agent's
+conversation as yours. For each file, the message has an
+`attn agent attachment … --out <path>` command that saves the file where the
+agent runs, including on an outpost. `--json` prints the saved capture with an
+id, name, media type and size for each file. Run `attn capture send --help` for
+the details.
+
 ## Details
 
 <details>

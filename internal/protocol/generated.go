@@ -8510,12 +8510,16 @@ type QuickCaptureMailbox struct {
 
 	// MemberID corresponds to the JSON schema field "member_id".
 	MemberID *string `json:"member_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type QuickCaptureMailboxKind string
 
 const QuickCaptureMailboxKindChief QuickCaptureMailboxKind = "chief"
 const QuickCaptureMailboxKindCrewMember QuickCaptureMailboxKind = "crew_member"
+const QuickCaptureMailboxKindSession QuickCaptureMailboxKind = "session"
 
 type QuickCaptureReadMessage struct {
 	// CaptureID corresponds to the JSON schema field "capture_id".

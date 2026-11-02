@@ -2901,10 +2901,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
 	case protocol.CmdAgentReload:
 		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
-	case protocol.CmdQuickCaptureAttachmentGet:
+	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		d.handleQuickCapture(conn, msg)
-	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentDiscard:
-		d.sendError(conn, "quick capture authoring and history are app-only; use the authenticated app WebSocket channel")
+	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
+		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:
