@@ -81,6 +81,7 @@ const (
 	AutomationRunReserved      = "automation-run-reserved"
 	AutomationRunFinalizing    = "automation-run-finalizing"
 	RemoteRecentRecorded       = "remote-recent-recorded"
+	KittyImageRequested        = "kitty-image-requested"
 )
 
 type armed struct {

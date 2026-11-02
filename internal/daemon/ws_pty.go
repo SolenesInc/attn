@@ -80,7 +80,7 @@ func (d *Daemon) detachSession(client *wsClient, terminalID protocol.TerminalID)
 		_ = stream.Close()
 	}
 	if next, handedOn := d.ptySizes.release(client, terminalID); handedOn {
-		d.applyPtySize(next.owner, next.size)
+		d.applyPtySize(next.owner, terminalID)
 	}
 }
 
@@ -225,7 +225,7 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 
 func (d *Daemon) releasePtySizes(client *wsClient) {
 	for _, next := range d.ptySizes.releaseAll(client) {
-		d.applyPtySize(next.owner, next.size)
+		d.applyPtySize(next.owner, next.terminal)
 	}
 }
 
@@ -771,8 +771,8 @@ func (d *Daemon) handleTerminalFocus(client *wsClient, msg *protocol.TerminalFoc
 }
 
 func (d *Daemon) claimPtySize(client *wsClient, terminal protocol.TerminalID) {
-	if size, changed := d.ptySizes.claim(client, terminal); changed {
-		d.applyPtySize(client, size)
+	if d.ptySizes.claim(client, terminal) {
+		d.applyPtySize(client, terminal)
 	}
 }
 
@@ -807,21 +807,26 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		return
 	}
 	if d.ptySizes.request(client, *msg) {
-		d.applyPtySize(client, *msg)
+		d.applyPtySize(client, msg.ID)
 	}
 }
 
-func (d *Daemon) applyPtySize(owner *wsClient, size protocol.PtyResizeMessage) {
-	d.sendInTerminalOrder(owner, size.ID, func(answered func()) {
-		d.router().Send(size, func(err error) {
-			answered()
-			if err != nil && shouldLogPtyCommandError(err) {
-				d.logf("pty_resize failed for %s: %v", size.ID, err)
-				if !errors.Is(err, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(size.ID)) != "" {
-					d.sendTerminalRefusal(owner, protocol.CmdPtyResize, size.ID, err)
+func (d *Daemon) applyPtySize(owner *wsClient, terminal protocol.TerminalID) {
+	d.sendInTerminalOrder(owner, terminal, func(answered func()) {
+		stillOwner := d.ptySizes.applyIfOwner(owner, terminal, func(size protocol.PtyResizeMessage) {
+			d.router().Send(size, func(err error) {
+				answered()
+				if err != nil && shouldLogPtyCommandError(err) {
+					d.logf("pty_resize failed for %s: %v", size.ID, err)
+					if !errors.Is(err, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(size.ID)) != "" {
+						d.sendTerminalRefusal(owner, protocol.CmdPtyResize, size.ID, err)
+					}
 				}
-			}
+			})
 		})
+		if !stillOwner {
+			answered()
+		}
 	})
 }
 
