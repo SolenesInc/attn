@@ -455,6 +455,7 @@ func TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt(t *testing.T) {
 			testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 				return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseConnecting
 			})
+			synctest.Wait()
 			close(ssh.probing)
 			testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 				return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed

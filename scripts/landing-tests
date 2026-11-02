@@ -39,6 +39,8 @@ go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
 go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout
 go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript
+go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
+go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
