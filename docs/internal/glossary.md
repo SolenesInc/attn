@@ -103,8 +103,11 @@ ring                    one prompt for an agent with unread items: it types
                         answers and quick captures as the user's message and
                         tells of the rest; like a push notification
 quick capture           a quick message (with optional attachments) the user
-                        can send to chief or crew, from outside attn, using a
-                        global shortcut; like macOS Quick Note
+                        sends from outside attn: to chief or crew with a global
+                        shortcut, or to any session through a paired sender;
+                        like macOS Quick Note
+paired sender           a program the user allowed in the app to send quick
+                        captures as them with attn send; like an OAuth client
 ```
 
 ```text
