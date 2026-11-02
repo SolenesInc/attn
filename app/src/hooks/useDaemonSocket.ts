@@ -3609,8 +3609,6 @@ export function useDaemonSocket({
   const sendPhonePairingRevoke = useCallback((deviceId: string, profileId: string): Promise<true> =>
     sendRequest('phone_pairing_revoke', { device_id: deviceId, profile_id: profileId }, 'Revoking the phone timed out'), [sendRequest]);
 
-  const sendSendersGet = useCallback(() => sendOrQueueCommand({ cmd: 'senders_get' }), [sendOrQueueCommand]);
-
   const sendSenderPairDecide = useCallback((pairingId: string, allow: boolean): Promise<true> =>
     sendRequest('sender_pair_decide', { pairing_id: pairingId, allow }, 'Deciding the pairing timed out'), [sendRequest]);
 
@@ -4344,7 +4342,6 @@ export function useDaemonSocket({
     sendPhonesGet,
     sendPhonePairBegin,
     sendPhonePairingRevoke,
-    sendSendersGet,
     sendSenderPairDecide,
     sendSenderUnpair,
     sendInstallCodexUpdate,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useSendersStore } from '../store/senders';
 import type { SenderElement } from '../types/generated';
@@ -22,11 +22,9 @@ function PairedSender({ sender, onRemove }: { sender: SenderElement; onRemove: (
 }
 
 export function SendersSettings() {
-  const { sendSendersGet, sendSenderUnpair, connectionGeneration } = useDaemonApi();
+  const { sendSenderUnpair } = useDaemonApi();
   const senders = useSendersStore((state) => state.senders);
   const [error, setError] = useState('');
-
-  useEffect(() => { sendSendersGet(); }, [sendSendersGet, connectionGeneration]);
 
   function remove(sender: SenderElement) {
     setError('');
