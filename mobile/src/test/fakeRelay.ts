@@ -100,6 +100,7 @@ export class FakeRelay {
   readonly images = new Map<string, { mimeType: string; bytes: Uint8Array }>()
   readonly heldImageRequests: Array<() => void> = []
   holdImageReplies = false
+  readonly commands: Array<{ readonly cmd: string; readonly [field: string]: unknown }> = []
 
   get homeNoisePub() {
     return x25519.getPublicKey(this.homeStatic)
@@ -135,7 +136,18 @@ export class FakeSocket implements Listener {
   }
 
   toPhone(message: object) {
-    this.deliver(frame(5, this.connId, this.transport!.send.seal(text.encode(JSON.stringify(message)))))
+    this.toPhoneBytes(text.encode(JSON.stringify(message)))
+  }
+
+  toPhoneBytes(message: Uint8Array) {
+    this.deliver(frame(5, this.connId, this.transport!.send.seal(message)))
+  }
+
+  output(terminalId: string, seq: number, data: string) {
+    const id = text.encode(terminalId)
+    const message = join(Uint8Array.of(1, id.length), id, new Uint8Array(4), text.encode(data))
+    new DataView(message.buffer).setUint32(2 + id.length, seq)
+    this.toPhoneBytes(message)
   }
 
   send(data: Uint8Array | string) {
@@ -160,6 +172,7 @@ export class FakeSocket implements Listener {
       return
     }
     const message = JSON.parse(new TextDecoder().decode(this.transport.recv.open(payload)))
+    this.relay.commands.push(message)
     if (message.cmd === 'hello') {
       this.toPhone({
         event: 'welcome',

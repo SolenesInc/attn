@@ -2,12 +2,20 @@ import { ed25519, x25519 } from '@noble/curves/ed25519.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toBase64Url } from './bytes'
 import type { DeviceKeys } from './device'
-import { pingIntervalMs, pongDeadlineMs, runLink, type LinkEvent } from './link'
+import {
+  pingIntervalMs,
+  pongDeadlineMs,
+  runLink,
+  terminalCreditBytes,
+  type Link,
+  type LinkEvent,
+} from './link'
 import { FakeRelay, socketsOf } from './test/fakeRelay'
 
 let relay: FakeRelay
 let events: Array<LinkEvent>
 let close: () => void
+let link: Link
 
 const signSecret = ed25519.utils.randomSecretKey()
 const keys: DeviceKeys = {
@@ -19,7 +27,7 @@ const keys: DeviceKeys = {
 }
 
 const connect = async () => {
-  close = runLink(
+  link = runLink(
     {
       cloud: 'https://cloud.example',
       homeId: 'home',
@@ -29,7 +37,8 @@ const connect = async () => {
     },
     keys,
     (event) => events.push(event),
-  ).close
+  )
+  close = link.close
   await vi.advanceTimersByTimeAsync(1)
 }
 
@@ -86,5 +95,74 @@ describe('a phone keeps checking that its home still answers', () => {
 
     expect(relay.homePings).toBe(0)
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
+  })
+})
+
+describe('a terminal the phone opened', () => {
+  const sink = () => {
+    const shown: Array<string> = []
+    return {
+      shown,
+      sink: {
+        screen: (_: unknown, ansi: Uint8Array) => shown.push(`screen:${new TextDecoder().decode(ansi)}`),
+        output: (data: Uint8Array) => shown.push(new TextDecoder().decode(data)),
+        resized: (cols: number, rows: number) => shown.push(`resized:${cols}x${rows}`),
+        ended: () => shown.push('ended'),
+        failed: (message: string) => shown.push(`failed:${message}`),
+      },
+    }
+  }
+  const attachCommands = () =>
+    relay.commands.filter((command) => command.cmd === 'terminal_attach' || command.cmd === 'terminal_focus')
+
+  it('attaches with its size and credit, shows what the home sends, and attaches again after a reconnect', async () => {
+    await connect()
+    const { shown, sink: terminal } = sink()
+    link.openTerminal('t1', { cols: 49, rows: 35 }, terminal)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(attachCommands()).toEqual([
+      { cmd: 'terminal_attach', terminal_id: 't1', cols: 49, rows: 35, credit: terminalCreditBytes },
+      { cmd: 'terminal_focus', terminal_id: 't1' },
+    ])
+
+    const socket = relay.sockets[0]!
+    socket.toPhone({
+      event: 'terminal_screen',
+      terminal_id: 't1',
+      cols: 49,
+      rows: 35,
+      ansi: btoa('$ '),
+      seq: 4,
+    })
+    socket.output('t1', 5, 'ls\r\n')
+    socket.output('t2', 6, 'not this terminal')
+    socket.toPhone({ event: 'terminal_resized', terminal_id: 't1', cols: 120, rows: 36 })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(shown).toEqual(['screen:$ ', 'ls\r\n', 'resized:120x36'])
+
+    relay.homeAnswersPings = false
+    await vi.advanceTimersByTimeAsync(pingIntervalMs + pongDeadlineMs)
+    relay.homeAnswersPings = true
+    await vi.advanceTimersByTimeAsync(100)
+    expect(relay.sockets).toHaveLength(2)
+    expect(attachCommands()).toHaveLength(4)
+    expect(attachCommands().at(-2)).toMatchObject({
+      cmd: 'terminal_attach',
+      terminal_id: 't1',
+      cols: 49,
+      rows: 35,
+    })
+  })
+
+  it('tells the terminal why when the home is too old to open it', async () => {
+    relay.welcomeApi = 3
+    await connect()
+    const { shown, sink: terminal } = sink()
+    link.openTerminal('t1', { cols: 49, rows: 35 }, terminal)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(attachCommands()).toEqual([])
+    expect(shown).toEqual([
+      'failed:attn on Mac is too old to open terminals from a phone; update it to the latest attn',
+    ])
   })
 })

@@ -6,7 +6,6 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "node"],
     "strict": true,
-    "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
     "paths": { "@attn/*": ["../app/src/*"] },

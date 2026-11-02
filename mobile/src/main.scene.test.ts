@@ -1,6 +1,16 @@
 import { Scene } from 'foldkit'
 import { describe, expect, it } from 'vitest'
-import { Message, SavePairings, subscriptions, update, view, type Model } from './main'
+import {
+  KeepFocus,
+  Message,
+  SavePairings,
+  SendPrompt,
+  TerminalMount,
+  subscriptions,
+  update,
+  view,
+  type Model,
+} from './main'
 import type { Pairing } from './pairing'
 import type { QueueSession } from './queue'
 
@@ -40,6 +50,7 @@ const session = (
   waitingSince,
   host: null,
   offline: false,
+  terminalId: null,
 })
 
 const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
@@ -51,9 +62,21 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   images: {},
   diagrams: {},
   zoom: null,
+  openSession: null,
+  composer: { text: '', sending: false, note: '' },
+  terminalStatus: '',
+  fullHeight: 800,
+  keyboardHeight: 0,
   loaded: true,
   foreground: true,
-  homes: pairings.map((pairing) => ({ pairing, status: 'connecting', reason: '', sessions: [], asks: [] })),
+  homes: pairings.map((pairing) => ({
+    pairing,
+    api: 4,
+    status: 'connecting',
+    reason: '',
+    sessions: [],
+    asks: [],
+  })),
   pairingFlow: 'idle',
   pairingMessage: '',
   typedCode: '',
@@ -223,7 +246,12 @@ describe('the queue merges every pairing into one list', () => {
       { update, view },
       Scene.given(paired(personal, work)),
       Scene.Subscription.emit(
-        Message.WelcomedByHome({ pairingId: personal.id, homeName: 'Mac', profileName: 'side projects' }),
+        Message.WelcomedByHome({
+          api: 4,
+          pairingId: personal.id,
+          homeName: 'Mac',
+          profileName: 'side projects',
+        }),
       ),
       Scene.Command.resolve(SavePairings, Message.SavedPairings()),
       Scene.Subscription.emit(
@@ -272,6 +300,7 @@ describe('pairing again', () => {
       homes: [
         {
           pairing: personal,
+          api: 4,
           status: 'closed' as const,
           reason: 'Mac ended this pairing',
           sessions: [],
@@ -292,10 +321,71 @@ describe('pairing again', () => {
     const before = paired(personal, work)
     const { model: after } = update(
       before,
-      Message.WelcomedByHome({ pairingId: personal.id, homeName: 'Mac', profileName: 'side projects' }),
+      Message.WelcomedByHome({
+        api: 4,
+        pairingId: personal.id,
+        homeName: 'Mac',
+        profileName: 'side projects',
+      }),
     )
     expect(subscriptions.links.modelToDependencies(after)).toEqual(
       subscriptions.links.modelToDependencies(before),
+    )
+  })
+})
+
+const withSession = (api: number): Model => ({
+  ...paired(personal),
+  homes: [
+    {
+      pairing: personal,
+      api,
+      status: 'online',
+      reason: '',
+      sessions: [{ ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' }],
+      asks: [],
+    },
+  ],
+})
+
+const keepFocus = Scene.Mount.resolveAll(
+  [KeepFocus, Message.CompletedCommand()],
+  [KeepFocus, Message.CompletedCommand()],
+)
+
+describe('answering an agent from the phone', () => {
+  it('opens the session’s terminal and keeps the words in the composer until the home delivers them', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      Scene.click(Scene.testId('queue-entry')),
+      keepFocus,
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a' })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+      Scene.type(Scene.placeholder('Reply to the agent…'), 'Yes, land it.'),
+      Scene.click(Scene.role('button', { name: 'Send' })),
+      Scene.Command.resolve(
+        SendPrompt,
+        Message.FailedPrompt({ message: 'session input blocked by pending approval' }),
+      ),
+      Scene.expect(Scene.placeholder('Reply to the agent…')).toHaveValue('Yes, land it.'),
+      Scene.expect(Scene.text('session input blocked by pending approval')).toExist(),
+      Scene.click(Scene.role('button', { name: 'Send' })),
+      Scene.Command.resolve(SendPrompt, Message.DeliveredPrompt()),
+      Scene.expect(Scene.placeholder('Reply to the agent…')).toHaveValue(''),
+      Scene.expect(Scene.text('session input blocked by pending approval')).not.toExist(),
+    )
+  })
+
+  it('says why when the home is too old to open terminals', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(3)),
+      Scene.click(Scene.testId('queue-entry')),
+      Scene.Mount.expectNone(),
+      Scene.expect(
+        Scene.text('attn on Mac is too old to open terminals from a phone. Update it to the latest attn.'),
+      ).toExist(),
     )
   })
 })

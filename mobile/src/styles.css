@@ -650,3 +650,112 @@ textarea.note:focus {
   color: #fff;
   font-weight: 600;
 }
+.row.session:not(.offline) {
+  cursor: pointer;
+}
+
+.session-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.session-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 6px) 12px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-top .back {
+  flex: none;
+  padding: 6px 8px;
+}
+
+.session-title {
+  min-width: 0;
+}
+
+.terminal-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #0f0f0e;
+}
+
+.term-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.term-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.term-stage canvas {
+  display: block;
+}
+
+.terminal-status {
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.keys {
+  display: flex;
+  gap: 4px;
+  padding: 6px 6px 0;
+  overflow: hidden;
+}
+
+.keys button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 0;
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.composer-area {
+  padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
+}
+
+.composer-note {
+  margin: 0 4px 4px;
+  font-size: 13px;
+}
+
+.composer {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.composer button.primary {
+  flex: none;
+  width: auto;
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: 10px;
+}
+
+.composer textarea {
+  flex: 1;
+  min-height: 38px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: none;
+}

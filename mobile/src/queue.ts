@@ -23,6 +23,7 @@ export const QueueSession = Schema.Struct({
   waitingSince: Schema.NullOr(Schema.Finite),
   host: Schema.NullOr(Schema.String),
   offline: Schema.Boolean,
+  terminalId: Schema.NullOr(Schema.String),
 })
 export type QueueSession = typeof QueueSession.Type
 
@@ -31,6 +32,7 @@ export type LinkStatus = typeof LinkStatus.Type
 
 export const Home = Schema.Struct({
   pairing: Pairing,
+  api: Schema.Finite,
   status: LinkStatus,
   reason: Schema.String,
   sessions: Schema.Array(QueueSession),
@@ -46,6 +48,7 @@ export const fromGatewaySession = (session: GatewaySession): QueueSession => ({
   waitingSince: session.waiting_since ? session.waiting_since.getTime() : null,
   host: session.host ?? null,
   offline: session.offline,
+  terminalId: session.terminal_id ?? null,
 })
 
 export type SessionRow = {

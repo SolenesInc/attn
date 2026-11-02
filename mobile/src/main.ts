@@ -1,6 +1,7 @@
 import { App } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
-import { Duration, Effect, Queue, Schema, Stream } from 'effect'
+import { Keyboard } from '@capacitor/keyboard'
+import { Duration, Effect, Option, Queue, Schema, Stream } from 'effect'
 import { renderMermaid } from '@attn/components/Markdown/mermaidRender'
 import { Command, Mount, Runtime, Subscription, type Update } from 'foldkit'
 import { type Document, type Html, type HtmlBuilder } from 'foldkit/html'
@@ -24,7 +25,7 @@ import { askRow, askScreen, type AskActions, type AskRow } from './asks/view'
 import { attachZoom } from './asks/zoom'
 import { fromBase64Url } from './bytes'
 import { deviceKeys } from './device'
-import { pairWithHome, runLink, type Link, type LinkEvent } from './link'
+import { homeTerminalApi, pairWithHome, runLink, type Link, type LinkEvent } from './link'
 import {
   LinkTarget,
   Pairing,
@@ -35,6 +36,7 @@ import {
   savePairings,
 } from './pairing'
 import { Home, QueueSession, buildQueue, fromGatewaySession, type HomeRow, type SessionRow } from './queue'
+import { activeTerminal, mountTerminal, terminalKeys, type TerminalKey } from './terminal/terminal'
 
 // MODEL
 
@@ -60,8 +62,22 @@ const Zoom = Schema.Union([
 
 const OpenAskId = Schema.Struct({ pairingId: Schema.String, askId: Schema.String })
 
+const OpenSession = Schema.Struct({ pairingId: Schema.String, sessionId: Schema.String })
+
+const Composer = Schema.Struct({
+  text: Schema.String,
+  sending: Schema.Boolean,
+  note: Schema.String,
+})
+export type Composer = typeof Composer.Type
+
 export const Model = Schema.Struct({
-  screen: Schema.Literals(['queue', 'pairings', 'ask']),
+  screen: Schema.Literals(['queue', 'pairings', 'ask', 'session']),
+  openSession: Schema.NullOr(OpenSession),
+  composer: Composer,
+  terminalStatus: Schema.String,
+  fullHeight: Schema.Finite,
+  keyboardHeight: Schema.Finite,
   openAsk: Schema.NullOr(OpenAskId),
   drafts: Schema.Record(Schema.String, Draft),
   sending: Schema.Boolean,
@@ -85,7 +101,12 @@ export const Message = defineMessageUnion({
   LoadedPairings: { pairings: Schema.Array(Pairing) },
   FailedLoadingPairings: { message: Schema.String },
   ChangedForeground: { foreground: Schema.Boolean },
-  WelcomedByHome: { pairingId: Schema.String, homeName: Schema.String, profileName: Schema.String },
+  WelcomedByHome: {
+    pairingId: Schema.String,
+    api: Schema.Finite,
+    homeName: Schema.String,
+    profileName: Schema.String,
+  },
   ReceivedSessions: { pairingId: Schema.String, sessions: Schema.Array(QueueSession) },
   ReceivedAsks: { pairingId: Schema.String, asks: Schema.Array(PhoneAsk) },
   ClickedAsk: { pairingId: Schema.String, askId: Schema.String },
@@ -121,6 +142,17 @@ export const Message = defineMessageUnion({
   ClickedRemovePairing: { pairingId: Schema.String },
   SavedPairings: {},
   Ticked: { now: Schema.Finite },
+  ClickedSession: { pairingId: Schema.String, sessionId: Schema.String },
+  ChangedComposer: { value: Schema.String },
+  SubmittedComposer: {},
+  DeliveredPrompt: {},
+  FailedPrompt: { message: Schema.String },
+  ClickedKey: { key: Schema.Literals(terminalKeys) },
+  ClickedHideKeyboard: {},
+  ChangedKeyboard: { height: Schema.Finite },
+  ChangedViewport: { height: Schema.Finite },
+  ChangedTerminalStatus: { text: Schema.String },
+  CompletedCommand: {},
 })
 export type Message = typeof Message.Type
 
@@ -276,6 +308,40 @@ export const SendAnswer = Command.define('SendAnswer', {
     ),
 })
 
+export const SendPrompt = Command.define('SendPrompt', {
+  args: { pairingId: Schema.String, sessionId: Schema.String, text: Schema.String },
+  messages: [Message.DeliveredPrompt, Message.FailedPrompt],
+  execute: ({ pairingId, sessionId, text }) =>
+    Effect.tryPromise(async () => {
+      const reply = await linkTo(pairingId).request({ cmd: 'submit_prompt', session_id: sessionId, text })
+      if (reply.event !== 'submit_result') throw new Error(`the home answered ${reply.event}`)
+      if (!reply.delivered) throw new Error(reply.message || 'Not sent.')
+    }).pipe(
+      Effect.map(() => Message.DeliveredPrompt()),
+      Effect.catch(({ cause }) => Effect.succeed(Message.FailedPrompt({ message: errorText(cause) }))),
+    ),
+})
+
+const SendKey = Command.define('SendKey', {
+  args: { key: Schema.Literals(terminalKeys) },
+  messages: [Message.CompletedCommand],
+  execute: ({ key }) =>
+    Effect.sync(() => {
+      activeTerminal?.sendKey(key)
+      return Message.CompletedCommand()
+    }),
+})
+
+// iOS gives a web view no gesture that closes the keyboard, so the keys bar carries one.
+const HideKeyboard = Command.define('HideKeyboard', {
+  messages: [Message.CompletedCommand],
+  execute: Effect.promise(async () => {
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    if (Capacitor.isNativePlatform()) await Keyboard.hide()
+    return Message.CompletedCommand()
+  }),
+})
+
 export const PinchZoom = Mount.define('PinchZoom', {
   messages: [Message.AttachedZoom],
   execute: ({ element }) =>
@@ -292,8 +358,11 @@ const updateHome = (model: Model, pairingId: string, change: (home: Home) => Hom
     homes: (homes) => homes.map((home) => (home.pairing.id === pairingId ? change(home) : home)),
   })
 
+const emptyComposer: Composer = { text: '', sending: false, note: '' }
+
 const newHome = (pairing: Pairing): Home => ({
   pairing,
+  api: 0,
   status: 'connecting',
   reason: '',
   sessions: [],
@@ -414,9 +483,10 @@ export const update = (model: Model, message: Message) =>
           foreground ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '' })) : homes,
       }),
     }),
-    WelcomedByHome: ({ pairingId, homeName, profileName }) => {
+    WelcomedByHome: ({ pairingId, api, homeName, profileName }) => {
       const welcomed = updateHome(model, pairingId, (home) => ({
         ...home,
+        api,
         status: 'online',
         reason: '',
         pairing: { ...home.pairing, homeName, profileName },
@@ -444,9 +514,11 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, {
         screen: () => 'queue' as const,
         openAsk: () => null,
+        openSession: () => null,
         sendError: () => '',
         zoom: () => null,
       }),
+      commands: model.screen === 'session' ? [HideKeyboard()] : [],
     }),
     PickedChoice: ({ key, label }) => {
       const ask = openAskOf(model)
@@ -588,6 +660,39 @@ export const update = (model: Model, message: Message) =>
     },
     SavedPairings: () => ({ model }),
     Ticked: ({ now }) => ({ model: modifyFields(model, { now: () => now }) }),
+    ClickedSession: ({ pairingId, sessionId }) => ({
+      model: modifyFields(model, {
+        screen: () => 'session' as const,
+        openSession: () => ({ pairingId, sessionId }),
+        composer: () => emptyComposer,
+        terminalStatus: () => '',
+      }),
+    }),
+    ChangedComposer: ({ value }) => ({
+      model: modifyFields(model, { composer: (composer) => ({ ...composer, text: value }) }),
+    }),
+    SubmittedComposer: () => {
+      const open = model.openSession
+      if (!open || model.composer.sending || model.composer.text.trim() === '') return { model }
+      return {
+        model: modifyFields(model, { composer: (composer) => ({ ...composer, sending: true, note: '' }) }),
+        commands: [SendPrompt({ ...open, text: model.composer.text })],
+      }
+    },
+    DeliveredPrompt: () => ({ model: modifyFields(model, { composer: () => emptyComposer }) }),
+    FailedPrompt: ({ message }) => ({
+      model: modifyFields(model, {
+        composer: (composer) => ({ ...composer, sending: false, note: message }),
+      }),
+    }),
+    ClickedKey: ({ key }) => ({ model, commands: [SendKey({ key })] }),
+    ClickedHideKeyboard: () => ({ model, commands: [HideKeyboard()] }),
+    ChangedKeyboard: ({ height }) => ({ model: modifyFields(model, { keyboardHeight: () => height }) }),
+    ChangedViewport: ({ height }) => ({
+      model: model.keyboardHeight === 0 ? modifyFields(model, { fullHeight: () => height }) : model,
+    }),
+    ChangedTerminalStatus: ({ text }) => ({ model: modifyFields(model, { terminalStatus: () => text }) }),
+    CompletedCommand: () => ({ model }),
   })
 
 // INIT
@@ -595,6 +700,11 @@ export const update = (model: Model, message: Message) =>
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: {
     screen: 'queue',
+    openSession: null,
+    composer: emptyComposer,
+    terminalStatus: '',
+    fullHeight: window.innerHeight,
+    keyboardHeight: 0,
     openAsk: null,
     drafts: {},
     sending: false,
@@ -618,7 +728,12 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 const linkMessage = (pairingId: string, event: LinkEvent): Message => {
   switch (event._tag) {
     case 'Welcomed':
-      return Message.WelcomedByHome({ pairingId, homeName: event.homeName, profileName: event.profileName })
+      return Message.WelcomedByHome({
+        pairingId,
+        api: event.api,
+        homeName: event.homeName,
+        profileName: event.profileName,
+      })
     case 'Sessions':
       return Message.ReceivedSessions({ pairingId, sessions: event.sessions.map(fromGatewaySession) })
     case 'Asks':
@@ -662,6 +777,33 @@ const foregroundStream = Stream.callback<Message>((queue) =>
   ).pipe(Effect.flatMap(() => Effect.never)),
 )
 
+const keyboardStream = Stream.callback<Message>((queue) =>
+  Effect.acquireRelease(
+    Effect.promise(() =>
+      Promise.all([
+        Keyboard.addListener('keyboardWillShow', ({ keyboardHeight }) =>
+          Queue.offerUnsafe(queue, Message.ChangedKeyboard({ height: keyboardHeight })),
+        ),
+        Keyboard.addListener('keyboardWillHide', () =>
+          Queue.offerUnsafe(queue, Message.ChangedKeyboard({ height: 0 })),
+        ),
+      ]),
+    ),
+    (handles) => Effect.promise(() => Promise.all(handles.map((handle) => handle.remove()))),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
+
+const viewportStream = Stream.callback<Message>((queue) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const resized = () => Queue.offerUnsafe(queue, Message.ChangedViewport({ height: window.innerHeight }))
+      window.addEventListener('resize', resized)
+      return resized
+    }),
+    (resized) => Effect.sync(() => window.removeEventListener('resize', resized)),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
+
 const tickStream = Stream.tick(Duration.seconds(30)).pipe(
   Stream.map(() => Message.Ticked({ now: Date.now() })),
 )
@@ -676,6 +818,17 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
       dependenciesToStream: ({ connected }) =>
         Stream.mergeAll(connected.map(linkStream), { concurrency: 'unbounded' }),
     },
+  ),
+  keyboard: entry(
+    { on: Schema.Boolean },
+    {
+      modelToDependencies: () => ({ on: Capacitor.isNativePlatform() }),
+      dependenciesToStream: ({ on }) => (on ? keyboardStream : Stream.empty),
+    },
+  ),
+  viewport: entry(
+    { on: Schema.Boolean },
+    { modelToDependencies: () => ({ on: true }), dependenciesToStream: () => viewportStream },
   ),
   foreground: entry(
     { on: Schema.Boolean },
@@ -726,6 +879,9 @@ const sessionRow = (row: SessionRow, now: number, h: HtmlBuilder<Message>): Html
       h.Key(row.key),
       h.Class(`row session state-${row.session.state}${row.live ? '' : ' offline'}`),
       h.DataAttribute('testid', 'queue-entry'),
+      ...(row.live
+        ? [h.OnClick(Message.ClickedSession({ pairingId: row.pairing.id, sessionId: row.session.id }))]
+        : []),
     ],
     [
       h.div(
@@ -921,6 +1077,166 @@ const pairingsView = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+// MOUNTS
+
+export const TerminalMount = Mount.defineStream('TerminalMount', {
+  args: { pairingId: Schema.String, terminalId: Schema.String },
+  messages: [Message.ChangedTerminalStatus],
+  execute: ({ element, pairingId, terminalId }) =>
+    Stream.callback<typeof Message.ChangedTerminalStatus.Type>((queue) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const link = liveLinks.get(pairingId)
+          const status = (text: string) => Queue.offerUnsafe(queue, Message.ChangedTerminalStatus({ text }))
+          if (!link) {
+            status('This home is not connected.')
+            return () => {}
+          }
+          return mountTerminal(element as HTMLElement, link, terminalId, status)
+        }),
+        (dispose) => Effect.sync(dispose),
+      ).pipe(Effect.flatMap(() => Effect.never)),
+    ),
+})
+
+// A tap on a key or on Send must not take focus from the composer, or iOS closes the keyboard.
+export const KeepFocus = Mount.define('KeepFocus', {
+  messages: [Message.CompletedCommand],
+  execute: ({ element }) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const keep = (event: Event) => event.preventDefault()
+          element.addEventListener('pointerdown', keep)
+          element.addEventListener('mousedown', keep)
+          return keep
+        }),
+        (keep) =>
+          Effect.sync(() => {
+            element.removeEventListener('pointerdown', keep)
+            element.removeEventListener('mousedown', keep)
+          }),
+      )
+      return Message.CompletedCommand()
+    }),
+})
+
+const keyLabels: Record<TerminalKey, string> = {
+  Esc: 'Esc',
+  Up: '↑',
+  Down: '↓',
+  Enter: '⏎',
+  '1': '1',
+  '2': '2',
+  '3': '3',
+  Tab: 'Tab',
+  CtrlC: '^C',
+  ShiftTab: '⇧Tab',
+}
+
+const keysBar = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('keys'), h.OnMount(KeepFocus())],
+    [
+      h.button([h.Attribute('aria-label', 'Hide keyboard'), h.OnClick(Message.ClickedHideKeyboard())], ['⌄']),
+      ...terminalKeys.map((key) =>
+        h.button([h.Key(key), h.OnClick(Message.ClickedKey({ key }))], [keyLabels[key]]),
+      ),
+    ],
+  )
+
+const composerView = (composer: Composer, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('composer-area')],
+    [
+      composer.note ? h.p([h.Class('composer-note error')], [composer.note]) : h.empty,
+      h.form(
+        [h.Class('composer'), h.OnSubmit(Message.SubmittedComposer())],
+        [
+          h.textarea([
+            h.Value(composer.text),
+            h.OnInput((value) => Message.ChangedComposer({ value })),
+            h.Placeholder('Reply to the agent…'),
+            h.Rows(1),
+            h.Attribute('enterkeyhint', 'send'),
+            h.Attribute('autocapitalize', 'sentences'),
+            h.Attribute('autocorrect', 'on'),
+            h.Spellcheck(true),
+            h.OnKeyDownPreventDefault((key, mods) =>
+              key === 'Enter' && !mods.shiftKey ? Option.some(Message.SubmittedComposer()) : Option.none(),
+            ),
+          ]),
+          h.button(
+            [h.Type('submit'), h.Class('primary'), h.Disabled(composer.sending), h.OnMount(KeepFocus())],
+            [composer.sending ? 'Sending…' : 'Send'],
+          ),
+        ],
+      ),
+    ],
+  )
+
+const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const open = model.openSession
+  const home = model.homes.find((candidate) => candidate.pairing.id === open?.pairingId)
+  const session = home?.sessions.find((candidate) => candidate.id === open?.sessionId)
+  const back = h.button([h.Class('back'), h.OnClick(Message.ClickedBack())], ['‹ Queue'])
+  if (!open || !home || !session) {
+    return h.div(
+      [h.Class('session-screen')],
+      [h.header([h.Class('session-top')], [back]), h.p([h.Class('empty muted')], ['This session is gone.'])],
+    )
+  }
+  const header = h.header(
+    [h.Class('session-top')],
+    [
+      back,
+      h.div(
+        [h.Class('session-title')],
+        [
+          h.div([h.Class('row-title')], [session.title || session.id]),
+          h.div(
+            [h.Class('row-where')],
+            [`${stateLabel[session.state]} · ${where(home.pairing, session.host)}`],
+          ),
+        ],
+      ),
+    ],
+  )
+  if (home.api > 0 && home.api < homeTerminalApi) {
+    return h.div(
+      [h.Class('session-screen')],
+      [
+        header,
+        h.p(
+          [h.Class('empty muted')],
+          [
+            `attn on ${home.pairing.homeName} is too old to open terminals from a phone. Update it to the latest attn.`,
+          ],
+        ),
+      ],
+    )
+  }
+  return h.div(
+    [h.Class('session-screen')],
+    [
+      header,
+      session.terminalId
+        ? h.keyed('div')(
+            `${open.pairingId}/${session.terminalId}`,
+            [
+              h.Class('terminal-host'),
+              h.OnMount(TerminalMount({ pairingId: open.pairingId, terminalId: session.terminalId })),
+            ],
+            [],
+          )
+        : h.div([h.Class('terminal-host empty muted')], ['This session has no terminal.']),
+      model.terminalStatus ? h.p([h.Class('terminal-status muted')], [model.terminalStatus]) : h.empty,
+      keysBar(h),
+      composerView(model.composer, h),
+    ],
+  )
+}
+
 const waitingCount = (model: Model) => buildQueue(model.homes).waiting.length + askRows(model.homes).length
 
 const openAskView = (model: Model, h: HtmlBuilder<Message>): Html => {
@@ -958,48 +1274,57 @@ const zoomView = (model: Model, h: HtmlBuilder<Message>): Html => {
   )
 }
 
-const screenTitle = { queue: 'Queue', pairings: 'Pairings', ask: 'Ask' } as const
+const screenTitle = { queue: 'Queue', pairings: 'Pairings', ask: 'Ask', session: 'Session' } as const
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'attn',
-  body: h.div(
-    [h.Class('app')],
-    [
-      h.header(
-        [h.Class('top')],
-        [
-          model.screen === 'ask'
-            ? h.button([h.Class('back'), h.Type('button'), h.OnClick(Message.ClickedBack())], ['‹ Queue'])
-            : h.h1([], [screenTitle[model.screen]]),
-          model.screen === 'queue' && waitingCount(model) > 0
-            ? h.span([h.Class('waiting-count')], [`${waitingCount(model)} waiting`])
-            : h.empty,
-        ],
-      ),
-      h.main(
-        [],
-        [
-          model.screen === 'queue'
-            ? queueView(model, h)
-            : model.screen === 'ask'
-              ? openAskView(model, h)
-              : pairingsView(model, h),
-        ],
-      ),
-      zoomView(model, h),
-      h.nav(
-        [h.Class('tabs')],
-        [
-          h.button(
-            [h.Class(model.screen !== 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedQueueTab())],
-            ['Queue'],
-          ),
-          h.button(
-            [h.Class(model.screen === 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedPairingsTab())],
-            ['Pairings'],
-          ),
-        ],
-      ),
-    ],
-  ),
+  body:
+    model.screen === 'session'
+      ? h.div(
+          [h.Class('app'), h.Style({ height: `${Math.round(model.fullHeight - model.keyboardHeight)}px` })],
+          [sessionView(model, h)],
+        )
+      : h.div(
+          [h.Class('app')],
+          [
+            h.header(
+              [h.Class('top')],
+              [
+                model.screen === 'ask'
+                  ? h.button(
+                      [h.Class('back'), h.Type('button'), h.OnClick(Message.ClickedBack())],
+                      ['‹ Queue'],
+                    )
+                  : h.h1([], [screenTitle[model.screen]]),
+                model.screen === 'queue' && waitingCount(model) > 0
+                  ? h.span([h.Class('waiting-count')], [`${waitingCount(model)} waiting`])
+                  : h.empty,
+              ],
+            ),
+            h.main(
+              [],
+              [
+                model.screen === 'queue'
+                  ? queueView(model, h)
+                  : model.screen === 'ask'
+                    ? openAskView(model, h)
+                    : pairingsView(model, h),
+              ],
+            ),
+            zoomView(model, h),
+            h.nav(
+              [h.Class('tabs')],
+              [
+                h.button(
+                  [h.Class(model.screen !== 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedQueueTab())],
+                  ['Queue'],
+                ),
+                h.button(
+                  [h.Class(model.screen === 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedPairingsTab())],
+                  ['Pairings'],
+                ),
+              ],
+            ),
+          ],
+        ),
 })

@@ -12,7 +12,8 @@ The Cloud wire contract is `docs/protocol.md` in `SolenesInc/attn-cloud`. The
 cloud link is `internal/cloudlink` (home keys in the data directory as
 `cloud_sign_key`, `cloud_noise_key` and `cloud_home_id`), pairings are the
 `phone_pairings` table, the daemon side is `internal/daemon/phones.go`, the
-gateway is `internal/daemon/gateway.go`, the gateway API is
+gateway is `internal/daemon/gateway.go` and `gateway_terminal.go`, the phone
+app is `mobile/`, the gateway API is
 `internal/protocol/schema/gateway.tsp`, and `scripts/check-gateway-compat`
 refuses a gateway change that is not an addition. The phone's Noise framing is
 pinned by `internal/cloudlink/testdata/noise_vectors.json`.
@@ -24,7 +25,10 @@ pinned by `internal/cloudlink/testdata/noise_vectors.json`.
 - `pairing`: Settings → Phones shows a QR code per profile. Its secret works once, for 10 minutes, and the relay admits unknown devices only while a code is live. The first message the phone sends after the handshake writes the pairing.
 - `revoke`: removes the pairing, sends the relay the new allowlist, and closes the phone's conversation with that profile.
 - `gateway-hello`: the phone says hello with its api version. The home answers welcome, serving min(the phone's api, `GATEWAY_API_VERSION`), with the home's name and the pairing's profile, or refused with a reason.
-- `gateway-sessions`: after welcome, and again whenever one changes, every session of the pairing's profile, with its state mapped to the gateway's states. Sessions of other profiles never reach the phone.
+- `gateway-sessions`: after welcome, and again whenever one changes, every session of the pairing's profile, with its state mapped to the gateway's states and its main terminal. Sessions of other profiles never reach the phone.
+- `phone-terminal`: tapping a live session on the phone opens its terminal, fitted to the phone's width with rows for the screen with the keyboard closed. The phone asks for that size and becomes the size owner (`size-owner` in terminals.md); the desktop then shows the terminal scaled until someone uses it there. The home answers `terminal_screen` (the visible screen as ANSI), then output frames, coalesced every 16 ms and sent only while the phone's credit allows. A phone that falls more than 1 MiB behind gets a fresh screen instead of the backlog. The terminal attaches again after every reconnect. Opening the keyboard pans the terminal and never resizes it.
+- `phone-keys-bar`: one row under the terminal: hide the keyboard, Esc, ↑, ↓, ⏎, 1, 2, 3, Tab, ^C, ⇧Tab. A key sends its bytes as the person's keystrokes and keeps the keyboard open.
+- `phone-composer`: a text field with autocorrect and dictation. Send asks the home to `submit_prompt`: the session monitor pastes the text and presses Enter when the agent is at a turn boundary. The text stays until the home says it was delivered; a refusal shows the home's reason.
 
 ## How to get to it
 
@@ -44,12 +48,14 @@ Preconditions:
 
 - A relay. Run the relay of a checkout of `SolenesInc/attn-cloud` under workerd, as its `test/relay.test.ts` does, and add `export ATTN_CLOUD_URL=http://127.0.0.1:<port>` to `$DRIVE_ENV` before starting the daemon. Without `ATTN_CLOUD_URL` the daemon dials `https://cloud.attn.codes`.
 - Use the baseline instance with its app, or the daemon alone for the link and the protocol.
+- For the phone app, run `pnpm --dir mobile exec vite --port 5180` and open it in a browser at a phone's size. Pair it by pasting the QR code's text in Pairings.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-phones-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Off by default.** `./attn settings get phone_access_enabled` prints an empty line, which reads as off, and `ss -tnp` shows no connection from the daemon's pid to the relay.
 - **The person turns it on.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-experimental"]` natively, and click `[aria-label="Phone access"]` natively after `dom_native_point` scrolls it into view. `./attn settings get phone_access_enabled` prints `true`, and the daemon holds one connection to the relay. From the person's shell, `./attn settings set phone_access_enabled true` does the same.
 - **Pairing and revoke.** Click `[data-testid="settings-nav-phones"]` natively, then "Pair a phone" in the profile's section. A phone is the test device in `internal/testworld/phone.go`. The stack test drives it end to end: `./scripts/test-go.sh --packages -v -run 'Phone|TestDeletingAProfile|TestOnlyTheHome|TestUnreadableCloudKeys' ./cmd/attn`, against a Go stand-in for the relay, or against a real relay with `ATTN_TEST_CLOUD_URL=http://127.0.0.1:<port>`.
-- **The gateway.** `./scripts/test-go.sh --packages -v -run TestGateway ./internal/daemon`.
+- **The gateway.** `./scripts/test-go.sh --packages -v -run 'TestGateway|TestAPhone' ./internal/daemon`.
+- **The phone terminal.** Spawn a Claude Code session in the paired profile and tap it in the phone app. The terminal shows the agent at the phone's width, and `attn debug daemon-log --grep pty_resize` shows one resize to the phone's size. Answer a numbered menu with the keys bar, and send a prompt from the composer. In the desktop app, the tile shows the terminal scaled; clicking it takes the size back.
 - **Proof.** In `$P`, keep each `./attn settings` command's output, the `ss` lines, the test output, and `bridge capture_native_window_screenshot '{"path":"<P>/phones.png"}'` of Settings → Phones, `<P>` written out.
 
 ## Contexts
@@ -59,13 +65,15 @@ Preconditions:
 - **Restarts**: the home's keys and pairings survive a restart. A live QR code does not; show a new one. Keys attn cannot read stay in place; Settings → Phones names the file and how to start over.
 - **Desktop reconnects**: Settings → Phones reads the phones again on every new daemon connection.
 - **Relay deploys and network loss**: the relay drops busy sockets without a close frame. The home reconnects and every phone runs a new handshake.
-- **Version skew**: a phone decodes a session state it does not know as `unknown` and skips an event it does not know.
-- **Performance and idle cost**: with phone access off, nothing runs. With it on and no phone connected, the home sends one ping every 15 s.
+- **Version skew**: a phone decodes a session state it does not know as `unknown` and skips an event it does not know. A home older than gateway api 4 cannot open terminals; the phone says so instead of showing one.
+- **Several clients on one terminal**: the phone, the desktop and other phones each ask for their size; the last one the person used owns it, as `size-owner` in terminals.md describes. A phone that disconnects or closes the terminal hands the size on.
+- **Performance and idle cost**: with phone access off, nothing runs. With it on and no phone connected, the home sends one ping every 15 s. An open phone terminal that is quiet runs no timer on the home.
 
 ## Tests
 
 - Stack: `cmd/attn/phones_stack_test.go` (pair, reconnect after a cut, a second use of a code, revoke, a revoke between handshake and hello; a deleted profile's phones; unreadable keys; only the home connects; no connection while off).
 - Kernel: `internal/cloudlink/noise_vectors_test.go`, the vectors the phone's initiator checks too.
-- Wire: `internal/daemon/gateway_wire_test.go`.
+- Wire: `internal/daemon/gateway_wire_test.go`, `internal/daemon/gateway_terminal_wire_test.go` (screen then output, focus ownership and hand-back, submit_prompt, output within credit during a flood).
+- Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach).
 - App: `app/src/components/PhonesSettings.pairing.test.tsx`, `app/src/gateway/decode.test.ts`, and the switch in `app/src/components/SettingsModal.test.tsx`.
 - Script: `scripts/check-gateway-compat_test.sh`.
