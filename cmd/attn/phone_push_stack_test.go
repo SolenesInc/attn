@@ -148,3 +148,47 @@ func cmpPhone(phones []*testworld.Phone, a, b string) int {
 	}
 	return index(a) - index(b)
 }
+
+func TestEveryApprovalAnAgentNeedsPushesOnItsOwn(t *testing.T) {
+	t.Parallel()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	s.Start()
+	app := s.App()
+	setSetting(t, app, "auto_approve_enabled", "false")
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	phones := []*testworld.Phone{pairPhone(t, app, cloud, app.SelectedProfile(), "iPhone")}
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"), labelled("migrator"))
+	codex := s.Launched(session)
+	next := func() testworld.PushNote {
+		t.Helper()
+		return awaitPushesUntil(t, cloud, phones, func(openedPush) bool { return true })[0].note
+	}
+
+	app.TypeLine(session, "plan the release")
+	codex.Prompted()
+	codex.Reply("Should I ship version one? <!-- attn:state=waiting_input -->")
+	if note := next(); note.Kind != "waiting" || note.Text != "Should I ship version one?" {
+		t.Fatalf("the question pushed %+v", note)
+	}
+
+	app.TypeLine(session, "run the migration")
+	codex.Prompted()
+	codex.AskApproval()
+	if note := next(); note.Kind != "needs_approval" || note.Text != "" {
+		t.Fatalf("the first approval pushed %+v, want needs_approval without the earlier question", note)
+	}
+	app.AwaitScreen(session, "Allow the command to run?")
+	answered := len(app.Log())
+	app.TypeLine(session, "1")
+	if codex.Answered() == "" {
+		t.Fatal("the first approval took no answer")
+	}
+	testworld.AwaitSessionSince(app, answered, session, func(x protocol.Session) bool { return x.State != protocol.SessionStatePendingApproval })
+	codex.AskApproval()
+	if note := next(); note.Kind != "needs_approval" || note.SessionID != session {
+		t.Fatalf("the second approval in the same turn pushed %+v, want its own needs_approval push", note)
+	}
+}

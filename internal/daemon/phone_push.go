@@ -18,9 +18,9 @@ import (
 const phonePushConsumer = "phone_push"
 
 // phonePushFreshFor drops a push for a wait or ask that began longer ago, so a daemon restart or a consumer that
-// fell behind never floods the phone with old news. A push leaves 20 ms after the agent's reply, and the turn's
-// opening survives a restart: a wait 128 s old sent nothing after one, while a wait 4 s old was pushed again 71 ms
-// after it, under the same collapse id, so the phone replaces the first notification (s-h6j4pq).
+// fell behind never floods the phone with old news. A push leaves 20 ms after the agent's reply, and StateSince
+// survives a restart: a wait 128 s old sent nothing after one, while a wait 3 s old was pushed again 73 ms after
+// it, under the same collapse id, so the phone replaces the first notification (s-h6j4pq).
 const phonePushFreshFor = 2 * time.Minute
 
 // APNs caps a notification at 4096 bytes. At these caps the sealed, base64url-encoded note stays near 2.6 KB.
@@ -133,7 +133,7 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 		delete(pushes.pushedEpisode, sessionID)
 		return phonePushNote{}, false
 	}
-	var kind string
+	var kind, text string
 	switch session.State {
 	case protocol.SessionStateWaitingInput:
 		kind = phonePushWaiting
@@ -142,10 +142,12 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	default:
 		return phonePushNote{}, false
 	}
-	opened := protocol.Deref(session.TurnOpenedAt)
-	episode := string(session.State) + "@" + opened
-	if d.clock.Now().Sub(protocol.Timestamp(opened).Time()) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
+	episode := string(session.State) + "@" + session.StateSince
+	if d.clock.Now().Sub(protocol.Timestamp(session.StateSince).Time()) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
 		return phonePushNote{}, false
+	}
+	if kind == phonePushWaiting {
+		text = lastParagraphTail(d.lastAssistantMessage(ctx, sessionID), phonePushTextRunes)
 	}
 	pushes.pushedEpisode[sessionID] = episode
 	sum := sha256.Sum256([]byte(string(sessionID) + "\n" + episode))
@@ -154,7 +156,7 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 		SessionID:  string(sessionID),
 		Title:      clipRunes(d.phoneSessionTitle(session), phonePushTitleRunes),
 		Kind:       kind,
-		Text:       lastParagraphTail(d.lastAssistantMessage(ctx, sessionID), phonePushTextRunes),
+		Text:       text,
 		collapseID: hex.EncodeToString(sum[:16]),
 	}, true
 }
