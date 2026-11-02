@@ -90,20 +90,36 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 
 ## Send files to an agent from outside Attn
 
-A program or script on the computer that runs Attn can send files and a message
-to any running agent, local or on an outpost:
+A program on the computer that runs Attn can send files and a message to any
+running agent, local or on an outpost. The agent receives them as a message
+from you, so only a program you paired can send.
+
+Pair a program once:
 
 ```sh
-attn send <id> --file shot.png -m "The arrow marks the broken button" --json
+attn send pair --name "Capture"
+```
+
+Attn asks you to allow "Capture" and shows a 4-digit code. Check that the
+command prints the same code, then click **Allow**. The command prints a token
+once. Keep the token where other programs cannot read it, such as the macOS
+Keychain.
+
+Send with the token on stdin:
+
+```sh
+attn send <id> --token-stdin --file data.csv -m "Totals look off in March" < token
 ```
 
 `attn session list --json` gives each live session's id, label and host. Repeat
 `--file` to send more files. Attn types the message into the agent's
 conversation as yours. For each file, the message has an
 `attn agent attachment … --out <path>` command that saves the file where the
-agent runs, including on an outpost. `--json` prints the saved capture with an
-id, name, media type and size for each file. Run `attn send --help` for
-the details.
+agent runs, including on an outpost.
+
+To see paired programs, open the **Paired senders** list in Settings or run
+`attn send senders`. To stop a program sending, click **Remove** there or run
+`attn send unpair <name>`. Run `attn send --help` for the details.
 
 ## Details
 

@@ -1,5 +1,6 @@
 import { OutpostsSettings } from './OutpostsSettings';
 import { PhonesSettings } from './PhonesSettings';
+import { SendersSettings } from './SendersSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AnalyticsSettings } from './Analytics/AnalyticsSettings';
@@ -229,6 +230,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       return state.outpostsEnabled ? <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} /> : null;
     case 'phones':
       return <PhonesSettings />;
+    case 'senders':
+      return <SendersSettings />;
     case 'experimental':
       return (
         <ExperimentalSettings

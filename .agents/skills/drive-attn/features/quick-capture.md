@@ -19,6 +19,8 @@ an experimental setting, off by default, and the panel is macOS only.
 - `capture-history`: recent messages, each marked "Read" once its agent retrieved the message from its inbox, and "Sent" before.
 - `capture-delivery`: the message lands as user input in the mailbox's session, waking an asleep member.
 - `capture-guidance`: what attn tells agents about messages from quick capture.
+- `capture-send`: a paired program sends files and a message to any running session, local or on an outpost, with `attn send`. It lands like a panel capture, as user input.
+- `capture-senders`: pairing a program, the approval dialog that allows or denies it, and listing and removing paired senders.
 
 ## How to get to it
 
@@ -29,6 +31,15 @@ an experimental setting, off by default, and the panel is macOS only.
 - The panel (`app/src/components/QuickCapture.tsx`): the "Message" field, "To: <mailbox>" (`[aria-label="Send to"]`, ⌘K) with its list, ⌘1 to ⌘4 for the first four mailboxes, Enter to send, Shift+Enter for a new line, Escape closes the list first, then the history, then the panel. Dragging the panel's surface outside the message field and its controls moves the panel. In history, only the heading drags. Each time the panel opens, it centers on the screen that has the pointer. "Recent messages" shows the history (`app/src/components/QuickCaptureHistory.tsx`), and attached files show as previews (`app/src/components/QuickCaptureAttachmentPreview.tsx`).
 - **Settings → Experimental**: the "Quick Capture" switch (`[role="switch"][aria-label="Quick Capture"]`, `app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do with it: the message appears in the chief's or member's terminal as typed text, and the history marks it "Read" once the agent retrieved it.
+
+- The sender approval dialog: it opens in the main window whenever a program asks to pair, shows the program's name and a 4-digit code, and offers Deny and Allow.
+- **Settings → Paired senders**: each paired program with when it paired and was last used, and Remove.
+
+### Programs
+
+- `attn send pair --name <name> [--json]` asks the user to pair the program and waits for the approval dialog. It prints the code, then a token once (`cmd/attn/send.go`, `internal/daemon/senders.go`).
+- `attn send <session> --token-stdin [--file <path>]... [-m <text>] [--json]` uploads the files and sends the capture to that session. Without a paired sender's token, the daemon refuses.
+- `attn send senders [--json]` and `attn send unpair <name|id>` list and remove paired senders.
 
 ### Agents
 
@@ -85,12 +96,14 @@ EOF
 - **A file for the agent.** Put an image on the clipboard, as ⌃⇧⌘4 and a selection does. Run `osascript -e "set the clipboard to (read (POSIX file \"$PWD/docs/banner.png\") as «class PNGf»)"`, open the panel as above, then run `bridge native_key '{"window":"capture","key":"v","modifiers":["command"]}'`. `bridge capture_state '{"attachmentCount":1,"settled":true}'` returns with one file. A send resets the mailbox to chief, so select Fern again with `bridge native_key '{"window":"capture","key":"2","modifiers":["command"]}'` and check `bridge capture_state '{"mailbox":"fern"}'` before pressing Enter. The fixture runs the message's `attn agent attachment` command. `./attn agent peek fern` shows `Saved file to <P>/received.png`, and `file "$P/received.png"` identifies the PNG. Reopen the panel and its history to see the message marked retrieved. A file dropped on the panel attaches the same way, but the drive has no app to drag one from: drop one from Finder by hand and say so in the report.
 - **Delivery to the chief.** Make a chief as [crew.md](crew.md) does, open the panel, leave the mailbox on `chief` (⌘1) and send. Peek on the chief shows the typed message. Without a chief, the message waits for the next one.
 - **Guidance at launch.** Fern's session starts after quick capture is on, woken by the send above or by `./attn crew wake fern`. `grep -c "The user can send you messages from Quick Capture" $C/.attn-mock-agent/*.jsonl` prints 1 for that session's transcript. A plain agent gets none. To check, run `Q=$(mktemp -d /tmp/drive-attn-quick-capture-plain.XXXX) && echo "export Q=$Q" >> $DRIVE_ENV && echo '{"version": 1, "turns": []}' > $Q/.attn-mock-agent.json`, then `wsctl add-session --cwd $Q --agent claude --label qc-plain --id qc-plain`. Re-run `ls $Q/.attn-mock-agent/` until it lists a `.jsonl` file, with a deadline that fails the run. The same grep on that file prints 0.
+- **Pair and send from a program.** Daemon only is enough. Start `./attn send pair --name Drive --json > $P/pair.jsonl &` and capture its PID from `$!`. Run `wsctl request --json '{"cmd":"senders_get"}' --event senders_updated`: `requests` holds Drive with the code that the first line of `$P/pair.jsonl` shows. With the app, the dialog shows the same name and code. Click **Allow** natively. Without the app, the decision needs the authenticated app, so `wsctl` gets `only the authenticated attn app can allow or deny a sender`. Once allowed, the second line of `$P/pair.jsonl` holds the token. Make a session with `wsctl add-session --cwd $C2 --agent claude --label send-target --id send-target`, then run `jq -r .token <(sed -n 2p $P/pair.jsonl) | ./attn send send-target --token-stdin --file docs/banner.png -m "From a program" --json`. `./attn agent peek send-target` shows the typed message with its `attn agent attachment` line. `./attn send senders` lists Drive with a last-used time. `./attn send unpair Drive`, and the same send now fails naming `attn send pair`.
 - **Proof.** In `$P`, keep `bridge capture_state` after each step (its `latencyMs` times each opening), `input_driver frontmost` before and after each opening, `./attn crew list --json` and `./attn agent peek fern` after the send, `./attn settings get quick_capture_enabled`, and the guidance step's two `grep -c` outputs with the `ls $Q/.attn-mock-agent/` listing. Name each file for its way in, such as `quick-capture-shortcut-state.json`.
 
 ## Contexts
 
 - **Durability across restarts**: the draft, its files and the binding survive app restarts, and a sent message is a durable inbox item that waits for its mailbox's session.
 - **Linux**: the panel, the global shortcut and the File menu item are macOS only. The `quick-capture` scenario skips Linux. Messages already in an inbox, and `attn agent attachment`, work where the daemon and CLI run on Linux.
+- **Outposts**: `attn send` targets a session on an outpost by its id. That session's `attn agent attachment` forwards to the home daemon, which holds the files. Pairing and paired senders live on the home.
 - **Profiles**: attn keeps drafts per profile, and the panel offers the chief and the crew members of the profile the app shows. `attn agent attachment` reads files only from the session's profile. Outside a session, `--profile` picks one when there are several.
 - **Performance and idle cost**: the panel opens with the message field focused. The scenario records the time from the key press to focus in `opening-latency.json`. Nothing measures the hidden panel's idle cost. When a change touches the panel, check the panel with `docs/internal/perf-testing.md`.
 - **Harnesses**: the message is typed as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
@@ -99,7 +112,7 @@ EOF
 ## Tests
 
 - Wire: `internal/daemon/quick_captures_wire_test.go`.
-- Stack: `cmd/attn/quick_captures_stack_test.go`, `app/e2e/quick-capture-history.spec.ts`.
+- Stack: `cmd/attn/quick_captures_stack_test.go`, `cmd/attn/send_stack_test.go` (pairing, sending to a local and an outpost session, unpair), `app/e2e/quick-capture-history.spec.ts`.
 - Scenario: `quick-capture`.
 - App: `app/src/App.quickCapture.test.tsx`.
 

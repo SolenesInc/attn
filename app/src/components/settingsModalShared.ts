@@ -56,6 +56,7 @@ export type SettingsSectionID =
   | 'connectivity'
   | 'outposts'
   | 'phones'
+  | 'senders'
   | 'plugins'
   | 'backgroundTasks'
   | 'eventBus'

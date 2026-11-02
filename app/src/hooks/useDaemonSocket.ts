@@ -13,6 +13,7 @@ import { useTerminalRefusals } from '../store/terminalRefusals';
 import { useToastStore } from '../store/toasts';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
 import { handlePhoneDaemonEvent } from './daemonPhoneEvents';
+import { handleSenderDaemonEvent } from './daemonSenderEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
@@ -1198,6 +1199,7 @@ export function useDaemonSocket({
             setHasReceivedInitialState(true);
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: 'senders_get' }));
             if (lastTerminalThemeRef.current && ws.readyState === WebSocket.OPEN) {
               const theme = lastTerminalThemeRef.current;
               ws.send(JSON.stringify({
@@ -2356,6 +2358,7 @@ export function useDaemonSocket({
             if (handleAskDaemonEvent(data, pending)) break;
             if (handleSharedCodexDaemonEvent(data, pending)) break;
             if (handlePhoneDaemonEvent(data, pending)) break;
+            if (handleSenderDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3606,6 +3609,14 @@ export function useDaemonSocket({
   const sendPhonePairingRevoke = useCallback((deviceId: string, profileId: string): Promise<true> =>
     sendRequest('phone_pairing_revoke', { device_id: deviceId, profile_id: profileId }, 'Revoking the phone timed out'), [sendRequest]);
 
+  const sendSendersGet = useCallback(() => sendOrQueueCommand({ cmd: 'senders_get' }), [sendOrQueueCommand]);
+
+  const sendSenderPairDecide = useCallback((pairingId: string, allow: boolean): Promise<true> =>
+    sendRequest('sender_pair_decide', { pairing_id: pairingId, allow }, 'Deciding the pairing timed out'), [sendRequest]);
+
+  const sendSenderUnpair = useCallback((senderId: string): Promise<true> =>
+    sendRequest('sender_unpair', { sender: senderId }, 'Removing the sender timed out'), [sendRequest]);
+
   const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
     sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
 
@@ -4333,6 +4344,9 @@ export function useDaemonSocket({
     sendPhonesGet,
     sendPhonePairBegin,
     sendPhonePairingRevoke,
+    sendSendersGet,
+    sendSenderPairDecide,
+    sendSenderUnpair,
     sendInstallCodexUpdate,
     sendRecentFiles,
     sendGetRecentLocations,

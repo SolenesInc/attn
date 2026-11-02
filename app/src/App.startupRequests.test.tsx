@@ -12,13 +12,14 @@ describe('App startup requests', () => {
 
     expect(daemon.sent.map((command) => command.cmd)).toEqual([
       'client_hello',
+      'senders_get',
       'set_terminal_theme',
       'set_client_presence',
       'notification_list',
     ]);
 
     await daemon.idle();
-    expect(daemon.sent).toHaveLength(4);
+    expect(daemon.sent).toHaveLength(5);
     expect(daemon.connections).toHaveLength(1);
   });
 

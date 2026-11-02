@@ -558,6 +558,12 @@ export function useSettingsModalState({
             description: 'Pair phones with this home and revoke them.',
             keywords: 'phones phone mobile iphone pair pairing qr code revoke attn cloud relay',
           }] : []),
+          {
+            id: 'senders',
+            label: 'Paired senders',
+            description: 'Programs outside attn that send files and messages as you.',
+            keywords: 'senders paired sender pair pairing send program script remove unpair attn send',
+          },
         ],
       },
       {

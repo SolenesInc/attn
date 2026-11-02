@@ -4,6 +4,7 @@ import { BannerStack } from '../components/BannerStack';
 import { ChordLeaderHud } from '../components/ChordLeaderHud';
 import { DelegationChainProvider } from '../components/DelegationChain';
 import { DiagnosticReportPrompt } from '../components/DiagnosticReportPrompt';
+import { SenderPairingPrompt } from '../components/SenderPairingPrompt';
 import { OpenPRLauncherProgress } from '../components/OpenPRLauncherProgress';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
@@ -141,6 +142,7 @@ export function AppSurface() {
                 />
               )}
               <AppPreferences />
+              <SenderPairingPrompt />
               <CalloutOverlay />
             </div>
           </DelegationChainProvider>

@@ -35,6 +35,7 @@ describe('SettingsModal sections', () => {
       'Background agents',
       'Delegation',
       'GitHub hosts',
+      'Paired senders',
       'Plugins',
       'Experimental',
       'Task runner',
