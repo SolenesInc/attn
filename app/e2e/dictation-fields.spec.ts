@@ -148,6 +148,18 @@ test('a replaced field gets an offer instead of an insert, and a profile change 
   expect(await page.evaluate(() => window.__dictation.canceled)).toContain(second);
 });
 
+test('sending the draft while recording offers the transcript instead of writing it into the next draft', async ({ page }) => {
+  await open(page);
+  await typeInto(page, message(page), 'first draft ');
+  const recording = await record(page);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(state(page, 'sent')).toHaveText(JSON.stringify(['first draft ']));
+  await message(page).focus();
+  await transcribe(page, recording, 'for the first draft');
+  await expect(page.getByTestId('dictation-card')).toContainText('nothing was inserted');
+  await expect(message(page)).toHaveValue('');
+});
+
 test('a transcript that arrives during IME composition waits until the composition ends', async ({ page }) => {
   await open(page);
   await typeInto(page, message(page), 'x');

@@ -78,7 +78,7 @@ export class TrackedField {
   private value: string;
   private ranges = new Set<Range>();
   private applying: { range: Range; text: string } | null = null;
-  private readonly onInput = () => this.observe();
+  private readonly onInput = () => this.observe('edited');
 
   constructor(readonly element: TextField) {
     this.value = element.value;
@@ -106,7 +106,7 @@ export class TrackedField {
     return range.intact ? this.element.value.slice(range.start, range.end) : null;
   }
 
-  private observe() {
+  private observe(cause: 'edited' | 'replaced' = 'replaced') {
     const after = this.element.value;
     if (after === this.value) return;
     if (this.applying) {
@@ -114,10 +114,12 @@ export class TrackedField {
       const edit = { from: range.start, to: range.end, inserted: text.length };
       for (const other of this.ranges) if (other !== range) mapRange(other, edit);
       range.end = range.start + text.length;
-    } else {
+    } else if (cause === 'edited') {
       const caret = document.activeElement === this.element ? this.element.selectionEnd : null;
       const edit = diff(this.value, after, caret);
       for (const range of this.ranges) mapRange(range, edit);
+    } else {
+      for (const range of this.ranges) range.intact = false;
     }
     this.value = after;
   }
