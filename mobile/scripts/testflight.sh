@@ -61,6 +61,9 @@ run_logged() {
   if ! "$@" >"${log}" 2>&1; then
     printf '\n%s failed. Its errors:\n' "${name}" >&2
     grep -E '(^|: )error:|^error|\*\* .* FAILED \*\*' "${log}" | sort -u >&2 || tail -n 30 "${log}" >&2
+    if grep -q 'Error Downloading App Information' "${log}"; then
+      fail "App Store Connect has no app record for codes.attn.mobile, or the API key cannot see it. Create it once as docs/internal/phone-app-releases.md says (One-time setup), then run this script again. The full log is ${log}"
+    fi
     fail "${name} failed; the full log is ${log}"
   fi
 }
@@ -105,18 +108,11 @@ cat >"${OUT_DIR}/ExportOptions.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-if ! xcodebuild -exportArchive \
+run_logged upload xcodebuild -exportArchive \
   -archivePath "${OUT_DIR}/App.xcarchive" \
   -exportOptionsPlist "${OUT_DIR}/ExportOptions.plist" \
   -exportPath "${OUT_DIR}/export" \
-  "${AUTH_FLAGS[@]}" >"${OUT_DIR}/upload.log" 2>&1; then
-  printf '\nupload failed. Its errors:\n' >&2
-  grep -E '(^|: )error:|^error|\*\* .* FAILED \*\*' "${OUT_DIR}/upload.log" | sort -u >&2 || tail -n 30 "${OUT_DIR}/upload.log" >&2
-  if grep -q 'Error Downloading App Information' "${OUT_DIR}/upload.log"; then
-    fail "App Store Connect has no app record for codes.attn.mobile, or the API key cannot see it. Create it once as docs/internal/phone-app-releases.md says (One-time setup), then run this script again. The full log is ${OUT_DIR}/upload.log"
-  fi
-  fail "upload failed; the full log is ${OUT_DIR}/upload.log"
-fi
+  "${AUTH_FLAGS[@]}"
 
 step "Done"
 echo "Uploaded attn ${VERSION} (${BUILD_NUMBER}) to App Store Connect."

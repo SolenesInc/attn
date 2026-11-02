@@ -5,6 +5,22 @@ attn's phone app (`mobile/`) reaches testers through TestFlight.
 uploads it to App Store Connect. Testers install it as the guide's
 [phone app](../guide/reference/phone-app.md) page says.
 
+## One-time setup
+
+App Store Connect needs two things before the first upload, besides the API
+key under [Secrets](#secrets). Without them the upload fails with
+`Error Downloading App Information`, and the script says the app record is
+missing.
+
+1. The bundle id `codes.attn.mobile`, registered in team `VMGP8G85TK` under
+   [Identifiers](https://developer.apple.com/account/resources/identifiers/list).
+   Development builds sign with the team's wildcard id, and archiving does not
+   register the explicit one.
+2. The app record, made in [Apps](https://appstoreconnect.apple.com/apps) with
+   **+ → New App**: platform iOS, name `attn.codes` (`attn` is taken),
+   primary language English (U.S.), bundle id `codes.attn.mobile`, SKU
+   `attn-mobile`, full access. The bundle id of an app record cannot change.
+
 ## Upload a build
 
 Run the script on the Mac, from a checkout of the commit you want to ship:
@@ -23,15 +39,23 @@ The script:
 4. Signs the archive for App Store distribution and uploads it.
 
 Signing is automatic. With the API key, Xcode creates the distribution
-certificate in the cloud and the App Store provisioning profiles for every
-target in the archive, including app extensions. The Mac needs no signing
+certificate in the cloud and the App Store provisioning profiles. The Mac needs no signing
 identity of its own.
 
 The archive and the `archive.log` and `upload.log` files land in
 `mobile/ios/App/build/testflight-<build>/`. When a step fails, the script prints
 that step's `error:` lines and the path of its log.
 
-App Store Connect processes a build before TestFlight offers it.
+App Store Connect processes a build before TestFlight offers it. The first
+builds took 2 to 4 minutes.
+
+## Answer export compliance
+
+App Store Connect holds each new build at **Missing Compliance** until someone
+says whether the app uses encryption beyond what Apple's operating system
+provides. TestFlight does not offer the build until then. Open
+**Apps → attn.codes → TestFlight**, click the build, and answer the questions
+next to **Missing Compliance**.
 
 ## Secrets
 
@@ -59,21 +83,6 @@ rm ~/Downloads/AuthKey_<key id>.p8
 
 This key is not the APNs key that Attn Cloud uses to send push notifications.
 
-## One-time setup
-
-App Store Connect needs two things before the first upload. Without them the
-upload fails with `Error Downloading App Information`, and the script says the
-app record is missing.
-
-1. The bundle id `codes.attn.mobile`, registered in team `VMGP8G85TK` under
-   [Identifiers](https://developer.apple.com/account/resources/identifiers/list).
-   Development builds sign with the team's wildcard id, and archiving does not
-   register the explicit one.
-2. The app record, made in [Apps](https://appstoreconnect.apple.com/apps) with
-   **+ → New App**: platform iOS, name `attn`, primary language English (U.S.),
-   bundle id `codes.attn.mobile`, SKU `attn-mobile`, full access. The bundle id
-   of an app record cannot change.
-
 ## Add a tester
 
 Testers in the team are internal testers. They get each build once processing
@@ -81,8 +90,8 @@ ends, with no review by Apple.
 
 1. In App Store Connect, open **Users and Access** and invite the person with
    the **Developer** role, or a higher one.
-2. Open **Apps → attn → TestFlight**, choose the internal testing group, and
-   add the person.
+2. Open **Apps → attn.codes → TestFlight**, choose the internal testing
+   group, and add the person.
 
 People outside the team are external testers. Apple reviews the first build
 that goes to an external group.

@@ -14,13 +14,14 @@ Store.
    tester. Give them the email address of your Apple Account.
 2. On the iPhone, install **TestFlight** from the App Store.
 3. Open the invitation email from TestFlight on the iPhone and tap
-   **View in TestFlight**. If you are an internal tester, TestFlight lists attn
-   without an email.
-4. In TestFlight, tap **attn**, then **Install**.
+   **View in TestFlight**. If you are an internal tester, TestFlight lists the
+   app without an email.
+4. In TestFlight, tap **attn.codes**, then **Install**. The app shows on the
+   Home Screen as **attn**.
 
 TestFlight installs new builds as they come out when **Automatic Updates** is on
-for attn. A TestFlight build stops opening 90 days after it was uploaded, so
-keep updates on.
+for attn.codes. A TestFlight build stops opening 90 days after it was uploaded,
+so keep updates on.
 
 ## Pair the phone with a profile
 
