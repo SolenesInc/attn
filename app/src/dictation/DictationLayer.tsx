@@ -69,13 +69,20 @@ function Pill({ dictation, controller }: { dictation: Dictation; controller: Dic
     actions = <><Action primary testId="dictation-stop" onClick={() => controller.stop(key)}>Stop</Action><Action testId="dictation-cancel" onClick={() => controller.cancel(key)}>Cancel</Action></>;
   } else if (phase === 'transcribing') {
     text = dictation.notice ?? 'Transcribing…';
+  } else if (phase === 'refining' && dictation.target === 'paste') {
+    text = <>Refining… <kbd>Enter</kbd> pastes the original</>;
+    actions = <><Action primary testId="dictation-paste-original" onClick={() => controller.choose(key, dictation.raw ?? '')}>Paste original</Action><Action testId="dictation-cancel" onClick={() => controller.discard(key)}>Cancel</Action></>;
   } else if (phase === 'refining') {
     text = 'Refining…';
     actions = <Action testId="dictation-keep-original" onClick={() => controller.discard(key)}>Keep original</Action>;
   } else if (dictation.refineError) {
     text = dictation.refineError;
     tone = 'error';
-    actions = <><Action testId="dictation-retry" onClick={() => controller.retry(key)}>Retry</Action><Action onClick={() => controller.discard(key)}>Dismiss</Action></>;
+    actions = <>
+      {dictation.target === 'paste' && <Action primary testId="dictation-paste-original" onClick={() => controller.choose(key, dictation.raw ?? '')}>Paste original</Action>}
+      <Action testId="dictation-retry" onClick={() => controller.retry(key)}>Retry</Action>
+      <Action onClick={() => controller.discard(key)}>{dictation.target === 'paste' ? 'Discard' : 'Dismiss'}</Action>
+    </>;
   } else {
     text = dictation.notice ?? '';
     tone = 'error';

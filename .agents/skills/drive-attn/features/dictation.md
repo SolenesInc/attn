@@ -10,10 +10,10 @@ runs and exits when dictation turns off or the app quits. After transcribing,
 the daemon asks a harness's light model, with tools off, to fix punctuation,
 fillers and explicit self-corrections without changing what was said. The
 original stays available. The dictation shortcut (Control+Shift+Space by
-default) starts and stops a recording in the focused text field of an attn
-window: an input or textarea in the main window or Quick Capture. The app owns
-the microphone only while recording. Editors, terminals and browser pages come
-in a later slice of the dictation plan.
+default) starts and stops a recording at the cursor in an attn window: an input or
+textarea in the main window or Quick Capture, a markdown editor, or a terminal.
+The app owns the microphone only while recording. Browser pages come in a later
+slice of the dictation plan.
 
 ## Sub-features
 
@@ -25,12 +25,13 @@ in a later slice of the dictation plan.
 - `dictation-refine-limit`: each refinement must answer within 15 s plus a quarter of the recording's duration, or it fails naming both and the original is kept.
 - `dictation-refine-cancel`: the app cancels a pending refinement, or closes its connection, and the harness process stops.
 - `dictation-refine-harness`: the `dictation.refinement_agent` setting picks Claude (the default) or Codex. Refinement uses that harness's light model and respects `headless_tasks.enabled`.
-- `dictation-record`: the shortcut toggles a recording for the focused text field; the pill shows Starting the microphone…, Listening with a clock, Transcribing… and Refining…, with Stop and Cancel while recording; Escape cancels too, before any other Escape handler. A recording keeps going when the person switches windows or leaves attn; while it records, the shortcut works in every app, so it stops from anywhere. Without a writable field the pill says why and nothing records.
+- `dictation-record`: the shortcut toggles a recording for the focused text field, markdown editor or terminal; the pill shows Starting the microphone…, Listening with a clock, Transcribing… and Refining…, with Stop and Cancel while recording; Escape cancels too, before any other Escape handler. A recording keeps going when the person switches windows or leaves attn; while it records, the shortcut works in every app, so it stops from anywhere. Without a writable target the pill says why and nothing records.
 - `dictation-microphone`: the first recording asks macOS for microphone access. When access is off, the pill names it and offers Open Privacy Settings. A microphone that changes or disconnects mid-recording ends the recording and transcribes what was recorded.
-- `dictation-insert`: Insert at cursor (setting `dictation.interaction` = `insert_at_cursor`, the default) types the transcript where the recording started, through the field's own editing, then replaces only that text with the refined version as its own undo step. Edits elsewhere, the caret and the focused field are kept. Editing, deleting or undoing the dictated text turns the refined version into an offer card.
+- `dictation-insert`: Insert at cursor (setting `dictation.interaction` = `insert_at_cursor`, the default) types the transcript where the recording started, through the field's own editing, then replaces only that text with the refined version as its own undo step. Edits elsewhere, the caret and the focused field are kept. Editing, deleting or undoing the dictated text turns the refined version into an offer card. Markdown editors do the same through their own history, and ask for markdown-aware refinement.
+- `dictation-terminal`: in a terminal, Insert at cursor waits for the refined text and pastes it once through the terminal's ordinary paste, bracketed when the program enabled bracketed paste. While it waits, the pill offers Paste original, and Enter in that terminal pastes the original instead of reaching the program. Enter anywhere else keeps its meaning. Nothing is pasted when the terminal's runtime was replaced, exited or became unreachable before the paste; the card offers the text instead. No submit key is added, and a multiline paste without bracketed paste can still run shell lines, as any paste does.
 - `dictation-compare`: Compare first (`compare_first`) shows the original and the refined text with their differences, and inserts only the version chosen.
 - `dictation-offer`: a card with Use original / Use refined (or Insert at cursor), Copy and Discard, shown when the field changed, was replaced or closed before the text could go in.
-- `dictation-refine-failure`: a failed or timed-out refinement shows the daemon's text, which ends "Original kept", with Retry and Dismiss; Keep original cancels a pending refinement.
+- `dictation-refine-failure`: a failed or timed-out refinement shows the daemon's text, which ends "Original kept", with Retry and Dismiss (in a terminal, Paste original, Retry and Discard); Keep original cancels a pending refinement.
 - `dictation-shortcut`: Keyboard Shortcuts lists "Dictation · in attn windows" with Change, Reset and Turn off; setting `dictation.shortcut`, where empty turns it off.
 
 ## How to get to it
@@ -39,7 +40,7 @@ in a later slice of the dictation plan.
 
 - **Settings → Experimental** (`app/src/components/SettingsModalSections.tsx`, `DictationSetting`): the "Dictation" switch, the status `[data-testid="settings-dictation-status"]`, `[data-testid="settings-dictation-retry"]` and `[data-testid="settings-dictation-remove"]`. Only a packaged macOS app shows the row. While dictation is on, "When dictation finishes" picks Insert at cursor or Compare first.
 - **Keyboard Shortcuts** (`app/src/components/ShortcutEditorModal.tsx`, `NativeShortcutEditor`): "Dictation · in attn windows".
-- **The dictation shortcut** in any attn text field: press to start, press again to stop. The pill (`[data-testid="dictation-pill"]`) has Stop (`dictation-stop`), Cancel (`dictation-cancel`), Keep original (`dictation-keep-original`) and Retry (`dictation-retry`); the card (`[data-testid="dictation-card"]`) has `dictation-use-original`, `dictation-use-refined` and `dictation-discard`. Card and pill buttons never take focus from the field.
+- **The dictation shortcut** in any attn text field, markdown editor or terminal: press to start, press again to stop. The pill (`[data-testid="dictation-pill"]`) has Stop (`dictation-stop`), Cancel (`dictation-cancel`), Keep original (`dictation-keep-original`), Paste original (`dictation-paste-original`, terminals) and Retry (`dictation-retry`); the card (`[data-testid="dictation-card"]`) has `dictation-use-original`, `dictation-use-refined` and `dictation-discard`. Card and pill buttons never take focus from the field.
 - Their own shell: `attn settings set dictation_enabled true|false`, `attn settings set dictation.refinement_agent claude|codex` (empty restores Claude), `attn settings set dictation.interaction insert_at_cursor|compare_first` and `attn settings set dictation.shortcut <chord>`.
 
 ### Agents
@@ -104,6 +105,7 @@ Codex reads its login from the scratch tool home, so copy the credential in. Cla
 
 - App: `app/src/App.dictationSetup.test.tsx`.
 - Fields: `app/e2e/dictation-fields.spec.ts` drives real controlled fields in WebKit with fake native and refinement ports (`app/test-harness/harnesses/DictationFieldsHarness.tsx`).
+- Editors and terminals: `app/e2e/dictation-targets.spec.ts` drives a real markdown editor and a real terminal pane over the mock PTY, and asserts the exact bytes written (`app/test-harness/harnesses/DictationTargetsHarness.tsx`).
 - Helper: `cargo test --manifest-path app/speech/Cargo.toml` (the stdio protocol before prepare) and `scripts/verify-speech-helper.py check` (download, resume, verification, dictation, cancel, crash and lease exit against the real model).
 - Wire: `internal/daemon/dictation_wire_test.go` (refinement).
 - Live corpus: `scripts/dictationrefineprobe`, run by hand against real harnesses.

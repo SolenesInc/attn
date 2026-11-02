@@ -6,7 +6,7 @@ import type { DictationInteraction } from '../../src/dictation/settings';
 import { useEscapeStack } from '../../src/hooks/useEscapeStack';
 import type { HarnessProps } from '../types';
 
-interface DictationProbe {
+export interface DictationProbe {
   press(): void;
   update(update: NativeUpdate): void;
   started: number[];
@@ -24,7 +24,7 @@ declare global {
   interface Window { __dictation: DictationProbe }
 }
 
-function createProbe() {
+export function createProbe() {
   let onRequest = () => {};
   let onUpdate: (update: NativeUpdate) => void = () => {};
   let next = 0;

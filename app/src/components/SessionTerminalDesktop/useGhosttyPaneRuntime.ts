@@ -45,6 +45,7 @@ export interface GhosttyPaneRuntime {
   setTerminalHandle: (paneId: string, handle: GhosttyTerminalHandle | null) => void;
   handleTerminalReady: (paneId: string) => (terminal: GhosttyTerminalHandle) => Promise<void>;
   handleTerminalInput: (paneId: string) => (data: string, source?: string, traceId?: string) => void;
+  handleDictationPaste: (paneId: string) => (data: string, runtimeId: string) => boolean;
   handleTerminalResize: (paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => void;
   focusPane: (paneId: string, retries?: number) => void;
   fitPane: (paneId: string) => void;
@@ -389,13 +390,12 @@ export function useGhosttyPaneRuntime(
     }
   }, [cancelRuntimeConnection, handleTerminalReady, panes, terminalsLive]);
 
-  const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
-    const pane = paneFor(paneId);
-    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+  const deliverInput = useCallback((pane: PaneRuntimeSpec | undefined, data: string, source?: string, traceId?: string) => {
+    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return false;
     const typed = isTypedInput(source);
     if (!reachable(pane)) {
       if (typed) useTerminalRefusals.getState().refused(pane.runtimeId, 0);
-      return;
+      return false;
     }
     if (typed) useTerminalRefusals.getState().sent(pane.runtimeId);
     if (import.meta.env.DEV && pane.testSessionId) {
@@ -406,7 +406,17 @@ export function useGhosttyPaneRuntime(
       testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data, source });
     }
     void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}), ...(traceId ? { traceId } : {}) });
-  }, [paneFor]);
+    return true;
+  }, []);
+
+  const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
+    deliverInput(paneFor(paneId), data, source, traceId);
+  }, [deliverInput, paneFor]);
+
+  const handleDictationPaste = useCallback((paneId: string) => (data: string, runtimeId: string) => {
+    const pane = paneFor(paneId);
+    return pane?.runtimeId === runtimeId && deliverInput(pane, data, 'user');
+  }, [deliverInput, paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {
     if (!isActiveSessionRef.current) return;
@@ -446,6 +456,7 @@ export function useGhosttyPaneRuntime(
     setTerminalHandle,
     handleTerminalReady,
     handleTerminalInput,
+    handleDictationPaste,
     handleTerminalResize,
     focusPane: (paneId: string, retries = 20) => {
       recordFocus(paneId, retries);
@@ -481,5 +492,5 @@ export function useGhosttyPaneRuntime(
     injectPaneBytes: async (paneId: string, bytes: Uint8Array) => { const terminal = get(paneId); if (!terminal) return false; await terminal.write(bytes); return true; },
     injectPaneBase64: async (paneId: string, data: string) => { const terminal = get(paneId); if (!terminal) return false; await terminal.write(decodePtyBytes(data)); return true; },
     drainPaneTerminal: async (paneId: string) => { const terminal = get(paneId); if (!terminal) return false; await terminal.drain(); return true; },
-  }), [activePaneId, emptyContent, emptyStyle, get, handleTerminalInput, handleTerminalReady, handleTerminalResize, setTerminalHandle]);
+  }), [activePaneId, emptyContent, emptyStyle, get, handleDictationPaste, handleTerminalInput, handleTerminalReady, handleTerminalResize, setTerminalHandle]);
 }

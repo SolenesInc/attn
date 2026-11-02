@@ -2,8 +2,8 @@ import { writableField, type TextField } from '../utils/textFields';
 
 export function missingTargetReason(element: Element | null): string {
   if (!element || element === document.body) return 'Click into a text field first, then start dictation.';
-  if (element.closest('.cm-editor')) return 'Dictation into editors is not available yet.';
-  if (element.closest('[data-terminal-input], .ghostty-terminal')) return 'Dictation into terminals is not available yet.';
+  if (element.closest('.cm-editor')) return 'This editor is read-only right now.';
+  if (element.closest('.ghostty-terminal')) return 'This terminal is not connected to a running session, so it cannot take dictation.';
   if (element instanceof HTMLInputElement && element.type === 'password') return 'Dictation does not type into password fields.';
   if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && (element.readOnly || element.disabled)) return 'This field is read-only right now.';
   return 'The focused element does not take text. Click into a text field first.';
@@ -154,14 +154,3 @@ export class TrackedField {
     return 'inserted';
   }
 }
-
-export function insertAtCursor(text: string): Insertion {
-  const field = writableField(document.activeElement);
-  if (!field) return 'targetGone';
-  const tracked = new TrackedField(field);
-  const range = tracked.track(field.selectionStart ?? field.value.length, field.selectionEnd ?? field.value.length);
-  const outcome = tracked.replace(range, text);
-  tracked.release(range);
-  return outcome;
-}
-

@@ -8,6 +8,7 @@ export interface RefineRequest {
   profileId: string;
   rawText: string;
   recordingDurationMs: number;
+  format: DictationTextFormat;
 }
 
 export type RefineOutcome = { ok: true; text: string } | { ok: false; error: string };
@@ -35,7 +36,7 @@ export function daemonRefiner(api: Api): Refiner {
       profile_id: request.profileId,
       raw_text: request.rawText,
       recording_duration_ms: request.recordingDurationMs,
-      format: DictationTextFormat.Plain,
+      format: request.format,
     }).then(outcome, error => ({ ok: false, error: error instanceof Error ? error.message : String(error) })),
     cancel: requestId => api.sendDictationRefineCancel(requestId),
   };
