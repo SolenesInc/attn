@@ -92,9 +92,11 @@ export type ImageView =
   | { readonly status: 'loaded'; readonly url: string }
   | { readonly status: 'failed'; readonly message: string }
 
+const readableDiagramScale = 0.7
+
 export type DiagramView =
   | { readonly status: 'loading' }
-  | { readonly status: 'rendered'; readonly svg: string }
+  | { readonly status: 'rendered'; readonly svg: string; readonly width: number }
   | { readonly status: 'failed'; readonly message: string }
 
 export type MarkdownContext<Message> = {
@@ -140,14 +142,20 @@ export const renderMarkdown = <Message>(
     const shown = context.diagram(code)
     switch (shown.status) {
       case 'rendered':
-        return h.button(
+        return h.div(
+          [h.Class('md-diagram')],
           [
-            h.Class('md-diagram'),
-            h.Type('button'),
-            h.AriaLabel('Open the diagram full screen'),
-            h.OnClick(context.zoomDiagram(shown.svg)),
+            h.button(
+              [
+                h.Type('button'),
+                h.AriaLabel('Open the diagram full screen'),
+                h.Style({ minWidth: `${Math.round(shown.width * readableDiagramScale)}px` }),
+                h.OnClick(context.zoomDiagram(shown.svg)),
+                h.InnerHTML(shown.svg),
+              ],
+              [],
+            ),
           ],
-          [h.div([h.InnerHTML(shown.svg)], [])],
         )
       case 'loading':
         return h.pre([h.Class('md-diagram placeholder')], [code])

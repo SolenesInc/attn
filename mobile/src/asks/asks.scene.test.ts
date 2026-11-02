@@ -111,7 +111,7 @@ const loadStoreVisuals = Scene.Command.resolveAll(
   ],
   [
     RenderDiagram({ code: diagram }),
-    Message.RenderedDiagram({ code: diagram, svg: '<svg data-diagram="1"></svg>' }),
+    Message.RenderedDiagram({ code: diagram, svg: '<svg data-diagram="1"></svg>', width: 0 }),
   ],
 )
 
@@ -130,7 +130,10 @@ describe('asks on the phone', () => {
           LoadImage({ pairingId: personal.id, askId: 'a-store', src: 'shots/board.png' }),
           Message.LoadedImage({ key: `${personal.id}\na-store\nshots/board.png`, url: 'blob:board' }),
         ],
-        [RenderDiagram({ code: diagram }), Message.RenderedDiagram({ code: diagram, svg: '<svg></svg>' })],
+        [
+          RenderDiagram({ code: diagram }),
+          Message.RenderedDiagram({ code: diagram, svg: '<svg></svg>', width: 0 }),
+        ],
       ),
       Scene.tap((simulation) => {
         const asks = entries('ask-entry', simulation.html)
@@ -258,7 +261,10 @@ describe('asks on the phone', () => {
             retry: true,
           }),
         ],
-        [RenderDiagram({ code: diagram }), Message.RenderedDiagram({ code: diagram, svg: '<svg></svg>' })],
+        [
+          RenderDiagram({ code: diagram }),
+          Message.RenderedDiagram({ code: diagram, svg: '<svg></svg>', width: 0 }),
+        ],
       ),
       arrive(personal, [storeAsk]),
       Scene.Command.expectExact(LoadImage),

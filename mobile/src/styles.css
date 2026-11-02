@@ -437,6 +437,10 @@ button.row.ask {
   overflow: hidden;
 }
 
+.md-diagram {
+  overflow-x: auto;
+}
+
 .md-image img,
 .md-diagram svg {
   display: block;
@@ -445,8 +449,13 @@ button.row.ask {
   margin: 0 auto;
 }
 
-.md-diagram > div {
+.md-diagram > button {
+  display: block;
+  box-sizing: content-box;
+  width: calc(100% - 20px);
   padding: 10px;
+  border-radius: 0;
+  color: inherit;
 }
 
 .md-image.placeholder,

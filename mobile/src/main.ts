@@ -53,7 +53,7 @@ type ImageState = typeof ImageState.Type
 
 const DiagramState = Schema.Union([
   Schema.Struct({ status: Schema.Literal('loading') }),
-  Schema.Struct({ status: Schema.Literal('rendered'), svg: Schema.String }),
+  Schema.Struct({ status: Schema.Literal('rendered'), svg: Schema.String, width: Schema.Finite }),
   Schema.Struct({ status: Schema.Literal('failed'), message: Schema.String }),
 ])
 
@@ -134,7 +134,7 @@ export const Message = defineMessageUnion({
   FailedAnswer: { pairingId: Schema.String, askId: Schema.String, message: Schema.String },
   LoadedImage: { key: Schema.String, url: Schema.String },
   FailedImage: { key: Schema.String, message: Schema.String, retry: Schema.Boolean },
-  RenderedDiagram: { code: Schema.String, svg: Schema.String },
+  RenderedDiagram: { code: Schema.String, svg: Schema.String, width: Schema.Finite },
   FailedDiagram: { code: Schema.String, message: Schema.String },
   ReleasedImages: {},
   ClickedZoomImage: { url: Schema.String, alt: Schema.String },
@@ -320,6 +320,10 @@ const ReleaseImages = Command.define('ReleaseImages', {
 
 let diagramCount = 0
 
+const topToBottom = (code: string) => code.replace(/^(\s*(?:graph|flowchart)\s+)(?:LR|RL)\b/m, '$1TB')
+
+const naturalWidth = (svg: string) => Number(/viewBox="[\d.-]+ [\d.-]+ ([\d.]+)/.exec(svg)?.[1] ?? 0)
+
 export const RenderDiagram = Command.define('RenderDiagram', {
   args: { code: Schema.String },
   messages: [Message.RenderedDiagram, Message.FailedDiagram],
@@ -327,11 +331,11 @@ export const RenderDiagram = Command.define('RenderDiagram', {
     Effect.tryPromise(() =>
       renderMermaid(
         `ask-diagram-${diagramCount++}`,
-        code,
+        topToBottom(code),
         window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'neutral',
       ),
     ).pipe(
-      Effect.map((svg) => Message.RenderedDiagram({ code, svg })),
+      Effect.map((svg) => Message.RenderedDiagram({ code, svg, width: naturalWidth(svg) })),
       Effect.catch(({ cause }) => Effect.succeed(Message.FailedDiagram({ code, message: errorText(cause) }))),
     ),
 })
@@ -691,10 +695,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
           })
         : model,
     }),
-    RenderedDiagram: ({ code, svg }) => ({
+    RenderedDiagram: ({ code, svg, width }) => ({
       model: model.diagrams[code]
         ? modifyFields(model, {
-            diagrams: (diagrams) => ({ ...diagrams, [code]: { status: 'rendered' as const, svg } }),
+            diagrams: (diagrams) => ({ ...diagrams, [code]: { status: 'rendered' as const, svg, width } }),
           })
         : model,
     }),
