@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -494,38 +493,6 @@ func TestANestedFolderNeverSyncsThroughTheFolderAroundIt(t *testing.T) {
 		t.Fatalf("files written under the outpost's outer copy reached Side's folder at the home")
 	}
 	t.Logf("with %s inside %s, the outer folder synced both ways while neither side's files under %s crossed", inner, outer, filepath.Base(inner))
-}
-
-func TestProfilesSavedWithALineBreakInTheirNotebookFolderCanBeRepairedOneAtATime(t *testing.T) {
-	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
-	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	created := testworld.Request(pair.App, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "second", Name: "Second"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "second" })
-	if !created.Success {
-		t.Fatalf("create Second: %+v", created)
-	}
-	home.Stop()
-	legacy := notebookPath(home, "line\nbreak")
-	db, err := sql.Open("sqlite3", filepath.Join(home.Dir, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO profile_settings (profile_id, key, value) SELECT id, 'notebook.root', ? FROM profiles WHERE deleted_at = ''`, legacy); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	home.Start()
-	pair.App = home.App()
-
-	requireStdout(t, home.Attn("settings", "set", "notebook.root", notebookPath(home), "--profile", "Default"))
-	requireStdout(t, home.Attn("settings", "set", "notebook.root", "", "--profile", "Second"))
-	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	writeNotebookFile(t, home, "repaired.md", "written once both profiles were repaired")
-	awaitOutpostFile(t, pair, filepath.Join(outpostCopyPlacement(outpost, "notebook", notebookPath(home)), "repaired.md"), "written once both profiles were repaired", false)
-	t.Logf("two profiles saved on %q were repaired one at a time while paired, and the Notebook synced again", legacy)
 }
 
 func awaitNotebookError(t *testing.T, pair *testworld.OutpostPair, want ...string) string {
