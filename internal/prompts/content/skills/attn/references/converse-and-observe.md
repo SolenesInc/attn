@@ -121,8 +121,10 @@ The seed does not move and still names that session as its tender, so whoever
 comes next takes the seed or parks it.
 
 If you name a seed instead of a session, the command closes whoever tends the
-seed. An Orchestrator usually closes by seed. For example:
-`attn agent close s-7k3f9m -m "its report landed"`.
+seed, for example `attn agent close s-7k3f9m -m "its report landed"`. A
+harvested, parked or withered seed has no tender, so the command refuses it.
+To close a delegate after its seed closed, name its session id, which
+`attn delegate` printed and which signs the delegate's entries in the seed log.
 
 A close takes effect immediately. The session gets no goodbye turn and reads
 nothing queued for it. Before you close a session, read what you need, such as

@@ -195,7 +195,9 @@ describes. A stalled Sheriff delegation can also need a different role.
 When the repair lands, review it against its brief and record the check
 verdicts as Orchestration describes. Report only P0 and P1 findings, and say
 when you and the Builder ran on the same model. Then add the repair's SHA and
-repair checks to the failure's record.
+repair checks to the failure's record, and close the delegate as
+[Orchestration](../../../internal/prompts/content/skills/attn-workflow/references/orchestration.md)
+says.
 
 ## No silent reverts
 
