@@ -86,7 +86,7 @@ const PushToken = Schema.Struct({
 export const Model = Schema.Struct({
   screen: Schema.Literals(['queue', 'pairings', 'ask', 'session']),
   openSession: Schema.NullOr(OpenSession),
-  composer: Composer,
+  composers: Schema.Record(Schema.String, Composer),
   terminalStatus: Schema.String,
   fullHeight: Schema.Finite,
   keyboardHeight: Schema.Finite,
@@ -159,8 +159,9 @@ export const Message = defineMessageUnion({
   ClickedSession: { pairingId: Schema.String, sessionId: Schema.String },
   ChangedComposer: { value: Schema.String },
   SubmittedComposer: {},
-  DeliveredPrompt: {},
-  FailedPrompt: { message: Schema.String },
+  DeliveredPrompt: { key: Schema.String, text: Schema.String },
+  FailedPrompt: { key: Schema.String, message: Schema.String },
+  StartedLink: { pairingId: Schema.String, link: Schema.Finite },
   ClickedKey: { key: Schema.Literals(terminalKeys) },
   ClickedHideKeyboard: {},
   ChangedKeyboard: { height: Schema.Finite },
@@ -357,31 +358,32 @@ export const SendAnswer = Command.define('SendAnswer', {
 })
 
 export const SendPrompt = Command.define('SendPrompt', {
-  args: { pairingId: Schema.String, sessionId: Schema.String, text: Schema.String },
+  args: { key: Schema.String, pairingId: Schema.String, sessionId: Schema.String, text: Schema.String },
   messages: [Message.DeliveredPrompt, Message.FailedPrompt],
-  execute: ({ pairingId, sessionId, text }) =>
+  execute: ({ key, pairingId, sessionId, text }) =>
     Effect.tryPromise(async () => {
       const reply = await linkTo(pairingId).request({ cmd: 'submit_prompt', session_id: sessionId, text })
       if (reply.event !== 'submit_result') throw new Error(`the home answered ${reply.event}`)
       if (!reply.delivered) throw new Error(reply.message || 'Not sent.')
     }).pipe(
-      Effect.map(() => Message.DeliveredPrompt()),
-      Effect.catch(({ cause }) => Effect.succeed(Message.FailedPrompt({ message: errorText(cause) }))),
+      Effect.map(() => Message.DeliveredPrompt({ key, text })),
+      Effect.catch(({ cause }) => Effect.succeed(Message.FailedPrompt({ key, message: errorText(cause) }))),
     ),
 })
 
 const SendKey = Command.define('SendKey', {
-  args: { key: Schema.Literals(terminalKeys) },
-  messages: [Message.CompletedCommand],
-  execute: ({ key }) =>
-    Effect.sync(() => {
+  args: { key: Schema.Literals(terminalKeys), homeName: Schema.String },
+  messages: [Message.CompletedCommand, Message.ChangedTerminalStatus],
+  execute: ({ key, homeName }) =>
+    Effect.sync(() =>
       activeTerminal?.sendKey(key)
-      return Message.CompletedCommand()
-    }),
+        ? Message.CompletedCommand()
+        : Message.ChangedTerminalStatus({ text: `Not sent: ${homeName} is not connected.` }),
+    ),
 })
 
 // iOS gives a web view no gesture that closes the keyboard, so the keys bar carries one.
-const HideKeyboard = Command.define('HideKeyboard', {
+export const HideKeyboard = Command.define('HideKeyboard', {
   messages: [Message.CompletedCommand],
   execute: Effect.promise(async () => {
     ;(document.activeElement as HTMLElement | null)?.blur()
@@ -408,9 +410,23 @@ const updateHome = (model: Model, pairingId: string, change: (home: Home) => Hom
 
 const emptyComposer: Composer = { text: '', sending: false, note: '' }
 
+const composerKey = (open: Model['openSession']) => (open ? `${open.pairingId}/${open.sessionId}` : null)
+
+const composerOf = (model: Model, key: string): Composer => model.composers[key] ?? emptyComposer
+
+const withComposer = (model: Model, key: string, change: (composer: Composer) => Composer): Model => {
+  const { [key]: _, ...others } = model.composers
+  const next = change(composerOf(model, key))
+  return modifyFields(model, {
+    composers: () =>
+      next.text === '' && !next.sending && next.note === '' ? others : { ...others, [key]: next },
+  })
+}
+
 const newHome = (pairing: Pairing): Home => ({
   pairing,
   api: 0,
+  link: 0,
   status: 'connecting',
   reason: '',
   sessions: [],
@@ -554,8 +570,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         foreground: () => foreground,
         now: () => Date.now(),
         homes: (homes) =>
-          foreground ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '' })) : homes,
+          foreground
+            ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '' }))
+            : homes.map((home) => ({ ...home, link: 0 })),
       }),
+    }),
+    StartedLink: ({ pairingId, link }) => ({
+      model: updateHome(model, pairingId, (home) => ({ ...home, link })),
     }),
     WelcomedByHome: ({ pairingId, api, homeName, profileName }) => {
       const welcomed = updateHome(model, pairingId, (home) => ({
@@ -753,28 +774,38 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       model: modifyFields(model, {
         screen: () => 'session' as const,
         openSession: () => ({ pairingId, sessionId }),
-        composer: () => emptyComposer,
         terminalStatus: () => '',
       }),
     }),
-    ChangedComposer: ({ value }) => ({
-      model: modifyFields(model, { composer: (composer) => ({ ...composer, text: value }) }),
-    }),
+    ChangedComposer: ({ value }) => {
+      const key = composerKey(model.openSession)
+      return key
+        ? { model: withComposer(model, key, (composer) => ({ ...composer, text: value })) }
+        : { model }
+    },
     SubmittedComposer: () => {
       const open = model.openSession
-      if (!open || model.composer.sending || model.composer.text.trim() === '') return { model }
+      const key = composerKey(open)
+      if (!open || !key) return { model }
+      const composer = composerOf(model, key)
+      if (composer.sending || composer.text.trim() === '') return { model }
       return {
-        model: modifyFields(model, { composer: (composer) => ({ ...composer, sending: true, note: '' }) }),
-        commands: [SendPrompt({ ...open, text: model.composer.text })],
+        model: withComposer(model, key, () => ({ ...composer, sending: true, note: '' })),
+        commands: [SendPrompt({ key, ...open, text: composer.text })],
       }
     },
-    DeliveredPrompt: () => ({ model: modifyFields(model, { composer: () => emptyComposer }) }),
-    FailedPrompt: ({ message }) => ({
-      model: modifyFields(model, {
-        composer: (composer) => ({ ...composer, sending: false, note: message }),
-      }),
+    DeliveredPrompt: ({ key, text }) => ({
+      model: withComposer(model, key, (composer) =>
+        composer.text === text ? emptyComposer : { ...composer, sending: false, note: '' },
+      ),
     }),
-    ClickedKey: ({ key }) => ({ model, commands: [SendKey({ key })] }),
+    FailedPrompt: ({ key, message }) => ({
+      model: withComposer(model, key, (composer) => ({ ...composer, sending: false, note: message })),
+    }),
+    ClickedKey: ({ key }) => {
+      const home = model.homes.find((candidate) => candidate.pairing.id === model.openSession?.pairingId)
+      return { model, commands: [SendKey({ key, homeName: home?.pairing.homeName ?? 'the home' })] }
+    },
     ClickedHideKeyboard: () => ({ model, commands: [HideKeyboard()] }),
     ChangedKeyboard: ({ height }) => ({ model: modifyFields(model, { keyboardHeight: () => height }) }),
     ChangedViewport: ({ height }) => ({
@@ -812,7 +843,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: {
     screen: 'queue',
     openSession: null,
-    composer: emptyComposer,
+    composers: {},
     terminalStatus: '',
     fullHeight: window.innerHeight,
     keyboardHeight: 0,
@@ -860,6 +891,8 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
   }
 }
 
+let linksStarted = 0
+
 const linkStream = (pairing: LinkTarget) =>
   Stream.callback<Message>((queue) =>
     Effect.acquireRelease(
@@ -869,6 +902,7 @@ const linkStream = (pairing: LinkTarget) =>
           Queue.offerUnsafe(queue, linkMessage(pairing.id, event)),
         )
         liveLinks.set(pairing.id, link)
+        Queue.offerUnsafe(queue, Message.StartedLink({ pairingId: pairing.id, link: ++linksStarted }))
         return link
       }),
       (link) =>
@@ -1266,7 +1300,7 @@ const pairingsView = (model: Model, h: HtmlBuilder<Message>): Html =>
 // MOUNTS
 
 export const TerminalMount = Mount.defineStream('TerminalMount', {
-  args: { pairingId: Schema.String, terminalId: Schema.String },
+  args: { pairingId: Schema.String, terminalId: Schema.String, link: Schema.Finite },
   messages: [Message.ChangedTerminalStatus],
   execute: ({ element, pairingId, terminalId }) =>
     Stream.callback<typeof Message.ChangedTerminalStatus.Type>((queue) =>
@@ -1320,18 +1354,18 @@ const keyLabels: Record<TerminalKey, string> = {
   ShiftTab: '⇧Tab',
 }
 
-const keysBar = (h: HtmlBuilder<Message>): Html =>
+const keysBar = (live: boolean, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('keys'), h.OnMount(KeepFocus())],
     [
       h.button([h.Attribute('aria-label', 'Hide keyboard'), h.OnClick(Message.ClickedHideKeyboard())], ['⌄']),
       ...terminalKeys.map((key) =>
-        h.button([h.Key(key), h.OnClick(Message.ClickedKey({ key }))], [keyLabels[key]]),
+        h.button([h.Key(key), h.Disabled(!live), h.OnClick(Message.ClickedKey({ key }))], [keyLabels[key]]),
       ),
     ],
   )
 
-const composerView = (composer: Composer, h: HtmlBuilder<Message>): Html =>
+const composerView = (composer: Composer, live: boolean, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('composer-area')],
     [
@@ -1353,7 +1387,12 @@ const composerView = (composer: Composer, h: HtmlBuilder<Message>): Html =>
             ),
           ]),
           h.button(
-            [h.Type('submit'), h.Class('primary'), h.Disabled(composer.sending), h.OnMount(KeepFocus())],
+            [
+              h.Type('submit'),
+              h.Class('primary'),
+              h.Disabled(composer.sending || !live),
+              h.OnMount(KeepFocus()),
+            ],
             [composer.sending ? 'Sending…' : 'Send'],
           ),
         ],
@@ -1366,6 +1405,7 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const home = model.homes.find((candidate) => candidate.pairing.id === open?.pairingId)
   const session = home?.sessions.find((candidate) => candidate.id === open?.sessionId)
   const back = h.button([h.Class('back'), h.OnClick(Message.ClickedBack())], ['‹ Queue'])
+  const live = home?.status === 'online' && !session?.offline
   if (!open || !home || !session) {
     return h.div(
       [h.Class('session-screen')],
@@ -1382,7 +1422,7 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div([h.Class('row-title')], [session.title || session.id]),
           h.div(
             [h.Class('row-where')],
-            [`${stateLabel[session.state]} · ${where(home.pairing, session.host)}`],
+            [`${live ? stateLabel[session.state] : 'offline'} · ${where(home.pairing, session.host)}`],
           ),
         ],
       ),
@@ -1406,19 +1446,35 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
     [h.Class('session-screen')],
     [
       header,
-      session.terminalId
-        ? h.keyed('div')(
-            `${open.pairingId}/${session.terminalId}`,
+      !session.terminalId
+        ? h.div([h.Class('terminal-host empty muted')], ['This session has no terminal.'])
+        : home.link === 0
+          ? h.div([h.Class('terminal-host empty muted')], [`Connecting to ${home.pairing.homeName}…`])
+          : h.keyed('div')(
+              `${open.pairingId}/${session.terminalId}`,
+              [
+                h.Class('terminal-host'),
+                h.OnMount(
+                  TerminalMount({
+                    pairingId: open.pairingId,
+                    terminalId: session.terminalId,
+                    link: home.link,
+                  }),
+                ),
+              ],
+              [],
+            ),
+      live
+        ? h.empty
+        : h.p(
+            [h.Class('terminal-status error'), h.DataAttribute('testid', 'home-offline')],
             [
-              h.Class('terminal-host'),
-              h.OnMount(TerminalMount({ pairingId: open.pairingId, terminalId: session.terminalId })),
+              `${home.reason || `${home.pairing.homeName} is not connected`}. Keys and Send work again when it is back.`,
             ],
-            [],
-          )
-        : h.div([h.Class('terminal-host empty muted')], ['This session has no terminal.']),
+          ),
       model.terminalStatus ? h.p([h.Class('terminal-status muted')], [model.terminalStatus]) : h.empty,
-      keysBar(h),
-      composerView(model.composer, h),
+      keysBar(live, h),
+      composerView(composerOf(model, composerKey(open)!), live, h),
     ],
   )
 }

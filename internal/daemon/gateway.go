@@ -175,6 +175,11 @@ func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
 	if !d.phoneAccessEnabled() {
 		return d.gatewayRefuse(conn, phoneAccessOff)
 	}
+	select {
+	case <-d.ptyRecovered:
+	case <-d.life.Done():
+		return errDaemonStopping
+	}
 	if hello.API < 1 {
 		return d.gatewayRefuse(conn, fmt.Sprintf("hello asked for api %d; this home serves api 1 to %d", hello.API, gateway.APIVersion))
 	}

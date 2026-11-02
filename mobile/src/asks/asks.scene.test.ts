@@ -33,7 +33,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
   diagrams: {},
   zoom: null,
   openSession: null,
-  composer: { text: '', sending: false, note: '' },
+  composers: {},
   terminalStatus: '',
   fullHeight: 800,
   keyboardHeight: 0,
@@ -42,6 +42,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
   homes: pairings.map((pairing) => ({
     pairing,
     api: 4,
+    link: 1,
     status: 'online',
     reason: '',
     sessions: [],

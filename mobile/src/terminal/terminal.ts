@@ -13,7 +13,7 @@ import { terminalCreditBytes, type Link, type OpenTerminal, type TerminalRequest
 export const terminalKeys = ['Esc', 'Up', 'Down', 'Enter', '1', '2', '3', 'Tab', 'CtrlC', 'ShiftTab'] as const
 export type TerminalKey = (typeof terminalKeys)[number]
 
-export type MountedTerminal = { readonly sendKey: (key: TerminalKey) => void }
+export type MountedTerminal = { readonly sendKey: (key: TerminalKey) => boolean }
 
 export let activeTerminal: MountedTerminal | null = null
 
@@ -120,7 +120,7 @@ export const mountTerminal = (
     return renderer.fitDimensions(stableWidth, stableHeight)
   }
 
-  const send = (data: string) => open?.send({ cmd: 'terminal_input', terminal_id: terminalId, data })
+  const send = (data: string) => open?.send({ cmd: 'terminal_input', terminal_id: terminalId, data }) ?? false
 
   const start = async () => {
     const ghostty = await loadGhostty()
@@ -194,9 +194,9 @@ export const mountTerminal = (
   const handle: MountedTerminal = {
     sendKey: (key) => {
       if (key === 'Up' || key === 'Down') {
-        if (!terminal) return
+        if (!terminal) return false
         const arrow = key === 'Up' ? 'ARROW_UP' : 'ARROW_DOWN'
-        send(
+        return send(
           terminal.encodeKey({
             action: 'press',
             key: arrow,
@@ -206,9 +206,8 @@ export const mountTerminal = (
             unshiftedCodepoint: 0,
           }),
         )
-        return
       }
-      send(keyBytes[key])
+      return send(keyBytes[key])
     },
   }
   activeTerminal = handle

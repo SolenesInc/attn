@@ -26,9 +26,9 @@ pinned by `internal/cloudlink/testdata/noise_vectors.json`.
 - `revoke`: removes the pairing, sends the relay the new allowlist, and closes the phone's conversation with that profile.
 - `gateway-hello`: the phone says hello with its api version. The home answers welcome, serving min(the phone's api, `GATEWAY_API_VERSION`), with the home's name and the pairing's profile, or refused with a reason.
 - `gateway-sessions`: after welcome, and again whenever one changes, every session of the pairing's profile, with its state mapped to the gateway's states and its main terminal. Sessions of other profiles never reach the phone.
-- `phone-terminal`: tapping a live session on the phone opens its terminal, fitted to the phone's width with rows for the screen with the keyboard closed. The phone asks for that size and becomes the size owner (`size-owner` in terminals.md); the desktop then shows the terminal scaled until someone uses it there. The home answers `terminal_screen` (the visible screen as ANSI), then output frames, coalesced every 16 ms and sent only while the phone's credit allows. A phone that falls more than 1 MiB behind gets a fresh screen instead of the backlog. The terminal attaches again after every reconnect. Opening the keyboard pans the terminal and never resizes it.
-- `phone-keys-bar`: one row under the terminal: hide the keyboard, Esc, ↑, ↓, ⏎, 1, 2, 3, Tab, ^C, ⇧Tab. A key sends its bytes as the person's keystrokes and keeps the keyboard open.
-- `phone-composer`: a text field with autocorrect and dictation. Send asks the home to `submit_prompt`: the session monitor pastes the text and presses Enter when the agent is at a turn boundary. The text stays until the home says it was delivered; a refusal shows the home's reason.
+- `phone-terminal`: tapping a live session on the phone opens its terminal, fitted to the phone's width with rows for the screen with the keyboard closed. The phone asks for that size and becomes the size owner (`size-owner` in terminals.md); the desktop then shows the terminal scaled until someone uses it there. The home answers `terminal_screen` (the visible screen as ANSI), then output frames, coalesced every 16 ms and sent only while the phone's credit allows. A phone that falls more than 1 MiB behind gets a fresh screen instead of the backlog. The terminal attaches again after every reconnect, including when the app returns to the foreground on a new connection. A phone that reconnects while the home is starting is welcomed only after the home has its terminals back. Opening the keyboard pans the terminal and never resizes it.
+- `phone-keys-bar`: one row under the terminal: hide the keyboard, Esc, ↑, ↓, ⏎, 1, 2, 3, Tab, ^C, ⇧Tab. A key sends its bytes as the person's keystrokes and keeps the keyboard open. While the home is not connected, the session screen says so and the keys are off.
+- `phone-composer`: a text field with autocorrect and dictation. Send asks the home to `submit_prompt`: the session monitor pastes the text and presses Enter when the agent is at a turn boundary. Each session keeps its own draft. The text stays until the home says it was delivered; a refusal shows the home's reason. While the home is not connected, Send is off.
 
 ## How to get to it
 
@@ -71,7 +71,7 @@ Preconditions:
 
 ## Tests
 
-- Stack: `cmd/attn/phones_stack_test.go` (pair, reconnect after a cut, a second use of a code, revoke, a revoke between handshake and hello; a deleted profile's phones; unreadable keys; only the home connects; no connection while off).
+- Stack: `cmd/attn/phones_stack_test.go` (pair, reconnect after a cut, a second use of a code, revoke, a revoke between handshake and hello; a deleted profile's phones; unreadable keys; only the home connects; no connection while off; a phone that reconnects while the home starts).
 - Kernel: `internal/cloudlink/noise_vectors_test.go`, the vectors the phone's initiator checks too.
 - Wire: `internal/daemon/gateway_wire_test.go`, `internal/daemon/gateway_terminal_wire_test.go` (screen then output, focus ownership and hand-back, submit_prompt, output within credit during a flood).
 - Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach).

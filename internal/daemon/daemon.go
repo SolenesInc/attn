@@ -166,7 +166,7 @@ type Daemon struct {
 	sharedPTYHost              *ptybackend.WorkerBackend
 	upgradingMu                sync.Mutex
 	upgradingWorkers           map[harness.TerminalID]chan struct{}
-	ptyRecovered               atomic.Bool
+	ptyRecovered               chan struct{}
 	monitorTerminalsDirty      atomic.Bool
 
 	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
@@ -513,6 +513,7 @@ func New(socketPath string) *Daemon {
 		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
+		ptyRecovered:        make(chan struct{}),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
@@ -549,6 +550,7 @@ func NewForTesting(socketPath string) *Daemon {
 		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
+		ptyRecovered:        make(chan struct{}),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,

@@ -96,7 +96,7 @@ const decodeOutputFrame = (plaintext: Uint8Array): TerminalEvent => {
 export type TerminalRequest = { readonly cols: number; readonly rows: number }
 
 export type OpenTerminal = {
-  readonly send: (message: object) => void
+  readonly send: (message: object) => boolean
   readonly grant: (bytes: number) => void
   readonly resize: (request: TerminalRequest) => void
   readonly close: () => void
@@ -438,9 +438,7 @@ export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent
       else attach(terminalId, attached)
       const current = () => terminals.get(terminalId) === attached
       return {
-        send: (message) => {
-          if (current()) socket?.send(message)
-        },
+        send: (message) => current() && (socket?.send(message) ?? false),
         grant: (bytes) => {
           if (current()) socket?.send({ cmd: 'terminal_credit', terminal_id: terminalId, bytes })
         },

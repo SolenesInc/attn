@@ -136,10 +136,11 @@ func (s *Stack) StartHeldAt(p *Pause) {
 
 func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
 	s.T.Helper()
+	s.pauses.Reopen()
 	started := make(chan struct{})
 	go func() {
 		defer close(started)
-		s.launch()
+		s.spawn()
 	}()
 	s.T.Cleanup(func() {
 		s.pauses.Close()
@@ -168,10 +169,15 @@ func (s *Stack) checkStarted() {
 
 func (s *Stack) launch(vars ...string) {
 	s.T.Helper()
+	s.pauses.Reopen()
+	s.spawn(vars...)
+}
+
+func (s *Stack) spawn(vars ...string) {
+	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
 	}
-	s.pauses.Reopen()
 	ready, signal, err := os.Pipe()
 	if err != nil {
 		s.T.Fatal(err)

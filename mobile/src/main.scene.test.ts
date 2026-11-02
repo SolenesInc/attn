@@ -6,6 +6,7 @@ import {
   RegisterPush,
   pushHomeKey,
   SavePairings,
+  HideKeyboard,
   SendPrompt,
   TerminalMount,
   subscriptions,
@@ -65,7 +66,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   diagrams: {},
   zoom: null,
   openSession: null,
-  composer: { text: '', sending: false, note: '' },
+  composers: {},
   terminalStatus: '',
   fullHeight: 800,
   keyboardHeight: 0,
@@ -74,6 +75,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   homes: pairings.map((pairing) => ({
     pairing,
     api: 4,
+    link: 1,
     status: 'connecting',
     reason: '',
     sessions: [],
@@ -322,6 +324,7 @@ describe('pairing again', () => {
         {
           pairing: personal,
           api: 4,
+          link: 1,
           status: 'closed' as const,
           reason: 'Mac ended this pairing',
           sessions: [],
@@ -362,9 +365,13 @@ const withSession = (api: number): Model => ({
     {
       pairing: personal,
       api,
+      link: 1,
       status: 'online',
       reason: '',
-      sessions: [{ ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' }],
+      sessions: [
+        { ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' },
+        { ...session('b', 'Write docs', 'waiting', minutesAgo(1)), terminalId: 't-b' },
+      ],
       listed: true,
       asks: [],
     },
@@ -376,27 +383,122 @@ const keepFocus = Scene.Mount.resolveAll(
   [KeepFocus, Message.CompletedCommand()],
 )
 
+const composer = Scene.placeholder('Reply to the agent…')
+
+const openSession = (title: string, terminalId: string, link = 1) =>
+  [
+    Scene.click(Scene.text(title)),
+    keepFocus,
+    Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId, link })),
+    Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+  ] as const
+
+const backToQueue = (terminalId: string) =>
+  [
+    Scene.click(Scene.role('button', { name: '‹ Queue' })),
+    Scene.Mount.expectEnded(
+      TerminalMount({ pairingId: personal.id, terminalId, link: 1 }),
+      KeepFocus(),
+      KeepFocus(),
+    ),
+    Scene.Command.resolve(HideKeyboard, Message.CompletedCommand()),
+  ] as const
+
 describe('answering an agent from the phone', () => {
-  it('opens the session’s terminal and keeps the words in the composer until the home delivers them', () => {
+  it('keeps the words in the composer until the home delivers them', () => {
     Scene.scene(
       { update, view },
       Scene.given(withSession(4)),
-      Scene.click(Scene.testId('queue-entry')),
-      keepFocus,
-      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a' })),
-      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
-      Scene.type(Scene.placeholder('Reply to the agent…'), 'Yes, land it.'),
+      ...openSession('Land the fix', 't-a'),
+      Scene.type(composer, 'Yes, land it.'),
       Scene.click(Scene.role('button', { name: 'Send' })),
       Scene.Command.resolve(
         SendPrompt,
-        Message.FailedPrompt({ message: 'session input blocked by pending approval' }),
+        Message.FailedPrompt({
+          key: `${personal.id}/a`,
+          message: 'session input blocked by pending approval',
+        }),
       ),
-      Scene.expect(Scene.placeholder('Reply to the agent…')).toHaveValue('Yes, land it.'),
+      Scene.expect(composer).toHaveValue('Yes, land it.'),
       Scene.expect(Scene.text('session input blocked by pending approval')).toExist(),
       Scene.click(Scene.role('button', { name: 'Send' })),
-      Scene.Command.resolve(SendPrompt, Message.DeliveredPrompt()),
-      Scene.expect(Scene.placeholder('Reply to the agent…')).toHaveValue(''),
+      Scene.Command.resolve(
+        SendPrompt,
+        Message.DeliveredPrompt({ key: `${personal.id}/a`, text: 'Yes, land it.' }),
+      ),
+      Scene.expect(composer).toHaveValue(''),
       Scene.expect(Scene.text('session input blocked by pending approval')).not.toExist(),
+    )
+  })
+
+  it('keeps each session’s draft while the person moves between sessions', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      ...openSession('Land the fix', 't-a'),
+      Scene.type(composer, 'Half a thought'),
+      ...backToQueue('t-a'),
+      ...openSession('Write docs', 't-b'),
+      Scene.expect(composer).toHaveValue(''),
+      Scene.type(composer, 'Ship the docs.'),
+      ...backToQueue('t-b'),
+      ...openSession('Land the fix', 't-a'),
+      Scene.expect(composer).toHaveValue('Half a thought'),
+    )
+  })
+
+  it('keeps words typed while an earlier prompt was being delivered', () => {
+    const key = `${personal.id}/b`
+    const sending: Model = {
+      ...withSession(4),
+      screen: 'session',
+      openSession: { pairingId: personal.id, sessionId: 'b' },
+      composers: { [key]: { text: 'Ship the docs.', sending: true, note: '' } },
+    }
+    const typed = update(sending, Message.ChangedComposer({ value: 'And the changelog.' })).model
+    const delivered = update(typed, Message.DeliveredPrompt({ key, text: 'Ship the docs.' })).model
+    expect(delivered.composers[key]).toEqual({ text: 'And the changelog.', sending: false, note: '' })
+    const elsewhere = update(
+      { ...typed, openSession: { pairingId: personal.id, sessionId: 'a' } },
+      Message.DeliveredPrompt({ key, text: 'Ship the docs.' }),
+    ).model
+    expect(elsewhere.composers[key]?.text).toBe('And the changelog.')
+  })
+
+  it('opens the terminal again on the new connection after the app returns to the foreground', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      ...openSession('Land the fix', 't-a'),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: false })),
+      Scene.Mount.expectEnded(TerminalMount),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: true })),
+      Scene.Subscription.emit(Message.StartedLink({ pairingId: personal.id, link: 2 })),
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a', link: 2 })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+    )
+  })
+
+  it('says the home is not connected and turns the keys and Send off until it is back', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      ...openSession('Land the fix', 't-a'),
+      Scene.type(composer, 'Yes'),
+      Scene.Subscription.emit(
+        Message.LostHome({ pairingId: personal.id, reason: 'Mac: no answer for 10 s; reconnecting' }),
+      ),
+      Scene.expect(Scene.testId('home-offline')).toHaveText(
+        'Mac: no answer for 10 s; reconnecting. Keys and Send work again when it is back.',
+      ),
+      Scene.expect(Scene.role('button', { name: '^C' })).toBeDisabled(),
+      Scene.expect(Scene.role('button', { name: 'Send' })).toBeDisabled(),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 4, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
+      Scene.expect(Scene.testId('home-offline')).not.toExist(),
+      Scene.expect(Scene.role('button', { name: '^C' })).not.toBeDisabled(),
     )
   })
 
@@ -404,7 +506,7 @@ describe('answering an agent from the phone', () => {
     Scene.scene(
       { update, view },
       Scene.given(withSession(3)),
-      Scene.click(Scene.testId('queue-entry')),
+      Scene.click(Scene.text('Land the fix')),
       Scene.Mount.expectNone(),
       Scene.expect(
         Scene.text('attn on Mac is too old to open terminals from a phone. Update it to the latest attn.'),
@@ -488,7 +590,7 @@ describe('push notifications', () => {
         Message.TappedNotification({ pairingId: personal.id, sessionId: 'a', askId: '' }),
       ),
       keepFocus,
-      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a' })),
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a', link: 1 })),
       Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
     )
   })

@@ -253,6 +253,7 @@ func (d *Daemon) gatewaySubmitPrompt(conn *gatewayConn, message gateway.SubmitPr
 }
 
 func (d *Daemon) gatewayTerminalError(conn *gatewayConn, id protocol.TerminalID, message string) {
+	d.logf("gateway: device %s, terminal %s: %s", conn.device.DeviceID, id, message)
 	_ = gatewaySend(conn, gateway.TerminalError{Event: "terminal_error", TerminalID: string(id), Message: message})
 }
 

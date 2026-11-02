@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -12,7 +14,9 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/protocol/gateway"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -363,4 +367,65 @@ func closeCode(t *testing.T, err error) websocket.StatusCode {
 		t.Fatal("the handshake succeeded; want the home to refuse it")
 	}
 	return websocket.CloseStatus(err)
+}
+
+func TestAPhoneThatReconnectsWhileTheHomeStartsOpensItsTerminalOnceTheHomeHasRecovered(t *testing.T) {
+	t.Parallel()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t)
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	s.Start()
+	app := s.App()
+	profile := app.SelectedProfile()
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair").Qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := socket.Pair(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Hello()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	terminal := app.Terminal(shell)
+	app.TypeLine(shell, "echo before-$((1+1))")
+	app.AwaitScreen(shell, "before-2")
+
+	s.Stop()
+	socket.AwaitPresence(false)
+	starting := s.PauseAt(pausepoint.DaemonEnrollmentLoaded)
+	ready := s.StartHeldBeforeReady(starting)
+	socket.AwaitPresence(true)
+	if err := socket.Resume(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Send(gateway.GatewayHello{Cmd: "hello", API: gateway.APIVersion, DeviceID: "phone"})
+	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	starting.Release()
+	ready()
+
+	for {
+		raw, err := socket.Next()
+		if err != nil {
+			t.Fatalf("waiting for the terminal's screen: %v", err)
+		}
+		var head struct {
+			Event string `json:"event"`
+		}
+		_ = json.Unmarshal(raw, &head)
+		switch head.Event {
+		case "terminal_screen":
+			var screen gateway.TerminalScreen
+			_ = json.Unmarshal(raw, &screen)
+			ansi, _ := base64.StdEncoding.DecodeString(screen.Ansi)
+			if !strings.Contains(string(ansi), "before-2") {
+				t.Fatalf("the screen after the restart shows %q, want the shell's earlier output", ansi)
+			}
+			return
+		case "terminal_error":
+			t.Fatalf("the phone's attach during the restart was refused: %s", raw)
+		}
+	}
 }

@@ -33,6 +33,7 @@ export type LinkStatus = typeof LinkStatus.Type
 export const Home = Schema.Struct({
   pairing: Pairing,
   api: Schema.Finite,
+  link: Schema.Finite,
   status: LinkStatus,
   reason: Schema.String,
   sessions: Schema.Array(QueueSession),
