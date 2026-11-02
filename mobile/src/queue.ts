@@ -25,7 +25,7 @@ export const QueueSession = Schema.Struct({
 })
 export type QueueSession = typeof QueueSession.Type
 
-export const LinkStatus = Schema.Literals(['connecting', 'online', 'home_offline', 'unreachable'])
+export const LinkStatus = Schema.Literals(['connecting', 'online', 'home_offline', 'unreachable', 'closed'])
 export type LinkStatus = typeof LinkStatus.Type
 
 export const Home = Schema.Struct({

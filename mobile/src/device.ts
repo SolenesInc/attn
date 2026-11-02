@@ -43,7 +43,11 @@ const fromSecrets = (signSecret: Uint8Array, noiseSecret: Uint8Array): DeviceKey
 
 let loading: Promise<DeviceKeys> | undefined
 
-export const deviceKeys = (): Promise<DeviceKeys> => (loading ??= loadOrCreate())
+export const deviceKeys = (): Promise<DeviceKeys> =>
+  (loading ??= loadOrCreate().catch((error: unknown) => {
+    loading = undefined
+    throw error
+  }))
 
 const loadOrCreate = async (): Promise<DeviceKeys> => {
   const stored = await Keychain.get({ key: keychainKey })

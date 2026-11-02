@@ -184,6 +184,32 @@ describe('the queue merges every pairing into one list', () => {
     )
   })
 
+  it('says when a home no longer allows this phone, and keeps the other homes live', () => {
+    const reason = 'Mac no longer allows this phone; pair it again from Settings → Phones'
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal, linux)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [session('a', 'Land the fix', 'working')],
+        }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: linux.id,
+          sessions: [session('b', 'Bisect flake', 'working')],
+        }),
+      ),
+      Scene.Subscription.emit(Message.ClosedByHome({ pairingId: personal.id, reason })),
+      expectEntries([
+        ['Bisect flake', 'Box · default', 'working'],
+        ['Mac · personal', reason, 'not allowed'],
+        ['Land the fix', 'Mac · personal', 'offline'],
+      ]),
+    )
+  })
+
   it('drops a forgotten pairing from the queue', () => {
     Scene.scene(
       { update, view },

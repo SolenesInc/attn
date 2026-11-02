@@ -181,7 +181,8 @@ ul {
   border-color: var(--line);
 }
 
-.row.home.unreachable .badge {
+.row.home.unreachable .badge,
+.row.home.closed .badge {
   color: var(--error);
 }
 

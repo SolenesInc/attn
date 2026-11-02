@@ -49,6 +49,7 @@ export type LinkEvent =
   | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<GatewaySession> }
   | { readonly _tag: 'HomeOffline' }
   | { readonly _tag: 'Lost'; readonly reason: string }
+  | { readonly _tag: 'Closed'; readonly reason: string }
 
 type Pairing = { readonly pairingId: string; readonly secret: Uint8Array }
 
@@ -58,7 +59,7 @@ const deviceAddress = (home: Home): string =>
 const closeReason = (home: Home, url: string, event: CloseEvent, ready: boolean): string => {
   switch (event.code) {
     case 4000:
-      return `${home.homeName} closed the connection`
+      return `${home.homeName} ended this pairing; to use it again, pair from Settings → Phones`
     case 4403:
       return `${home.homeName} no longer allows this phone; pair it again from Settings → Phones`
     case 4400:
@@ -68,7 +69,7 @@ const closeReason = (home: Home, url: string, event: CloseEvent, ready: boolean)
     default:
       return ready
         ? `the connection to ${home.homeName} dropped (close code ${event.code})`
-        : `could not reach ${home.homeName} at ${url} (close code ${event.code})`
+        : `could not reach ${home.homeName} at ${url} (close code ${event.code}); if you revoked this phone there, forget this pairing`
   }
 }
 
@@ -77,7 +78,7 @@ const openSocket = (
   keys: DeviceKeys,
   pairing: Pairing | undefined,
   onEvent: (event: LinkEvent) => void,
-  onEnd: (reason: string) => void,
+  onEnd: (reason: string, final: boolean) => void,
 ): (() => void) => {
   const url = deviceAddress(home)
   const socket = new WebSocket(`${url}?device_sign_pub=${toBase64Url(keys.signPub)}`)
@@ -103,13 +104,13 @@ const openSocket = (
     socket.send('ping')
   }, pingIntervalMs)
 
-  const end = (reason: string) => {
+  const end = (reason: string, final = false) => {
     if (ended) return
     ended = true
     clearTimeout(deadline)
     clearInterval(heartbeat)
     socket.close()
-    onEnd(refusal ?? reason)
+    onEnd(refusal ?? reason, final || refusal !== undefined)
   }
   const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
 
@@ -185,7 +186,8 @@ const openSocket = (
       end(`talking to ${home.homeName} failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  socket.onclose = (event) => end(closeReason(home, url, event, connId !== 0))
+  socket.onclose = (event) =>
+    end(closeReason(home, url, event, connId !== 0), event.code === 4000 || event.code === 4403)
   armDeadline()
 
   return () => {
@@ -209,7 +211,8 @@ export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent
         if (event._tag === 'Welcomed') retryMs = firstRetryMs
         onEvent(event)
       },
-      (reason) => {
+      (reason, final) => {
+        if (final) return onEvent({ _tag: 'Closed', reason })
         onEvent({ _tag: 'Lost', reason })
         retry = setTimeout(attempt, retryMs)
         retryMs = Math.min(retryMs * 2, maxRetryMs)

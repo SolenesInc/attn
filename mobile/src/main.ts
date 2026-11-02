@@ -37,6 +37,7 @@ export const Message = defineMessageUnion({
   ReceivedSessions: { pairingId: Schema.String, sessions: Schema.Array(QueueSession) },
   WentOffline: { pairingId: Schema.String },
   LostHome: { pairingId: Schema.String, reason: Schema.String },
+  ClosedByHome: { pairingId: Schema.String, reason: Schema.String },
   ClickedScan: {},
   ScannedCode: { code: Schema.String },
   CancelledScan: {},
@@ -171,6 +172,9 @@ export const update = (model: Model, message: Message) =>
     LostHome: ({ pairingId, reason }) => ({
       model: updateHome(model, pairingId, (home) => ({ ...home, status: 'unreachable', reason })),
     }),
+    ClosedByHome: ({ pairingId, reason }) => ({
+      model: updateHome(model, pairingId, (home) => ({ ...home, status: 'closed', reason })),
+    }),
     ClickedScan: () =>
       Capacitor.isNativePlatform()
         ? {
@@ -242,6 +246,8 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
       return Message.WentOffline({ pairingId })
     case 'Lost':
       return Message.LostHome({ pairingId, reason: event.reason })
+    case 'Closed':
+      return Message.ClosedByHome({ pairingId, reason: event.reason })
   }
 }
 
@@ -353,6 +359,7 @@ const homeStatusLabel: Record<HomeRow['status'], string> = {
   connecting: 'connecting…',
   home_offline: 'offline',
   unreachable: 'unreachable',
+  closed: 'not allowed',
 }
 
 const homeRow = (row: HomeRow, h: HtmlBuilder<Message>): Html =>
