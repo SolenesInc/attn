@@ -32,8 +32,14 @@ func (d *Daemon) analyticsEnabled() bool {
 	return parseBooleanSetting(d.machineSetting(SettingAnalyticsEnabled))
 }
 
+func (d *Daemon) analyticsCapturedSince(at time.Time) bool {
+	since := d.analyticsOnSince.Load()
+	return since != nil && !at.Before(*since) && d.analyticsEnabled()
+}
+
 func (d *Daemon) configureAnalytics() {
 	if !d.analyticsEnabled() {
+		d.analyticsOnSince.Store(nil)
 		if err := d.stopAnalyticsMirror(); err != nil {
 			d.logf("analytics: %v", err)
 		}
@@ -47,6 +53,8 @@ func (d *Daemon) configureAnalytics() {
 	if err := d.startAnalyticsMirror(secret); err != nil {
 		d.logf("analytics: %v", err)
 	}
+	now := time.Now()
+	d.analyticsOnSince.CompareAndSwap(nil, &now)
 }
 
 func ensureAnalyticsSecret(dataRoot string) ([]byte, error) {

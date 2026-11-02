@@ -9,7 +9,7 @@ import (
 
 func (h monitorHost) RunEnded(m *sessionmonitor.Monitor, run sessionmonitor.Run) {
 	d := h.daemon
-	if !d.analyticsEnabled() {
+	if !d.analyticsCapturedSince(run.StartedAt) {
 		return
 	}
 	session := m.Session()

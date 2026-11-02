@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -161,4 +163,78 @@ func TestARunWithNoWatchedTranscriptRecordsItsUsageUnavailable(t *testing.T) {
 	assertRuns(t, runRecords(t, w, app, session), []string{
 		"started_by=user ended=idle opened_turn=true approvals=0 usage=unavailable tokens=none harness=claude",
 	})
+}
+
+func claudeAtIdle(w *world, app *testworld.Peer) (string, *fakeagent.Run, protocol.Session) {
+	w.T.Helper()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(session)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	return session, agent, settleFromApp(app, idle)
+}
+
+func userRunStarts(app *testworld.Peer, agent *fakeagent.Run, session string, after protocol.Session, prompt string) protocol.Session {
+	app.T.Helper()
+	after = settleFromApp(app, after)
+	app.TypeLine(session, prompt)
+	agent.Prompted()
+	return testworld.AwaitStateAfter(app, after, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+}
+
+func TestARunRecordCoversOnlyRunsAnalyticsCapturedThroughout(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, agent, idle := claudeAtIdle(w, app)
+
+	working := userRunStarts(app, agent, session, idle, "find the flaky test")
+	setAnalyticsEnabled(app, "true")
+	stopped := runEnds(w, app, agent, working, "It races the tax lookup. <!-- attn:state=idle -->")
+
+	working = userRunStarts(app, agent, session, stopped, "fix it")
+	setAnalyticsEnabled(app, "false")
+	setAnalyticsEnabled(app, "true")
+	stopped = runEnds(w, app, agent, working, "Fixed the race. <!-- attn:state=idle -->")
+
+	working = userRunStarts(app, agent, session, stopped, "add a regression test")
+	capturedReply := "Added the test. <!-- attn:state=idle -->"
+	runEnds(w, app, agent, working, capturedReply)
+
+	assertRuns(t, runRecords(t, w, app, session), []string{
+		fmt.Sprintf("started_by=user ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(capturedReply)),
+	})
+}
+
+func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
+	steers := map[string]func(app *testworld.Peer, session string){
+		"typed": func(app *testworld.Peer, session string) { app.TypeLine(session, "also run the linter") },
+		"annotation": func(app *testworld.Peer, session string) {
+			requestID := uuid.NewString()
+			answer := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: "also run the linter"},
+				protocol.EventSessionAnnotationsSubmitResult, func(m protocol.SessionAnnotationsSubmitResultMessage) bool { return m.RequestID == requestID })
+			if !answer.Success {
+				app.T.Fatalf("annotation steer refused: %s %s", answer.Status, protocol.Deref(answer.Error))
+			}
+		},
+	}
+	for name, steer := range steers {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			setAnalyticsEnabled(app, "true")
+			session, agent, idle := claudeAtIdle(w, app)
+			app.TypeLine(session, "")
+			screenSnapshot(app, session)
+
+			agent.ProgramStatus("state=working:app=claude-code")
+			working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			steer(app, session)
+			agent.Prompted()
+			reply := "The build and the linter pass. <!-- attn:state=idle -->"
+			runEnds(w, app, agent, working, reply)
+
+			assertRuns(t, runRecords(t, w, app, session), []string{
+				fmt.Sprintf("started_by=agent ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(reply)),
+			})
+		})
+	}
 }

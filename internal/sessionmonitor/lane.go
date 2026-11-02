@@ -256,6 +256,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
+	steering := l.run != nil
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery)
@@ -269,6 +270,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		l.placed = make(map[string]Attempt)
 	}
 	l.placed[delivery.ID.String()] = attempt
+	if steering {
+		m.runSteeredLocked()
+	}
 	return attempt, l.tookLocked(delivery)
 }
 

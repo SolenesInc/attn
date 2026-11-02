@@ -38,7 +38,7 @@ type Run struct {
 
 type trackedRun struct {
 	Run
-	prompted    bool
+	startKnown  bool
 	costAtStart map[string]*sessioncost.Source
 }
 
@@ -70,7 +70,7 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 		if recovered || previous == protocol.SessionStateWorking || previous == protocol.SessionStatePendingApproval || m.input.run == nil {
 			return nil
 		}
-		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, prompted: m.input.run.prompted, costAtStart: m.cost}
+		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost}
 	case open == nil, phase == protocol.SessionStateWorking:
 	case phase == protocol.SessionStatePendingApproval:
 		if previous != protocol.SessionStatePendingApproval {
@@ -87,12 +87,22 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 	return nil
 }
 
+func (m *Monitor) runStartInFlightLocked() bool {
+	return m.input.userSubmit || m.input.placing || m.evidence.InitialPromptOwed
+}
+
+func (m *Monitor) runSteeredLocked() {
+	if open := m.runs.open; open != nil {
+		open.startKnown = true
+	}
+}
+
 func (m *Monitor) runPromptedLocked() {
 	open := m.runs.open
-	if open == nil || open.prompted {
+	if open == nil || open.startKnown {
 		return
 	}
-	open.prompted = true
+	open.startKnown = true
 	open.StartedBy = m.input.run.start()
 }
 

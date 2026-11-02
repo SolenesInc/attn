@@ -40,6 +40,7 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 		l.phase = m.state.State
 	}
 	if m.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
+		m.runSteeredLocked()
 		l.userSubmit = true
 	}
 	return m.registry.host.Input(ctx, terminal, data)

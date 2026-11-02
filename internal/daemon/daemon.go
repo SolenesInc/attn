@@ -139,6 +139,7 @@ type Daemon struct {
 	wsHub                      *wsHub
 	startedAt                  time.Time
 	analyticsUpload            analyticsUpload
+	analyticsOnSince           atomic.Pointer[time.Time]
 	appIdentity                atomic.Pointer[appIdentity]
 	lastPresentAt              time.Time
 	presenceMu                 sync.RWMutex
