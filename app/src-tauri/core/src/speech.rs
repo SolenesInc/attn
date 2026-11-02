@@ -190,9 +190,10 @@ fn read_events<R: Runtime>(app: &AppHandle<R>, stdout: ChildStdout, generation: 
             return;
         };
         let id = event["id"].as_u64();
-        if let Some(answer) = id.and_then(|id| helper.answers.get(&id)) {
-            if answer.send(event.clone()).is_err() {
-                helper.answers.remove(&id.expect("answered id"));
+        if let Some(id) = id.filter(|id| helper.answers.contains_key(id)) {
+            let delivered = helper.answers[&id].send(event.clone()).is_ok();
+            if !delivered || ends_request(&event) {
+                helper.answers.remove(&id);
             }
             continue;
         }
@@ -225,6 +226,10 @@ fn read_events<R: Runtime>(app: &AppHandle<R>, stdout: ChildStdout, generation: 
     drop(state);
     #[cfg(target_os = "macos")]
     crate::dictation::release(app, "The speech helper stopped while recording.");
+}
+
+fn ends_request(event: &Value) -> bool {
+    !matches!(event["event"].as_str(), Some("started" | "progress"))
 }
 
 fn phase_after(event: &Value) -> Option<Phase> {
