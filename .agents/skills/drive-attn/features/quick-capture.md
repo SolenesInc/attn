@@ -31,7 +31,7 @@ paired program sends with `attn send` without the panel or the setting.
 - Native menu: File, Quick Capture (`app/src-tauri/core/src/lib.rs`), enabled while quick capture is on. It has no key equivalent.
 - The panel (`app/src/components/QuickCapture.tsx`): the "Message" field, "To: <mailbox>" (`[aria-label="Send to"]`, ⌘K) with its list, ⌘1 to ⌘4 for the first four mailboxes, Enter to send, Shift+Enter for a new line, Escape closes the list first, then the history, then the panel. Dragging the panel's surface outside the message field and its controls moves the panel. In history, only the heading drags. Each time the panel opens, it centers on the screen that has the pointer. "Recent messages" shows the history (`app/src/components/QuickCaptureHistory.tsx`), and attached files show as previews (`app/src/components/QuickCaptureAttachmentPreview.tsx`).
 - **Settings → Experimental**: the "Quick Capture" switch (`[role="switch"][aria-label="Quick Capture"]`, `app/src/components/SettingsModalSections.tsx`).
-- The sender approval dialog: it opens in the main window whenever a program asks to pair, shows the program's name and a 4-digit code, and offers Deny and Allow.
+- The sender approval dialog: it opens in the main window whenever a program asks to pair, shows the program's name, the profile it will belong to and a 4-digit code, and offers Deny and Allow.
 - **Settings → Paired senders**: each paired program with when it paired and was last used, and Remove.
 - Where people see what agents do with it: the message appears in the chief's or member's terminal as typed text, and the history marks it "Read" once the agent retrieved it.
 

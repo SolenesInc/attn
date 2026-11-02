@@ -25,7 +25,7 @@ describe('Sender pairing prompt', () => {
     await gesture(daemon, () => daemon.emit(senders([backup, deploy])));
     await act(() => vi.advanceTimersByTimeAsync(0));
     const dialog = screen.getByRole('dialog', { name: 'Allow “deploy-bot” to send messages as you?' });
-    expect(dialog).toHaveTextContent('This program will be able to send files and messages that agents receive as your own.');
+    expect(dialog).toHaveTextContent('This program will be able to send files and messages that agents receive as your own, to the sessions of profile “Default”.');
     expect(dialog).toHaveTextContent('4821');
     expect(dialog).toHaveTextContent('Check that the program shows the same code.');
     expect(within(dialog).getByRole('button', { name: 'Deny' })).toHaveFocus();

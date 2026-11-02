@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import FocusTrap from './AppFocusTrap';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { useProfilesStore } from '../store/profiles';
 import { useSendersStore } from '../store/senders';
 import type { SenderPairing } from '../types/generated';
 import './SenderPairingPrompt.css';
@@ -17,6 +18,7 @@ function PairingRequest({ request }: { request: SenderPairing }) {
   const denyRef = useRef<HTMLButtonElement>(null);
   const [deciding, setDeciding] = useState(false);
   const [error, setError] = useState('');
+  const profileName = useProfilesStore((state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name);
 
   useEscapeStack(ignoreEscape, true);
 
@@ -40,7 +42,8 @@ function PairingRequest({ request }: { request: SenderPairing }) {
         >
           <h2 className="sender-pairing-title" id="sender-pairing-title">Allow “{request.name}” to send messages as you?</h2>
           <p className="sender-pairing-message" id="sender-pairing-message">
-            This program will be able to send files and messages that agents receive as your own.
+            This program will be able to send files and messages that agents receive as your own
+            {profileName ? <>, to the sessions of profile “{profileName}”</> : null}.
           </p>
           <p className="sender-pairing-code">{request.code}</p>
           <p className="sender-pairing-hint">Check that the program shows the same code.</p>

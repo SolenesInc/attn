@@ -152,3 +152,59 @@ func TestASessionMailboxNamesOneRunningSessionOfTheProfile(t *testing.T) {
 		t.Fatalf("saved mailbox: %+v", r.Mailbox)
 	}
 }
+
+func pairSenderInApp(t *testing.T, cli *client.Client, app *testworld.Peer, name string) *protocol.PairedSenderToken {
+	t.Helper()
+	request, outcome := requestSenderPairing(t, cli, name)
+	if r := decideSenderPairing(t, app, request.ID, true); !r.Success {
+		t.Fatalf("allowing %s: %+v", name, r)
+	}
+	paired := <-outcome
+	if paired.err != nil {
+		t.Fatalf("pairing %s: %v", name, paired.err)
+	}
+	return paired.token
+}
+
+func TestAPairedSenderBelongsToTheProfileTheAppShowed(t *testing.T) {
+	w := newWorld(t)
+	cli, app := w.Client(), w.TrustedApp()
+	registerSessions(t, w, cli, "target")
+	home := app.SelectedProfile()
+	homeSender := pairSenderInApp(t, cli, app, "Capture")
+
+	side := createProfile(app, "Side")
+	selectProfile(app, side.ID)
+	if shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(protocol.SendersUpdatedMessage) bool { return true }); len(shown.Senders) != 0 {
+		t.Fatalf("the app on Side shows Home's senders: %+v", shown.Senders)
+	}
+	sideSender := pairSenderInApp(t, cli, app, "Capture")
+
+	for profile, want := range map[string]string{home: homeSender.Sender.ID, side.ID: sideSender.Sender.ID} {
+		if listed, err := cli.PairedSenders(profile); err != nil || len(listed) != 1 || listed[0].ID != want {
+			t.Fatalf("senders of profile %s = %+v %v, want only %s", profile, listed, err, want)
+		}
+	}
+	for _, msg := range authoringAs(&sideSender.Token, home) {
+		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), `"Side"`) || !strings.Contains(err.Error(), home) {
+			t.Fatalf("Side's sender authoring %T in Home: %v", msg, err)
+		}
+	}
+	if err := cli.UnpairSender(side.ID, homeSender.Sender.ID); err == nil {
+		t.Fatal("Side unpaired Home's sender")
+	}
+
+	selectProfile(app, home)
+	deleted := profileRequest(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: "delete-side", ProfileID: side.ID, ExpectedRevision: side.Revision}, "delete-side")
+	if !deleted.Success {
+		t.Fatalf("delete Side: %+v", deleted)
+	}
+	for _, msg := range authoringAs(&sideSender.Token, side.ID) {
+		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), "no paired sender") {
+			t.Fatalf("a deleted profile's sender authoring %T: %v", msg, err)
+		}
+	}
+	if listed, err := cli.PairedSenders(home); err != nil || len(listed) != 1 {
+		t.Fatalf("Home's senders after deleting Side: %+v %v", listed, err)
+	}
+}

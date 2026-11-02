@@ -90,10 +90,10 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 
 ## Send files to an agent from outside Attn
 
-A program on the computer that runs Attn can send files and a message to any
-running agent, local or on an outpost. The agent receives them as a message
-from you, so only a program you paired can send. This does not need the Quick
-Capture setting.
+A program on the computer that runs Attn can send files and a message to a
+running agent of one profile, local or on an outpost. The agent receives them
+as a message from you, so only a program you paired can send. This does not
+need the Quick Capture setting.
 
 Pair a program once:
 
@@ -122,8 +122,9 @@ conversation as yours. For each file, the message has an
 agent runs, including on an outpost.
 
 To see a profile's paired programs, open the **Paired senders** list in
-Settings or run `attn send senders`. To stop a program sending, click **Remove** there or run
-`attn send unpair <name>`. Run `attn send --help` for the details.
+Settings or run `attn send senders`. To stop a program sending, click
+**Remove** there or run `attn send unpair <name>`. Run `attn send --help` for
+the details.
 
 ## Details
 
