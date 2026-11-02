@@ -18,7 +18,8 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
+func inboxRingText() string { return prompts.RenderText("session", "inbox-notification", nil) }
+
 var errInboxNoUnread = errors.New("agent inbox has no unread items to wake for")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
 var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstanding")
@@ -377,7 +378,7 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 		paste.typed = append(paste.typed, item.ID)
 	}
 	if paste.notified {
-		texts = append(texts, inboxRingText)
+		texts = append(texts, inboxRingText())
 	}
 	paste.text = strings.Join(texts, "\n\n")
 	return paste, nil

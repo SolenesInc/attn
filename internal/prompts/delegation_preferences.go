@@ -52,7 +52,7 @@ func delegationPreferencesRecipient() Recipient {
 }
 
 func preferenceText(event string, values Values) string {
-	result, err := builtin.Render("delegation-preferences", event, values)
+	result, err := Builtin().Render("delegation-preferences", event, values)
 	if err != nil {
 		panic(err)
 	}

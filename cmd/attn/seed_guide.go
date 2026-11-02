@@ -17,7 +17,7 @@ func runSeedGuide(args []string) {
 }
 
 func writeSeedGuide(w io.Writer) {
-	fmt.Fprint(w, seedGuideText)
+	fmt.Fprint(w, seedGuideText())
 }
 
-var seedGuideText = prompts.RenderText("authoring-agent", "seed-guide", nil)
+func seedGuideText() string { return prompts.RenderText("authoring-agent", "seed-guide", nil) }

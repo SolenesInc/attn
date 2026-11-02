@@ -32,11 +32,13 @@ type sessionStartHookOutput struct {
 	HookSpecificOutput sessionStartHookSpecificOutput `json:"hookSpecificOutput"`
 }
 
-var (
-	AgentGuidance                 = prompts.RenderText("session", "agent-guidance", nil)
-	GardenGuidance                = prompts.RenderText("session", "garden-guidance", nil)
-	PullRequestSelfReportGuidance = prompts.RenderText("session", "pull-request-guidance", nil)
-)
+func AgentGuidance() string { return prompts.RenderText("session", "agent-guidance", nil) }
+
+func GardenGuidance() string { return prompts.RenderText("session", "garden-guidance", nil) }
+
+func PullRequestSelfReportGuidance() string {
+	return prompts.RenderText("session", "pull-request-guidance", nil)
+}
 
 type Launch = prompts.Launch
 

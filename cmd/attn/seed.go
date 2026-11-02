@@ -414,8 +414,6 @@ func (f *seedFlags) client() *client.Client {
 	return client.New(config.SocketPath()).WithGardenProfile(profile, session)
 }
 
-var seedPrimeText = hooks.GardenGuidance
-
 func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	values := prompts.Values{
 		"has_crown": fmt.Sprint(ready.Crown != nil),
@@ -444,7 +442,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 }
 
 func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
-	return seedPrimeText + "\n\n" + seedPrimeTailFromReady(ready)
+	return hooks.GardenGuidance() + "\n\n" + seedPrimeTailFromReady(ready)
 }
 
 func runSeedPrime(args []string) {

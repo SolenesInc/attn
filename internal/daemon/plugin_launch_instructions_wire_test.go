@@ -38,9 +38,9 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				unwant  []string
 			}{
 				{launch: "agent", content: agent.Instructions.Content,
-					want: []string{hooks.AgentGuidance, hooks.GardenGuidance, askGuidanceLead}, unwant: []string{"shared context"}},
+					want: []string{hooks.AgentGuidance(), hooks.GardenGuidance(), askGuidanceLead}, unwant: []string{"shared context"}},
 				{launch: "chief", content: chief.Instructions.Content,
-					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance, askGuidanceLead}},
+					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance(), askGuidanceLead}},
 			} {
 				for _, want := range row.want {
 					if !strings.Contains(row.content, want) {
@@ -52,7 +52,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 						t.Errorf("the %s guidance still says %q", row.launch, unwant)
 					}
 				}
-				if told := strings.Contains(row.content, hooks.PullRequestSelfReportGuidance); told == reportsPullRequests {
+				if told := strings.Contains(row.content, hooks.PullRequestSelfReportGuidance()); told == reportsPullRequests {
 					t.Errorf("the %s guidance tells the agent to record its own pull requests: %v, want %v", row.launch, told, !reportsPullRequests)
 				}
 			}

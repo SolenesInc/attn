@@ -25,7 +25,9 @@ const (
 	sessionTitleAttempts = 3
 )
 
-var sessionTitleInstructions = prompts.RenderText("session-title", "instructions", nil)
+func sessionTitleInstructions() string {
+	return prompts.RenderText("session-title", "instructions", nil)
+}
 
 type sessionTitlePayload struct {
 	Conversation string             `json:"conversation"`
@@ -151,7 +153,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 	request := agentdriver.HeadlessTaskRequest{
 		Executable:   executable,
 		Model:        model,
-		SystemPrompt: sessionTitleInstructions,
+		SystemPrompt: sessionTitleInstructions(),
 		Prompt:       prompts.RenderText("session-title", "generate", prompts.Values{"conversation": conversation}),
 		WorkDir:      workDir,
 		DisableTools: true,

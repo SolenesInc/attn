@@ -16,7 +16,7 @@ import (
 func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{
 		"wake": prompts.RenderText("crew", "wake", prompts.Values{}), "successor": prompts.RenderText("crew", "successor", prompts.Values{}), "sleep-requested": prompts.RenderText("crew", "sleep-requested", prompts.Values{}),
-		"heartbeat": crewHeartbeatPrompt, "sleep-away": prompts.RenderText("crew", "sleep-away", prompts.Values{}),
+		"heartbeat": crewHeartbeatPrompt(), "sleep-away": prompts.RenderText("crew", "sleep-away", prompts.Values{}),
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {
@@ -44,9 +44,9 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		if mask&8 != 0 {
 			s.AgentTurns = []string{"Status one", "Status two"}
 		}
-		out[fmt.Sprint("title/", mask)] = sessionTitleInstructions + "\n\n" + prompts.RenderText("session-title", "generate", prompts.Values{"conversation": s.Render()})
+		out[fmt.Sprint("title/", mask)] = sessionTitleInstructions() + "\n\n" + prompts.RenderText("session-title", "generate", prompts.Values{"conversation": s.Render()})
 	}
-	out["inbox-notification"] = inboxRingText
+	out["inbox-notification"] = inboxRingText()
 	for _, kind := range []string{"comment", "global", "deletion"} {
 		for mask := 0; mask < 8; mask++ {
 			a := protocol.MarkdownAnnotation{ID: "a", Type: kind, Anchor: mdAnchor(2, 4, 0, "quote λ\n{{literal}}"), Text: protocol.Ptr("comment")}
