@@ -272,8 +272,30 @@ button:disabled {
   color: var(--accent);
 }
 
-.row.ask {
-  cursor: pointer;
+.ask-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.ask-item:last-child {
+  border-bottom: none;
+}
+
+button.row.ask {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  color: var(--text);
+  text-align: left;
+}
+
+.row.ask .row-main,
+.row.ask .row-title,
+.row.ask .row-where {
+  display: block;
+}
+
+.row.ask.offline {
+  color: var(--offline);
 }
 
 .row.ask .row-title {

@@ -20,7 +20,7 @@ import {
   type Answer,
 } from './asks/ask'
 import { ImageRefused, fetchAskImage } from './asks/images'
-import { visualsOf, type DiagramView, type ImageView } from './asks/markdown'
+import { keepParsed, visualsOf, type DiagramView, type ImageView } from './asks/markdown'
 import { askRow, askScreen, type AskActions, type AskRow } from './asks/view'
 import { attachZoom } from './asks/zoom'
 import { fromBase64Url } from './bytes'
@@ -62,6 +62,11 @@ const Zoom = Schema.Union([
 
 const OpenAskId = Schema.Struct({ pairingId: Schema.String, askId: Schema.String })
 
+const AnswerState = Schema.Union([
+  Schema.Struct({ status: Schema.Literal('sending') }),
+  Schema.Struct({ status: Schema.Literal('failed'), message: Schema.String }),
+])
+
 const OpenSession = Schema.Struct({ pairingId: Schema.String, sessionId: Schema.String })
 
 const Composer = Schema.Struct({
@@ -80,8 +85,7 @@ export const Model = Schema.Struct({
   keyboardHeight: Schema.Finite,
   openAsk: Schema.NullOr(OpenAskId),
   drafts: Schema.Record(Schema.String, Draft),
-  sending: Schema.Boolean,
-  sendError: Schema.String,
+  answering: Schema.Record(Schema.String, AnswerState),
   images: Schema.Record(Schema.String, ImageState),
   diagrams: Schema.Record(Schema.String, DiagramState),
   zoom: Schema.NullOr(Zoom),
@@ -379,15 +383,28 @@ const openAskOf = (model: Model) => {
     ?.asks.find((ask) => ask.id === open.askId)
 }
 
-const draftOf = (model: Model): Draft =>
-  (model.openAsk && model.drafts[askKey(model.openAsk.pairingId, model.openAsk.askId)]) || emptyDraft
+const openAskKey = (model: Model): string | null =>
+  model.openAsk ? askKey(model.openAsk.pairingId, model.openAsk.askId) : null
+
+const draftOf = (model: Model): Draft => {
+  const key = openAskKey(model)
+  return (key && model.drafts[key]) || emptyDraft
+}
+
+const answeringOpenAsk = (model: Model) => {
+  const key = openAskKey(model)
+  return key ? model.answering[key] : undefined
+}
+
+const without = <V>(record: Readonly<Record<string, V>>, key: string): Record<string, V> =>
+  Object.fromEntries(Object.entries(record).filter(([k]) => k !== key))
 
 const withDraft = (model: Model, change: (draft: Draft) => Draft): Model => {
-  if (!model.openAsk) return model
-  const key = askKey(model.openAsk.pairingId, model.openAsk.askId)
+  const key = openAskKey(model)
+  if (!key || answeringOpenAsk(model)?.status === 'sending') return model
   return modifyFields(model, {
     drafts: (drafts) => ({ ...drafts, [key]: change(draftOf(model)) }),
-    sendError: () => '',
+    answering: (answering) => without(answering, key),
   })
 }
 
@@ -399,10 +416,13 @@ const withAnswer = (model: Model, key: string, change: (answer: Answer) => Answe
 
 const sendDraft = (model: Model): Update.Return<Model, Message> => {
   const ask = openAskOf(model)
-  if (!ask || !model.openAsk || model.sending) return { model }
+  const key = openAskKey(model)
+  if (!ask || !model.openAsk || !key || answeringOpenAsk(model)?.status === 'sending') return { model }
   const draft = draftOf(model)
   return {
-    model: modifyFields(model, { sending: () => true, sendError: () => '' }),
+    model: modifyFields(model, {
+      answering: (answering) => ({ ...answering, [key]: { status: 'sending' as const } }),
+    }),
     commands: [
       SendAnswer({
         pairingId: model.openAsk.pairingId,
@@ -417,13 +437,13 @@ const sendDraft = (model: Model): Update.Return<Model, Message> => {
 const askMarkdowns = (ask: PhoneAsk): ReadonlyArray<string> =>
   ask.parts.flatMap((part) => [part.markdown ?? '', part.question?.context ?? ''].filter(Boolean))
 
-// Keeps the images and diagrams of the asks the homes still list, and starts loading the open asks' missing ones.
 const receiveAsks = (
   model: Model,
   pairingId: string,
   asks: ReadonlyArray<PhoneAsk>,
 ): Update.Return<Model, Message> => {
   const homes = model.homes.map((home) => (home.pairing.id === pairingId ? { ...home, asks } : home))
+  keepParsed(homes.flatMap((home) => home.asks.flatMap(askMarkdowns)))
   const wantedImages = new Set<string>()
   const wantedDiagrams = new Set<string>()
   const loads: Array<{ pairingId: string; askId: string; src: string }> = []
@@ -506,8 +526,6 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, {
         screen: () => 'ask' as const,
         openAsk: () => ({ pairingId, askId }),
-        sending: () => false,
-        sendError: () => '',
       }),
     }),
     ClickedBack: () => ({
@@ -515,7 +533,6 @@ export const update = (model: Model, message: Message) =>
         screen: () => 'queue' as const,
         openAsk: () => null,
         openSession: () => null,
-        sendError: () => '',
         zoom: () => null,
       }),
       commands: model.screen === 'session' ? [HideKeyboard()] : [],
@@ -523,7 +540,7 @@ export const update = (model: Model, message: Message) =>
     PickedChoice: ({ key, label }) => {
       const ask = openAskOf(model)
       const question = ask?.parts.find((part) => part.question?.key === key)?.question
-      if (!ask || !question || model.sending) return { model }
+      if (!ask || !question || answeringOpenAsk(model)?.status === 'sending') return { model }
       const picked = withAnswer(model, key, (answer) =>
         question.kind === 'one'
           ? { ...answer, picked: [label], other: '' }
@@ -556,15 +573,20 @@ export const update = (model: Model, message: Message) =>
       const stillOpen = model.openAsk?.pairingId === pairingId && model.openAsk.askId === askId
       return {
         model: modifyFields(model, {
-          sending: () => false,
-          drafts: (drafts) => Object.fromEntries(Object.entries(drafts).filter(([k]) => k !== key)),
+          answering: (answering) => without(answering, key),
+          drafts: (drafts) => without(drafts, key),
           screen: () => (stillOpen ? ('queue' as const) : model.screen),
           openAsk: () => (stillOpen ? null : model.openAsk),
         }),
       }
     },
-    FailedAnswer: ({ message }) => ({
-      model: modifyFields(model, { sending: () => false, sendError: () => `Not sent: ${message}` }),
+    FailedAnswer: ({ pairingId, askId, message }) => ({
+      model: modifyFields(model, {
+        answering: (answering) => ({
+          ...answering,
+          [askKey(pairingId, askId)]: { status: 'failed' as const, message: `Not sent: ${message}` },
+        }),
+      }),
     }),
     LoadedImage: ({ key, url }) =>
       model.images[key]
@@ -707,8 +729,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     keyboardHeight: 0,
     openAsk: null,
     drafts: {},
-    sending: false,
-    sendError: '',
+    answering: {},
     images: {},
     diagrams: {},
     zoom: null,
@@ -1240,11 +1261,17 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
 const waitingCount = (model: Model) => buildQueue(model.homes).waiting.length + askRows(model.homes).length
 
 const openAskView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const answering = answeringOpenAsk(model)
   const open = model.openAsk
   const home = open ? model.homes.find((home) => home.pairing.id === open.pairingId) : undefined
   const row = home && open ? askRowsOf(home).find((row) => row.ask.id === open.askId) : undefined
   return askScreen(
-    { row, draft: draftOf(model), sending: model.sending, error: model.sendError },
+    {
+      row,
+      draft: draftOf(model),
+      sending: answering?.status === 'sending',
+      error: answering?.status === 'failed' ? answering.message : '',
+    },
     model.now,
     waitedFor,
     askActions(model),

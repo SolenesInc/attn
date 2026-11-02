@@ -46,21 +46,29 @@ export const askRow = <Message>(
   h: HtmlBuilder<Message>,
 ): Html =>
   h.li(
+    [h.Key(row.key), h.Class('ask-item')],
     [
-      h.Key(row.key),
-      h.Class(`row ask${row.live ? '' : ' offline'}`),
-      h.DataAttribute('testid', 'ask-entry'),
-      h.OnClick(actions.openAsk(row.pairing.id, row.ask.id)),
-    ],
-    [
-      h.div(
-        [h.Class('row-main')],
+      h.button(
         [
-          h.div([h.Class('row-title')], [row.ask.subject]),
-          h.div([h.Class('row-where')], [`${row.from} · ${where(row.pairing)}`]),
+          h.Type('button'),
+          h.Class(`row ask${row.live ? '' : ' offline'}`),
+          h.DataAttribute('testid', 'ask-entry'),
+          h.OnClick(actions.openAsk(row.pairing.id, row.ask.id)),
+        ],
+        [
+          h.span(
+            [h.Class('row-main')],
+            [
+              h.span([h.Class('row-title')], [row.ask.subject]),
+              h.span([h.Class('row-where')], [`${row.from} · ${where(row.pairing)}`]),
+            ],
+          ),
+          h.span(
+            [h.Class('row-side')],
+            [h.span([h.Class('age')], [age]), h.span([h.Class('chevron'), h.AriaHidden(true)], ['›'])],
+          ),
         ],
       ),
-      h.div([h.Class('row-side')], [h.span([h.Class('age')], [age]), h.span([h.Class('chevron')], ['›'])]),
     ],
   )
 

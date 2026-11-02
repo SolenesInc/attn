@@ -4,18 +4,6 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { gfm } from 'micromark-extension-gfm'
 
-const parsed = new Map<string, Root>()
-const parsedLimit = 200
-
-export const parseMarkdown = (markdown: string): Root => {
-  const cached = parsed.get(markdown)
-  if (cached) return cached
-  if (parsed.size >= parsedLimit) parsed.clear()
-  const root = fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] })
-  parsed.set(markdown, root)
-  return root
-}
-
 const walk = (node: Nodes, visit: (node: Nodes) => void) => {
   visit(node)
   if ('children' in node) for (const child of node.children) walk(child, visit)
@@ -43,18 +31,59 @@ const htmlImages = (html: string): ReadonlyArray<{ readonly src: string; readonl
     return src ? [{ src, alt: attribute(tag, 'alt') ?? '' }] : []
   })
 
+type Parsed = {
+  readonly root: Root
+  readonly definitions: ReadonlyMap<string, string>
+  readonly images: ReadonlyArray<{ readonly src: string; readonly alt: string }>
+  readonly diagrams: ReadonlyArray<string>
+}
+
+const parse = (markdown: string): Parsed => {
+  const root = fromMarkdown(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] })
+  const definitions = new Map<string, string>()
+  walk(root, (node) => {
+    if (node.type === 'definition' && !definitions.has(node.identifier))
+      definitions.set(node.identifier, node.url)
+  })
+  const images: Array<{ src: string; alt: string }> = []
+  const diagrams: Array<string> = []
+  walk(root, (node) => {
+    if (node.type === 'image' && node.url) images.push({ src: node.url, alt: node.alt ?? '' })
+    if (node.type === 'imageReference') {
+      const src = definitions.get(node.identifier)
+      if (src) images.push({ src, alt: node.alt ?? '' })
+    }
+    if (node.type === 'html') images.push(...htmlImages(node.value))
+    if (node.type === 'code' && node.lang === 'mermaid') diagrams.push(node.value)
+  })
+  return { root, definitions, images, diagrams }
+}
+
+let parsed = new Map<string, Parsed>()
+
+const parsedMarkdown = (markdown: string): Parsed => {
+  const cached = parsed.get(markdown)
+  if (cached) return cached
+  const fresh = parse(markdown)
+  parsed.set(markdown, fresh)
+  return fresh
+}
+
+export const keepParsed = (markdowns: Iterable<string>) => {
+  const kept = new Map<string, Parsed>()
+  for (const markdown of markdowns) kept.set(markdown, parsedMarkdown(markdown))
+  parsed = kept
+}
+
 export type Visuals = { readonly images: ReadonlyArray<string>; readonly diagrams: ReadonlyArray<string> }
 
-// The image sources and mermaid diagrams a piece of markdown shows, each once, in reading order.
 export const visualsOf = (markdowns: ReadonlyArray<string>): Visuals => {
   const images = new Set<string>()
   const diagrams = new Set<string>()
   for (const markdown of markdowns) {
-    walk(parseMarkdown(markdown), (node) => {
-      if (node.type === 'image' && node.url) images.add(node.url)
-      if (node.type === 'html') for (const image of htmlImages(node.value)) images.add(image.src)
-      if (node.type === 'code' && node.lang === 'mermaid') diagrams.add(node.value)
-    })
+    const shown = parsedMarkdown(markdown)
+    for (const image of shown.images) images.add(image.src)
+    for (const code of shown.diagrams) diagrams.add(code)
   }
   return { images: [...images], diagrams: [...diagrams] }
 }
@@ -84,6 +113,7 @@ export const renderMarkdown = <Message>(
   context: MarkdownContext<Message>,
   h: HtmlBuilder<Message>,
 ): Html => {
+  const { root, definitions } = parsedMarkdown(markdown)
   const children = (node: Nodes): Array<Html | string> =>
     'children' in node ? node.children.map((child: RootContent) => render(child)) : []
 
@@ -176,6 +206,18 @@ export const renderMarkdown = <Message>(
         return h.a([h.Href(node.url), h.Target('_blank'), h.Rel('noopener')], children(node))
       case 'image':
         return image(node.url, node.alt ?? '')
+      case 'imageReference': {
+        const src = definitions.get(node.identifier)
+        return src ? image(src, node.alt ?? '') : `![${node.alt ?? ''}]`
+      }
+      case 'linkReference': {
+        const href = definitions.get(node.identifier)
+        return href
+          ? h.a([h.Href(href), h.Target('_blank'), h.Rel('noopener')], children(node))
+          : textOf(node)
+      }
+      case 'definition':
+        return ''
       case 'table':
         return h.div([h.Class('md-table')], [h.table([], [h.tbody([], children(node))])])
       case 'tableRow':
@@ -196,5 +238,5 @@ export const renderMarkdown = <Message>(
     }
   }
 
-  return h.div([h.Class('markdown')], children(parseMarkdown(markdown)))
+  return h.div([h.Class('markdown')], children(root))
 }

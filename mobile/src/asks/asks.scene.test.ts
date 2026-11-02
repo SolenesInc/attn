@@ -28,8 +28,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
   screen: 'queue',
   openAsk: null,
   drafts: {},
-  sending: false,
-  sendError: '',
+  answering: {},
   images: {},
   diagrams: {},
   zoom: null,
@@ -288,6 +287,51 @@ describe('asks on the phone', () => {
       ),
       Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
       Scene.expect(Scene.role('img', { name: 'the wide board' })).toHaveAttr('src', 'blob:wide'),
+    )
+  })
+
+  it('loads a reference-style image from the definition in its part', () => {
+    const referenceAsk = ask('a-ref', 1, [
+      { markdown: 'The board:\n\n![the board][shot]\n\n[shot]: shots/board.png', question: null },
+      { markdown: null, question: choiceQuestion },
+    ])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [referenceAsk]),
+      Scene.Command.resolve(
+        LoadImage({ pairingId: personal.id, askId: 'a-ref', src: 'shots/board.png' }),
+        Message.LoadedImage({ key: `${personal.id}\na-ref\nshots/board.png`, url: 'blob:board' }),
+      ),
+      Scene.click(Scene.role('button', { name: /Which store\?/ })),
+      Scene.expect(Scene.role('img', { name: 'the board' })).toHaveAttr('src', 'blob:board'),
+    )
+  })
+
+  it('keeps an answer in flight when the ask is left and opened again, and shows its failure there', () => {
+    const opened = (model: Model) =>
+      update(model, Message.ClickedAsk({ pairingId: personal.id, askId: 'a-store' })).model
+    let model = update(
+      online(personal),
+      Message.ReceivedAsks({ pairingId: personal.id, asks: [storeAsk] }),
+    ).model
+    model = opened(model)
+    const tapped = update(model, Message.PickedChoice({ key: 'q1', label: 'Redis' }))
+    expect(tapped.commands).toHaveLength(1)
+    model = opened(update(tapped.model, Message.ClickedBack()).model)
+
+    const again = update(model, Message.PickedChoice({ key: 'q1', label: 'Postgres' }))
+    expect(again.commands ?? []).toHaveLength(0)
+    Scene.scene({ update, view }, Scene.given(again.model), Scene.expect(Scene.text('Sending…')).toExist())
+
+    model = update(
+      update(again.model, Message.ClickedBack()).model,
+      Message.FailedAnswer({ pairingId: personal.id, askId: 'a-store', message: 'Mac went offline' }),
+    ).model
+    Scene.scene(
+      { update, view },
+      Scene.given(opened(model)),
+      Scene.expect(Scene.text('Not sent: Mac went offline')).toExist(),
     )
   })
 
