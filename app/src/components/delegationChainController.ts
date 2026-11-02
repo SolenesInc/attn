@@ -91,7 +91,17 @@ export class DelegationChainController {
     if (this.current && !this.popover?.contains(event.target as Node)) this.dismiss('outside-scroll');
   };
 
-  setPopover = (element: HTMLElement | null) => { this.popover = element; };
+  setPopover = (element: HTMLElement | null) => {
+    this.popover?.removeEventListener('pointerenter', this.cancelClose);
+    this.popover?.removeEventListener('pointerleave', this.leavePopover);
+    this.popover = element;
+    element?.addEventListener('pointerenter', this.cancelClose);
+    element?.addEventListener('pointerleave', this.leavePopover);
+  };
+
+  private leavePopover = () => {
+    if (this.current) this.leave(this.current.sessionId, this.current.anchor);
+  };
 
   cancelClose = () => {
     clearTimeout(this.closeTimer);
