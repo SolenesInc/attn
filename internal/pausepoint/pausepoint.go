@@ -29,6 +29,7 @@ const (
 	PtyWorkerUpgrade  = "pty-worker-upgrade"
 	PtyWaitBlock      = "pty-wait-block"
 	PtyRemoveReplied  = "pty-remove-replied"
+	PtyWorkerStopped  = "pty-worker-stopped"
 	BusAnnounce       = "bus-announce"
 	BusEventHandled   = "bus-event-handled"
 	SeedRollbackRead  = "seed-rollback-read"

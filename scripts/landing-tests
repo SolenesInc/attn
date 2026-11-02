@@ -43,6 +43,8 @@ go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTransc
 go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
 go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
 go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
+go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
+go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

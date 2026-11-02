@@ -302,6 +302,7 @@ func (r *Runtime) run(ctx context.Context) error {
 			r.manager.Shutdown()
 		}
 		r.cleanup()
+		pausepoint.At(pausepoint.PtyWorkerStopped)
 	}()
 
 	if r.adopted {
