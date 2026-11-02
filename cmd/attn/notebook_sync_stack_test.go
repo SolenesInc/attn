@@ -54,7 +54,7 @@ func reportedCopy(t *testing.T, outpost *testworld.Stack, seed string, profile .
 
 func awaitNotebookState(t *testing.T, pair *testworld.OutpostPair, state protocol.OutpostNotebookState) protocol.OutpostNotebook {
 	t.Helper()
-	for _, row := range pair.App.Initial.Outposts {
+	for _, row := range outpostsShownAt(pair.App, len(pair.App.Log())) {
 		if row.ID == pair.Host && row.Notebook != nil && row.Notebook.State == state {
 			return *row.Notebook
 		}
@@ -445,7 +445,7 @@ func awaitNotebookError(t *testing.T, pair *testworld.OutpostPair, want ...strin
 		}
 		return true
 	}
-	for _, row := range pair.App.Initial.Outposts {
+	for _, row := range outpostsShownAt(pair.App, len(pair.App.Log())) {
 		if names(row) {
 			return protocol.Deref(row.Notebook.Error)
 		}

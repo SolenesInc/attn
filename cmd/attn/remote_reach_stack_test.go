@@ -16,14 +16,7 @@ func outpostReachSince(p *testworld.Peer, mark int, name string, reach protocol.
 	p.T.Helper()
 	var previous string
 	if reach == protocol.OutpostReachReachable && mark > 0 {
-		rows := p.Initial.Outposts
-		for _, raw := range p.Log()[:mark] {
-			var update protocol.OutpostsUpdatedMessage
-			if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
-				rows = update.Outposts
-			}
-		}
-		for _, row := range rows {
+		for _, row := range outpostsShownAt(p, mark) {
 			if row.Name == name {
 				previous = row.StateSince
 			}

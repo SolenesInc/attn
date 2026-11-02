@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,17 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func outpostsShownAt(p *testworld.Peer, mark int) []protocol.OutpostInfo {
+	rows := p.Initial.Outposts
+	for _, raw := range p.Log()[:mark] {
+		var update protocol.OutpostsUpdatedMessage
+		if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+			rows = update.Outposts
+		}
+	}
+	return rows
+}
 
 func outpostState(p *testworld.Peer, name string, state protocol.OutpostState) protocol.OutpostInfo {
 	var found protocol.OutpostInfo
