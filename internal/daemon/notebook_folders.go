@@ -179,7 +179,7 @@ const NotebookFoldersRetryTimer stepclock.Name = "notebook-folders-retry"
 
 func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 	var sent []protocol.NotebookSyncFolder
-	pushed := false
+	pushed, failed := false, false
 	backoff := bridge.ReconnectInterval
 	for conn.Context().Err() == nil {
 		changed := d.notebookFoldersChanges()
@@ -188,7 +188,7 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 		folders := notebookFoldersWire(d.notebookSync.folders)
 		d.notebookSync.mu.Unlock()
 		var retry stepclock.Timer
-		if listed && (!pushed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
+		if listed && (!pushed || failed || !slices.EqualFunc(sent, folders, func(a, b protocol.NotebookSyncFolder) bool {
 			return a.ID == b.ID && a.Epoch == b.Epoch && slices.Equal(a.Profiles, b.Profiles)
 		})) {
 			err := conn.Call(conn.Context(), bridgeCall, protocol.NotebookFoldersMessage{Cmd: protocol.CmdNotebookFolders, Folders: folders}, nil)
@@ -198,12 +198,13 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 				if !pushed {
 					openStream()
 				}
-				sent, pushed, backoff = folders, true, bridge.ReconnectInterval
+				sent, pushed, failed, backoff = folders, true, false, bridge.ReconnectInterval
 			case conn.Context().Err() == nil:
 				d.logf("Notebook folders for %s: %v", conn.Peer().Name, err)
 				if rejected := (*bridge.CallRejected)(nil); errors.As(err, &rejected) {
 					d.setNotebookFoldersRejection(conn, rejected.Reason)
 				}
+				failed = true
 				retry = d.clock.NewTimer(NotebookFoldersRetryTimer, backoff)
 				backoff = min(2*backoff, bridge.RefusedRetryInterval)
 			}

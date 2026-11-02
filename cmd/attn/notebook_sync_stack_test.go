@@ -432,6 +432,35 @@ func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T)
 	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list before the stream opened, and before-recovery.md reached %s", rejected, copied)
 }
 
+func TestARejectedFolderListClearsWhenTheListRevertsToTheAcceptedOne(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	state := filepath.Join(outpost.Dir, "notebook-sync")
+	if err := os.Chmod(state, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(state, 0700) })
+	created := testworld.Request(pair.App, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "second", Name: "Second"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "second" })
+	if !created.Success {
+		t.Fatalf("create Second: %+v", created)
+	}
+	rejected := awaitNotebookError(t, pair, "outpost rejected the Notebook folder list", "permission denied")
+
+	if err := os.Chmod(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	deleted := testworld.Request(pair.App, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: "delete-second", ProfileID: created.Profile.ID, ExpectedRevision: created.Profile.Revision}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "delete-second" })
+	if !deleted.Success {
+		t.Fatalf("delete Second: %+v", deleted)
+	}
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	writeNotebookFile(t, home, "after-revert.md", "written once the list was back to the accepted one")
+	awaitOutpostFile(t, pair, filepath.Join(outpostCopyPlacement(outpost, "notebook", notebookPath(home)), "after-revert.md"), "written once the list was back to the accepted one", false)
+	t.Logf("the row showed %q for the list with Second; deleting Second brought the list back to the accepted one, and the row returned to in_sync without a reconnect", rejected)
+}
+
 func TestANestedFolderNeverSyncsThroughTheFolderAroundIt(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
