@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/cloudlink"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -37,9 +38,12 @@ type gatewayTerminal struct {
 	pendingLen int
 	floor      uint32
 	credit     int
-	needScreen bool
-	flushing   bool
-	detached   bool
+	// A screen covers the output dropped before it was asked for; one asked for during a snapshot needs another.
+	screensAsked   uint64
+	screensCovered uint64
+	flushing       bool
+	detached       bool
+	awaitingHost   bool
 }
 
 type gatewayChunk struct {
@@ -132,7 +136,7 @@ func (d *Daemon) gatewayAttach(conn *gatewayConn, message gateway.TerminalAttach
 	if !d.gatewayRequestSize(conn, id, message.Cols, message.Rows) {
 		return
 	}
-	terminal := &gatewayTerminal{id: id, conn: conn, credit: message.Credit, needScreen: true}
+	terminal := &gatewayTerminal{id: id, conn: conn, credit: message.Credit, screensAsked: 1}
 	stream, err := d.gatewayOpenStream(terminal)
 	if err != nil {
 		d.gatewayTerminalError(conn, id, "could not open the terminal: "+err.Error())
@@ -264,9 +268,26 @@ func (d *Daemon) runGatewayTerminal(terminal *gatewayTerminal, stream ptybackend
 		if terminal.isDetached() {
 			return
 		}
-		if !d.terminalNeedsResync(d.life.Context(), terminal.id) {
-			terminal.queue(gatewayChunk{ended: true})
+		if d.gatewayTerminalGone(terminal.id) {
+			d.gatewayTerminalEnded(terminal)
+			return
+		}
+		if host := d.sessionHost(d.terminals().owner(terminal.id)); host != "" {
+			next, err := d.gatewayOpenStream(terminal)
+			if err != nil {
+				d.gatewayAwaitHost(terminal, host, err)
+				return
+			}
+			if !terminal.reopened(next) {
+				_ = next.Close()
+				return
+			}
+			stream = next
 			d.gatewayFlushSoon(terminal, 0)
+			continue
+		}
+		if !d.terminalNeedsResync(d.life.Context(), terminal.id) {
+			d.gatewayTerminalEnded(terminal)
 			return
 		}
 		next, err := d.gatewayOpenStream(terminal)
@@ -281,6 +302,70 @@ func (d *Daemon) runGatewayTerminal(terminal *gatewayTerminal, stream ptybackend
 		stream = next
 		d.gatewayFlushSoon(terminal, 0)
 	}
+}
+
+func (d *Daemon) gatewayAwaitHost(terminal *gatewayTerminal, host string, err error) {
+	terminal.mu.Lock()
+	terminal.stream = nil
+	terminal.awaitingHost = !terminal.detached
+	terminal.mu.Unlock()
+	_, name, _ := d.outpostConn(host)
+	d.gatewayTerminalError(terminal.conn, terminal.id, fmt.Sprintf("lost the terminal on %s (%v); it comes back when %s answers again", name, err, name))
+}
+
+// gatewayResumeAwaiting runs on every change the gateway hears, so a terminal whose outpost answers again resumes.
+func (d *Daemon) gatewayResumeAwaiting(conn *gatewayConn) {
+	conn.terminalsMu.Lock()
+	var resuming []*gatewayTerminal
+	for _, terminal := range conn.terminals {
+		if terminal.takeAwaiting() {
+			resuming = append(resuming, terminal)
+		}
+	}
+	conn.terminalsMu.Unlock()
+	for _, terminal := range resuming {
+		d.life.Go("gatewayResumeTerminal", func() {
+			if d.gatewayTerminalGone(terminal.id) {
+				d.gatewayTerminalEnded(terminal)
+				return
+			}
+			stream, err := d.gatewayOpenStream(terminal)
+			if err != nil {
+				terminal.backToAwaiting()
+				return
+			}
+			if !terminal.reopened(stream) {
+				_ = stream.Close()
+				return
+			}
+			d.gatewayFlushSoon(terminal, 0)
+			d.runGatewayTerminal(terminal, stream)
+		})
+	}
+}
+
+func (d *Daemon) gatewayTerminalGone(id protocol.TerminalID) bool {
+	session, shown := d.shownIn(id)
+	return !shown || d.store.GetSessionExit(session) != nil
+}
+
+func (d *Daemon) gatewayTerminalEnded(terminal *gatewayTerminal) {
+	terminal.queue(gatewayChunk{ended: true})
+	d.gatewayFlushSoon(terminal, 0)
+}
+
+func (t *gatewayTerminal) takeAwaiting() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	taken := t.awaitingHost
+	t.awaitingHost = false
+	return taken
+}
+
+func (t *gatewayTerminal) backToAwaiting() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.awaitingHost = !t.detached
 }
 
 func (d *Daemon) gatewayReadStream(terminal *gatewayTerminal, stream ptybackend.Stream) {
@@ -316,26 +401,31 @@ func (t *gatewayTerminal) reopened(stream ptybackend.Stream) bool {
 		return false
 	}
 	t.stream = stream
+	t.awaitingHost = false
 	t.pending = nil
 	t.pendingLen = 0
-	t.needScreen = true
+	t.screensAsked++
 	return true
 }
 
 func (t *gatewayTerminal) output(seq uint32, data []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.detached || (!t.needScreen && seq <= t.floor) {
+	if t.detached || (!t.needsScreenLocked() && seq <= t.floor) {
 		return
 	}
 	if t.pendingLen+len(data) > gatewayPendingTripwire {
 		t.pending = nil
 		t.pendingLen = 0
-		t.needScreen = true
+		t.screensAsked++
 		return
 	}
 	t.pending = append(t.pending, gatewayChunk{output: data, seq: seq})
 	t.pendingLen += len(data)
+}
+
+func (t *gatewayTerminal) needsScreenLocked() bool {
+	return t.screensAsked > t.screensCovered
 }
 
 func (t *gatewayTerminal) queue(chunk gatewayChunk) {
@@ -367,7 +457,7 @@ func (t *gatewayTerminal) hasWorkLocked() bool {
 	if t.detached {
 		return false
 	}
-	if t.needScreen {
+	if t.needsScreenLocked() {
 		return t.credit >= cloudlink.MaxMessageBytes
 	}
 	return t.credit > 0 && len(t.pending) > 0
@@ -381,7 +471,7 @@ func (d *Daemon) gatewayFlush(terminal *gatewayTerminal) {
 			terminal.mu.Unlock()
 			return
 		}
-		if terminal.needScreen {
+		if terminal.needsScreenLocked() {
 			terminal.mu.Unlock()
 			if !d.gatewaySendScreen(terminal) {
 				return
@@ -440,7 +530,11 @@ func (t *gatewayTerminal) nextMessageLocked() ([]byte, bool) {
 }
 
 func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
+	terminal.mu.Lock()
+	asked := terminal.screensAsked
+	terminal.mu.Unlock()
 	snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](context.Background(), d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal.id})
+	pausepoint.At(pausepoint.GatewayScreenCaptured)
 	if err == nil && !snapshot.Success {
 		err = errors.New(protocol.Deref(snapshot.Error))
 	}
@@ -460,9 +554,13 @@ func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
 		return false
 	}
 	terminal.mu.Lock()
+	if terminal.screensAsked != asked {
+		terminal.mu.Unlock()
+		return true
+	}
 	floor := uint32(protocol.Deref(snapshot.LastSeq))
 	terminal.floor = floor
-	terminal.needScreen = false
+	terminal.screensCovered = asked
 	terminal.credit -= len(ansi)
 	kept := terminal.pending[:0]
 	terminal.pendingLen = 0

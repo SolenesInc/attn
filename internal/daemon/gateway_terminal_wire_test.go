@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
 	"github.com/victorarias/attn/internal/testworld"
@@ -305,5 +306,31 @@ func TestAPhoneReachesOnlyTheTerminalsOfItsPairingsProfile(t *testing.T) {
 	sideApp.AwaitScreen(theirs, "after=36 120.")
 	if bytes.Contains(sideApp.Screen(theirs), []byte("from-the-phone")) {
 		t.Fatal("a phone paired with another profile typed into this terminal")
+	}
+}
+
+func TestAPhoneThatFallsBehindWhileItsScreenIsTakenGetsAScreenThatCoversWhatItMissed(t *testing.T) {
+	w := newWorld(t)
+	desktop := w.App()
+	setSetting(t, desktop, "phone_access_enabled", "true")
+	session := w.Spawn(desktop, shellHarness, w.Path("shop"))
+	terminal := desktop.Terminal(session)
+
+	keeping, _ := welcomedPhone(t, w, desktop.SelectedProfile())
+	watching := keeping.attach(terminal, 80, 24, phoneCredit)
+	watching.keepUp = true
+	watching.read()
+
+	capturing := w.PauseAt(pausepoint.GatewayScreenCaptured)
+	behind, _ := welcomedPhone(t, w, desktop.SelectedProfile())
+	opened := behind.attach(terminal, 80, 24, phoneCredit)
+	capturing.Await()
+	watching.typeLine(`printf 'marker-%s' 2; head -c 1300000 /dev/zero | tr '\0' '\a'; echo; echo done-$((1+1))`)
+	watching.awaitShown("done-2\r\n")
+	capturing.Release()
+
+	opened.awaitShown("done-2")
+	if !bytes.Contains(opened.shown, []byte("marker-2")) {
+		t.Fatalf("the phone shows %q at the end of what it got after falling behind during its first screen; want the marker the dropped output drew", opened.shown[max(0, len(opened.shown)-200):])
 	}
 }

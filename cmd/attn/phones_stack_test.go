@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 
 	"nhooyr.io/websocket"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -426,6 +428,87 @@ func TestAPhoneThatReconnectsWhileTheHomeStartsOpensItsTerminalOnceTheHomeHasRec
 			return
 		case "terminal_error":
 			t.Fatalf("the phone's attach during the restart was refused: %s", raw)
+		}
+	}
+}
+
+func TestAPhonesOutpostTerminalComesBackWhenTheOutpostAnswersAgain(t *testing.T) {
+	t.Setenv("ATTN_TEST_CLOUD_URL", "")
+	cloud := testworld.StartCloud(t)
+	home, remote := testworld.NewStack(t), testworld.NewStack(t)
+	home.Vars = append(home.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	pair := testworld.PrepareOutpostPair(t, home, remote)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	app := pair.App
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	terminal := app.Terminal(shell)
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "pair").Qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := socket.Pair(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Hello()
+	var output bytes.Buffer
+	next := func(event string) json.RawMessage {
+		t.Helper()
+		for {
+			raw, err := socket.Next()
+			if err != nil {
+				t.Fatalf("waiting for %s: %v", event, err)
+			}
+			if len(raw) > 2 && raw[0] == protocol.BinaryFrameTypePtyOutput {
+				if _, _, data, err := protocol.DecodePtyOutputFrame(raw); err == nil {
+					output.Write(data)
+				}
+				if event == "" {
+					return raw
+				}
+				continue
+			}
+			var head struct {
+				Event string `json:"event"`
+			}
+			_ = json.Unmarshal(raw, &head)
+			if head.Event == "terminal_ended" {
+				t.Fatalf("the home ended the outpost's terminal while the outpost was only away: %s", raw)
+			}
+			if head.Event == event {
+				return raw
+			}
+		}
+	}
+	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	next("terminal_screen")
+
+	mark := app.EventCount()
+	pair.Disconnect()
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	next("terminal_error")
+	pair.Reconnect()
+	defer home.FireTimers(bridge.RetryTimer)()
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	next("terminal_screen")
+
+	socket.Send(gateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "printf 'back-%s\\n' again\r"})
+	for !strings.Contains(output.String(), "back-again") {
+		next("")
+	}
+
+	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(shell)})
+	for {
+		raw, err := socket.Next()
+		if err != nil {
+			t.Fatalf("waiting for the closed session's terminal to end: %v", err)
+		}
+		var ended gateway.TerminalEnded
+		if json.Unmarshal(raw, &ended) == nil && ended.Event == "terminal_ended" && ended.TerminalID == terminal {
+			return
 		}
 	}
 }

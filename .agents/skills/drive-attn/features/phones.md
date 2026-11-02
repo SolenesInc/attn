@@ -61,7 +61,7 @@ Preconditions:
 ## Contexts
 
 - **Profiles**: a pairing reaches only its profile. The profile comes from the pairing, never from the phone's hello. A phone pairs with each profile separately, with one QR code each. Deleting a profile removes its pairings and disconnects its phones.
-- **Outposts**: an outpost's sessions reach the phone through the home, with `host` set, and `offline` while the outpost is unreachable. Only the home connects to Attn Cloud: an outpost that copies phone access from its home holds no link, and its Settings → Phones says why.
+- **Outposts**: an outpost's sessions reach the phone through the home, with `host` set, and `offline` while the outpost is unreachable. A phone terminal of an outpost session survives the outpost going away: the phone says the terminal is lost until the outpost answers again, and then gets a fresh screen without reopening it. Only the home connects to Attn Cloud: an outpost that copies phone access from its home holds no link, and its Settings → Phones says why.
 - **Restarts**: the home's keys and pairings survive a restart. A live QR code does not; show a new one. Keys attn cannot read stay in place; Settings → Phones names the file and how to start over.
 - **Desktop reconnects**: Settings → Phones reads the phones again on every new daemon connection.
 - **Relay deploys and network loss**: the relay drops busy sockets without a close frame. The home reconnects and every phone runs a new handshake.
@@ -71,7 +71,7 @@ Preconditions:
 
 ## Tests
 
-- Stack: `cmd/attn/phones_stack_test.go` (pair, reconnect after a cut, a second use of a code, revoke, a revoke between handshake and hello; a deleted profile's phones; unreadable keys; only the home connects; no connection while off; a phone that reconnects while the home starts).
+- Stack: `cmd/attn/phones_stack_test.go` (pair, reconnect after a cut, a second use of a code, revoke, a revoke between handshake and hello; a deleted profile's phones; unreadable keys; only the home connects; no connection while off; a phone that reconnects while the home starts; an outpost terminal that comes back after its outpost drops).
 - Kernel: `internal/cloudlink/noise_vectors_test.go`, the vectors the phone's initiator checks too.
 - Wire: `internal/daemon/gateway_wire_test.go`, `internal/daemon/gateway_terminal_wire_test.go` (screen then output, focus ownership and hand-back, submit_prompt, output within credit during a flood).
 - Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach).

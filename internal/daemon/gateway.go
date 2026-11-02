@@ -150,6 +150,7 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 			if !d.phoneAccessEnabled() {
 				return d.gatewayRefuse(conn, phoneAccessOff)
 			}
+			d.gatewayResumeAwaiting(conn)
 			if err := d.gatewaySendState(conn); err != nil {
 				return err
 			}
