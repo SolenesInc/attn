@@ -71,5 +71,6 @@ go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 
 group app ^app/
 vitest src/App.desktops.test.tsx
+vitest src/App.automationSelection.test.tsx
 vitest scripts/real-app-harness/scenarioCatalog.test.mjs
 playwright e2e/queue-sidebar-fit.spec.ts

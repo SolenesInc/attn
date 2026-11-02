@@ -508,7 +508,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
 
       # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
       # whether apt or the download stalled; bounded steps name the one that does.
@@ -517,16 +517,16 @@ jobs:
           printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
             | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
 
-      # The suite only runs chromium (no projects configured), so skip the
-      # firefox/webkit downloads.
+      # The suite runs in chromium; the dictation specs run in webkit, the
+      # engine of the app's WKWebView. Firefox is never used.
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 10
-        run: pnpm exec playwright install chromium
+        run: pnpm exec playwright install chromium webkit
 
       - name: Install Playwright OS deps
         timeout-minutes: 10
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: E2E
         env:

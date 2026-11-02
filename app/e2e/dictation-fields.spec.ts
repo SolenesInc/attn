@@ -24,7 +24,7 @@ test('Insert at cursor puts the transcript where dictation started, through the 
   await message(page).evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(11, 11));
   const changesBefore = Number(await state(page, 'message-changes').textContent());
   const recording = await record(page);
-  await page.keyboard.press('Meta+ArrowLeft');
+  await message(page).evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(0, 0));
   await page.keyboard.type('>> ');
   await transcribe(page, recording, 'the build is green');
   await expect(message(page)).toHaveValue('>> Dear team, the build is green. Thanks');

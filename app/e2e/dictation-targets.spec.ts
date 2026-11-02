@@ -24,7 +24,7 @@ test.describe('editor', () => {
   test('Insert at cursor types raw text at the caret through the editor, then refinement is its own undo step', async ({ page }) => {
     await open(page);
     await editor(page).focus();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+End');
     const recording = await record(page);
     await transcribe(page, recording, 'um the build is green');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\num the build is green');
@@ -35,11 +35,11 @@ test.describe('editor', () => {
     await expect(editor(page)).toBeFocused();
     await page.keyboard.type('!');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\nThe build is green.!');
-    await page.keyboard.press('Meta+z');
+    await page.keyboard.press('ControlOrMeta+z');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\nThe build is green.');
-    await page.keyboard.press('Meta+z');
+    await page.keyboard.press('ControlOrMeta+z');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\num the build is green');
-    await page.keyboard.press('Meta+z');
+    await page.keyboard.press('ControlOrMeta+z');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\n');
     await expect(page.getByTestId('dictation-layer')).toHaveCount(0);
   });
@@ -47,9 +47,9 @@ test.describe('editor', () => {
   test('refinement replaces only its own text while the person types elsewhere in the editor and then works in another field', async ({ page }) => {
     await open(page);
     await editor(page).focus();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+End');
     const recording = await record(page);
-    await page.keyboard.press('Meta+ArrowUp');
+    await page.keyboard.press('ControlOrMeta+Home');
     await page.keyboard.type('> ');
     await transcribe(page, recording, 'so the deploy is done');
     await expect(docState(page)).toHaveText('> # Notes\n\nFirst line.\nso the deploy is done');
@@ -66,11 +66,11 @@ test.describe('editor', () => {
   test('editing or undoing the dictated text before refinement answers turns refinement into an offer', async ({ page }) => {
     await open(page);
     await editor(page).focus();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+End');
     const first = await record(page);
     await transcribe(page, first, 'ship it on friday');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\nship it on friday');
-    await page.keyboard.press('Meta+z');
+    await page.keyboard.press('ControlOrMeta+z');
     await expect(docState(page)).toHaveText('# Notes\n\nFirst line.\n');
     const request = await refineRequest(page, 0);
     await answer(page, request.requestId, { ok: true, text: 'Ship it on Friday.' });
@@ -94,7 +94,7 @@ test.describe('editor', () => {
     await open(page);
     await page.evaluate(() => window.__dictation.setInteraction('compareFirst'));
     await editor(page).focus();
-    await page.keyboard.press('Meta+ArrowDown');
+    await page.keyboard.press('ControlOrMeta+End');
     const recording = await record(page);
     await transcribe(page, recording, 'uh closing note');
     await expect(page.getByTestId('dictation-original')).toHaveText('uh closing note');
