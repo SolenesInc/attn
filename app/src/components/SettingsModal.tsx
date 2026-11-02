@@ -239,6 +239,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
+          phoneAccessEnabled={state.phoneAccessEnabled}
           crewV2Enabled={state.crewV2Enabled}
           analyticsEnabled={state.analyticsEnabled}
           ptyBackendMode={state.ptyBackendMode}

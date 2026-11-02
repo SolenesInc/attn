@@ -580,6 +580,7 @@ export function ExperimentalSettings({
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  phoneAccessEnabled,
   crewV2Enabled,
   analyticsEnabled,
   ptyBackendMode,
@@ -597,6 +598,7 @@ export function ExperimentalSettings({
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'phoneAccessEnabled'
   | 'crewV2Enabled'
   | 'analyticsEnabled'
   | 'ptyBackendMode'
@@ -799,6 +801,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Phone access</p>
+            <p className="settings-row-copy" id="settings-phone-access-description">
+              Let phones you pair see this home's agents. Turning it off disconnects every phone.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Phone access"
+            aria-checked={phoneAccessEnabled} aria-describedby="settings-phone-access-description"
+            className="settings-action" data-testid="settings-phone-access-toggle"
+            onClick={() => onSetSetting('phone_access_enabled', phoneAccessEnabled ? 'false' : 'true')}>
+            {phoneAccessEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">

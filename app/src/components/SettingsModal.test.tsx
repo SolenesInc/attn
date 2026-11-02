@@ -502,6 +502,19 @@ describe('SettingsModal sent files', () => {
   });
 });
 
+describe('SettingsModal phone access', () => {
+  it('finds phone access on the Experimental page, off by default, and turns it on', async () => {
+    const { daemon } = await renderSettings();
+    fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'phone' } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    const toggle = screen.getByRole('switch', { name: 'Phone access' });
+
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle));
+    expect(savedSettings(daemon)).toEqual([['phone_access_enabled', 'true']]);
+  });
+});
+
 describe('SettingsModal asks', () => {
   it('finds asks on the Experimental page, off by default, and turns them on', async () => {
     const { daemon } = await renderSettings();

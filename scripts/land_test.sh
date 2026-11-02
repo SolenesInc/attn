@@ -113,6 +113,10 @@ land 'Scripts and generated inputs'
 expect_checks check-types check-prompts land --group prompts "${selected_tests[@]}" sync
 expect_output 'the checkout has no script tests'
 
+printf 'gateway\n' >internal/protocol/schema/gateway.tsp
+land 'Gateway API change'
+expect_checks check-types check-gateway-compat sync
+
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh
 printf 'bash scripts/example.sh\nsource scripts/lib/shared.sh\n' >scripts/example_test.sh

@@ -142,6 +142,7 @@ export function useSettingsModalState({
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const calloutsEnabled = settings.callouts_enabled === 'true';
+  const phoneAccessEnabled = settings.phone_access_enabled === 'true';
   const crewV2Enabled = settings.crew_v2_enabled === 'true';
   const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const asksEnabled = isAsksEnabled(settings);
@@ -567,7 +568,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps usage analytics telemetry',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',
@@ -621,6 +622,7 @@ export function useSettingsModalState({
     autoSettleEnabled,
     asksEnabled,
     calloutsEnabled,
+    phoneAccessEnabled,
     crewV2Enabled,
     analyticsEnabled,
     mutedRepos,

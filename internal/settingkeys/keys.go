@@ -49,6 +49,7 @@ const (
 	SettingQuickCaptureEnabled           HomeSetting    = "quick_capture_enabled"
 	SettingCrewV2Enabled                 HomeSetting    = "crew_v2_enabled"
 	SettingCalloutsEnabled               HomeSetting    = "callouts_enabled"
+	SettingPhoneAccessEnabled            HomeSetting    = "phone_access_enabled"
 	SettingAutoSettleArmSeconds          HomeSetting    = "auto_settle_arm_seconds"
 	SettingAutoSettleCountdownSeconds    HomeSetting    = "auto_settle_countdown_seconds"
 	SettingKeybindingsConfig             HomeSetting    = "keybindings_config"

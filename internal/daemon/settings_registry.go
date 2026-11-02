@@ -58,6 +58,7 @@ const (
 	SettingQuickCaptureEnabled           = settingkeys.SettingQuickCaptureEnabled
 	SettingCrewV2Enabled                 = settingkeys.SettingCrewV2Enabled
 	SettingCalloutsEnabled               = settingkeys.SettingCalloutsEnabled
+	SettingPhoneAccessEnabled            = settingkeys.SettingPhoneAccessEnabled
 	SettingAutoSettleArmSeconds          = settingkeys.SettingAutoSettleArmSeconds
 	SettingAutoSettleCountdownSeconds    = settingkeys.SettingAutoSettleCountdownSeconds
 	SettingKeybindingsConfig             = settingkeys.SettingKeybindingsConfig
@@ -149,6 +150,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingAnalyticsShareVents), scope: daemonScope, description: "Send each new attn vent, with its text, in the next upload: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingAnalyticsToolVents), scope: daemonScope, description: "Let new sessions also vent about their other tools, such as skills, other CLIs and harness permissions; tool vents never leave the machine: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCalloutsEnabled), scope: daemonScope, experimental: true, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingPhoneAccessEnabled), scope: daemonScope, experimental: true, description: "Let paired phones reach this home's sessions: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingChiefContextWindowCap), scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
 	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort for chief sessions. Empty uses the default effort.", validate: func(d *Daemon, key, value string) error { return nil }},

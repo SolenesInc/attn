@@ -110,3 +110,7 @@ func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
 }
+
+func (w *WireDaemon) ServeGateway(device GatewayDevice, stream GatewayStream) error {
+	return w.d.ServeGateway(device, stream)
+}

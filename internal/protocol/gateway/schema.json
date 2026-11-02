@@ -1,0 +1,147 @@
+{
+  "GatewayHello": {
+    "properties": {
+      "api": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "cmd": {
+        "const": "hello",
+        "type": "string"
+      },
+      "device_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "api",
+      "device_id"
+    ],
+    "type": "object"
+  },
+  "GatewayProfile": {
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "name"
+    ],
+    "type": "object"
+  },
+  "GatewayRefused": {
+    "properties": {
+      "event": {
+        "const": "refused",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewaySession": {
+    "properties": {
+      "agent": {
+        "type": "string"
+      },
+      "host": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "offline": {
+        "type": "boolean"
+      },
+      "state": {
+        "$ref": "GatewaySessionState.json"
+      },
+      "title": {
+        "type": "string"
+      },
+      "waiting_since": {
+        "format": "date-time",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "agent",
+      "state",
+      "offline"
+    ],
+    "type": "object"
+  },
+  "GatewaySessionState": {
+    "enum": [
+      "working",
+      "waiting",
+      "needs_approval",
+      "idle",
+      "scheduled",
+      "launching",
+      "recoverable",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewaySessions": {
+    "properties": {
+      "event": {
+        "const": "sessions",
+        "type": "string"
+      },
+      "sessions": {
+        "items": {
+          "$ref": "GatewaySession.json"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "sessions"
+    ],
+    "type": "object"
+  },
+  "GatewayWelcome": {
+    "properties": {
+      "api": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "welcome",
+        "type": "string"
+      },
+      "home_name": {
+        "type": "string"
+      },
+      "profile": {
+        "$ref": "GatewayProfile.json"
+      }
+    },
+    "required": [
+      "event",
+      "api",
+      "home_name",
+      "profile"
+    ],
+    "type": "object"
+  }
+}

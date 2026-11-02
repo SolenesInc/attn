@@ -104,6 +104,7 @@ type Daemon struct {
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
 	outpost             outpostRuntime
+	gateway             gatewayConns
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	socketPath          string

@@ -1,0 +1,242 @@
+package daemon
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"sync"
+
+	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/protocol/gateway"
+)
+
+// GatewayDevice is a device the caller has already authenticated, with the profile its pairing reaches.
+type GatewayDevice struct {
+	DeviceID  string
+	ProfileID string
+}
+
+// GatewayStream carries one device's gateway messages, one JSON message per frame. Close must unblock Recv.
+type GatewayStream interface {
+	Recv() ([]byte, error)
+	Send([]byte) error
+	Close() error
+}
+
+const phoneAccessOff = "phone access is off on this home; turn it on in Settings → Experimental → Phone access"
+
+var gatewayFacts = bus.Filter{
+	FactSessionRegistered,
+	FactSessionReregistered,
+	FactSessionStateChanged,
+	FactSessionTitleChanged,
+	FactSessionRenamed,
+	FactSessionUnregistered,
+	FactSessionClosed,
+	FactSessionTerminated,
+	FactSessionReconciled,
+	FactWorktreeSessionsRemoved,
+	FactOutpostChanged,
+	FactProfileRenamed,
+	FactSettingChanged,
+}
+
+var gatewayStates = map[protocol.SessionState]gateway.GatewaySessionState{
+	protocol.SessionStateWorking:         gateway.GatewaySessionStateWorking,
+	protocol.SessionStateWaitingInput:    gateway.GatewaySessionStateWaiting,
+	protocol.SessionStatePendingApproval: gateway.GatewaySessionStateNeedsApproval,
+	protocol.SessionStateIdle:            gateway.GatewaySessionStateIdle,
+	protocol.SessionStateScheduled:       gateway.GatewaySessionStateScheduled,
+	protocol.SessionStateLaunching:       gateway.GatewaySessionStateLaunching,
+	protocol.SessionStateRecoverable:     gateway.GatewaySessionStateRecoverable,
+}
+
+func gatewayState(state protocol.SessionState) gateway.GatewaySessionState {
+	if mapped, ok := gatewayStates[state]; ok {
+		return mapped
+	}
+	return gateway.GatewaySessionStateUnknown
+}
+
+type gatewayConns struct {
+	mu    sync.Mutex
+	conns map[*gatewayConn]struct{}
+}
+
+type gatewayConn struct {
+	device  GatewayDevice
+	stream  GatewayStream
+	changed chan struct{}
+	sent    []gateway.GatewaySession
+}
+
+func (g *gatewayConns) add(conn *gatewayConn) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.conns == nil {
+		g.conns = map[*gatewayConn]struct{}{}
+	}
+	g.conns[conn] = struct{}{}
+}
+
+func (g *gatewayConns) remove(conn *gatewayConn) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.conns, conn)
+}
+
+func (g *gatewayConns) nudge() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for conn := range g.conns {
+		select {
+		case conn.changed <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (d *Daemon) phoneAccessEnabled() bool {
+	return parseBooleanSetting(d.homeSetting(SettingPhoneAccessEnabled))
+}
+
+// ServeGateway answers one device until its stream ends, the home turns phone access off, or the daemon stops.
+// A daemon stop closes the stream.
+func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error {
+	defer stream.Close()
+	release, ok := d.life.Hold("gateway")
+	if !ok {
+		return errDaemonStopping
+	}
+	defer release()
+	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
+	defer stopClosing()
+
+	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1)}
+	d.gateway.add(conn)
+	defer d.gateway.remove(conn)
+	if err := d.gatewayWelcome(conn); err != nil {
+		return err
+	}
+
+	ended := make(chan error, 1)
+	if !d.life.Go("gatewayReceive", func() { ended <- d.gatewayReceive(conn) }) {
+		return errDaemonStopping
+	}
+	for {
+		select {
+		case <-conn.changed:
+			if !d.phoneAccessEnabled() {
+				return d.gatewayRefuse(conn, phoneAccessOff)
+			}
+			if err := d.gatewaySendSessions(conn); err != nil {
+				return err
+			}
+		case err := <-ended:
+			return err
+		}
+	}
+}
+
+func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
+	frame, err := conn.stream.Recv()
+	if err != nil {
+		return err
+	}
+	var hello gateway.GatewayHello
+	if err := json.Unmarshal(frame, &hello); err != nil || hello.Cmd != "hello" {
+		return d.gatewayRefuse(conn, "the first message must be hello")
+	}
+	if !d.phoneAccessEnabled() {
+		return d.gatewayRefuse(conn, phoneAccessOff)
+	}
+	if hello.API < 1 {
+		return d.gatewayRefuse(conn, fmt.Sprintf("hello asked for api %d; this home serves api 1 to %d", hello.API, gateway.APIVersion))
+	}
+	profile, err := d.store.GetProfile(conn.device.ProfileID)
+	if err != nil {
+		return d.gatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.device.ProfileID))
+	}
+	homeName, _ := os.Hostname()
+	if err := gatewaySend(conn, gateway.GatewayWelcome{
+		Event:    "welcome",
+		API:      min(hello.API, gateway.APIVersion),
+		HomeName: homeName,
+		Profile:  gateway.GatewayProfile{ID: profile.ID, Name: profile.Name},
+	}); err != nil {
+		return err
+	}
+	return d.gatewaySendSessions(conn)
+}
+
+func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
+	for {
+		frame, err := conn.stream.Recv()
+		if err != nil {
+			return err
+		}
+		var message struct {
+			Cmd string `json:"cmd"`
+		}
+		_ = json.Unmarshal(frame, &message)
+		d.logf("gateway: device %s sent %q, which this home does not serve", conn.device.DeviceID, message.Cmd)
+	}
+}
+
+func (d *Daemon) gatewayRefuse(conn *gatewayConn, message string) error {
+	if err := gatewaySend(conn, gateway.GatewayRefused{Event: "refused", Message: message}); err != nil {
+		return err
+	}
+	return errors.New("gateway refused device " + conn.device.DeviceID + ": " + message)
+}
+
+func (d *Daemon) gatewaySendSessions(conn *gatewayConn) error {
+	sessions := d.gatewaySessions(conn.device.ProfileID)
+	if conn.sent != nil && wireEqual(conn.sent, sessions) {
+		return nil
+	}
+	if err := gatewaySend(conn, gateway.GatewaySessions{Event: "sessions", Sessions: sessions}); err != nil {
+		return err
+	}
+	conn.sent = sessions
+	return nil
+}
+
+func (d *Daemon) gatewaySessions(profileID string) []gateway.GatewaySession {
+	sessions := []gateway.GatewaySession{}
+	for _, session := range d.store.List("") {
+		if session.ProfileID != profileID {
+			continue
+		}
+		d.decorateSessionWithTitle(session)
+		title := protocol.Deref(session.Title)
+		if title == "" {
+			title = session.Label
+		}
+		state := gatewayState(session.State)
+		out := gateway.GatewaySession{ID: string(session.ID), Title: title, Agent: string(session.Agent), State: state}
+		if state == gateway.GatewaySessionStateWaiting || state == gateway.GatewaySessionStateNeedsApproval {
+			if since := protocol.Timestamp(session.StateSince); !since.IsZero() {
+				out.WaitingSince = protocol.Ptr(since.Time().UTC())
+			}
+		}
+		if host := protocol.Deref(session.Host); host != "" {
+			_, name, err := d.outpostConn(host)
+			out.Host = protocol.Ptr(name)
+			out.Offline = err != nil
+		}
+		sessions = append(sessions, out)
+	}
+	return sessions
+}
+
+func gatewaySend(conn *gatewayConn, message any) error {
+	frame, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	return conn.stream.Send(frame)
+}

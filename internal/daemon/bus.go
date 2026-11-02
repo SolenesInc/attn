@@ -130,6 +130,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostsUpdated() }},
+		{filter: gatewayFacts, apply: func(d *Daemon, _ bus.Event) { d.gateway.nudge() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`

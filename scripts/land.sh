@@ -17,6 +17,11 @@ protocol_outputs=(
   internal/protocol/protocol_version.go
   app/src/types/generated.ts
   app/src/types/protocolVersion.ts
+  internal/protocol/gateway/generated.go
+  internal/protocol/gateway/schema.json
+  internal/protocol/gateway/version.go
+  app/src/types/gatewayGenerated.ts
+  app/src/types/gatewayVersion.ts
 )
 prompt_outputs=(
   internal/prompts/catalog.generated.json
@@ -179,6 +184,7 @@ run_checks() {
     targets+=(check-go "GO_PACKAGES=$packages")
   fi
   touches '^internal/protocol/schema/' && targets+=(check-types)
+  touches '^internal/protocol/(schema/gateway\.tsp|gateway/)' && targets+=(check-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
   script_tests="$(script_tests_for "$changed")"

@@ -5,6 +5,7 @@
     "**/dist/**",
     "app/src-tauri/**",
     "app/src/types/generated.ts",
+    "app/src/types/gatewayGenerated.ts",
     "app/lint/anti-slop/**"
   ],
   "jsPlugins": [
