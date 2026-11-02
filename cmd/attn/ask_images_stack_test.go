@@ -116,6 +116,28 @@ func TestAnAskOpenedBeforeImagesTravelledGetsItsImagesCopiedWhenTheDaemonStarts(
 	}
 }
 
+func TestAnAskFromAFolderWhoseNameEndsInASpaceKeepsItsOwnImageAcrossARestart(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	turnAsksOn(app)
+	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
+	s.Launched(asker)
+	spaced := s.Path("work") + " "
+	red := writeImage(t, filepath.Join(spaced, "shot.png"), 1024)
+	writeImage(t, s.Path("work", "shot.png"), 2048)
+	asked := askAs(t, s, asker, spaced, "Red: ![shot](shot.png)\n")
+	if asked.BaseDir != spaced {
+		t.Fatalf("the ask resolves its images against %q, want the folder it was asked from, %q", asked.BaseDir, spaced)
+	}
+
+	s.Stop()
+	s.Start()
+	if got := askImage(t, s.App(), asked.ID, filepath.Join(spaced, "shot.png")); !bytes.Equal(got, red) {
+		t.Fatalf("after a restart the ask shows %d bytes for its image, want its own %d", len(got), len(red))
+	}
+}
+
 func turnAsksOn(app *testworld.Peer) {
 	testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks-on")},
 		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks-on" })
