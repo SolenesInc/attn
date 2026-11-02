@@ -35,6 +35,7 @@ go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrit
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
+go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
 go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout
