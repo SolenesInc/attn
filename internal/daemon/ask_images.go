@@ -94,20 +94,31 @@ func (d *Daemon) handleAskImage(client *wsClient, msg *protocol.AskImageMessage)
 }
 
 func (d *Daemon) askImage(askID, imagePath, profileID string) (string, []byte, error) {
+	if _, err := d.askShownTo(askID, profileID); err != nil {
+		return "", nil, err
+	}
+	return askImageCopy(askID, imagePath)
+}
+
+func (d *Daemon) askShownTo(askID, profileID string) (store.Ask, error) {
 	stored, err := d.store.GetAsk(askID)
 	if errors.Is(err, store.ErrAskGone) {
-		return "", nil, fmt.Errorf("ask %s is gone", askID)
+		return store.Ask{}, fmt.Errorf("ask %s is gone", askID)
 	}
 	if err != nil {
-		return "", nil, err
+		return store.Ask{}, err
 	}
 	shown, err := d.readAsk(stored)
 	if err != nil {
-		return "", nil, err
+		return store.Ask{}, err
 	}
 	if !askShownIn(profileID, shown.profileID) {
-		return "", nil, fmt.Errorf("ask %s is gone", askID)
+		return store.Ask{}, fmt.Errorf("ask %s is gone", askID)
 	}
+	return stored, nil
+}
+
+func askImageCopy(askID, imagePath string) (string, []byte, error) {
 	mimeType, ok := ask.ImageType(imagePath)
 	if !ok {
 		return "", nil, fmt.Errorf("%s is not a supported image type", imagePath)

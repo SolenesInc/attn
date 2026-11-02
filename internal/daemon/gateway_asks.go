@@ -3,8 +3,6 @@ package daemon
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
-	"github.com/victorarias/attn/internal/store"
 )
 
 // gatewayImageChunkBytes keeps a chunk's base64 (54,616 bytes) and its fields inside one gateway message.
@@ -61,14 +58,38 @@ func (d *Daemon) gatewaySendAsks(conn *gatewayConn) error {
 
 func gatewayAskFrame(wire protocol.Ask) ([]byte, error) {
 	out := gatewayAsk(wire)
-	frame, err := json.Marshal(gateway.GatewayAskEvent{Event: "ask", Ask: out})
+	frame, err := gatewayMarshal(gateway.GatewayAskEvent{Event: "ask", Ask: out})
 	if err != nil || len(frame) <= cloudlink.MaxMessageBytes {
 		return frame, err
 	}
-	out.Parts = []gateway.GatewayAskPart{}
-	out.TooLargeBytes = protocol.Ptr(len(frame))
-	out.MaxFrameBytes = protocol.Ptr(cloudlink.MaxMessageBytes)
-	return json.Marshal(gateway.GatewayAskEvent{Event: "ask", Ask: out})
+	return gatewayMarshal(gateway.GatewayAskEvent{Event: "ask", Ask: tooLargeAsk(out, len(frame))})
+}
+
+// gatewayTooLargeSubjectRunes keeps the stand-in for an ask too large for a frame within a few KiB, whatever escaping
+// its subject needs.
+const gatewayTooLargeSubjectRunes = 200
+
+func tooLargeAsk(full gateway.GatewayAsk, size int) gateway.GatewayAsk {
+	subject := []rune(full.Subject)
+	if len(subject) > gatewayTooLargeSubjectRunes {
+		subject = append(subject[:gatewayTooLargeSubjectRunes-1], '…')
+	}
+	out := gateway.GatewayAsk{
+		ID:            full.ID,
+		SessionID:     full.SessionID,
+		Subject:       string(subject),
+		Parts:         []gateway.GatewayAskPart{},
+		CreatedAt:     full.CreatedAt,
+		SeedSlug:      full.SeedSlug,
+		CrewMember:    full.CrewMember,
+		Chief:         full.Chief,
+		TooLargeBytes: protocol.Ptr(size),
+		MaxFrameBytes: protocol.Ptr(cloudlink.MaxMessageBytes),
+	}
+	if full.Reply != nil {
+		out.Reply = &gateway.GatewayAskReply{Answers: []gateway.GatewayAskAnswer{}, AnsweredAt: full.Reply.AnsweredAt}
+	}
+	return out
 }
 
 func gatewayAsk(wire protocol.Ask) gateway.GatewayAsk {
@@ -160,10 +181,7 @@ func (d *Daemon) gatewayAskImage(conn *gatewayConn, command gateway.GatewayAskIm
 }
 
 func (d *Daemon) gatewayAskImageBytes(profileID, askID, src string) (string, []byte, error) {
-	stored, err := d.store.GetAsk(askID)
-	if errors.Is(err, store.ErrAskGone) {
-		return "", nil, fmt.Errorf("ask %s is gone", askID)
-	}
+	stored, err := d.askShownTo(askID, profileID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -171,5 +189,5 @@ func (d *Daemon) gatewayAskImageBytes(profileID, askID, src string) (string, []b
 	if !ok {
 		return "", nil, fmt.Errorf("%s is not a local image with one of the extensions an ask shows", src)
 	}
-	return d.askImage(askID, imagePath, profileID)
+	return askImageCopy(askID, imagePath)
 }

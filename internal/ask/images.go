@@ -79,7 +79,7 @@ func imageTargets(markdown string) []string {
 		}
 		switch n := node.(type) {
 		case *ast.Image:
-			targets = append(targets, string(n.Destination))
+			targets = append(targets, string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(n.Destination)))))
 		case *ast.RawHTML:
 			targets = append(targets, htmlImageSources(segmentsText(n.Segments, source))...)
 		case *ast.HTMLBlock:
@@ -124,10 +124,10 @@ func htmlImageSources(raw []byte) []string {
 	}
 }
 
-// ResolveImage resolves an image target as the ask's markdown writes it to the absolute local path the app shows,
-// or reports that the target is no local image.
+// ResolveImage resolves an image target, with its markdown escapes and HTML references already decoded, to the
+// absolute local path the app shows, or reports that the target is no local image.
 func ResolveImage(baseDir, target string) (string, bool) {
-	target = string(util.URLEscape([]byte(strings.TrimSpace(target)), true))
+	target = string(util.URLEscape([]byte(strings.TrimSpace(target)), false))
 	if target == "" || strings.HasPrefix(target, "#") || strings.HasPrefix(target, "//") {
 		return "", false
 	}

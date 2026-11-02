@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -279,9 +280,19 @@ func (d *Daemon) gatewaySessions(profileID string) []gateway.GatewaySession {
 }
 
 func gatewaySend(conn *gatewayConn, message any) error {
-	frame, err := json.Marshal(message)
+	frame, err := gatewayMarshal(message)
 	if err != nil {
 		return err
 	}
 	return conn.stream.Send(frame)
+}
+
+func gatewayMarshal(message any) ([]byte, error) {
+	var frame bytes.Buffer
+	encoder := json.NewEncoder(&frame)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(message); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(frame.Bytes(), []byte("\n")), nil
 }

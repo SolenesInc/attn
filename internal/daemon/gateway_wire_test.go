@@ -446,6 +446,47 @@ func TestGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
 	}
 }
 
+func TestGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	angled, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "Angled", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "Control", w.Path("shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 2 })
+
+	angledNote := strings.Repeat("<", 11_000)
+	controlNote := strings.Repeat("\x01", 11_000)
+	for id, note := range map[string]string{angled.ID: angledNote, control.ID: controlNote} {
+		if result := phone.answer(id, nil, note); result.Error != nil {
+			t.Fatalf("answering %s: %s", id, *result.Error)
+		}
+	}
+	asks := phone.showsAsks(func(asks []gateway.GatewayAsk) bool {
+		return len(asks) == 2 && asks[0].Reply != nil && asks[1].Reply != nil
+	})
+	byID := map[string]gateway.GatewayAsk{asks[0].ID: asks[0], asks[1].ID: asks[1]}
+	if shown := byID[angled.ID]; shown.TooLargeBytes != nil || protocol.Deref(shown.Reply.Note) != angledNote {
+		t.Fatalf("the ask answered with 11,000 '<' arrived as %+v, want it whole with its note", shown.TooLargeBytes)
+	}
+	if shown := byID[control.ID]; shown.TooLargeBytes == nil || len(shown.Parts) != 0 || shown.Reply.Note != nil || shown.Reply.AnsweredAt.IsZero() {
+		t.Fatalf("the ask whose note escapes past a frame arrived as %+v, want it answered and too large, without parts or note", shown)
+	}
+	phone.send(gateway.GatewayPing{Cmd: "ping"})
+	var pong gateway.GatewayPong
+	phone.next("pong", &pong)
+}
+
 func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -529,7 +570,9 @@ func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) 
 	stranger := connectPhone(t, w, "stranger", side.ID)
 	stranger.welcomed()
 	stranger.askList()
-	if _, failed := read(stranger, "shots/board.png", 0); failed == nil || failed.Message != "ask "+asked.ID+" is gone" {
-		t.Errorf("a phone paired to another profile read the image: %+v", failed)
+	for _, src := range []string{"shots/board.png", "notes.txt"} {
+		if _, failed := read(stranger, src, 0); failed == nil || failed.Message != "ask "+asked.ID+" is gone" {
+			t.Errorf("a phone paired to another profile reading %s of %s got %+v, want the ask to read as gone", src, asked.ID, failed)
+		}
 	}
 }
