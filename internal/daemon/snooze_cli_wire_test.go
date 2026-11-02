@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -117,5 +118,33 @@ func TestSnoozePermissionsIncludeDispatchersAndProfileChief(t *testing.T) {
 		if err := action(); err == nil || !strings.Contains(err.Error(), "unknown live session") || strings.Contains(err.Error(), "private foreign work") {
 			t.Fatalf("cross-profile operation: %v", err)
 		}
+	}
+}
+
+func TestASnoozeThatArrivesAfterANewTurnOpenedSaysTheTurnChanged(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "self")
+	snoozeReport(t, w, cli, "self", protocol.StateWaitingInput)
+	mark := app.EventCount()
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: "self"})
+	testworld.AwaitSessionSince(app, mark, "self", func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
+	arrived := w.PauseAt(pausepoint.SessionSnoozeArrived)
+	answered := make(chan error, 1)
+	go func() { answered <- cli.SnoozeSession("", "self", time.Now().Add(time.Hour)) }()
+	arrived.Await()
+	snoozeReport(t, w, cli, "self", protocol.StateWorking)
+	reopened := snoozeReport(t, w, cli, "self", protocol.StateWaitingInput)
+	if !protocol.Deref(reopened.TurnOwed) {
+		t.Fatal("the agent's stop opened no new turn")
+	}
+	arrived.Release()
+	err := <-answered
+	if err == nil || !strings.Contains(err.Error(), "turn changed") || !strings.Contains(err.Error(), protocol.Deref(reopened.TurnOpenedAt)) {
+		t.Fatalf("snooze of the replaced turn: %v; want it to say the turn changed and name the turn opened at %s", err, protocol.Deref(reopened.TurnOpenedAt))
+	}
+	shown, err := cli.SessionShow("self")
+	if err != nil || shown.Entry.TurnSnoozedUntil != nil {
+		t.Fatalf("the refused snooze still put off the new turn: %+v %v", shown, err)
 	}
 }

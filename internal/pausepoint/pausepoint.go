@@ -38,6 +38,7 @@ const (
 	DaemonStartupRecovery      = "daemon-startup-recovery"
 	SessionInputPasteGap       = "session-input-paste-gap"
 	SessionInputLaneContended  = "session-input-lane-contended"
+	SessionSnoozeArrived       = "session-snooze-arrived"
 	SessionSnoozeDecided       = "session-snooze-decided"
 	SessionTeardownPrepared    = "session-teardown-prepared"
 	AgentCloseDrained          = "agent-close-drained"
