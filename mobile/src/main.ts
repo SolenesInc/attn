@@ -1128,7 +1128,16 @@ const homeRow = (row: HomeRow, h: HtmlBuilder<Message>): Html =>
           row.reason ? h.div([h.Class('row-where')], [row.reason]) : h.empty,
         ],
       ),
-      h.div([h.Class('row-side')], [h.span([h.Class('badge')], [homeStatusLabel[row.status]])]),
+      h.div(
+        [h.Class('row-side')],
+        [
+          h.span([h.Class('badge')], [homeStatusLabel[row.status]]),
+          h.button(
+            [h.Class('quiet'), h.OnClick(Message.ClickedRemovePairing({ pairingId: row.pairing.id }))],
+            ['Forget'],
+          ),
+        ],
+      ),
     ],
   )
 

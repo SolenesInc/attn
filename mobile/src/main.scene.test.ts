@@ -278,6 +278,27 @@ describe('the queue merges every pairing into one list', () => {
     )
   })
 
+  it('forgets a home that is not connected from its queue entry, and keeps its other pairings', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal, work)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({ pairingId: work.id, sessions: [session('b', 'Write docs', 'working')] }),
+      ),
+      Scene.Subscription.emit(Message.WentOffline({ pairingId: personal.id })),
+      expectEntries([
+        ['Write docs', 'Mac · work', 'working'],
+        ['Mac · personal', 'Mac is offline', 'offline'],
+      ]),
+      Scene.click(
+        Scene.within(Scene.last(Scene.all.testId('queue-entry')), Scene.role('button', { name: 'Forget' })),
+      ),
+      Scene.Command.expectExact(SavePairings({ pairings: [work] })),
+      Scene.Command.resolve(SavePairings, Message.SavedPairings()),
+      expectEntries([['Write docs', 'Mac · work', 'working']]),
+    )
+  })
+
   it('drops a forgotten pairing from the queue', () => {
     Scene.scene(
       { update, view },
