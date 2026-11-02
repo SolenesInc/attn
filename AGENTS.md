@@ -346,6 +346,7 @@ entry names:
   docs/internal/trunk-based-development.md
 - Pull requests, or waiting on their reviews => docs/internal/pull-requests.md
 - Release notes, releases, or hotfixes => docs/internal/making-a-release.md
+- Phone app TestFlight builds or testers => docs/internal/phone-app-releases.md
 - Installing, launching, or verifying instances => docs/internal/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
