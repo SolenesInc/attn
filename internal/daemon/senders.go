@@ -10,7 +10,6 @@ import (
 	"io"
 	"math/big"
 	"net"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +25,7 @@ type senderPairing struct {
 
 type senderPairings struct {
 	mu      sync.Mutex
-	pending map[string]*senderPairing
+	pending *senderPairing
 }
 
 func senderTokenHash(token string) string {
@@ -37,11 +36,10 @@ func senderTokenHash(token string) string {
 func (d *Daemon) pendingSenderPairings() []protocol.SenderPairingRequest {
 	d.senders.mu.Lock()
 	defer d.senders.mu.Unlock()
-	requests := []protocol.SenderPairingRequest{}
-	for _, p := range d.senders.pending {
-		requests = append(requests, p.request)
+	if d.senders.pending == nil {
+		return []protocol.SenderPairingRequest{}
 	}
-	return requests
+	return []protocol.SenderPairingRequest{d.senders.pending.request}
 }
 
 func (d *Daemon) sendersSnapshot() protocol.SendersUpdatedMessage {
@@ -50,9 +48,7 @@ func (d *Daemon) sendersSnapshot() protocol.SendersUpdatedMessage {
 		d.logf("senders snapshot: %v", err)
 		senders = []protocol.PairedSender{}
 	}
-	requests := d.pendingSenderPairings()
-	slices.SortFunc(requests, func(a, b protocol.SenderPairingRequest) int { return strings.Compare(a.RequestedAt, b.RequestedAt) })
-	return protocol.SendersUpdatedMessage{Event: protocol.EventSendersUpdated, Requests: requests, Senders: senders}
+	return protocol.SendersUpdatedMessage{Event: protocol.EventSendersUpdated, Requests: d.pendingSenderPairings(), Senders: senders}
 }
 
 func (d *Daemon) projectSenders() {
@@ -64,7 +60,11 @@ func (d *Daemon) projectSenders() {
 	})
 }
 
-func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage) {
+func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage, caller protocol.SessionID) {
+	if caller != "" {
+		d.sendError(conn, fmt.Sprintf("session %s runs inside attn, and agents cannot pair senders; run attn send pair from the program outside attn", caller))
+		return
+	}
 	name := strings.TrimSpace(msg.Name)
 	if name == "" {
 		d.sendError(conn, "sender_pair needs a name")
@@ -87,14 +87,18 @@ func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage
 		allowed: make(chan bool, 1),
 	}
 	d.senders.mu.Lock()
-	if d.senders.pending == nil {
-		d.senders.pending = map[string]*senderPairing{}
+	if waiting := d.senders.pending; waiting != nil {
+		d.senders.mu.Unlock()
+		d.sendError(conn, fmt.Sprintf("%q is already waiting for the user to allow or deny it, and attn asks about one program at a time; ask again after the user answers", waiting.request.Name))
+		return
 	}
-	d.senders.pending[pairing.request.ID] = pairing
+	d.senders.pending = pairing
 	d.senders.mu.Unlock()
 	defer func() {
 		d.senders.mu.Lock()
-		delete(d.senders.pending, pairing.request.ID)
+		if d.senders.pending == pairing {
+			d.senders.pending = nil
+		}
 		d.senders.mu.Unlock()
 		d.publishFact(FactSendersChanged, "", nil)
 	}()
@@ -120,8 +124,13 @@ func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage
 			d.sendError(conn, err.Error())
 			return
 		}
+		if err := encoder.Encode(protocol.Response{Ok: true, PairedSenderToken: &protocol.PairedSenderToken{Sender: sender, Token: token}}); err != nil {
+			if _, err := d.store.RemovePairedSender(sender.ID); err != nil {
+				d.logf("senders: %q left the pairing before its token arrived, and removing it failed: %v", name, err)
+			}
+			return
+		}
 		d.logf("senders: paired %q (%s)", name, sender.ID)
-		_ = encoder.Encode(protocol.Response{Ok: true, PairedSenderToken: &protocol.PairedSenderToken{Sender: sender, Token: token}})
 	case <-closed:
 	case <-d.life.Done():
 	}
@@ -129,9 +138,11 @@ func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage
 
 func (d *Daemon) decideSenderPairing(pairingID string, allow bool) error {
 	d.senders.mu.Lock()
-	pairing := d.senders.pending[pairingID]
-	if pairing != nil {
-		delete(d.senders.pending, pairingID)
+	pairing := d.senders.pending
+	if pairing != nil && pairing.request.ID == pairingID {
+		d.senders.pending = nil
+	} else {
+		pairing = nil
 	}
 	d.senders.mu.Unlock()
 	if pairing == nil {

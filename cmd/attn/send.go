@@ -274,7 +274,9 @@ pair --name <name>
   deny the name and shows a 4-digit code; this command prints the same code
   and waits. When the user allows it, the command prints the token once. Keep
   the token where other programs cannot read it, such as the macOS Keychain.
-  Stopping the command withdraws the request. --json prints two JSON lines:
+  Stopping the command withdraws the request. attn asks about one program at
+  a time, and refuses a request made from inside an attn session, because
+  agents cannot pair. --json prints two JSON lines:
   the request (id, name, code, requested_at), then {sender, token}.
 
 senders

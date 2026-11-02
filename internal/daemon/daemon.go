@@ -2905,7 +2905,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		d.handleQuickCapture(conn, msg)
 	case protocol.CmdSenderPair:
-		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage))
+		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage), caller)
 	case protocol.CmdSenderList:
 		senders, err := d.store.PairedSenders()
 		if err != nil {

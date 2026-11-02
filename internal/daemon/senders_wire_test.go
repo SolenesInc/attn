@@ -62,7 +62,13 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 		}
 	}
 
+	if _, err := cli.WithCaller(protocol.TerminalID(w.Terminal("target"))).SenderPair("From an agent", func(protocol.SenderPairingRequest) { t.Error("an agent's pairing reached the user") }); err == nil || !strings.Contains(err.Error(), "agents cannot pair senders") {
+		t.Fatalf("pairing from inside a session: %v", err)
+	}
 	denied, deniedOutcome := requestSenderPairing(t, cli, "Denied")
+	if _, err := cli.SenderPair("Second", func(protocol.SenderPairingRequest) { t.Error("a second pairing reached the user while one waited") }); err == nil || !strings.Contains(err.Error(), "one program at a time") {
+		t.Fatalf("a second pairing while one waits: %v", err)
+	}
 	if r := decideSenderPairing(t, w.App(), denied.ID, true); r.Success {
 		t.Fatal("a client that is not the authenticated app allowed a sender")
 	}
