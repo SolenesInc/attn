@@ -16,7 +16,8 @@ const pskPlacement = 2
 
 const noiseTagSize = 16
 
-const maxSealed = maxRelayFrame - envelopeHeader - noiseTagSize
+// MaxMessageBytes is the largest gateway message that fits one relay frame once sealed.
+const MaxMessageBytes = maxRelayFrame - envelopeHeader - noiseTagSize
 
 func prologue(deviceSignPub []byte) []byte {
 	return append([]byte("attn-cloud/v1 noise\n"), deviceSignPub...)
@@ -28,8 +29,8 @@ type transport struct {
 }
 
 func (t transport) seal(plaintext []byte) ([]byte, error) {
-	if len(plaintext) > maxSealed {
-		return nil, fmt.Errorf("a gateway message of %d bytes does not fit the relay's %d-byte frame; at most %d bytes fit after the envelope and the Noise tag", len(plaintext), maxRelayFrame, maxSealed)
+	if len(plaintext) > MaxMessageBytes {
+		return nil, fmt.Errorf("a gateway message of %d bytes does not fit the relay's %d-byte frame; at most %d bytes fit after the envelope and the Noise tag", len(plaintext), maxRelayFrame, MaxMessageBytes)
 	}
 	return t.send.Encrypt(nil, nil, plaintext)
 }

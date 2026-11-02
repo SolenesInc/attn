@@ -42,6 +42,8 @@ var gatewayFacts = bus.Filter{
 	FactOutpostChanged,
 	FactProfileRenamed,
 	FactSettingChanged,
+	FactAskOpened,
+	FactAskClosed,
 }
 
 var gatewayStates = map[protocol.SessionState]gateway.GatewaySessionState{
@@ -71,7 +73,11 @@ type gatewayConn struct {
 	stream  GatewayStream
 	changed chan struct{}
 	pinged  chan struct{}
+	api     int
 	sent    []gateway.GatewaySession
+
+	sentAskIDs []string
+	sentAsks   map[string][]byte
 }
 
 func (g *gatewayConns) add(conn *gatewayConn) {
@@ -133,7 +139,7 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 			if !d.phoneAccessEnabled() {
 				return d.gatewayRefuse(conn, phoneAccessOff)
 			}
-			if err := d.gatewaySendSessions(conn); err != nil {
+			if err := d.gatewaySendState(conn); err != nil {
 				return err
 			}
 		case <-conn.pinged:
@@ -166,15 +172,23 @@ func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
 		return d.gatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.device.ProfileID))
 	}
 	homeName, _ := os.Hostname()
+	conn.api = min(hello.API, gateway.APIVersion)
 	if err := gatewaySend(conn, gateway.GatewayWelcome{
 		Event:    "welcome",
-		API:      min(hello.API, gateway.APIVersion),
+		API:      conn.api,
 		HomeName: homeName,
 		Profile:  gateway.GatewayProfile{ID: profile.ID, Name: profile.Name},
 	}); err != nil {
 		return err
 	}
-	return d.gatewaySendSessions(conn)
+	return d.gatewaySendState(conn)
+}
+
+func (d *Daemon) gatewaySendState(conn *gatewayConn) error {
+	if err := d.gatewaySendSessions(conn); err != nil {
+		return err
+	}
+	return d.gatewaySendAsks(conn)
 }
 
 func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
@@ -187,10 +201,29 @@ func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
 			Cmd string `json:"cmd"`
 		}
 		_ = json.Unmarshal(frame, &message)
-		if message.Cmd == "ping" {
+		switch message.Cmd {
+		case "ping":
 			select {
 			case conn.pinged <- struct{}{}:
 			default:
+			}
+			continue
+		case "ask_answer":
+			var command gateway.GatewayAskAnswerCommand
+			if err := json.Unmarshal(frame, &command); err != nil {
+				return fmt.Errorf("device %s sent a malformed ask_answer: %w", conn.device.DeviceID, err)
+			}
+			if err := d.gatewayAnswerAsk(conn, command); err != nil {
+				return err
+			}
+			continue
+		case "ask_image":
+			var command gateway.GatewayAskImage
+			if err := json.Unmarshal(frame, &command); err != nil {
+				return fmt.Errorf("device %s sent a malformed ask_image: %w", conn.device.DeviceID, err)
+			}
+			if err := d.gatewayAskImage(conn, command); err != nil {
+				return err
 			}
 			continue
 		}

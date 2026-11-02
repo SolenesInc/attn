@@ -47,7 +47,7 @@ func ImagePaths(parts []protocol.AskPart, baseDir string) []string {
 	seen := map[string]bool{}
 	for _, markdown := range renderedMarkdown(parts) {
 		for _, target := range imageTargets(markdown) {
-			resolved, ok := localImagePath(baseDir, target)
+			resolved, ok := ResolveImage(baseDir, target)
 			if ok && !seen[resolved] {
 				seen[resolved] = true
 				paths = append(paths, resolved)
@@ -79,7 +79,7 @@ func imageTargets(markdown string) []string {
 		}
 		switch n := node.(type) {
 		case *ast.Image:
-			targets = append(targets, string(util.URLEscape(n.Destination, true)))
+			targets = append(targets, string(n.Destination))
 		case *ast.RawHTML:
 			targets = append(targets, htmlImageSources(segmentsText(n.Segments, source))...)
 		case *ast.HTMLBlock:
@@ -124,8 +124,10 @@ func htmlImageSources(raw []byte) []string {
 	}
 }
 
-func localImagePath(baseDir, target string) (string, bool) {
-	target = strings.TrimSpace(target)
+// ResolveImage resolves an image target as the ask's markdown writes it to the absolute local path the app shows,
+// or reports that the target is no local image.
+func ResolveImage(baseDir, target string) (string, bool) {
+	target = string(util.URLEscape([]byte(strings.TrimSpace(target)), true))
 	if target == "" || strings.HasPrefix(target, "#") || strings.HasPrefix(target, "//") {
 		return "", false
 	}

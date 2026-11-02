@@ -1,4 +1,346 @@
 {
+  "GatewayAsk": {
+    "properties": {
+      "chief": {
+        "type": "boolean"
+      },
+      "created_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "crew_member": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "max_frame_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "parts": {
+        "items": {
+          "$ref": "GatewayAskPart.json"
+        },
+        "type": "array"
+      },
+      "reply": {
+        "$ref": "GatewayAskReply.json"
+      },
+      "seed_slug": {
+        "type": "string"
+      },
+      "seed_title": {
+        "type": "string"
+      },
+      "session_id": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      },
+      "too_large_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "session_id",
+      "subject",
+      "parts",
+      "created_at"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswer": {
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "other": {
+        "type": "string"
+      },
+      "picked": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "picked"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswerCommand": {
+    "properties": {
+      "answers": {
+        "items": {
+          "$ref": "GatewayAskAnswer.json"
+        },
+        "type": "array"
+      },
+      "ask_id": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "ask_answer",
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "ask_id",
+      "answers"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswerResult": {
+    "properties": {
+      "ask_id": {
+        "type": "string"
+      },
+      "error": {
+        "type": "string"
+      },
+      "event": {
+        "const": "ask_answer_result",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "ask_id"
+    ],
+    "type": "object"
+  },
+  "GatewayAskChoice": {
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "label"
+    ],
+    "type": "object"
+  },
+  "GatewayAskEvent": {
+    "properties": {
+      "ask": {
+        "$ref": "GatewayAsk.json"
+      },
+      "event": {
+        "const": "ask",
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "ask"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImage": {
+    "properties": {
+      "ask_id": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "ask_image",
+        "type": "string"
+      },
+      "offset": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "src": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "ask_id",
+      "src",
+      "offset"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImageChunk": {
+    "properties": {
+      "data_base64": {
+        "type": "string"
+      },
+      "event": {
+        "const": "ask_image_chunk",
+        "type": "string"
+      },
+      "mime_type": {
+        "type": "string"
+      },
+      "offset": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "size": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "offset",
+      "size",
+      "mime_type",
+      "data_base64"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImageError": {
+    "properties": {
+      "event": {
+        "const": "ask_image_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewayAskPart": {
+    "properties": {
+      "markdown": {
+        "type": "string"
+      },
+      "question": {
+        "$ref": "GatewayAskQuestion.json"
+      }
+    },
+    "type": "object"
+  },
+  "GatewayAskQuestion": {
+    "properties": {
+      "choices": {
+        "items": {
+          "$ref": "GatewayAskChoice.json"
+        },
+        "type": "array"
+      },
+      "context": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "GatewayAskQuestionKind.json"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "recommended": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "kind",
+      "prompt",
+      "choices"
+    ],
+    "type": "object"
+  },
+  "GatewayAskQuestionKind": {
+    "enum": [
+      "one",
+      "any",
+      "text",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewayAskReply": {
+    "properties": {
+      "answered_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "answers": {
+        "items": {
+          "$ref": "GatewayAskAnswer.json"
+        },
+        "type": "array"
+      },
+      "note": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "answers",
+      "answered_at"
+    ],
+    "type": "object"
+  },
+  "GatewayAsks": {
+    "properties": {
+      "event": {
+        "const": "asks",
+        "type": "string"
+      },
+      "ids": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "ids"
+    ],
+    "type": "object"
+  },
   "GatewayHello": {
     "properties": {
       "api": {

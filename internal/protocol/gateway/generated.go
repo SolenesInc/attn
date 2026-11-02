@@ -4,6 +4,207 @@ package gateway
 
 import "time"
 
+type GatewayAsk struct {
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt time.Time `json:"created_at"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// MaxFrameBytes corresponds to the JSON schema field "max_frame_bytes".
+	MaxFrameBytes *int `json:"max_frame_bytes,omitempty,omitzero"`
+
+	// Parts corresponds to the JSON schema field "parts".
+	Parts []GatewayAskPart `json:"parts"`
+
+	// Reply corresponds to the JSON schema field "reply".
+	Reply *GatewayAskReply `json:"reply,omitempty,omitzero"`
+
+	// SeedSlug corresponds to the JSON schema field "seed_slug".
+	SeedSlug *string `json:"seed_slug,omitempty,omitzero"`
+
+	// SeedTitle corresponds to the JSON schema field "seed_title".
+	SeedTitle *string `json:"seed_title,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+
+	// Subject corresponds to the JSON schema field "subject".
+	Subject string `json:"subject"`
+
+	// TooLargeBytes corresponds to the JSON schema field "too_large_bytes".
+	TooLargeBytes *int `json:"too_large_bytes,omitempty,omitzero"`
+}
+
+type GatewayAskAnswer struct {
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Other corresponds to the JSON schema field "other".
+	Other *string `json:"other,omitempty,omitzero"`
+
+	// Picked corresponds to the JSON schema field "picked".
+	Picked []string `json:"picked"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type GatewayAskAnswerCommand struct {
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []GatewayAskAnswer `json:"answers"`
+
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GatewayAskAnswerResult struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GatewayAskChoice struct {
+	// Description corresponds to the JSON schema field "description".
+	Description *string `json:"description,omitempty,omitzero"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+}
+
+type GatewayAskEvent struct {
+	// Ask corresponds to the JSON schema field "ask".
+	Ask GatewayAsk `json:"ask"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+}
+
+type GatewayAskImage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Src corresponds to the JSON schema field "src".
+	Src string `json:"src"`
+}
+
+type GatewayAskImageChunk struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// MimeType corresponds to the JSON schema field "mime_type".
+	MimeType string `json:"mime_type"`
+
+	// Offset corresponds to the JSON schema field "offset".
+	Offset int `json:"offset"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Size corresponds to the JSON schema field "size".
+	Size int `json:"size"`
+}
+
+type GatewayAskImageError struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GatewayAskPart struct {
+	// Markdown corresponds to the JSON schema field "markdown".
+	Markdown *string `json:"markdown,omitempty,omitzero"`
+
+	// Question corresponds to the JSON schema field "question".
+	Question *GatewayAskQuestion `json:"question,omitempty,omitzero"`
+}
+
+type GatewayAskQuestion struct {
+	// Choices corresponds to the JSON schema field "choices".
+	Choices []GatewayAskChoice `json:"choices"`
+
+	// Context corresponds to the JSON schema field "context".
+	Context *string `json:"context,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind GatewayAskQuestionKind `json:"kind"`
+
+	// Prompt corresponds to the JSON schema field "prompt".
+	Prompt string `json:"prompt"`
+
+	// Recommended corresponds to the JSON schema field "recommended".
+	Recommended *string `json:"recommended,omitempty,omitzero"`
+}
+
+type GatewayAskQuestionKind string
+
+const GatewayAskQuestionKindAny GatewayAskQuestionKind = "any"
+const GatewayAskQuestionKindOne GatewayAskQuestionKind = "one"
+const GatewayAskQuestionKindText GatewayAskQuestionKind = "text"
+const GatewayAskQuestionKindUnknown GatewayAskQuestionKind = "unknown"
+
+type GatewayAskReply struct {
+	// AnsweredAt corresponds to the JSON schema field "answered_at".
+	AnsweredAt time.Time `json:"answered_at"`
+
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []GatewayAskAnswer `json:"answers"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+}
+
+type GatewayAsks struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Ids corresponds to the JSON schema field "ids".
+	Ids []string `json:"ids"`
+}
+
 type GatewayHello struct {
 	// API corresponds to the JSON schema field "api".
 	API int `json:"api"`

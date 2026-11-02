@@ -1,16 +1,25 @@
 package daemon_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 type testPhone struct {
@@ -20,6 +29,8 @@ type testPhone struct {
 	closed    chan struct{}
 	closeOnce sync.Once
 	served    chan error
+	asks      map[string]gateway.GatewayAsk
+	askIDs    []string
 }
 
 type phoneLink struct{ *testPhone }
@@ -49,7 +60,7 @@ func (l phoneLink) Close() error {
 
 func connectPhone(t *testing.T, w *world, deviceID, profileID string) *testPhone {
 	t.Helper()
-	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1)}
+	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]gateway.GatewayAsk{}}
 	go func() {
 		p.served <- w.daemon.ServeGateway(daemon.GatewayDevice{DeviceID: deviceID, ProfileID: profileID}, phoneLink{p})
 	}()
@@ -80,23 +91,58 @@ func (p *testPhone) send(message any) {
 	}
 }
 
+// next skips events until one of kind event arrives, keeping the asks it passes as a phone does.
 func (p *testPhone) next(event string, out any) {
 	p.t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
+	for {
+		frame := p.receive(guard, event)
+		var head struct {
+			Event string `json:"event"`
+		}
+		_ = json.Unmarshal(frame, &head)
+		if head.Event != event {
+			continue
+		}
+		if err := json.Unmarshal(frame, out); err != nil {
+			p.t.Fatalf("decode %s: %v", frame, err)
+		}
+		return
+	}
+}
+
+func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
+	p.t.Helper()
 	select {
 	case frame := <-p.fromHome:
 		var head struct {
 			Event string `json:"event"`
 		}
-		if err := json.Unmarshal(frame, &head); err != nil || head.Event != event {
-			p.t.Fatalf("the home sent %s, want a %s event", frame, event)
+		if err := json.Unmarshal(frame, &head); err != nil {
+			p.t.Fatalf("the home sent %s, which is not a gateway event", frame)
 		}
-		if err := json.Unmarshal(frame, out); err != nil {
-			p.t.Fatalf("decode %s: %v", frame, err)
+		if len(frame) > cloudlink.MaxMessageBytes {
+			p.t.Fatalf("the home sent a %s event of %d bytes; a relay frame carries at most cloudlink.MaxMessageBytes=%d", head.Event, len(frame), cloudlink.MaxMessageBytes)
 		}
+		switch head.Event {
+		case "ask":
+			var message gateway.GatewayAskEvent
+			if err := json.Unmarshal(frame, &message); err != nil {
+				p.t.Fatalf("decode %s: %v", frame, err)
+			}
+			p.asks[message.Ask.ID] = message.Ask
+		case "asks":
+			var message gateway.GatewayAsks
+			if err := json.Unmarshal(frame, &message); err != nil {
+				p.t.Fatalf("decode %s: %v", frame, err)
+			}
+			p.askIDs = message.Ids
+		}
+		return frame
 	case <-guard.C:
-		p.t.Fatalf("still awaiting a %s event after fakeagent.HangGuard=%s", event, fakeagent.HangGuard)
+		p.t.Fatalf("still awaiting %s after fakeagent.HangGuard=%s; the phone shows asks %v", awaiting, fakeagent.HangGuard, p.askIDs)
+		return nil
 	}
 }
 
@@ -201,7 +247,7 @@ func TestGatewayRefusesAHelloItCannotServe(t *testing.T) {
 	setSetting(t, app, "phone_access_enabled", "true")
 	tooOld := connectPhone(t, w, "phone", profile)
 	tooOld.hello(0)
-	tooOld.refusedWith("hello asked for api 0; this home serves api 1 to 2")
+	tooOld.refusedWith(fmt.Sprintf("hello asked for api 0; this home serves api 1 to %d", gateway.APIVersion))
 
 	gone := connectPhone(t, w, "phone", "deleted-profile")
 	gone.hello(gateway.APIVersion)
@@ -268,5 +314,222 @@ func TestGatewayLetsTheDaemonStopWhileAPhoneHasNotSaidHello(t *testing.T) {
 		phone.served <- err
 	case <-guard.C:
 		t.Fatalf("the gateway kept serving %s after the daemon stopped", fakeagent.HangGuard)
+	}
+}
+
+// showsAsks waits until the asks the phone shows match, and returns them.
+func (p *testPhone) showsAsks(match func([]gateway.GatewayAsk) bool) []gateway.GatewayAsk {
+	p.t.Helper()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	for {
+		if p.askIDs != nil {
+			asks := []gateway.GatewayAsk{}
+			for _, id := range p.askIDs {
+				asks = append(asks, p.asks[id])
+			}
+			if match(asks) {
+				return asks
+			}
+		}
+		p.receive(guard, "matching asks")
+	}
+}
+
+func (p *testPhone) askList() []gateway.GatewayAsk {
+	p.t.Helper()
+	return p.showsAsks(func([]gateway.GatewayAsk) bool { return true })
+}
+
+func (p *testPhone) welcomed() {
+	p.t.Helper()
+	p.hello(gateway.APIVersion)
+	var welcome gateway.GatewayWelcome
+	p.next("welcome", &welcome)
+}
+
+func (p *testPhone) answer(askID string, answers []gateway.GatewayAskAnswer, note string) gateway.GatewayAskAnswerResult {
+	p.t.Helper()
+	requestID := uuid.NewString()
+	p.send(gateway.GatewayAskAnswerCommand{Cmd: "ask_answer", RequestID: requestID, AskID: askID, Answers: answers, Note: &note})
+	var result gateway.GatewayAskAnswerResult
+	p.next("ask_answer_result", &result)
+	if result.RequestID != requestID {
+		p.t.Fatalf("answer result %+v, want request %s", result, requestID)
+	}
+	return result
+}
+
+func TestGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	home := app.SelectedProfile()
+	side := createProfile(app, "Side")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(asker)
+	sideAsker := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("side"))
+	w.Launched(sideAsker)
+	sideAsk, err := cli.AskOpen(protocol.SessionID(sideAsker), "", cacheAsk, "", w.Path("side"))
+	if err != nil {
+		t.Fatalf("side ask: %v", err)
+	}
+
+	phone := connectPhone(t, w, "phone", home)
+	phone.welcomed()
+	if asks := phone.askList(); len(asks) != 0 {
+		t.Fatalf("the phone starts with %+v, want no asks: the only one belongs to another profile", asks)
+	}
+
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	asks := phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 1 })
+	if asks[0].ID != asked.ID || asks[0].SessionID != asker || asks[0].Subject != "Which store should keep the cache?" || asks[0].Reply != nil {
+		t.Fatalf("the phone shows %+v, want the open ask %s from %s", asks, asked.ID, asker)
+	}
+	parts := asks[0].Parts
+	if len(parts) != 2 || parts[0].Markdown == nil || parts[1].Question == nil {
+		t.Fatalf("the ask reads %+v, want the prose then the question", parts)
+	}
+	question := parts[1].Question
+	if question.Kind != gateway.GatewayAskQuestionKindOne || len(question.Choices) != 2 || protocol.Deref(question.Recommended) != "Postgres" || question.Choices[0].Description == nil {
+		t.Fatalf("the question reads %+v, want one of two described choices with Postgres recommended", question)
+	}
+
+	if crossed := phone.answer(sideAsk.ID, nil, "from the phone"); crossed.Error == nil {
+		t.Fatal("the phone answered an ask of another profile")
+	}
+	if result := phone.answer(asked.ID, []gateway.GatewayAskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}, "Keep it boring."); result.Error != nil {
+		t.Fatalf("answering from the phone failed: %s", *result.Error)
+	}
+	replied := phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 1 && asks[0].Reply != nil })
+	if !slices.Equal(replied[0].Reply.Answers[0].Picked, []string{"Postgres"}) || protocol.Deref(replied[0].Reply.Note) != "Keep it boring." || replied[0].Reply.AnsweredAt.IsZero() {
+		t.Fatalf("after the answer the phone shows %+v, want the reply with Postgres and the note", replied)
+	}
+	if again := phone.answer(asked.ID, nil, "twice"); again.Error == nil || *again.Error != "this ask was already answered or withdrawn" {
+		t.Fatalf("a second answer got %+v, want the desktop's refusal", again)
+	}
+
+	typed := agent.Prompted()
+	for _, want := range []string{asked.ID, "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
+		if !strings.Contains(typed, want) {
+			t.Errorf("the agent was typed %q, missing %q", typed, want)
+		}
+	}
+	shown := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
+	if protocol.Deref(shown.Asks[0].Reply.Note) != "Keep it boring." {
+		t.Fatalf("the desktop shows the reply %+v, want the phone's", shown.Asks[0].Reply)
+	}
+}
+
+func TestGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	long := strings.Repeat("A \"quoted\" line.\n", (64<<10-len(cacheAsk))/18) + cacheAsk
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", long, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask of %d bytes: %v", len(long), err)
+	}
+
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	asks := phone.askList()
+	if len(asks) != 1 || asks[0].ID != asked.ID || len(asks[0].Parts) != 0 || asks[0].TooLargeBytes == nil || asks[0].MaxFrameBytes == nil || *asks[0].TooLargeBytes <= *asks[0].MaxFrameBytes {
+		t.Fatalf("the phone shows %+v, want the ask without parts, with its size past the frame's", asks)
+	}
+}
+
+func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	side := createProfile(app, "Side")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	shot := make([]byte, 100_000)
+	for i := range shot {
+		shot[i] = byte(i * 7)
+	}
+	markdown := "![the board](shots/board.png) ![gone](gone.png) ![notes](notes.txt)\n\n" + cacheAsk
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", markdown, "", w.Path("shop"),
+		protocol.AskImage{Path: w.Path("shop") + "/shots/board.png", DataBase64: base64.StdEncoding.EncodeToString(shot)})
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	phone.askList()
+	read := func(phone *testPhone, src string, offset int) (gateway.GatewayAskImageChunk, *gateway.GatewayAskImageError) {
+		requestID := uuid.NewString()
+		phone.send(gateway.GatewayAskImage{Cmd: "ask_image", RequestID: requestID, AskID: asked.ID, Src: src, Offset: offset})
+		guard := time.NewTimer(fakeagent.HangGuard)
+		defer guard.Stop()
+		for {
+			frame := phone.receive(guard, src)
+			var head struct {
+				Event     string `json:"event"`
+				RequestID string `json:"request_id"`
+			}
+			_ = json.Unmarshal(frame, &head)
+			if head.RequestID != requestID {
+				continue
+			}
+			var chunk gateway.GatewayAskImageChunk
+			var failed gateway.GatewayAskImageError
+			if head.Event == "ask_image_error" {
+				_ = json.Unmarshal(frame, &failed)
+				return chunk, &failed
+			}
+			if err := json.Unmarshal(frame, &chunk); err != nil || head.Event != "ask_image_chunk" {
+				t.Fatalf("the home answered %s, want a chunk or an error", frame)
+			}
+			return chunk, nil
+		}
+	}
+
+	var got []byte
+	for offset := 0; ; {
+		chunk, failed := read(phone, "shots/board.png", offset)
+		if failed != nil {
+			t.Fatalf("reading the board at %d: %s", offset, failed.Message)
+		}
+		data, err := base64.StdEncoding.DecodeString(chunk.DataBase64)
+		if err != nil || chunk.Offset != offset || chunk.Size != len(shot) || chunk.MimeType != "image/png" || len(data) == 0 {
+			t.Fatalf("chunk at %d = offset %d, size %d, %s, %d bytes (%v)", offset, chunk.Offset, chunk.Size, chunk.MimeType, len(data), err)
+		}
+		got = append(got, data...)
+		offset += len(data)
+		if offset == chunk.Size {
+			break
+		}
+	}
+	if !bytes.Equal(got, shot) {
+		t.Fatalf("the phone assembled %d bytes that differ from the %d-byte image", len(got), len(shot))
+	}
+
+	for _, c := range []struct{ src, want string }{
+		{"gone.png", "holds no copy of " + w.Path("shop") + "/gone.png"},
+		{"notes.txt", "notes.txt is not a local image"},
+		{"https://example.com/board.png", "https://example.com/board.png is not a local image"},
+	} {
+		if _, failed := read(phone, c.src, 0); failed == nil || !strings.Contains(failed.Message, c.want) {
+			t.Errorf("reading %s answered %+v, want an error containing %q", c.src, failed, c.want)
+		}
+	}
+
+	stranger := connectPhone(t, w, "stranger", side.ID)
+	stranger.welcomed()
+	stranger.askList()
+	if _, failed := read(stranger, "shots/board.png", 0); failed == nil || failed.Message != "ask "+asked.ID+" is gone" {
+		t.Errorf("a phone paired to another profile read the image: %+v", failed)
 	}
 }
