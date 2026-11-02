@@ -301,8 +301,10 @@ export class DictationController {
     if (refined === dictation.raw) { this.remove(dictation.key); return; }
     await afterComposition();
     if (this.targets.get(dictation.key) !== target) return;
-    if (await target.replace(refined) === 'inserted') { this.remove(dictation.key); return; }
-    this.patch(dictation.key, { phase: 'settled', refined, card: 'offer', notice: 'You edited the dictated text, so the refined version was not applied.' });
+    const outcome = await target.replace(refined);
+    if (outcome === 'inserted') { this.remove(dictation.key); return; }
+    const notice = outcome === 'targetGone' ? 'The field closed or its page changed, so the refined version was not applied.' : 'You edited the dictated text, so the refined version was not applied.';
+    this.patch(dictation.key, { phase: 'settled', refined, card: 'offer', notice });
   }
 
   choose(key: string, text: string) {

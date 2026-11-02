@@ -11,6 +11,7 @@ import {
 } from "@testing-library/dom";
 import { afterComposition, missingTargetReason, TrackedField, type Range } from "../dictation/field";
 import { writableField } from "../utils/textFields";
+import { installNativeTextUndo } from "../utils/nativeTextUndo";
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
 const SHADOW_KEY = "shadow-6066-11e4-a52e-4f735466cecf";
@@ -543,6 +544,25 @@ function dictationRelease(id: string) {
   return null;
 }
 
+const focusSnapshots = new Map<string, { element: Element | null; start: number | null; end: number | null }>();
+
+function focusSnapshot(id: string) {
+  const element = document.hasFocus() ? document.activeElement : null;
+  const field = writableField(element);
+  focusSnapshots.set(id, { element, start: field?.selectionStart ?? null, end: field?.selectionEnd ?? null });
+  return null;
+}
+
+function focusRestore(id: string) {
+  const snapshot = focusSnapshots.get(id);
+  focusSnapshots.delete(id);
+  if (!(snapshot?.element instanceof HTMLElement) || !snapshot.element.isConnected || document.activeElement === snapshot.element) return null;
+  snapshot.element.focus({ preventScroll: true });
+  const field = writableField(snapshot.element);
+  if (field && snapshot.start !== null && snapshot.end !== null) field.setSelectionRange(snapshot.start, snapshot.end);
+  return null;
+}
+
 function execute(action: string, params: JsonObject): unknown | Promise<unknown> {
   switch (action) {
     case "snapshot": return snapshot();
@@ -674,9 +694,12 @@ function execute(action: string, params: JsonObject): unknown | Promise<unknown>
     case "dictation_capture": return dictationCapture(stringParam(params, "id"));
     case "dictation_replace": return dictationReplace(stringParam(params, "id"), stringParam(params, "text", false));
     case "dictation_release": return dictationRelease(stringParam(params, "id"));
+    case "focus_snapshot": return focusSnapshot(stringParam(params, "id"));
+    case "focus_restore": return focusRestore(stringParam(params, "id"));
     case "switch_to_parent_frame": frameWindow = frameWindow.parent || window; currentDocument(); return null;
     default: return error(`unsupported page action: ${action}`);
   }
 }
 
+installNativeTextUndo(document);
 window.__attnBrowser = { version: 1, execute };

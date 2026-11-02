@@ -232,6 +232,20 @@ test.describe('browser page fields', () => {
     expect(await page.evaluate(() => window.__dictation.started)).toEqual([]);
   });
 
+  test('a page that navigates or replaces its frame while refining gets the refined text as an offer, not an edit', async ({ page }) => {
+    await open(page);
+    await search(page).focus();
+    await page.evaluate(() => window.__dictation.press('browser-tile'));
+    await expect.poll(() => page.evaluate(() => window.__dictation.started.length)).toBe(1);
+    await transcribe(page, 1, 'raw query');
+    await expect(search(page)).toHaveValue('raw query');
+    const request = await refineRequest(page, 0);
+    await page.evaluate(() => { window.__dictation.browserGone = true; });
+    await answer(page, request.requestId, { ok: true, text: 'Raw query.' });
+    await expect(page.getByTestId('dictation-card')).toContainText('its page changed');
+    await expect(search(page)).toHaveValue('raw query');
+  });
+
   test('a page that navigated or replaced its frame gets an offer instead of an insert', async ({ page }) => {
     await open(page);
     await message(page).focus();

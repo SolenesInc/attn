@@ -1618,15 +1618,36 @@ pub async fn browser_host_dictation(
         }
         "replace" => {
             let id = id.ok_or_else(|| "dictation replace needs an id".to_string())?;
+            let focus = format!("{id}-focus");
+            {
+                let (label, focus) = (label.clone(), focus.clone());
+                on_main_thread(&webview, move || dictation_frames::bind(&label, &focus))?;
+            }
+            let focus_params = Map::from_iter([("id".to_string(), Value::String(focus.clone()))]);
+            let _ = run_frame_action(
+                webview.clone(),
+                Some(&focus),
+                "focus_snapshot",
+                &focus_params,
+            )
+            .await;
             let params = Map::from_iter([
                 ("id".to_string(), Value::String(id.clone())),
                 ("text".to_string(), Value::String(text.unwrap_or_default())),
             ]);
-            Ok(
+            let outcome =
                 run_frame_action(webview.clone(), Some(&id), "dictation_replace", &params)
                     .await
-                    .unwrap_or_else(|_| r#""targetGone""#.to_string()),
+                    .unwrap_or_else(|_| r#""targetGone""#.to_string());
+            let _ = run_frame_action(
+                webview.clone(),
+                Some(&focus),
+                "focus_restore",
+                &focus_params,
             )
+            .await;
+            release(focus)?;
+            Ok(outcome)
         }
         "release" => {
             let id = id.ok_or_else(|| "dictation release needs an id".to_string())?;
