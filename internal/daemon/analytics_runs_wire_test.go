@@ -154,7 +154,7 @@ func TestARunWithNoWatchedTranscriptRecordsItsUsageUnavailable(t *testing.T) {
 	app.TypeLine(session, "find the flaky test")
 	agent.Prompted()
 	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	agent.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	agent.ReplyAfterStop("It races the tax lookup. <!-- attn:state=idle -->")
 	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if !protocol.Deref(stopped.TurnOwed) {
 		t.Fatal("the user's run stopped without opening a turn")
@@ -201,6 +201,30 @@ func TestARunRecordCoversOnlyRunsAnalyticsCapturedThroughout(t *testing.T) {
 
 	assertRuns(t, runRecords(t, w, app, session), []string{
 		fmt.Sprintf("started_by=user ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(capturedReply)),
+	})
+}
+
+func TestARunStartedBeforeThePreviousRunWasReadCountsOnlyItsOwnTokens(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, agent, idle := claudeAtIdle(w, app)
+	working := userRunStarts(app, agent, session, idle, "read the failing build")
+	stopped := runEnds(w, app, agent, working, "The tax tests fail. <!-- attn:state=idle -->")
+
+	working = userRunStarts(app, agent, session, stopped, "find the flaky test")
+	w.OnTranscriptWrite(func() {})
+	agent.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	stopped = testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+	setAnalyticsEnabled(app, "true")
+
+	working = userRunStarts(app, agent, session, stopped, "fix it")
+	w.readTranscripts()
+	w.OnTranscriptWrite(w.readTranscripts)
+	reply := "Fixed the race. <!-- attn:state=idle -->"
+	runEnds(w, app, agent, working, reply)
+
+	assertRuns(t, runRecords(t, w, app, session), []string{
+		fmt.Sprintf("started_by=user ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(reply)),
 	})
 }
 

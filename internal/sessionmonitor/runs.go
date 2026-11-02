@@ -38,8 +38,9 @@ type Run struct {
 
 type trackedRun struct {
 	Run
-	startKnown  bool
-	costAtStart map[string]*sessioncost.Source
+	startKnown     bool
+	costAtStart    map[string]*sessioncost.Source
+	awaitsBaseline bool
 }
 
 type runRecorder struct {
@@ -70,7 +71,7 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 		if recovered || previous == protocol.SessionStateWorking || previous == protocol.SessionStatePendingApproval || m.input.run == nil {
 			return nil
 		}
-		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost}
+		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: len(m.runs.ended) > 0}
 	case open == nil, phase == protocol.SessionStateWorking:
 	case phase == protocol.SessionStatePendingApproval:
 		if previous != protocol.SessionStatePendingApproval {
@@ -121,6 +122,9 @@ func (m *Monitor) takeEndedRunsLocked(measuredFrom time.Time, unmeasured bool) [
 		}
 	}
 	m.runs.ended = kept
+	if open := m.runs.open; open != nil && open.awaitsBaseline && len(kept) == 0 && !unmeasured {
+		open.costAtStart, open.awaitsBaseline = m.cost, false
+	}
 	return taken
 }
 
@@ -130,6 +134,9 @@ func (run trackedRun) measured(costAtEnd map[string]*sessioncost.Source) Run {
 	measured := run.Run
 	measured.Usage = RunUsageKnown
 	switch {
+	case run.awaitsBaseline:
+		measured.Usage = RunUsageIncomplete
+		return measured
 	case end.UsageUnavailable:
 		measured.Usage = RunUsageUnavailable
 		return measured
