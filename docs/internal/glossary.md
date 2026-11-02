@@ -107,7 +107,8 @@ quick capture           a quick message (with optional attachments) the user
                         shortcut, or to any session through a paired sender;
                         like macOS Quick Note
 paired sender           a program the user allowed in the app to send quick
-                        captures as them with attn send; like an OAuth client
+                        captures as them with attn send, to the sessions of
+                        the profile it was allowed in; like an OAuth client
 ```
 
 ```text

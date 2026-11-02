@@ -481,6 +481,7 @@ var sessionOwnedTables = []string{
 	"session_runtime",
 	"session_annotation_drafts",
 	"session_exit_screens",
+	"session_focus",
 }
 
 func (s *Store) Remove(id protocol.SessionID) []string {

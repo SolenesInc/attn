@@ -91,20 +91,27 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 	if paired.err != nil || paired.token.Token == "" || paired.token.Sender.Name != "Capture" {
 		t.Fatalf("allowed pairing: %+v", paired)
 	}
-	if _, err := cli.SenderPair("capture", func(protocol.SenderPairingRequest) { t.Error("a second sender asked for a paired sender's name") }); err == nil || !strings.Contains(err.Error(), "attn send unpair") {
-		t.Fatalf("pairing a taken name: %v", err)
+	taken, takenOutcome := requestSenderPairing(t, cli, "capture")
+	if r := decideSenderPairing(t, app, taken.ID, true); r.Success || !strings.Contains(protocol.Deref(r.Error), `already has a sender named "capture"`) {
+		t.Fatalf("allowing a name the profile already paired: %+v", r)
+	}
+	if r := decideSenderPairing(t, app, taken.ID, false); !r.Success {
+		t.Fatalf("denying after the refused allow: %+v", r)
+	}
+	if o := <-takenOutcome; o.err == nil || !strings.Contains(o.err.Error(), "denied") {
+		t.Fatalf("pairing a taken name: %+v", o)
 	}
 	for _, msg := range authoringAs(&paired.token.Token, profileID) {
 		if _, err := cli.QuickCapture(msg); err != nil {
 			t.Fatalf("paired %T: %v", msg, err)
 		}
 	}
-	senders, err := cli.PairedSenders()
+	senders, err := cli.PairedSenders("")
 	if err != nil || len(senders) != 1 || senders[0].ID != paired.token.Sender.ID || senders[0].LastUsedAt == nil {
 		t.Fatalf("paired senders after use: %+v %v", senders, err)
 	}
 
-	if err := cli.UnpairSender("Capture"); err != nil {
+	if err := cli.UnpairSender("", "Capture"); err != nil {
 		t.Fatal(err)
 	}
 	for _, msg := range authoringAs(&paired.token.Token, profileID) {
@@ -112,7 +119,7 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 			t.Fatalf("unpaired %T: %v", msg, err)
 		}
 	}
-	if err := cli.UnpairSender("Capture"); err == nil || !strings.Contains(err.Error(), "attn send senders") {
+	if err := cli.UnpairSender("", "Capture"); err == nil || !strings.Contains(err.Error(), "attn send senders") {
 		t.Fatalf("unpairing a sender twice: %v", err)
 	}
 }

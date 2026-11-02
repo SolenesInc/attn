@@ -2907,18 +2907,11 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdSenderPair:
 		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage), caller)
 	case protocol.CmdSenderList:
-		senders, err := d.store.PairedSenders()
-		if err != nil {
-			d.sendError(conn, err.Error())
-		} else {
-			_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, PairedSenders: senders})
-		}
+		d.handleSenderList(conn, msg.(*protocol.SenderListMessage), caller)
 	case protocol.CmdSenderUnpair:
-		if err := d.unpairSender(msg.(*protocol.SenderUnpairMessage).Sender); err != nil {
-			d.sendError(conn, err.Error())
-		} else {
-			d.sendOK(conn)
-		}
+		d.handleSenderUnpair(conn, msg.(*protocol.SenderUnpairMessage), caller)
+	case protocol.CmdSenderSessions:
+		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:

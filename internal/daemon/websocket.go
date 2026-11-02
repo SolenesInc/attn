@@ -927,7 +927,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSetVentSend:
 		d.life.Go("handleSetVentSend", func() { d.handleSetVentSend(client, msg.(*protocol.SetVentSendMessage)) })
 	case protocol.CmdSendersGet:
-		d.life.Go("sendSendersSnapshot", func() { d.sendToClient(client, d.sendersSnapshot()) })
+		d.life.Go("sendSendersSnapshot", func() { d.sendToClient(client, d.sendersSnapshot(d.profileForClient(client))) })
 	case protocol.CmdSenderPairDecide:
 		d.life.Go("handleSenderPairDecide", func() { d.handleSenderPairDecide(client, msg.(*protocol.SenderPairDecideMessage)) })
 	case protocol.CmdSenderUnpair:

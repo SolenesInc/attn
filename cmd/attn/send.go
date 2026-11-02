@@ -44,6 +44,9 @@ func executeSend(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "unpair":
 		setCommandPath("send unpair")
 		return executeSendUnpair(args[1:], stdout, stderr)
+	case "sessions":
+		setCommandPath("send sessions")
+		return executeSendSessions(args[1:], stdin, stdout, stderr)
 	}
 	setCommandPath("send")
 	fs := flag.NewFlagSet("send", flag.ContinueOnError)
@@ -66,12 +69,11 @@ func executeSend(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "send: --token-stdin is required; pipe in the token attn send pair printed")
 		return 2
 	}
-	token, err := bufio.NewReader(stdin).ReadString('\n')
-	if strings.TrimSpace(token) == "" {
-		fmt.Fprintf(stderr, "send: no token on stdin: %v\n", err)
+	token, ok := readSenderToken(stdin, "send", stderr)
+	if !ok {
 		return 2
 	}
-	record, err := sendCapture(client.New(""), strings.TrimSpace(token), protocol.SessionID(positionals[0]), *message, files)
+	record, err := sendCapture(client.New(""), token, protocol.SessionID(positionals[0]), *message, files)
 	if err != nil {
 		fmt.Fprintf(stderr, "send: %v\n", err)
 		return 1
@@ -82,6 +84,15 @@ func executeSend(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Sent %d file(s) and the message to session %s as capture %s.\n", len(record.Attachments), *record.Mailbox.SessionID, record.ID)
 	return 0
+}
+
+func readSenderToken(stdin io.Reader, command string, stderr io.Writer) (string, bool) {
+	token, err := bufio.NewReader(stdin).ReadString('\n')
+	if strings.TrimSpace(token) == "" {
+		fmt.Fprintf(stderr, "%s: no token on stdin: %v\n", command, err)
+		return "", false
+	}
+	return strings.TrimSpace(token), true
 }
 
 func sendCapture(cli *client.Client, token string, session protocol.SessionID, message string, files []string) (*protocol.QuickCaptureRecord, error) {
@@ -201,11 +212,12 @@ func executeSendSenders(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("send senders", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	asJSON := fs.Bool("json", false, "print the paired senders as JSON")
+	profile := fs.String("profile", "", "the profile whose senders to list")
 	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: attn send senders [--json]")
+		fmt.Fprintln(stderr, "usage: attn send senders [--profile <name|id>] [--json]")
 		return 2
 	}
-	senders, err := client.New("").PairedSenders()
+	senders, err := client.New("").PairedSenders(strings.TrimSpace(*profile))
 	if err != nil {
 		fmt.Fprintf(stderr, "send senders: %v\n", daemonMessage(err))
 		return 1
@@ -228,15 +240,54 @@ func executeSendSenders(args []string, stdout, stderr io.Writer) int {
 }
 
 func executeSendUnpair(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: attn send unpair <name|id>")
+	fs := flag.NewFlagSet("send unpair", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "the profile the sender belongs to")
+	positionals, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil || len(positionals) != 1 {
+		fmt.Fprintln(stderr, "usage: attn send unpair <name|id> [--profile <name|id>]")
 		return 2
 	}
-	if err := client.New("").UnpairSender(args[0]); err != nil {
+	if err := client.New("").UnpairSender(strings.TrimSpace(*profile), positionals[0]); err != nil {
 		fmt.Fprintf(stderr, "send unpair: %v\n", daemonMessage(err))
 		return 1
 	}
-	fmt.Fprintf(stdout, "Unpaired %s. Its token no longer works.\n", args[0])
+	fmt.Fprintf(stdout, "Unpaired %s. Its token no longer works.\n", positionals[0])
+	return 0
+}
+
+func executeSendSessions(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("send sessions", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	tokenStdin := fs.Bool("token-stdin", false, "read the paired sender's token from stdin")
+	asJSON := fs.Bool("json", false, "print the sessions as JSON")
+	if err := parseFlags(fs, args); err != nil || fs.NArg() != 0 || !*tokenStdin {
+		fmt.Fprintln(stderr, "usage: attn send sessions --token-stdin [--json]")
+		return 2
+	}
+	token, ok := readSenderToken(stdin, "send sessions", stderr)
+	if !ok {
+		return 2
+	}
+	sessions, err := client.New("").SenderSessions(token)
+	if err != nil {
+		fmt.Fprintf(stderr, "send sessions: %v\n", daemonMessage(err))
+		return 1
+	}
+	if *asJSON {
+		printJSONLine(stdout, sessions)
+		return 0
+	}
+	if len(sessions) == 0 {
+		fmt.Fprintln(stdout, "No live sessions in this sender's profile.")
+		return 0
+	}
+	table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(table, "ID\tAGENT\tSTATE\tHOST\tLAST FOCUSED\tLABEL")
+	for _, s := range sessions {
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n", s.ID, s.Agent, s.State, orDash(protocol.Deref(s.Host)), orDash(protocol.Deref(s.LastFocusedAt)), s.Label)
+	}
+	table.Flush()
 	return 0
 }
 
@@ -246,20 +297,22 @@ func printJSONLine(w io.Writer, v any) {
 
 func writeSendHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn send <session> --token-stdin [--file <path>]... [-m <text>] [--json]
+       attn send sessions --token-stdin [--json]
        attn send pair --name <name> [--json]
-       attn send senders [--json]
-       attn send unpair <name|id>
+       attn send senders [--profile <name|id>] [--json]
+       attn send unpair <name|id> [--profile <name|id>]
 
 Send files and a message to a running agent session, local or on an outpost,
 as the user. Only a sender the user paired can send: pair a program once with
-attn send pair, then give its token on stdin with every send.
+attn send pair, then give its token on stdin with every send. A sender belongs
+to the profile the app showed when the user allowed it, and sends only to that
+profile's sessions.
 
 send <session>
   attn types the message into the session's conversation as the user's, with
   an attn agent attachment command for each file that saves it where the
   agent runs. Give -m, --file, or both.
-  <session>        the receiving session's id; attn session list --json names
-                   each live session with its label and host
+  <session>        the receiving session's id; attn send sessions lists them
   --token-stdin    read the paired sender's token from the first line of stdin
   --file <path>    a file to send; repeat for more. Its name is kept
   -m <text>        the message
@@ -268,6 +321,13 @@ send <session>
                    and bytes
   The files stay on this daemon after delivery. A failed send removes the
   files it uploaded and exits nonzero.
+
+sessions --token-stdin
+  list every live session of the sender's profile, the sessions it can send
+  to, in one unpaged list. --json prints an array of objects with id, label,
+  agent, state, host (only for a session on an outpost) and last_focused_at
+  (only once the user has focused the session's terminal in attn). The most
+  recent last_focused_at is the session the user last focused.
 
 pair --name <name>
   ask the user to pair this program. The attn app asks the user to allow or
@@ -280,9 +340,12 @@ pair --name <name>
   the request (id, name, code, requested_at), then {sender, token}.
 
 senders
-  list the paired senders: name, when paired, when last used, id.
+  list a profile's paired senders: name, when paired, when last used, id.
 
 unpair <name|id>
-  remove a paired sender; its token stops working at once.
+  remove a profile's paired sender; its token stops working at once.
+
+  --profile <name|id> chooses the profile for senders and unpair. It defaults
+  to the calling session's profile inside attn, or the only profile.
 `)
 }

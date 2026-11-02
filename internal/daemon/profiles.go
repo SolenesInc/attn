@@ -788,6 +788,7 @@ func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	d.sendToClient(client, &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, Settings: d.settingsSnapshot(d.profileForClient(client))})
 	d.sendGardenFull(client)
 	d.sendToClient(client, asksSnapshot(profileID, d.asks()))
+	d.sendToClient(client, d.sendersSnapshot(d.profileForClient(client)))
 	d.sendToClient(client, d.ventsSnapshot(profileID))
 	d.sendToClient(client, d.notificationsUpdated(profileID))
 	if profileID != "" {

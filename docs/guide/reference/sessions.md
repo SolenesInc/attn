@@ -102,9 +102,10 @@ attn send pair --name "Capture"
 ```
 
 Attn asks you to allow "Capture" and shows a 4-digit code. Check that the
-command prints the same code, then click **Allow**. The command prints a token
-once. Keep the token where other programs cannot read it, such as the macOS
-Keychain.
+command prints the same code, then click **Allow**. The program belongs to the
+profile the app shows when you allow it, and sends only to that profile's
+sessions. The command prints a token once. Keep the token where other programs
+cannot read it, such as the macOS Keychain.
 
 Send with the token on stdin:
 
@@ -112,14 +113,16 @@ Send with the token on stdin:
 attn send <id> --token-stdin --file data.csv -m "Totals look off in March" < token
 ```
 
-`attn session list --json` gives each live session's id, label and host. Repeat
+`attn send sessions --token-stdin --json` lists the sessions the program can
+send to: each live session of its profile, with its id, label, agent, state,
+host when it runs on an outpost, and when you last focused it in Attn. Repeat
 `--file` to send more files. Attn types the message into the agent's
 conversation as yours. For each file, the message has an
 `attn agent attachment … --out <path>` command that saves the file where the
 agent runs, including on an outpost.
 
-To see paired programs, open the **Paired senders** list in Settings or run
-`attn send senders`. To stop a program sending, click **Remove** there or run
+To see a profile's paired programs, open the **Paired senders** list in
+Settings or run `attn send senders`. To stop a program sending, click **Remove** there or run
 `attn send unpair <name>`. Run `attn send --help` for the details.
 
 ## Details

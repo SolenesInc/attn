@@ -50,15 +50,23 @@ func (c *Client) SenderPair(name string, waiting func(protocol.SenderPairingRequ
 	return second.PairedSenderToken, nil
 }
 
-func (c *Client) PairedSenders() ([]protocol.PairedSender, error) {
-	resp, err := c.send(protocol.SenderListMessage{Cmd: protocol.CmdSenderList})
+func (c *Client) PairedSenders(profile string) ([]protocol.PairedSender, error) {
+	resp, err := c.send(protocol.SenderListMessage{Cmd: protocol.CmdSenderList, ProfileID: protocol.Ptr(profile)})
 	if err != nil {
 		return nil, err
 	}
 	return resp.PairedSenders, nil
 }
 
-func (c *Client) UnpairSender(sender string) error {
-	_, err := c.send(protocol.SenderUnpairMessage{Cmd: protocol.CmdSenderUnpair, Sender: sender})
+func (c *Client) UnpairSender(profile, sender string) error {
+	_, err := c.send(protocol.SenderUnpairMessage{Cmd: protocol.CmdSenderUnpair, Sender: sender, ProfileID: protocol.Ptr(profile)})
 	return err
+}
+
+func (c *Client) SenderSessions(token string) ([]protocol.SenderSession, error) {
+	resp, err := c.send(protocol.SenderSessionsMessage{Cmd: protocol.CmdSenderSessions, SenderToken: token})
+	if err != nil {
+		return nil, err
+	}
+	return resp.SenderSessions, nil
 }

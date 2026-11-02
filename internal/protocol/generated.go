@@ -9310,6 +9310,9 @@ type Response struct {
 	// SenderPairing corresponds to the JSON schema field "sender_pairing".
 	SenderPairing *SenderPairingRequest `json:"sender_pairing,omitempty,omitzero"`
 
+	// SenderSessions corresponds to the JSON schema field "sender_sessions".
+	SenderSessions []SenderSession `json:"sender_sessions,omitempty,omitzero"`
+
 	// SessionInstructionsResult corresponds to the JSON schema field
 	// "session_instructions_result".
 	SessionInstructionsResult *SessionInstructionsResult `json:"session_instructions_result,omitempty,omitzero"`
@@ -11116,6 +11119,9 @@ type SeedWatchResult struct {
 type SenderListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 }
 
 type SenderPairDecideMessage struct {
@@ -11168,9 +11174,40 @@ type SenderPairingRequest struct {
 	RequestedAt string `json:"requested_at"`
 }
 
+type SenderSession struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID SessionID `json:"id"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// LastFocusedAt corresponds to the JSON schema field "last_focused_at".
+	LastFocusedAt *string `json:"last_focused_at,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State SessionState `json:"state"`
+}
+
+type SenderSessionsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken string `json:"sender_token"`
+}
+
 type SenderUnpairMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`

@@ -6884,6 +6884,7 @@ model Response {
   sender_pairing?: SenderPairingRequest;
   paired_sender_token?: PairedSenderToken;
   paired_senders?: PairedSender[];
+  sender_sessions?: SenderSession[];
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -8479,7 +8480,9 @@ model PhonePairingRevokeResultMessage {
 
 // Paired senders
 
-// A program the user allowed, in the app, to send messages as them with attn send.
+// A program the user allowed, in the app, to send messages as them with attn
+// send. It belongs to the profile the app showed when the user allowed it, and
+// sends only to that profile's sessions.
 model PairedSender {
   id: string;
   name: string;
@@ -8511,17 +8514,42 @@ model SenderPairMessage {
   name: string;
 }
 
+// profile_id: the profile whose senders to list; the caller session's profile
+// when it runs inside attn, or the only profile.
 @extension("x-on", #{ home: true })
 model SenderListMessage {
   cmd: "sender_list";
+  profile_id?: string;
 }
 
-// sender: the paired sender's id or name.
+// sender: the paired sender's id or name. profile_id as in sender_list; the
+// app's selected profile when the app sends it.
 @extension("x-on", #{ home: true })
 model SenderUnpairMessage {
   cmd: "sender_unpair";
   request_id?: string;
   sender: string;
+  profile_id?: string;
+}
+
+// Lists the live sessions of the paired sender's profile, the ones it can send
+// to, unpaged.
+@extension("x-on", #{ home: true })
+model SenderSessionsMessage {
+  cmd: "sender_sessions";
+  sender_token: string;
+}
+
+model SenderSession {
+  id: SessionID;
+  label: string;
+  agent: string;
+  state: SessionState;
+  // The outpost the session runs on; absent for a session on this machine.
+  host?: string;
+  // When the user last focused the session's terminal in attn; absent when
+  // never.
+  last_focused_at?: string;
 }
 
 model SenderUnpairResultMessage {

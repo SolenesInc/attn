@@ -177,6 +177,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPhonePairingRevoke:            commandMetadata(false, true),
 	protocol.CmdSenderPair:                    commandMetadata(false, true),
 	protocol.CmdSenderList:                    commandMetadata(false, true),
+	protocol.CmdSenderSessions:                commandMetadata(false, true),
 	protocol.CmdSenderUnpair:                  commandMetadata(false, true),
 	protocol.CmdSendersGet:                    commandMetadata(false, false),
 	protocol.CmdSenderPairDecide:              commandMetadata(false, true),

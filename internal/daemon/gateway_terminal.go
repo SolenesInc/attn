@@ -78,6 +78,7 @@ func (d *Daemon) gatewayCommand(conn *gatewayConn, cmd string, frame []byte) boo
 	case "terminal_focus":
 		if message, ok := decodeGatewayCommand[gateway.TerminalFocus](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
 			d.claimPtySize(conn, protocol.TerminalID(message.TerminalID))
+			d.noteTerminalFocus(protocol.TerminalID(message.TerminalID))
 		}
 	case "submit_prompt":
 		if message, ok := decodeGatewayCommand[gateway.SubmitPrompt](d, conn, frame); ok {

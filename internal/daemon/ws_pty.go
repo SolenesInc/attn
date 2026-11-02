@@ -775,6 +775,7 @@ func (d *Daemon) handleTerminalPointerActivity(client *wsClient, msg *protocol.T
 
 func (d *Daemon) handleTerminalFocus(client *wsClient, msg *protocol.TerminalFocusMessage) {
 	d.claimPtySize(client, msg.ID)
+	d.noteTerminalFocus(msg.ID)
 }
 
 func (d *Daemon) claimPtySize(client terminalClient, terminal protocol.TerminalID) {

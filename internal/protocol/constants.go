@@ -78,6 +78,7 @@ const (
 	CmdSenderPair                    = "sender_pair"
 	CmdSenderList                    = "sender_list"
 	CmdSenderUnpair                  = "sender_unpair"
+	CmdSenderSessions                = "sender_sessions"
 	CmdSendersGet                    = "senders_get"
 	CmdSenderPairDecide              = "sender_pair_decide"
 	CmdPlantVentSeed                 = "plant_vent_seed"

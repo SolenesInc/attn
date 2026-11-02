@@ -65,6 +65,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPhonePairBegin:                decodeInto[PhonePairBeginMessage],
 	CmdSenderPair:                    decodeInto[SenderPairMessage],
 	CmdSenderList:                    decodeInto[SenderListMessage],
+	CmdSenderSessions:                decodeInto[SenderSessionsMessage],
 	CmdSenderUnpair:                  decodeInto[SenderUnpairMessage],
 	CmdSendersGet:                    decodeInto[SendersGetMessage],
 	CmdSenderPairDecide:              decodeInto[SenderPairDecideMessage],

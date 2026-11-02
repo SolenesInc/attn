@@ -12,10 +12,15 @@ import (
 
 var ErrPairedSenderNameTaken = errors.New("a paired sender already has this name")
 
-func (s *Store) PairedSenders() ([]protocol.PairedSender, error) {
+type PairedSender struct {
+	protocol.PairedSender
+	ProfileID string
+}
+
+func (s *Store) PairedSenders(profileID string) ([]protocol.PairedSender, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT id, name, created_at, last_used_at FROM paired_senders ORDER BY created_at, id`)
+	rows, err := s.db.Query(`SELECT id, name, created_at, last_used_at FROM paired_senders WHERE profile_id = ? ORDER BY created_at, id`, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -35,32 +40,32 @@ func (s *Store) PairedSenders() ([]protocol.PairedSender, error) {
 	return senders, rows.Err()
 }
 
-func (s *Store) AddPairedSender(sender protocol.PairedSender, tokenHash string) error {
+func (s *Store) AddPairedSender(sender PairedSender, tokenHash string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO paired_senders(id, name, token_hash, created_at) VALUES(?,?,?,?)`, sender.ID, sender.Name, tokenHash, sender.CreatedAt)
+	_, err := s.db.Exec(`INSERT INTO paired_senders(id, profile_id, name, token_hash, created_at) VALUES(?,?,?,?,?)`, sender.ID, sender.ProfileID, sender.Name, tokenHash, sender.CreatedAt)
 	if err != nil && strings.Contains(err.Error(), "paired_senders.name") {
 		return fmt.Errorf("%w: %q", ErrPairedSenderNameTaken, sender.Name)
 	}
 	return err
 }
 
-func (s *Store) PairedSenderNameTaken(name string) (bool, error) {
+func (s *Store) PairedSenderNameTaken(profileID, name string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var id string
-	err := s.db.QueryRow(`SELECT id FROM paired_senders WHERE name = ?`, name).Scan(&id)
+	err := s.db.QueryRow(`SELECT id FROM paired_senders WHERE profile_id = ? AND name = ?`, profileID, name).Scan(&id)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
 	return err == nil, err
 }
 
-func (s *Store) UsePairedSender(tokenHash string, at time.Time) (*protocol.PairedSender, error) {
+func (s *Store) UsePairedSender(tokenHash string, at time.Time) (*PairedSender, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var p protocol.PairedSender
-	err := s.db.QueryRow(`SELECT id, name, created_at FROM paired_senders WHERE token_hash = ?`, tokenHash).Scan(&p.ID, &p.Name, &p.CreatedAt)
+	var p PairedSender
+	err := s.db.QueryRow(`SELECT id, profile_id, name, created_at FROM paired_senders WHERE token_hash = ?`, tokenHash).Scan(&p.ID, &p.ProfileID, &p.Name, &p.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -75,10 +80,10 @@ func (s *Store) UsePairedSender(tokenHash string, at time.Time) (*protocol.Paire
 	return &p, nil
 }
 
-func (s *Store) RemovePairedSender(idOrName string) (bool, error) {
+func (s *Store) RemovePairedSender(profileID, idOrName string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result, err := s.db.Exec(`DELETE FROM paired_senders WHERE id = ? OR name = ?`, idOrName, idOrName)
+	result, err := s.db.Exec(`DELETE FROM paired_senders WHERE profile_id = ? AND (id = ? OR name = ?)`, profileID, idOrName, idOrName)
 	if err != nil {
 		return false, err
 	}

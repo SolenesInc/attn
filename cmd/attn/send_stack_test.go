@@ -3,6 +3,7 @@ package main_test
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -70,17 +71,19 @@ func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, token, session str
 	if sent.Code != 0 {
 		t.Fatalf("send: %+v", sent)
 	}
-	var keys map[string]json.RawMessage
+	var keys jsonKeys
 	sent.JSON(t, &keys)
-	got := slices.Sorted(func(yield func(string) bool) {
-		for k := range keys {
-			if !yield(k) {
-				return
-			}
-		}
-	})
-	if want := []string{"attachments", "content", "created_at", "id", "mailbox"}; !reflect.DeepEqual(got, want) {
+	if got, want := keys.sorted(), []string{"attachments", "content", "created_at", "id", "mailbox"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("send --json keys = %v; the app reads %v", got, want)
+	}
+	var attachments []jsonKeys
+	if err := json.Unmarshal(keys["attachments"], &attachments); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range attachments {
+		if got, want := a.sorted(), []string{"bytes", "id", "media_type", "name"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("send --json attachment keys = %v; the app reads %v", got, want)
+		}
 	}
 	var out sendOutput
 	sent.JSON(t, &out)
@@ -93,6 +96,12 @@ func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, token, session str
 		}
 	}
 	return out
+}
+
+type jsonKeys map[string]json.RawMessage
+
+func (k jsonKeys) sorted() []string {
+	return slices.Sorted(maps.Keys(k))
 }
 
 func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture sendOutput) {
@@ -161,6 +170,41 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 	history, err := home.TrustedApp().QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 10})
 	if err != nil || len(history.List.Items) != 0 || len(history.List.DraftAssets) != 0 {
 		t.Fatalf("Quick Capture panel history shows session deliveries: %+v %v", history, err)
+	}
+
+	pair.App.Send(protocol.TerminalFocusMessage{Cmd: protocol.CmdTerminalFocus, ID: protocol.TerminalID(home.Terminal(local))})
+	created := testworld.Request(pair.App, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	side := home.Spawn(home.AppOn(created.Profile.ID), fakeagent.Claude, home.Path("side"))
+	home.Launched(side)
+
+	listed := home.Run(testworld.Invocation{Args: []string{"send", "sessions", "--token-stdin", "--json"}, Stdin: token + "\n"})
+	if listed.Code != 0 {
+		t.Fatalf("send sessions: %+v", listed)
+	}
+	var sessions []jsonKeys
+	listed.JSON(t, &sessions)
+	keysByID := map[string][]string{}
+	for _, row := range sessions {
+		var id string
+		if err := json.Unmarshal(row["id"], &id); err != nil {
+			t.Fatalf("send sessions row %v: %v", row, err)
+		}
+		keysByID[id] = row.sorted()
+	}
+	if want := map[string][]string{
+		local:  {"agent", "id", "label", "last_focused_at", "state"},
+		remote: {"agent", "host", "id", "label", "state"},
+	}; !reflect.DeepEqual(keysByID, want) {
+		t.Fatalf("send sessions --json = %s; the app reads %v and never another profile's session %s", listed.Stdout, want, side)
+	}
+
+	elsewhere := home.Run(testworld.Invocation{Args: []string{"send", side, "--token-stdin", "-m", "wrong profile"}, Stdin: token + "\n"})
+	if elsewhere.Code == 0 || !strings.Contains(elsewhere.Stderr, `"Capture"`) || !strings.Contains(elsewhere.Stderr, created.Profile.ID) || !strings.Contains(elsewhere.Stderr, pair.App.SelectedProfile()) {
+		t.Fatalf("send from a sender of profile %s to a session of profile %s: %+v", pair.App.SelectedProfile(), created.Profile.ID, elsewhere)
 	}
 
 	missing := home.Run(testworld.Invocation{Args: []string{"send", "no-such-session", "--token-stdin", "--file", shot, "-m", "lost"}, Stdin: token})

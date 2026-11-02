@@ -160,12 +160,14 @@ func quickCaptureSenderToken(msg any) (string, bool) {
 }
 
 func (d *Daemon) handleQuickCapture(conn net.Conn, msg any) {
+	var profileID string
 	var err error
 	if token, authoring := quickCaptureSenderToken(msg); authoring {
-		err = d.requirePairedSender(token)
-	}
-	var profileID string
-	if err == nil {
+		var sender *store.PairedSender
+		if sender, err = d.requirePairedSender(token); err == nil {
+			profileID, err = d.senderProfile(sender, quickCaptureRequestScope(msg).profileID)
+		}
+	} else {
 		profileID, err = d.quickCaptureProfile(msg, "")
 	}
 	var result *protocol.QuickCaptureResult
