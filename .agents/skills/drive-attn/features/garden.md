@@ -30,6 +30,7 @@ checks.
 - `garden-board`: columns Ready, In progress, Parked and Closed. Moving a card moves the seed.
 - `seed-tile`: a seed opened as a tile beside the agent that tends it.
 - `seed-chip`: the seed a session tends, on its tile header, with its popover.
+- `terminal-seed-card`: a seed id the garden knows is marked in a terminal, and hovering it shows the seed's card, which opens the seed as a tile or goes to the agent working it.
 - `garden-review`: an advisory review of growing seeds that went quiet.
 - `seed-export`: write a seed's body to a markdown file to read and annotate.
 - `garden-guidance`: what attn tells its agents about the garden.
@@ -44,6 +45,7 @@ checks.
 - In the garden (`app/src/components/GardenPanel.tsx`): the search field, seed and plot rows, the trail back up a plot, the frame button ("Expand the garden" or "Return the garden to the dock"), "Review garden", and a seed's page with its Authorization section ("Set" or "Change", and "Clear"), its checks ("Confirm C1", "Reject…", "Reopen") and the buttons "Open as tile", "Resume", "Handover" and "Send to Chief". Arrow keys walk rows, ← climbs out of a plot, fullscreen → drills into one, and `/` returns to search.
 - Fullscreen, the "Garden view" switch picks list or board (`app/src/components/GardenFrame.tsx`). On the board, drag a card to a column or open the card's menu to park, harvest, wither or replant the seed with a reason (`app/src/components/GardenBoard.tsx`).
 - On an agent's tile header, the chip of the seed it tends opens the seed's popover (`app/src/components/PaneSeedChip.tsx`). The chip leaves out a seed title that repeats the session title, and a narrow tile cuts the title, then shows only the state icon.
+- In a terminal, hovering a marked seed id shows its card (`app/src/components/TerminalSeedPreview.tsx`). "Open as tile" opens the seed beside the terminal's agent. A button labelled with the agent's name ("Go to <agent>") goes to the seed's live tender, or else to the last session that tended it while that session is open, locally or on an outpost, as picking it in the sidebar does. The card leaves the button out when neither session is open or when that session owns the terminal. The keyboard reaches it as it reaches "Open as tile", and Escape closes the card.
 - **Settings → Background agents**, Garden advisor: the agent that classifies seeds during a review (`app/src/components/GardenAdvisorSettings.tsx`).
 - Where people see what agents do: the tender and state on each row and card, notes on the seed's log, the chip on the agent's tile, and the seed tile `attn open` puts beside the agent.
 - Their own shell: the same `attn seed` verbs agents use, below. Outside attn, `--profile <name|id>` picks the profile when there are several.

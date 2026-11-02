@@ -3715,6 +3715,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         <TerminalSeedPreview
           seed={previewSeed}
           anchor={seedPreview.anchor}
+          hostSessionId={runtimeLogMeta?.sessionId}
           onOpen={(seedId) => {
             onOpenSeedRef.current?.(seedId);
             closeSeedPreview();

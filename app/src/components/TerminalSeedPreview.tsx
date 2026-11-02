@@ -8,7 +8,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import type { DaemonSession } from '../hooks/useDaemonSocket';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useSessionStore } from '../store/sessions';
 import type { Seed } from '../types/generated';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import {
@@ -26,6 +28,7 @@ export type { TerminalSeedAnchor } from '../utils/terminalSeedPreviewPlacement';
 interface TerminalSeedPreviewProps {
   seed: Seed;
   anchor: TerminalSeedAnchor;
+  hostSessionId?: string;
   onOpen: (seedId: string) => void;
   onClose: () => void;
   onPointerEnter: () => void;
@@ -42,6 +45,15 @@ function formatAge(iso: string): string {
   return `${Math.round(seconds / 86400)}d ago`;
 }
 
+function seedAgentSession(seed: Seed, sessions: readonly DaemonSession[]): DaemonSession | undefined {
+  const candidates = [seed.tender?.session_id, seed.last_execution_id];
+  for (const id of candidates) {
+    const session = id ? sessions.find((open) => open.id === id) : undefined;
+    if (session) return session;
+  }
+  return undefined;
+}
+
 function stopPreviewPointerDown(event: ReactPointerEvent<HTMLDialogElement>) {
   event.stopPropagation();
 }
@@ -49,6 +61,7 @@ function stopPreviewPointerDown(event: ReactPointerEvent<HTMLDialogElement>) {
 export function TerminalSeedPreview({
   seed,
   anchor,
+  hostSessionId,
   onOpen,
   onClose,
   onPointerEnter,
@@ -64,6 +77,10 @@ export function TerminalSeedPreview({
     [daemonSessions],
   );
   const tender = tenderOf(seed, sessionLabels);
+  const agentSession = seedAgentSession(seed, daemonSessions);
+  const agent = agentSession && agentSession.id !== hostSessionId
+    ? { id: agentSession.id, name: sessionDisplayName(agentSession) }
+    : null;
   const updated = formatAge(seed.updated_at);
 
   useLayoutEffect(() => {
@@ -85,7 +102,7 @@ export function TerminalSeedPreview({
     place();
     window.addEventListener('resize', place);
     return () => window.removeEventListener('resize', place);
-  }, [anchor, excerpt, seed.status, seed.title, tender, updated]);
+  }, [agent?.name, anchor, excerpt, seed.status, seed.title, tender, updated]);
 
   const style = placement
     ? ({
@@ -146,6 +163,23 @@ export function TerminalSeedPreview({
               <i aria-hidden="true" />
               {seed.status}
             </span>
+            {agent ? (
+              <button
+                type="button"
+                className="terminal-seed-preview__agent"
+                aria-label={`Go to ${agent.name}`}
+                title={`Go to ${agent.name}`}
+                onClick={() => {
+                  useSessionStore.getState().selectAgent(agent.id);
+                  onClose();
+                }}
+              >
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" />
+                </svg>
+                <span>{agent.name}</span>
+              </button>
+            ) : null}
             <button
               type="button"
               className="terminal-seed-preview__open"
