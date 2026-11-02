@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": { "@attn/*": ["../app/src/*"] },
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "floatingEffect": "error" }
+      }
+    ]
+  },
+  "include": ["src", "vite.config.ts", "capacitor.config.ts"]
+}

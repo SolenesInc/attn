@@ -1,0 +1,11 @@
+{
+  "name": "attn-keychain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Keeps the phone's device keys in the iOS Keychain.",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}

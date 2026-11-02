@@ -158,6 +158,7 @@ system.
 
 - `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
 - `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
+- `make check-mobile`: The phone app's format, lint, type check and tests
 - `scripts/land.sh`: Fast compile, typecheck, lint, generated-file and script
   checks, and the landing tests, then push to `main`. The landing tests are the
   `scripts/landing-tests` groups the changed paths match, the tests the change

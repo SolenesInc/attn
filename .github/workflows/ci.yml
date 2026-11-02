@@ -25,6 +25,7 @@ jobs:
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
       tauri: ${{ steps.filter.outputs.tauri }}
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
       app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
@@ -87,6 +88,14 @@ jobs:
               - 'internal/protocol/schema/**'
               - 'ghostty-vt.pin'
               - 'ghostty-vt-wasm.lock'
+              - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
+            mobile:
+              - 'mobile/**'
+              - 'app/src/gateway/**'
+              - 'app/src/types/gateway*'
+              - 'internal/cloudlink/testdata/**'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
@@ -457,6 +466,33 @@ jobs:
         run: |
           node --test cmd/prompt-editor/test/compare.test.mjs
           app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+
+  mobile:
+    name: Mobile
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-toolchains
+        with:
+          node: 'true'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format, lint, type check and test
+        run: pnpm run check
 
   # E2E runs apart from the unit job so the two overlap instead of stacking.
   # Each shard is its own runner with its own throwaway daemon + Vite server,
@@ -992,6 +1028,7 @@ jobs:
       - backend
       - pty-compatibility
       - frontend
+      - mobile
       - frontend-e2e
       - rust
       - app-acceptance-build
@@ -1024,6 +1061,7 @@ jobs:
       - backend
       - pty-compatibility
       - frontend
+      - mobile
       - frontend-e2e
       - rust
       - app-acceptance-build

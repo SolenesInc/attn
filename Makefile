@@ -194,6 +194,11 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 	pnpm --dir app install --frozen-lockfile
 	@touch $@
 
+MOBILE_NODE_MODULES := mobile/node_modules/.attn-installed
+$(MOBILE_NODE_MODULES): mobile/package.json mobile/pnpm-lock.yaml
+	pnpm --dir mobile install --frozen-lockfile
+	@touch $@
+
 SCHEMA_NODE_MODULES := internal/protocol/schema/node_modules/.attn-installed
 $(SCHEMA_NODE_MODULES): internal/protocol/schema/package.json internal/protocol/schema/pnpm-lock.yaml
 	pnpm --dir internal/protocol/schema install --frozen-lockfile
@@ -211,7 +216,7 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: check-go check-frontend check-browser-runtime
+.PHONY: check-go check-frontend check-browser-runtime check-mobile
 check-go: lint-go
 	go vet ./...
 
@@ -234,6 +239,9 @@ lint-frontend: $(APP_NODE_MODULES)
 
 check-frontend: lint-frontend check-browser-runtime
 	cd app && pnpm exec tsrs --noEmit
+
+check-mobile: $(MOBILE_NODE_MODULES)
+	cd mobile && pnpm run check
 
 check-browser-runtime: $(APP_NODE_MODULES)
 	cd app && pnpm run build:browser-runtime
