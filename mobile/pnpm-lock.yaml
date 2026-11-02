@@ -32,15 +32,15 @@ importers:
       '@effect/platform-browser':
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)
-      '@noble/ciphers':
-        specifier: 2.4.0
-        version: 2.4.0
       '@noble/curves':
         specifier: 2.4.0
         version: 2.4.0
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
+      attn-apple-crypto:
+        specifier: file:native/crypto
+        version: file:native/crypto
       attn-keychain:
         specifier: file:native/keychain
         version: file:native/keychain
@@ -75,6 +75,9 @@ importers:
       '@effect/tsgo':
         specifier: 0.63.0
         version: 0.63.0
+      '@noble/ciphers':
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/mdast':
         specifier: 4.0.4
         version: 4.0.4
@@ -767,6 +770,9 @@ packages:
   at-least-node@1.0.0:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
     engines: {node: '>= 4.0.0'}
+
+  attn-apple-crypto@file:native/crypto:
+    resolution: {directory: native/crypto, type: directory}
 
   attn-keychain@file:native/keychain:
     resolution: {directory: native/keychain, type: directory}
@@ -2367,6 +2373,8 @@ snapshots:
   astral-regex@2.0.0: {}
 
   at-least-node@1.0.0: {}
+
+  attn-apple-crypto@file:native/crypto: {}
 
   attn-keychain@file:native/keychain: {}
 

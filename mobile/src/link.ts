@@ -1,7 +1,7 @@
 import { decodeGatewayEvent, type GatewayEvent } from '@attn/gateway/decode'
 import type { GatewayAsk, GatewaySession, TerminalScreen } from '@attn/types/gatewayGenerated'
 import { GATEWAY_API_VERSION } from '@attn/types/gatewayVersion'
-import { fromBase64Url, toBase64Url } from './bytes'
+import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
 import { signChallenge, type DeviceKeys } from './device'
 import { HandshakeKind, startHandshake, type Transport } from './noise'
 
@@ -93,8 +93,6 @@ const decodeOutputFrame = (plaintext: Uint8Array): TerminalEvent => {
   return { _tag: 'Output', terminalId, data: plaintext.subarray(2 + idLength + 4) }
 }
 
-const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
-
 export type TerminalRequest = { readonly cols: number; readonly rows: number }
 
 export type OpenTerminal = {
@@ -146,7 +144,7 @@ const openSocket = (
   socket.binaryType = 'arraybuffer'
   let ended = false
   let connId = 0
-  let finishHandshake: ((reply: Uint8Array) => Transport) | undefined
+  let finishHandshake: ((reply: Uint8Array) => Promise<Transport>) | undefined
   let transport: Transport | undefined
   let refusal: string | undefined
   let homeAnswersPing = false
@@ -170,7 +168,7 @@ const openSocket = (
       () => end(`${pinged}: no answer for ${pongDeadlineMs / 1000} s; reconnecting`),
       pongDeadlineMs,
     )
-    if (transport && homeAnswersPing) sendGateway({ cmd: 'ping' })
+    if (transport && homeAnswersPing) inOrder(() => sendGateway({ cmd: 'ping' }))
     else socket.send('ping')
   }, pingIntervalMs)
   const answered = () => {
@@ -192,15 +190,31 @@ const openSocket = (
     failPending(refusal ?? reason)
     onEnd(refusal ?? reason, final || refusal !== undefined)
   }
-  const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
-  const sendGateway = (message: object) =>
-    send(FrameType.data, transport!.send.encrypt(new TextEncoder().encode(JSON.stringify(message))))
+  let queue: Promise<void> = Promise.resolve()
+  const inOrder = (task: () => Promise<void> | void) => {
+    queue = queue.then(async () => {
+      if (ended) return
+      try {
+        await task()
+      } catch (error) {
+        end(`talking to ${home.homeName} failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    })
+  }
 
-  const handshake = () => {
+  const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
+  const sendGateway = async (message: object) => {
+    const sending = transport
+    if (!sending) return
+    const sealed = await sending.send.encrypt(new TextEncoder().encode(JSON.stringify(message)))
+    if (!ended) send(FrameType.data, sealed)
+  }
+
+  const handshake = async () => {
     const first = pairing
       ? { pairing_id: pairing.pairingId, device_name: keys.name }
       : { profile_id: home.profileId }
-    const started = startHandshake(
+    const started = await startHandshake(
       {
         kind: pairing ? HandshakeKind.pair : HandshakeKind.paired,
         staticPrivate: keys.noiseSecret,
@@ -210,6 +224,7 @@ const openSocket = (
       },
       new TextEncoder().encode(JSON.stringify(first)),
     )
+    if (ended) return
     transport = undefined
     homeAnswersPing = false
     welcomed = false
@@ -270,13 +285,18 @@ const openSocket = (
     }
   }
 
-  const onData = (payload: Uint8Array) => {
+  const onData = async (payload: Uint8Array) => {
     if (finishHandshake) {
-      transport = finishHandshake(payload)
+      const finish = finishHandshake
       finishHandshake = undefined
+      const finished = await finish(payload)
+      if (ended) return
+      transport = finished
       return sendGateway({ cmd: 'hello', api: GATEWAY_API_VERSION, device_id: keys.id })
     }
-    if (transport) receive(transport.recv.decrypt(payload))
+    if (!transport) return
+    const plaintext = await transport.recv.decrypt(payload)
+    if (!ended) receive(plaintext)
   }
 
   socket.onmessage = (message: MessageEvent<ArrayBuffer | string>) => {
@@ -285,7 +305,7 @@ const openSocket = (
       return
     }
     const frame = decodeFrame(new Uint8Array(message.data))
-    try {
+    inOrder(() => {
       switch (frame.type) {
         case FrameType.challenge:
           return send(FrameType.auth, signChallenge(keys, home.homeId, frame.payload))
@@ -307,9 +327,7 @@ const openSocket = (
         case FrameType.data:
           return onData(frame.payload)
       }
-    } catch (error) {
-      end(`talking to ${home.homeName} failed: ${error instanceof Error ? error.message : String(error)}`)
-    }
+    })
   }
   socket.onclose = (event) =>
     end(closeReason(home, url, event, connId !== 0), event.code === 4000 || event.code === 4403)
@@ -329,11 +347,11 @@ const openSocket = (
         if (ended || !transport || !welcomed) return reject(new Error(`${home.homeName} is not connected`))
         const requestId = crypto.randomUUID()
         pending.set(requestId, { resolve, reject })
-        sendGateway({ ...command, request_id: requestId })
+        inOrder(() => sendGateway({ ...command, request_id: requestId }))
       }),
     send: (message) => {
       if (ended || !transport || !welcomed) return false
-      sendGateway(message)
+      inOrder(() => sendGateway(message))
       return true
     },
   }

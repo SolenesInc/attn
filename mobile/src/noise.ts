@@ -1,7 +1,6 @@
-import { chacha20poly1305 } from '@noble/ciphers/chacha.js'
-import { x25519 } from '@noble/curves/ed25519.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { open, seal, x25519PublicKey, x25519SharedSecret } from './appleCrypto'
 
 export const HandshakeKind = { paired: 1, pair: 2 } as const
 export type HandshakeKind = (typeof HandshakeKind)[keyof typeof HandshakeKind]
@@ -32,16 +31,12 @@ export class CipherState {
   private n = 0n
   constructor(private readonly key: Uint8Array) {}
 
-  encrypt(plaintext: Uint8Array, ad: Uint8Array = empty): Uint8Array {
-    const out = chacha20poly1305(this.key, nonceBytes(this.n), ad).encrypt(plaintext)
-    this.n += 1n
-    return out
+  encrypt(plaintext: Uint8Array, ad: Uint8Array = empty): Promise<Uint8Array> {
+    return seal(this.key, nonceBytes(this.n++), ad, plaintext)
   }
 
-  decrypt(ciphertext: Uint8Array, ad: Uint8Array = empty): Uint8Array {
-    const out = chacha20poly1305(this.key, nonceBytes(this.n), ad).decrypt(ciphertext)
-    this.n += 1n
-    return out
+  decrypt(ciphertext: Uint8Array, ad: Uint8Array = empty): Promise<Uint8Array> {
+    return open(this.key, nonceBytes(this.n++), ad, ciphertext)
   }
 }
 
@@ -81,14 +76,14 @@ class SymmetricState {
     this.cipher = new CipherState(key!)
   }
 
-  encryptAndHash(plaintext: Uint8Array): Uint8Array {
-    const out = this.cipher ? this.cipher.encrypt(plaintext, this.h) : plaintext
+  async encryptAndHash(plaintext: Uint8Array): Promise<Uint8Array> {
+    const out = this.cipher ? await this.cipher.encrypt(plaintext, this.h) : plaintext
     this.mixHash(out)
     return out
   }
 
-  decryptAndHash(ciphertext: Uint8Array): Uint8Array {
-    const out = this.cipher ? this.cipher.decrypt(ciphertext, this.h) : ciphertext
+  async decryptAndHash(ciphertext: Uint8Array): Promise<Uint8Array> {
+    const out = this.cipher ? await this.cipher.decrypt(ciphertext, this.h) : ciphertext
     this.mixHash(ciphertext)
     return out
   }
@@ -113,7 +108,7 @@ export type InitiatorConfig = {
 const dhLen = 32
 const tagLen = 16
 
-export const startHandshake = (config: InitiatorConfig, payload: Uint8Array) => {
+export const startHandshake = async (config: InitiatorConfig, payload: Uint8Array) => {
   const usesPsk = config.kind === HandshakeKind.pair
   if (usesPsk && config.psk?.length !== 32) {
     throw new Error(`pairing needs a 32-byte secret from the QR code; got ${config.psk?.length ?? 0} bytes`)
@@ -124,17 +119,17 @@ export const startHandshake = (config: InitiatorConfig, payload: Uint8Array) => 
   state.mixHash(prologue(config.deviceSignPub))
   state.mixHash(config.homeStaticPublic)
 
-  const ephemeralPrivate = config.ephemeralPrivate ?? x25519.utils.randomSecretKey()
-  const ephemeralPublic = x25519.getPublicKey(ephemeralPrivate)
+  const ephemeralPrivate = config.ephemeralPrivate ?? crypto.getRandomValues(new Uint8Array(32))
+  const ephemeralPublic = await x25519PublicKey(ephemeralPrivate)
   state.mixHash(ephemeralPublic)
   if (usesPsk) state.mixKey(ephemeralPublic)
-  state.mixKey(x25519.getSharedSecret(ephemeralPrivate, config.homeStaticPublic))
-  const sealedStatic = state.encryptAndHash(x25519.getPublicKey(config.staticPrivate))
-  state.mixKey(x25519.getSharedSecret(config.staticPrivate, config.homeStaticPublic))
-  const sealedPayload = state.encryptAndHash(payload)
+  state.mixKey(await x25519SharedSecret(ephemeralPrivate, config.homeStaticPublic))
+  const sealedStatic = await state.encryptAndHash(await x25519PublicKey(config.staticPrivate))
+  state.mixKey(await x25519SharedSecret(config.staticPrivate, config.homeStaticPublic))
+  const sealedPayload = await state.encryptAndHash(payload)
   const firstFrame = concat(Uint8Array.of(config.kind), ephemeralPublic, sealedStatic, sealedPayload)
 
-  const finish = (reply: Uint8Array): Transport => {
+  const finish = async (reply: Uint8Array): Promise<Transport> => {
     if (reply.length < dhLen + tagLen) {
       throw new Error(
         `the home's handshake reply is ${reply.length} bytes; a Noise reply is at least ${dhLen + tagLen}`,
@@ -143,10 +138,10 @@ export const startHandshake = (config: InitiatorConfig, payload: Uint8Array) => 
     const homeEphemeral = reply.subarray(0, dhLen)
     state.mixHash(homeEphemeral)
     if (usesPsk) state.mixKey(homeEphemeral)
-    state.mixKey(x25519.getSharedSecret(ephemeralPrivate, homeEphemeral))
-    state.mixKey(x25519.getSharedSecret(config.staticPrivate, homeEphemeral))
+    state.mixKey(await x25519SharedSecret(ephemeralPrivate, homeEphemeral))
+    state.mixKey(await x25519SharedSecret(config.staticPrivate, homeEphemeral))
     if (usesPsk) state.mixKeyAndHash(config.psk!)
-    state.decryptAndHash(reply.subarray(dhLen))
+    await state.decryptAndHash(reply.subarray(dhLen))
     return state.split()
   }
 

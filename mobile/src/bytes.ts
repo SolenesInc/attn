@@ -1,8 +1,14 @@
+export const toBase64 = (bytes: Uint8Array): string => {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+export const fromBase64 = (text: string): Uint8Array =>
+  Uint8Array.from(atob(text), (char) => char.charCodeAt(0))
+
 export const toBase64Url = (bytes: Uint8Array): string =>
-  btoa(String.fromCharCode(...bytes))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/, '')
+  toBase64(bytes).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 
 export const fromBase64Url = (text: string): Uint8Array =>
   Uint8Array.from(atob(text.replaceAll('-', '+').replaceAll('_', '/')), (char) => char.charCodeAt(0))

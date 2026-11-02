@@ -17,6 +17,7 @@ let package = Package(
         .package(name: "CapacitorKeyboard", path: "../../../node_modules/.pnpm/@capacitor+keyboard@8.0.6_@capacitor+core@8.6.0/node_modules/@capacitor/keyboard"),
         .package(name: "CapacitorPreferences", path: "../../../node_modules/.pnpm/@capacitor+preferences@8.0.1_@capacitor+core@8.6.0/node_modules/@capacitor/preferences"),
         .package(name: "CapacitorPushNotifications", path: "../../../node_modules/.pnpm/@capacitor+push-notifications@8.1.3_@capacitor+core@8.6.0/node_modules/@capacitor/push-notifications"),
+        .package(name: "AttnAppleCrypto", path: "../../../node_modules/.pnpm/attn-apple-crypto@file+native+crypto/node_modules/attn-apple-crypto"),
         .package(name: "AttnKeychain", path: "../../../node_modules/.pnpm/attn-keychain@file+native+keychain/node_modules/attn-keychain"),
         .package(name: "AttnPush", path: "../../../node_modules/.pnpm/attn-push@file+native+push/node_modules/attn-push")
     ],
@@ -31,6 +32,7 @@ let package = Package(
                 .product(name: "CapacitorKeyboard", package: "CapacitorKeyboard"),
                 .product(name: "CapacitorPreferences", package: "CapacitorPreferences"),
                 .product(name: "CapacitorPushNotifications", package: "CapacitorPushNotifications"),
+                .product(name: "AttnAppleCrypto", package: "AttnAppleCrypto"),
                 .product(name: "AttnKeychain", package: "AttnKeychain"),
                 .product(name: "AttnPush", package: "AttnPush")
             ]

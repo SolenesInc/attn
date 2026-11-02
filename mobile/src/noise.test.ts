@@ -26,9 +26,9 @@ const vectors: Array<Vector> = JSON.parse(
 const text = new TextEncoder()
 
 describe('the Noise initiator speaks the home responder vectors', () => {
-  it.each(vectors.map((vector) => [vector.name, vector] as const))('%s', (_, vector) => {
+  it.each(vectors.map((vector) => [vector.name, vector] as const))('%s', async (_, vector) => {
     const kind = vector.kind === 2 ? HandshakeKind.pair : HandshakeKind.paired
-    const { firstFrame, finish } = startHandshake(
+    const { firstFrame, finish } = await startHandshake(
       {
         kind,
         staticPrivate: hexToBytes(vector.device_static_private),
@@ -41,18 +41,18 @@ describe('the Noise initiator speaks the home responder vectors', () => {
     )
     expect(bytesToHex(firstFrame)).toBe(vector.device_first_frame)
 
-    const transport = finish(hexToBytes(vector.home_reply))
-    expect(bytesToHex(transport.send.encrypt(text.encode(vector.device_to_home_plaintext)))).toBe(
+    const transport = await finish(hexToBytes(vector.home_reply))
+    expect(bytesToHex(await transport.send.encrypt(text.encode(vector.device_to_home_plaintext)))).toBe(
       vector.device_to_home,
     )
-    expect(new TextDecoder().decode(transport.recv.decrypt(hexToBytes(vector.home_to_device)))).toBe(
+    expect(new TextDecoder().decode(await transport.recv.decrypt(hexToBytes(vector.home_to_device)))).toBe(
       vector.home_to_device_plaintext,
     )
   })
 
-  it('refuses a home reply forged without the pairing secret', () => {
+  it('refuses a home reply forged without the pairing secret', async () => {
     const vector = vectors.find((each) => each.kind === 2)!
-    const { finish } = startHandshake(
+    const { finish } = await startHandshake(
       {
         kind: HandshakeKind.pair,
         staticPrivate: hexToBytes(vector.device_static_private),
@@ -63,6 +63,6 @@ describe('the Noise initiator speaks the home responder vectors', () => {
       },
       text.encode(vector.first_payload),
     )
-    expect(() => finish(hexToBytes(vector.home_reply))).toThrow()
+    await expect(finish(hexToBytes(vector.home_reply))).rejects.toThrow()
   })
 })

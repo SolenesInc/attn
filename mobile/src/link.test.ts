@@ -11,6 +11,7 @@ import {
   type LinkEvent,
 } from './link'
 import { FakeRelay, socketsOf } from './test/fakeRelay'
+import { holdDecryption } from './test/nobleCrypto'
 
 let relay: FakeRelay
 let events: Array<LinkEvent>
@@ -94,6 +95,22 @@ describe('a phone keeps checking that its home still answers', () => {
     await vi.advanceTimersByTimeAsync(10 * pingIntervalMs)
 
     expect(relay.homePings).toBe(0)
+    expect(tags()).toEqual(['Welcomed', 'Sessions'])
+  })
+})
+
+describe('a phone that closes its link', () => {
+  it('reports nothing the home sent once it has closed, even when that message was still being decrypted', async () => {
+    await connect()
+    expect(tags()).toEqual(['Welcomed', 'Sessions'])
+    const release = holdDecryption()
+    relay.sessions(relay.sockets[0]!, [])
+    await vi.advanceTimersByTimeAsync(1)
+
+    close()
+    release()
+    await vi.advanceTimersByTimeAsync(1)
+
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
   })
 })

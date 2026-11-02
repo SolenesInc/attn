@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
-import { ed25519, x25519 } from '@noble/curves/ed25519.js'
+import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { fromBase64Url, toBase32, toBase64Url } from './bytes'
 
@@ -56,7 +56,7 @@ const loadOrCreate = async (): Promise<DeviceKeys> => {
     return fromSecrets(fromBase64Url(sign), fromBase64Url(noise))
   }
   const signSecret = ed25519.utils.randomSecretKey()
-  const noiseSecret = x25519.utils.randomSecretKey()
+  const noiseSecret = crypto.getRandomValues(new Uint8Array(32))
   await Keychain.set({
     key: keychainKey,
     value: JSON.stringify({ sign: toBase64Url(signSecret), noise: toBase64Url(noiseSecret) }),
