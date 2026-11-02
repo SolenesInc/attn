@@ -130,7 +130,7 @@ item.
   then. An answer to an ask about a seed is also a note on the seed, and that
   note does not ring.
 - A Quick Capture goes to the chief or the crew member the user picked, or to
-  the session that `attn capture send` names.
+  the session that `attn send` names.
 - A change to a seed's authorization goes to the seed's tender, addressed as a
   seed update is: the session, or the crew member when a member tends it. attn
   writes the item only when someone other than the tender changes the words

@@ -15,7 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-type captureSendOutput struct {
+type sendOutput struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
 	Mailbox struct {
@@ -31,15 +31,15 @@ type captureSendOutput struct {
 	} `json:"attachments"`
 }
 
-func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, session string, message string, files ...string) captureSendOutput {
+func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, session string, message string, files ...string) sendOutput {
 	t.Helper()
-	args := []string{"capture", "send", "--session", session, "-m", message, "--json"}
+	args := []string{"send", session, "-m", message, "--json"}
 	for _, f := range files {
 		args = append(args, "--file", f)
 	}
 	sent := s.Attn(args...)
 	if sent.Code != 0 {
-		t.Fatalf("capture send: %+v", sent)
+		t.Fatalf("send: %+v", sent)
 	}
 	var keys map[string]json.RawMessage
 	sent.JSON(t, &keys)
@@ -51,12 +51,12 @@ func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, session string, me
 		}
 	})
 	if want := []string{"attachments", "content", "created_at", "id", "mailbox"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("capture send --json keys = %v; the app reads %v", got, want)
+		t.Fatalf("send --json keys = %v; the app reads %v", got, want)
 	}
-	var out captureSendOutput
+	var out sendOutput
 	sent.JSON(t, &out)
 	if out.ID == "" || out.CreatedAt == "" || out.Content != message || out.Mailbox.Kind != "session" || out.Mailbox.SessionID != session || len(out.Attachments) != len(files) {
-		t.Fatalf("capture send --json = %s", sent.Stdout)
+		t.Fatalf("send --json = %s", sent.Stdout)
 	}
 	for i, a := range out.Attachments {
 		if a.ID == "" || a.Name != filepath.Base(files[i]) || a.MediaType == "" || a.Bytes == 0 {
@@ -66,7 +66,7 @@ func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, session string, me
 	return out
 }
 
-func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture captureSendOutput) {
+func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture sendOutput) {
 	t.Helper()
 	prompt := agent.Prompted()
 	if !strings.Contains(prompt, "sent through Quick Capture") || !strings.Contains(prompt, capture.Content) {
@@ -79,7 +79,7 @@ func awaitCapturePrompt(t *testing.T, agent *fakeagent.Run, capture captureSendO
 	}
 }
 
-func pullCaptureFile(t *testing.T, s *testworld.Stack, terminal string, capture captureSendOutput, index int, want []byte) {
+func pullCaptureFile(t *testing.T, s *testworld.Stack, terminal string, capture sendOutput, index int, want []byte) {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), capture.Attachments[index].Name)
 	pulled := s.Run(testworld.Invocation{Terminal: terminal, Args: []string{"agent", "attachment", capture.ID, capture.Attachments[index].ID, "--out", out}})
@@ -92,7 +92,7 @@ func pullCaptureFile(t *testing.T, s *testworld.Stack, terminal string, capture 
 	}
 }
 
-func TestCaptureSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
+func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 	home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -132,7 +132,7 @@ func TestCaptureSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 		t.Fatalf("Quick Capture panel history shows session deliveries: %+v %v", history, err)
 	}
 
-	missing := home.Attn("capture", "send", "--session", "no-such-session", "--file", shot, "-m", "lost")
+	missing := home.Attn("send", "no-such-session", "--file", shot, "-m", "lost")
 	if missing.Code == 0 || !strings.Contains(missing.Stderr, "no-such-session") {
 		t.Fatalf("send to a missing session: %+v", missing)
 	}

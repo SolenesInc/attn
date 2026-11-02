@@ -181,9 +181,9 @@ func run() {
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
-	case "capture":
+	case "send":
 		maybePrintInstanceBanner()
-		runCapture()
+		runSend()
 	case "settings":
 		runSettings()
 	case "state":
@@ -738,7 +738,7 @@ commands:
   agent msg-status <message-id>         inspect a sent peer message
   agent close <session-or-seed> | --self -m "reason"   close a session and keep the reason
   agent reload <session-or-member>... | --all   restart agents in place
-  capture send --session <id> --file <path> -m "text"   send files and a message to a session as the user
+  send <session> --file <path> -m "text"   send files and a message to a session as the user
   terminal <command>                open, read, type into, wait on, move and close terminals
   session <command>                 read the ledger and conversations; reopen, rename, snooze and prioritize sessions
   state explain <id>                replay why a session's state is what it is

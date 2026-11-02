@@ -94,7 +94,7 @@ A program or script on the computer that runs Attn can send files and a message
 to any running agent, local or on an outpost:
 
 ```sh
-attn capture send --session <id> --file shot.png -m "The arrow marks the broken button" --json
+attn send <id> --file shot.png -m "The arrow marks the broken button" --json
 ```
 
 `attn session list --json` gives each live session's id, label and host. Repeat
@@ -102,7 +102,7 @@ attn capture send --session <id> --file shot.png -m "The arrow marks the broken 
 conversation as yours. For each file, the message has an
 `attn agent attachment … --out <path>` command that saves the file where the
 agent runs, including on an outpost. `--json` prints the saved capture with an
-id, name, media type and size for each file. Run `attn capture send --help` for
+id, name, media type and size for each file. Run `attn send --help` for
 the details.
 
 ## Details

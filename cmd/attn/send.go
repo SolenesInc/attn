@@ -22,51 +22,40 @@ type fileList []string
 func (f *fileList) String() string     { return strings.Join(*f, ",") }
 func (f *fileList) Set(v string) error { *f = append(*f, v); return nil }
 
-func runCapture() {
-	exit(executeCapture(os.Args[2:], os.Stdout, os.Stderr))
+func runSend() {
+	exit(executeSend(os.Args[2:], os.Stdout, os.Stderr))
 }
 
-func executeCapture(args []string, stdout, stderr io.Writer) int {
+func executeSend(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || hasHelpFlag(args) {
-		writeCaptureHelp(stdout)
+		writeSendHelp(stdout)
 		return 0
 	}
-	if args[0] != "send" {
-		recordUsageError("capture", usageErrorUnknownCommand)
-		fmt.Fprintf(stderr, "capture: unknown command %q; use send\n", args[0])
-		writeCaptureHelp(stderr)
-		return 2
-	}
-	setCommandPath("capture send")
-	fs := flag.NewFlagSet("capture send", flag.ContinueOnError)
+	fs := flag.NewFlagSet("send", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	session := fs.String("session", "", "the session that receives the capture")
 	message := fs.String("m", "", "the message")
 	asJSON := fs.Bool("json", false, "print the saved capture as JSON")
 	var files fileList
 	fs.Var(&files, "file", "a file to send; repeat for more")
-	if err := parseFlags(fs, args[1:]); err != nil || fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: attn capture send --session <id> [--file <path>]... [-m <text>] [--json]")
-		return 2
-	}
-	if strings.TrimSpace(*session) == "" {
-		fmt.Fprintln(stderr, "capture send: --session <id> is required")
+	positionals, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil || len(positionals) != 1 {
+		fmt.Fprintln(stderr, "usage: attn send <session> [--file <path>]... [-m <text>] [--json]")
 		return 2
 	}
 	if strings.TrimSpace(*message) == "" && len(files) == 0 {
-		fmt.Fprintln(stderr, "capture send: give -m <text>, --file <path>, or both")
+		fmt.Fprintln(stderr, "send: give -m <text>, --file <path>, or both")
 		return 2
 	}
-	record, err := sendCapture(client.New(""), protocol.SessionID(*session), *message, files)
+	record, err := sendCapture(client.New(""), protocol.SessionID(positionals[0]), *message, files)
 	if err != nil {
-		fmt.Fprintf(stderr, "capture send: %v\n", err)
+		fmt.Fprintf(stderr, "send: %v\n", err)
 		return 1
 	}
 	if *asJSON {
 		printJSON(record)
 		return 0
 	}
-	fmt.Fprintf(stdout, "Sent capture %s to session %s with %d file(s).\n", record.ID, *record.Mailbox.SessionID, len(record.Attachments))
+	fmt.Fprintf(stdout, "Sent %d file(s) and the message to session %s as capture %s.\n", len(record.Attachments), *record.Mailbox.SessionID, record.ID)
 	return 0
 }
 
@@ -153,17 +142,17 @@ func uploadCaptureFile(cli *client.Client, profileID *string, captureID, id, pat
 	}
 }
 
-func writeCaptureHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn capture send --session <id> [--file <path>]... [-m <text>] [--json]
+func writeSendHelp(w io.Writer) {
+	fmt.Fprint(w, `usage: attn send <session> [--file <path>]... [-m <text>] [--json]
 
 Send files and a message to a running agent session, local or on an outpost,
 as the user. attn types the message into the session's conversation, with an
 attn agent attachment command for each file that saves it where the agent
-runs. Repeat --file for more files. Give -m, --file, or both.
+runs. Give -m, --file, or both.
 
-  --session <id>   the receiving session; attn session list --json names
+  <session>        the receiving session's id; attn session list --json names
                    each live session with its label and host
-  --file <path>    a file to send; its name is kept
+  --file <path>    a file to send; repeat for more. Its name is kept
   -m <text>        the message
   --json           print the saved capture: id, mailbox, content,
                    created_at, and attachments with id, name, media_type
