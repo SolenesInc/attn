@@ -496,7 +496,6 @@ describe('answering an agent from the phone', () => {
       Scene.Subscription.emit(
         Message.WelcomedByHome({ pairingId: personal.id, api: 4, homeName: 'Mac', profileName: 'personal' }),
       ),
-      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
       Scene.expect(Scene.testId('home-offline')).not.toExist(),
       Scene.expect(Scene.role('button', { name: '^C' })).not.toBeDisabled(),
     )
