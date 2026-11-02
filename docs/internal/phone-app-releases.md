@@ -7,15 +7,22 @@ uploads it to App Store Connect. Testers install it as the guide's
 
 ## One-time setup
 
-App Store Connect needs two things before the first upload, besides the API
-key under [Secrets](#secrets). Without them the upload fails with
+App Store Connect needs these before the first upload, besides the API key
+under [Secrets](#secrets). Without the app record, the upload fails with
 `Error Downloading App Information`, and the script says the app record is
-missing.
+missing. Without an App ID or its capability, signing fails and the script
+prints Xcode's provisioning errors.
 
-1. The bundle id `codes.attn.mobile`, registered in team `VMGP8G85TK` under
+1. The App IDs, registered in team `VMGP8G85TK` under
    [Identifiers](https://developer.apple.com/account/resources/identifiers/list).
    Development builds sign with the team's wildcard id, and archiving does not
-   register the explicit one.
+   register explicit ones:
+   - `codes.attn.mobile`, with the **Push Notifications** capability.
+   - `codes.attn.mobile.NotificationService`, the notification service
+     extension.
+
+   The keychain group the two share is an entitlement and needs no
+   registration.
 2. The app record, made in [Apps](https://appstoreconnect.apple.com/apps) with
    **+ → New App**: platform iOS, name `attn.codes` (`attn` is taken),
    primary language English (U.S.), bundle id `codes.attn.mobile`, SKU
