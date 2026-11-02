@@ -59,6 +59,10 @@ const session = (
 
 const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   screen: 'queue',
+  seedTrail: [],
+  seedPage: { status: 'loading' },
+  seedNotes: {},
+  seedMove: null,
   openAsk: null,
   drafts: {},
   answering: {},
@@ -81,6 +85,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
     sessions: [],
     listed: false,
     asks: [],
+    garden: [],
   })),
   pairingFlow: 'idle',
   pairingMessage: '',
@@ -351,6 +356,7 @@ describe('pairing again', () => {
           sessions: [],
           listed: false,
           asks: [],
+          garden: [],
         },
       ],
     }
@@ -395,6 +401,7 @@ const withSession = (api: number): Model => ({
       ],
       listed: true,
       asks: [],
+      garden: [],
     },
   ],
 })

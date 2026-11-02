@@ -1,9 +1,10 @@
 # The phone app
 
 The attn phone app shows your agents on an iPhone: the queue of agents waiting
-for you and the ones working. The phone reaches your computer through Attn
-Cloud, which relays end-to-end encrypted traffic it cannot read. Phone access is
-experimental and off by default.
+for you and the ones working, and the Garden, where you read seeds, add notes
+and move them. The phone reaches your computer through Attn Cloud, which relays
+end-to-end encrypted traffic it cannot read. Phone access is experimental and
+off by default.
 
 ## Install the app from TestFlight
 
@@ -39,6 +40,22 @@ The app merges every pairing into one queue.
    Allow the camera when iOS asks.
 4. Point the camera at the QR code. The app returns to **Queue** and lists the
    profile's agents.
+
+## Read and tend the Garden
+
+The **Garden** tab lists the open seeds of every paired profile: plots with how
+far their children have come, then the seeds growing, ready, blocked and
+parked. Tap a seed to read it: its state and tender, its body, the seeds that
+are part of it, its checks and the newest entries of its log.
+
+- To add a note to the log, write it under **Log** and tap **Add note**. The
+  note is yours, as one written on the computer is.
+- To park, harvest, wither or replant a seed, tap the move, write the reason,
+  and confirm. The move works as it does on the computer's Garden board: it
+  moves a seed an agent tends, and the log records that you moved it.
+
+Images in a seed's body open on the computer. A seed whose body is larger
+than the phone can take in one message says so; read it on the computer.
 
 ## Remove a pairing
 

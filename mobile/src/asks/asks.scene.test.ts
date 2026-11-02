@@ -26,6 +26,10 @@ const now = Date.parse('2026-11-02T12:00:00Z')
 
 const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
   screen: 'queue',
+  seedTrail: [],
+  seedPage: { status: 'loading' },
+  seedNotes: {},
+  seedMove: null,
   openAsk: null,
   drafts: {},
   answering: {},
@@ -48,6 +52,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
     sessions: [],
     listed: true,
     asks: [],
+    garden: [],
   })),
   pairingFlow: 'idle',
   pairingMessage: '',

@@ -24,8 +24,10 @@ import { keepParsed, visualsOf, type DiagramView, type ImageView } from './asks/
 import { askRow, askScreen, type AskActions, type AskRow } from './asks/view'
 import { attachZoom } from './asks/zoom'
 import { fromBase64Url } from './bytes'
+import { GardenSeed, SeedDetail, Verb, fromGatewayDetail, fromGatewaySeed } from './garden/seed'
+import { gardenScreen, seedScreen, type GardenActions } from './garden/view'
 import { deviceKeys } from './device'
-import { homeTerminalApi, pairWithHome, runLink, type Link, type LinkEvent } from './link'
+import { homeGardenApi, homeTerminalApi, pairWithHome, runLink, type Link, type LinkEvent } from './link'
 import {
   LinkTarget,
   Pairing,
@@ -78,13 +80,35 @@ const Composer = Schema.Struct({
 })
 export type Composer = typeof Composer.Type
 
+const OpenSeedId = Schema.Struct({ pairingId: Schema.String, seedId: Schema.String })
+
+const SeedPage = Schema.Union([
+  Schema.Struct({ status: Schema.Literal('loading') }),
+  Schema.Struct({ status: Schema.Literal('loaded'), detail: SeedDetail }),
+  Schema.Struct({ status: Schema.Literal('failed'), message: Schema.String }),
+])
+
+const NoteDraft = Schema.Struct({ text: Schema.String, sending: Schema.Boolean, error: Schema.String })
+type NoteDraft = typeof NoteDraft.Type
+
+const MoveDraft = Schema.Struct({
+  verb: Verb,
+  text: Schema.String,
+  sending: Schema.Boolean,
+  error: Schema.String,
+})
+
 const PushToken = Schema.Struct({
   token: Schema.String,
   environment: Schema.Literals(['sandbox', 'production']),
 })
 
 export const Model = Schema.Struct({
-  screen: Schema.Literals(['queue', 'pairings', 'ask', 'session']),
+  screen: Schema.Literals(['queue', 'pairings', 'ask', 'session', 'garden', 'seed']),
+  seedTrail: Schema.Array(OpenSeedId),
+  seedPage: SeedPage,
+  seedNotes: Schema.Record(Schema.String, NoteDraft),
+  seedMove: Schema.NullOr(MoveDraft),
   openSession: Schema.NullOr(OpenSession),
   composers: Schema.Record(Schema.String, Composer),
   terminalStatus: Schema.String,
@@ -123,6 +147,22 @@ export const Message = defineMessageUnion({
   },
   ReceivedSessions: { pairingId: Schema.String, sessions: Schema.Array(QueueSession) },
   ReceivedAsks: { pairingId: Schema.String, asks: Schema.Array(PhoneAsk) },
+  ReceivedGarden: { pairingId: Schema.String, seeds: Schema.Array(GardenSeed) },
+  ClickedGardenTab: {},
+  ClickedSeed: { pairingId: Schema.String, seedId: Schema.String },
+  LoadedSeed: { pairingId: Schema.String, seedId: Schema.String, detail: SeedDetail },
+  FailedSeed: { pairingId: Schema.String, seedId: Schema.String, message: Schema.String },
+  ClickedReloadSeed: {},
+  ChangedSeedNote: { value: Schema.String },
+  ClickedAddNote: {},
+  AddedNote: { key: Schema.String, text: Schema.String },
+  FailedNote: { key: Schema.String, message: Schema.String },
+  ClickedMove: { verb: Verb },
+  ChangedMoveText: { value: Schema.String },
+  CancelledMove: {},
+  ClickedConfirmMove: {},
+  MovedSeed: { key: Schema.String },
+  FailedMove: { key: Schema.String, message: Schema.String },
   ClickedAsk: { pairingId: Schema.String, askId: Schema.String },
   ClickedBack: {},
   PickedChoice: { key: Schema.String, label: Schema.String },
@@ -375,6 +415,58 @@ export const SendPrompt = Command.define('SendPrompt', {
     ),
 })
 
+export const GetSeed = Command.define('GetSeed', {
+  args: { pairingId: Schema.String, seedId: Schema.String },
+  messages: [Message.LoadedSeed, Message.FailedSeed],
+  execute: ({ pairingId, seedId }) =>
+    Effect.tryPromise(async () => {
+      const reply = await linkTo(pairingId).request({ cmd: 'seed_get', seed_id: seedId })
+      if (reply.event === 'seed_error') throw new Error(reply.message)
+      if (reply.event !== 'seed_detail') throw new Error(`the home answered ${reply.event}`)
+      return fromGatewayDetail(reply)
+    }).pipe(
+      Effect.map((detail) => Message.LoadedSeed({ pairingId, seedId, detail })),
+      Effect.catch(({ cause }) =>
+        Effect.succeed(Message.FailedSeed({ pairingId, seedId, message: errorText(cause) })),
+      ),
+    ),
+})
+
+const seedResult = async (
+  pairingId: string,
+  command: { readonly cmd: string; readonly [field: string]: unknown },
+) => {
+  const reply = await linkTo(pairingId).request(command)
+  if (reply.event !== 'seed_result') throw new Error(`the home answered ${reply.event}`)
+  if (reply.error) throw new Error(reply.error)
+}
+
+export const AddNote = Command.define('AddNote', {
+  args: { key: Schema.String, pairingId: Schema.String, seedId: Schema.String, body: Schema.String },
+  messages: [Message.AddedNote, Message.FailedNote],
+  execute: ({ key, pairingId, seedId, body }) =>
+    Effect.tryPromise(() => seedResult(pairingId, { cmd: 'seed_note', seed_id: seedId, body })).pipe(
+      Effect.map(() => Message.AddedNote({ key, text: body })),
+      Effect.catch(({ cause }) => Effect.succeed(Message.FailedNote({ key, message: errorText(cause) }))),
+    ),
+})
+
+export const MoveSeed = Command.define('MoveSeed', {
+  args: {
+    key: Schema.String,
+    pairingId: Schema.String,
+    seedId: Schema.String,
+    verb: Verb,
+    text: Schema.String,
+  },
+  messages: [Message.MovedSeed, Message.FailedMove],
+  execute: ({ key, pairingId, seedId, verb, text }) =>
+    Effect.tryPromise(() => seedResult(pairingId, { cmd: 'seed_move', seed_id: seedId, verb, text })).pipe(
+      Effect.map(() => Message.MovedSeed({ key })),
+      Effect.catch(({ cause }) => Effect.succeed(Message.FailedMove({ key, message: errorText(cause) }))),
+    ),
+})
+
 const SendKey = Command.define('SendKey', {
   args: { key: Schema.Literals(terminalKeys), homeName: Schema.String },
   messages: [Message.CompletedCommand, Message.ChangedTerminalStatus],
@@ -436,6 +528,7 @@ const newHome = (pairing: Pairing): Home => ({
   sessions: [],
   listed: false,
   asks: [],
+  garden: [],
 })
 
 const saved = (homes: ReadonlyArray<Home>) => SavePairings({ pairings: homes.map((home) => home.pairing) })
@@ -502,13 +595,83 @@ const sendDraft = (model: Model): Update.Return<Model, Message> => {
 const askMarkdowns = (ask: PhoneAsk): ReadonlyArray<string> =>
   ask.parts.flatMap((part) => [part.markdown ?? '', part.question?.context ?? ''].filter(Boolean))
 
+const openSeedOf = (model: Model) => model.seedTrail.at(-1)
+
+const openSeedKey = (model: Model): string | null => {
+  const open = openSeedOf(model)
+  return open ? seedKey(open.pairingId, open.seedId) : null
+}
+
+export const seedKey = (pairingId: string, seedId: string) => `${pairingId}/${seedId}`
+
+const seedMarkdowns = (model: Model): ReadonlyArray<string> =>
+  model.screen === 'seed' && model.seedPage.status === 'loaded'
+    ? [model.seedPage.detail.body, ...model.seedPage.detail.log.map((entry) => entry.body)]
+    : []
+
+const emptyNote: NoteDraft = { text: '', sending: false, error: '' }
+
+const withNote = (model: Model, key: string, change: (note: NoteDraft) => NoteDraft): Model => {
+  const { [key]: current, ...others } = model.seedNotes
+  const next = change(current ?? emptyNote)
+  return modifyFields(model, {
+    seedNotes: () =>
+      next.text === '' && !next.sending && next.error === '' ? others : { ...others, [key]: next },
+  })
+}
+
+const showSeed = (model: Model, trail: Model['seedTrail']): Update.Return<Model, Message> => {
+  const top = trail.at(-1)
+  return {
+    model: modifyFields(model, {
+      screen: () => (top ? ('seed' as const) : ('garden' as const)),
+      seedTrail: () => trail,
+      seedPage: () => ({ status: 'loading' as const }),
+      seedMove: () => null,
+    }),
+    commands: top ? [GetSeed(top)] : [],
+  }
+}
+
+const loadSeed = (model: Model, detail: SeedDetail): Update.Return<Model, Message> => {
+  const shown = modifyFields(model, { seedPage: () => ({ status: 'loaded' as const, detail }) })
+  keepParsed([...model.homes.flatMap((home) => home.asks.flatMap(askMarkdowns)), ...seedMarkdowns(shown)])
+  const renders = [...new Set(visualsOf(seedMarkdowns(shown)).diagrams)].filter(
+    (code) => !model.diagrams[code],
+  )
+  return {
+    model: modifyFields(shown, {
+      diagrams: (diagrams) => ({
+        ...diagrams,
+        ...Object.fromEntries(renders.map((code) => [code, { status: 'loading' as const }])),
+      }),
+    }),
+    commands: renders.map((code) => RenderDiagram({ code })),
+  }
+}
+
+const receiveGarden = (
+  model: Model,
+  pairingId: string,
+  seeds: ReadonlyArray<GardenSeed>,
+): Update.Return<Model, Message> => {
+  const received = updateHome(model, pairingId, (home) => ({ ...home, garden: seeds }))
+  const open = openSeedOf(model)
+  const page = model.seedPage
+  if (model.screen !== 'seed' || open?.pairingId !== pairingId || page.status !== 'loaded')
+    return { model: received }
+  const listed = seeds.find((seed) => seed.id === open.seedId)
+  const changed = listed !== undefined && JSON.stringify(listed) !== JSON.stringify(page.detail.seed)
+  return { model: received, commands: changed ? [GetSeed(open)] : [] }
+}
+
 const receiveAsks = (
   model: Model,
   pairingId: string,
   asks: ReadonlyArray<PhoneAsk>,
 ): Update.Return<Model, Message> => {
   const homes = model.homes.map((home) => (home.pairing.id === pairingId ? { ...home, asks } : home))
-  keepParsed(homes.flatMap((home) => home.asks.flatMap(askMarkdowns)))
+  keepParsed([...homes.flatMap((home) => home.asks.flatMap(askMarkdowns)), ...seedMarkdowns(model)])
   const listed = new Set(homes.flatMap((home) => home.asks.map((ask) => askKey(home.pairing.id, ask.id))))
   const ofListed = <V>(record: Readonly<Record<string, V>>) =>
     Object.fromEntries(Object.entries(record).filter(([key]) => listed.has(key)))
@@ -519,6 +682,12 @@ const receiveAsks = (
     for (const ask of home.asks) {
       const visuals = visualsOf(askMarkdowns(ask))
       for (const code of visuals.diagrams) wantedDiagrams.add(code)
+    }
+  }
+  for (const code of visualsOf(seedMarkdowns(model)).diagrams) wantedDiagrams.add(code)
+  for (const home of homes) {
+    for (const ask of home.asks) {
+      const visuals = visualsOf(askMarkdowns(ask))
       for (const src of visuals.images) {
         const key = imageKey(home.pairing.id, ask.id, src)
         wantedImages.add(key)
@@ -614,21 +783,105 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       })),
     }),
     ReceivedAsks: ({ pairingId, asks }) => receiveAsks(model, pairingId, asks),
+    ReceivedGarden: ({ pairingId, seeds }) => receiveGarden(model, pairingId, seeds),
+    ClickedGardenTab: () => ({
+      model: modifyFields(model, {
+        screen: () => 'garden' as const,
+        seedTrail: () => [],
+        seedMove: () => null,
+        openAsk: () => null,
+        zoom: () => null,
+      }),
+    }),
+    ClickedSeed: ({ pairingId, seedId }) => showSeed(model, [...model.seedTrail, { pairingId, seedId }]),
+    LoadedSeed: ({ pairingId, seedId, detail }) =>
+      openSeedKey(model) === seedKey(pairingId, seedId) ? loadSeed(model, detail) : { model },
+    FailedSeed: ({ pairingId, seedId, message }) => ({
+      model:
+        openSeedKey(model) === seedKey(pairingId, seedId) && model.seedPage.status !== 'loaded'
+          ? modifyFields(model, { seedPage: () => ({ status: 'failed' as const, message }) })
+          : model,
+    }),
+    ClickedReloadSeed: () => showSeed(model, model.seedTrail),
+    ChangedSeedNote: ({ value }) => {
+      const key = openSeedKey(model)
+      return key
+        ? { model: withNote(model, key, (note) => ({ ...note, text: value, error: '' })) }
+        : { model }
+    },
+    ClickedAddNote: () => {
+      const open = openSeedOf(model)
+      const key = openSeedKey(model)
+      if (!open || !key) return { model }
+      const note = model.seedNotes[key] ?? emptyNote
+      if (note.sending || note.text.trim() === '') return { model }
+      return {
+        model: withNote(model, key, () => ({ ...note, sending: true, error: '' })),
+        commands: [AddNote({ key, ...open, body: note.text.trim() })],
+      }
+    },
+    AddedNote: ({ key, text }) => {
+      const open = openSeedOf(model)
+      const noted = withNote(model, key, (note) =>
+        note.text.trim() === text ? emptyNote : { ...note, sending: false },
+      )
+      return { model: noted, commands: open && openSeedKey(model) === key ? [GetSeed(open)] : [] }
+    },
+    FailedNote: ({ key, message }) => ({
+      model: withNote(model, key, (note) => ({ ...note, sending: false, error: `Not added: ${message}` })),
+    }),
+    ClickedMove: ({ verb }) => ({
+      model: modifyFields(model, { seedMove: () => ({ verb, text: '', sending: false, error: '' }) }),
+    }),
+    ChangedMoveText: ({ value }) => ({
+      model: modifyFields(model, {
+        seedMove: (move) => (move && !move.sending ? { ...move, text: value, error: '' } : move),
+      }),
+    }),
+    CancelledMove: () => ({
+      model: modifyFields(model, { seedMove: (move) => (move?.sending ? move : null) }),
+    }),
+    ClickedConfirmMove: () => {
+      const open = openSeedOf(model)
+      const key = openSeedKey(model)
+      const move = model.seedMove
+      if (!open || !key || !move || move.sending || move.text.trim() === '') return { model }
+      return {
+        model: modifyFields(model, { seedMove: () => ({ ...move, sending: true, error: '' }) }),
+        commands: [MoveSeed({ key, ...open, verb: move.verb, text: move.text.trim() })],
+      }
+    },
+    MovedSeed: ({ key }) => {
+      const open = openSeedOf(model)
+      if (!open || openSeedKey(model) !== key) return { model }
+      return { model: modifyFields(model, { seedMove: () => null }), commands: [GetSeed(open)] }
+    },
+    FailedMove: ({ key, message }) => ({
+      model:
+        openSeedKey(model) === key
+          ? modifyFields(model, {
+              seedMove: (move) => (move ? { ...move, sending: false, error: `Not moved: ${message}` } : move),
+            })
+          : model,
+    }),
     ClickedAsk: ({ pairingId, askId }) => ({
       model: modifyFields(model, {
         screen: () => 'ask' as const,
         openAsk: () => ({ pairingId, askId }),
       }),
     }),
-    ClickedBack: () => ({
-      model: modifyFields(model, {
-        screen: () => 'queue' as const,
-        openAsk: () => null,
-        openSession: () => null,
-        zoom: () => null,
-      }),
-      commands: model.screen === 'session' ? [HideKeyboard()] : [],
-    }),
+    ClickedBack: () =>
+      model.screen === 'seed'
+        ? showSeed(model, model.seedTrail.slice(0, -1))
+        : {
+            model: modifyFields(model, {
+              screen: () => 'queue' as const,
+              openAsk: () => null,
+              openSession: () => null,
+              zoom: () => null,
+            }),
+            commands: model.screen === 'session' ? [HideKeyboard()] : [],
+          },
     PickedChoice: ({ key, label }) => {
       const ask = openAskOf(model)
       const question = ask?.parts.find((part) => part.question?.key === key)?.question
@@ -846,6 +1099,10 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
 export const init: Runtime.ApplicationInit<Model, Message> = () => ({
   model: {
     screen: 'queue',
+    seedTrail: [],
+    seedPage: { status: 'loading' },
+    seedNotes: {},
+    seedMove: null,
     openSession: null,
     composers: {},
     terminalStatus: '',
@@ -886,6 +1143,8 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
       return Message.ReceivedSessions({ pairingId, sessions: event.sessions.map(fromGatewaySession) })
     case 'Asks':
       return Message.ReceivedAsks({ pairingId, asks: event.asks.map(fromGatewayAsk) })
+    case 'Garden':
+      return Message.ReceivedGarden({ pairingId, seeds: event.seeds.map(fromGatewaySeed) })
     case 'HomeOffline':
       return Message.WentOffline({ pairingId })
     case 'Lost':
@@ -1047,9 +1306,10 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
       modelToDependencies: (model) => ({
         ticking:
           model.foreground &&
-          model.homes.some(
-            (home) => home.asks.length > 0 || home.sessions.some((s) => s.waitingSince !== null),
-          ),
+          (model.screen === 'seed' ||
+            model.homes.some(
+              (home) => home.asks.length > 0 || home.sessions.some((s) => s.waitingSince !== null),
+            )),
       }),
       dependenciesToStream: ({ ticking }) => (ticking ? tickStream : Stream.empty),
     },
@@ -1169,6 +1429,55 @@ const askActions = (model: Model): AskActions<Message> => ({
   changeNote: (value) => Message.ChangedNote({ value }),
   send: Message.ClickedSend(),
 })
+
+const gardenActions = (model: Model): GardenActions<Message> => ({
+  image: () => ({ status: 'failed', message: 'Images in a seed open on your computer.' }),
+  diagram: (code): DiagramView => model.diagrams[code] ?? { status: 'loading' },
+  zoomImage: (url, alt) => Message.ClickedZoomImage({ url, alt }),
+  zoomDiagram: (svg) => Message.ClickedZoomDiagram({ svg }),
+  openSeed: (pairingId, seedId) => Message.ClickedSeed({ pairingId, seedId }),
+  reload: Message.ClickedReloadSeed(),
+  changeNote: (value) => Message.ChangedSeedNote({ value }),
+  sendNote: Message.ClickedAddNote(),
+  chooseMove: (verb) => Message.ClickedMove({ verb }),
+  changeMoveText: (value) => Message.ChangedMoveText({ value }),
+  cancelMove: Message.CancelledMove(),
+  confirmMove: Message.ClickedConfirmMove(),
+})
+
+const gardenView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  if (!model.loaded) return h.div([h.Class('empty')], [])
+  if (model.homes.length === 0) return pairHint(h)
+  return gardenScreen(
+    model.homes.map((home) => ({
+      pairing: home.pairing,
+      seeds: home.garden,
+      tooOld: home.api > 0 && home.api < homeGardenApi,
+    })),
+    gardenActions(model),
+    h,
+  )
+}
+
+const openSeedView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const open = openSeedOf(model)
+  const home = model.homes.find((candidate) => candidate.pairing.id === open?.pairingId)
+  if (!open || !home) return h.p([h.Class('empty muted')], ['This seed is gone.'])
+  const key = seedKey(open.pairingId, open.seedId)
+  return seedScreen(
+    {
+      pairing: home.pairing,
+      live: home.status === 'online',
+      page: model.seedPage,
+      note: model.seedNotes[key] ?? emptyNote,
+      move: model.seedMove,
+      now: model.now,
+    },
+    waitedFor,
+    gardenActions(model),
+    h,
+  )
+}
 
 const imageView = (model: Model, src: string): ImageView => {
   const open = model.openAsk
@@ -1551,7 +1860,40 @@ const zoomView = (model: Model, h: HtmlBuilder<Message>): Html => {
   )
 }
 
-const screenTitle = { queue: 'Queue', pairings: 'Pairings', ask: 'Ask', session: 'Session' } as const
+const screenTitle = {
+  queue: 'Queue',
+  pairings: 'Pairings',
+  ask: 'Ask',
+  session: 'Session',
+  garden: 'Garden',
+  seed: 'Seed',
+} as const
+
+const backLabel = (model: Model): string | null => {
+  if (model.screen === 'ask') return '‹ Queue'
+  if (model.screen !== 'seed') return null
+  const parent = model.seedTrail.at(-2)
+  if (!parent) return '‹ Garden'
+  const shown = model.homes
+    .find((home) => home.pairing.id === parent.pairingId)
+    ?.garden.find((seed) => seed.id === parent.seedId)
+  return `‹ ${shown?.title ?? 'Back'}`
+}
+
+const screenView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  switch (model.screen) {
+    case 'queue':
+      return queueView(model, h)
+    case 'ask':
+      return openAskView(model, h)
+    case 'garden':
+      return gardenView(model, h)
+    case 'seed':
+      return openSeedView(model, h)
+    default:
+      return pairingsView(model, h)
+  }
+}
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
   title: 'attn',
@@ -1567,10 +1909,10 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             h.header(
               [h.Class('top')],
               [
-                model.screen === 'ask'
+                backLabel(model)
                   ? h.button(
                       [h.Class('back'), h.Type('button'), h.OnClick(Message.ClickedBack())],
-                      ['‹ Queue'],
+                      [backLabel(model)],
                     )
                   : h.h1([], [screenTitle[model.screen]]),
                 model.screen === 'queue' && waitingCount(model) > 0
@@ -1581,12 +1923,8 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             h.main(
               [],
               [
-                model.screen === 'ask' ? h.empty : pushNotesView(model, h),
-                model.screen === 'queue'
-                  ? queueView(model, h)
-                  : model.screen === 'ask'
-                    ? openAskView(model, h)
-                    : pairingsView(model, h),
+                model.screen === 'ask' || model.screen === 'seed' ? h.empty : pushNotesView(model, h),
+                screenView(model, h),
               ],
             ),
             zoomView(model, h),
@@ -1594,8 +1932,18 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
               [h.Class('tabs')],
               [
                 h.button(
-                  [h.Class(model.screen !== 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedQueueTab())],
+                  [
+                    h.Class(model.screen === 'queue' || model.screen === 'ask' ? 'on' : ''),
+                    h.OnClick(Message.ClickedQueueTab()),
+                  ],
                   ['Queue'],
+                ),
+                h.button(
+                  [
+                    h.Class(model.screen === 'garden' || model.screen === 'seed' ? 'on' : ''),
+                    h.OnClick(Message.ClickedGardenTab()),
+                  ],
+                  ['Garden'],
                 ),
                 h.button(
                   [h.Class(model.screen === 'pairings' ? 'on' : ''), h.OnClick(Message.ClickedPairingsTab())],

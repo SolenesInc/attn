@@ -797,3 +797,123 @@ textarea.note:focus {
   font-family: inherit;
   font-weight: 600;
 }
+
+.seed-status {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.seed-status.status-growing,
+.row.seed.status-growing .badge {
+  color: var(--working);
+  border-color: currentColor;
+}
+
+.seed-status.status-parked,
+.row.seed.status-parked .badge {
+  color: var(--waiting);
+  border-color: currentColor;
+}
+
+.move-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+
+button.move {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.move-form {
+  margin: 0 0 16px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: 12px;
+}
+
+.move-prompt {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.move-form textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.move-form .move-buttons {
+  margin: 8px 0 0;
+  align-items: center;
+}
+
+.move-form .move-buttons button.primary {
+  flex: 1;
+  margin-top: 0;
+}
+
+.seed-body {
+  margin: 8px 0;
+}
+
+ul.checks .row {
+  align-items: flex-start;
+}
+
+.check-mark {
+  width: 18px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.check-confirmed .check-mark {
+  color: var(--working);
+}
+
+.check-rejected .check-mark {
+  color: var(--error);
+}
+
+.check-id {
+  font-weight: 600;
+}
+
+.note-bar {
+  margin: 0 0 12px;
+}
+
+.note-bar button.primary {
+  margin-top: 8px;
+}
+
+ul.log {
+  background: none;
+}
+
+.log-entry {
+  padding: 10px 12px;
+  margin: 0 0 8px;
+  background: var(--surface);
+  border-radius: 12px;
+}
+
+.log-entry .row-where {
+  margin: 0 0 4px;
+}
+
+.log-entry .markdown p:last-child {
+  margin-bottom: 0;
+}

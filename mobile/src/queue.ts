@@ -1,6 +1,7 @@
 import type { GatewaySession } from '@attn/types/gatewayGenerated'
 import { Schema } from 'effect'
 import { PhoneAsk } from './asks/ask'
+import { GardenSeed } from './garden/seed'
 import { Pairing } from './pairing'
 
 export const SessionState = Schema.Literals([
@@ -39,6 +40,7 @@ export const Home = Schema.Struct({
   sessions: Schema.Array(QueueSession),
   listed: Schema.Boolean,
   asks: Schema.Array(PhoneAsk),
+  garden: Schema.Array(GardenSeed),
 })
 export type Home = typeof Home.Type
 

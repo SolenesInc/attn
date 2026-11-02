@@ -1,5 +1,5 @@
 import { decodeGatewayEvent, type GatewayEvent } from '@attn/gateway/decode'
-import type { GatewayAsk, GatewaySession, TerminalScreen } from '@attn/types/gatewayGenerated'
+import type { GatewayAsk, GatewaySeed, GatewaySession, TerminalScreen } from '@attn/types/gatewayGenerated'
 import { GATEWAY_API_VERSION } from '@attn/types/gatewayVersion'
 import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
 import { signChallenge, type DeviceKeys } from './device'
@@ -10,6 +10,7 @@ export const pingIntervalMs = 15_000
 export const pongDeadlineMs = 10_000
 const homePingApi = 2
 export const homeTerminalApi = 4
+export const homeGardenApi = 6
 const outputFrame = 0x01
 const firstRetryMs = 100
 const maxRetryMs = 10_000
@@ -57,6 +58,7 @@ export type LinkEvent =
     }
   | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<GatewaySession> }
   | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<GatewayAsk> }
+  | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<GatewaySeed> }
   | { readonly _tag: 'HomeOffline' }
   | { readonly _tag: 'Lost'; readonly reason: string }
   | { readonly _tag: 'Closed'; readonly reason: string }
@@ -151,6 +153,7 @@ const openSocket = (
   let welcomed = false
   const pending = new Map<string, Pending>()
   const asks = new Map<string, GatewayAsk>()
+  const seeds = new Map<string, GatewaySeed>()
   let deadline: ReturnType<typeof setTimeout> | undefined
   let pongDeadline: ReturnType<typeof setTimeout> | undefined
 
@@ -229,6 +232,7 @@ const openSocket = (
     homeAnswersPing = false
     welcomed = false
     asks.clear()
+    seeds.clear()
     answered()
     finishHandshake = started.finish
     send(FrameType.data, started.firstFrame)
@@ -274,6 +278,17 @@ const openSocket = (
       case 'asks':
         for (const id of asks.keys()) if (!event.ids.includes(id)) asks.delete(id)
         return onEvent({ _tag: 'Asks', asks: event.ids.flatMap((id) => asks.get(id) ?? []) })
+      case 'garden_seeds':
+        for (const seed of event.seeds) seeds.set(seed.id, seed)
+        return
+      case 'garden': {
+        const open = new Set(event.ids)
+        for (const id of seeds.keys()) if (!open.has(id)) seeds.delete(id)
+        return onEvent({ _tag: 'Garden', seeds: event.ids.flatMap((id) => seeds.get(id) ?? []) })
+      }
+      case 'seed_detail':
+      case 'seed_error':
+      case 'seed_result':
       case 'submit_result':
       case 'ask_answer_result':
       case 'ask_image_chunk':

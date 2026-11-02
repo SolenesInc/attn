@@ -46,7 +46,7 @@ const connect = async () => {
 const tags = () => events.map((event) => event._tag)
 
 beforeEach(() => {
-  vi.useFakeTimers()
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
   relay = new FakeRelay()
   events = []
   vi.stubGlobal('WebSocket', socketsOf(relay))
@@ -180,6 +180,38 @@ describe('a terminal the phone opened', () => {
     expect(attachCommands()).toEqual([])
     expect(shown).toEqual([
       'failed:attn on Mac is too old to open terminals from a phone; update it to the latest attn',
+    ])
+  })
+})
+
+describe('a phone keeps its home’s garden', () => {
+  const seed = (id: string, title: string) => ({
+    id,
+    slug: title.toLowerCase().replaceAll(' ', '-'),
+    title,
+    status: 'planted',
+    claimed: false,
+    ready: true,
+    waits_for: [],
+    state_changed_at: '2026-11-02T10:00:00Z',
+  })
+  const gardens = () =>
+    events.flatMap((event) =>
+      event._tag === 'Garden' ? [event.seeds.map((shown) => `${shown.id}:${shown.status}`)] : [],
+    )
+
+  it('shows the open seeds in the order the home lists them, keeping the ones a change leaves alone', async () => {
+    await connect()
+    const socket = relay.sockets[0]!
+    socket.toPhone({ event: 'garden_seeds', seeds: [seed('s-1', 'Read seeds'), seed('s-2', 'Move seeds')] })
+    socket.toPhone({ event: 'garden_seeds', seeds: [seed('s-3', 'Ship it')] })
+    socket.toPhone({ event: 'garden', ids: ['s-3', 's-2', 's-1'] })
+    socket.toPhone({ event: 'garden_seeds', seeds: [{ ...seed('s-2', 'Move seeds'), status: 'growing' }] })
+    socket.toPhone({ event: 'garden', ids: ['s-3', 's-2'] })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(gardens()).toEqual([
+      ['s-3:planted', 's-2:planted', 's-1:planted'],
+      ['s-3:planted', 's-2:growing'],
     ])
   })
 })
