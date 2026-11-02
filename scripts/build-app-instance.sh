@@ -10,7 +10,6 @@
 # Inputs (env):
 #   INSTANCE                  instance name ("" = default/prod)
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
-#   ATTN_SPEECH_HELPER_BIN   path to the built attn-speech helper (macOS only)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
 #   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
@@ -34,9 +33,6 @@ if [ -n "$demo" ] && [ -z "$instance" ]; then
 fi
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
 pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
-if [ "$(uname -s)" = "Darwin" ]; then
-  speech_helper="${ATTN_SPEECH_HELPER_BIN:?ATTN_SPEECH_HELPER_BIN is required on macOS}"
-fi
 : "${VERSION:?VERSION is required}"
 : "${SOURCE_FINGERPRINT:?SOURCE_FINGERPRINT is required}"
 : "${GIT_COMMIT:?GIT_COMMIT is required}"
@@ -82,9 +78,6 @@ fi
 mkdir -p app/src-tauri/binaries
 cp "$attn" "app/src-tauri/binaries/attn-${host_triple}"
 cp "$pty_host" "app/src-tauri/binaries/attn-pty-host-${host_triple}"
-if [ -n "${speech_helper:-}" ]; then
-  cp "$speech_helper" "app/src-tauri/binaries/attn-speech-${host_triple}"
-fi
 
 cd app
 pnpm install
@@ -178,7 +171,6 @@ if [ "$(uname -s)" = "Darwin" ]; then
   done < <(find "${bundle_dir}/Contents/Resources/plugins" -type f -perm -111 2>/dev/null | sort)
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
-  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-speech"
   codesign --force --sign "$identity" "${bundle_dir}"
 fi
 

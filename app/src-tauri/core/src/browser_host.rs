@@ -34,7 +34,6 @@ const BROWSER_DATA_STORE_ID: [u8; 16] = *b"attn-browser-v1!";
 #[cfg(target_os = "macos")]
 const BROWSER_CONTENT_WORLD_NAME: &str = "attn-browser-control";
 static NEXT_RUNTIME_RESULT_ID: AtomicU64 = AtomicU64::new(1);
-static NEXT_DICTATION_ID: AtomicU64 = AtomicU64::new(1);
 static COOKIE_JAR_IO: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 static COOKIE_SYNC_WORKERS: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -198,10 +197,6 @@ fn isolated_initialization_script() -> String {
     if (event.isTrusted) {{
       window.webkit?.messageHandlers?.attnBrowserFocus?.postMessage(null);
     }}
-  }}, true);
-  document.addEventListener('focusin', (event) => {{
-    if (!event.isTrusted || event.target instanceof HTMLIFrameElement || event.target instanceof HTMLFrameElement) return;
-    window.webkit?.messageHandlers?.attnBrowserFrame?.postMessage(null);
   }}, true);
   let lastLocation = location.href;
   window.setInterval(() => {{
@@ -419,10 +414,6 @@ pub fn browser_host_unmount(
     browser_alerts::remove(&label);
     if let Some(webview) = app.get_webview(&label) {
         let persist_error = persist_cookie_jar(&app, &webview).err();
-        let forgotten = label.clone();
-        let _ = on_main_thread(&webview, move || {
-            dictation_frames::forget_webview(&forgotten)
-        });
         let close_error = webview
             .close()
             .err()
@@ -482,11 +473,6 @@ fn register_focus_handler(webview: &tauri::Webview) -> Result<(), String> {
                     mark_browser_focused(&ivars.label);
                     return;
                 }
-                if name == "attnBrowserFrame" {
-                    let frame = unsafe { message.frameInfo() };
-                    dictation_frames::focused(&ivars.label, frame);
-                    return;
-                }
                 if name == "attnBrowserLocation" {
                     if let Some(webview) = ivars.app.get_webview(&ivars.label) {
                         if let Ok(url) = webview.url() {
@@ -507,7 +493,6 @@ fn register_focus_handler(webview: &tauri::Webview) -> Result<(), String> {
     }
 
     let label = webview.label().to_string();
-    let webview_label = label.clone();
     let app = webview.app_handle().clone();
     webview
         .with_webview(move |platform| unsafe {
@@ -529,12 +514,6 @@ fn register_focus_handler(webview: &tauri::Webview) -> Result<(), String> {
                 &world,
                 &NSString::from_str("attnBrowserLocation"),
             );
-            controller.addScriptMessageHandler_contentWorld_name(
-                &protocol,
-                &world,
-                &NSString::from_str("attnBrowserFrame"),
-            );
-            dictation_frames::forget_webview(webview_label.as_str());
             let user_script =
                 WKUserScript::initWithSource_injectionTime_forMainFrameOnly_inContentWorld(
                     WKUserScript::alloc(mtm),
@@ -644,15 +623,6 @@ async fn run_page_action(
     action: &str,
     params: &Map<String, Value>,
 ) -> Result<String, String> {
-    run_frame_action(webview, None, action, params).await
-}
-
-async fn run_frame_action(
-    webview: tauri::Webview,
-    dictation: Option<&str>,
-    action: &str,
-    params: &Map<String, Value>,
-) -> Result<String, String> {
     let alert_state = browser_alerts::state(webview.label());
     let result_id = format!(
         "attn-result-{}",
@@ -662,7 +632,6 @@ async fn run_frame_action(
         webview.clone(),
         page_action_script(action, params, &result_id, false)?,
         Some(alert_state.clone()),
-        dictation.map(str::to_string),
     )
     .await?
     else {
@@ -675,7 +644,6 @@ async fn run_frame_action(
             webview.clone(),
             page_action_script(action, params, &result_id, true)?,
             Some(alert_state.clone()),
-            dictation.map(str::to_string),
         )
         .await?
         else {
@@ -704,7 +672,6 @@ async fn run_frame_action(
 }})()"#
             ),
             Some(alert_state.clone()),
-            dictation.map(str::to_string),
         )
         .await?
         else {
@@ -782,7 +749,6 @@ async fn evaluate_isolated_script_with_alert(
     webview: tauri::Webview,
     script: String,
     alert_state: Option<Arc<browser_alerts::AlertState>>,
-    dictation: Option<String>,
 ) -> Result<Option<String>, String> {
     use block2::RcBlock;
     use objc2::runtime::AnyObject;
@@ -791,20 +757,9 @@ async fn evaluate_isolated_script_with_alert(
     use objc2_web_kit::{WKContentWorld, WKWebView};
 
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
-    let label = webview.label().to_string();
     webview
         .with_webview(move |platform| unsafe {
             let view: &WKWebView = &*platform.inner().cast();
-            let frame = match &dictation {
-                None => None,
-                Some(id) => match dictation_frames::frame(&label, id) {
-                    Some(frame) => frame,
-                    None => {
-                        let _ = tx.send(Err("the dictation target is gone".to_string()));
-                        return;
-                    }
-                },
-            };
             let world = WKContentWorld::worldWithName(
                 &NSString::from_str(BROWSER_CONTENT_WORLD_NAME),
                 MainThreadMarker::new_unchecked(),
@@ -826,7 +781,7 @@ async fn evaluate_isolated_script_with_alert(
             });
             view.evaluateJavaScript_inFrame_inContentWorld_completionHandler(
                 &NSString::from_str(&script),
-                frame.as_deref(),
+                None,
                 &world,
                 Some(&handler),
             );
@@ -865,7 +820,6 @@ async fn evaluate_isolated_script_with_alert(
     webview: tauri::Webview,
     script: String,
     _alert_state: Option<Arc<browser_alerts::AlertState>>,
-    _dictation: Option<String>,
 ) -> Result<Option<String>, String> {
     evaluate_script(webview, script).await.map(Some)
 }
@@ -1517,153 +1471,6 @@ pub async fn browser_host_control(
         }
     }
     result
-}
-
-#[cfg(target_os = "macos")]
-mod dictation_frames {
-    use objc2::rc::Retained;
-    use objc2_web_kit::WKFrameInfo;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-
-    #[derive(Default)]
-    struct Frames {
-        focused: Option<Retained<WKFrameInfo>>,
-        dictations: HashMap<String, Option<Retained<WKFrameInfo>>>,
-    }
-
-    thread_local! {
-        static FRAMES: RefCell<HashMap<String, Frames>> = RefCell::new(HashMap::new());
-    }
-
-    pub fn focused(label: &str, frame: Retained<WKFrameInfo>) {
-        FRAMES.with_borrow_mut(|frames| {
-            frames.entry(label.to_string()).or_default().focused = Some(frame);
-        });
-    }
-
-    pub fn forget_webview(label: &str) {
-        FRAMES.with_borrow_mut(|frames| frames.remove(label));
-    }
-
-    pub fn bind(label: &str, id: &str) {
-        FRAMES.with_borrow_mut(|frames| {
-            let entry = frames.entry(label.to_string()).or_default();
-            let focused = entry.focused.clone();
-            entry.dictations.insert(id.to_string(), focused);
-        });
-    }
-
-    pub fn frame(label: &str, id: &str) -> Option<Option<Retained<WKFrameInfo>>> {
-        FRAMES.with_borrow(|frames| frames.get(label)?.dictations.get(id).cloned())
-    }
-
-    pub fn release(label: &str, id: &str) {
-        FRAMES.with_borrow_mut(|frames| {
-            if let Some(entry) = frames.get_mut(label) {
-                entry.dictations.remove(id);
-            }
-        });
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-mod dictation_frames {
-    pub fn forget_webview(_label: &str) {}
-    pub fn bind(_label: &str, _id: &str) {}
-    pub fn release(_label: &str, _id: &str) {}
-}
-
-fn on_main_thread(
-    webview: &tauri::Webview,
-    work: impl FnOnce() + Send + 'static,
-) -> Result<(), String> {
-    webview
-        .with_webview(move |_| work())
-        .map_err(|error| format!("reach browser webview: {error}"))
-}
-
-#[tauri::command]
-pub async fn browser_host_dictation(
-    _caller: TrustedMainWebview,
-    app: AppHandle,
-    label: String,
-    action: String,
-    id: Option<String>,
-    text: Option<String>,
-) -> Result<String, String> {
-    validate_label(&label)?;
-    let webview = app
-        .get_webview(&label)
-        .ok_or_else(|| "browser webview is not mounted".to_string())?;
-    let release = |id: String| {
-        let label = label.clone();
-        on_main_thread(&webview, move || dictation_frames::release(&label, &id))
-    };
-    match action.as_str() {
-        "capture" => {
-            let id = format!(
-                "attn-dictation-{}",
-                NEXT_DICTATION_ID.fetch_add(1, Ordering::Relaxed)
-            );
-            {
-                let (label, id) = (label.clone(), id.clone());
-                on_main_thread(&webview, move || dictation_frames::bind(&label, &id))?;
-            }
-            let params = Map::from_iter([("id".to_string(), Value::String(id.clone()))]);
-            let result =
-                run_frame_action(webview.clone(), Some(&id), "dictation_capture", &params).await;
-            let captured = result.as_ref().is_ok_and(|raw| {
-                serde_json::from_str::<Value>(raw).is_ok_and(|value| value.get("id").is_some())
-            });
-            if !captured {
-                release(id)?;
-            }
-            result
-        }
-        "replace" => {
-            let id = id.ok_or_else(|| "dictation replace needs an id".to_string())?;
-            let focus = format!("{id}-focus");
-            {
-                let (label, focus) = (label.clone(), focus.clone());
-                on_main_thread(&webview, move || dictation_frames::bind(&label, &focus))?;
-            }
-            let focus_params = Map::from_iter([("id".to_string(), Value::String(focus.clone()))]);
-            let _ = run_frame_action(
-                webview.clone(),
-                Some(&focus),
-                "focus_snapshot",
-                &focus_params,
-            )
-            .await;
-            let params = Map::from_iter([
-                ("id".to_string(), Value::String(id.clone())),
-                ("text".to_string(), Value::String(text.unwrap_or_default())),
-            ]);
-            let outcome =
-                run_frame_action(webview.clone(), Some(&id), "dictation_replace", &params)
-                    .await
-                    .unwrap_or_else(|_| r#""targetGone""#.to_string());
-            let _ = run_frame_action(
-                webview.clone(),
-                Some(&focus),
-                "focus_restore",
-                &focus_params,
-            )
-            .await;
-            release(focus)?;
-            Ok(outcome)
-        }
-        "release" => {
-            let id = id.ok_or_else(|| "dictation release needs an id".to_string())?;
-            let params = Map::from_iter([("id".to_string(), Value::String(id.clone()))]);
-            let _ =
-                run_frame_action(webview.clone(), Some(&id), "dictation_release", &params).await;
-            release(id)?;
-            Ok("null".to_string())
-        }
-        _ => Err(format!("unknown browser dictation action: {action}")),
-    }
 }
 
 #[cfg(test)]

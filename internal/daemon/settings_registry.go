@@ -56,7 +56,6 @@ const (
 	SettingAsksEnabled                   = settingkeys.SettingAsksEnabled
 	SettingCaptureShortcut               = settingkeys.SettingCaptureShortcut
 	SettingQuickCaptureEnabled           = settingkeys.SettingQuickCaptureEnabled
-	SettingDictationEnabled              = settingkeys.SettingDictationEnabled
 	SettingCrewV2Enabled                 = settingkeys.SettingCrewV2Enabled
 	SettingCalloutsEnabled               = settingkeys.SettingCalloutsEnabled
 	SettingAutoSettleArmSeconds          = settingkeys.SettingAutoSettleArmSeconds
@@ -76,8 +75,6 @@ const (
 	SettingActivityPresenceIdleSeconds   = settingkeys.SettingActivityPresenceIdleSeconds
 	SettingGardenAdvisor                 = settingkeys.SettingGardenAdvisor
 	SettingDictationRefinementAgent      = settingkeys.SettingDictationRefinementAgent
-	SettingDictationShortcut             = settingkeys.SettingDictationShortcut
-	SettingDictationInteraction          = settingkeys.SettingDictationInteraction
 	SettingCrewHeartbeatEnabled          = settingkeys.SettingCrewHeartbeatEnabled
 	SettingCrewAutoSleepEnabled          = settingkeys.SettingCrewAutoSleepEnabled
 	SettingCrewCacheTTLSeconds           = settingkeys.SettingCrewCacheTTLSeconds
@@ -138,7 +135,6 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: string(SettingCaptureShortcut), scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: string(SettingDictationEnabled), scope: daemonScope, experimental: true, description: "Enable experimental dictation: true or false. Enabling downloads the English speech model on this Mac. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingQuickCaptureEnabled), scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCrewV2Enabled), scope: daemonScope, experimental: true, description: "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingNewSessionLauncherEnabled), scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
@@ -231,14 +227,6 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingDictationRefinementAgent), scope: daemonScope, description: "Harness whose light model cleans up dictated text: claude or codex. Empty uses claude.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseDictationRefinementAgent(value)
 		return err
-	}},
-	{key: string(SettingDictationShortcut), scope: daemonScope, description: "Shortcut that starts and stops dictation while an attn window is focused. Unset uses Control+Shift+Space; empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: string(SettingDictationInteraction), scope: daemonScope, description: "What happens when dictation finishes: insert_at_cursor inserts the transcript and then its refinement, compare_first shows both before inserting. Empty uses insert_at_cursor.", validate: func(d *Daemon, key, value string) error {
-		switch value {
-		case "", "insert_at_cursor", "compare_first":
-			return nil
-		}
-		return fmt.Errorf("dictation.interaction must be insert_at_cursor or compare_first, got %q", value)
 	}},
 	{key: string(SettingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)

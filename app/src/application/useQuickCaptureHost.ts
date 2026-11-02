@@ -6,8 +6,6 @@ import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { quickCaptureDaemonClient } from '../quickCapture/daemonClient';
 import { isMacLikePlatform } from '../shortcuts/platform';
-import { DICTATION_ENABLED_SETTING } from '../dictation/speechHelper';
-import { dictationInteraction } from '../dictation/settings';
 import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_ENABLED_SETTING, QUICK_CAPTURE_FONT,
   EMPTY_HOST_STATE,
@@ -35,7 +33,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
     connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,
     fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config,
-    dictation: { enabled: settings[DICTATION_ENABLED_SETTING] === 'true', interaction: dictationInteraction(settings) },
   };
   const stateRef = useRef(state);
   useLayoutEffect(() => { stateRef.current = state; });
@@ -122,6 +119,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   }, [binding, state.enabled, nativeReady, state.connected]);
   useEffect(() => {
     if (supported) void emitTo('capture', QUICK_CAPTURE_STATE, state);
-  }, [profileId, state.enabled, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings, state.dictation?.enabled, state.dictation?.interaction]);
+  }, [profileId, state.enabled, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings]);
   return { state, setBinding };
 }

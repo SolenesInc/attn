@@ -216,13 +216,16 @@ try {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'experimental' });
     await driver.activateApp();
+    let enabledAt;
     await recordHostedStep('enable-quick-capture', async () => {
       await client.request('dom_click', { selector: '[role="switch"][aria-label="Quick Capture"]' });
       await observer.waitFor(() => observer.getSetting('quick_capture_enabled') === 'true', 'Quick Capture enabled in Settings');
+      enabledAt = performance.now();
       await driver.screenshot(path.join(runner.runDir, 'enabled-quick-capture.png'), { windowId: await driver.mainWindowId({ windowTitle: mainTitle }) });
     }, mainTitle);
     await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
     const initialBinding = (await state()).binding;
+    runner.log('capture bridge answered after Quick Capture was enabled', { ms: Math.round(performance.now() - enabledAt) });
     assert.ok(initialBinding === '' || initialBinding === testBinding, 'This named instance must be Off or retain its own test binding');
     runner.writeJson('initial-binding.json', { binding: initialBinding, testBinding });
     runner.registerCleanup('capture-binding', () => client.request('capture_binding', { binding: initialBinding }));

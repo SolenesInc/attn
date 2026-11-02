@@ -1,14 +1,8 @@
-import { useDictationShortcut, useSpeechHelperLifecycle } from './dictation/speechHelper';
-import { DictationShortcutProvider } from './dictation/ShortcutContext';
-import { WindowDictation } from './dictation/DictationLayer';
-import { daemonRefiner, useDictationRefineRelay } from './dictation/refiner';
-import { dictationInteraction } from './dictation/settings';
 import { Toast } from './components/Toast';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { emitTo } from '@tauri-apps/api/event';
 import { QUICK_CAPTURE_READ } from './quickCapture/client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useProfilesStore } from './store/profiles';
+import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { useQuickCaptureHost } from './application/useQuickCaptureHost';
 import { QuickCaptureShortcutProvider } from './quickCapture/ShortcutContext';
@@ -135,11 +129,6 @@ function App() {
   });
 
   const captureHost = useQuickCaptureHost(daemon, settings);
-  useSpeechHelperLifecycle(settings);
-  const dictationShortcut = useDictationShortcut(settings, daemon.isReady, daemon.sendSaveSetting);
-  useDictationRefineRelay(daemon);
-  const dictationRefiner = useMemo(() => daemonRefiner(daemon), [daemon.sendDictationRefine, daemon.sendDictationRefineCancel]);
-  const dictationProfileId = useProfilesStore(store => store.selectedProfileId) ?? '';
   const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const { sendRecordAnalytics } = daemon;
   useEffect(() => {
@@ -200,7 +189,6 @@ function App() {
       <KeybindingsProvider>
         <DaemonApiProvider api={daemon}>
           <QuickCaptureShortcutProvider value={captureHost}>
-          <DictationShortcutProvider value={dictationShortcut}>
           <MigrationGate>
             <AppContent
               daemonSessions={daemonSessions}
@@ -223,8 +211,6 @@ function App() {
             />
           </MigrationGate>
           <Toast />
-          <WindowDictation enabled={dictationShortcut.enabled} profileId={dictationProfileId} interaction={dictationInteraction(settings)} refiner={dictationRefiner} />
-          </DictationShortcutProvider>
           </QuickCaptureShortcutProvider>
         </DaemonApiProvider>
       </KeybindingsProvider>

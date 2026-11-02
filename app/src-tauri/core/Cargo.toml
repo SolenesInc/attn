@@ -41,8 +41,6 @@ tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "6e595d
 global-hotkey = { path = "../vendor/global-hotkey" }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "block2", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSGraphicsContext", "NSImage", "NSMenu", "NSResponder", "NSRunningApplication", "NSScreen", "libc", "NSTextField", "NSView", "NSWindow", "NSWorkspace"] }
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
-objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "block2", "AVAudioBuffer", "AVAudioChannelLayout", "AVAudioConverter", "AVAudioEngine", "AVAudioFormat", "AVAudioIONode", "AVAudioMixing", "AVAudioNode", "AVAudioTime", "AVAudioTypes", "objc2-core-audio-types"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSData", "NSError", "NSNotification", "NSObject", "NSOperation", "NSProcessInfo", "NSString"] }
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "WKContentWorld", "WKFrameInfo", "WKPDFConfiguration", "WKScriptMessage", "WKScriptMessageHandler", "WKSnapshotConfiguration", "WKUIDelegate", "WKUserContentController", "WKUserScript", "WKWebView", "WKWebViewConfiguration"] }

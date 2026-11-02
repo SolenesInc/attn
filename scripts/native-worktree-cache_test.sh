@@ -17,7 +17,7 @@ export XDG_CACHE_HOME="$work/cache with spaces"
 export NATIVE_TEST_ASSET="$work/asset.tar.gz" NATIVE_TEST_DOWNLOADS="$work/downloads"
 mkdir -p "$work/bin" "$work/repo/scripts/lib" "$work/repo/internal/ghosttyvt" "$work/repo/cmd/probe"
 cp "$root/scripts/build-libghostty-vt.sh" "$work/repo/scripts/"
-cp "$root/scripts/lib/libghostty-vt.sh" "$root/scripts/lib/build-cache.sh" "$root/scripts/lib/release-asset.sh" "$work/repo/scripts/lib/"
+cp "$root/scripts/lib/libghostty-vt.sh" "$root/scripts/lib/release-asset.sh" "$work/repo/scripts/lib/"
 cp "$root/Makefile" "$root/.tool-versions" "$work/repo/"
 cat > "$work/bin/gh" <<'GH'
 #!/usr/bin/env bash

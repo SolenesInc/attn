@@ -487,11 +487,6 @@
   padding: 12px 14px;
 }
 
-.settings-row-actions {
-  display: flex;
-  gap: 8px;
-}
-
 .settings-row-card.compact {
   min-height: 48px;
 }

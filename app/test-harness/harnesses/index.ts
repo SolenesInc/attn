@@ -19,13 +19,9 @@ import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
 import { DelegationChainHarness } from './DelegationChainHarness';
 import { AgentHeaderHarness } from './AgentHeaderHarness';
 import { SidebarRailHarness } from './SidebarRailHarness';
-import { DictationFieldsHarness } from './DictationFieldsHarness';
-import { DictationTargetsHarness } from './DictationTargetsHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   QuickCaptureHistory: QuickCaptureHistoryHarness,
-  DictationFields: DictationFieldsHarness,
-  DictationTargets: DictationTargetsHarness,
   AgentHeader: AgentHeaderHarness,
   BrokenLinks: BrokenLinksHarness,
   FileTree: FileTreeHarness,

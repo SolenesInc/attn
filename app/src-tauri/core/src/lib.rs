@@ -1,8 +1,6 @@
 mod browser_alerts;
 mod browser_host;
 #[cfg(target_os = "macos")]
-mod dictation;
-#[cfg(target_os = "macos")]
 mod hotkeys;
 mod instance;
 mod migration_failure;
@@ -11,7 +9,6 @@ mod native_input_diagnostics;
 #[cfg(target_os = "macos")]
 mod native_keyboard;
 mod quick_capture;
-mod speech;
 mod ui_automation;
 mod wake;
 
@@ -1097,10 +1094,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(speech::Speech::default());
-    #[cfg(target_os = "macos")]
-    let builder = builder.manage(dictation::Dictation::default());
+        .plugin(tauri_plugin_clipboard_manager::init());
     // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
     // so only macOS gets a menu.
     #[cfg(target_os = "macos")]
@@ -1160,23 +1154,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quick_capture::quick_capture_draft_file_chunk,
             quick_capture::quick_capture_download_find,
             quick_capture::quick_capture_download_append,
-            speech::speech_enable,
-            speech::speech_disable,
-            speech::speech_status,
-            speech::speech_remove,
-            #[cfg(target_os = "macos")]
-            dictation::dictation_start,
-            #[cfg(target_os = "macos")]
-            dictation::dictation_stop,
-            #[cfg(target_os = "macos")]
-            dictation::dictation_cancel,
-            #[cfg(target_os = "macos")]
-            dictation::dictation_bind,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
             browser_host::browser_host_control,
-            browser_host::browser_host_dictation,
             browser_host::browser_host_clear_focus,
             browser_host::browser_host_claim_focus,
             browser_host::browser_host_focus_state,
@@ -1260,9 +1241,6 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         })
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
-                #[cfg(target_os = "macos")]
-                dictation::release(_handle, "attn is quitting.");
-                speech::shutdown(_handle);
                 #[cfg(target_os = "macos")]
                 hotkeys::shutdown(_handle);
                 instance::remove_app_pid_file();

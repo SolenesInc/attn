@@ -21,7 +21,6 @@ coverage.out
 # Build artifacts
 app/src-tauri/binaries/
 /pty-host/target/
-/app/speech/target/
 app/src-tauri/app-runtime/*
 !app/src-tauri/app-runtime/.gitkeep
 dist/app-runtime/

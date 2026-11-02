@@ -40,7 +40,7 @@ if [[ -z "$lock_sha" ]]; then
   exit 0
 fi
 
-cache_parent="$(vt_cache_root "$platform")"
+cache_parent="$(vt_cache_root)/$platform"
 mkdir -p "$cache_parent"
 cache_parent="$(cd "$cache_parent" && pwd -P)"
 cached="$cache_parent/$lock_sha"

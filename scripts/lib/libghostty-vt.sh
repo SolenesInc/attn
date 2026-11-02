@@ -20,8 +20,6 @@ vt_repo_dir="$(cd "$vt_lib_dir/../.." && pwd)"
 vt_pin_file="$vt_repo_dir/ghostty-vt.pin"
 vt_lock_file="$vt_repo_dir/ghostty-vt-native.lock"
 
-source "$vt_lib_dir/build-cache.sh"
-
 # Every native target that links the real cgo library. Keep in lockstep with the
 # widened //go:build constraint in internal/ghosttyvt and the per-tuple #cgo
 # directives in ghosttyvt.go. `publish` builds+uploads all of these.
@@ -61,17 +59,40 @@ vt_zig_target() {
 vt_output_dir_for() { printf '%s/third_party/ghostty-vt/%s' "$vt_repo_dir" "$1"; }
 vt_lib_for()        { printf '%s/lib/libghostty-vt.a' "$(vt_output_dir_for "$1")"; }
 
-vt_cache_root() { attn_build_cache_root "native-vt/$1"; }
+vt_cache_root() {
+  local base="${XDG_CACHE_HOME:-}"
+  if [[ -z "$base" ]]; then
+    if [[ "$(uname -s)" == Darwin ]]; then
+      base="$HOME/Library/Caches"
+    else
+      base="$HOME/.cache"
+    fi
+  fi
+  printf '%s/attn/native-vt' "$base"
+}
 
-vt_cache_artifact() {
-  local platform="$1" identity="$2" source_dir="$3" cached
-  cached="$(attn_build_cache_publish "native-vt/$platform" "$identity" "$source_dir")"
+vt_cache_artifact() (
+  local platform="$1" identity="$2" source_dir="$3" parent cached staging
+  parent="$(vt_cache_root)/$platform"
+  mkdir -p "$parent"
+  parent="$(cd "$parent" && pwd -P)"
+  cached="$parent/$identity"
+  if [[ ! -d "$cached" ]]; then
+    staging="$(mktemp -d "$parent/.publish.XXXXXX")"
+    trap 'rm -rf "$staging"' EXIT
+    mkdir "$staging/$identity"
+    cp -R "$source_dir/lib" "$source_dir/include" "$staging/$identity/"
+    if [[ -f "$source_dir/LICENSE" ]]; then
+      cp "$source_dir/LICENSE" "$staging/$identity/LICENSE"
+    fi
+    mv -n "$staging/$identity" "$parent/"
+  fi
   if [[ ! -f "$cached/lib/libghostty-vt.a" || ! -d "$cached/include" ]]; then
     echo "error: native VT artifact is incomplete: $cached" >&2
     return 1
   fi
   printf '%s' "$cached"
-}
+)
 
 vt_use_artifact() {
   local platform="$1" cached="$2" output generated pending quoted

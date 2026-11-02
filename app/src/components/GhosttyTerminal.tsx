@@ -167,7 +167,6 @@ import {
   TerminalSeedPreview,
   type TerminalSeedAnchor,
 } from './TerminalSeedPreview';
-import { consumeDictationEnter, registerTerminalInput, type TerminalBinding } from '../dictation/terminal';
 import './GhosttyTerminal.css';
 
 export interface GhosttyTerminalProps {
@@ -186,7 +185,6 @@ export interface GhosttyTerminalProps {
     paneCount: number;
   };
   onInput: (data: string, source?: string, traceId?: string) => void;
-  onDictationPaste?: (data: string, binding: TerminalBinding) => boolean;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onPathRefused?: (message: string) => void;
@@ -522,7 +520,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onDictationPaste, onPointerActivity, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -618,7 +616,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const readyRef = useRef(false);
     const startupRef = useRef(emptyStartup());
     const onInputRef = useRef(onInput);
-    const onDictationPasteRef = useRef(onDictationPaste);
     const onPointerActivityRef = useRef(onPointerActivity);
     const lastPointerActivityAtRef = useRef(Number.NEGATIVE_INFINITY);
     const onOpenMarkdownRef = useRef(onOpenMarkdown);
@@ -662,7 +659,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const fontSizeRef = useRef(fontSize);
 
     onInputRef.current = onInput;
-    onDictationPasteRef.current = onDictationPaste;
     onOpenMarkdownRef.current = onOpenMarkdown;
     onPathRefusedRef.current = onPathRefused;
     onReadyRef.current = onReady;
@@ -2052,7 +2048,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         terminal: () => inputReadyRef.current ? terminalRef.current : null,
         send: (data, traceId) => onInputRef.current(data, 'user', traceId),
         interceptKey: (event, traceId) => {
-          if (consumeDictationEnter(container, event)) return true;
           interceptedTraceId = traceId;
           const meta = runtimeMetaRef.current;
           if (event.type === 'keydown' && meta) {
@@ -2072,22 +2067,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           recoverFromModelFault(`input.${operation}`, reason);
         },
       });
-      const unregisterDictation = registerTerminalInput(container, {
-        binding: () => {
-          const meta = runtimeMetaRef.current;
-          return onDictationPasteRef.current && inputReadyRef.current && terminalRef.current && meta
-            ? { runtimeId: meta.runtimeId, sessionId: meta.sessionId }
-            : null;
-        },
-        paste: (text, binding) => {
-          const terminal = terminalRef.current;
-          const deliver = onDictationPasteRef.current;
-          if (!terminal || !deliver) return false;
-          return deliver(terminal.formatPaste(text), binding);
-        },
-      });
       return () => {
-        unregisterDictation();
         inputRef.current?.();
         inputRef.current = null;
         inputDiagnostics.dispose();

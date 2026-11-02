@@ -109,7 +109,6 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
             paneCount: paneIds.length,
           }}
           onInput={runtime.handleTerminalInput(agentPane.id)}
-          onDictationPaste={runtime.handleDictationPaste(agentPane.id)}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
           onPathRefused={onTerminalPathRefused}

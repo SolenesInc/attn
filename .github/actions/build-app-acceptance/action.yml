@@ -82,11 +82,7 @@ runs:
       with:
         workspaces: |
           app/src-tauri
-          app/speech
           pty-host
-
-    - name: Ensure speech helper
-      uses: ./.github/actions/cache-speech-helper
 
     - name: Build the packaged app
       shell: bash

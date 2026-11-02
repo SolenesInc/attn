@@ -16,7 +16,6 @@ import { noteDir } from './linkResolver';
 import { markdownTables } from './tableWidget';
 import { computeMinimalEdit } from './minimalEdit';
 import { acceleratorBindings } from './acceleratorKeymap';
-import { dictationTracking } from '../../dictation/codemirror';
 
 const acceleratorSearchKeymap: readonly KeyBinding[] = acceleratorBindings(searchKeymap);
 
@@ -170,7 +169,6 @@ export const LiveMarkdownEditor = forwardRef<LiveMarkdownEditorHandle, LiveMarkd
       search({ top: true }),
       keymap.of(acceleratorSearchKeymap),
       formattingKeymap(),
-      dictationTracking(),
       editorTheme,
     ],
     [onFollowLink, existsFile, resolveImageSrc, notePath],

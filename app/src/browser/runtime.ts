@@ -9,9 +9,6 @@ import {
   queryAllByText,
   queryAllByTitle,
 } from "@testing-library/dom";
-import { afterComposition, missingTargetReason, TrackedField, type Range } from "../dictation/field";
-import { writableField } from "../utils/textFields";
-import { holdFocus, RichEditorSelection } from "../dictation/richEditor";
 import { installNativeTextUndo } from "../utils/nativeTextUndo";
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
@@ -520,53 +517,6 @@ async function performActions(params: JsonObject): Promise<null> {
   return null;
 }
 
-type PageDictation = { kind: "edit"; field: TrackedField; range: Range } | { kind: "paste"; editor: RichEditorSelection };
-
-const dictations = new Map<string, PageDictation>();
-
-function dictationCapture(id: string) {
-  if (!document.hasFocus()) return { reason: "Click into the page's text field first, then start dictation." };
-  const focused = document.activeElement;
-  const element = writableField(focused);
-  if (element) {
-    const field = new TrackedField(element);
-    const range = field.track(element.selectionStart ?? element.value.length, element.selectionEnd ?? element.value.length);
-    dictations.set(id, { kind: "edit", field, range });
-    return { id, kind: "edit" };
-  }
-  const editor = RichEditorSelection.capture(focused);
-  if (!editor) return { reason: missingTargetReason(focused) };
-  dictations.set(id, { kind: "paste", editor });
-  return { id, kind: "paste" };
-}
-
-async function dictationReplace(id: string, text: string) {
-  await afterComposition();
-  const dictation = dictations.get(id);
-  if (!dictation) return "targetGone";
-  return dictation.kind === "edit" ? dictation.field.replace(dictation.range, text) : dictation.editor.insert(text);
-}
-
-function dictationRelease(id: string) {
-  const dictation = dictations.get(id);
-  if (dictation?.kind === "edit") dictation.field.release(dictation.range);
-  dictations.delete(id);
-  return null;
-}
-
-const focusHolds = new Map<string, () => void>();
-
-function focusSnapshot(id: string) {
-  focusHolds.set(id, holdFocus(document));
-  return null;
-}
-
-function focusRestore(id: string) {
-  focusHolds.get(id)?.();
-  focusHolds.delete(id);
-  return null;
-}
-
 function execute(action: string, params: JsonObject): unknown | Promise<unknown> {
   switch (action) {
     case "snapshot": return snapshot();
@@ -695,11 +645,6 @@ function execute(action: string, params: JsonObject): unknown | Promise<unknown>
       currentDocument();
       return null;
     }
-    case "dictation_capture": return dictationCapture(stringParam(params, "id"));
-    case "dictation_replace": return dictationReplace(stringParam(params, "id"), stringParam(params, "text", false));
-    case "dictation_release": return dictationRelease(stringParam(params, "id"));
-    case "focus_snapshot": return focusSnapshot(stringParam(params, "id"));
-    case "focus_restore": return focusRestore(stringParam(params, "id"));
     case "switch_to_parent_frame": frameWindow = frameWindow.parent || window; currentDocument(); return null;
     default: return error(`unsupported page action: ${action}`);
   }

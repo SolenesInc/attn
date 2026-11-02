@@ -26,7 +26,6 @@ import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleCon
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import { selectionShown } from './uiAutomationSelection';
-import { useDictationStore } from '../dictation/controller';
 import {
   clickElementWithModifiers,
   APP_BUILD_IDENTITY,
@@ -3129,8 +3128,6 @@ export function useUiAutomationBridge({
       }
       case 'garden_get_state':
         return collectGardenUiState();
-      case 'dictation_get_state':
-        return useDictationStore.getState();
       case 'notifications_get_state':
         return collectNotificationsUiState();
       case 'garden_board_get_state':

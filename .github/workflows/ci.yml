@@ -110,9 +110,6 @@ jobs:
               - '.github/actions/setup-toolchains/**'
             tauri:
               - 'app/src-tauri/**'
-              - 'app/speech/**'
-              - 'scripts/build-speech-helper.sh'
-              - '.github/actions/cache-speech-helper/**'
               - 'pty-host/**'
               - 'internal/ptyhost/**'
               - 'scripts/rust-zig-linker.sh'
@@ -514,7 +511,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
 
       # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
       # whether apt or the download stalled; bounded steps name the one that does.
@@ -523,16 +520,16 @@ jobs:
           printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
             | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
 
-      # The suite runs in chromium; the dictation specs run in webkit, the
-      # engine of the app's WKWebView. Firefox is never used.
+      # The suite only runs chromium (no projects configured), so skip the
+      # firefox/webkit downloads.
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         timeout-minutes: 10
-        run: pnpm exec playwright install chromium webkit
+        run: pnpm exec playwright install chromium
 
       - name: Install Playwright OS deps
         timeout-minutes: 10
-        run: pnpm exec playwright install-deps chromium webkit
+        run: pnpm exec playwright install-deps chromium
 
       - name: E2E
         env:
@@ -614,7 +611,6 @@ jobs:
         with:
           workspaces: |
             app/src-tauri
-            app/speech
             pty-host
           # Saving on PRs too would copy this cache into every branch scope and
           # evict the rest of the repo's entries.
@@ -622,9 +618,6 @@ jobs:
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
-
-      - name: Ensure speech helper
-        uses: ./.github/actions/cache-speech-helper
 
       - name: Build attn binary
         run: |
@@ -636,9 +629,6 @@ jobs:
           mkdir -p app/src-tauri/binaries
           cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
-          if [ "$(uname -s)" = "Darwin" ]; then
-            cp app/speech/target/release/attn-speech "app/src-tauri/binaries/attn-speech-${target_triple}"
-          fi
           cd app/src-tauri
 
       - name: PTY host fmt, clippy, and test
@@ -647,14 +637,6 @@ jobs:
           cargo fmt --manifest-path pty-host/Cargo.toml -- --check
           cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path pty-host/Cargo.toml
-
-      - name: Speech helper fmt, clippy, and test
-        if: matrix.os == 'macos-15'
-        run: |
-          cd ../..
-          cargo fmt --manifest-path app/speech/Cargo.toml -- --check
-          cargo clippy --manifest-path app/speech/Cargo.toml --locked --all-targets -- -D warnings
-          cargo test --manifest-path app/speech/Cargo.toml --locked
 
       - name: Cargo fmt
         run: cargo fmt -- --check
@@ -940,7 +922,7 @@ jobs:
           archive: ${{ steps.build-app.outputs.archive }}
 
       - name: Run native clipboard, keyboard and capture scenarios
-        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture --scenario dictation-routing
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture
 
       - name: Upload test receipts
         if: always()
@@ -958,7 +940,6 @@ jobs:
             { id: 'terminal-block-copy', code: 0, skipped: false },
             { id: 'terminal-input', code: 0, skipped: false },
             { id: 'quick-capture', code: 0, skipped: false },
-            { id: 'dictation-routing', code: 0, skipped: false },
           ]);
           NODE
 

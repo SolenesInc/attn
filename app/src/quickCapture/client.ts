@@ -1,4 +1,3 @@
-import type { DictationInteraction } from '../dictation/settings';
 import { emitTo, listen } from '@tauri-apps/api/event';
 
 export const QUICK_CAPTURE_STATE = 'attn://capture/state';
@@ -27,7 +26,6 @@ export interface QuickCaptureHostState {
   profileId: string; connected: boolean; mailboxes: QuickCaptureMailbox[]; binding: string | null;
   activeBinding: string | null; shortcutError?: string; connectionError?: string;
   fontScale?: number; keybindings?: string;
-  dictation?: { enabled: boolean; interaction: DictationInteraction };
 }
 export interface QuickCaptureDraftAsset { captureId: string; id: string; name: string; state: string }
 export interface QuickCaptureHistory { nextCursor?: string; items: QuickCaptureItem[]; assets: QuickCaptureDraftAsset[] }
