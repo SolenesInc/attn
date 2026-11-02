@@ -11,7 +11,6 @@ require (
 	github.com/klauspost/compress v1.20.1
 	github.com/mattn/go-sqlite3 v1.14.50
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/vektah/gqlparser/v2 v2.5.58
 	github.com/victorarias/syncthing v0.1.9
 	github.com/yuin/goldmark v1.8.6

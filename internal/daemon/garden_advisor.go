@@ -1,16 +1,18 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
@@ -26,40 +28,18 @@ const (
 	gardenAdvisorEvidenceTextChars  = 1200
 )
 
-const gardenAdviceOutputSchema = `{
-	"type": "object",
-	"properties": {
-		"recommendation": {
-			"type": "string",
-			"enum": ["resume", "handover", "keep_growing", "park", "harvest", "wither"]
-		},
-		"explanation": { "type": "string", "minLength": 1, "maxLength": 1200 },
-		"evidence": {
-			"type": "array",
-			"items": { "type": "string", "minLength": 1, "maxLength": 500 },
-			"minItems": 1,
-			"maxItems": 8
-		}
-	},
-	"required": ["recommendation", "explanation", "evidence"],
-	"additionalProperties": false
-}`
-
-const gardenHandoffOutputSchema = `{
-	"type": "object",
-	"properties": {
-		"handoff": { "type": "string", "minLength": 1, "maxLength": 6000 }
-	},
-	"required": ["handoff"],
-	"additionalProperties": false
-}`
-
-var gardenAdvisorSystemPrompt = prompts.RenderText("garden-advisor", "instructions", nil)
-
-var (
-	compiledGardenAdviceSchema  = mustCompileGardenAdvisorSchema("advice", gardenAdviceOutputSchema)
-	compiledGardenHandoffSchema = mustCompileGardenAdvisorSchema("handoff", gardenHandoffOutputSchema)
+const (
+	gardenAdviceExplanationMaxChars = 1200
+	gardenAdviceEvidenceMaxItems    = 8
+	gardenAdviceEvidenceMaxChars    = 500
+	gardenHandoffMaxChars           = 6000
 )
+
+var gardenAdviceRecommendations = []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}
+
+func gardenAdvisorSystemPrompt() string {
+	return prompts.RenderText("garden-advisor", "instructions", nil)
+}
 
 type gardenAdvisorEvidence struct {
 	Label string `json:"label"`
@@ -86,7 +66,7 @@ type gardenHandoffDraft struct {
 
 type gardenAdvisorTask struct {
 	name   string
-	schema string
+	schema map[string]any
 }
 
 func (task gardenAdvisorTask) prompt(evidence string) string {
@@ -95,12 +75,23 @@ func (task gardenAdvisorTask) prompt(evidence string) string {
 
 var (
 	gardenAdviceTask = gardenAdvisorTask{
-		name:   "advice",
-		schema: gardenAdviceOutputSchema,
+		name: "advice",
+		schema: gardenAdvisorObjectSchema(map[string]any{
+			"recommendation": map[string]any{"type": "string", "enum": gardenAdviceRecommendations},
+			"explanation":    gardenAdvisorTextSchema(gardenAdviceExplanationMaxChars),
+			"evidence": map[string]any{
+				"type":     "array",
+				"items":    gardenAdvisorTextSchema(gardenAdviceEvidenceMaxChars),
+				"minItems": 1,
+				"maxItems": gardenAdviceEvidenceMaxItems,
+			},
+		}),
 	}
 	gardenHandoffTask = gardenAdvisorTask{
-		name:   "handoff",
-		schema: gardenHandoffOutputSchema,
+		name: "handoff",
+		schema: gardenAdvisorObjectSchema(map[string]any{
+			"handoff": gardenAdvisorTextSchema(gardenHandoffMaxChars),
+		}),
 	}
 )
 
@@ -113,8 +104,8 @@ func (d *Daemon) adviseGardenSeedWithConfig(
 	if err != nil {
 		return gardenAdvice{}, err
 	}
-	var advice gardenAdvice
-	if err := validateGardenAdvisorOutput(compiledGardenAdviceSchema, raw, &advice); err != nil {
+	advice, err := parseGardenAdvice(raw)
+	if err != nil {
 		return gardenAdvice{}, fmt.Errorf("garden advisor returned invalid advice: %w", err)
 	}
 	if len(input.AvailableActions) > 0 && !slices.Contains(input.AvailableActions, advice.Recommendation) {
@@ -139,8 +130,8 @@ func (d *Daemon) draftGardenHandoffWithConfig(
 	if err != nil {
 		return "", err
 	}
-	var draft gardenHandoffDraft
-	if err := validateGardenAdvisorOutput(compiledGardenHandoffSchema, raw, &draft); err != nil {
+	draft, err := parseGardenHandoffDraft(raw)
+	if err != nil {
 		return "", fmt.Errorf("garden advisor returned an invalid handoff: %w", err)
 	}
 	draft.Handoff = strings.TrimSpace(draft.Handoff)
@@ -188,10 +179,10 @@ func executeGardenAdvisor(
 		Model:           config.Model,
 		ReasoningEffort: config.Effort,
 		Prompt:          task.prompt(string(payload)),
-		SystemPrompt:    gardenAdvisorSystemPrompt,
+		SystemPrompt:    gardenAdvisorSystemPrompt(),
 		WorkDir:         workDir,
 		DisableTools:    true,
-		OutputSchema:    json.RawMessage(task.schema),
+		OutputSchema:    task.outputSchema(),
 	}
 	if config.Agent == "claude" {
 		request.MaxTurns = 4
@@ -253,33 +244,79 @@ func truncateGardenAdvisorText(value string, limit int) string {
 	return string(runes[:limit-1]) + "…"
 }
 
-func mustCompileGardenAdvisorSchema(name, raw string) *jsonschema.Schema {
-	schemaObject, err := jsonschema.UnmarshalJSON(strings.NewReader(raw))
-	if err != nil {
-		panic(fmt.Sprintf("parse Garden advisor %s schema: %v", name, err))
-	}
-	compiler := jsonschema.NewCompiler()
-	location := "mem://garden-advisor/" + name
-	if err := compiler.AddResource(location, schemaObject); err != nil {
-		panic(fmt.Sprintf("load Garden advisor %s schema: %v", name, err))
-	}
-	compiled, err := compiler.Compile(location)
-	if err != nil {
-		panic(fmt.Sprintf("compile Garden advisor %s schema: %v", name, err))
-	}
-	return compiled
+func gardenAdvisorTextSchema(maxChars int) map[string]any {
+	return map[string]any{"type": "string", "minLength": 1, "maxLength": maxChars}
 }
 
-func validateGardenAdvisorOutput(schema *jsonschema.Schema, raw []byte, target any) error {
-	instance, err := jsonschema.UnmarshalJSON(strings.NewReader(string(raw)))
+func gardenAdvisorObjectSchema(properties map[string]any) map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"required":             slices.Sorted(maps.Keys(properties)),
+		"additionalProperties": false,
+	}
+}
+
+func (task gardenAdvisorTask) outputSchema() json.RawMessage {
+	schema, err := json.Marshal(task.schema)
 	if err != nil {
+		panic(fmt.Sprintf("encode Garden advisor %s schema: %v", task.name, err))
+	}
+	return schema
+}
+
+func parseGardenAdvice(raw []byte) (gardenAdvice, error) {
+	var advice gardenAdvice
+	if err := decodeGardenAdvisorOutput(raw, &advice); err != nil {
+		return gardenAdvice{}, err
+	}
+	if !slices.Contains(gardenAdviceRecommendations, advice.Recommendation) {
+		return gardenAdvice{}, gardenAdvisorSchemaMismatch("recommendation %q is not one of %s", advice.Recommendation, strings.Join(gardenAdviceRecommendations, ", "))
+	}
+	if err := checkGardenAdvisorText("explanation", advice.Explanation, gardenAdviceExplanationMaxChars); err != nil {
+		return gardenAdvice{}, err
+	}
+	if n := len(advice.Evidence); n < 1 || n > gardenAdviceEvidenceMaxItems {
+		return gardenAdvice{}, gardenAdvisorSchemaMismatch("evidence has %d items, want 1 to %d", n, gardenAdviceEvidenceMaxItems)
+	}
+	for i, item := range advice.Evidence {
+		if err := checkGardenAdvisorText(fmt.Sprintf("evidence[%d]", i), item, gardenAdviceEvidenceMaxChars); err != nil {
+			return gardenAdvice{}, err
+		}
+	}
+	return advice, nil
+}
+
+func parseGardenHandoffDraft(raw []byte) (gardenHandoffDraft, error) {
+	var draft gardenHandoffDraft
+	if err := decodeGardenAdvisorOutput(raw, &draft); err != nil {
+		return gardenHandoffDraft{}, err
+	}
+	if err := checkGardenAdvisorText("handoff", draft.Handoff, gardenHandoffMaxChars); err != nil {
+		return gardenHandoffDraft{}, err
+	}
+	return draft, nil
+}
+
+func decodeGardenAdvisorOutput(raw []byte, target any) error {
+	if !json.Valid(raw) {
 		return errors.New("output is not JSON")
 	}
-	if err := schema.Validate(instance); err != nil {
-		return fmt.Errorf("output does not match its schema: %w", err)
-	}
-	if err := json.Unmarshal(raw, target); err != nil {
-		return errors.New("output could not be decoded")
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return gardenAdvisorSchemaMismatch("%v", err)
 	}
 	return nil
+}
+
+func checkGardenAdvisorText(field, value string, maxChars int) error {
+	if n := utf8.RuneCountInString(value); n < 1 || n > maxChars {
+		return gardenAdvisorSchemaMismatch("%s has %d characters, want 1 to %d", field, n, maxChars)
+	}
+	return nil
+}
+
+func gardenAdvisorSchemaMismatch(format string, args ...any) error {
+	return fmt.Errorf("output does not match its schema: "+format, args...)
 }
