@@ -1,14 +1,21 @@
 import {
   Convert,
   GatewayAskQuestionKind,
+  GatewayCheckState,
+  GatewaySeedStatus,
   GatewaySessionState,
   type GatewayAskAnswerResult,
   type GatewayAskEvent,
   type GatewayAskImageChunk,
   type GatewayAskImageError,
   type GatewayAsks,
+  type GatewayGarden,
+  type GatewayGardenSeeds,
   type GatewayPong,
   type GatewayRefused,
+  type GatewaySeedDetail,
+  type GatewaySeedError,
+  type GatewaySeedResult,
   type GatewaySessions,
   type GatewayWelcome,
   type SubmitResult,
@@ -32,11 +39,20 @@ export type GatewayEvent =
   | TerminalResized
   | TerminalError
   | TerminalEnded
-  | SubmitResult;
+  | SubmitResult
+  | GatewayGardenSeeds
+  | GatewayGarden
+  | GatewaySeedDetail
+  | GatewaySeedError
+  | GatewaySeedResult;
 
 const sessionStates = new Set<string>(Object.values(GatewaySessionState));
 
 const questionKinds = new Set<string>(Object.values(GatewayAskQuestionKind));
+
+const seedStatuses = new Set<string>(Object.values(GatewaySeedStatus));
+
+const checkStates = new Set<string>(Object.values(GatewayCheckState));
 
 function known(members: Set<string>, unknown: string, value: unknown): unknown {
   return typeof value === 'string' && !members.has(value) ? unknown : value;
@@ -55,6 +71,20 @@ function withKnownQuestionKinds(ask: Record<string, unknown>): unknown {
       : part;
   });
   return { ...ask, parts };
+}
+
+function withKnownStatus(seed: Record<string, unknown>): unknown {
+  return seed ? { ...seed, status: known(seedStatuses, GatewaySeedStatus.Unknown, seed.status) } : seed;
+}
+
+function withKnownStatuses(seeds: unknown): unknown {
+  return Array.isArray(seeds) ? seeds.map(withKnownStatus) : seeds;
+}
+
+function withKnownCheckStates(checks: unknown): unknown {
+  return Array.isArray(checks)
+    ? checks.map((check: Record<string, unknown>) => ({ ...check, state: known(checkStates, GatewayCheckState.Unknown, check?.state) }))
+    : checks;
 }
 
 // A home on a newer api may send enum members and events this build does not know: an unknown member decodes as
@@ -94,6 +124,21 @@ export function decodeGatewayEvent(frame: string): GatewayEvent | null {
       return Convert.toGatewayAskImageChunk(frame);
     case 'ask_image_error':
       return Convert.toGatewayAskImageError(frame);
+    case 'garden_seeds':
+      return Convert.toGatewayGardenSeeds(JSON.stringify({ ...message, seeds: withKnownStatuses(message.seeds) }));
+    case 'garden':
+      return Convert.toGatewayGarden(frame);
+    case 'seed_detail':
+      return Convert.toGatewaySeedDetail(JSON.stringify({
+        ...message,
+        seed: withKnownStatus(message.seed),
+        children: withKnownStatuses(message.children),
+        checks: withKnownCheckStates(message.checks),
+      }));
+    case 'seed_error':
+      return Convert.toGatewaySeedError(frame);
+    case 'seed_result':
+      return Convert.toGatewaySeedResult(frame);
     default:
       return null;
   }

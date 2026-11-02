@@ -69,16 +69,20 @@ type gatewayConns struct {
 }
 
 type gatewayConn struct {
-	device  GatewayDevice
-	stream  GatewayStream
-	sendMu  sync.Mutex
-	changed chan struct{}
-	pinged  chan struct{}
-	api     int
-	sent    []gateway.GatewaySession
+	device        GatewayDevice
+	stream        GatewayStream
+	sendMu        sync.Mutex
+	changed       chan struct{}
+	gardenChanged chan struct{}
+	pinged        chan struct{}
+	api           int
+	sent          []gateway.GatewaySession
 
 	sentAskIDs []string
 	sentAsks   map[string][]byte
+
+	sentSeedIDs []string
+	sentSeeds   map[string][]byte
 
 	order       terminalOrder
 	terminalsMu sync.Mutex
@@ -101,11 +105,19 @@ func (g *gatewayConns) remove(conn *gatewayConn) {
 }
 
 func (g *gatewayConns) nudge() {
+	g.signal(func(conn *gatewayConn) chan struct{} { return conn.changed })
+}
+
+func (g *gatewayConns) nudgeGarden() {
+	g.signal(func(conn *gatewayConn) chan struct{} { return conn.gardenChanged })
+}
+
+func (g *gatewayConns) signal(channel func(*gatewayConn) chan struct{}) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for conn := range g.conns {
 		select {
-		case conn.changed <- struct{}{}:
+		case channel(conn) <- struct{}{}:
 		default:
 		}
 	}
@@ -127,7 +139,7 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
 	defer stopClosing()
 
-	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*gatewayTerminal{}}
+	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), gardenChanged: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*gatewayTerminal{}}
 	d.gateway.add(conn)
 	defer d.gateway.remove(conn)
 	if err := d.gatewayWelcome(conn); err != nil {
@@ -152,6 +164,13 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 			}
 			d.gatewayResumeAwaiting(conn)
 			if err := d.gatewaySendState(conn); err != nil {
+				return err
+			}
+		case <-conn.gardenChanged:
+			if !d.phoneAccessEnabled() {
+				return d.gatewayRefuse(conn, phoneAccessOff)
+			}
+			if err := d.gatewaySendGarden(conn); err != nil {
 				return err
 			}
 		case <-conn.pinged:
@@ -197,7 +216,10 @@ func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
 	}); err != nil {
 		return err
 	}
-	return d.gatewaySendState(conn)
+	if err := d.gatewaySendState(conn); err != nil {
+		return err
+	}
+	return d.gatewaySendGarden(conn)
 }
 
 func (d *Daemon) gatewaySendState(conn *gatewayConn) error {
@@ -230,6 +252,14 @@ func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
 				return fmt.Errorf("device %s sent a malformed ask_answer: %w", conn.device.DeviceID, err)
 			}
 			if err := d.gatewayAnswerAsk(conn, command); err != nil {
+				return err
+			}
+			continue
+		case "seed_get", "seed_note", "seed_move":
+			if conn.api < gatewayGardenAPI {
+				break
+			}
+			if err := d.gatewayGardenCommand(conn, message.Cmd, frame); err != nil {
 				return err
 			}
 			continue

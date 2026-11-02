@@ -341,6 +341,73 @@
     ],
     "type": "object"
   },
+  "GatewayCheckState": {
+    "enum": [
+      "open",
+      "reported",
+      "confirmed",
+      "rejected",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewayCheckTally": {
+    "properties": {
+      "confirmed": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "confirmed",
+      "total"
+    ],
+    "type": "object"
+  },
+  "GatewayGarden": {
+    "properties": {
+      "event": {
+        "const": "garden",
+        "type": "string"
+      },
+      "ids": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "ids"
+    ],
+    "type": "object"
+  },
+  "GatewayGardenSeeds": {
+    "properties": {
+      "event": {
+        "const": "garden_seeds",
+        "type": "string"
+      },
+      "seeds": {
+        "items": {
+          "$ref": "GatewaySeed.json"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "seeds"
+    ],
+    "type": "object"
+  },
   "GatewayHello": {
     "properties": {
       "api": {
@@ -372,6 +439,55 @@
     },
     "required": [
       "cmd"
+    ],
+    "type": "object"
+  },
+  "GatewayPlotProgress": {
+    "properties": {
+      "blocked": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "done": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "growing": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "parked": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "ready": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "withered": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total",
+      "done",
+      "withered",
+      "growing",
+      "parked",
+      "ready",
+      "blocked"
     ],
     "type": "object"
   },
@@ -417,6 +533,311 @@
       "message"
     ],
     "type": "object"
+  },
+  "GatewaySeed": {
+    "properties": {
+      "checks": {
+        "$ref": "GatewayCheckTally.json"
+      },
+      "claimed": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "plot_id": {
+        "type": "string"
+      },
+      "progress": {
+        "$ref": "GatewayPlotProgress.json"
+      },
+      "ready": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "slug": {
+        "type": "string"
+      },
+      "state_changed_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "status": {
+        "$ref": "GatewaySeedStatus.json"
+      },
+      "tender": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "waits_for": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "slug",
+      "title",
+      "status",
+      "claimed",
+      "ready",
+      "waits_for",
+      "state_changed_at"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedCheck": {
+    "properties": {
+      "from": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "GatewayCheckState.json"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "text",
+      "state"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedDetail": {
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "body_too_large_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "checks": {
+        "items": {
+          "$ref": "GatewaySeedCheck.json"
+        },
+        "type": "array"
+      },
+      "children": {
+        "items": {
+          "$ref": "GatewaySeed.json"
+        },
+        "type": "array"
+      },
+      "event": {
+        "const": "seed_detail",
+        "type": "string"
+      },
+      "log": {
+        "items": {
+          "$ref": "GatewaySeedLogEntry.json"
+        },
+        "type": "array"
+      },
+      "log_total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "max_frame_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed": {
+        "$ref": "GatewaySeed.json"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "seed",
+      "body",
+      "checks",
+      "children",
+      "log",
+      "log_total"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedError": {
+    "properties": {
+      "event": {
+        "const": "seed_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedGet": {
+    "properties": {
+      "cmd": {
+        "const": "seed_get",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedLogEntry": {
+    "properties": {
+      "author": {
+        "type": "string"
+      },
+      "body": {
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "body",
+      "author",
+      "created_at"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedMove": {
+    "properties": {
+      "cmd": {
+        "const": "seed_move",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      },
+      "verb": {
+        "$ref": "GatewaySeedVerb.json"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id",
+      "verb",
+      "text"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedNoteCommand": {
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "seed_note",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id",
+      "body"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedResult": {
+    "properties": {
+      "error": {
+        "type": "string"
+      },
+      "event": {
+        "const": "seed_result",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "seed_id"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedStatus": {
+    "enum": [
+      "planted",
+      "growing",
+      "parked",
+      "harvested",
+      "withered",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewaySeedVerb": {
+    "enum": [
+      "park",
+      "harvest",
+      "wither",
+      "replant",
+      "unknown"
+    ],
+    "type": "string"
   },
   "GatewaySession": {
     "properties": {

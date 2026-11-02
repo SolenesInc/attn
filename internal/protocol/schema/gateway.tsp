@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Gateway;
 
-const GATEWAY_API_VERSION = 5;
+const GATEWAY_API_VERSION = 6;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model GatewayHello {
@@ -297,4 +297,161 @@ model TerminalError {
 model TerminalEnded {
   event: "terminal_ended";
   terminal_id: string;
+}
+
+// Since api 6: the profile's open seeds, planted, growing and parked, without
+// their bodies. After welcome and on each change the home sends garden_seeds
+// frames holding each seed that is new or changed, as many as fit a frame, then
+// garden with every open seed's id, newest first.
+model GatewayGardenSeeds {
+  event: "garden_seeds";
+  seeds: GatewaySeed[];
+}
+
+model GatewayGarden {
+  event: "garden";
+  ids: string[];
+}
+
+enum GatewaySeedStatus {
+  planted,
+  growing,
+  parked,
+  harvested,
+  withered,
+  status_unknown: "unknown",
+}
+
+model GatewayCheckTally {
+  confirmed: int32;
+  total: int32;
+}
+
+// How far a plot has drained: done counts harvested children, withered ones
+// count apart.
+model GatewayPlotProgress {
+  total: int32;
+  done: int32;
+  withered: int32;
+  growing: int32;
+  parked: int32;
+  ready: int32;
+  blocked: int32;
+}
+
+model GatewaySeed {
+  id: string;
+  slug: string;
+  title: string;
+  status: GatewaySeedStatus;
+  // Who the seed's claim names; claimed says whether the claim holds now.
+  tender?: string;
+  claimed: boolean;
+  // Nothing open blocks it, nobody holds it, and it is not a plot.
+  ready: boolean;
+  // The plot this seed is part of.
+  plot_id?: string;
+  // The open seeds this one waits for.
+  waits_for: string[];
+  // Present when the seed is a plot.
+  progress?: GatewayPlotProgress;
+  // The seed's own and inherited checks; on a plot, every check below it.
+  checks?: GatewayCheckTally;
+  state_changed_at: utcDateTime;
+  // Why it was harvested or withered.
+  reason?: string;
+}
+
+// Reads one seed of the pairing's profile. The home answers seed_detail, or
+// seed_error naming the reason.
+model GatewaySeedGet {
+  cmd: "seed_get";
+  request_id: string;
+  seed_id: string;
+}
+
+enum GatewayCheckState {
+  open,
+  reported,
+  confirmed,
+  rejected,
+  check_unknown: "unknown",
+}
+
+model GatewaySeedCheck {
+  id: string;
+  text: string;
+  state: GatewayCheckState;
+  // The plot that defines an inherited check.
+  from?: string;
+}
+
+model GatewaySeedLogEntry {
+  id: string;
+  // note, handoff, attach, detach, check, or a kind added later.
+  kind: string;
+  body: string;
+  author: string;
+  created_at: utcDateTime;
+}
+
+// body is the seed's markdown. children lists every seed part of it, closed
+// ones included, newest first. log holds the newest entries, newest first, as
+// many as fit one frame; log_total counts them all. body_too_large_bytes is
+// set, and body left empty, when the body alone does not fit a frame of
+// max_frame_bytes; read it on the computer.
+model GatewaySeedDetail {
+  event: "seed_detail";
+  request_id: string;
+  seed: GatewaySeed;
+  body: string;
+  checks: GatewaySeedCheck[];
+  children: GatewaySeed[];
+  log: GatewaySeedLogEntry[];
+  log_total: int32;
+  body_too_large_bytes?: int32;
+  max_frame_bytes?: int32;
+}
+
+model GatewaySeedError {
+  event: "seed_error";
+  request_id: string;
+  message: string;
+}
+
+// Adds a note to a seed's log as the user, through the desktop's note path.
+// The home answers seed_result.
+model GatewaySeedNoteCommand {
+  cmd: "seed_note";
+  request_id: string;
+  seed_id: string;
+  body: string;
+}
+
+enum GatewaySeedVerb {
+  park,
+  harvest,
+  wither,
+  replant,
+  verb_unknown: "unknown",
+}
+
+// Moves a seed as the user, as the desktop's board does: harvest and wither
+// keep text as the seed's reason, park logs it with the move, and replant logs
+// it as a note first. Harvest needs text. The home answers seed_result.
+model GatewaySeedMove {
+  cmd: "seed_move";
+  request_id: string;
+  seed_id: string;
+  verb: GatewaySeedVerb;
+  text: string;
+}
+
+// error is absent on success; the seed's change reaches the device as garden
+// frames.
+model GatewaySeedResult {
+  event: "seed_result";
+  request_id: string;
+  seed_id: string;
+  error?: string;
 }

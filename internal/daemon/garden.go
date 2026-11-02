@@ -481,10 +481,14 @@ func (d *Daemon) countSeedsForBroadcast(profileID ...string) int {
 }
 
 func (d *Daemon) projectGardenSeeds() {
-	if d.store == nil || d.wsHub == nil {
+	if d.store == nil {
 		return
 	}
 	d.projectSnapshot(snapshotGarden, func() {
+		d.gateway.nudgeGarden()
+		if d.wsHub == nil {
+			return
+		}
 		windows := map[string]gardenWindow{}
 		d.wsHub.ForEachClient(func(client *wsClient) {
 			profileID := client.selectedProfile()

@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayHello, GatewayPing, GatewayPong, GatewayProfile, GatewayRefused, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
+//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayCheckState, GatewayCheckTally, GatewayGarden, GatewayGardenSeeds, GatewayHello, GatewayPing, GatewayPlotProgress, GatewayPong, GatewayProfile, GatewayRefused, GatewaySeed, GatewaySeedCheck, GatewaySeedDetail, GatewaySeedError, GatewaySeedGet, GatewaySeedLogEntry, GatewaySeedMove, GatewaySeedNoteCommand, GatewaySeedResult, GatewaySeedStatus, GatewaySeedVerb, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
 //
 //   const gatewayAsk = Convert.toGatewayAsk(json);
 //   const gatewayAskAnswer = Convert.toGatewayAskAnswer(json);
@@ -16,11 +16,27 @@
 //   const gatewayAskQuestionKind = Convert.toGatewayAskQuestionKind(json);
 //   const gatewayAskReply = Convert.toGatewayAskReply(json);
 //   const gatewayAsks = Convert.toGatewayAsks(json);
+//   const gatewayCheckState = Convert.toGatewayCheckState(json);
+//   const gatewayCheckTally = Convert.toGatewayCheckTally(json);
+//   const gatewayGarden = Convert.toGatewayGarden(json);
+//   const gatewayGardenSeeds = Convert.toGatewayGardenSeeds(json);
 //   const gatewayHello = Convert.toGatewayHello(json);
 //   const gatewayPing = Convert.toGatewayPing(json);
+//   const gatewayPlotProgress = Convert.toGatewayPlotProgress(json);
 //   const gatewayPong = Convert.toGatewayPong(json);
 //   const gatewayProfile = Convert.toGatewayProfile(json);
 //   const gatewayRefused = Convert.toGatewayRefused(json);
+//   const gatewaySeed = Convert.toGatewaySeed(json);
+//   const gatewaySeedCheck = Convert.toGatewaySeedCheck(json);
+//   const gatewaySeedDetail = Convert.toGatewaySeedDetail(json);
+//   const gatewaySeedError = Convert.toGatewaySeedError(json);
+//   const gatewaySeedGet = Convert.toGatewaySeedGet(json);
+//   const gatewaySeedLogEntry = Convert.toGatewaySeedLogEntry(json);
+//   const gatewaySeedMove = Convert.toGatewaySeedMove(json);
+//   const gatewaySeedNoteCommand = Convert.toGatewaySeedNoteCommand(json);
+//   const gatewaySeedResult = Convert.toGatewaySeedResult(json);
+//   const gatewaySeedStatus = Convert.toGatewaySeedStatus(json);
+//   const gatewaySeedVerb = Convert.toGatewaySeedVerb(json);
 //   const gatewaySession = Convert.toGatewaySession(json);
 //   const gatewaySessionState = Convert.toGatewaySessionState(json);
 //   const gatewaySessions = Convert.toGatewaySessions(json);
@@ -237,6 +253,75 @@ export enum GatewayAsksEvent {
     Asks = "asks",
 }
 
+export interface GatewayCheckTally {
+    confirmed: number;
+    total:     number;
+    [property: string]: any;
+}
+
+export interface GatewayGarden {
+    event: GatewayGardenEvent;
+    ids:   string[];
+    [property: string]: any;
+}
+
+export enum GatewayGardenEvent {
+    Garden = "garden",
+}
+
+export interface GatewayGardenSeeds {
+    event: GatewayGardenSeedsEvent;
+    seeds: Seed[];
+    [property: string]: any;
+}
+
+export enum GatewayGardenSeedsEvent {
+    GardenSeeds = "garden_seeds",
+}
+
+export interface Seed {
+    checks?:          Checks;
+    claimed:          boolean;
+    id:               string;
+    plot_id?:         string;
+    progress?:        Progress;
+    ready:            boolean;
+    reason?:          string;
+    slug:             string;
+    state_changed_at: Date;
+    status:           GatewaySeedStatus;
+    tender?:          string;
+    title:            string;
+    waits_for:        string[];
+    [property: string]: any;
+}
+
+export interface Checks {
+    confirmed: number;
+    total:     number;
+    [property: string]: any;
+}
+
+export interface Progress {
+    blocked:  number;
+    done:     number;
+    growing:  number;
+    parked:   number;
+    ready:    number;
+    total:    number;
+    withered: number;
+    [property: string]: any;
+}
+
+export enum GatewaySeedStatus {
+    Growing = "growing",
+    Harvested = "harvested",
+    Parked = "parked",
+    Planted = "planted",
+    Unknown = "unknown",
+    Withered = "withered",
+}
+
 export interface GatewayHello {
     api:       number;
     cmd:       GatewayHelloCmd;
@@ -255,6 +340,17 @@ export interface GatewayPing {
 
 export enum GatewayPingCmd {
     Ping = "ping",
+}
+
+export interface GatewayPlotProgress {
+    blocked:  number;
+    done:     number;
+    growing:  number;
+    parked:   number;
+    ready:    number;
+    total:    number;
+    withered: number;
+    [property: string]: any;
 }
 
 export interface GatewayPong {
@@ -280,6 +376,150 @@ export interface GatewayRefused {
 
 export enum GatewayRefusedEvent {
     Refused = "refused",
+}
+
+export interface GatewaySeed {
+    checks?:          Checks;
+    claimed:          boolean;
+    id:               string;
+    plot_id?:         string;
+    progress?:        Progress;
+    ready:            boolean;
+    reason?:          string;
+    slug:             string;
+    state_changed_at: Date;
+    status:           GatewaySeedStatus;
+    tender?:          string;
+    title:            string;
+    waits_for:        string[];
+    [property: string]: any;
+}
+
+export interface GatewaySeedCheck {
+    from?: string;
+    id:    string;
+    state: GatewayCheckState;
+    text:  string;
+    [property: string]: any;
+}
+
+export enum GatewayCheckState {
+    Confirmed = "confirmed",
+    Open = "open",
+    Rejected = "rejected",
+    Reported = "reported",
+    Unknown = "unknown",
+}
+
+export interface GatewaySeedDetail {
+    body:                  string;
+    body_too_large_bytes?: number;
+    checks:                CheckElement[];
+    children:              Seed[];
+    event:                 GatewaySeedDetailEvent;
+    log:                   LogElement[];
+    log_total:             number;
+    max_frame_bytes?:      number;
+    request_id:            string;
+    seed:                  Seed;
+    [property: string]: any;
+}
+
+export interface CheckElement {
+    from?: string;
+    id:    string;
+    state: GatewayCheckState;
+    text:  string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedDetailEvent {
+    SeedDetail = "seed_detail",
+}
+
+export interface LogElement {
+    author:     string;
+    body:       string;
+    created_at: Date;
+    id:         string;
+    kind:       string;
+    [property: string]: any;
+}
+
+export interface GatewaySeedError {
+    event:      GatewaySeedErrorEvent;
+    message:    string;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedErrorEvent {
+    SeedError = "seed_error",
+}
+
+export interface GatewaySeedGet {
+    cmd:        GatewaySeedGetCmd;
+    request_id: string;
+    seed_id:    string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedGetCmd {
+    SeedGet = "seed_get",
+}
+
+export interface GatewaySeedLogEntry {
+    author:     string;
+    body:       string;
+    created_at: Date;
+    id:         string;
+    kind:       string;
+    [property: string]: any;
+}
+
+export interface GatewaySeedMove {
+    cmd:        GatewaySeedMoveCmd;
+    request_id: string;
+    seed_id:    string;
+    text:       string;
+    verb:       GatewaySeedVerb;
+    [property: string]: any;
+}
+
+export enum GatewaySeedMoveCmd {
+    SeedMove = "seed_move",
+}
+
+export enum GatewaySeedVerb {
+    Harvest = "harvest",
+    Park = "park",
+    Replant = "replant",
+    Unknown = "unknown",
+    Wither = "wither",
+}
+
+export interface GatewaySeedNoteCommand {
+    body:       string;
+    cmd:        GatewaySeedNoteCommandCmd;
+    request_id: string;
+    seed_id:    string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedNoteCommandCmd {
+    SeedNote = "seed_note",
+}
+
+export interface GatewaySeedResult {
+    error?:     string;
+    event:      GatewaySeedResultEvent;
+    request_id: string;
+    seed_id:    string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedResultEvent {
+    SeedResult = "seed_result",
 }
 
 export interface GatewaySession {
@@ -598,6 +838,38 @@ export class Convert {
         return JSON.stringify(uncast(value, r("GatewayAsks")), null, 2);
     }
 
+    public static toGatewayCheckState(json: string): GatewayCheckState {
+        return cast(JSON.parse(json), r("GatewayCheckState"));
+    }
+
+    public static gatewayCheckStateToJson(value: GatewayCheckState): string {
+        return JSON.stringify(uncast(value, r("GatewayCheckState")), null, 2);
+    }
+
+    public static toGatewayCheckTally(json: string): GatewayCheckTally {
+        return cast(JSON.parse(json), r("GatewayCheckTally"));
+    }
+
+    public static gatewayCheckTallyToJson(value: GatewayCheckTally): string {
+        return JSON.stringify(uncast(value, r("GatewayCheckTally")), null, 2);
+    }
+
+    public static toGatewayGarden(json: string): GatewayGarden {
+        return cast(JSON.parse(json), r("GatewayGarden"));
+    }
+
+    public static gatewayGardenToJson(value: GatewayGarden): string {
+        return JSON.stringify(uncast(value, r("GatewayGarden")), null, 2);
+    }
+
+    public static toGatewayGardenSeeds(json: string): GatewayGardenSeeds {
+        return cast(JSON.parse(json), r("GatewayGardenSeeds"));
+    }
+
+    public static gatewayGardenSeedsToJson(value: GatewayGardenSeeds): string {
+        return JSON.stringify(uncast(value, r("GatewayGardenSeeds")), null, 2);
+    }
+
     public static toGatewayHello(json: string): GatewayHello {
         return cast(JSON.parse(json), r("GatewayHello"));
     }
@@ -612,6 +884,14 @@ export class Convert {
 
     public static gatewayPingToJson(value: GatewayPing): string {
         return JSON.stringify(uncast(value, r("GatewayPing")), null, 2);
+    }
+
+    public static toGatewayPlotProgress(json: string): GatewayPlotProgress {
+        return cast(JSON.parse(json), r("GatewayPlotProgress"));
+    }
+
+    public static gatewayPlotProgressToJson(value: GatewayPlotProgress): string {
+        return JSON.stringify(uncast(value, r("GatewayPlotProgress")), null, 2);
     }
 
     public static toGatewayPong(json: string): GatewayPong {
@@ -636,6 +916,94 @@ export class Convert {
 
     public static gatewayRefusedToJson(value: GatewayRefused): string {
         return JSON.stringify(uncast(value, r("GatewayRefused")), null, 2);
+    }
+
+    public static toGatewaySeed(json: string): GatewaySeed {
+        return cast(JSON.parse(json), r("GatewaySeed"));
+    }
+
+    public static gatewaySeedToJson(value: GatewaySeed): string {
+        return JSON.stringify(uncast(value, r("GatewaySeed")), null, 2);
+    }
+
+    public static toGatewaySeedCheck(json: string): GatewaySeedCheck {
+        return cast(JSON.parse(json), r("GatewaySeedCheck"));
+    }
+
+    public static gatewaySeedCheckToJson(value: GatewaySeedCheck): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedCheck")), null, 2);
+    }
+
+    public static toGatewaySeedDetail(json: string): GatewaySeedDetail {
+        return cast(JSON.parse(json), r("GatewaySeedDetail"));
+    }
+
+    public static gatewaySeedDetailToJson(value: GatewaySeedDetail): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedDetail")), null, 2);
+    }
+
+    public static toGatewaySeedError(json: string): GatewaySeedError {
+        return cast(JSON.parse(json), r("GatewaySeedError"));
+    }
+
+    public static gatewaySeedErrorToJson(value: GatewaySeedError): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedError")), null, 2);
+    }
+
+    public static toGatewaySeedGet(json: string): GatewaySeedGet {
+        return cast(JSON.parse(json), r("GatewaySeedGet"));
+    }
+
+    public static gatewaySeedGetToJson(value: GatewaySeedGet): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedGet")), null, 2);
+    }
+
+    public static toGatewaySeedLogEntry(json: string): GatewaySeedLogEntry {
+        return cast(JSON.parse(json), r("GatewaySeedLogEntry"));
+    }
+
+    public static gatewaySeedLogEntryToJson(value: GatewaySeedLogEntry): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedLogEntry")), null, 2);
+    }
+
+    public static toGatewaySeedMove(json: string): GatewaySeedMove {
+        return cast(JSON.parse(json), r("GatewaySeedMove"));
+    }
+
+    public static gatewaySeedMoveToJson(value: GatewaySeedMove): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedMove")), null, 2);
+    }
+
+    public static toGatewaySeedNoteCommand(json: string): GatewaySeedNoteCommand {
+        return cast(JSON.parse(json), r("GatewaySeedNoteCommand"));
+    }
+
+    public static gatewaySeedNoteCommandToJson(value: GatewaySeedNoteCommand): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedNoteCommand")), null, 2);
+    }
+
+    public static toGatewaySeedResult(json: string): GatewaySeedResult {
+        return cast(JSON.parse(json), r("GatewaySeedResult"));
+    }
+
+    public static gatewaySeedResultToJson(value: GatewaySeedResult): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedResult")), null, 2);
+    }
+
+    public static toGatewaySeedStatus(json: string): GatewaySeedStatus {
+        return cast(JSON.parse(json), r("GatewaySeedStatus"));
+    }
+
+    public static gatewaySeedStatusToJson(value: GatewaySeedStatus): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedStatus")), null, 2);
+    }
+
+    public static toGatewaySeedVerb(json: string): GatewaySeedVerb {
+        return cast(JSON.parse(json), r("GatewaySeedVerb"));
+    }
+
+    public static gatewaySeedVerbToJson(value: GatewaySeedVerb): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedVerb")), null, 2);
     }
 
     public static toGatewaySession(json: string): GatewaySession {
@@ -1039,6 +1407,46 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("GatewayAsksEvent") },
         { json: "ids", js: "ids", typ: a("") },
     ], "any"),
+    "GatewayCheckTally": o([
+        { json: "confirmed", js: "confirmed", typ: 0 },
+        { json: "total", js: "total", typ: 0 },
+    ], "any"),
+    "GatewayGarden": o([
+        { json: "event", js: "event", typ: r("GatewayGardenEvent") },
+        { json: "ids", js: "ids", typ: a("") },
+    ], "any"),
+    "GatewayGardenSeeds": o([
+        { json: "event", js: "event", typ: r("GatewayGardenSeedsEvent") },
+        { json: "seeds", js: "seeds", typ: a(r("Seed")) },
+    ], "any"),
+    "Seed": o([
+        { json: "checks", js: "checks", typ: u(undefined, r("Checks")) },
+        { json: "claimed", js: "claimed", typ: true },
+        { json: "id", js: "id", typ: "" },
+        { json: "plot_id", js: "plot_id", typ: u(undefined, "") },
+        { json: "progress", js: "progress", typ: u(undefined, r("Progress")) },
+        { json: "ready", js: "ready", typ: true },
+        { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "slug", js: "slug", typ: "" },
+        { json: "state_changed_at", js: "state_changed_at", typ: Date },
+        { json: "status", js: "status", typ: r("GatewaySeedStatus") },
+        { json: "tender", js: "tender", typ: u(undefined, "") },
+        { json: "title", js: "title", typ: "" },
+        { json: "waits_for", js: "waits_for", typ: a("") },
+    ], "any"),
+    "Checks": o([
+        { json: "confirmed", js: "confirmed", typ: 0 },
+        { json: "total", js: "total", typ: 0 },
+    ], "any"),
+    "Progress": o([
+        { json: "blocked", js: "blocked", typ: 0 },
+        { json: "done", js: "done", typ: 0 },
+        { json: "growing", js: "growing", typ: 0 },
+        { json: "parked", js: "parked", typ: 0 },
+        { json: "ready", js: "ready", typ: 0 },
+        { json: "total", js: "total", typ: 0 },
+        { json: "withered", js: "withered", typ: 0 },
+    ], "any"),
     "GatewayHello": o([
         { json: "api", js: "api", typ: 0 },
         { json: "cmd", js: "cmd", typ: r("GatewayHelloCmd") },
@@ -1046,6 +1454,15 @@ const typeMap: any = {
     ], "any"),
     "GatewayPing": o([
         { json: "cmd", js: "cmd", typ: r("GatewayPingCmd") },
+    ], "any"),
+    "GatewayPlotProgress": o([
+        { json: "blocked", js: "blocked", typ: 0 },
+        { json: "done", js: "done", typ: 0 },
+        { json: "growing", js: "growing", typ: 0 },
+        { json: "parked", js: "parked", typ: 0 },
+        { json: "ready", js: "ready", typ: 0 },
+        { json: "total", js: "total", typ: 0 },
+        { json: "withered", js: "withered", typ: 0 },
     ], "any"),
     "GatewayPong": o([
         { json: "event", js: "event", typ: r("GatewayPongEvent") },
@@ -1057,6 +1474,88 @@ const typeMap: any = {
     "GatewayRefused": o([
         { json: "event", js: "event", typ: r("GatewayRefusedEvent") },
         { json: "message", js: "message", typ: "" },
+    ], "any"),
+    "GatewaySeed": o([
+        { json: "checks", js: "checks", typ: u(undefined, r("Checks")) },
+        { json: "claimed", js: "claimed", typ: true },
+        { json: "id", js: "id", typ: "" },
+        { json: "plot_id", js: "plot_id", typ: u(undefined, "") },
+        { json: "progress", js: "progress", typ: u(undefined, r("Progress")) },
+        { json: "ready", js: "ready", typ: true },
+        { json: "reason", js: "reason", typ: u(undefined, "") },
+        { json: "slug", js: "slug", typ: "" },
+        { json: "state_changed_at", js: "state_changed_at", typ: Date },
+        { json: "status", js: "status", typ: r("GatewaySeedStatus") },
+        { json: "tender", js: "tender", typ: u(undefined, "") },
+        { json: "title", js: "title", typ: "" },
+        { json: "waits_for", js: "waits_for", typ: a("") },
+    ], "any"),
+    "GatewaySeedCheck": o([
+        { json: "from", js: "from", typ: u(undefined, "") },
+        { json: "id", js: "id", typ: "" },
+        { json: "state", js: "state", typ: r("GatewayCheckState") },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "GatewaySeedDetail": o([
+        { json: "body", js: "body", typ: "" },
+        { json: "body_too_large_bytes", js: "body_too_large_bytes", typ: u(undefined, 0) },
+        { json: "checks", js: "checks", typ: a(r("CheckElement")) },
+        { json: "children", js: "children", typ: a(r("Seed")) },
+        { json: "event", js: "event", typ: r("GatewaySeedDetailEvent") },
+        { json: "log", js: "log", typ: a(r("LogElement")) },
+        { json: "log_total", js: "log_total", typ: 0 },
+        { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed", js: "seed", typ: r("Seed") },
+    ], "any"),
+    "CheckElement": o([
+        { json: "from", js: "from", typ: u(undefined, "") },
+        { json: "id", js: "id", typ: "" },
+        { json: "state", js: "state", typ: r("GatewayCheckState") },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
+    "LogElement": o([
+        { json: "author", js: "author", typ: "" },
+        { json: "body", js: "body", typ: "" },
+        { json: "created_at", js: "created_at", typ: Date },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
+    ], "any"),
+    "GatewaySeedError": o([
+        { json: "event", js: "event", typ: r("GatewaySeedErrorEvent") },
+        { json: "message", js: "message", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "GatewaySeedGet": o([
+        { json: "cmd", js: "cmd", typ: r("GatewaySeedGetCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+    ], "any"),
+    "GatewaySeedLogEntry": o([
+        { json: "author", js: "author", typ: "" },
+        { json: "body", js: "body", typ: "" },
+        { json: "created_at", js: "created_at", typ: Date },
+        { json: "id", js: "id", typ: "" },
+        { json: "kind", js: "kind", typ: "" },
+    ], "any"),
+    "GatewaySeedMove": o([
+        { json: "cmd", js: "cmd", typ: r("GatewaySeedMoveCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "text", js: "text", typ: "" },
+        { json: "verb", js: "verb", typ: r("GatewaySeedVerb") },
+    ], "any"),
+    "GatewaySeedNoteCommand": o([
+        { json: "body", js: "body", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("GatewaySeedNoteCommandCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
+    ], "any"),
+    "GatewaySeedResult": o([
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("GatewaySeedResultEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "GatewaySession": o([
         { json: "agent", js: "agent", typ: "" },
@@ -1185,6 +1684,20 @@ const typeMap: any = {
     "GatewayAsksEvent": [
         "asks",
     ],
+    "GatewayGardenEvent": [
+        "garden",
+    ],
+    "GatewayGardenSeedsEvent": [
+        "garden_seeds",
+    ],
+    "GatewaySeedStatus": [
+        "growing",
+        "harvested",
+        "parked",
+        "planted",
+        "unknown",
+        "withered",
+    ],
     "GatewayHelloCmd": [
         "hello",
     ],
@@ -1196,6 +1709,38 @@ const typeMap: any = {
     ],
     "GatewayRefusedEvent": [
         "refused",
+    ],
+    "GatewayCheckState": [
+        "confirmed",
+        "open",
+        "rejected",
+        "reported",
+        "unknown",
+    ],
+    "GatewaySeedDetailEvent": [
+        "seed_detail",
+    ],
+    "GatewaySeedErrorEvent": [
+        "seed_error",
+    ],
+    "GatewaySeedGetCmd": [
+        "seed_get",
+    ],
+    "GatewaySeedMoveCmd": [
+        "seed_move",
+    ],
+    "GatewaySeedVerb": [
+        "harvest",
+        "park",
+        "replant",
+        "unknown",
+        "wither",
+    ],
+    "GatewaySeedNoteCommandCmd": [
+        "seed_note",
+    ],
+    "GatewaySeedResultEvent": [
+        "seed_result",
     ],
     "GatewaySessionState": [
         "idle",

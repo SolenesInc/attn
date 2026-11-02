@@ -31,6 +31,8 @@ type testPhone struct {
 	served    chan error
 	asks      map[string]gateway.GatewayAsk
 	askIDs    []string
+	seeds     map[string]gateway.GatewaySeed
+	seedIDs   []string
 }
 
 type phoneLink struct{ *testPhone }
@@ -60,7 +62,7 @@ func (l phoneLink) Close() error {
 
 func connectPhone(t *testing.T, w *world, deviceID, profileID string) *testPhone {
 	t.Helper()
-	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]gateway.GatewayAsk{}}
+	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]gateway.GatewayAsk{}, seeds: map[string]gateway.GatewaySeed{}}
 	go func() {
 		p.served <- w.daemon.ServeGateway(daemon.GatewayDevice{DeviceID: deviceID, ProfileID: profileID}, phoneLink{p})
 	}()
@@ -138,6 +140,20 @@ func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
 				p.t.Fatalf("decode %s: %v", frame, err)
 			}
 			p.askIDs = message.Ids
+		case "garden_seeds":
+			var message gateway.GatewayGardenSeeds
+			if err := json.Unmarshal(frame, &message); err != nil {
+				p.t.Fatalf("decode %s: %v", frame, err)
+			}
+			for _, seed := range message.Seeds {
+				p.seeds[seed.ID] = seed
+			}
+		case "garden":
+			var message gateway.GatewayGarden
+			if err := json.Unmarshal(frame, &message); err != nil {
+				p.t.Fatalf("decode %s: %v", frame, err)
+			}
+			p.seedIDs = message.Ids
 		}
 		return frame
 	case <-guard.C:

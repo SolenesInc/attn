@@ -205,6 +205,38 @@ type GatewayAsks struct {
 	Ids []string `json:"ids"`
 }
 
+type GatewayCheckState string
+
+const GatewayCheckStateConfirmed GatewayCheckState = "confirmed"
+const GatewayCheckStateOpen GatewayCheckState = "open"
+const GatewayCheckStateRejected GatewayCheckState = "rejected"
+const GatewayCheckStateReported GatewayCheckState = "reported"
+const GatewayCheckStateUnknown GatewayCheckState = "unknown"
+
+type GatewayCheckTally struct {
+	// Confirmed corresponds to the JSON schema field "confirmed".
+	Confirmed int `json:"confirmed"`
+
+	// Total corresponds to the JSON schema field "total".
+	Total int `json:"total"`
+}
+
+type GatewayGarden struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Ids corresponds to the JSON schema field "ids".
+	Ids []string `json:"ids"`
+}
+
+type GatewayGardenSeeds struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []GatewaySeed `json:"seeds"`
+}
+
 type GatewayHello struct {
 	// API corresponds to the JSON schema field "api".
 	API int `json:"api"`
@@ -219,6 +251,29 @@ type GatewayHello struct {
 type GatewayPing struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+}
+
+type GatewayPlotProgress struct {
+	// Blocked corresponds to the JSON schema field "blocked".
+	Blocked int `json:"blocked"`
+
+	// Done corresponds to the JSON schema field "done".
+	Done int `json:"done"`
+
+	// Growing corresponds to the JSON schema field "growing".
+	Growing int `json:"growing"`
+
+	// Parked corresponds to the JSON schema field "parked".
+	Parked int `json:"parked"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready int `json:"ready"`
+
+	// Total corresponds to the JSON schema field "total".
+	Total int `json:"total"`
+
+	// Withered corresponds to the JSON schema field "withered".
+	Withered int `json:"withered"`
 }
 
 type GatewayPong struct {
@@ -241,6 +296,194 @@ type GatewayRefused struct {
 	// Message corresponds to the JSON schema field "message".
 	Message string `json:"message"`
 }
+
+type GatewaySeed struct {
+	// Checks corresponds to the JSON schema field "checks".
+	Checks *GatewayCheckTally `json:"checks,omitempty,omitzero"`
+
+	// Claimed corresponds to the JSON schema field "claimed".
+	Claimed bool `json:"claimed"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// PlotID corresponds to the JSON schema field "plot_id".
+	PlotID *string `json:"plot_id,omitempty,omitzero"`
+
+	// Progress corresponds to the JSON schema field "progress".
+	Progress *GatewayPlotProgress `json:"progress,omitempty,omitzero"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+
+	// Slug corresponds to the JSON schema field "slug".
+	Slug string `json:"slug"`
+
+	// StateChangedAt corresponds to the JSON schema field "state_changed_at".
+	StateChangedAt time.Time `json:"state_changed_at"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status GatewaySeedStatus `json:"status"`
+
+	// Tender corresponds to the JSON schema field "tender".
+	Tender *string `json:"tender,omitempty,omitzero"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+
+	// WaitsFor corresponds to the JSON schema field "waits_for".
+	WaitsFor []string `json:"waits_for"`
+}
+
+type GatewaySeedCheck struct {
+	// From corresponds to the JSON schema field "from".
+	From *string `json:"from,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// State corresponds to the JSON schema field "state".
+	State GatewayCheckState `json:"state"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type GatewaySeedDetail struct {
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// BodyTooLargeBytes corresponds to the JSON schema field "body_too_large_bytes".
+	BodyTooLargeBytes *int `json:"body_too_large_bytes,omitempty,omitzero"`
+
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []GatewaySeedCheck `json:"checks"`
+
+	// Children corresponds to the JSON schema field "children".
+	Children []GatewaySeed `json:"children"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Log corresponds to the JSON schema field "log".
+	Log []GatewaySeedLogEntry `json:"log"`
+
+	// LogTotal corresponds to the JSON schema field "log_total".
+	LogTotal int `json:"log_total"`
+
+	// MaxFrameBytes corresponds to the JSON schema field "max_frame_bytes".
+	MaxFrameBytes *int `json:"max_frame_bytes,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed GatewaySeed `json:"seed"`
+}
+
+type GatewaySeedError struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GatewaySeedGet struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type GatewaySeedLogEntry struct {
+	// Author corresponds to the JSON schema field "author".
+	Author string `json:"author"`
+
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt time.Time `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+}
+
+type GatewaySeedMove struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+
+	// Verb corresponds to the JSON schema field "verb".
+	Verb GatewaySeedVerb `json:"verb"`
+}
+
+type GatewaySeedNoteCommand struct {
+	// Body corresponds to the JSON schema field "body".
+	Body string `json:"body"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type GatewaySeedResult struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
+type GatewaySeedStatus string
+
+const GatewaySeedStatusGrowing GatewaySeedStatus = "growing"
+const GatewaySeedStatusHarvested GatewaySeedStatus = "harvested"
+const GatewaySeedStatusParked GatewaySeedStatus = "parked"
+const GatewaySeedStatusPlanted GatewaySeedStatus = "planted"
+const GatewaySeedStatusUnknown GatewaySeedStatus = "unknown"
+const GatewaySeedStatusWithered GatewaySeedStatus = "withered"
+
+type GatewaySeedVerb string
+
+const GatewaySeedVerbHarvest GatewaySeedVerb = "harvest"
+const GatewaySeedVerbPark GatewaySeedVerb = "park"
+const GatewaySeedVerbReplant GatewaySeedVerb = "replant"
+const GatewaySeedVerbUnknown GatewaySeedVerb = "unknown"
+const GatewaySeedVerbWither GatewaySeedVerb = "wither"
 
 type GatewaySession struct {
 	// Agent corresponds to the JSON schema field "agent".
