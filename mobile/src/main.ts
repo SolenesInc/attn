@@ -444,6 +444,9 @@ const receiveAsks = (
 ): Update.Return<Model, Message> => {
   const homes = model.homes.map((home) => (home.pairing.id === pairingId ? { ...home, asks } : home))
   keepParsed(homes.flatMap((home) => home.asks.flatMap(askMarkdowns)))
+  const listed = new Set(homes.flatMap((home) => home.asks.map((ask) => askKey(home.pairing.id, ask.id))))
+  const ofListed = <V>(record: Readonly<Record<string, V>>) =>
+    Object.fromEntries(Object.entries(record).filter(([key]) => listed.has(key)))
   const wantedImages = new Set<string>()
   const wantedDiagrams = new Set<string>()
   const loads: Array<{ pairingId: string; askId: string; src: string }> = []
@@ -474,7 +477,13 @@ const receiveAsks = (
   const renders = [...wantedDiagrams].filter((code) => !diagrams[code])
   for (const code of renders) diagrams[code] = { status: 'loading' }
   return {
-    model: modifyFields(model, { homes: () => homes, images: () => images, diagrams: () => diagrams }),
+    model: modifyFields(model, {
+      homes: () => homes,
+      images: () => images,
+      diagrams: () => diagrams,
+      drafts: ofListed,
+      answering: ofListed,
+    }),
     commands: [
       ...loads.map((load) => LoadImage(load)),
       ...renders.map((code) => RenderDiagram({ code })),
