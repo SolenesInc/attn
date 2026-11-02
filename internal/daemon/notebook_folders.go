@@ -209,13 +209,13 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 				backoff = min(2*backoff, bridge.RefusedRetryInterval)
 			}
 		}
-		if !d.awaitNotebookFoldersPush(conn, changed, retry) {
+		if !d.awaitNotebookBridgeWake(conn, changed, retry) {
 			return
 		}
 	}
 }
 
-func (d *Daemon) awaitNotebookFoldersPush(conn *bridge.Conn, changed <-chan struct{}, retry stepclock.Timer) bool {
+func (d *Daemon) awaitNotebookBridgeWake(conn *bridge.Conn, changed <-chan struct{}, retry stepclock.Timer) bool {
 	var retried <-chan time.Time
 	if retry != nil {
 		retried = retry.C()

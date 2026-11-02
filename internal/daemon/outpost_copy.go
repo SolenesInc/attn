@@ -67,7 +67,7 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 		notebookChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("notebookStream", func() {
 				d.configureNotebookSync()
-				d.life.Go("notebookReports", func() { d.sendNotebookSyncReports(conn) })
+				d.startNotebookSyncReports(conn)
 				d.serveNotebookSync(conn, incoming)
 			}) {
 				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")

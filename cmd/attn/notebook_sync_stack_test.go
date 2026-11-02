@@ -531,6 +531,7 @@ func TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync(t *testing.T) {
 		}
 		return created.Profile.ID
 	}
+	home.FireTimers(daemon.NotebookStreamRetryTimer)
 	sideID := createProfile("Side")
 	defaultFolder, inner := notebookPath(home), notebookPath(home, "inner")
 	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
@@ -660,6 +661,32 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 			t.Logf("%s: replacement synced replacement.md; delayed old error handled; fresh row and both CLI errors clear; first artifact attach reached home", side)
 		})
 	}
+}
+
+func TestTheNotebookStreamReopensAfterTheOutpostSendsAFolderTheHomeJustDropped(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	first := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
+	second := filepath.Join(home.Dir, "second")
+	writeFileAt(t, filepath.Join(second, "second.md"), "in the second folder")
+	writeFileAt(t, filepath.Join(first, "from-outpost.md"), "the outpost sends this folder's index")
+	awaitHomeFile(t, pair.App, home, notebookPath(home, "from-outpost.md"), "the outpost sends this folder's index", false)
+
+	resume := pair.SSH.PauseInput(pair.Destination)
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", second))
+	writeFileAt(t, filepath.Join(first, "in-flight.md"), "indexed by the outpost before it hears the home dropped its folder")
+	closed := awaitNotebookError(t, pair, "Notebook stream: connection closed")
+	resume()
+	home.FireTimers(daemon.NotebookStreamRetryTimer)
+
+	pair.App = home.App()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	moved := outpostCopyPlacement(outpost, "second", second)
+	writeFileAt(t, filepath.Join(second, "after-reopen.md"), "synced by the reopened stream")
+	awaitOutpostFile(t, pair, filepath.Join(moved, "after-reopen.md"), "synced by the reopened stream", false)
+	t.Logf("an outpost Index for the folder the home dropped closed the stream (%q); the home reopened it on the same bridge, the row returned to in sync, and after-reopen.md reached %s", closed, moved)
 }
 
 func TestNotebookMarkerErrorReachesHomeBeforeOutpostBridgeRegistration(t *testing.T) {

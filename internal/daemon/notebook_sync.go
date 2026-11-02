@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/syncthing/lib/attnsync"
 	syncconfig "github.com/victorarias/syncthing/lib/config"
@@ -94,10 +95,11 @@ type notebookSyncRun struct {
 	conflicts map[string]map[string]struct{}
 	homeState protocol.OutpostNotebook
 	progress  *time.Timer
+	opened    uint64
 }
 
 type notebookSyncStream struct {
-	conn  *bridge.Conn
+	id    uint64
 	error string
 }
 
@@ -112,6 +114,7 @@ type notebookSyncRuntime struct {
 	run            *notebookSyncRun
 	error          string
 	changed        chan struct{}
+	reporting      *bridge.Conn
 	settingState   string
 	settingError   string
 }
@@ -1038,6 +1041,17 @@ func (d *Daemon) outpostNotebookReportLocked(home string) notebookSyncReport {
 	return report
 }
 
+func (d *Daemon) startNotebookSyncReports(conn *bridge.Conn) {
+	r := &d.notebookSync
+	r.mu.Lock()
+	started := r.reporting == conn
+	r.reporting = conn
+	r.mu.Unlock()
+	if !started {
+		d.life.Go("notebookReports", func() { d.sendNotebookSyncReports(conn) })
+	}
+}
+
 func (d *Daemon) sendNotebookSyncReports(conn *bridge.Conn) {
 	for conn.Context().Err() == nil {
 		changed := d.notebookSyncChanges()
@@ -1095,35 +1109,63 @@ func (d *Daemon) serveNotebookSync(conn *bridge.Conn, incoming ssh.NewChannel) {
 	stop := context.AfterFunc(conn.Context(), cancel)
 	defer stop()
 	d.notebookSync.mu.Lock()
-	run.streams[conn.Peer().DaemonID] = notebookSyncStream{conn: conn}
+	id := d.beginNotebookStreamLocked(run, conn.Peer().DaemonID)
 	d.notebookSync.mu.Unlock()
 	stream := conn.Bulk(ctx, channel, requests)
 	if err := run.engine.ServeConn(ctx, stream, notebookDevice(conn.Peer().DaemonID)); err != nil && ctx.Err() == nil {
-		d.notebookStreamError(run, conn, err)
+		d.notebookStreamError(run, conn.Peer().DaemonID, id, err)
 	}
 }
 
-func (d *Daemon) openNotebookSync(conn *bridge.Conn) {
-	pausepoint.At(pausepoint.NotebookStreamOpen)
-	run := d.notebookSyncEngine()
-	if run == nil {
-		return
+const NotebookStreamRetryTimer stepclock.Name = "notebook-stream-retry"
+
+func (d *Daemon) keepNotebookStream(conn *bridge.Conn) {
+	backoff := bridge.ReconnectInterval
+	for conn.Context().Err() == nil {
+		run := d.notebookSyncEngine()
+		if run != nil && d.openNotebookSync(conn, run) != nil {
+			retry := d.clock.NewTimer(NotebookStreamRetryTimer, backoff)
+			backoff = min(2*backoff, bridge.RefusedRetryInterval)
+			if !d.awaitNotebookBridgeWake(conn, nil, retry) {
+				return
+			}
+			continue
+		}
+		changed := d.notebookSyncChanges()
+		if d.notebookSyncEngine() == run && !d.awaitNotebookBridgeWake(conn, changed, nil) {
+			return
+		}
 	}
+}
+
+func (d *Daemon) openNotebookSync(conn *bridge.Conn, run *notebookSyncRun) error {
+	pausepoint.At(pausepoint.NotebookStreamOpen)
 	ctx, cancel := context.WithCancel(run.ctx)
 	defer cancel()
 	stop := context.AfterFunc(conn.Context(), cancel)
 	defer stop()
+	peer := conn.Peer().DaemonID
 	d.notebookSync.mu.Lock()
-	delete(run.remote, conn.Peer().DaemonID)
-	run.streams[conn.Peer().DaemonID] = notebookSyncStream{conn: conn}
+	delete(run.remote, peer)
+	id := d.beginNotebookStreamLocked(run, peer)
 	d.notebookSync.mu.Unlock()
+	d.refreshNotebookRows()
 	channel, requests, err := conn.Open(ctx, notebookChannel, nil)
 	if err == nil {
-		err = run.engine.ServeConn(ctx, conn.Bulk(ctx, channel, requests), notebookDevice(conn.Peer().DaemonID))
+		err = run.engine.ServeConn(ctx, conn.Bulk(ctx, channel, requests), notebookDevice(peer))
 	}
-	if err != nil && ctx.Err() == nil {
-		d.notebookStreamError(run, conn, err)
+	if err == nil || ctx.Err() != nil {
+		return nil
 	}
+	d.notebookStreamError(run, peer, id, err)
+	return err
+}
+
+func (d *Daemon) beginNotebookStreamLocked(run *notebookSyncRun, peer string) uint64 {
+	run.opened++
+	run.streams[peer] = notebookSyncStream{id: run.opened}
+	d.notebookSyncChangedLocked()
+	return run.opened
 }
 
 func (d *Daemon) notebookSyncSettings() (string, string) {
@@ -1434,17 +1476,16 @@ func notebookConflictOriginal(path string) string {
 	return original
 }
 
-func (d *Daemon) notebookStreamError(run *notebookSyncRun, conn *bridge.Conn, err error) {
+func (d *Daemon) notebookStreamError(run *notebookSyncRun, peer string, id uint64, err error) {
 	pausepoint.At(pausepoint.NotebookStreamError)
 	defer pausepoint.At(pausepoint.NotebookStreamErrorHandled)
 	r := &d.notebookSync
 	r.mu.Lock()
-	peer := conn.Peer().DaemonID
-	if r.run != run || run.streams[peer].conn != conn {
+	if r.run != run || run.streams[peer].id != id {
 		r.mu.Unlock()
 		return
 	}
-	run.streams[peer] = notebookSyncStream{conn: conn, error: err.Error()}
+	run.streams[peer] = notebookSyncStream{id: id, error: err.Error()}
 	d.notebookSyncChangedLocked()
 	r.mu.Unlock()
 	d.logf("Notebook stream: %v", err)

@@ -42,6 +42,7 @@ go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingThei
 go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript
 go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
 go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
+go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

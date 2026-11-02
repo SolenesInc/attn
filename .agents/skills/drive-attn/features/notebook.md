@@ -41,7 +41,7 @@ writers never collide. The chief treats the notebook as its home.
 
 ### Triggers
 
-- An outpost's copies sync with the home's folders while Outposts is on (`internal/daemon/notebook_sync.go`). The home pushes the folder list on connect and when a profile's folder, or the set of profiles, changes (`internal/daemon/notebook_folders.go`). When the outpost rejects the list, the Outposts row shows the rejection and the home tries again on its own, every 2 s at first and backing off to every 10 s; the outpost's Notebook stream opens only after it accepts a list.
+- An outpost's copies sync with the home's folders while Outposts is on (`internal/daemon/notebook_sync.go`). The home pushes the folder list on connect and when a profile's folder, or the set of profiles, changes (`internal/daemon/notebook_folders.go`). When the outpost rejects the list, the Outposts row shows the rejection and the home tries again on its own, every 2 s at first and backing off to every 10 s; the outpost's Notebook stream opens only after it accepts a list. When the stream closes while the bridge stays up, such as when one side sends an index for a folder the other just dropped, the Outposts row shows `Notebook stream: connection closed` and the home reopens the stream on the same bridge, every 2 s at first and backing off to every 10 s.
 
 ## Driving it
 
