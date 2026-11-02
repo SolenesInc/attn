@@ -71,7 +71,7 @@ const closeReason = (home: Home, url: string, event: CloseEvent, ready: boolean)
     default:
       return ready
         ? `the connection to ${home.homeName} dropped (close code ${event.code})`
-        : `could not reach ${home.homeName} at ${url} (close code ${event.code}); if you revoked this phone there, forget this pairing`
+        : `could not reach ${home.homeName} at ${url} (close code ${event.code})`
   }
 }
 
