@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import {
   fitHeaderRow,
   type HeaderLevels,
@@ -55,7 +56,22 @@ export function useHeaderFit(
     let disposed = false;
     const observed = new WeakSet<HTMLElement>();
 
-    const apply = (next: HeaderLevels) => setLevels((current) => (sameLevels(current, next) ? current : next));
+    let observing = false;
+    let frame = 0;
+    let pending: HeaderLevels = {};
+    const commit = (next: HeaderLevels) => setLevels((current) => (sameLevels(current, next) ? current : next));
+    const apply = (next: HeaderLevels) => {
+      if (!observing) {
+        commit(next);
+        return;
+      }
+      pending = next;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        flushSync(() => commit(pending));
+      });
+    };
     const fit = () => {
       const style = getComputedStyle(row);
       const available = row.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
@@ -91,11 +107,13 @@ export function useHeaderFit(
       else remeasure();
     });
     fit();
+    observing = true;
     resizes?.observe(row);
     const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver(remeasure);
     mutations?.observe(row, { childList: true, subtree: true, characterData: true });
     return () => {
       disposed = true;
+      cancelAnimationFrame(frame);
       mutations?.disconnect();
       resizes?.disconnect();
     };

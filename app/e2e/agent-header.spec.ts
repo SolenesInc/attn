@@ -2,13 +2,21 @@ import { expect, test, type Page } from '@playwright/test';
 
 const TILES = 4;
 
-async function settled(page: Page) {
-  await page.evaluate(() => window.__HARNESS_READY__);
-  await nextFrames(page);
-}
-
-async function nextFrames(page: Page) {
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+async function fitted(page: Page) {
+  await page.evaluate(async () => {
+    await window.__HARNESS_READY__;
+    await document.fonts.ready;
+    const rows = document.querySelectorAll('.desktop-pane-headline, .desktop-pane-subline');
+    if (rows.length === 0) throw new Error('no agent header rows to wait for');
+    await new Promise<void>((resolve) => {
+      const observer = new ResizeObserver(() => {
+        observer.disconnect();
+        resolve();
+      });
+      for (const row of rows) observer.observe(row);
+    });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
 }
 
 const WIDTHS = [180, 200, 240, 299, 340, 400, 480, 560, 640, 760, 900, 1050, 1200];
@@ -74,13 +82,13 @@ function readHeaders(page: Page): Promise<HeaderReceipt[]> {
 test('agent headers keep the dot, title and signals from 180px to 1200px, in one height, inside their rows', async ({ page }) => {
   await page.setViewportSize({ width: 1200 * TILES + 200, height: 360 });
   await page.goto('/test-harness/?component=AgentHeader');
-  await settled(page);
+  await fitted(page);
   expect(await page.locator('.desktop-pane-header').count()).toBe(TILES);
 
   const customRoleLevels = new Set<string | null>();
   for (const width of WIDTHS) {
     await setTileWidth(page, width);
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await fitted(page);
     const headers = await readHeaders(page);
     const receipt = `${width}px ${JSON.stringify(headers)}`;
     expect(new Set(headers.map((header) => header.height)).size, receipt).toBe(1);
@@ -108,7 +116,7 @@ test('agent headers keep the dot, title and signals from 180px to 1200px, in one
 test('a usage receipt requested for a narrow tile shows the badge and opens beneath it', async ({ page }) => {
   await page.setViewportSize({ width: 180 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=180&usage=release');
-  await settled(page);
+  await fitted(page);
   const badge = page.getByTestId('session-usage-release');
   const receipt = page.locator('.session-usage-popover');
   expect(await badge.isVisible()).toBe(true);
@@ -130,7 +138,7 @@ for (const selection of ['rail', 'spotlight'] as const) {
   test(`inactive agent tiles dim the body and subline and keep signals lit under ${selection}`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(`/test-harness/?component=AgentHeader&selection=${selection}`);
-    await page.evaluate(() => window.__HARNESS_READY__);
+    await fitted(page);
     expect(await page.locator(`.session-terminal-desktop.desktop-selection--${selection}.multi-leaf`).count()).toBe(1);
     expect(await page.locator('.desktop-pane[data-pane-kind="agent"]').count()).toBe(TILES);
     expect(await page.locator('.desktop-pane.active').getAttribute('data-pane-id')).toBe('pane-release');
@@ -191,7 +199,7 @@ for (const selection of ['rail', 'spotlight'] as const) {
 test('a pull request collapsed to its icon still opens its details from the keyboard', async ({ page }) => {
   await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=480');
-  await settled(page);
+  await fitted(page);
   const pane = page.locator('[data-pane-id="pane-release"]');
   expect(await pane.locator('.desktop-pane-piece[data-fit-piece="provenance"]').getAttribute('data-level')).toBe('icon');
   const details = pane.getByRole('button', { name: 'Pull request attn#412 details' });
@@ -204,9 +212,9 @@ test('a pull request collapsed to its icon still opens its details from the keyb
 test('agent headers refit when the app text size changes', async ({ page }) => {
   await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=480');
-  await settled(page);
+  await fitted(page);
   await page.evaluate(() => document.documentElement.style.setProperty('--ui-scale', '1.5'));
-  await nextFrames(page);
+  await fitted(page);
   const headers = await readHeaders(page);
   const receipt = JSON.stringify(headers);
   for (const header of headers) expect(header.overflow, receipt).toEqual([]);
