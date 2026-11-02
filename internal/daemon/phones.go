@@ -25,6 +25,7 @@ func cloudURL() string {
 }
 
 type phonesRuntime struct {
+	configuring sync.Mutex
 	mu          sync.Mutex
 	link        *cloudlink.Link
 	stop        context.CancelFunc
@@ -35,6 +36,8 @@ type phonesRuntime struct {
 const outpostUnlinked = "this daemon is an outpost; phones reach its agents through its home, so turn on phone access there"
 
 func (d *Daemon) configurePhoneAccess() {
+	d.phones.configuring.Lock()
+	defer d.phones.configuring.Unlock()
 	switch {
 	case !d.phoneAccessEnabled():
 		d.stopCloudLink("")

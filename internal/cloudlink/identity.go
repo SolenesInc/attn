@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -88,16 +89,27 @@ func writeFileAtomic(path string, data []byte) error {
 
 func (id Identity) SignPub() ed25519.PublicKey { return id.SignKey.Public().(ed25519.PublicKey) }
 
+type registration struct {
+	HomeID      string `json:"home_id"`
+	HomeSignPub string `json:"home_sign_pub"`
+}
+
+// HomeID is the id Attn Cloud gave this signing key; an id saved for another key does not count.
 func (id Identity) HomeID() string {
 	data, err := os.ReadFile(filepath.Join(id.dir, homeIDFile))
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	var saved registration
+	if json.Unmarshal(data, &saved) != nil || saved.HomeSignPub != b64(id.SignPub()) {
+		return ""
+	}
+	return saved.HomeID
 }
 
 func (id Identity) saveHomeID(homeID string) error {
-	return writeFileAtomic(filepath.Join(id.dir, homeIDFile), []byte(homeID+"\n"))
+	data, _ := json.Marshal(registration{HomeID: homeID, HomeSignPub: b64(id.SignPub())})
+	return writeFileAtomic(filepath.Join(id.dir, homeIDFile), append(data, '\n'))
 }
 
 func KeyID(pub []byte) string {

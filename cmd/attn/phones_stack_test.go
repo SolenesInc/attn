@@ -295,6 +295,31 @@ func TestUnreadableCloudKeysAreShownAndKept(t *testing.T) {
 	}
 }
 
+func TestMovingTheCloudKeysAsideStartsAFreshRegistration(t *testing.T) {
+	t.Parallel()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t)
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	s.Start()
+	app := s.App()
+	setPhoneAccess(t, app, true)
+	first := testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	setPhoneAccess(t, app, false)
+
+	aside := t.TempDir()
+	for _, name := range []string{"cloud_sign_key", "cloud_noise_key"} {
+		if err := os.Rename(filepath.Join(s.Dir, name), filepath.Join(aside, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reconnected := len(app.Log())
+	setPhoneAccess(t, app, true)
+	again := testworld.AwaitSince(app, reconnected, protocol.EventPhonesUpdated, linkConnected)
+	if protocol.Deref(again.Link.HomeID) == "" || protocol.Deref(again.Link.HomeID) == protocol.Deref(first.Link.HomeID) {
+		t.Fatalf("home id after new keys = %q, want a new registration (was %q)", protocol.Deref(again.Link.HomeID), protocol.Deref(first.Link.HomeID))
+	}
+}
+
 func TestPhoneAccessOffHoldsNoConnectionToTheCloud(t *testing.T) {
 	t.Parallel()
 	cloud := testworld.StartCloud(t)
