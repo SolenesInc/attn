@@ -103,6 +103,7 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 		"SSH_AUTH_SOCK=",
 		"ATTN_HEADLESS_TASKS=off",
 		config.AnalyticsIngestURLEnv + "=",
+		config.CloudURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
 	}
 	if w.kit != nil {

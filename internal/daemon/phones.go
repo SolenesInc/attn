@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/cloudlink"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -16,7 +17,7 @@ import (
 const defaultCloudURL = "https://cloud.attn.codes"
 
 func cloudURL() string {
-	if url := strings.TrimSpace(os.Getenv("ATTN_CLOUD_URL")); url != "" {
+	if url := strings.TrimSpace(os.Getenv(config.CloudURLEnv)); url != "" {
 		return strings.TrimRight(url, "/")
 	}
 	return defaultCloudURL
