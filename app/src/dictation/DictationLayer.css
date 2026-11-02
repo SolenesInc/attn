@@ -46,6 +46,14 @@
   white-space: pre-wrap;
 }
 
+.dictation-pill-original {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  opacity: 0.8;
+}
+
 .dictation-pill[data-tone='error'] .dictation-pill-text {
   color: var(--color-warning, #f59e0b);
 }

@@ -3,10 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { afterComposition, missingTargetReason, type Insertion } from './field';
 import { captureBrowserTarget, type BrowserDictationHost } from './browser';
-import { captureTarget, type DictationTarget, type EditTarget, type PasteTarget } from './target';
+import { captureTarget, placeOf, type EditTarget, type PasteTarget, type TargetPlace, type DictationTarget } from './target';
 import type { DictationInteraction } from './settings';
 import type { Refiner } from './refiner';
 import { DictationTextFormat } from '../types/generated';
+
+const PASTE_LOST: Record<PasteTarget['place'], string> = {
+  terminal: 'The terminal closed, restarted or became unreachable, so nothing was pasted.',
+  richEditor: 'The editor or its page changed, so nothing was inserted.',
+};
 
 export type DictationPhase = 'starting' | 'recording' | 'transcribing' | 'refining' | 'settled';
 
@@ -15,7 +20,7 @@ export interface Dictation {
   recording: number | null;
   profileId: string;
   mode: DictationInteraction;
-  target: DictationTarget['kind'];
+  target: TargetPlace;
   phase: DictationPhase;
   listeningAt?: number;
   raw?: string;
@@ -102,7 +107,7 @@ async function insertAtCursor(text: string): Promise<Insertion> {
   const target = captureTarget(document.activeElement);
   if (!target) return 'targetGone';
   try {
-    return target.kind === 'paste' ? target.paste(text) : await target.replace(text);
+    return target.kind === 'paste' ? await target.paste(text) : await target.replace(text);
   } finally {
     target.release();
   }
@@ -110,6 +115,7 @@ async function insertAtCursor(text: string): Promise<Insertion> {
 
 export class DictationController {
   private targets = new Map<string, DictationTarget>();
+  private pasting = new Set<string>();
   private requests = new Map<string, string>();
   private early = new Map<number, NativeUpdate[]>();
   private stops: (() => void)[] = [];
@@ -155,7 +161,7 @@ export class DictationController {
 
   private notice(message: string, extra: Partial<Dictation> = {}) {
     const key = `notice-${++this.sequence}`;
-    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: 'edit', phase: 'settled', rawInField: false, card: null, notice: message, ...extra });
+    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: 'field', phase: 'settled', rawInField: false, card: null, notice: message, ...extra });
     if (!extra.microphoneDenied) setTimeout(() => this.remove(key), NOTICE_MS);
   }
 
@@ -165,23 +171,24 @@ export class DictationController {
     const focused = document.activeElement;
     const target = captureTarget(focused);
     if (!target) { this.notice(missingTargetReason(focused)); return; }
-    const key = this.starting(target.kind);
+    const key = this.starting(placeOf(target));
     this.targets.set(key, target);
     this.record(key);
   }
 
-  private starting(kind: DictationTarget['kind']) {
+  private starting(place: TargetPlace) {
     const key = `dictation-${++this.sequence}`;
-    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: kind, phase: 'starting', rawInField: false, card: null });
+    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: place, phase: 'starting', rawInField: false, card: null });
     return key;
   }
 
   private async beginInBrowser(label: string) {
-    const key = this.starting('edit');
+    const key = this.starting('field');
     const target = await captureBrowserTarget(this.native.browser, label);
     if (!this.find(key)) { if (!('reason' in target)) target.release(); return; }
     if ('reason' in target) { this.remove(key); this.notice(target.reason); return; }
     this.targets.set(key, target);
+    this.patch(key, { target: placeOf(target) });
     this.record(key);
   }
 
@@ -243,7 +250,7 @@ export class DictationController {
       this.patch(dictation.key, { raw, audioMs: update.audioMs, card: 'compare', notice: undefined });
     } else if (target?.kind === 'paste') {
       this.patch(dictation.key, { raw, audioMs: update.audioMs, notice: undefined });
-      target.claimEnter(() => this.choose(dictation.key, raw));
+      if (target.place === 'terminal') target.claimEnter(() => this.choose(dictation.key, raw));
     } else {
       await afterComposition();
       const current = this.targets.get(dictation.key);
@@ -296,7 +303,7 @@ export class DictationController {
 
   private async refined(dictation: Dictation, refined: string) {
     const target = this.targets.get(dictation.key);
-    if (!dictation.card && target?.kind === 'paste') { this.pasteOnce(dictation.key, target, refined, refined); return; }
+    if (!dictation.card && target?.kind === 'paste') { void this.pasteOnce(dictation.key, target, refined, refined); return; }
     if (dictation.card || !dictation.rawInField || target?.kind !== 'edit') { this.patch(dictation.key, { phase: 'settled', refined }); return; }
     if (refined === dictation.raw) { this.remove(dictation.key); return; }
     await afterComposition();
@@ -309,20 +316,22 @@ export class DictationController {
 
   choose(key: string, text: string) {
     const dictation = this.find(key);
-    if (!dictation) return;
+    if (!dictation || this.pasting.has(key)) return;
     const target = dictation.rawInField ? undefined : this.targets.get(key);
-    if (target?.kind === 'paste') this.pasteOnce(key, target, text);
+    if (target?.kind === 'paste') void this.pasteOnce(key, target, text);
     else void this.insertChosen(key, target, text);
   }
 
-  private pasteOnce(key: string, target: PasteTarget, text: string, refined?: string) {
+  private async pasteOnce(key: string, target: PasteTarget, text: string, refined?: string) {
     this.targets.delete(key);
-    target.release();
     const requestId = this.requests.get(key);
     if (requestId) this.context.refiner().cancel(requestId);
     this.requests.delete(key);
-    if (target.paste(text) === 'inserted') { this.remove(key); return; }
-    this.patch(key, { phase: 'settled', card: 'offer', ...(refined === undefined ? {} : { refined }), notice: 'The terminal closed, restarted or became unreachable, so nothing was pasted.' });
+    this.pasting.add(key);
+    const pasted = await Promise.resolve(target.paste(text)).finally(() => this.pasting.delete(key));
+    target.release();
+    if (pasted === 'inserted') { this.remove(key); return; }
+    this.patch(key, { phase: 'settled', card: 'offer', ...(refined === undefined ? {} : { refined }), notice: PASTE_LOST[target.place] });
   }
 
   private async insertChosen(key: string, target: EditTarget | undefined, text: string) {

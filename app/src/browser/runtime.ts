@@ -11,6 +11,7 @@ import {
 } from "@testing-library/dom";
 import { afterComposition, missingTargetReason, TrackedField, type Range } from "../dictation/field";
 import { writableField } from "../utils/textFields";
+import { holdFocus, RichEditorSelection } from "../dictation/richEditor";
 import { installNativeTextUndo } from "../utils/nativeTextUndo";
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
@@ -519,48 +520,50 @@ async function performActions(params: JsonObject): Promise<null> {
   return null;
 }
 
-const dictations = new Map<string, { field: TrackedField; range: Range }>();
+type PageDictation = { kind: "edit"; field: TrackedField; range: Range } | { kind: "paste"; editor: RichEditorSelection };
+
+const dictations = new Map<string, PageDictation>();
 
 function dictationCapture(id: string) {
   if (!document.hasFocus()) return { reason: "Click into the page's text field first, then start dictation." };
   const focused = document.activeElement;
   const element = writableField(focused);
-  if (!element) return { reason: missingTargetReason(focused) };
-  const field = new TrackedField(element);
-  const range = field.track(element.selectionStart ?? element.value.length, element.selectionEnd ?? element.value.length);
-  dictations.set(id, { field, range });
-  return { id };
+  if (element) {
+    const field = new TrackedField(element);
+    const range = field.track(element.selectionStart ?? element.value.length, element.selectionEnd ?? element.value.length);
+    dictations.set(id, { kind: "edit", field, range });
+    return { id, kind: "edit" };
+  }
+  const editor = RichEditorSelection.capture(focused);
+  if (!editor) return { reason: missingTargetReason(focused) };
+  dictations.set(id, { kind: "paste", editor });
+  return { id, kind: "paste" };
 }
 
 async function dictationReplace(id: string, text: string) {
   await afterComposition();
   const dictation = dictations.get(id);
-  return dictation ? dictation.field.replace(dictation.range, text) : "targetGone";
+  if (!dictation) return "targetGone";
+  return dictation.kind === "edit" ? dictation.field.replace(dictation.range, text) : dictation.editor.insert(text);
 }
 
 function dictationRelease(id: string) {
   const dictation = dictations.get(id);
-  dictation?.field.release(dictation.range);
+  if (dictation?.kind === "edit") dictation.field.release(dictation.range);
   dictations.delete(id);
   return null;
 }
 
-const focusSnapshots = new Map<string, { element: Element | null; start: number | null; end: number | null }>();
+const focusHolds = new Map<string, () => void>();
 
 function focusSnapshot(id: string) {
-  const element = document.hasFocus() ? document.activeElement : null;
-  const field = writableField(element);
-  focusSnapshots.set(id, { element, start: field?.selectionStart ?? null, end: field?.selectionEnd ?? null });
+  focusHolds.set(id, holdFocus(document));
   return null;
 }
 
 function focusRestore(id: string) {
-  const snapshot = focusSnapshots.get(id);
-  focusSnapshots.delete(id);
-  if (!(snapshot?.element instanceof HTMLElement) || !snapshot.element.isConnected || document.activeElement === snapshot.element) return null;
-  snapshot.element.focus({ preventScroll: true });
-  const field = writableField(snapshot.element);
-  if (field && snapshot.start !== null && snapshot.end !== null) field.setSelectionRange(snapshot.start, snapshot.end);
+  focusHolds.get(id)?.();
+  focusHolds.delete(id);
   return null;
 }
 

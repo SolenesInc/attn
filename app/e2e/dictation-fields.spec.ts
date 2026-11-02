@@ -269,3 +269,55 @@ test.describe('browser page fields', () => {
     await expect(message(page)).toHaveValue('');
   });
 });
+
+test.describe('rich web editors', () => {
+  const rich = (page: Page) => page.getByRole('textbox', { name: 'Rich' });
+
+  async function dictateInRich(page: Page, place: string | undefined, raw: string) {
+    await rich(page).focus();
+    await rich(page).evaluate(element => {
+      const text = element.firstChild!;
+      getSelection()!.setBaseAndExtent(text, 6, text, 6);
+    });
+    const before = await page.evaluate(() => window.__dictation.started.length);
+    await page.evaluate(label => window.__dictation.press(label), place);
+    await expect.poll(() => page.evaluate(() => window.__dictation.started.length)).toBe(before + 1);
+    await transcribe(page, before + 1, raw);
+    await expect(page.getByTestId('dictation-pill-original')).toHaveText(raw);
+    await expect(rich(page)).toHaveText('Hello world');
+    return refineRequest(page, before);
+  }
+
+  for (const [where, place] of [['a browser page', 'browser-tile'], ['the app', undefined]] as const) {
+    test(`in ${where}, Insert at cursor waits for refined text and inserts it once at the captured caret as an ordinary edit, leaving focus where the person moved it`, async ({ page }) => {
+      await open(page);
+      const request = await dictateInRich(page, place, 'um big');
+      await typeInto(page, search(page), 'elsewhere');
+      await answer(page, request.requestId, { ok: true, text: 'big ' });
+      await expect(rich(page)).toHaveText('Hello big world');
+      await expect(state(page, 'rich-inputs')).toHaveText('["insertText"]');
+      await expect(search(page)).toBeFocused();
+      await expect(page.getByTestId('dictation-layer')).toHaveCount(0);
+    });
+  }
+
+  test('Use original inserts the transcript once, cancels the refinement, and the late answer is ignored', async ({ page }) => {
+    await open(page);
+    const request = await dictateInRich(page, 'browser-tile', 'big');
+    await page.getByTestId('dictation-use-original').click();
+    await expect(rich(page)).toHaveText('Hello bigworld');
+    expect(await page.evaluate(() => window.__dictation.refineCancels)).toEqual([request.requestId]);
+    await answer(page, request.requestId, { ok: true, text: 'large ' });
+    await expect(rich(page)).toHaveText('Hello bigworld');
+    await expect(state(page, 'rich-inputs')).toHaveText('["insertText"]');
+  });
+
+  test('an editor that is gone when the refined text arrives gets an offer, and nothing is inserted', async ({ page }) => {
+    await open(page);
+    const removed = await dictateInRich(page, 'browser-tile', 'gone');
+    await page.getByRole('button', { name: 'Remove rich editor' }).click();
+    await answer(page, removed.requestId, { ok: true, text: 'Gone. ' });
+    await expect(page.getByTestId('dictation-card')).toContainText('nothing was inserted');
+    await expect(rich(page)).toHaveCount(0);
+  });
+});

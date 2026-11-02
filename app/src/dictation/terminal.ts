@@ -1,5 +1,5 @@
 import { DictationTextFormat } from '../types/generated';
-import type { PasteTarget } from './target';
+import type { TerminalPaste } from './target';
 
 export interface TerminalBinding {
   runtimeId: string;
@@ -40,7 +40,7 @@ export function consumeDictationEnter(element: Element, event: KeyboardEvent) {
   return true;
 }
 
-export function terminalTarget(focused: Element | null): PasteTarget | null {
+export function terminalTarget(focused: Element | null): TerminalPaste | null {
   const element = focused?.closest('.ghostty-terminal');
   const input = element ? terminals.get(element) : undefined;
   const binding = input?.binding();
@@ -53,6 +53,7 @@ export function terminalTarget(focused: Element | null): PasteTarget | null {
   };
   return {
     kind: 'paste',
+    place: 'terminal',
     format: DictationTextFormat.Plain,
     paste: text => element.isConnected && terminals.get(element) === input && input.paste(text, binding) ? 'inserted' : 'targetGone',
     claimEnter: onEnter => {

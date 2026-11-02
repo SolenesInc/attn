@@ -78,6 +78,8 @@ export function DictationFieldsHarness({ onReady }: HarnessProps) {
   const [generation, setGeneration] = useState(0);
   const [sent, setSent] = useState<string[]>([]);
   const [panel, setPanel] = useState(false);
+  const [rich, setRich] = useState(true);
+  const [richInputs, setRichInputs] = useState<string[]>([]);
   useEffect(() => {
     probe.setInteraction = setInteraction;
     probe.setProfile = setProfileId;
@@ -89,6 +91,9 @@ export function DictationFieldsHarness({ onReady }: HarnessProps) {
       onChange={event => { setMessage(event.target.value); setMessageChanges(count => count + 1); }} />
     <input aria-label="Search" value={search} onChange={event => setSearch(event.target.value)} />
     <input aria-label="Read-only" readOnly value="fixed" />
+    {rich && <div aria-label="Rich" role="textbox" contentEditable suppressContentEditableWarning
+      onInput={event => { const inputType = (event.nativeEvent as InputEvent).inputType; setRichInputs(previous => [...previous, inputType]); }}>Hello world</div>}
+    <button type="button" onClick={() => setRich(false)}>Remove rich editor</button>
     <button type="button" onClick={() => { setSent(previous => [...previous, message]); setMessage(''); }}>Send</button>
     <button type="button" onClick={() => setGeneration(value => value + 1)}>Replace message field</button>
     <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => setPanel(true)}>Open panel</button>
@@ -97,6 +102,7 @@ export function DictationFieldsHarness({ onReady }: HarnessProps) {
     <output data-testid="search-state">{search}</output>
     <output data-testid="message-changes">{messageChanges}</output>
     <output data-testid="sent">{JSON.stringify(sent)}</output>
+    <output data-testid="rich-inputs">{JSON.stringify(richInputs)}</output>
     <WindowDictation enabled profileId={profileId} interaction={interaction} refiner={refiner} native={native} />
   </main>;
 }

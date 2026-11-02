@@ -1,6 +1,6 @@
 import { DictationTextFormat } from '../types/generated';
 import type { Insertion } from './field';
-import type { EditTarget } from './target';
+import type { EditTarget, RichEditorPaste } from './target';
 
 export type BrowserDictationAction = 'capture' | 'replace' | 'release';
 
@@ -8,8 +8,8 @@ export type BrowserDictationHost = (label: string, action: BrowserDictationActio
 
 const INSERTIONS = new Set<Insertion>(['inserted', 'targetGone', 'rangeEdited', 'refused']);
 
-export async function captureBrowserTarget(host: BrowserDictationHost, label: string): Promise<EditTarget | { reason: string }> {
-  let captured: { id?: string; reason?: string } | null;
+export async function captureBrowserTarget(host: BrowserDictationHost, label: string): Promise<EditTarget | RichEditorPaste | { reason: string }> {
+  let captured: { id?: string; kind?: 'edit' | 'paste'; reason?: string } | null;
   try {
     captured = JSON.parse(await host(label, 'capture'));
   } catch (error) {
@@ -17,13 +17,19 @@ export async function captureBrowserTarget(host: BrowserDictationHost, label: st
   }
   const id = captured?.id;
   if (!id) return { reason: captured?.reason ?? 'The browser page has no text field focused.' };
-  return {
-    kind: 'edit',
-    format: DictationTextFormat.Plain,
-    replace: text => host(label, 'replace', id, text).then(raw => {
-      const outcome = JSON.parse(raw) as Insertion;
-      return INSERTIONS.has(outcome) ? outcome : 'targetGone';
-    }, () => 'targetGone' as const),
-    release: () => { void host(label, 'release', id).catch(() => undefined); },
-  };
+  const replace = (text: string) => host(label, 'replace', id, text).then(raw => {
+    const outcome = JSON.parse(raw) as Insertion;
+    return INSERTIONS.has(outcome) ? outcome : 'targetGone';
+  }, () => 'targetGone' as const);
+  const release = () => { void host(label, 'release', id).catch(() => undefined); };
+  if (captured?.kind === 'paste') {
+    return {
+      kind: 'paste',
+      place: 'richEditor',
+      format: DictationTextFormat.Plain,
+      paste: text => replace(text).then(outcome => outcome === 'inserted' ? 'inserted' : 'targetGone'),
+      release,
+    };
+  }
+  return { kind: 'edit', format: DictationTextFormat.Plain, replace, release };
 }
