@@ -522,6 +522,7 @@ async function performActions(params: JsonObject): Promise<null> {
 const dictations = new Map<string, { field: TrackedField; range: Range }>();
 
 function dictationCapture(id: string) {
+  if (!document.hasFocus()) return { reason: "Click into the page's text field first, then start dictation." };
   const focused = document.activeElement;
   const element = writableField(focused);
   if (!element) return { reason: missingTargetReason(focused) };

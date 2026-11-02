@@ -101,7 +101,7 @@ Preconditions:
 - **Profiles**: the tile opens on a desktop of the caller's profile, and `--session` targets a session's desktop in its own profile.
 - **Performance and idle cost**: a hidden or covered browser tile hides its native view. A callout over the tile hides the native view until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
 - **Harnesses**: every harness drives the browser with the same `attn browser` verbs and reads the same reference.
-- **Keyboard and native input**: the page is a native view. Once a click puts focus in the page, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu.
+- **Keyboard and native input**: the page is a native view. Once a click puts focus in the page, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu. ⌘Z and ⇧⌘Z undo and redo in the page's text fields through the browser runtime, as in attn's own fields, because attn's Edit menu has no Undo item.
 
 ## Tests
 

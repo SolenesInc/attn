@@ -200,7 +200,7 @@ fn isolated_initialization_script() -> String {
     }}
   }}, true);
   document.addEventListener('focusin', (event) => {{
-    if (event.target instanceof HTMLIFrameElement || event.target instanceof HTMLFrameElement) return;
+    if (!event.isTrusted || event.target instanceof HTMLIFrameElement || event.target instanceof HTMLFrameElement) return;
     window.webkit?.messageHandlers?.attnBrowserFrame?.postMessage(null);
   }}, true);
   let lastLocation = location.href;
@@ -419,6 +419,10 @@ pub fn browser_host_unmount(
     browser_alerts::remove(&label);
     if let Some(webview) = app.get_webview(&label) {
         let persist_error = persist_cookie_jar(&app, &webview).err();
+        let forgotten = label.clone();
+        let _ = on_main_thread(&webview, move || {
+            dictation_frames::forget_webview(&forgotten)
+        });
         let close_error = webview
             .close()
             .err()
@@ -1565,6 +1569,7 @@ mod dictation_frames {
 
 #[cfg(not(target_os = "macos"))]
 mod dictation_frames {
+    pub fn forget_webview(_label: &str) {}
     pub fn bind(_label: &str, _id: &str) {}
     pub fn release(_label: &str, _id: &str) {}
 }
