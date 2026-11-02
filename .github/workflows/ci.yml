@@ -79,6 +79,8 @@ jobs:
               - 'app/playwright.config.ts'
               - 'app/tsconfig*.json'
               - 'app/vite.config.ts'
+              - 'app/vite.browser-runtime.config.ts'
+              - 'app/src-tauri/generated/**'
               - 'app/lint/**'
               - '.oxlintrc.json'
               - 'app/pnpm-workspace.yaml'
@@ -433,6 +435,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Check the committed browser runtime
+        working-directory: .
+        run: make check-browser-runtime
 
       - name: Type check
         run: pnpm run build

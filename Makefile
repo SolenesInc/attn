@@ -216,7 +216,7 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: check-go check-frontend
+.PHONY: check-go check-frontend check-browser-runtime
 check-go: lint-go
 	go vet ./...
 
@@ -237,8 +237,15 @@ lint-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run lint
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
-check-frontend: lint-frontend
+check-frontend: lint-frontend check-browser-runtime
 	cd app && pnpm exec tsrs --noEmit
+
+check-browser-runtime: $(APP_NODE_MODULES)
+	cd app && pnpm run build:browser-runtime
+	@git diff --quiet -- app/src-tauri/generated/browser-runtime.js || { \
+		echo "app/src-tauri/generated/browser-runtime.js differs from a fresh build of its sources. Commit the file this check just rebuilt." >&2; \
+		exit 1; \
+	}
 
 test-e2e: $(APP_NODE_MODULES)
 	cd app && pnpm run e2e
