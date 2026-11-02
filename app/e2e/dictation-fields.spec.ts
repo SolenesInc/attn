@@ -200,3 +200,46 @@ test('a second dictation records while the first still refines, and each refinem
   await expect(message(page)).toHaveValue('Alpha 1. | Beta 2.');
   await expect(state(page, 'message-state')).toHaveText('Alpha 1. | Beta 2.');
 });
+
+test.describe('browser page fields', () => {
+  test('a press in a browser tile captures the page’s focused field through the browser host, inserts raw text and then refines it there', async ({ page }) => {
+    await open(page);
+    await typeInto(page, search(page), 'find ');
+    await page.evaluate(() => window.__dictation.press('browser-tile'));
+    await expect.poll(() => page.evaluate(() => window.__dictation.started.length)).toBe(1);
+    await page.evaluate(() => window.__dictation.update({ kind: 'listening', recording: 1, at: Date.now() }));
+    await transcribe(page, 1, 'um open tickets');
+    await expect(search(page)).toHaveValue('find um open tickets');
+    await expect(state(page, 'search-state')).toHaveText('find um open tickets');
+    const request = await refineRequest(page, 0);
+    expect(request.format).toBe('plain');
+    await answer(page, request.requestId, { ok: true, text: 'open tickets' });
+    await expect(search(page)).toHaveValue('find open tickets');
+    await expect(page.getByTestId('dictation-layer')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__dictation.browserCalls)).toEqual([
+      { label: 'browser-tile', action: 'capture' },
+      { label: 'browser-tile', action: 'replace' },
+      { label: 'browser-tile', action: 'replace' },
+      { label: 'browser-tile', action: 'release' },
+    ]);
+  });
+
+  test('a browser page with no writable field focused explains why and does not record', async ({ page }) => {
+    await open(page);
+    await page.getByRole('textbox', { name: 'Read-only' }).focus();
+    await page.evaluate(() => window.__dictation.press('browser-tile'));
+    await expect(page.getByTestId('dictation-pill')).toHaveText(/read-only/);
+    expect(await page.evaluate(() => window.__dictation.started)).toEqual([]);
+  });
+
+  test('a page that navigated or replaced its frame gets an offer instead of an insert', async ({ page }) => {
+    await open(page);
+    await message(page).focus();
+    await page.evaluate(() => window.__dictation.press('browser-tile'));
+    await expect.poll(() => page.evaluate(() => window.__dictation.started.length)).toBe(1);
+    await page.evaluate(() => { window.__dictation.browserGone = true; });
+    await transcribe(page, 1, 'lost page');
+    await expect(page.getByTestId('dictation-card')).toContainText('nothing was inserted');
+    await expect(message(page)).toHaveValue('');
+  });
+});

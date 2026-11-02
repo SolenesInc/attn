@@ -1176,6 +1176,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
             browser_host::browser_host_control,
+            browser_host::browser_host_dictation,
             browser_host::browser_host_clear_focus,
             browser_host::browser_host_claim_focus,
             browser_host::browser_host_focus_state,

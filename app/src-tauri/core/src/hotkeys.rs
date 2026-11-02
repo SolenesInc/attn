@@ -342,15 +342,22 @@ pub fn install(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+pub fn focused_browser_in<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window: Option<&str>,
+) -> Option<String> {
+    crate::browser_host::focused_browser_label().filter(|label| {
+        app.get_webview(label)
+            .is_some_and(|webview| Some(webview.window().label()) == window)
+    })
+}
+
 fn dispatch(app: &AppHandle, action: Action) {
     match action {
         Action::QuickCapture => crate::quick_capture::show(app),
         Action::Dictation => {
             let window = key_window_label(app);
-            let browser = crate::browser_host::focused_browser_label().filter(|label| {
-                app.get_webview(label)
-                    .is_some_and(|webview| Some(webview.window().label()) == window.as_deref())
-            });
+            let browser = focused_browser_in(app, window.as_deref());
             crate::dictation::press(app, window.clone(), browser.clone());
             let press = Press {
                 action,

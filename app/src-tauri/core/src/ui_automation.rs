@@ -1084,7 +1084,8 @@ fn hotkey_request<R: Runtime>(
             .ok_or("hotkey_press needs the window whose Dictation press to simulate")?
             .to_string();
         hotkeys::on_main(app, move |app| {
-            crate::dictation::press(app, Some(window), None);
+            let browser = hotkeys::focused_browser_in(app, Some(&window));
+            crate::dictation::press(app, Some(window), browser);
             Ok(())
         })?;
     }

@@ -9,6 +9,8 @@ import {
   queryAllByText,
   queryAllByTitle,
 } from "@testing-library/dom";
+import { afterComposition, missingTargetReason, TrackedField, type Range } from "../dictation/field";
+import { writableField } from "../utils/textFields";
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
 const SHADOW_KEY = "shadow-6066-11e4-a52e-4f735466cecf";
@@ -516,6 +518,31 @@ async function performActions(params: JsonObject): Promise<null> {
   return null;
 }
 
+const dictations = new Map<string, { field: TrackedField; range: Range }>();
+
+function dictationCapture(id: string) {
+  const focused = document.activeElement;
+  const element = writableField(focused);
+  if (!element) return { reason: missingTargetReason(focused) };
+  const field = new TrackedField(element);
+  const range = field.track(element.selectionStart ?? element.value.length, element.selectionEnd ?? element.value.length);
+  dictations.set(id, { field, range });
+  return { id };
+}
+
+async function dictationReplace(id: string, text: string) {
+  await afterComposition();
+  const dictation = dictations.get(id);
+  return dictation ? dictation.field.replace(dictation.range, text) : "targetGone";
+}
+
+function dictationRelease(id: string) {
+  const dictation = dictations.get(id);
+  dictation?.field.release(dictation.range);
+  dictations.delete(id);
+  return null;
+}
+
 function execute(action: string, params: JsonObject): unknown | Promise<unknown> {
   switch (action) {
     case "snapshot": return snapshot();
@@ -644,6 +671,9 @@ function execute(action: string, params: JsonObject): unknown | Promise<unknown>
       currentDocument();
       return null;
     }
+    case "dictation_capture": return dictationCapture(stringParam(params, "id"));
+    case "dictation_replace": return dictationReplace(stringParam(params, "id"), stringParam(params, "text", false));
+    case "dictation_release": return dictationRelease(stringParam(params, "id"));
     case "switch_to_parent_frame": frameWindow = frameWindow.parent || window; currentDocument(); return null;
     default: return error(`unsupported page action: ${action}`);
   }

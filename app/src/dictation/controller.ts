@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { afterComposition, missingTargetReason, type Insertion } from './field';
+import { captureBrowserTarget, type BrowserDictationHost } from './browser';
 import { captureTarget, type DictationTarget, type EditTarget, type PasteTarget } from './target';
 import type { DictationInteraction } from './settings';
 import type { Refiner } from './refiner';
@@ -48,6 +49,10 @@ export type NativeUpdate =
   | { kind: 'failed'; recording: number; message: string }
   | { kind: 'canceled'; recording: number };
 
+export interface DictationRequest {
+  browser: string | null;
+}
+
 export const DICTATION_EVENT = 'dictation';
 export const DICTATION_REQUEST_EVENT = 'dictation-request';
 const NOTICE_MS = 4000;
@@ -67,7 +72,8 @@ export interface NativeDictation {
   start(): Promise<{ recording: number }>;
   stop(recording: number): Promise<unknown>;
   cancel(recording: number | null): Promise<unknown>;
-  subscribe(onRequest: () => void, onUpdate: (update: NativeUpdate) => void): () => void;
+  subscribe(onRequest: (request: DictationRequest) => void, onUpdate: (update: NativeUpdate) => void): () => void;
+  browser: BrowserDictationHost;
   openMicrophoneSettings(): void;
 }
 
@@ -78,10 +84,11 @@ export const tauriDictation: NativeDictation = {
   stop: recording => invoke('dictation_stop', { recording }),
   cancel: recording => invoke('dictation_cancel', { recording }),
   subscribe(onRequest, onUpdate) {
-    const request = listen(DICTATION_REQUEST_EVENT, () => onRequest());
+    const request = listen<DictationRequest>(DICTATION_REQUEST_EVENT, ({ payload }) => onRequest({ browser: payload?.browser ?? null }));
     const updates = listen<NativeUpdate>(DICTATION_EVENT, ({ payload }) => onUpdate(payload));
     return () => { void request.then(stop => stop()); void updates.then(stop => stop()); };
   },
+  browser: (label, action, id, text) => invoke<string>('browser_host_dictation', { label, action, id, text }),
   openMicrophoneSettings: () => { void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(MICROPHONE_SETTINGS)); },
 };
 
@@ -111,7 +118,7 @@ export class DictationController {
   constructor(private readonly context: DictationContext, private readonly native: NativeDictation = tauriDictation) {}
 
   start() {
-    this.stops.push(this.native.subscribe(() => this.begin(), update => this.receive(update)));
+    this.stops.push(this.native.subscribe(request => this.begin(request), update => this.receive(update)));
     void this.native.cancel(null).catch(() => undefined);
   }
 
@@ -152,14 +159,33 @@ export class DictationController {
     if (!extra.microphoneDenied) setTimeout(() => this.remove(key), NOTICE_MS);
   }
 
-  begin() {
+  begin(request: DictationRequest = { browser: null }) {
     if (useDictationStore.getState().dictations.some(item => item.phase === 'starting' || item.phase === 'recording')) return;
+    if (request.browser) { void this.beginInBrowser(request.browser); return; }
     const focused = document.activeElement;
     const target = captureTarget(focused);
     if (!target) { this.notice(missingTargetReason(focused)); return; }
-    const key = `dictation-${++this.sequence}`;
+    const key = this.starting(target.kind);
     this.targets.set(key, target);
-    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: target.kind, phase: 'starting', rawInField: false, card: null });
+    this.record(key);
+  }
+
+  private starting(kind: DictationTarget['kind']) {
+    const key = `dictation-${++this.sequence}`;
+    this.add({ key, recording: null, profileId: this.context.profileId(), mode: this.context.interaction(), target: kind, phase: 'starting', rawInField: false, card: null });
+    return key;
+  }
+
+  private async beginInBrowser(label: string) {
+    const key = this.starting('edit');
+    const target = await captureBrowserTarget(this.native.browser, label);
+    if (!this.find(key)) { if (!('reason' in target)) target.release(); return; }
+    if ('reason' in target) { this.remove(key); this.notice(target.reason); return; }
+    this.targets.set(key, target);
+    this.record(key);
+  }
+
+  private record(key: string) {
     this.native.start().then(({ recording }) => {
       const updates = this.early.get(recording) ?? [];
       this.early.delete(recording);

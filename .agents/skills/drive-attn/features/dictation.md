@@ -11,9 +11,9 @@ the daemon asks a harness's light model, with tools off, to fix punctuation,
 fillers and explicit self-corrections without changing what was said. The
 original stays available. The dictation shortcut (Control+Shift+Space by
 default) starts and stops a recording at the cursor in an attn window: an input or
-textarea in the main window or Quick Capture, a markdown editor, or a terminal.
-The app owns the microphone only while recording. Browser pages come in a later
-slice of the dictation plan.
+textarea in the main window, Quick Capture or a browser tile's page (in any of
+its frames), a markdown editor, or a terminal. The app owns the microphone only
+while recording.
 
 ## Sub-features
 
@@ -25,9 +25,10 @@ slice of the dictation plan.
 - `dictation-refine-limit`: each refinement must answer within 15 s plus a quarter of the recording's duration, or it fails naming both and the original is kept.
 - `dictation-refine-cancel`: the app cancels a pending refinement, or closes its connection, and the harness process stops.
 - `dictation-refine-harness`: the `dictation.refinement_agent` setting picks Claude (the default) or Codex. Refinement uses that harness's light model and respects `headless_tasks.enabled`.
-- `dictation-record`: the shortcut toggles a recording for the focused text field, markdown editor or terminal; the pill shows Starting the microphone…, Listening with a clock, Transcribing… and Refining…, with Stop and Cancel while recording; Escape cancels too, before any other Escape handler. A recording keeps going when the person switches windows or leaves attn; while it records, the shortcut works in every app, so it stops from anywhere. Without a writable target the pill says why and nothing records.
+- `dictation-record`: the shortcut toggles a recording for the focused text field, browser page field, markdown editor or terminal; the pill shows Starting the microphone…, Listening with a clock, Transcribing… and Refining…, with Stop and Cancel while recording; Escape cancels too, before any other Escape handler. A recording keeps going when the person switches windows or leaves attn; while it records, the shortcut works in every app, so it stops from anywhere. Without a writable target the pill says why and nothing records.
 - `dictation-microphone`: the first recording asks macOS for microphone access. When access is off, the pill names it and offers Open Privacy Settings. A microphone that changes or disconnects mid-recording ends the recording and transcribes what was recorded.
 - `dictation-insert`: Insert at cursor (setting `dictation.interaction` = `insert_at_cursor`, the default) types the transcript where the recording started, through the field's own editing, then replaces only that text with the refined version as its own undo step. Edits elsewhere, the caret and the focused field are kept. Editing, deleting or undoing the dictated text turns the refined version into an offer card. Markdown editors do the same through their own history, and ask for markdown-aware refinement.
+- `dictation-browser`: in a browser tile, the press captures the field focused in the page or in one of its frames, and the same two interactions apply there through the page's own editing. A page that navigated or replaced the frame gets the offer card instead.
 - `dictation-terminal`: in a terminal, Insert at cursor waits for the refined text and pastes it once through the terminal's ordinary paste, bracketed when the program enabled bracketed paste. While it waits, the pill offers Paste original, and Enter in that terminal pastes the original instead of reaching the program. Enter anywhere else keeps its meaning. Nothing is pasted when the terminal's runtime was replaced, exited or became unreachable before the paste; the card offers the text instead. No submit key is added, and a multiline paste without bracketed paste can still run shell lines, as any paste does.
 - `dictation-compare`: Compare first (`compare_first`) shows the original and the refined text with their differences, and inserts only the version chosen.
 - `dictation-offer`: a card with Use original / Use refined (or Insert at cursor), Copy and Discard, shown when the field changed, was replaced or closed before the text could go in.
@@ -52,7 +53,7 @@ slice of the dictation plan.
 - An app that starts with `dictation_enabled` on starts the helper and prepares the model (`app/src/dictation/speechHelper.ts`, `useSpeechHelperLifecycle`).
 - When the app exits, it closes the helper's stdin and waits for the helper to exit (`app/src-tauri/core/src/speech.rs`, `shutdown`).
 - The trusted app's `dictation_refine` and `dictation_refine_cancel` WebSocket commands, answered by `dictation_refine_result` (`internal/protocol/schema/main.tsp`, `internal/daemon/dictation.go`). The main window sends them for its own fields and relays them for Quick Capture (`app/src/dictation/refiner.ts`). The refinement prompt is the `dictation-refiner` recipient (`internal/prompts/dictation.go`).
-- The native recorder (`app/src-tauri/core/src/dictation.rs`): a press while idle asks the key window for its target (`dictation-request`); the window starts the recording (`dictation_start`); a press while recording stops it natively. Updates reach the owning window as the `dictation` event: listening, stopped, transcript (with its timeline), failed, canceled.
+- The native recorder (`app/src-tauri/core/src/dictation.rs`): a press while idle asks the key window for its target (`dictation-request`); the window starts the recording (`dictation_start`); a press while recording stops it natively. Updates reach the owning window as the `dictation` event: listening, stopped, transcript (with its timeline), failed, canceled. When the press came from a browser tile, the main window captures and edits the page field through `browser_host_dictation` (`app/src-tauri/core/src/browser_host.rs`), which runs the browser runtime's dictation actions in the isolated world of the frame that last took focus.
 
 ## Driving it
 
@@ -104,7 +105,7 @@ Codex reads its login from the scratch tool home, so copy the credential in. Cla
 ## Tests
 
 - App: `app/src/App.dictationSetup.test.tsx`.
-- Fields: `app/e2e/dictation-fields.spec.ts` drives real controlled fields in WebKit with fake native and refinement ports (`app/test-harness/harnesses/DictationFieldsHarness.tsx`).
+- Fields: `app/e2e/dictation-fields.spec.ts` drives real controlled fields in WebKit with fake native and refinement ports (`app/test-harness/harnesses/DictationFieldsHarness.tsx`), and browser page fields through the browser runtime's dictation actions behind a fake browser host.
 - Editors and terminals: `app/e2e/dictation-targets.spec.ts` drives a real markdown editor and a real terminal pane over the mock PTY, and asserts the exact bytes written (`app/test-harness/harnesses/DictationTargetsHarness.tsx`).
 - Helper: `cargo test --manifest-path app/speech/Cargo.toml` (the stdio protocol before prepare) and `scripts/verify-speech-helper.py check` (download, resume, verification, dictation, cancel, crash and lease exit against the real model).
 - Wire: `internal/daemon/dictation_wire_test.go` (refinement).

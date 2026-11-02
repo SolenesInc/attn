@@ -5,9 +5,12 @@ import type { RefineOutcome, RefineRequest, Refiner } from '../../src/dictation/
 import type { DictationInteraction } from '../../src/dictation/settings';
 import { useEscapeStack } from '../../src/hooks/useEscapeStack';
 import type { HarnessProps } from '../types';
+import '../../src/browser/runtime';
 
 export interface DictationProbe {
-  press(): void;
+  press(browser?: string): void;
+  browserCalls: { label: string; action: string }[];
+  browserGone: boolean;
   update(update: NativeUpdate): void;
   started: number[];
   stopped: number[];
@@ -25,12 +28,14 @@ declare global {
 }
 
 export function createProbe() {
-  let onRequest = () => {};
+  let onRequest: (request: { browser: string | null }) => void = () => {};
+  let browserIds = 0;
   let onUpdate: (update: NativeUpdate) => void = () => {};
   let next = 0;
   const answers = new Map<string, (outcome: RefineOutcome) => void>();
   const probe: DictationProbe = {
-    press: () => onRequest(),
+    press: browser => onRequest({ browser: browser ?? null }),
+    browserCalls: [], browserGone: false,
     update: update => onUpdate(update),
     started: [], stopped: [], canceled: [], refines: [], refineCancels: [],
     answer: (requestId, outcome) => { answers.get(requestId)?.(outcome); answers.delete(requestId); },
@@ -44,6 +49,12 @@ export function createProbe() {
     cancel: async recording => { probe.canceled.push(recording); },
     subscribe(request, update) { onRequest = request; onUpdate = update; return () => {}; },
     openMicrophoneSettings: () => {},
+    browser: async (label, action, id, text) => {
+      probe.browserCalls.push({ label, action });
+      if (probe.browserGone) throw new Error('frame not found');
+      const value = await window.__attnBrowser!.execute(`dictation_${action}`, { id: id ?? `page-${++browserIds}`, text });
+      return JSON.stringify(value);
+    },
   };
   const refiner: Refiner = {
     refine: request => new Promise(resolve => { probe.refines.push(request); answers.set(request.requestId, resolve); }),
