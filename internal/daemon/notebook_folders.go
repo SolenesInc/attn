@@ -23,6 +23,7 @@ type notebookFolder struct {
 	HomePath string
 	Profiles []string
 	Nested   string
+	Excludes []string
 }
 
 type profileNotebook struct {
@@ -71,10 +72,15 @@ func notebookFoldersOf(home string, notebooks []profileNotebook) []notebookFolde
 		if folder := byPath[n.inner.path]; folder.Nested == "" {
 			folder.Nested = n.String() + "; it stays out of outpost sync until one of them moves"
 		}
+		rel, _ := filepath.Rel(n.outer.path, n.inner.path)
+		outer := byPath[n.outer.path]
+		outer.Excludes = append(outer.Excludes, filepath.ToSlash(rel))
 	}
 	folders := make([]notebookFolder, 0, len(byPath))
 	for _, folder := range byPath {
 		slices.Sort(folder.Profiles)
+		slices.Sort(folder.Excludes)
+		folder.Excludes = slices.Compact(folder.Excludes)
 		folders = append(folders, *folder)
 	}
 	slices.SortFunc(folders, func(a, b notebookFolder) int { return strings.Compare(a.ID, b.ID) })

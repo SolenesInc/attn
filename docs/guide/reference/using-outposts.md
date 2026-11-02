@@ -237,7 +237,8 @@ folder inside another profile's folder, or around it. Nesting can still arise
 another way: you pair with such folders in place, or a new profile starts on
 the default folder around another profile's folder. Then only the inner folder
 stays out of sync, the row shows its error, and agents of its profile don't
-start on the outpost. Every other folder keeps syncing. The refusal and the
+start on the outpost. Every other folder keeps syncing, and the folder around it
+syncs without the inner folder's files in either direction. The refusal and the
 error name both profiles and both folders. Once one of the folders moves, the
 inner folder syncs again from where it stopped, so files you deleted from it at
 the home meanwhile stay deleted.

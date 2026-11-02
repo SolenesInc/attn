@@ -432,6 +432,37 @@ func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T)
 	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list before the stream opened, and before-recovery.md reached %s", rejected, copied)
 }
 
+func TestANestedFolderNeverSyncsThroughTheFolderAroundIt(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	outpost.Start()
+	home.Start()
+	created := testworld.Request(home.App(), protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	outer, inner := notebookPath(home), notebookPath(home, "inner[1]")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
+	writeFileAt(t, filepath.Join(inner, "home-inner.md"), "Side's file at the home")
+	writeFileAt(t, filepath.Join(outer, "outer.md"), "the outer folder syncs")
+	pair.Connect()
+	copied := outpostCopyPlacement(outpost, "notebook", outer)
+	awaitOutpostFile(t, pair, filepath.Join(copied, "outer.md"), "the outer folder syncs", false)
+	awaitNotebookError(t, pair, "Side", inner, "Default", outer)
+	if _, err := os.Stat(filepath.Join(copied, "inner[1]", "home-inner.md")); !os.IsNotExist(err) {
+		t.Fatalf("Side's home file reached the outpost through the outer copy: %v", err)
+	}
+
+	writeFileAt(t, filepath.Join(copied, "inner[1]", "home-inner.md"), "edited on the outpost's outer copy")
+	writeFileAt(t, filepath.Join(copied, "inner[1]", "outpost-inner.md"), "written on the outpost's outer copy")
+	writeFileAt(t, filepath.Join(copied, "back.md"), "the outer copy syncs back")
+	awaitHomeFile(t, home.App(), home, filepath.Join(outer, "back.md"), "the outer copy syncs back", false)
+	if !fileHolds(filepath.Join(inner, "home-inner.md"), "Side's file at the home", false) || !fileHolds(filepath.Join(inner, "outpost-inner.md"), "", true) {
+		t.Fatalf("files written under the outpost's outer copy reached Side's folder at the home")
+	}
+	t.Logf("with %s inside %s, the outer folder synced both ways while neither side's files under %s crossed", inner, outer, filepath.Base(inner))
+}
+
 func awaitNotebookError(t *testing.T, pair *testworld.OutpostPair, want ...string) string {
 	t.Helper()
 	names := func(row protocol.OutpostInfo) bool {
