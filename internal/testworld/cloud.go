@@ -37,6 +37,7 @@ const (
 	frameAllowlist = 7
 	framePresence  = 8
 	frameError     = 9
+	framePush      = 10
 )
 
 type Cloud struct {
@@ -44,13 +45,23 @@ type Cloud struct {
 	URL     string
 	HomeURL string
 	proxy   *cutProxy
+	relay   *fakeRelay
+}
+
+// Push is a push frame the home sent the relay, which the real Cloud would hand to APNs.
+type Push struct {
+	Device     string `json:"device"`
+	Ciphertext string `json:"ciphertext"`
+	CollapseID string `json:"collapse_id"`
 }
 
 func StartCloud(t *testing.T) *Cloud {
 	t.Helper()
 	relay := strings.TrimRight(os.Getenv("ATTN_TEST_CLOUD_URL"), "/")
+	var fake *fakeRelay
 	if relay == "" {
-		server := httptest.NewServer(newFakeRelay())
+		fake = newFakeRelay()
+		server := httptest.NewServer(fake.handler())
 		t.Cleanup(server.Close)
 		relay = server.URL
 	}
@@ -59,7 +70,16 @@ func StartCloud(t *testing.T) *Cloud {
 		t.Fatal(err)
 	}
 	proxy := startCutProxy(t, target.Host)
-	return &Cloud{t: t, URL: relay, HomeURL: "http://" + proxy.addr, proxy: proxy}
+	return &Cloud{t: t, URL: relay, HomeURL: "http://" + proxy.addr, proxy: proxy, relay: fake}
+}
+
+// Pushes yields the push frames the relay accepted, in order. A real Cloud hands them to APNs instead, so a test
+// that reads them skips under ATTN_TEST_CLOUD_URL.
+func (c *Cloud) Pushes() <-chan Push {
+	if c.relay == nil {
+		c.t.Skip("pushes are visible only through the fake relay; this run uses ATTN_TEST_CLOUD_URL")
+	}
+	return c.relay.pushes
 }
 
 func (c *Cloud) Dials() <-chan struct{} { return c.proxy.dials }
@@ -173,8 +193,9 @@ func decodeEnvelope(data []byte) (envelope, error) {
 }
 
 type fakeRelay struct {
-	mu    sync.Mutex
-	homes map[string]*fakeHome
+	mu     sync.Mutex
+	homes  map[string]*fakeHome
+	pushes chan Push
 }
 
 type fakeHome struct {
@@ -191,8 +212,11 @@ type fakeDevice struct {
 	signPub string
 }
 
-func newFakeRelay() http.Handler {
-	r := &fakeRelay{homes: map[string]*fakeHome{}}
+func newFakeRelay() *fakeRelay {
+	return &fakeRelay{homes: map[string]*fakeHome{}, pushes: make(chan Push, 64)}
+}
+
+func (r *fakeRelay) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/homes", r.register)
 	mux.HandleFunc("GET /v1/homes/{id}/home", r.serveHome)
@@ -348,6 +372,17 @@ func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 			}
 		}
 		h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameAllowlist, 0, nil))
+	case framePush:
+		var push Push
+		if json.Unmarshal(f.payload, &push) != nil || push.Ciphertext == "" || push.CollapseID == "" {
+			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, []byte(`{"code":"bad_push","message":"malformed"}`)))
+			return
+		}
+		if !slices.Contains(h.allowed, push.Device) {
+			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, []byte(`{"code":"push_refused","message":"device is not on the allowlist"}`)))
+			return
+		}
+		r.pushes <- push
 	}
 }
 

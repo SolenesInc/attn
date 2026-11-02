@@ -31,6 +31,7 @@ const (
 	frameAllowlist frameType = 7
 	framePresence  frameType = 8
 	frameError     frameType = 9
+	framePush      frameType = 10
 )
 
 const envelopeHeader = 6

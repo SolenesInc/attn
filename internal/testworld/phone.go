@@ -2,8 +2,11 @@ package testworld
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ed25519"
+	"crypto/hpke"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -252,4 +255,42 @@ func (s *PhoneSocket) Hello() gateway.GatewayWelcome {
 		s.t.Fatalf("home answered hello with %s", raw)
 	}
 	return welcome
+}
+
+// PushNote is what a phone's Notification Service Extension reads after it opens a push.
+type PushNote struct {
+	V           int    `json:"v"`
+	HomeID      string `json:"home_id"`
+	HomeName    string `json:"home_name"`
+	ProfileID   string `json:"profile_id"`
+	ProfileName string `json:"profile_name"`
+	SessionID   string `json:"session_id"`
+	Title       string `json:"title"`
+	Kind        string `json:"kind"`
+	Text        string `json:"text"`
+	AskID       string `json:"ask_id"`
+}
+
+func (p *Phone) SignPub() string { return b64(p.sign.Public().(ed25519.PublicKey)) }
+
+// OpenPush decrypts a push addressed to this phone the way the phone app's extension does.
+func (p *Phone) OpenPush(push Push) (PushNote, error) {
+	sealed, err := base64.RawURLEncoding.DecodeString(push.Ciphertext)
+	if err != nil {
+		return PushNote{}, err
+	}
+	private, err := ecdh.X25519().NewPrivateKey(p.noise.Private)
+	if err != nil {
+		return PushNote{}, err
+	}
+	key, err := hpke.NewDHKEMPrivateKey(private)
+	if err != nil {
+		return PushNote{}, err
+	}
+	plaintext, err := hpke.Open(key, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), []byte("attn push v1"), sealed)
+	if err != nil {
+		return PushNote{}, fmt.Errorf("opening the push: %w", err)
+	}
+	var note PushNote
+	return note, json.Unmarshal(plaintext, &note)
 }

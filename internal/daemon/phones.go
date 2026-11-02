@@ -73,6 +73,7 @@ func (d *Daemon) startCloudLink() {
 		return
 	}
 	d.phones.link, d.phones.stop, d.phones.done = link, cancel, done
+	d.registerPhonePush()
 }
 
 func (d *Daemon) stopCloudLink(whyUnlinked string) {
@@ -84,6 +85,7 @@ func (d *Daemon) stopCloudLink(whyUnlinked string) {
 	if stop == nil {
 		return
 	}
+	d.unregisterPhonePush()
 	stop()
 	<-done
 }

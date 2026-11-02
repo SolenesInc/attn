@@ -1,0 +1,225 @@
+package daemon
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/cloudlink"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/statemarker"
+)
+
+const phonePushConsumer = "phone_push"
+
+// phonePushFreshFor drops a push for a wait or ask that began longer ago, so a daemon restart or a consumer that
+// fell behind never floods the phone with old news. A push leaves 20 ms after the agent's reply, and the turn's
+// opening survives a restart: a wait 128 s old sent nothing after one, while a wait 4 s old was pushed again 71 ms
+// after it, under the same collapse id, so the phone replaces the first notification (s-h6j4pq).
+const phonePushFreshFor = 2 * time.Minute
+
+// APNs caps a notification at 4096 bytes. At these caps the sealed, base64url-encoded note stays near 2.6 KB.
+const (
+	phonePushTitleRunes = 100
+	phonePushTextRunes  = 300
+)
+
+const (
+	phonePushWaiting       = "waiting"
+	phonePushNeedsApproval = "needs_approval"
+	phonePushAsk           = "ask"
+)
+
+type phonePushNote struct {
+	V           int    `json:"v"`
+	HomeID      string `json:"home_id"`
+	HomeName    string `json:"home_name"`
+	ProfileID   string `json:"profile_id"`
+	ProfileName string `json:"profile_name"`
+	SessionID   string `json:"session_id"`
+	Title       string `json:"title"`
+	Kind        string `json:"kind"`
+	Text        string `json:"text"`
+	AskID       string `json:"ask_id,omitempty"`
+
+	collapseID string
+}
+
+type phonePushes struct {
+	pushedEpisode map[protocol.SessionID]string
+}
+
+var phonePushFacts = bus.Filter{FactSessionStateChanged, FactAskOpened}
+
+func (d *Daemon) registerPhonePush() {
+	if d.eventBus == nil {
+		return
+	}
+	pushes := &phonePushes{pushedEpisode: map[protocol.SessionID]string{}}
+	if err := d.eventBus.Register(phonePushConsumer, phonePushFacts, func(ctx context.Context, ev bus.Event) error {
+		d.pushToPhones(ctx, pushes, ev)
+		return nil
+	}); err != nil {
+		d.logf("phone push: %v", err)
+	}
+}
+
+func (d *Daemon) unregisterPhonePush() {
+	if d.eventBus == nil {
+		return
+	}
+	if err := d.eventBus.Unregister(phonePushConsumer); err != nil {
+		d.logf("phone push: %v", err)
+	}
+}
+
+func (d *Daemon) pushToPhones(ctx context.Context, pushes *phonePushes, ev bus.Event) {
+	link := d.cloudLink()
+	if link == nil {
+		return
+	}
+	var note phonePushNote
+	var ok bool
+	switch ev.Name {
+	case FactSessionStateChanged:
+		note, ok = d.waitingNote(ctx, pushes, protocol.SessionID(ev.Subject))
+	case FactAskOpened:
+		note, ok = d.askNote(ev.Subject)
+	}
+	if !ok {
+		return
+	}
+	pairings, err := phoneHome{d}.Pairings()
+	if err != nil {
+		d.logf("phone push: reading pairings: %v", err)
+		return
+	}
+	note.V, note.HomeID, note.HomeName = 1, link.Status().HomeID, link.HomeName()
+	if profile, err := d.store.GetProfile(note.ProfileID); err == nil {
+		note.ProfileName = profile.Name
+	}
+	plaintext, err := json.Marshal(note)
+	if err != nil {
+		d.logf("phone push: encoding the note: %v", err)
+		return
+	}
+	for _, pairing := range pairings {
+		if pairing.ProfileID != note.ProfileID {
+			continue
+		}
+		err := link.Push(pairing, plaintext, note.collapseID)
+		switch {
+		case errors.Is(err, cloudlink.ErrLinkDown):
+			d.logf("phone push: dropped %s %s for device %s: %v", note.Kind, note.SessionID, pairing.DeviceID, err)
+		case err != nil:
+			d.logf("phone push: %s %s for device %s: %v", note.Kind, note.SessionID, pairing.DeviceID, err)
+		default:
+			d.logf("phone push: sent %s %s to device %s", note.Kind, note.SessionID, pairing.DeviceID)
+		}
+	}
+}
+
+func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID protocol.SessionID) (phonePushNote, bool) {
+	var session *protocol.Session
+	if stored := d.store.Get(sessionID); stored != nil {
+		session = d.sessionForBroadcast(stored)
+	}
+	if session == nil || !protocol.Deref(session.TurnOwed) {
+		delete(pushes.pushedEpisode, sessionID)
+		return phonePushNote{}, false
+	}
+	var kind string
+	switch session.State {
+	case protocol.SessionStateWaitingInput:
+		kind = phonePushWaiting
+	case protocol.SessionStatePendingApproval:
+		kind = phonePushNeedsApproval
+	default:
+		return phonePushNote{}, false
+	}
+	opened := protocol.Deref(session.TurnOpenedAt)
+	episode := string(session.State) + "@" + opened
+	if d.clock.Now().Sub(protocol.Timestamp(opened).Time()) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
+		return phonePushNote{}, false
+	}
+	pushes.pushedEpisode[sessionID] = episode
+	sum := sha256.Sum256([]byte(string(sessionID) + "\n" + episode))
+	return phonePushNote{
+		ProfileID:  session.ProfileID,
+		SessionID:  string(sessionID),
+		Title:      clipRunes(d.phoneSessionTitle(session), phonePushTitleRunes),
+		Kind:       kind,
+		Text:       lastParagraphTail(d.lastAssistantMessage(ctx, sessionID), phonePushTextRunes),
+		collapseID: hex.EncodeToString(sum[:16]),
+	}, true
+}
+
+func (d *Daemon) askNote(askID string) (phonePushNote, bool) {
+	stored, err := d.store.GetAsk(askID)
+	if err != nil {
+		d.logf("phone push: reading ask %s: %v", askID, err)
+		return phonePushNote{}, false
+	}
+	shown, err := d.readAsk(stored)
+	if err != nil || shown.profileID == "" {
+		return phonePushNote{}, false
+	}
+	created, err := time.Parse(time.RFC3339Nano, stored.CreatedAt)
+	if err != nil || d.clock.Now().Sub(created) > phonePushFreshFor {
+		return phonePushNote{}, false
+	}
+	title := protocol.Deref(shown.wire.SeedTitle)
+	if session := d.store.Get(stored.SessionID); session != nil {
+		title = d.phoneSessionTitle(session)
+	}
+	return phonePushNote{
+		ProfileID:  shown.profileID,
+		SessionID:  string(stored.SessionID),
+		Title:      clipRunes(title, phonePushTitleRunes),
+		Kind:       phonePushAsk,
+		Text:       clipRunes(stored.Subject, phonePushTextRunes),
+		AskID:      askID,
+		collapseID: "ask-" + askID,
+	}, true
+}
+
+func (d *Daemon) phoneSessionTitle(session *protocol.Session) string {
+	d.decorateSessionWithTitle(session)
+	if title := protocol.Deref(session.Title); title != "" {
+		return title
+	}
+	return session.Label
+}
+
+func (d *Daemon) lastAssistantMessage(ctx context.Context, sessionID protocol.SessionID) string {
+	answer, err := Call[protocol.MonitorLastAssistantResult](ctx, d.router(), protocol.MonitorLastAssistantMessage{Cmd: protocol.CmdMonitorLastAssistant, SessionID: sessionID})
+	if err != nil {
+		return ""
+	}
+	return statemarker.Strip(answer.Text)
+}
+
+func lastParagraphTail(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if i := strings.LastIndex(text, "\n\n"); i >= 0 {
+		text = strings.TrimSpace(text[i:])
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return "…" + strings.TrimSpace(string(runes[len(runes)-limit+1:]))
+}
+
+func clipRunes(text string, limit int) string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return strings.TrimSpace(string(runes[:limit-1])) + "…"
+}

@@ -269,13 +269,8 @@ func (d *Daemon) gatewaySessions(profileID string) []gateway.GatewaySession {
 		if session.ProfileID != profileID {
 			continue
 		}
-		d.decorateSessionWithTitle(session)
-		title := protocol.Deref(session.Title)
-		if title == "" {
-			title = session.Label
-		}
 		state := gatewayState(session.State)
-		out := gateway.GatewaySession{ID: string(session.ID), Title: title, Agent: string(session.Agent), State: state}
+		out := gateway.GatewaySession{ID: string(session.ID), Title: d.phoneSessionTitle(session), Agent: string(session.Agent), State: state}
 		if terminal := d.primaryTerminal(session.ID); terminal != "" {
 			out.TerminalID = protocol.Ptr(string(terminal))
 		}
