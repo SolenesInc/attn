@@ -138,6 +138,40 @@ func TestAnAskFromAFolderWhoseNameEndsInASpaceKeepsItsOwnImageAcrossARestart(t *
 	}
 }
 
+func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	turnAsksOn(app)
+	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
+	s.Launched(asker)
+	small := writeImage(t, s.Path("work", "small.png"), 1024)
+	large := writeImage(t, s.Path("work", "large.png"), 4<<20)
+	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "![small](small.png) ![large](large.png)\n", "", s.Path("work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Stop()
+	s.StartWritingFilesOfAtMost(2 << 20)
+	if partial := askImageResult(s.App(), earlier.ID, s.Path("work", "large.png")); partial.Success {
+		t.Fatalf("with the disk refusing the large copy partway, the ask shows %d base64 bytes for it, want no image", len(protocol.Deref(partial.DataBase64)))
+	}
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "small.png")); !bytes.Equal(got, small) {
+		t.Fatalf("the small image shows %d bytes, want its %d", len(got), len(small))
+	}
+
+	s.Stop()
+	s.Start()
+	removeAll(t, s.Path("work"))
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "large.png")); !bytes.Equal(got, large) {
+		t.Fatalf("on the next start the large image shows %d bytes, want its %d", len(got), len(large))
+	}
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "small.png")); !bytes.Equal(got, small) {
+		t.Fatalf("on the next start the small image shows %d bytes, want its %d", len(got), len(small))
+	}
+}
+
 func turnAsksOn(app *testworld.Peer) {
 	testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks-on")},
 		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks-on" })

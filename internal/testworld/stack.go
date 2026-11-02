@@ -152,6 +152,11 @@ func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
 func (s *Stack) start(vars ...string) {
 	s.T.Helper()
 	s.launch(vars...)
+	s.checkStarted()
+}
+
+func (s *Stack) checkStarted() {
+	s.T.Helper()
 	probe := s.App()
 	for _, warning := range probe.Initial.Warnings {
 		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
