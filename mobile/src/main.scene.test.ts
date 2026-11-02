@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   KeepFocus,
   Message,
+  RegisterPush,
   SavePairings,
   SendPrompt,
   TerminalMount,
@@ -80,6 +81,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   pairingFlow: 'idle',
   pairingMessage: '',
   typedCode: '',
+  pushNote: '',
   now,
 })
 
@@ -254,6 +256,7 @@ describe('the queue merges every pairing into one list', () => {
         }),
       ),
       Scene.Command.resolve(SavePairings, Message.SavedPairings()),
+      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
       Scene.Subscription.emit(
         Message.ReceivedSessions({
           pairingId: personal.id,
@@ -301,6 +304,7 @@ describe('an empty queue', () => {
       Scene.Subscription.emit(
         Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
       ),
+      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
       Scene.expect(Scene.text('No agents yet.')).toBeAbsent(),
       Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: personal.id, sessions: [] })),
       Scene.expect(Scene.text('No agents yet.')).toExist(),
@@ -403,6 +407,48 @@ describe('answering an agent from the phone', () => {
       Scene.expect(
         Scene.text('attn on Mac is too old to open terminals from a phone. Update it to the latest attn.'),
       ).toExist(),
+    )
+  })
+})
+
+describe('push notifications', () => {
+  it('registers with each home that welcomes the phone, and says so when notifications are off', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Command.expectHas(RegisterPush({ cloud: personal.cloud, homeId: personal.homeId })),
+      Scene.Command.resolve(
+        RegisterPush,
+        Message.FailedPush({
+          message: 'Notifications are off for attn, so waiting agents cannot reach you.',
+        }),
+      ),
+      Scene.expect(
+        Scene.text('Notifications are off for attn, so waiting agents cannot reach you.'),
+      ).toExist(),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
+      Scene.expect(
+        Scene.text('Notifications are off for attn, so waiting agents cannot reach you.'),
+      ).not.toExist(),
+    )
+  })
+
+  it('opens the waiting agent’s session when its notification is tapped', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      Scene.Subscription.emit(
+        Message.TappedNotification({ pairingId: personal.id, sessionId: 'a', askId: '' }),
+      ),
+      keepFocus,
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a' })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
     )
   })
 })

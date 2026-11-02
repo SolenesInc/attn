@@ -1,0 +1,11 @@
+{
+  "name": "attn-push",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hands the phone's notification service extension the key it decrypts pushes with, and names the APNs environment the app was signed for.",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}

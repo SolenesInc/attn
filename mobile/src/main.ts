@@ -32,9 +32,11 @@ import {
   linkTarget,
   loadPairings,
   pairingFromOffer,
+  pairingId,
   readOffer,
   savePairings,
 } from './pairing'
+import { readPushTap, registerForPush } from './push'
 import { Home, QueueSession, buildQueue, fromGatewaySession, type HomeRow, type SessionRow } from './queue'
 import { activeTerminal, mountTerminal, terminalKeys, type TerminalKey } from './terminal/terminal'
 
@@ -95,6 +97,7 @@ export const Model = Schema.Struct({
   pairingFlow: PairingFlow,
   pairingMessage: Schema.String,
   typedCode: Schema.String,
+  pushNote: Schema.String,
   now: Schema.Finite,
 })
 export type Model = typeof Model.Type
@@ -157,6 +160,9 @@ export const Message = defineMessageUnion({
   ChangedViewport: { height: Schema.Finite },
   ChangedTerminalStatus: { text: Schema.String },
   CompletedCommand: {},
+  RegisteredPush: {},
+  FailedPush: { message: Schema.String },
+  TappedNotification: { pairingId: Schema.String, sessionId: Schema.String, askId: Schema.String },
 })
 export type Message = typeof Message.Type
 
@@ -221,6 +227,18 @@ const PairWithCode = Command.define('PairWithCode', {
       Effect.map((pairing) => Message.Paired({ pairing })),
       Effect.catch((error) =>
         Effect.succeed(Message.FailedPairing({ message: errorText(error.cause ?? error) })),
+      ),
+    ),
+})
+
+export const RegisterPush = Command.define('RegisterPush', {
+  args: { cloud: Schema.String, homeId: Schema.String },
+  messages: [Message.RegisteredPush, Message.FailedPush],
+  execute: (home) =>
+    Effect.tryPromise(() => registerForPush(home)).pipe(
+      Effect.map(() => Message.RegisteredPush()),
+      Effect.catch((error) =>
+        Effect.succeed(Message.FailedPush({ message: errorText(error.cause ?? error) })),
       ),
     ),
 })
@@ -493,7 +511,7 @@ const receiveAsks = (
   }
 }
 
-export const update = (model: Model, message: Message) =>
+export const update = (model: Model, message: Message): Update.Return<Model, Message> =>
   Message.match<Update.Return<Model, Message>>(message, {
     LoadedPairings: ({ pairings }) => ({
       model: modifyFields(model, { loaded: () => true, homes: () => pairings.map(newHome) }),
@@ -526,7 +544,14 @@ export const update = (model: Model, message: Message) =>
           home.pairing.id === pairingId &&
           (home.pairing.homeName !== homeName || home.pairing.profileName !== profileName),
       )
-      return { model: welcomed, commands: renamed ? [saved(welcomed.homes)] : [] }
+      const home = model.homes.find((home) => home.pairing.id === pairingId)
+      return {
+        model: welcomed,
+        commands: [
+          ...(renamed ? [saved(welcomed.homes)] : []),
+          ...(home ? [RegisterPush({ cloud: home.pairing.cloud, homeId: home.pairing.homeId })] : []),
+        ],
+      }
     },
     ReceivedSessions: ({ pairingId, sessions }) => ({
       model: updateHome(model, pairingId, (home) => ({
@@ -731,6 +756,13 @@ export const update = (model: Model, message: Message) =>
     }),
     ChangedTerminalStatus: ({ text }) => ({ model: modifyFields(model, { terminalStatus: () => text }) }),
     CompletedCommand: () => ({ model }),
+    RegisteredPush: () => ({ model: modifyFields(model, { pushNote: () => '' }) }),
+    FailedPush: ({ message }) => ({ model: modifyFields(model, { pushNote: () => message }) }),
+    TappedNotification: ({ pairingId, sessionId, askId }) =>
+      update(
+        model,
+        askId ? Message.ClickedAsk({ pairingId, askId }) : Message.ClickedSession({ pairingId, sessionId }),
+      ),
   })
 
 // INIT
@@ -755,6 +787,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     pairingFlow: 'idle',
     pairingMessage: '',
     typedCode: '',
+    pushNote: '',
     now: Date.now(),
   },
   commands: [LoadPairings()],
@@ -802,6 +835,28 @@ const linkStream = (pairing: LinkTarget) =>
         }),
     ).pipe(Effect.flatMap(() => Effect.never)),
   )
+
+const notificationTapStream = Stream.callback<Message>((queue) =>
+  Effect.acquireRelease(
+    Effect.promise(async () => {
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      return PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+        const tap = readPushTap(notification.data)
+        if (tap) {
+          Queue.offerUnsafe(
+            queue,
+            Message.TappedNotification({
+              pairingId: pairingId(tap.homeId, tap.profileId),
+              sessionId: tap.sessionId,
+              askId: tap.askId,
+            }),
+          )
+        }
+      })
+    }),
+    (handle) => Effect.promise(() => handle.remove()),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
 
 const foregroundStream = Stream.callback<Message>((queue) =>
   Effect.acquireRelease(
@@ -866,6 +921,13 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   viewport: entry(
     { on: Schema.Boolean },
     { modelToDependencies: () => ({ on: true }), dependenciesToStream: () => viewportStream },
+  ),
+  notificationTaps: entry(
+    { on: Schema.Boolean },
+    {
+      modelToDependencies: () => ({ on: Capacitor.isNativePlatform() }),
+      dependenciesToStream: ({ on }) => (on ? notificationTapStream : Stream.empty),
+    },
   ),
   foreground: entry(
     { on: Schema.Boolean },
@@ -1348,6 +1410,9 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             h.main(
               [],
               [
+                model.pushNote && model.screen !== 'ask'
+                  ? h.p([h.Class('error push-note')], [model.pushNote])
+                  : h.empty,
                 model.screen === 'queue'
                   ? queueView(model, h)
                   : model.screen === 'ask'

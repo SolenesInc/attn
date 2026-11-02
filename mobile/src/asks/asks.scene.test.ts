@@ -51,6 +51,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
   pairingFlow: 'idle',
   pairingMessage: '',
   typedCode: '',
+  pushNote: '',
   now,
 })
 
