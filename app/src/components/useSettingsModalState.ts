@@ -116,6 +116,10 @@ export function useSettingsModalState({
   useEffect(() => {
     if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
   }, [selectedSection, outpostsEnabled]);
+  const phonesEnabled = settings.phone_access_enabled === 'true';
+  useEffect(() => {
+    if (selectedSection === 'phones' && !phonesEnabled) setSelectedSection('connectivity');
+  }, [selectedSection, phonesEnabled]);
   useEffect(() => {
     if (isOpen) recordAppAction('settings_section', { section: selectedSection });
   }, [isOpen, selectedSection]);
@@ -548,6 +552,12 @@ export function useSettingsModalState({
             count: 1,
             keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
           }] : []),
+          ...(phonesEnabled ? [{
+            id: 'phones' as const,
+            label: 'Phones',
+            description: 'Pair phones with this home and revoke them.',
+            keywords: 'phones phone mobile iphone pair pairing qr code revoke attn cloud relay',
+          }] : []),
         ],
       },
       {
@@ -593,7 +603,7 @@ export function useSettingsModalState({
         ],
       },
     ],
-    [outpostsEnabled, analyticsEnabled],
+    [outpostsEnabled, phonesEnabled, analyticsEnabled],
   );
 
   const filteredNavGroups = useMemo(() => {

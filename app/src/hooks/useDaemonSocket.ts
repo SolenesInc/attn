@@ -12,6 +12,7 @@ import { useSharedCodexStore } from '../store/sharedCodex';
 import { useTerminalRefusals } from '../store/terminalRefusals';
 import { useToastStore } from '../store/toasts';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
+import { handlePhoneDaemonEvent } from './daemonPhoneEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
@@ -33,6 +34,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  PhonePairingOffer,
   AskAnswer,
   AskImageResultMessage,
   CommandUsage,
@@ -564,6 +566,8 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+// The home answers once its relay applied the pairing window, which it waits up to 15 s for (cloudlink connectWithin).
+const PHONE_PAIR_BEGIN_TIMEOUT_MS = 20_000;
 const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
@@ -2351,6 +2355,7 @@ export function useDaemonSocket({
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
             if (handleSharedCodexDaemonEvent(data, pending)) break;
+            if (handlePhoneDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3593,6 +3598,14 @@ export function useDaemonSocket({
   const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
     sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
 
+  const sendPhonesGet = useCallback(() => sendOrQueueCommand({ cmd: 'phones_get' }), [sendOrQueueCommand]);
+
+  const sendPhonePairBegin = useCallback((profileId: string): Promise<PhonePairingOffer> =>
+    sendRequest('phone_pair_begin', { profile_id: profileId }, 'Showing a pairing code timed out', PHONE_PAIR_BEGIN_TIMEOUT_MS), [sendRequest]);
+
+  const sendPhonePairingRevoke = useCallback((deviceId: string, profileId: string): Promise<true> =>
+    sendRequest('phone_pairing_revoke', { device_id: deviceId, profile_id: profileId }, 'Revoking the phone timed out'), [sendRequest]);
+
   const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
     sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
 
@@ -4317,6 +4330,9 @@ export function useDaemonSocket({
     sendAskAnswer,
     sendAskImage,
     sendRestartSharedCodex,
+    sendPhonesGet,
+    sendPhonePairBegin,
+    sendPhonePairingRevoke,
     sendInstallCodexUpdate,
     sendRecentFiles,
     sendGetRecentLocations,
