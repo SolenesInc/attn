@@ -173,7 +173,7 @@ describe('App asks', () => {
     const screenshot: Ask = {
       ...cacheStore,
       parts: [
-        { markdown: 'The banner overlaps: ![before](shots/before.png)' },
+        { markdown: 'The banner overlaps: ![before](shots/before.png) ![odd](shots/a\\(b\\)&amp;c.png)' },
         { question: { key: 'q1', kind: 'text', prompt: 'Ship it?', context: '![after](/elsewhere/after.png)', choices: [] } },
       ],
     };
@@ -186,6 +186,7 @@ describe('App asks', () => {
 
     expect(daemon.sentOf('ask_image').map(({ ask_id, path }) => ({ ask_id, path }))).toEqual([
       { ask_id: 'a-cache1', path: '/tmp/api/shots/before.png' },
+      { ask_id: 'a-cache1', path: '/tmp/api/shots/a(b)&c.png' },
       { ask_id: 'a-cache1', path: '/elsewhere/after.png' },
     ]);
     expect(screen.getByRole('img', { name: 'before' }).getAttribute('src')).toBe('data:image/png;base64,YmVmb3Jl');

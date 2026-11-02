@@ -55,14 +55,18 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 
 	beside := writeImage(t, filepath.Join(work, "beside.png"), 1024)
 	nested := writeImage(t, filepath.Join(work, "notes", "nested.webp"), 512)
+	escaped := writeImage(t, filepath.Join(work, "a(b)&c.png"), 256)
 	writeAskFile(t, filepath.Join(work, "notes", "ask.md"), "From the file: ![nested](nested.webp)\n")
-	stdinAsk := "Plain ![beside](beside.png), remote ![remote](https://example.com/r.png), in code `![no](absent.png)`.\n\n" +
+	stdinAsk := "Plain ![beside](beside.png), escaped ![escaped](a\\(b\\)&amp;c.png), remote ![remote](https://example.com/r.png), in code `![no](absent.png)`.\n\n" +
 		"```\n![no](also-absent.png)\n```\n\n:::question\nWhich?\n<img src=\"beside.png\">\n- [ ] One\n- [ ] Two\n:::\n"
 	fromStdin := askAs(t, s, asker, work, stdinAsk)
 	fromFile := askAs(t, s, asker, work, "", "--file", filepath.Join(work, "notes", "ask.md"))
 	removeAll(t, work)
 	if got := askImage(t, app, fromStdin.ID, filepath.Join(work, "beside.png")); !bytes.Equal(got, beside) {
 		t.Fatalf("the stdin ask shows %d bytes for beside.png after it was deleted, want its %d", len(got), len(beside))
+	}
+	if got := askImage(t, app, fromStdin.ID, filepath.Join(work, "a(b)&c.png")); !bytes.Equal(got, escaped) {
+		t.Fatalf("the stdin ask shows %d bytes for a(b)&c.png, written with markdown escapes, want its %d", len(got), len(escaped))
 	}
 	if got := askImage(t, app, fromFile.ID, filepath.Join(work, "notes", "nested.webp")); !bytes.Equal(got, nested) {
 		t.Fatalf("the file ask shows %d bytes for nested.webp after it was deleted, want its %d, resolved beside the file", len(got), len(nested))
@@ -82,6 +86,27 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	}
 	if listed, err := s.Client().AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 2 {
 		t.Fatalf("after the refusals the agent lists %+v (%v), want only its two asks", listed, err)
+	}
+}
+
+func TestAnAskOpenedBeforeImagesTravelledGetsItsImagesCopiedWhenTheDaemonStarts(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	app := s.App()
+	turnAsksOn(app)
+	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
+	s.Launched(asker)
+	shot := writeImage(t, s.Path("work", "shot.png"), 1024)
+	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "Before: ![shot](shot.png)\n", "", s.Path("work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Stop()
+	s.Start()
+	removeAll(t, s.Path("work"))
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "shot.png")); !bytes.Equal(got, shot) {
+		t.Fatalf("after the restart, the ask opened without images shows %d bytes for its image, want its %d", len(got), len(shot))
 	}
 }
 

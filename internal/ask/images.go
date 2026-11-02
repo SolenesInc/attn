@@ -11,6 +11,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 	"golang.org/x/net/html"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -78,7 +79,7 @@ func imageTargets(markdown string) []string {
 		}
 		switch n := node.(type) {
 		case *ast.Image:
-			targets = append(targets, string(n.Destination))
+			targets = append(targets, string(util.URLEscape(n.Destination, true)))
 		case *ast.RawHTML:
 			targets = append(targets, htmlImageSources(segmentsText(n.Segments, source))...)
 		case *ast.HTMLBlock:

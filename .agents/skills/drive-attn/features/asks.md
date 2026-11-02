@@ -115,7 +115,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The home keeps an ask's images under `<data-dir>/asks/<ask>/` until the ask's record goes.
+- **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The home keeps an ask's images under `<data-dir>/asks/<ask>/` until the ask's record goes. When the daemon starts, it copies the images of asks opened before attn copied images, from their files on the home.
 - **Outposts**: `attn ask` on an outpost reads the images there and the home keeps the copy, so the drawer shows them. Relative links to other files still resolve on the asker's machine and do not open from an outpost ask. The drawer shows answered asks for a day.
 - **Linux**: `attn ask` works the same where the daemon and CLI run on Linux. `dock.asks` is Ctrl+Alt+R there, and Ctrl+Enter sends from the drawer.
 - **Performance and idle cost**: an ask's markdown is at most 64 KiB, and its images at most 5 MiB together. The drawer loads each image once per ask it shows. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.

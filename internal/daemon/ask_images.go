@@ -105,3 +105,29 @@ func (d *Daemon) askImage(askID, imagePath, profileID string) (string, []byte, e
 	}
 	return mimeType, data, err
 }
+
+func (d *Daemon) copyImagesOfAsksOpenedBeforeImagesTravelled() {
+	asks, err := d.store.Asks()
+	if err != nil {
+		d.logf("copy images of earlier asks: %v", err)
+		return
+	}
+	for _, stored := range asks {
+		if _, err := os.Stat(askImagesDir(stored.ID)); !errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		parts, err := ask.Parse(stored.Markdown)
+		if err != nil {
+			continue
+		}
+		var images []askImage
+		for _, imagePath := range ask.ImagePaths(parts, stored.BaseDir) {
+			if data, err := os.ReadFile(imagePath); err == nil {
+				images = append(images, askImage{path: imagePath, data: data})
+			}
+		}
+		if err := writeAskImages(stored.ID, images); err != nil {
+			d.logf("copy images of ask %s: %v", stored.ID, err)
+		}
+	}
+}
