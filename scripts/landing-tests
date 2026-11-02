@@ -43,6 +43,7 @@ go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTransc
 go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
 go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
 go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
+go ./cmd/attn TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCopies
 go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
 go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
