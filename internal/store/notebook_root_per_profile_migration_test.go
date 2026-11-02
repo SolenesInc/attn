@@ -34,11 +34,8 @@ func TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, p := range []struct {
-		id       string
-		revision int64
-	}{{gone.ID, gone.Revision}, {goneOwner.ID, goneOwner.Revision}} {
-		if _, _, err := s.DeleteProfile(p.id, p.revision, 0); err != nil {
+	for _, id := range []string{gone.ID, goneOwner.ID} {
+		if _, err := s.db.Exec(`UPDATE profiles SET deleted_at = '2026-10-01T00:00:00Z' WHERE id = ?`, id); err != nil {
 			t.Fatal(err)
 		}
 	}

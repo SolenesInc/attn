@@ -45,6 +45,7 @@ go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
 go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
 go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
 go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
+go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
