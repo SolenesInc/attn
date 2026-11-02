@@ -510,31 +510,7 @@ func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) 
 	phone.welcomed()
 	phone.askList()
 	read := func(phone *testPhone, src string, offset int) (gateway.GatewayAskImageChunk, *gateway.GatewayAskImageError) {
-		requestID := uuid.NewString()
-		phone.send(gateway.GatewayAskImage{Cmd: "ask_image", RequestID: requestID, AskID: asked.ID, Src: src, Offset: offset})
-		guard := time.NewTimer(fakeagent.HangGuard)
-		defer guard.Stop()
-		for {
-			frame := phone.receive(guard, src)
-			var head struct {
-				Event     string `json:"event"`
-				RequestID string `json:"request_id"`
-			}
-			_ = json.Unmarshal(frame, &head)
-			if head.RequestID != requestID {
-				continue
-			}
-			var chunk gateway.GatewayAskImageChunk
-			var failed gateway.GatewayAskImageError
-			if head.Event == "ask_image_error" {
-				_ = json.Unmarshal(frame, &failed)
-				return chunk, &failed
-			}
-			if err := json.Unmarshal(frame, &chunk); err != nil || head.Event != "ask_image_chunk" {
-				t.Fatalf("the home answered %s, want a chunk or an error", frame)
-			}
-			return chunk, nil
-		}
+		return phone.readImage(asked.ID, src, offset)
 	}
 
 	var got []byte
@@ -573,6 +549,73 @@ func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) 
 	for _, src := range []string{"shots/board.png", "notes.txt"} {
 		if _, failed := read(stranger, src, 0); failed == nil || failed.Message != "ask "+asked.ID+" is gone" {
 			t.Errorf("a phone paired to another profile reading %s of %s got %+v, want the ask to read as gone", src, asked.ID, failed)
+		}
+	}
+}
+
+func (p *testPhone) readImage(askID, src string, offset int) (gateway.GatewayAskImageChunk, *gateway.GatewayAskImageError) {
+	p.t.Helper()
+	requestID := uuid.NewString()
+	p.send(gateway.GatewayAskImage{Cmd: "ask_image", RequestID: requestID, AskID: askID, Src: src, Offset: offset})
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	for {
+		frame := p.receive(guard, src)
+		var head struct {
+			Event     string `json:"event"`
+			RequestID string `json:"request_id"`
+		}
+		_ = json.Unmarshal(frame, &head)
+		if head.RequestID != requestID {
+			continue
+		}
+		var chunk gateway.GatewayAskImageChunk
+		var failed gateway.GatewayAskImageError
+		if head.Event == "ask_image_error" {
+			_ = json.Unmarshal(frame, &failed)
+			return chunk, &failed
+		}
+		if err := json.Unmarshal(frame, &chunk); err != nil || head.Event != "ask_image_chunk" {
+			p.t.Fatalf("the home answered %s, want a chunk or an error", frame)
+		}
+		return chunk, nil
+	}
+}
+
+func TestGatewayReadsAnHTMLImageWhetherThePhoneDecodedItsSourceOrNot(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(asker)
+	shop := w.Path("shop")
+	image := func(name, data string) protocol.AskImage {
+		return protocol.AskImage{Path: shop + "/" + name, DataBase64: base64.StdEncoding.EncodeToString([]byte(data))}
+	}
+	markdown := `<img src="caf&eacute;.png"> <img src="a&amp;copy;.png"> ![c](a©.png)` + "\n\n" + cacheAsk
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", markdown, "", shop,
+		image("café.png", "cafe"), image("a&copy;.png", "escaped copy"), image("a©.png", "copyright sign"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	phone := connectPhone(t, w, "phone", app.SelectedProfile())
+	phone.welcomed()
+	phone.askList()
+
+	for _, c := range []struct{ src, want string }{
+		{"café.png", "cafe"},
+		{"caf&eacute;.png", "cafe"},
+		{"a&copy;.png", "escaped copy"},
+		{"a©.png", "copyright sign"},
+	} {
+		chunk, failed := phone.readImage(asked.ID, c.src, 0)
+		if failed != nil {
+			t.Errorf("reading %s: %s", c.src, failed.Message)
+			continue
+		}
+		if data, _ := base64.StdEncoding.DecodeString(chunk.DataBase64); string(data) != c.want {
+			t.Errorf("reading %s returned %q, want %q", c.src, data, c.want)
 		}
 	}
 }

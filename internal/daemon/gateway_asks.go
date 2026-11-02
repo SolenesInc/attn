@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"slices"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/store"
 )
 
 // gatewayImageChunkBytes keeps a chunk's base64 (54,616 bytes) and its fields inside one gateway message.
@@ -185,9 +187,19 @@ func (d *Daemon) gatewayAskImageBytes(profileID, askID, src string) (string, []b
 	if err != nil {
 		return "", nil, err
 	}
+	mimeType, data, err := storedAskImage(stored, src)
+	if decoded := html.UnescapeString(src); err != nil && decoded != src {
+		if mimeType, data, decodedErr := storedAskImage(stored, decoded); decodedErr == nil {
+			return mimeType, data, nil
+		}
+	}
+	return mimeType, data, err
+}
+
+func storedAskImage(stored store.Ask, src string) (string, []byte, error) {
 	imagePath, ok := ask.ResolveImage(stored.BaseDir, src)
 	if !ok {
 		return "", nil, fmt.Errorf("%s is not a local image with one of the extensions an ask shows", src)
 	}
-	return askImageCopy(askID, imagePath)
+	return askImageCopy(stored.ID, imagePath)
 }

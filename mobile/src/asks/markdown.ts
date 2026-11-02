@@ -1,3 +1,4 @@
+import { decodeNamedCharacterReference } from 'decode-named-character-reference'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { Nodes, Root, RootContent } from 'mdast'
 import { fromMarkdown } from 'mdast-util-from-markdown'
@@ -15,11 +16,9 @@ const attribute = (tag: string, name: string): string | undefined => {
   return value === undefined ? undefined : decodeReferences(value)
 }
 
-const namedReferences: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
-
 const decodeReferences = (value: string) =>
-  value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (reference, name: string) => {
-    if (name[0] !== '#') return namedReferences[name.toLowerCase()] ?? reference
+  value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);/gi, (reference, name: string) => {
+    if (name[0] !== '#') return decodeNamedCharacterReference(name) || reference
     const code =
       name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10)
     return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : reference
