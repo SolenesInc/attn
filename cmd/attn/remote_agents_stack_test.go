@@ -41,13 +41,14 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 			}
 			agent.Reply("Outpost ready. <!-- attn:state=waiting_input -->")
 			session := testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
-				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens > 0
+				return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens > 0
 			})
 			if protocol.Deref(session.Host) != pair.Host {
 				t.Fatalf("host = %q, want %q", protocol.Deref(session.Host), pair.Host)
 			}
+			mark := pair.App.EventCount()
 			pair.App.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(id)})
-			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
+			testworld.AwaitSessionSince(pair.App, mark, id, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
 			until := time.Now().Add(time.Hour)
 			if err := home.Client().SnoozeSession("", protocol.SessionID(id), until); err != nil {
 				t.Fatal(err)
@@ -55,8 +56,9 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnSnoozedUntil) == until.UTC().Format(time.RFC3339Nano)
 			})
+			mark = pair.App.EventCount()
 			pair.App.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(id)})
-			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
+			testworld.AwaitSessionSince(pair.App, mark, id, func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnOwed) && protocol.Deref(s.TurnSnoozedUntil) == ""
 			})
 			rename := outpost.Run(testworld.Invocation{Terminal: pair.App.Terminal(id), Args: []string{"session", "rename", "Remote CLI label"}})
