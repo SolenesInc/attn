@@ -49,18 +49,19 @@ func askImageFile(askID, imagePath string) string {
 }
 
 func writeAskImages(askID string, images []askImage) error {
-	if len(images) == 0 {
-		return nil
-	}
-	if err := os.MkdirAll(askImagesDir(askID), 0o700); err != nil {
-		return err
-	}
 	for _, image := range images {
-		if err := os.WriteFile(askImageFile(askID, image.path), image.data, 0o600); err != nil {
+		if err := writeAskImage(askID, image); err != nil {
 			return errors.Join(err, removeAskImages(askID))
 		}
 	}
 	return nil
+}
+
+func writeAskImage(askID string, image askImage) error {
+	if err := os.MkdirAll(askImagesDir(askID), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(askImageFile(askID, image.path), image.data, 0o600)
 }
 
 func removeAskImages(askID string) error {
@@ -113,21 +114,21 @@ func (d *Daemon) copyImagesOfAsksOpenedBeforeImagesTravelled() {
 		return
 	}
 	for _, stored := range asks {
-		if _, err := os.Stat(askImagesDir(stored.ID)); !errors.Is(err, os.ErrNotExist) {
-			continue
-		}
 		parts, err := ask.Parse(stored.Markdown)
 		if err != nil {
 			continue
 		}
-		var images []askImage
 		for _, imagePath := range ask.ImagePaths(parts, stored.BaseDir) {
-			if data, err := os.ReadFile(imagePath); err == nil {
-				images = append(images, askImage{path: imagePath, data: data})
+			if _, err := os.Stat(askImageFile(stored.ID, imagePath)); !errors.Is(err, os.ErrNotExist) {
+				continue
 			}
-		}
-		if err := writeAskImages(stored.ID, images); err != nil {
-			d.logf("copy images of ask %s: %v", stored.ID, err)
+			data, err := os.ReadFile(imagePath)
+			if err != nil {
+				continue
+			}
+			if err := writeAskImage(stored.ID, askImage{path: imagePath, data: data}); err != nil {
+				d.logf("copy image %s of ask %s: %v", imagePath, stored.ID, err)
+			}
 		}
 	}
 }

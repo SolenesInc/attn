@@ -97,16 +97,22 @@ func TestAnAskOpenedBeforeImagesTravelledGetsItsImagesCopiedWhenTheDaemonStarts(
 	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
 	s.Launched(asker)
 	shot := writeImage(t, s.Path("work", "shot.png"), 1024)
-	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "Before: ![shot](shot.png)\n", "", s.Path("work"))
+	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "Before: ![shot](shot.png) ![later](later.png)\n", "", s.Path("work"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	s.Stop()
 	s.Start()
+	later := writeImage(t, s.Path("work", "later.png"), 512)
+	s.Stop()
+	s.Start()
 	removeAll(t, s.Path("work"))
 	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "shot.png")); !bytes.Equal(got, shot) {
 		t.Fatalf("after the restart, the ask opened without images shows %d bytes for its image, want its %d", len(got), len(shot))
+	}
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "later.png")); !bytes.Equal(got, later) {
+		t.Fatalf("an image that appeared after the first restart shows %d bytes after the next, want its %d", len(got), len(later))
 	}
 }
 
