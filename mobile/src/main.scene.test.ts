@@ -1,6 +1,6 @@
 import { Scene } from 'foldkit'
 import { describe, expect, it } from 'vitest'
-import { Message, SavePairings, update, view, type Model } from './main'
+import { Message, SavePairings, subscriptions, update, view, type Model } from './main'
 import type { Pairing } from './pairing'
 import type { QueueSession } from './queue'
 
@@ -12,6 +12,7 @@ const personal: Pairing = {
   homeName: 'Mac',
   profileId: 'p-personal',
   profileName: 'personal',
+  pairedAt: Date.parse('2026-11-01T09:00:00Z'),
 }
 const work: Pairing = { ...personal, id: 'mac/p-work', profileId: 'p-work', profileName: 'work' }
 const linux: Pairing = {
@@ -210,6 +211,30 @@ describe('the queue merges every pairing into one list', () => {
     )
   })
 
+  it('shows the names the home welcomes the phone with, after a rename on the home', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal, work)),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, homeName: 'Mac', profileName: 'side projects' }),
+      ),
+      Scene.Command.resolve(SavePairings, Message.SavedPairings()),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [session('a', 'Land the fix', 'working')],
+        }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({ pairingId: work.id, sessions: [session('b', 'Write docs', 'working')] }),
+      ),
+      expectEntries([
+        ['Land the fix', 'Mac · side projects'],
+        ['Write docs', 'Mac · work'],
+      ]),
+    )
+  })
+
   it('drops a forgotten pairing from the queue', () => {
     Scene.scene(
       { update, view },
@@ -229,6 +254,35 @@ describe('the queue merges every pairing into one list', () => {
       Scene.Command.resolve(SavePairings, Message.SavedPairings()),
       Scene.click(Scene.role('button', { name: 'Queue' })),
       expectEntries([['Write docs', 'Mac · work', 'working']]),
+    )
+  })
+})
+
+describe('pairing again', () => {
+  it('connects afresh even when the home and profile are the ones already paired', () => {
+    const before = {
+      ...paired(personal),
+      homes: [
+        { pairing: personal, status: 'closed' as const, reason: 'Mac ended this pairing', sessions: [] },
+      ],
+    }
+    const { model: after } = update(
+      before,
+      Message.Paired({ pairing: { ...personal, pairedAt: personal.pairedAt + 60_000 } }),
+    )
+    const links = (model: Model) => subscriptions.links.modelToDependencies(model)
+    expect(links(after)).not.toEqual(links(before))
+    expect(links(after).connected).toHaveLength(1)
+  })
+
+  it('keeps every link running when only a profile name changes', () => {
+    const before = paired(personal, work)
+    const { model: after } = update(
+      before,
+      Message.WelcomedByHome({ pairingId: personal.id, homeName: 'Mac', profileName: 'side projects' }),
+    )
+    expect(subscriptions.links.modelToDependencies(after)).toEqual(
+      subscriptions.links.modelToDependencies(before),
     )
   })
 })

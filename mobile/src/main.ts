@@ -8,7 +8,15 @@ import { modifyFields } from 'foldkit/struct'
 import { fromBase64Url } from './bytes'
 import { deviceKeys } from './device'
 import { pairWithHome, runLink, type LinkEvent } from './link'
-import { Pairing, loadPairings, pairingFromOffer, readOffer, savePairings } from './pairing'
+import {
+  LinkTarget,
+  Pairing,
+  linkTarget,
+  loadPairings,
+  pairingFromOffer,
+  readOffer,
+  savePairings,
+} from './pairing'
 import { Home, QueueSession, buildQueue, fromGatewaySession, type HomeRow, type SessionRow } from './queue'
 
 // MODEL
@@ -33,7 +41,7 @@ export const Message = defineMessageUnion({
   LoadedPairings: { pairings: Schema.Array(Pairing) },
   FailedLoadingPairings: { message: Schema.String },
   ChangedForeground: { foreground: Schema.Boolean },
-  WelcomedByHome: { pairingId: Schema.String },
+  WelcomedByHome: { pairingId: Schema.String, homeName: Schema.String, profileName: Schema.String },
   ReceivedSessions: { pairingId: Schema.String, sessions: Schema.Array(QueueSession) },
   WentOffline: { pairingId: Schema.String },
   LostHome: { pairingId: Schema.String, reason: Schema.String },
@@ -109,7 +117,7 @@ const PairWithCode = Command.define('PairWithCode', {
         keys,
         { pairingId: offer.pairing_id, secret: fromBase64Url(offer.secret) },
       )
-      return pairingFromOffer(offer, offer.home_name || welcome.homeName, welcome.profileName)
+      return pairingFromOffer(offer, welcome.homeName, welcome.profileName, Date.now())
     }).pipe(
       Effect.map((pairing) => Message.Paired({ pairing })),
       Effect.catch((error) =>
@@ -156,9 +164,20 @@ export const update = (model: Model, message: Message) =>
           foreground ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '' })) : homes,
       }),
     }),
-    WelcomedByHome: ({ pairingId }) => ({
-      model: updateHome(model, pairingId, (home) => ({ ...home, status: 'online', reason: '' })),
-    }),
+    WelcomedByHome: ({ pairingId, homeName, profileName }) => {
+      const welcomed = updateHome(model, pairingId, (home) => ({
+        ...home,
+        status: 'online',
+        reason: '',
+        pairing: { ...home.pairing, homeName, profileName },
+      }))
+      const renamed = model.homes.some(
+        (home) =>
+          home.pairing.id === pairingId &&
+          (home.pairing.homeName !== homeName || home.pairing.profileName !== profileName),
+      )
+      return { model: welcomed, commands: renamed ? [saved(welcomed.homes)] : [] }
+    },
     ReceivedSessions: ({ pairingId, sessions }) => ({
       model: updateHome(model, pairingId, (home) => ({ ...home, status: 'online', reason: '', sessions })),
     }),
@@ -239,7 +258,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
 const linkMessage = (pairingId: string, event: LinkEvent): Message => {
   switch (event._tag) {
     case 'Welcomed':
-      return Message.WelcomedByHome({ pairingId })
+      return Message.WelcomedByHome({ pairingId, homeName: event.homeName, profileName: event.profileName })
     case 'Sessions':
       return Message.ReceivedSessions({ pairingId, sessions: event.sessions.map(fromGatewaySession) })
     case 'HomeOffline':
@@ -251,7 +270,7 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
   }
 }
 
-const linkStream = (pairing: Pairing) =>
+const linkStream = (pairing: LinkTarget) =>
   Stream.callback<Message>((queue) =>
     Effect.acquireRelease(
       Effect.promise(async () => {
@@ -279,10 +298,10 @@ const tickStream = Stream.tick(Duration.seconds(30)).pipe(
 
 export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   links: entry(
-    { connected: Schema.Array(Pairing) },
+    { connected: Schema.Array(LinkTarget) },
     {
       modelToDependencies: (model) => ({
-        connected: model.foreground ? model.homes.map((home) => home.pairing) : [],
+        connected: model.foreground ? model.homes.map((home) => linkTarget(home.pairing)) : [],
       }),
       dependenciesToStream: ({ connected }) =>
         Stream.mergeAll(connected.map(linkStream), { concurrency: 'unbounded' }),

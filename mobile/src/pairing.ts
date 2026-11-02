@@ -1,5 +1,5 @@
 import { Preferences } from '@capacitor/preferences'
-import { Schema } from 'effect'
+import { Schema, Struct } from 'effect'
 
 export const PairingOffer = Schema.Struct({
   v: Schema.Literal(1),
@@ -22,8 +22,14 @@ export const Pairing = Schema.Struct({
   homeName: Schema.String,
   profileId: Schema.String,
   profileName: Schema.String,
+  pairedAt: Schema.Finite,
 })
 export type Pairing = typeof Pairing.Type
+
+export const LinkTarget = Pairing.mapFields(Struct.omit(['profileName']))
+export type LinkTarget = typeof LinkTarget.Type
+
+export const linkTarget = (pairing: Pairing): LinkTarget => Struct.omit(pairing, ['profileName'])
 
 export const pairingId = (homeId: string, profileId: string): string => `${homeId}/${profileId}`
 
@@ -43,7 +49,12 @@ export const readOffer = (scanned: string): PairingOffer => {
   }
 }
 
-export const pairingFromOffer = (offer: PairingOffer, homeName: string, profileName: string): Pairing => ({
+export const pairingFromOffer = (
+  offer: PairingOffer,
+  homeName: string,
+  profileName: string,
+  pairedAt: number,
+): Pairing => ({
   id: pairingId(offer.home_id, offer.profile_id),
   cloud: offer.cloud,
   homeId: offer.home_id,
@@ -51,6 +62,7 @@ export const pairingFromOffer = (offer: PairingOffer, homeName: string, profileN
   homeName,
   profileName,
   profileId: offer.profile_id,
+  pairedAt,
 })
 
 const storageKey = 'pairings'
