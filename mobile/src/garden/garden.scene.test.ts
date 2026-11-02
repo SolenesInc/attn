@@ -92,6 +92,7 @@ const reading = seed('s-read', 'Read seeds', {
 const moving = seed('s-move', 'Move seeds', { ready: false, plotId: 's-plot', waitsFor: ['s-read'] })
 const loose = seed('s-loose', 'Tidy the docs')
 const shelved = seed('s-shelf', 'Try a widget', { status: 'parked', ready: false })
+const finished = seed('s-done', 'Spike', { status: 'harvested', ready: false, reason: 'Proved it' })
 
 const plotDetail: SeedDetail = {
   seed: plot,
@@ -122,7 +123,10 @@ const readingDetail: SeedDetail = {
 }
 
 const garden = Scene.Subscription.emit(
-  Message.ReceivedGarden({ pairingId: personal.id, seeds: [shelved, loose, moving, reading, plot] }),
+  Message.ReceivedGarden({
+    pairingId: personal.id,
+    seeds: [finished, shelved, loose, moving, reading, plot],
+  }),
 )
 
 const sectionTitles = (html: Parameters<ReturnType<typeof Scene.getAllByTestId>>[0]) =>
@@ -140,6 +144,7 @@ describe('the Garden on the phone', () => {
       Scene.expect(Scene.text('Ready · 1')).toExist(),
       Scene.expect(Scene.text('Blocked · 1')).toExist(),
       Scene.expect(Scene.text('Parked · 1')).toExist(),
+      Scene.expect(Scene.text('Closed today · 1')).toExist(),
       Scene.tap((simulation) => {
         const rows = sectionTitles(simulation.html)
         expect(rows[0]).toContain('Ship the phone')
@@ -151,6 +156,8 @@ describe('the Garden on the phone', () => {
         expect(rows[3]).toContain('Move seeds')
         expect(rows[3]).toContain('waits for 1')
         expect(rows[4]).toContain('Try a widget')
+        expect(rows[5]).toContain('Spike')
+        expect(rows[5]).toContain('Proved it')
       }),
     )
   })
@@ -291,6 +298,8 @@ describe('the Garden on the phone', () => {
       Message.ReceivedGarden({ pairingId: personal.id, seeds: [{ ...reading, status: 'parked' }] }),
     )
     expect(moved.commands).toHaveLength(1)
+    const gone = update(model, Message.ReceivedGarden({ pairingId: personal.id, seeds: [] }))
+    expect(gone.commands).toHaveLength(1)
   })
 
   it('says which home is too old to show the Garden', () => {

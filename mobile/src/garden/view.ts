@@ -1,10 +1,10 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
+import { verbsFor } from '@attn/components/gardenBoardModel'
 import { renderMarkdown, type MarkdownContext } from '../asks/markdown'
 import type { Pairing } from '../pairing'
 import {
   gardenSections,
   verbSpecs,
-  verbsFor,
   type GardenSeed,
   type PlotProgress,
   type SeedDetail,
@@ -190,6 +190,11 @@ export const gardenScreen = <Message>(
       section(
         'Parked',
         rows((s) => s.parked),
+        h,
+      ),
+      section(
+        'Closed today',
+        rows((s) => s.closed),
         h,
       ),
     ],

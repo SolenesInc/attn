@@ -661,7 +661,10 @@ const receiveGarden = (
   if (model.screen !== 'seed' || open?.pairingId !== pairingId || page.status !== 'loaded')
     return { model: received }
   const listed = seeds.find((seed) => seed.id === open.seedId)
-  const changed = listed !== undefined && JSON.stringify(listed) !== JSON.stringify(page.detail.seed)
+  const wasListed = model.homes
+    .find((home) => home.pairing.id === pairingId)
+    ?.garden.some((seed) => seed.id === open.seedId)
+  const changed = listed ? JSON.stringify(listed) !== JSON.stringify(page.detail.seed) : wasListed === true
   return { model: received, commands: changed ? [GetSeed(open)] : [] }
 }
 

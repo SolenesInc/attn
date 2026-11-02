@@ -299,10 +299,11 @@ model TerminalEnded {
   terminal_id: string;
 }
 
-// Since api 6: the profile's open seeds, planted, growing and parked, without
-// their bodies. After welcome and on each change the home sends garden_seeds
-// frames holding each seed that is new or changed, as many as fit a frame, then
-// garden with every open seed's id, newest first.
+// Since api 6: the profile's open seeds, planted, growing and parked, and the
+// seeds closed in the last day, without their bodies. After welcome and on
+// each change the home sends garden_seeds frames holding each seed that is new
+// or changed, as many as fit a frame, then garden with every listed seed's id,
+// newest first.
 model GatewayGardenSeeds {
   event: "garden_seeds";
   seeds: GatewaySeed[];

@@ -1,4 +1,4 @@
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed } from '../types/generated';
 
 export type ColumnKey = 'ready' | 'growing' | 'parked' | 'closed';
 
@@ -31,7 +31,7 @@ export function columnOf(seed: Seed): ColumnKey {
 }
 
 // The garden's own lifecycle table (internal/garden/lifecycle.go) read from the board's side.
-export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
+export function legalVerbs(seed: Pick<Seed, 'status'>, target: ColumnKey): Verb[] {
   const status = seed.status;
   const open = status === 'planted' || status === 'growing' || status === 'parked';
   switch (target) {
@@ -48,7 +48,7 @@ export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
 
 // The verbs a card offers on its own. The keyboard path and the drag path must never disagree,
 // so they read the same table.
-export function verbsFor(seed: Seed): Verb[] {
+export function verbsFor(seed: Pick<Seed, 'status'>): Verb[] {
   const columns: ColumnKey[] = ['growing', 'parked', 'closed', 'ready'];
   return columns.flatMap((column) => legalVerbs(seed, column));
 }

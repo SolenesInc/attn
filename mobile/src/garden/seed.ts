@@ -108,17 +108,6 @@ export const fromGatewayDetail = (detail: GatewaySeedDetail): SeedDetail => ({
 export const Verb = Schema.Literals(['park', 'harvest', 'wither', 'replant'])
 export type Verb = typeof Verb.Type
 
-const open = (status: SeedStatus) => status === 'planted' || status === 'growing' || status === 'parked'
-
-// The moves internal/garden/lifecycle.go allows the user, in the order the seed screen offers them.
-export const verbsFor = (seed: GardenSeed): ReadonlyArray<Verb> => [
-  ...(seed.status === 'planted' || seed.status === 'growing' ? (['park'] as const) : []),
-  ...(open(seed.status) ? (['harvest', 'wither'] as const) : []),
-  ...(seed.status === 'parked' || seed.status === 'harvested' || seed.status === 'withered'
-    ? (['replant'] as const)
-    : []),
-]
-
 export const verbSpecs: Record<Verb, { readonly label: string; readonly prompt: string }> = {
   park: { label: 'Park', prompt: 'What are you leaving it at?' },
   harvest: { label: 'Harvest', prompt: 'What got done?' },
@@ -132,18 +121,23 @@ export type GardenSections = {
   readonly ready: ReadonlyArray<GardenSeed>
   readonly blocked: ReadonlyArray<GardenSeed>
   readonly parked: ReadonlyArray<GardenSeed>
+  readonly closed: ReadonlyArray<GardenSeed>
 }
 
-// Every open seed lands in one section. A plot lists at the top unless the plot it is part of is open too.
+const isClosed = (seed: GardenSeed) => seed.status === 'harvested' || seed.status === 'withered'
+
 export const gardenSections = (seeds: ReadonlyArray<GardenSeed>): GardenSections => {
-  const ids = new Set(seeds.map((seed) => seed.id))
+  const openIds = new Set(seeds.filter((seed) => !isClosed(seed)).map((seed) => seed.id))
   const leaves = seeds.filter((seed) => seed.progress === null)
   const recent = (a: GardenSeed, b: GardenSeed) => b.stateChangedAt - a.stateChangedAt
   return {
-    plots: seeds.filter((seed) => seed.progress !== null && !(seed.plotId && ids.has(seed.plotId))),
+    plots: seeds.filter(
+      (seed) => seed.progress !== null && !isClosed(seed) && !(seed.plotId && openIds.has(seed.plotId)),
+    ),
     growing: leaves.filter((seed) => seed.status === 'growing').toSorted(recent),
     ready: leaves.filter((seed) => seed.status === 'planted' && seed.ready),
     blocked: leaves.filter((seed) => seed.status === 'planted' && !seed.ready),
     parked: leaves.filter((seed) => seed.status === 'parked').toSorted(recent),
+    closed: seeds.filter(isClosed).toSorted(recent),
   }
 }

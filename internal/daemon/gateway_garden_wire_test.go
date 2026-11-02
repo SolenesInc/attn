@@ -193,9 +193,20 @@ func TestGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testin
 	if failure := phone.move(second, gateway.GatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
 		t.Fatalf("harvesting: %s", failure)
 	}
-	seeds = gardenByID(phone.showsGarden(func(seeds []gateway.GatewaySeed) bool { return len(seeds) == 2 }))
+	seeds = gardenByID(phone.showsGarden(func(seeds []gateway.GatewaySeed) bool {
+		return gardenByID(seeds)[second].Status == gateway.GatewaySeedStatusHarvested
+	}))
 	if got := seeds[plot].Progress; got == nil || got.Done != 1 || got.Parked != 1 {
 		t.Fatalf("the plot after the harvest reads %+v, want one done and one parked", got)
+	}
+	if failure := phone.move(second, gateway.GatewaySeedVerbReplant, "Harvested by mistake."); failure != "" {
+		t.Fatalf("replanting the seed closed a moment ago: %s", failure)
+	}
+	phone.showsGarden(func(seeds []gateway.GatewaySeed) bool {
+		return gardenByID(seeds)[second].Status == gateway.GatewaySeedStatusPlanted
+	})
+	if failure := phone.move(second, gateway.GatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
+		t.Fatalf("harvesting again: %s", failure)
 	}
 	detail, _ = phone.readSeed(plot)
 	if harvested := gardenByID(detail.Children)[second]; harvested.Status != gateway.GatewaySeedStatusHarvested || protocol.Deref(harvested.Reason) != "Moves work from the phone." {

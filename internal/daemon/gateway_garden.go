@@ -17,6 +17,8 @@ import (
 
 const gatewayGardenAPI = 6
 
+const gatewayClosedSeedShownFor = 24 * time.Hour
+
 func (d *Daemon) gatewaySendGarden(conn *gatewayConn) error {
 	if conn.api < gatewayGardenAPI {
 		return nil
@@ -30,14 +32,23 @@ func (d *Daemon) gatewaySendGarden(conn *gatewayConn) error {
 	}
 	ids := []string{}
 	seeds := map[string]gateway.GatewaySeed{}
+	shownSince := d.gardenTime().Add(-gatewayClosedSeedShownFor)
 	for _, seed := range read.seeds {
-		if garden.Closed(seed.Status) {
+		if garden.Closed(seed.Status) && !read.changedSince(seed, shownSince) {
 			continue
 		}
 		ids = append(ids, seed.ID)
 		seeds[seed.ID] = read.gatewaySeed(seed)
 	}
 	return d.gatewaySendGardenWindow(conn, ids, seeds)
+}
+
+func (g gardenRead) changedSince(seed garden.Seed, since time.Time) bool {
+	changedAt, err := time.Parse(time.RFC3339Nano, seed.StateChangedAt)
+	if err != nil {
+		changedAt = g.docs[seed.ID].UpdatedAt
+	}
+	return changedAt.After(since)
 }
 
 func (d *Daemon) gatewaySendGardenWindow(conn *gatewayConn, ids []string, seeds map[string]gateway.GatewaySeed) error {
@@ -220,12 +231,8 @@ func gatewayDetailFrame(detail gateway.GatewaySeedDetail) ([]byte, error) {
 			detail.BodyTooLargeBytes = protocol.Ptr(len(detail.Body))
 			detail.MaxFrameBytes = protocol.Ptr(cloudlink.MaxMessageBytes)
 			detail.Body = ""
-		case len(detail.Children) > 0:
-			detail.Children = detail.Children[:len(detail.Children)/2]
-		case len(detail.Checks) > 0:
-			detail.Checks = detail.Checks[:len(detail.Checks)/2]
 		default:
-			return nil, fmt.Errorf("seed %s does not fit one gateway message of %d bytes even without its body, log, children and checks", detail.Seed.ID, cloudlink.MaxMessageBytes)
+			return nil, fmt.Errorf("seed %s does not fit one gateway message of %d bytes even without its body and log; read it on the computer", detail.Seed.ID, cloudlink.MaxMessageBytes)
 		}
 	}
 }
