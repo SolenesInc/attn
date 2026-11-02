@@ -1,9 +1,9 @@
-import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core'
+import { CapacitorHttp, registerPlugin } from '@capacitor/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { toBase64Url } from './bytes'
-import { deviceKeys, type DeviceKeys } from './device'
+import { deviceKeys } from './device'
 
-type ApnsEnvironment = 'sandbox' | 'production'
+export type ApnsEnvironment = 'sandbox' | 'production'
 
 type AttnPushPlugin = {
   prepare(options: { noiseSecret: string }): Promise<{ environment: ApnsEnvironment }>
@@ -20,48 +20,45 @@ export type PushTap = {
   readonly askId: string
 }
 
-type Registration = {
-  readonly token: string
-  readonly environment: ApnsEnvironment
-  readonly keys: DeviceKeys
-}
+export type PushToken = { readonly token: string; readonly environment: ApnsEnvironment }
 
 export const notificationsOff =
   'Notifications are off for attn, so waiting agents cannot reach you. Turn them on in Settings → Notifications → attn.'
 
-let registering: Promise<Registration> | undefined
-
-const register = async (): Promise<Registration> => {
+export const watchPushTokens = async (
+  onToken: (token: PushToken) => void,
+  onRefused: (message: string) => void,
+): Promise<() => Promise<void>> => {
   const { PushNotifications } = await import('@capacitor/push-notifications')
+  const keys = await deviceKeys()
+  const { environment } = await AttnPush.prepare({ noiseSecret: toBase64Url(keys.noiseSecret) })
   let permission = await PushNotifications.checkPermissions()
   if (permission.receive === 'prompt' || permission.receive === 'prompt-with-rationale') {
     permission = await PushNotifications.requestPermissions()
   }
-  if (permission.receive !== 'granted') throw new Error(notificationsOff)
-  const token = new Promise<string>((resolve, reject) => {
-    void PushNotifications.addListener('registration', ({ value }) => resolve(value.toLowerCase()))
-    void PushNotifications.addListener('registrationError', ({ error }) =>
-      reject(new Error(`iOS refused a push token: ${error}`)),
-    )
-  })
+  if (permission.receive !== 'granted') {
+    onRefused(notificationsOff)
+    return async () => {}
+  }
+  const handles = await Promise.all([
+    PushNotifications.addListener('registration', ({ value }) =>
+      onToken({ token: value.toLowerCase(), environment }),
+    ),
+    PushNotifications.addListener('registrationError', ({ error }) =>
+      onRefused(`iOS gave attn no push token, so waiting agents cannot reach you: ${error}`),
+    ),
+  ])
   await PushNotifications.register()
-  const keys = await deviceKeys()
-  const { environment } = await AttnPush.prepare({ noiseSecret: toBase64Url(keys.noiseSecret) })
-  return { token: await token, environment, keys }
+  return async () => {
+    await Promise.all(handles.map((handle) => handle.remove()))
+  }
 }
-
-const registration = (): Promise<Registration> =>
-  (registering ??= register().catch((error: unknown) => {
-    registering = undefined
-    throw error
-  }))
 
 export const pushTokenMessage = (homeId: string, devicePub: string, environment: string, token: string) =>
   new TextEncoder().encode(`attn-cloud/v1 push-token\n${homeId}\n${devicePub}\n${environment}\n${token}`)
 
-export const registerForPush = async (home: PushHome): Promise<void> => {
-  if (!Capacitor.isNativePlatform()) return
-  const { token, environment, keys } = await registration()
+export const registerForPush = async (home: PushHome, { token, environment }: PushToken): Promise<void> => {
+  const keys = await deviceKeys()
   const devicePub = toBase64Url(keys.signPub)
   const response = await CapacitorHttp.post({
     url: `${home.cloud}/v1/homes/${home.homeId}/push-token`,

@@ -36,7 +36,7 @@ import {
   readOffer,
   savePairings,
 } from './pairing'
-import { readPushTap, registerForPush } from './push'
+import { readPushTap, registerForPush, watchPushTokens } from './push'
 import { Home, QueueSession, buildQueue, fromGatewaySession, type HomeRow, type SessionRow } from './queue'
 import { activeTerminal, mountTerminal, terminalKeys, type TerminalKey } from './terminal/terminal'
 
@@ -78,6 +78,11 @@ const Composer = Schema.Struct({
 })
 export type Composer = typeof Composer.Type
 
+const PushToken = Schema.Struct({
+  token: Schema.String,
+  environment: Schema.Literals(['sandbox', 'production']),
+})
+
 export const Model = Schema.Struct({
   screen: Schema.Literals(['queue', 'pairings', 'ask', 'session']),
   openSession: Schema.NullOr(OpenSession),
@@ -97,7 +102,9 @@ export const Model = Schema.Struct({
   pairingFlow: PairingFlow,
   pairingMessage: Schema.String,
   typedCode: Schema.String,
+  pushToken: Schema.NullOr(PushToken),
   pushNote: Schema.String,
+  pushRefusals: Schema.Record(Schema.String, Schema.String),
   now: Schema.Finite,
 })
 export type Model = typeof Model.Type
@@ -160,8 +167,10 @@ export const Message = defineMessageUnion({
   ChangedViewport: { height: Schema.Finite },
   ChangedTerminalStatus: { text: Schema.String },
   CompletedCommand: {},
-  RegisteredPush: {},
-  FailedPush: { message: Schema.String },
+  ReceivedPushToken: { pushToken: PushToken },
+  RefusedPush: { message: Schema.String },
+  RegisteredPush: { homeKey: Schema.String },
+  FailedPush: { homeKey: Schema.String, message: Schema.String },
   TappedNotification: { pairingId: Schema.String, sessionId: Schema.String, askId: Schema.String },
 })
 export type Message = typeof Message.Type
@@ -231,17 +240,34 @@ const PairWithCode = Command.define('PairWithCode', {
     ),
 })
 
+export const pushHomeKey = (cloud: string, homeId: string) => `${cloud} ${homeId}`
+
 export const RegisterPush = Command.define('RegisterPush', {
-  args: { cloud: Schema.String, homeId: Schema.String },
+  args: { cloud: Schema.String, homeId: Schema.String, pushToken: PushToken },
   messages: [Message.RegisteredPush, Message.FailedPush],
-  execute: (home) =>
-    Effect.tryPromise(() => registerForPush(home)).pipe(
-      Effect.map(() => Message.RegisteredPush()),
+  execute: ({ cloud, homeId, pushToken }) =>
+    Effect.tryPromise(() => registerForPush({ cloud, homeId }, pushToken)).pipe(
+      Effect.map(() => Message.RegisteredPush({ homeKey: pushHomeKey(cloud, homeId) })),
       Effect.catch((error) =>
-        Effect.succeed(Message.FailedPush({ message: errorText(error.cause ?? error) })),
+        Effect.succeed(
+          Message.FailedPush({
+            homeKey: pushHomeKey(cloud, homeId),
+            message: errorText(error.cause ?? error),
+          }),
+        ),
       ),
     ),
 })
+
+const registerWith = (homes: ReadonlyArray<Home>, pushToken: typeof PushToken.Type) => {
+  const seen = new Set<string>()
+  return homes.flatMap(({ pairing: { cloud, homeId } }) => {
+    const key = pushHomeKey(cloud, homeId)
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [RegisterPush({ cloud, homeId, pushToken })]
+  })
+}
 
 export const SavePairings = Command.define('SavePairings', {
   args: { pairings: Schema.Array(Pairing) },
@@ -549,7 +575,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         model: welcomed,
         commands: [
           ...(renamed ? [saved(welcomed.homes)] : []),
-          ...(home ? [RegisterPush({ cloud: home.pairing.cloud, homeId: home.pairing.homeId })] : []),
+          ...(home && model.pushToken ? registerWith([home], model.pushToken) : []),
         ],
       }
     },
@@ -756,8 +782,23 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     }),
     ChangedTerminalStatus: ({ text }) => ({ model: modifyFields(model, { terminalStatus: () => text }) }),
     CompletedCommand: () => ({ model }),
-    RegisteredPush: () => ({ model: modifyFields(model, { pushNote: () => '' }) }),
-    FailedPush: ({ message }) => ({ model: modifyFields(model, { pushNote: () => message }) }),
+    ReceivedPushToken: ({ pushToken }) => ({
+      model: modifyFields(model, { pushToken: () => pushToken, pushNote: () => '' }),
+      commands: registerWith(
+        model.homes.filter((home) => home.status === 'online'),
+        pushToken,
+      ),
+    }),
+    RefusedPush: ({ message }) => ({ model: modifyFields(model, { pushNote: () => message }) }),
+    RegisteredPush: ({ homeKey }) => ({
+      model: modifyFields(model, {
+        pushRefusals: (refusals) =>
+          Object.fromEntries(Object.entries(refusals).filter(([key]) => key !== homeKey)),
+      }),
+    }),
+    FailedPush: ({ homeKey, message }) => ({
+      model: modifyFields(model, { pushRefusals: (refusals) => ({ ...refusals, [homeKey]: message }) }),
+    }),
     TappedNotification: ({ pairingId, sessionId, askId }) =>
       update(
         model,
@@ -787,7 +828,9 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     pairingFlow: 'idle',
     pairingMessage: '',
     typedCode: '',
+    pushToken: null,
     pushNote: '',
+    pushRefusals: {},
     now: Date.now(),
   },
   commands: [LoadPairings()],
@@ -858,6 +901,24 @@ const notificationTapStream = Stream.callback<Message>((queue) =>
   ).pipe(Effect.flatMap(() => Effect.never)),
 )
 
+const pushTokenStream = Stream.callback<Message>((queue) =>
+  Effect.acquireRelease(
+    Effect.promise(() =>
+      watchPushTokens(
+        (pushToken) => Queue.offerUnsafe(queue, Message.ReceivedPushToken({ pushToken })),
+        (message) => Queue.offerUnsafe(queue, Message.RefusedPush({ message })),
+      ).catch((error: unknown) => {
+        Queue.offerUnsafe(
+          queue,
+          Message.RefusedPush({ message: `attn could not set up notifications: ${errorText(error)}` }),
+        )
+        return async () => {}
+      }),
+    ),
+    (stop) => Effect.promise(stop),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
+
 const foregroundStream = Stream.callback<Message>((queue) =>
   Effect.acquireRelease(
     Effect.promise(() =>
@@ -921,6 +982,15 @@ export const subscriptions = Subscription.make<Model, Message>()((entry) => ({
   viewport: entry(
     { on: Schema.Boolean },
     { modelToDependencies: () => ({ on: true }), dependenciesToStream: () => viewportStream },
+  ),
+  pushTokens: entry(
+    { on: Schema.Boolean },
+    {
+      modelToDependencies: (model) => ({
+        on: Capacitor.isNativePlatform() && model.foreground && model.homes.length > 0,
+      }),
+      dependenciesToStream: ({ on }) => (on ? pushTokenStream : Stream.empty),
+    },
   ),
   notificationTaps: entry(
     { on: Schema.Boolean },
@@ -1108,6 +1178,22 @@ const queueView = (model: Model, h: HtmlBuilder<Message>): Html => {
 
 const homeStatusText = (home: Home): string =>
   home.status === 'online' ? 'online' : home.status === 'connecting' ? 'connecting…' : home.reason
+
+const pushNotesView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const refused = model.homes.flatMap(({ pairing }, index, homes) => {
+    const key = pushHomeKey(pairing.cloud, pairing.homeId)
+    const message = model.pushRefusals[key]
+    const first = homes.findIndex((home) => pushHomeKey(home.pairing.cloud, home.pairing.homeId) === key)
+    return message && first === index ? [`${pairing.homeName}: ${message}`] : []
+  })
+  const notes = [...(model.pushNote ? [model.pushNote] : []), ...refused]
+  return notes.length === 0
+    ? h.empty
+    : h.div(
+        [h.Class('push-notes')],
+        notes.map((note) => h.p([h.Class('error push-note')], [note])),
+      )
+}
 
 const pairingsView = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -1410,9 +1496,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
             h.main(
               [],
               [
-                model.pushNote && model.screen !== 'ask'
-                  ? h.p([h.Class('error push-note')], [model.pushNote])
-                  : h.empty,
+                model.screen === 'ask' ? h.empty : pushNotesView(model, h),
                 model.screen === 'queue'
                   ? queueView(model, h)
                   : model.screen === 'ask'

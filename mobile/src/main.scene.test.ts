@@ -4,6 +4,7 @@ import {
   KeepFocus,
   Message,
   RegisterPush,
+  pushHomeKey,
   SavePairings,
   SendPrompt,
   TerminalMount,
@@ -13,6 +14,7 @@ import {
   type Model,
 } from './main'
 import type { Pairing } from './pairing'
+import { notificationsOff } from './push'
 import type { QueueSession } from './queue'
 
 const personal: Pairing = {
@@ -81,7 +83,9 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   pairingFlow: 'idle',
   pairingMessage: '',
   typedCode: '',
+  pushToken: null,
   pushNote: '',
+  pushRefusals: {},
   now,
 })
 
@@ -256,7 +260,6 @@ describe('the queue merges every pairing into one list', () => {
         }),
       ),
       Scene.Command.resolve(SavePairings, Message.SavedPairings()),
-      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
       Scene.Subscription.emit(
         Message.ReceivedSessions({
           pairingId: personal.id,
@@ -304,7 +307,6 @@ describe('an empty queue', () => {
       Scene.Subscription.emit(
         Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
       ),
-      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
       Scene.expect(Scene.text('No agents yet.')).toBeAbsent(),
       Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: personal.id, sessions: [] })),
       Scene.expect(Scene.text('No agents yet.')).toExist(),
@@ -412,30 +414,69 @@ describe('answering an agent from the phone', () => {
 })
 
 describe('push notifications', () => {
-  it('registers with each home that welcomes the phone, and says so when notifications are off', () => {
+  it('registers every welcomed home, and each again when iOS rotates the token', () => {
+    const first = { token: 'aa'.repeat(32), environment: 'production' as const }
+    const rotated = { token: 'bb'.repeat(32), environment: 'production' as const }
+    const at = (pairing: Pairing, pushToken: typeof first) =>
+      RegisterPush({ cloud: pairing.cloud, homeId: pairing.homeId, pushToken })
+    const registered = (pairing: Pairing) =>
+      Message.RegisteredPush({ homeKey: pushHomeKey(pairing.cloud, pairing.homeId) })
     Scene.scene(
       { update, view },
-      Scene.given(paired(personal)),
+      Scene.given(paired(personal, work, linux)),
       Scene.Subscription.emit(
         Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
       ),
-      Scene.Command.expectHas(RegisterPush({ cloud: personal.cloud, homeId: personal.homeId })),
+      Scene.Command.expectNone(),
+      Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: personal.id, sessions: [] })),
+      Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: work.id, sessions: [] })),
+      Scene.Subscription.emit(Message.ReceivedPushToken({ pushToken: first })),
+      Scene.Command.expectExact(at(personal, first)),
+      Scene.Command.resolve(at(personal, first), registered(personal)),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: linux.id, homeName: 'Box', profileName: 'default' }),
+      ),
+      Scene.Command.expectExact(at(linux, first)),
+      Scene.Command.resolve(at(linux, first), registered(linux)),
+      Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: linux.id, sessions: [] })),
+      Scene.Subscription.emit(Message.ReceivedPushToken({ pushToken: rotated })),
+      Scene.Command.expectExact(at(personal, rotated), at(linux, rotated)),
+      Scene.Command.resolve(at(personal, rotated), registered(personal)),
+      Scene.Command.resolve(at(linux, rotated), registered(linux)),
+    )
+  })
+
+  it('names each home that refused the token until it accepts one, and says when notifications are off', () => {
+    const pushToken = { token: 'aa'.repeat(32), environment: 'production' as const }
+    const refusal = 'Attn Cloud refused this phone’s push token (403): device is not on the allowlist'
+    Scene.scene(
+      { update, view },
+      Scene.given({ ...paired(personal, linux), pushToken }),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
+      ),
       Scene.Command.resolve(
         RegisterPush,
-        Message.FailedPush({
-          message: 'Notifications are off for attn, so waiting agents cannot reach you.',
-        }),
+        Message.FailedPush({ homeKey: pushHomeKey(personal.cloud, personal.homeId), message: refusal }),
       ),
-      Scene.expect(
-        Scene.text('Notifications are off for attn, so waiting agents cannot reach you.'),
-      ).toExist(),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: linux.id, homeName: 'Box', profileName: 'default' }),
+      ),
+      Scene.Command.resolve(
+        RegisterPush,
+        Message.RegisteredPush({ homeKey: pushHomeKey(linux.cloud, linux.homeId) }),
+      ),
+      Scene.expect(Scene.text(`Mac: ${refusal}`)).toExist(),
       Scene.Subscription.emit(
         Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
       ),
-      Scene.Command.resolve(RegisterPush, Message.RegisteredPush()),
-      Scene.expect(
-        Scene.text('Notifications are off for attn, so waiting agents cannot reach you.'),
-      ).not.toExist(),
+      Scene.Command.resolve(
+        RegisterPush,
+        Message.RegisteredPush({ homeKey: pushHomeKey(personal.cloud, personal.homeId) }),
+      ),
+      Scene.expect(Scene.text(`Mac: ${refusal}`)).not.toExist(),
+      Scene.Subscription.emit(Message.RefusedPush({ message: notificationsOff })),
+      Scene.expect(Scene.text(notificationsOff)).toExist(),
     )
   })
 
