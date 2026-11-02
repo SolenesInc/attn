@@ -228,6 +228,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPtyInput:                      decodeInto[PtyInputMessage],
 	CmdSupportSnapshot:               decodeInto[SupportSnapshotMessage],
 	CmdTerminalPointerActivity:       decodeInto[TerminalPointerActivityMessage],
+	CmdTerminalFocus:                 decodeInto[TerminalFocusMessage],
 	CmdBusStatusGet:                  decodeInto[BusStatusGetMessage],
 	CmdBusSetConsumerEnabled:         decodeInto[BusSetConsumerEnabledMessage],
 	CmdPtyResize:                     decodeInto[PtyResizeMessage],

@@ -2597,6 +2597,14 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'terminal_pointer_activity', id }));
   }, []);
 
+  const sendTerminalFocus = useCallback((id: string) => {
+    const ws = wsRef.current;
+    if (!hasReceivedInitialStateRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    ws.send(JSON.stringify({ cmd: 'terminal_focus', id }));
+  }, []);
+
   const sendSetClientPresence = useCallback((presence: {
     visible: boolean;
     dashboardVisible: boolean;
@@ -4346,6 +4354,7 @@ export function useDaemonSocket({
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,
+    sendTerminalFocus,
     sendSetClientPresence,
     sendSetTerminalTheme,
     subscribeDocuments,

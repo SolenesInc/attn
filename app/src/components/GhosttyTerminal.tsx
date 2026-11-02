@@ -99,6 +99,7 @@ import {
   geometryOverflowsContainer,
   isDesktopSuspensionAnimating,
   recoveryDelayMs,
+  scaledToFitTransform,
 } from './ghosttyGeometry';
 import { recordTerminalLinkHitTestEvent } from '../utils/terminalLinkHitTestLog';
 import {
@@ -186,6 +187,7 @@ export interface GhosttyTerminalProps {
   };
   onInput: (data: string, source?: string, traceId?: string) => void;
   onPointerActivity?: () => void;
+  onFocus?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onPathRefused?: (message: string) => void;
   gardenSeeds?: readonly Seed[];
@@ -520,7 +522,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onFocus, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -617,6 +619,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const startupRef = useRef(emptyStartup());
     const onInputRef = useRef(onInput);
     const onPointerActivityRef = useRef(onPointerActivity);
+    const onFocusRef = useRef(onFocus);
     const lastPointerActivityAtRef = useRef(Number.NEGATIVE_INFINITY);
     const onOpenMarkdownRef = useRef(onOpenMarkdown);
     const onPathRefusedRef = useRef(onPathRefused);
@@ -683,6 +686,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     useEffect(() => {
       onPointerActivityRef.current = onPointerActivity;
     }, [onPointerActivity]);
+
+    useEffect(() => {
+      onFocusRef.current = onFocus;
+    }, [onFocus]);
 
     useLayoutEffect(() => {
       gardenSeedsRef.current = gardenSeeds;
@@ -1820,6 +1827,23 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
     }, [blockRowAccess]);
 
+    const scaleSmallerPtyToFit = useCallback(() => {
+      const container = containerRef.current;
+      const canvas = canvasRef.current;
+      const terminal = terminalRef.current;
+      const renderer = rendererRef.current;
+      if (!container || !canvas || !terminal || !renderer) return;
+      const transform = scaledToFitTransform(
+        terminal.cols,
+        terminal.rows,
+        renderer.cellWidth,
+        renderer.cellHeight,
+        container.clientWidth,
+        container.clientHeight,
+      );
+      if (canvas.style.transform !== transform) canvas.style.transform = transform;
+    }, []);
+
     const resizeLocal = useCallback((
       cols: number,
       rows: number,
@@ -1848,6 +1872,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         reconcileBlocksAfterResize(cols !== fromCols);
         modelSizeRef.current = { cols, rows };
         renderer.resize(cols, rows);
+        scaleSmallerPtyToFit();
         hoverGenerationRef.current += 1;
         noteResize(diagKeyRef.current, {
           session: runtimeMetaRef.current?.sessionId ?? undefined,
@@ -1869,7 +1894,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           }
         }
       });
-    }, [enqueueOperation, reconcileBlocksAfterResize, renderSurface, scheduleCoalescedRefit]);
+    }, [enqueueOperation, reconcileBlocksAfterResize, renderSurface, scaleSmallerPtyToFit, scheduleCoalescedRefit]);
 
     const applyFitDimensions = useCallback((dims: TerminalDimensions) => {
       const terminal = terminalRef.current;
@@ -1936,6 +1961,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'inactiveSession', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
+      scaleSmallerPtyToFit();
       if (surfaceReleasedRef.current) {
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'surfaceReleased', cw: container.clientWidth, ch: container.clientHeight });
         return;
@@ -1965,7 +1991,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         );
       }
       fitResizeCoalescerRef.current.submit(dims);
-    }, []);
+    }, [scaleSmallerPtyToFit]);
 
     fitRef.current = fit;
 
@@ -2428,8 +2454,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     const cellFromPointer = (event: React.MouseEvent | React.WheelEvent | MouseEvent) => {
       const renderer = rendererRef.current;
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!renderer || !rect) return null;
+      const canvas = canvasRef.current;
+      const rect = canvas?.getBoundingClientRect();
+      if (!renderer || !canvas || !rect) return null;
+      const scale = canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1;
       if (
         event.clientX < rect.left
         || event.clientX >= rect.right
@@ -2439,8 +2467,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         return null;
       }
       return {
-        row: Math.max(0, Math.min((terminalRef.current?.rows ?? 1) - 1, Math.floor((event.clientY - rect.top) / renderer.cellHeight))),
-        col: Math.max(0, Math.min((terminalRef.current?.cols ?? 1), Math.floor((event.clientX - rect.left) / renderer.cellWidth))),
+        row: Math.max(0, Math.min((terminalRef.current?.rows ?? 1) - 1, Math.floor((event.clientY - rect.top) / (renderer.cellHeight * scale)))),
+        col: Math.max(0, Math.min((terminalRef.current?.cols ?? 1), Math.floor((event.clientX - rect.left) / (renderer.cellWidth * scale)))),
       };
     };
 
@@ -3445,6 +3473,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         aria-multiline="true"
         spellCheck={false}
         onBeforeInput={(event) => event.preventDefault()}
+        onFocus={() => onFocusRef.current?.()}
         onWheel={(event) => {
           if (isDesktopResizeActive(containerRef.current)) {
             event.preventDefault();

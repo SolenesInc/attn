@@ -22,6 +22,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
     isActiveSession,
     terminalsLive,
     onTerminalPointerActivity,
+    onTerminalFocus,
     onOpenMarkdown,
     onTerminalPathRefused,
     staleBuildDismissed,
@@ -110,6 +111,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
           }}
           onInput={runtime.handleTerminalInput(agentPane.id)}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
+          onFocus={() => onTerminalFocus?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
           onPathRefused={onTerminalPathRefused}
           gardenSeeds={gardenSeeds}

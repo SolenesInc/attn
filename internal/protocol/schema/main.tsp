@@ -2337,6 +2337,13 @@ model TerminalPointerActivityMessage {
   id: TerminalID; // The terminal (pane runtime_id)
 }
 
+// The user focused the terminal's tile in this client. The client becomes the
+// terminal's size owner, and the size it last asked for with pty_resize applies.
+model TerminalFocusMessage {
+  cmd: "terminal_focus";
+  id: TerminalID; // The terminal (pane runtime_id)
+}
+
 // Asks for the durable event bus's operator picture: what the log holds, which
 // fact classes write to it and how fast, which consumers read it and how far
 // behind they are, and what is wrong with any of it.
@@ -2459,6 +2466,11 @@ model BusSetConsumerEnabledResultMessage {
   error?: string;
 }
 
+// Records the size this client asks for. It applies only while this client is
+// the terminal's size owner: the client the user last typed in, pointed at or
+// focused (pty_input, terminal_pointer_activity, terminal_focus) among the
+// clients that asked for a size. Every other client follows pty_resized.
+//
 // xpixel/ypixel are the pane's TOTAL size in device pixels, the units
 // TIOCGWINSZ's ws_xpixel/ws_ypixel and XTWINOPS speak, so image emitters can
 // size an image to the space they were given. Absent or 0 means the client has

@@ -179,6 +179,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPtyInput:                      commandMetadata(true, false),
 	protocol.CmdSupportSnapshot:               commandMetadata(false, false),
 	protocol.CmdTerminalPointerActivity:       commandMetadata(false, false),
+	protocol.CmdTerminalFocus:                 commandMetadata(false, false),
 	protocol.CmdBusStatusGet:                  commandMetadata(false, false),
 	protocol.CmdBusSetConsumerEnabled:         commandMetadata(false, true),
 	protocol.CmdPtyResize:                     commandMetadata(true, true),

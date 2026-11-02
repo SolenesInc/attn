@@ -1263,6 +1263,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdTerminalPointerActivity:
 		pointer := msg.(*protocol.TerminalPointerActivityMessage)
 		d.handleTerminalPointerActivity(client, pointer)
+	case protocol.CmdTerminalFocus:
+		d.handleTerminalFocus(client, msg.(*protocol.TerminalFocusMessage))
 	case protocol.CmdBusStatusGet:
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:

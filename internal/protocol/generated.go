@@ -12899,6 +12899,14 @@ type TerminalExitedMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
+type TerminalFocusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID TerminalID `json:"id"`
+}
+
 type TerminalID string
 
 type TerminalInputMessage struct {

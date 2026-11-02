@@ -79,6 +79,9 @@ func (d *Daemon) detachSession(client *wsClient, terminalID protocol.TerminalID)
 	if hasStream {
 		_ = stream.Close()
 	}
+	if next, handedOn := d.ptySizes.release(client, terminalID); handedOn {
+		d.applyPtySize(next.owner, next.size)
+	}
 }
 
 func (c *wsClient) streamsTo(terminal protocol.TerminalID) bool {
@@ -217,6 +220,9 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 	client.attachMu.Unlock()
 	for _, stream := range streams {
 		_ = stream.Close()
+	}
+	for _, next := range d.ptySizes.releaseAll(client) {
+		d.applyPtySize(next.owner, next.size)
 	}
 }
 
@@ -710,6 +716,7 @@ func (d *Daemon) sendPTYDesync(client *wsClient, terminalID protocol.TerminalID,
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {
+	d.claimPtySize(client, msg.ID)
 	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
 		receivedAt := time.Now()
 		source := strings.TrimSpace(protocol.Deref(msg.Source))
@@ -748,9 +755,20 @@ func (d *Daemon) ptyInputAnswered(client *wsClient, msg *protocol.PtyInputMessag
 }
 
 func (d *Daemon) handleTerminalPointerActivity(client *wsClient, msg *protocol.TerminalPointerActivityMessage) {
+	d.claimPtySize(client, msg.ID)
 	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
 		d.router().Send(*msg, func(error) { answered() })
 	})
+}
+
+func (d *Daemon) handleTerminalFocus(client *wsClient, msg *protocol.TerminalFocusMessage) {
+	d.claimPtySize(client, msg.ID)
+}
+
+func (d *Daemon) claimPtySize(client *wsClient, terminal protocol.TerminalID) {
+	if size, changed := d.ptySizes.claim(client, terminal); changed {
+		d.applyPtySize(client, size)
+	}
 }
 
 type ptyGeometry struct {
@@ -783,13 +801,19 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		d.sendCommandError(client, protocol.CmdPtyResize, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", msg.Cols, msg.Rows, maxPTYDimValue))
 		return
 	}
-	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
-		d.router().Send(*msg, func(err error) {
+	if d.ptySizes.request(client, *msg) {
+		d.applyPtySize(client, *msg)
+	}
+}
+
+func (d *Daemon) applyPtySize(owner *wsClient, size protocol.PtyResizeMessage) {
+	d.sendInTerminalOrder(owner, size.ID, func(answered func()) {
+		d.router().Send(size, func(err error) {
 			answered()
 			if err != nil && shouldLogPtyCommandError(err) {
-				d.logf("pty_resize failed for %s: %v", msg.ID, err)
-				if !errors.Is(err, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(msg.ID)) != "" {
-					d.sendTerminalRefusal(client, protocol.CmdPtyResize, msg.ID, err)
+				d.logf("pty_resize failed for %s: %v", size.ID, err)
+				if !errors.Is(err, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(size.ID)) != "" {
+					d.sendTerminalRefusal(owner, protocol.CmdPtyResize, size.ID, err)
 				}
 			}
 		})

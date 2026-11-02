@@ -247,6 +247,7 @@ const (
 	CmdPtyInput                      = "pty_input"
 	CmdSupportSnapshot               = "support_snapshot"
 	CmdTerminalPointerActivity       = "terminal_pointer_activity"
+	CmdTerminalFocus                 = "terminal_focus"
 	CmdBusStatusGet                  = "bus_status_get"
 	CmdBusSetConsumerEnabled         = "bus_set_consumer_enabled"
 	CmdPtyResize                     = "pty_resize"

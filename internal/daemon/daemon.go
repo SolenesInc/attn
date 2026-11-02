@@ -193,6 +193,7 @@ type Daemon struct {
 	spawnLocks            map[protocol.SessionID]*spawnLock
 
 	terminalsOnce            sync.Once
+	ptySizes                 terminalSizes
 	routerOnce               sync.Once
 	routes                   *Router
 	terminalState            *terminalRegistry
