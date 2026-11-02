@@ -40,13 +40,14 @@ func senderTokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (d *Daemon) pendingSenderPairings() []protocol.SenderPairingRequest {
+func (d *Daemon) pendingSenderPairing() *protocol.SenderPairingRequest {
 	d.senders.mu.Lock()
 	defer d.senders.mu.Unlock()
 	if d.senders.pending == nil {
-		return []protocol.SenderPairingRequest{}
+		return nil
 	}
-	return []protocol.SenderPairingRequest{d.senders.pending.request}
+	request := d.senders.pending.request
+	return &request
 }
 
 func (d *Daemon) sendersSnapshot(profileID string) protocol.SendersUpdatedMessage {
@@ -55,7 +56,7 @@ func (d *Daemon) sendersSnapshot(profileID string) protocol.SendersUpdatedMessag
 		d.logf("senders snapshot: %v", err)
 		senders = []protocol.PairedSender{}
 	}
-	return protocol.SendersUpdatedMessage{Event: protocol.EventSendersUpdated, Requests: d.pendingSenderPairings(), Senders: senders}
+	return protocol.SendersUpdatedMessage{Event: protocol.EventSendersUpdated, Request: d.pendingSenderPairing(), Senders: senders}
 }
 
 func (d *Daemon) projectSenders() {
@@ -78,7 +79,7 @@ func (d *Daemon) projectSenders() {
 
 func (d *Daemon) handleSenderPair(conn net.Conn, msg *protocol.SenderPairMessage, caller protocol.SessionID) {
 	if caller != "" {
-		d.sendError(conn, fmt.Sprintf("session %s runs inside attn, and agents cannot pair senders; run attn send pair from the program outside attn", caller))
+		d.sendError(conn, fmt.Sprintf("this pair request comes from the environment of attn session %s, and attn refuses those; run attn send pair from the program, outside attn", caller))
 		return
 	}
 	name := strings.TrimSpace(msg.Name)

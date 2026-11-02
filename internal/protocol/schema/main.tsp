@@ -8563,11 +8563,12 @@ model SendersGetMessage {
   cmd: "senders_get";
 }
 
-// Pairing requests waiting for the user, and paired senders. Sent in answer
-// to senders_get and whenever either changes.
+// The pairing request waiting for the user, if any (attn asks about one
+// program at a time), and the client's profile's paired senders. Sent in
+// answer to senders_get and whenever either changes.
 model SendersUpdatedMessage {
   event: "senders_updated";
-  requests: SenderPairingRequest[];
+  request?: SenderPairingRequest;
   senders: PairedSender[];
 }
 

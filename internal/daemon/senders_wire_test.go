@@ -62,7 +62,7 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 		}
 	}
 
-	if _, err := cli.WithCaller(protocol.TerminalID(w.Terminal("target"))).SenderPair("From an agent", func(protocol.SenderPairingRequest) { t.Error("an agent's pairing reached the user") }); err == nil || !strings.Contains(err.Error(), "agents cannot pair senders") {
+	if _, err := cli.WithCaller(protocol.TerminalID(w.Terminal("target"))).SenderPair("From an agent", func(protocol.SenderPairingRequest) { t.Error("an agent's pairing reached the user") }); err == nil || !strings.Contains(err.Error(), "attn refuses those") {
 		t.Fatalf("pairing from inside a session: %v", err)
 	}
 	denied, deniedOutcome := requestSenderPairing(t, cli, "Denied")
@@ -72,9 +72,9 @@ func TestOnlyAPairedSenderAuthorsQuickCapturesOnTheCommandSocket(t *testing.T) {
 	if r := decideSenderPairing(t, w.App(), denied.ID, true); r.Success {
 		t.Fatal("a client that is not the authenticated app allowed a sender")
 	}
-	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return len(m.Requests) == 1 })
-	if shown.Requests[0] != denied || len(denied.Code) != 4 {
-		t.Fatalf("the app shows %+v; the program was told %+v", shown.Requests, denied)
+	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return m.Request != nil })
+	if *shown.Request != denied || len(denied.Code) != 4 {
+		t.Fatalf("the app shows %+v; the program was told %+v", shown.Request, denied)
 	}
 	if r := decideSenderPairing(t, app, denied.ID, false); !r.Success {
 		t.Fatal(r)

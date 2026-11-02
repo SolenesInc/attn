@@ -42,9 +42,9 @@ func pairSender(t *testing.T, s *testworld.Stack, name string) string {
 		t.Fatalf("send pair first line %q: %v", stdout, err)
 	}
 	app := s.TrustedApp()
-	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return len(m.Requests) == 1 })
-	if shown.Requests[0] != printed || len(printed.Code) != 4 || printed.Name != name {
-		t.Fatalf("the app shows %+v; the program printed %+v", shown.Requests[0], printed)
+	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return m.Request != nil })
+	if *shown.Request != printed || len(printed.Code) != 4 || printed.Name != name {
+		t.Fatalf("the app shows %+v; the program printed %+v", shown.Request, printed)
 	}
 	decided := testworld.Request(app, protocol.SenderPairDecideMessage{Cmd: protocol.CmdSenderPairDecide, RequestID: "decide", PairingID: printed.ID, Allow: true}, protocol.EventSenderPairDecideResult, func(r protocol.SenderPairDecideResultMessage) bool { return r.RequestID == "decide" })
 	if !decided.Success {

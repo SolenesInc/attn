@@ -53,10 +53,10 @@ try {
   const pairing = spawn(o.macBin, ['send', 'pair', '--name', 'Verify', '--json'], { env: W.env, stdio: ['ignore', 'pipe', 'inherit'] });
   const lines = readline.createInterface({ input: pairing.stdout })[Symbol.asyncIterator]();
   const request = JSON.parse((await lines.next()).value);
-  const shownPromise = app.waitForMessage(m => m.event === 'senders_updated' && m.requests.some(r => r.id === request.id) && m, 'the app sees the pairing request', 30_000);
+  const shownPromise = app.waitForMessage(m => m.event === 'senders_updated' && m.request?.id === request.id && m, 'the app sees the pairing request', 30_000);
   app.send({ cmd: 'senders_get' });
   const shown = await shownPromise;
-  const seen = shown.requests.find(r => r.id === request.id);
+  const seen = shown.request;
   if (seen.code !== request.code) throw new Error(`the app shows code ${seen.code}; the program printed ${request.code}`);
   const decided = await app.requestResult({ cmd: 'sender_pair_decide', pairing_id: request.id, allow: true }, 'sender_pair_decide_result');
   if (!decided.success) throw new Error(`allow failed: ${decided.error}`);

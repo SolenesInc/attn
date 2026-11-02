@@ -11239,8 +11239,8 @@ type SendersUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Requests corresponds to the JSON schema field "requests".
-	Requests []SenderPairingRequest `json:"requests"`
+	// Request corresponds to the JSON schema field "request".
+	Request *SenderPairingRequest `json:"request,omitempty,omitzero"`
 
 	// Senders corresponds to the JSON schema field "senders".
 	Senders []PairedSender `json:"senders"`

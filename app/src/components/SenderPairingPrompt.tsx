@@ -9,10 +9,6 @@ import './SenderPairingPrompt.css';
 
 const ignoreEscape = () => {};
 
-function oldestRequest(requests: SenderPairing[]): SenderPairing | undefined {
-  return [...requests].sort((a, b) => a.requested_at.localeCompare(b.requested_at))[0];
-}
-
 function PairingRequest({ request }: { request: SenderPairing }) {
   const { sendSenderPairDecide } = useDaemonApi();
   const denyRef = useRef<HTMLButtonElement>(null);
@@ -59,8 +55,7 @@ function PairingRequest({ request }: { request: SenderPairing }) {
 }
 
 export function SenderPairingPrompt() {
-  const requests = useSendersStore((state) => state.senders?.requests);
-  const request = requests ? oldestRequest(requests) : undefined;
+  const request = useSendersStore((state) => state.senders?.request);
   if (!request) return null;
   return <PairingRequest key={request.id} request={request} />;
 }

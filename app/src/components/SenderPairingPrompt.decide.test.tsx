@@ -7,22 +7,22 @@ import type { SenderPairing } from '../types/generated';
 const deploy: SenderPairing = { id: 'pair-1', name: 'deploy-bot', code: '4821', requested_at: '2026-11-02T10:00:00Z' };
 const backup: SenderPairing = { id: 'pair-2', name: 'backup-script', code: '0937', requested_at: '2026-11-02T10:05:00Z' };
 
-function senders(requests: SenderPairing[]): EventMessage<'senders_updated'> {
-  return { event: 'senders_updated', requests, senders: [] };
+function senders(request?: SenderPairing): EventMessage<'senders_updated'> {
+  return { event: 'senders_updated', request, senders: [] };
 }
 
 const prompt = () => screen.queryByRole('dialog', { name: /send messages as you/ });
 
 describe('Sender pairing prompt', () => {
-  it('asks about the oldest request with its code, focuses Deny, and sends Allow', async () => {
+  it('asks about the waiting request with its code, focuses Deny, and sends Allow', async () => {
     const { daemon } = await renderApp({ script: (d) => {
-      d.on('senders_get', () => senders([]));
-      d.on('sender_pair_decide', () => [{ event: 'sender_pair_decide_result', success: true }, senders([backup])]);
+      d.on('senders_get', () => senders());
+      d.on('sender_pair_decide', () => [{ event: 'sender_pair_decide_result', success: true }, senders(backup)]);
     } });
     await daemon.idle();
     expect(prompt()).toBeNull();
 
-    await gesture(daemon, () => daemon.emit(senders([backup, deploy])));
+    await gesture(daemon, () => daemon.emit(senders(deploy)));
     await act(() => vi.advanceTimersByTimeAsync(0));
     const dialog = screen.getByRole('dialog', { name: 'Allow “deploy-bot” to send messages as you?' });
     expect(dialog).toHaveTextContent('This program will be able to send files and messages that agents receive as your own, to the sessions of profile “Default”.');
@@ -37,13 +37,13 @@ describe('Sender pairing prompt', () => {
     expect(daemon.sentOf('sender_pair_decide').map(({ pairing_id, allow }) => [pairing_id, allow])).toEqual([['pair-1', true]]);
     expect(screen.getByRole('dialog', { name: 'Allow “backup-script” to send messages as you?' })).toHaveTextContent('0937');
 
-    await gesture(daemon, () => daemon.emit(senders([])));
+    await gesture(daemon, () => daemon.emit(senders()));
     expect(prompt()).toBeNull();
   });
 
   it('keeps the request open and shows why a decision failed', async () => {
     const { daemon } = await renderApp({ script: (d) => {
-      d.on('senders_get', () => senders([deploy]));
+      d.on('senders_get', () => senders(deploy));
       d.on('sender_pair_decide', () => ({ event: 'sender_pair_decide_result', success: false, error: 'pairing request pair-1 expired' }));
     } });
     await daemon.idle();
@@ -55,12 +55,12 @@ describe('Sender pairing prompt', () => {
   });
 
   it('learns of requests made while the app was disconnected', async () => {
-    let pending: SenderPairing[] = [];
+    let pending: SenderPairing | undefined;
     const { daemon } = await renderApp({ script: (d) => d.on('senders_get', () => senders(pending)) });
     await daemon.idle();
     expect(prompt()).toBeNull();
 
-    pending = [deploy];
+    pending = deploy;
     await daemon.reconnect();
     await daemon.idle();
     expect(screen.getByRole('dialog', { name: 'Allow “deploy-bot” to send messages as you?' })).toBeInTheDocument();

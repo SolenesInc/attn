@@ -8,7 +8,7 @@ import type { SenderElement } from '../types/generated';
 const deployBot: SenderElement = { id: 'sender-1', name: 'deploy-bot', created_at: '2026-11-01T09:00:00Z', last_used_at: '2026-11-02T10:00:00Z' };
 
 function senders(paired: SenderElement[]): EventMessage<'senders_updated'> {
-  return { event: 'senders_updated', requests: [], senders: paired };
+  return { event: 'senders_updated', senders: paired };
 }
 
 const section = () => screen.getByRole('region', { name: 'Paired senders' });

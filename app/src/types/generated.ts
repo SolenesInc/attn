@@ -11097,7 +11097,7 @@ export enum SendersGetMessageCmd {
 
 export interface SendersUpdatedMessage {
     event:    SendersUpdatedMessageEvent;
-    requests: SenderPairing[];
+    request?: SenderPairing;
     senders:  SenderElement[];
     [property: string]: any;
 }
@@ -26754,7 +26754,7 @@ const typeMap: any = {
     ], "any"),
     "SendersUpdatedMessage": o([
         { json: "event", js: "event", typ: r("SendersUpdatedMessageEvent") },
-        { json: "requests", js: "requests", typ: a(r("SenderPairing")) },
+        { json: "request", js: "request", typ: u(undefined, r("SenderPairing")) },
         { json: "senders", js: "senders", typ: a(r("SenderElement")) },
     ], "any"),
     "Session": o([

@@ -335,9 +335,9 @@ pair --name <name>
   and waits. When the user allows it, the command prints the token once. Keep
   the token where other programs cannot read it, such as the macOS Keychain.
   Stopping the command withdraws the request. attn asks about one program at
-  a time, and refuses a request made from inside an attn session, because
-  agents cannot pair. --json prints two JSON lines:
-  the request (id, name, code, requested_at), then {sender, token}.
+  a time, and refuses a request made from an attn session's environment.
+  --json prints two JSON lines: the request (id, name, code, requested_at),
+  then {sender, token}.
 
 senders
   list a profile's paired senders: name, when paired, when last used, id.
