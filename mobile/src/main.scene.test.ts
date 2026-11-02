@@ -44,9 +44,16 @@ const session = (
 
 const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   screen: 'queue',
+  openAsk: null,
+  drafts: {},
+  sending: false,
+  sendError: '',
+  images: {},
+  diagrams: {},
+  zoom: null,
   loaded: true,
   foreground: true,
-  homes: pairings.map((pairing) => ({ pairing, status: 'connecting', reason: '', sessions: [] })),
+  homes: pairings.map((pairing) => ({ pairing, status: 'connecting', reason: '', sessions: [], asks: [] })),
   pairingFlow: 'idle',
   pairingMessage: '',
   typedCode: '',
@@ -263,7 +270,13 @@ describe('pairing again', () => {
     const before = {
       ...paired(personal),
       homes: [
-        { pairing: personal, status: 'closed' as const, reason: 'Mac ended this pairing', sessions: [] },
+        {
+          pairing: personal,
+          status: 'closed' as const,
+          reason: 'Mac ended this pairing',
+          sessions: [],
+          asks: [],
+        },
       ],
     }
     const { model: after } = update(

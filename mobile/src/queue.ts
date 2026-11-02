@@ -1,5 +1,6 @@
 import type { GatewaySession } from '@attn/types/gatewayGenerated'
 import { Schema } from 'effect'
+import { PhoneAsk } from './asks/ask'
 import { Pairing } from './pairing'
 
 export const SessionState = Schema.Literals([
@@ -33,6 +34,7 @@ export const Home = Schema.Struct({
   status: LinkStatus,
   reason: Schema.String,
   sessions: Schema.Array(QueueSession),
+  asks: Schema.Array(PhoneAsk),
 })
 export type Home = typeof Home.Type
 

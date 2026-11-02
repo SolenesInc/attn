@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GatewaySessionState } from '../types/gatewayGenerated';
+import { GatewayAskQuestionKind, GatewaySessionState } from '../types/gatewayGenerated';
 import { decodeGatewayEvent } from './decode';
 
 const session = { id: 's1', title: 'Fix the build', agent: 'claude', offline: false };
@@ -20,6 +20,36 @@ describe('decodeGatewayEvent', () => {
         { id: 's1', state: GatewaySessionState.Unknown },
         { id: 's2', state: GatewaySessionState.Waiting, waiting_since: new Date('2026-11-02T10:00:00Z') },
       ],
+    });
+  });
+
+  it('decodes a question kind this build does not know as unknown', () => {
+    const decoded = decodeGatewayEvent(JSON.stringify({
+      event: 'ask',
+      ask: {
+        id: 'a-1',
+        session_id: 's1',
+        subject: 'Rank these',
+        created_at: '2026-11-02T10:00:00Z',
+        parts: [
+          { markdown: 'Context.' },
+          { question: { key: 'q1', kind: 'rank', prompt: 'Rank these', choices: [{ label: 'A' }] } },
+          { question: { key: 'q2', kind: 'one', prompt: 'Pick one', choices: [{ label: 'B' }] } },
+        ],
+      },
+    }));
+
+    expect(decoded).toMatchObject({
+      event: 'ask',
+      ask: {
+        id: 'a-1',
+        created_at: new Date('2026-11-02T10:00:00Z'),
+        parts: [
+          { markdown: 'Context.' },
+          { question: { key: 'q1', kind: GatewayAskQuestionKind.Unknown } },
+          { question: { key: 'q2', kind: GatewayAskQuestionKind.One } },
+        ],
+      },
     });
   });
 

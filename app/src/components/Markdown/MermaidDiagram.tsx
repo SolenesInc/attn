@@ -9,22 +9,11 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { DiagramFocusView } from './DiagramFocusView';
+import { renderMermaid, type MermaidTheme } from './mermaidRender';
 import './Markdown.css';
 
 // Preserve at least 80% of Mermaid's generated label size.
 const OVERSIZED_FIT_RATIO = 0.8;
-
-// Loaded lazily so mermaid (large) is code-split out of the main bundle and
-// only fetched when a document actually contains a mermaid fence.
-let mermaidModulePromise: Promise<typeof import('mermaid')> | null = null;
-function loadMermaid() {
-  if (!mermaidModulePromise) {
-    mermaidModulePromise = import('mermaid');
-  }
-  return mermaidModulePromise;
-}
-
-type MermaidTheme = 'dark' | 'neutral';
 
 function resolveTheme(): MermaidTheme {
   const attr = document.documentElement.getAttribute('data-theme');
@@ -137,19 +126,13 @@ function RenderedMermaidDiagram({
   useEffect(() => {
     let cancelled = false;
 
-    loadMermaid()
-      .then(async ({ default: mermaid }) => {
-        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme });
-        return mermaid.render(idRef.current, code);
-      })
-      .then(({ svg: rendered }) => {
+    renderMermaid(idRef.current, code, theme)
+      .then((rendered) => {
         if (cancelled) return;
         setSvg(rendered);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        // mermaid can leave an orphan error node in the document on a failed render.
-        document.getElementById(`d${idRef.current}`)?.remove();
         setError(err instanceof Error ? err.message : String(err));
       });
 

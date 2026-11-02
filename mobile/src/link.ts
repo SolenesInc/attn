@@ -1,5 +1,5 @@
-import { decodeGatewayEvent } from '@attn/gateway/decode'
-import type { GatewaySession } from '@attn/types/gatewayGenerated'
+import { decodeGatewayEvent, type GatewayEvent } from '@attn/gateway/decode'
+import type { GatewayAsk, GatewaySession } from '@attn/types/gatewayGenerated'
 import { GATEWAY_API_VERSION } from '@attn/types/gatewayVersion'
 import { fromBase64Url, toBase64Url } from './bytes'
 import { signChallenge, type DeviceKeys } from './device'
@@ -49,11 +49,22 @@ export type Home = {
 export type LinkEvent =
   | { readonly _tag: 'Welcomed'; readonly homeName: string; readonly profileName: string }
   | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<GatewaySession> }
+  | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<GatewayAsk> }
   | { readonly _tag: 'HomeOffline' }
   | { readonly _tag: 'Lost'; readonly reason: string }
   | { readonly _tag: 'Closed'; readonly reason: string }
 
 type Pairing = { readonly pairingId: string; readonly secret: Uint8Array }
+
+export type Reply = Extract<GatewayEvent, { request_id: string }>
+
+// A request is one gateway command that the home answers with one event carrying its request_id.
+export type Link = {
+  readonly close: () => void
+  readonly request: (command: { readonly cmd: string; readonly [field: string]: unknown }) => Promise<Reply>
+}
+
+type Pending = { readonly resolve: (reply: Reply) => void; readonly reject: (error: Error) => void }
 
 const deviceAddress = (home: Home): string =>
   `${home.cloud.replace(/^http/, 'ws')}/v1/homes/${home.homeId}/device`
@@ -81,7 +92,7 @@ const openSocket = (
   pairing: Pairing | undefined,
   onEvent: (event: LinkEvent) => void,
   onEnd: (reason: string, final: boolean) => void,
-): (() => void) => {
+): Link => {
   const url = deviceAddress(home)
   const socket = new WebSocket(`${url}?device_sign_pub=${toBase64Url(keys.signPub)}`)
   socket.binaryType = 'arraybuffer'
@@ -91,6 +102,9 @@ const openSocket = (
   let transport: Transport | undefined
   let refusal: string | undefined
   let homeAnswersPing = false
+  let welcomed = false
+  const pending = new Map<string, Pending>()
+  const asks = new Map<string, GatewayAsk>()
   let deadline: ReturnType<typeof setTimeout> | undefined
   let pongDeadline: ReturnType<typeof setTimeout> | undefined
 
@@ -116,6 +130,10 @@ const openSocket = (
     pongDeadline = undefined
   }
 
+  const failPending = (reason: string) => {
+    for (const request of pending.values()) request.reject(new Error(reason))
+    pending.clear()
+  }
   const end = (reason: string, final = false) => {
     if (ended) return
     ended = true
@@ -123,6 +141,7 @@ const openSocket = (
     clearTimeout(pongDeadline)
     clearInterval(heartbeat)
     socket.close()
+    failPending(refusal ?? reason)
     onEnd(refusal ?? reason, final || refusal !== undefined)
   }
   const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
@@ -145,6 +164,8 @@ const openSocket = (
     )
     transport = undefined
     homeAnswersPing = false
+    welcomed = false
+    asks.clear()
     answered()
     finishHandshake = started.finish
     send(FrameType.data, started.firstFrame)
@@ -155,6 +176,7 @@ const openSocket = (
     switch (event?.event) {
       case 'welcome':
         clearTimeout(deadline)
+        welcomed = true
         homeAnswersPing = event.api >= homePingApi
         return onEvent({ _tag: 'Welcomed', homeName: event.home_name, profileName: event.profile.name })
       case 'sessions':
@@ -164,6 +186,19 @@ const openSocket = (
         return
       case 'pong':
         return answered()
+      case 'ask':
+        asks.set(event.ask.id, event.ask)
+        return
+      case 'asks':
+        for (const id of asks.keys()) if (!event.ids.includes(id)) asks.delete(id)
+        return onEvent({ _tag: 'Asks', asks: event.ids.flatMap((id) => asks.get(id) ?? []) })
+      case 'ask_answer_result':
+      case 'ask_image_chunk':
+      case 'ask_image_error': {
+        const request = pending.get(event.request_id)
+        pending.delete(event.request_id)
+        return request?.resolve(event)
+      }
     }
   }
 
@@ -198,6 +233,8 @@ const openSocket = (
           answered()
           finishHandshake = undefined
           transport = undefined
+          welcomed = false
+          failPending(`${home.homeName} went offline`)
           return onEvent({ _tag: 'HomeOffline' })
         case FrameType.data:
           return onData(frame.payload)
@@ -210,21 +247,31 @@ const openSocket = (
     end(closeReason(home, url, event, connId !== 0), event.code === 4000 || event.code === 4403)
   armDeadline()
 
-  return () => {
-    ended = true
-    clearTimeout(deadline)
-    clearTimeout(pongDeadline)
-    clearInterval(heartbeat)
-    socket.close()
+  return {
+    close: () => {
+      ended = true
+      clearTimeout(deadline)
+      clearTimeout(pongDeadline)
+      clearInterval(heartbeat)
+      socket.close()
+      failPending(`the connection to ${home.homeName} closed`)
+    },
+    request: (command) =>
+      new Promise((resolve, reject) => {
+        if (!transport || !welcomed) return reject(new Error(`${home.homeName} is not connected`))
+        const requestId = crypto.randomUUID()
+        pending.set(requestId, { resolve, reject })
+        sendGateway({ ...command, request_id: requestId })
+      }),
   }
 }
 
-export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent) => void): (() => void) => {
+export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent) => void): Link => {
   let retryMs = firstRetryMs
   let retry: ReturnType<typeof setTimeout> | undefined
-  let close = () => {}
+  let socket: Link | undefined
   const attempt = () => {
-    close = openSocket(
+    socket = openSocket(
       home,
       keys,
       undefined,
@@ -241,9 +288,12 @@ export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent
     )
   }
   attempt()
-  return () => {
-    clearTimeout(retry)
-    close()
+  return {
+    close: () => {
+      clearTimeout(retry)
+      socket?.close()
+    },
+    request: (command) => socket!.request(command),
   }
 }
 
@@ -253,7 +303,7 @@ export const pairWithHome = (
   pairing: Pairing,
 ): Promise<{ homeName: string; profileName: string }> =>
   new Promise((resolve, reject) => {
-    const close = openSocket(
+    const { close } = openSocket(
       home,
       keys,
       pairing,

@@ -84,6 +84,8 @@ const frame = (type: number, connId: number, payload: Uint8Array = new Uint8Arra
   return out.buffer
 }
 
+const imageChunkBytes = 40 << 10
+
 type Listener = {
   onmessage?: (event: { data: ArrayBuffer | string }) => void
   onclose?: (event: { code: number }) => void
@@ -95,6 +97,9 @@ export class FakeRelay {
   homeAnswersPings = true
   homePings = 0
   welcomeApi: number | undefined
+  readonly images = new Map<string, { mimeType: string; bytes: Uint8Array }>()
+  readonly heldImageRequests: Array<() => void> = []
+  holdImageReplies = false
 
   get homeNoisePub() {
     return x25519.getPublicKey(this.homeStatic)
@@ -164,10 +169,36 @@ export class FakeSocket implements Listener {
       })
       this.relay.sessions(this, [])
     }
+    if (message.cmd === 'ask_image') {
+      const reply = () => this.answerImage(message)
+      if (this.relay.holdImageReplies) this.relay.heldImageRequests.push(reply)
+      else reply()
+    }
     if (message.cmd === 'ping') {
       this.relay.homePings++
       if (this.relay.homeAnswersPings) this.toPhone({ event: 'pong' })
     }
+  }
+
+  private answerImage(message: { request_id: string; ask_id: string; src: string; offset: number }) {
+    const image = this.relay.images.get(`${message.ask_id}\n${message.src}`)
+    if (!image) {
+      this.toPhone({
+        event: 'ask_image_error',
+        request_id: message.request_id,
+        message: `no copy of ${message.src}`,
+      })
+      return
+    }
+    const chunk = image.bytes.subarray(message.offset, message.offset + imageChunkBytes)
+    this.toPhone({
+      event: 'ask_image_chunk',
+      request_id: message.request_id,
+      offset: message.offset,
+      size: image.bytes.length,
+      mime_type: image.mimeType,
+      data_base64: btoa(String.fromCharCode(...chunk)),
+    })
   }
 
   close() {

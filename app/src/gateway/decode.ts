@@ -1,18 +1,50 @@
 import {
   Convert,
+  GatewayAskQuestionKind,
   GatewaySessionState,
+  type GatewayAskAnswerResult,
+  type GatewayAskEvent,
+  type GatewayAskImageChunk,
+  type GatewayAskImageError,
+  type GatewayAsks,
   type GatewayPong,
   type GatewayRefused,
   type GatewaySessions,
   type GatewayWelcome,
 } from '../types/gatewayGenerated';
 
-export type GatewayEvent = GatewayWelcome | GatewayRefused | GatewaySessions | GatewayPong;
+export type GatewayEvent =
+  | GatewayWelcome
+  | GatewayRefused
+  | GatewaySessions
+  | GatewayPong
+  | GatewayAskEvent
+  | GatewayAsks
+  | GatewayAskAnswerResult
+  | GatewayAskImageChunk
+  | GatewayAskImageError;
 
 const sessionStates = new Set<string>(Object.values(GatewaySessionState));
 
+const questionKinds = new Set<string>(Object.values(GatewayAskQuestionKind));
+
+function known(members: Set<string>, unknown: string, value: unknown): unknown {
+  return typeof value === 'string' && !members.has(value) ? unknown : value;
+}
+
 function knownSessionState(state: unknown): unknown {
-  return typeof state === 'string' && !sessionStates.has(state) ? GatewaySessionState.Unknown : state;
+  return known(sessionStates, GatewaySessionState.Unknown, state);
+}
+
+function withKnownQuestionKinds(ask: Record<string, unknown>): unknown {
+  if (!Array.isArray(ask?.parts)) return ask;
+  const parts = ask.parts.map((part: Record<string, unknown>) => {
+    const question = part?.question as Record<string, unknown> | undefined;
+    return question
+      ? { ...part, question: { ...question, kind: known(questionKinds, GatewayAskQuestionKind.Unknown, question.kind) } }
+      : part;
+  });
+  return { ...ask, parts };
 }
 
 // A home on a newer api may send enum members and events this build does not know: an unknown member decodes as
@@ -32,6 +64,16 @@ export function decodeGatewayEvent(frame: string): GatewayEvent | null {
         : message.sessions;
       return Convert.toGatewaySessions(JSON.stringify({ ...message, sessions }));
     }
+    case 'ask':
+      return Convert.toGatewayAskEvent(JSON.stringify({ ...message, ask: withKnownQuestionKinds(message.ask) }));
+    case 'asks':
+      return Convert.toGatewayAsks(frame);
+    case 'ask_answer_result':
+      return Convert.toGatewayAskAnswerResult(frame);
+    case 'ask_image_chunk':
+      return Convert.toGatewayAskImageChunk(frame);
+    case 'ask_image_error':
+      return Convert.toGatewayAskImageError(frame);
     default:
       return null;
   }

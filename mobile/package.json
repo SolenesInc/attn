@@ -24,11 +24,16 @@
     "@noble/hashes": "2.4.0",
     "attn-keychain": "file:native/keychain",
     "effect": "4.1.2",
-    "foldkit": "0.170.0"
+    "foldkit": "0.170.0",
+    "mdast-util-from-markdown": "2.0.2",
+    "mdast-util-gfm": "3.1.0",
+    "mermaid": "11.16.1",
+    "micromark-extension-gfm": "3.0.0"
   },
   "devDependencies": {
     "@capacitor/cli": "8.6.0",
     "@effect/tsgo": "0.63.0",
+    "@types/mdast": "4.0.4",
     "@types/node": "^26.6.6",
     "oxlint": "1.90.0",
     "prettier": "3.9.10",

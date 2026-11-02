@@ -29,7 +29,7 @@ const connect = async () => {
     },
     keys,
     (event) => events.push(event),
-  )
+  ).close
   await vi.advanceTimersByTimeAsync(1)
 }
 
