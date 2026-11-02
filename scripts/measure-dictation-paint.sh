@@ -19,7 +19,8 @@ done
 
 json() { python3 -I -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' "$@"; }
 call() { pnpm --silent --dir app run real-app:bridge-cli -- "$@"; }
-receipts() { call dictation_get_state | python3 -I -c 'import json,sys; print(len(json.load(sys.stdin)["receipts"]))'; }
+recording() { call dictation_get_state | python3 -I -c 'import json,sys; print(next(d["recording"] for d in json.load(sys.stdin)["dictations"] if d["phase"] == "recording"))'; }
+receipt() { call dictation_get_state | python3 -I -c 'import json,sys; print(next((json.dumps(r) for r in json.load(sys.stdin)["receipts"] if r["recording"] == int(sys.argv[1])), ""))' "$1"; }
 seconds() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
 
 for _ in $(seq "$rounds"); do
@@ -34,17 +35,18 @@ for _ in $(seq "$rounds"); do
     fi
     call dom_type "$(json selector "$selector" text "")" >/dev/null
     call dom_focus "$(json selector "$selector")" >/dev/null
-    before=$(receipts)
     call hotkey_press '{"window":"main"}' >/dev/null
     call dom_wait '{"selector":"[data-testid=\"dictation-pill\"][data-phase=\"recording\"]","timeoutMs":15000}' >/dev/null
+    id=$(recording)
     if [ "$kind" = mic ]; then afplay "$clip"; call hotkey_press '{"window":"main"}' >/dev/null; fi
-    for _ in $(seq 60); do [ "$(receipts)" -gt "$before" ] && break; sleep 0.5; done
-    raw=$(call dictation_get_state)
+    found=
+    for _ in $(seq 60); do found=$(receipt "$id"); [ -n "$found" ] && break; sleep 0.5; done
+    [ -n "$found" ] || { echo "recording $id of $(basename "$clip") left no paint receipt within 30 s" >&2; exit 1; }
     call dom_value "$(json selector "$selector")" | python3 -I -c '
 import json, os, sys
-receipt = json.loads(sys.argv[4])["receipts"][-1]
+receipt = json.loads(sys.argv[4])
 receipt.update(kind=sys.argv[1], clip=os.path.basename(sys.argv[2]), clipSeconds=float(sys.argv[3]), load=os.getloadavg()[0], fieldAfterRaw=json.load(sys.stdin)["value"])
-print(json.dumps(receipt))' "$kind" "$clip" "$length" "$raw"
+print(json.dumps(receipt))' "$kind" "$clip" "$length" "$found"
     for _ in $(seq 120); do
       call dictation_get_state | python3 -I -c 'import json, sys; sys.exit(any(d["phase"] in ("starting", "recording", "transcribing", "refining") for d in json.load(sys.stdin)["dictations"]))' && break
       sleep 0.5
