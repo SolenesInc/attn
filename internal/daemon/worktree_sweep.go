@@ -434,13 +434,13 @@ func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now t
 
 func (d *Daemon) forgetMissingRepository(repo string, now time.Time) {
 	d.logf("worktree sweep: %s is gone; no longer tracking it", repo)
-	for _, wt := range d.store.ListWorktreesByRepo(repo) {
-		d.store.RemoveWorktree(wt.Path)
+	rows := d.store.ListWorktreesByRepo(repo)
+	d.store.ForgetWorktreeRepository(repo)
+	for _, wt := range rows {
 		d.publishFact(FactWorktreeDeleted, wt.Path, nil)
 		d.recordForgotten(store.WorktreeSweepLogEntry{Path: wt.Path, MainRepo: repo, Branch: wt.Branch}, now)
 	}
 	d.recordForgotten(store.WorktreeSweepLogEntry{Path: repo, MainRepo: repo}, now)
-	d.store.ForgetWorktreeRepository(repo)
 }
 
 func (d *Daemon) recordForgotten(entry store.WorktreeSweepLogEntry, now time.Time) {

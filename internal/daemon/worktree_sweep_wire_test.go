@@ -451,6 +451,9 @@ func TestTheSweepForgetsARepositoryWhoseFolderIsGoneUntilAttnMakesAWorktreeThere
 		setAnalyticsEnabled(app, "true")
 		shop := newRepo(t, "shop")
 		path := createWorktree(t, app, shop, "feat-work")
+		replaced := createWorktree(t, app, shop, "feat-replaced")
+		sweepKeep(t, cli, path, true)
+		sweepKeep(t, cli, replaced, true)
 		away := shop + "-unmounted"
 		if err := os.Rename(shop, away); err != nil {
 			t.Fatal(err)
@@ -494,10 +497,15 @@ func TestTheSweepForgetsARepositoryWhoseFolderIsGoneUntilAttnMakesAWorktreeThere
 		if err := os.Rename(away, shop); err != nil {
 			t.Fatal(err)
 		}
+		runGit(t, shop, "worktree", "remove", "--force", replaced)
+		runGit(t, shop, "branch", "-D", "feat-replaced")
 		refreshWorktrees(t, cli)
 		synctest.Wait()
 		if listed, err := cli.WorktreeList(shop, 0); err != nil || len(listed.Worktrees) != 0 {
 			t.Errorf("the forgotten repository was swept before attn made a worktree there: %+v, %v", listed, err)
+		}
+		if recreated := createWorktree(t, app, shop, "feat-replaced"); recreated != replaced {
+			t.Fatalf("recreated the worktree at %s, want %s", recreated, replaced)
 		}
 		again := createWorktree(t, app, shop, "again")
 		refreshWorktrees(t, cli)
@@ -508,6 +516,12 @@ func TestTheSweepForgetsARepositoryWhoseFolderIsGoneUntilAttnMakesAWorktreeThere
 		}
 		if paths := worktreeCreatePaths(listed.Worktrees); !slices.Contains(paths, path) || !slices.Contains(paths, again) {
 			t.Errorf("after a new worktree the sweep lists %v, want %s rediscovered beside %s", paths, path, again)
+		}
+		if kept := sweepListed(t, cli, shop, path); !protocol.Deref(kept.Pinned) || protocol.Deref(kept.SweepStatus) != "pinned" {
+			t.Errorf("the worktree kept before its repository went missing came back as %+v; want it still kept", kept)
+		}
+		if fresh := sweepListed(t, cli, shop, replaced); protocol.Deref(fresh.Pinned) {
+			t.Errorf("a new worktree at the path of a kept one that was removed came back kept: %+v", fresh)
 		}
 	})
 }

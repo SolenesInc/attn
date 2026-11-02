@@ -65,6 +65,7 @@ func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo stri
 			d.publishFact(FactWorktreeDeleted, row.Path, nil)
 		}
 	}
+	d.store.DiscardForgottenWorktreePins(repo)
 	return rows, nil
 }
 

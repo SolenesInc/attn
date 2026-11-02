@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestUpgradeDropsSeedIDsFromStoredSweepReasons(t *testing.T) {
@@ -21,8 +20,10 @@ func TestUpgradeDropsSeedIDsFromStoredSweepReasons(t *testing.T) {
 		{"/work/shop--owned", WorktreeSweepKeptOpenSeed, "open seed s-aaaaaa, s-bbbbbb points at it"},
 		{"/work/shop--dirty", WorktreeSweepKeptDirty, "2 uncommitted or untracked file(s)"},
 	} {
-		s.AddWorktree(&Worktree{Path: row.path, Branch: filepath.Base(row.path), MainRepo: "/work/shop"})
-		s.SetWorktreeSweep(row.path, row.status, row.reason, time.Time{})
+		if _, err := s.db.Exec(`INSERT INTO worktrees (path, branch, main_repo, created_at, sweep_status, sweep_reason) VALUES (?, ?, '/work/shop', '', ?, ?)`,
+			row.path, filepath.Base(row.path), string(row.status), row.reason); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)

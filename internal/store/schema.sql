@@ -68,6 +68,7 @@ CREATE TABLE "desktop_panes" ( pane_id TEXT PRIMARY KEY, desktop_id TEXT NOT NUL
 CREATE TABLE desktops ( id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', order_key TEXT NOT NULL, tree_json TEXT NOT NULL DEFAULT '', active_pane_id TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL , focus_history TEXT NOT NULL DEFAULT '[]', empty_since TEXT NOT NULL DEFAULT '');
 CREATE TABLE document_collections ( id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, collection TEXT NOT NULL, fields_json TEXT NOT NULL, updated_at TEXT NOT NULL , text_json TEXT NOT NULL DEFAULT '[]');
 CREATE TABLE file_activity ( path TEXT NOT NULL, source TEXT NOT NULL, session_id TEXT, last_at TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(path, source) );
+CREATE TABLE forgotten_worktree_pins ( path TEXT PRIMARY KEY NOT NULL, main_repo TEXT NOT NULL, pinned_at TEXT NOT NULL );
 CREATE TABLE garden_seed_artifact_observations ( seed_id TEXT PRIMARY KEY, checksum TEXT NOT NULL, event_seq INTEGER NOT NULL UNIQUE, observed_at TEXT NOT NULL );
 CREATE TABLE garden_seed_event_receipts ( event_seq INTEGER PRIMARY KEY, handled_at TEXT NOT NULL );
 CREATE TABLE garden_seed_event_sources ( source_kind TEXT NOT NULL, source_id TEXT NOT NULL, event_name TEXT NOT NULL, event_seq INTEGER NOT NULL UNIQUE, PRIMARY KEY (source_kind, source_id, event_name) );
