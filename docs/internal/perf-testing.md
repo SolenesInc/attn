@@ -38,11 +38,19 @@ garden. Copy the database into a named instance with
 `scripts/gardenpushperf/copy-production.sh <name>`, which reads production
 read-only and turns off what the copy would otherwise reach: the real Notebook
 root, worktree removal, outposts, Tailscale and every automation. Start the
-instance's daemon and plant a seed to move. The Go tool reports bytes and
-move-to-update latency for notes and for wither and replant moves:
+instance's daemon and plant a seed to move.
+
+`gardenpushperf` and `sessionfactperf` change the daemon they reach, so run
+them, and the scripts that start them, in the instance's environment. They
+refuse to run without a non-production instance. Given `-vars`, they also refuse before any change when
+that endpoint serves a different daemon from the instance's WebSocket.
+
+The Go tool reports bytes and move-to-update latency for notes and for wither
+and replant moves:
 
 ```bash
-ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -n 20
+eval "$(attn instance-env <name>)"
+go run ./scripts/gardenpushperf -seed <id> -n 20
 ```
 
 `attn instance resolve --field dataDir` and `--field wsPort` give the data
@@ -53,7 +61,7 @@ To measure the daemon's CPU per garden mutation instead, start the daemon with
 diagnostics endpoint and the garden's profile:
 
 ```bash
-ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -profile <profile id> \
+go run ./scripts/gardenpushperf -seed <id> -profile <profile id> \
   -vars http://127.0.0.1:<port>/debug/vars -n 10
 ```
 
@@ -69,7 +77,7 @@ in headless Chromium (`PROFILE=1` adds a CPU profile):
 VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
   pnpm --dir app exec vite build --outDir <dir>
 pnpm --dir app exec vite preview --outDir <dir> --port <port>
-ATTN_INSTANCE=<name> node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
+node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
 ```
 
 ## Session facts
@@ -82,12 +90,13 @@ the daemon reprices every session with usage and sends one
 
 Copy production into a named instance with
 `scripts/gardenpushperf/copy-production.sh <name>`, as for the garden push, and
-start its daemon with `ATTN_PPROF=<pprof port>`. Each run is one reprice burst. The
-tool waits for the daemon to return to idle and reports CPU milliseconds per
-fact above the idle rate, the gaps between frames and their sizes:
+start its daemon with `ATTN_PPROF=<pprof port>`. Each run is one reprice
+burst. The tool waits for the daemon to return to idle and reports CPU
+milliseconds per fact above the idle rate, the gaps between frames and their
+sizes:
 
 ```bash
-ATTN_INSTANCE=<name> go run ./scripts/sessionfactperf -vars http://127.0.0.1:<pprof port>/debug/vars -n 10
+go run ./scripts/sessionfactperf -vars http://127.0.0.1:<pprof port>/debug/vars -n 10
 ```
 
 `-pace 10s -for 60s` sends one reprice every 10 seconds for a minute instead and
@@ -111,8 +120,8 @@ bundle built against the instance, as for the garden push. A dev server also
 names the components each commit renders, and needs the instance's port:
 
 ```bash
-VITE_DAEMON_PORT=<instance ws port> ATTN_INSTANCE=<name> pnpm --dir app exec vite --port <port>
-ATTN_INSTANCE=<name> node scripts/sessionfactperf/app-session.mjs http://localhost:<port>/ \
+VITE_DAEMON_PORT=<instance ws port> pnpm --dir app exec vite --port <port>
+node scripts/sessionfactperf/app-session.mjs http://localhost:<port>/ \
   http://127.0.0.1:<pprof port>/debug/vars 10
 ```
 
@@ -126,7 +135,8 @@ curl -s http://127.0.0.1:6060/debug/vars | jq
 go tool pprof -top http://127.0.0.1:6060/debug/pprof/heap
 ```
 
-`/debug/vars` lists `worker_pids`. Per-session memory lives in those workers,
-not the daemon heap. `/debug/vars` also reports `doc_subscriptions`, which counts
+`/debug/vars` names the daemon in `daemon_instance_id`, the same id the
+WebSocket's `initial_state` carries, and lists `worker_pids`. Per-session
+memory lives in those workers, not the daemon heap. `/debug/vars` also reports `doc_subscriptions`, which counts
 the live document queries that connected clients hold and drops when a client
 disconnects.

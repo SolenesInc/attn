@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"time"
 
+	"github.com/victorarias/attn/scripts/perfdaemon"
 	"nhooyr.io/websocket"
 )
 
@@ -102,16 +102,9 @@ func settle(vars string, idle float64) int64 {
 }
 
 func cpuMS(vars string) int64 {
-	resp, err := http.Get(vars)
+	out, err := perfdaemon.ReadVars(vars)
 	if err != nil {
-		fail(fmt.Errorf("reading %s: %w", vars, err))
-	}
-	defer resp.Body.Close()
-	var out struct {
-		CPUTimeMS int64 `json:"cpu_time_ms"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		fail(fmt.Errorf("decoding %s: %w", vars, err))
+		fail(err)
 	}
 	return out.CPUTimeMS
 }

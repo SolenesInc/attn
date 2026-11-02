@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 	"slices"
 	"sort"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/scripts/perfdaemon"
 	"nhooyr.io/websocket"
 )
 
@@ -38,8 +38,11 @@ func main() {
 	if *vars == "" {
 		fail(fmt.Errorf("-vars is required"))
 	}
+	url, err := perfdaemon.WebSocketURL("rewrites " + repriceKey + " and reprices every session")
+	if err != nil {
+		fail(err)
+	}
 	ctx := context.Background()
-	url := "ws://localhost:" + config.WSPortForInstance(os.Getenv("ATTN_INSTANCE")) + "/ws"
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		fail(err)
@@ -52,7 +55,9 @@ func main() {
 	})
 	frames := make(chan frame, 1<<16)
 	go read(ctx, conn, frames)
-	waitFor(frames, "initial_state", 60*time.Second)
+	if err := perfdaemon.RequireSameDaemon(*vars, url, waitFor(frames, "initial_state", 60*time.Second).data); err != nil {
+		fail(err)
+	}
 	drain(frames, 2*time.Second)
 
 	idle := idleRate(*vars, 5*time.Second)
@@ -151,13 +156,13 @@ func read(ctx context.Context, conn *websocket.Conn, out chan<- frame) {
 	}
 }
 
-func waitFor(frames <-chan frame, event string, limit time.Duration) {
+func waitFor(frames <-chan frame, event string, limit time.Duration) frame {
 	deadline := time.After(limit)
 	for {
 		select {
 		case f := <-frames:
 			if f.event == event {
-				return
+				return f
 			}
 		case <-deadline:
 			fail(fmt.Errorf("no %s within %s", event, limit))
@@ -217,16 +222,9 @@ func settle(vars string, idle float64) int64 {
 }
 
 func cpuMS(vars string) int64 {
-	resp, err := http.Get(vars)
+	out, err := perfdaemon.ReadVars(vars)
 	if err != nil {
-		fail(fmt.Errorf("reading %s: %w", vars, err))
-	}
-	defer resp.Body.Close()
-	var out struct {
-		CPUTimeMS int64 `json:"cpu_time_ms"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		fail(fmt.Errorf("decoding %s: %w", vars, err))
+		fail(err)
 	}
 	return out.CPUTimeMS
 }
