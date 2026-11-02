@@ -1,12 +1,13 @@
 import {
   Convert,
   GatewaySessionState,
+  type GatewayPong,
   type GatewayRefused,
   type GatewaySessions,
   type GatewayWelcome,
 } from '../types/gatewayGenerated';
 
-export type GatewayEvent = GatewayWelcome | GatewayRefused | GatewaySessions;
+export type GatewayEvent = GatewayWelcome | GatewayRefused | GatewaySessions | GatewayPong;
 
 const sessionStates = new Set<string>(Object.values(GatewaySessionState));
 
@@ -23,6 +24,8 @@ export function decodeGatewayEvent(frame: string): GatewayEvent | null {
       return Convert.toGatewayWelcome(frame);
     case 'refused':
       return Convert.toGatewayRefused(frame);
+    case 'pong':
+      return Convert.toGatewayPong(frame);
     case 'sessions': {
       const sessions = Array.isArray(message.sessions)
         ? message.sessions.map((session: Record<string, unknown>) => ({ ...session, state: knownSessionState(session?.state) }))

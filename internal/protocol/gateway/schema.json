@@ -21,6 +21,30 @@
     ],
     "type": "object"
   },
+  "GatewayPing": {
+    "properties": {
+      "cmd": {
+        "const": "ping",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd"
+    ],
+    "type": "object"
+  },
+  "GatewayPong": {
+    "properties": {
+      "event": {
+        "const": "pong",
+        "type": "string"
+      }
+    },
+    "required": [
+      "event"
+    ],
+    "type": "object"
+  },
   "GatewayProfile": {
     "properties": {
       "id": {

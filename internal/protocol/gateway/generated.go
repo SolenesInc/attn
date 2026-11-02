@@ -15,6 +15,16 @@ type GatewayHello struct {
 	DeviceID string `json:"device_id"`
 }
 
+type GatewayPing struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
+type GatewayPong struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+}
+
 type GatewayProfile struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`

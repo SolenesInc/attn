@@ -8,13 +8,23 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Gateway;
 
-const GATEWAY_API_VERSION = 1;
+const GATEWAY_API_VERSION = 2;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model GatewayHello {
   cmd: "hello";
   api: int32;
   device_id: string;
+}
+
+// Since api 2: a device sends ping to learn that its home still answers
+// through the relay; the home answers pong.
+model GatewayPing {
+  cmd: "ping";
+}
+
+model GatewayPong {
+  event: "pong";
 }
 
 model GatewayWelcome {

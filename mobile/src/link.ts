@@ -7,6 +7,8 @@ import { HandshakeKind, startHandshake, type Transport } from './noise'
 
 export const connectTimeoutMs = 10_000
 export const pingIntervalMs = 15_000
+export const pongDeadlineMs = 10_000
+const homePingApi = 2
 const firstRetryMs = 100
 const maxRetryMs = 10_000
 
@@ -88,8 +90,9 @@ const openSocket = (
   let finishHandshake: ((reply: Uint8Array) => Transport) | undefined
   let transport: Transport | undefined
   let refusal: string | undefined
-  let awaitingPong = false
+  let homeAnswersPing = false
   let deadline: ReturnType<typeof setTimeout> | undefined
+  let pongDeadline: ReturnType<typeof setTimeout> | undefined
 
   const armDeadline = () => {
     clearTimeout(deadline)
@@ -99,20 +102,32 @@ const openSocket = (
     )
   }
   const heartbeat = setInterval(() => {
-    if (awaitingPong) return end(`the relay for ${home.homeName} stopped answering pings`)
-    awaitingPong = true
-    socket.send('ping')
+    if (pongDeadline !== undefined) return
+    const pinged = transport && homeAnswersPing ? home.homeName : `the relay for ${home.homeName}`
+    pongDeadline = setTimeout(
+      () => end(`${pinged}: no answer for ${pongDeadlineMs / 1000} s; reconnecting`),
+      pongDeadlineMs,
+    )
+    if (transport && homeAnswersPing) sendGateway({ cmd: 'ping' })
+    else socket.send('ping')
   }, pingIntervalMs)
+  const answered = () => {
+    clearTimeout(pongDeadline)
+    pongDeadline = undefined
+  }
 
   const end = (reason: string, final = false) => {
     if (ended) return
     ended = true
     clearTimeout(deadline)
+    clearTimeout(pongDeadline)
     clearInterval(heartbeat)
     socket.close()
     onEnd(refusal ?? reason, final || refusal !== undefined)
   }
   const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
+  const sendGateway = (message: object) =>
+    send(FrameType.data, transport!.send.encrypt(new TextEncoder().encode(JSON.stringify(message))))
 
   const handshake = () => {
     const first = pairing
@@ -129,6 +144,8 @@ const openSocket = (
       new TextEncoder().encode(JSON.stringify(first)),
     )
     transport = undefined
+    homeAnswersPing = false
+    answered()
     finishHandshake = started.finish
     send(FrameType.data, started.firstFrame)
   }
@@ -138,12 +155,15 @@ const openSocket = (
     switch (event?.event) {
       case 'welcome':
         clearTimeout(deadline)
+        homeAnswersPing = event.api >= homePingApi
         return onEvent({ _tag: 'Welcomed', homeName: event.home_name, profileName: event.profile.name })
       case 'sessions':
         return onEvent({ _tag: 'Sessions', sessions: event.sessions })
       case 'refused':
         refusal = `${home.homeName} refused this phone: ${event.message}`
         return
+      case 'pong':
+        return answered()
     }
   }
 
@@ -151,15 +171,14 @@ const openSocket = (
     if (finishHandshake) {
       transport = finishHandshake(payload)
       finishHandshake = undefined
-      const hello = { cmd: 'hello', api: GATEWAY_API_VERSION, device_id: keys.id }
-      return send(FrameType.data, transport.send.encrypt(new TextEncoder().encode(JSON.stringify(hello))))
+      return sendGateway({ cmd: 'hello', api: GATEWAY_API_VERSION, device_id: keys.id })
     }
     if (transport) receive(transport.recv.decrypt(payload))
   }
 
   socket.onmessage = (message: MessageEvent<ArrayBuffer | string>) => {
     if (typeof message.data === 'string') {
-      if (message.data === 'pong') awaitingPong = false
+      if (message.data === 'pong') answered()
       return
     }
     const frame = decodeFrame(new Uint8Array(message.data))
@@ -176,6 +195,7 @@ const openSocket = (
             return handshake()
           }
           clearTimeout(deadline)
+          answered()
           finishHandshake = undefined
           transport = undefined
           return onEvent({ _tag: 'HomeOffline' })
@@ -193,6 +213,7 @@ const openSocket = (
   return () => {
     ended = true
     clearTimeout(deadline)
+    clearTimeout(pongDeadline)
     clearInterval(heartbeat)
     socket.close()
   }

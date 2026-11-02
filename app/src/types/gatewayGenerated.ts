@@ -1,8 +1,10 @@
 // To parse this data:
 //
-//   import { Convert, GatewayHello, GatewayProfile, GatewayRefused, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome } from "./gatewayGenerated";
+//   import { Convert, GatewayHello, GatewayPing, GatewayPong, GatewayProfile, GatewayRefused, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome } from "./gatewayGenerated";
 //
 //   const gatewayHello = Convert.toGatewayHello(json);
+//   const gatewayPing = Convert.toGatewayPing(json);
+//   const gatewayPong = Convert.toGatewayPong(json);
 //   const gatewayProfile = Convert.toGatewayProfile(json);
 //   const gatewayRefused = Convert.toGatewayRefused(json);
 //   const gatewaySession = Convert.toGatewaySession(json);
@@ -15,13 +17,31 @@
 
 export interface GatewayHello {
     api:       number;
-    cmd:       Cmd;
+    cmd:       GatewayHelloCmd;
     device_id: string;
     [property: string]: any;
 }
 
-export enum Cmd {
+export enum GatewayHelloCmd {
     Hello = "hello",
+}
+
+export interface GatewayPing {
+    cmd: GatewayPingCmd;
+    [property: string]: any;
+}
+
+export enum GatewayPingCmd {
+    Ping = "ping",
+}
+
+export interface GatewayPong {
+    event: GatewayPongEvent;
+    [property: string]: any;
+}
+
+export enum GatewayPongEvent {
+    Pong = "pong",
 }
 
 export interface GatewayProfile {
@@ -110,6 +130,22 @@ export class Convert {
 
     public static gatewayHelloToJson(value: GatewayHello): string {
         return JSON.stringify(uncast(value, r("GatewayHello")), null, 2);
+    }
+
+    public static toGatewayPing(json: string): GatewayPing {
+        return cast(JSON.parse(json), r("GatewayPing"));
+    }
+
+    public static gatewayPingToJson(value: GatewayPing): string {
+        return JSON.stringify(uncast(value, r("GatewayPing")), null, 2);
+    }
+
+    public static toGatewayPong(json: string): GatewayPong {
+        return cast(JSON.parse(json), r("GatewayPong"));
+    }
+
+    public static gatewayPongToJson(value: GatewayPong): string {
+        return JSON.stringify(uncast(value, r("GatewayPong")), null, 2);
     }
 
     public static toGatewayProfile(json: string): GatewayProfile {
@@ -312,8 +348,14 @@ function r(name: string) {
 const typeMap: any = {
     "GatewayHello": o([
         { json: "api", js: "api", typ: 0 },
-        { json: "cmd", js: "cmd", typ: r("Cmd") },
+        { json: "cmd", js: "cmd", typ: r("GatewayHelloCmd") },
         { json: "device_id", js: "device_id", typ: "" },
+    ], "any"),
+    "GatewayPing": o([
+        { json: "cmd", js: "cmd", typ: r("GatewayPingCmd") },
+    ], "any"),
+    "GatewayPong": o([
+        { json: "event", js: "event", typ: r("GatewayPongEvent") },
     ], "any"),
     "GatewayProfile": o([
         { json: "id", js: "id", typ: "" },
@@ -355,8 +397,14 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "name", js: "name", typ: "" },
     ], "any"),
-    "Cmd": [
+    "GatewayHelloCmd": [
         "hello",
+    ],
+    "GatewayPingCmd": [
+        "ping",
+    ],
+    "GatewayPongEvent": [
+        "pong",
     ],
     "GatewayRefusedEvent": [
         "refused",

@@ -23,6 +23,10 @@ describe('decodeGatewayEvent', () => {
     });
   });
 
+  it('decodes the pong a home sends in answer to ping', () => {
+    expect(decodeGatewayEvent(JSON.stringify({ event: 'pong' }))).toEqual({ event: 'pong' });
+  });
+
   it('skips an event this build does not know', () => {
     expect(decodeGatewayEvent(JSON.stringify({ event: 'terminal_screen', terminal_id: 't1' }))).toBeNull();
   });

@@ -70,6 +70,16 @@ func (p *testPhone) hello(api int) {
 	}
 }
 
+func (p *testPhone) send(message any) {
+	p.t.Helper()
+	frame, _ := json.Marshal(message)
+	select {
+	case p.toHome <- frame:
+	case <-p.closed:
+		p.t.Fatalf("the home closed the link before %s", frame)
+	}
+}
+
 func (p *testPhone) next(event string, out any) {
 	p.t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
@@ -191,11 +201,41 @@ func TestGatewayRefusesAHelloItCannotServe(t *testing.T) {
 	setSetting(t, app, "phone_access_enabled", "true")
 	tooOld := connectPhone(t, w, "phone", profile)
 	tooOld.hello(0)
-	tooOld.refusedWith("hello asked for api 0; this home serves api 1 to 1")
+	tooOld.refusedWith("hello asked for api 0; this home serves api 1 to 2")
 
 	gone := connectPhone(t, w, "phone", "deleted-profile")
 	gone.hello(gateway.APIVersion)
 	gone.refusedWith("profile deleted-profile is gone from this home; pair the phone again")
+}
+
+func TestGatewayAnswersEachPingSoAPhoneKnowsItsHomeIsAwake(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	profile := app.SelectedProfile()
+	if err := w.InjectSession("mine", "mine label", w.Path("mine"), protocol.SessionAgentClaude, profile); err != nil {
+		t.Fatal(err)
+	}
+	phone := connectPhone(t, w, "phone", profile)
+	phone.hello(gateway.APIVersion)
+	var welcome gateway.GatewayWelcome
+	phone.next("welcome", &welcome)
+	if welcome.API < 2 {
+		t.Fatalf("welcome api = %d; a phone pings only a home that serves api 2 or later", welcome.API)
+	}
+	phone.sessions()
+
+	var pong gateway.GatewayPong
+	for range 2 {
+		phone.send(gateway.GatewayPing{Cmd: "ping"})
+		phone.next("pong", &pong)
+	}
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal("mine")), protocol.StateWorking); err != nil {
+		t.Fatal(err)
+	}
+	if got := phone.sessions(); len(got) != 1 || got[0].State != gateway.GatewaySessionStateWorking {
+		t.Fatalf("sessions after pings = %+v, want mine working", got)
+	}
 }
 
 func TestGatewayDropsPhonesWhenPhoneAccessTurnsOff(t *testing.T) {

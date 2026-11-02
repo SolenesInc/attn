@@ -55,7 +55,7 @@ refuses removed-member "GatewaySessionState: member scheduled removed"
 edit removed-message 'delete s.GatewayRefused'
 refuses removed-message "GatewayRefused: removed"
 
-edit added-optional 's.GatewaySession.properties.pinned = {type: "boolean"}; s.GatewaySessionState.enum.push("paused"); s.GatewayPing = {type: "object", properties: {}}'
-accepts added-optional "GatewaySession.pinned, GatewaySessionState: member paused, GatewayPing"
+edit added-optional 's.GatewaySession.properties.pinned = {type: "boolean"}; s.GatewaySessionState.enum.push("paused"); s.GatewayHeadsUp = {type: "object", properties: {}}'
+accepts added-optional "GatewaySession.pinned, GatewaySessionState: member paused, GatewayHeadsUp"
 
 echo "check-gateway-compat: all cases passed"

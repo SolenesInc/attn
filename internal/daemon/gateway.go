@@ -70,6 +70,7 @@ type gatewayConn struct {
 	device  GatewayDevice
 	stream  GatewayStream
 	changed chan struct{}
+	pinged  chan struct{}
 	sent    []gateway.GatewaySession
 }
 
@@ -115,7 +116,7 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
 	defer stopClosing()
 
-	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1)}
+	conn := &gatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), pinged: make(chan struct{}, 1)}
 	d.gateway.add(conn)
 	defer d.gateway.remove(conn)
 	if err := d.gatewayWelcome(conn); err != nil {
@@ -133,6 +134,10 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 				return d.gatewayRefuse(conn, phoneAccessOff)
 			}
 			if err := d.gatewaySendSessions(conn); err != nil {
+				return err
+			}
+		case <-conn.pinged:
+			if err := gatewaySend(conn, gateway.GatewayPong{Event: "pong"}); err != nil {
 				return err
 			}
 		case err := <-ended:
@@ -182,6 +187,13 @@ func (d *Daemon) gatewayReceive(conn *gatewayConn) error {
 			Cmd string `json:"cmd"`
 		}
 		_ = json.Unmarshal(frame, &message)
+		if message.Cmd == "ping" {
+			select {
+			case conn.pinged <- struct{}{}:
+			default:
+			}
+			continue
+		}
 		d.logf("gateway: device %s sent %q, which this home does not serve", conn.device.DeviceID, message.Cmd)
 	}
 }
