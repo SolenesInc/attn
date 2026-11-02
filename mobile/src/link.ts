@@ -258,7 +258,7 @@ const openSocket = (
     },
     request: (command) =>
       new Promise((resolve, reject) => {
-        if (!transport || !welcomed) return reject(new Error(`${home.homeName} is not connected`))
+        if (ended || !transport || !welcomed) return reject(new Error(`${home.homeName} is not connected`))
         const requestId = crypto.randomUUID()
         pending.set(requestId, { resolve, reject })
         sendGateway({ ...command, request_id: requestId })

@@ -92,4 +92,12 @@ describe('a phone reads an ask image from its home in chunks', () => {
     expect(error).not.toBeInstanceOf(ImageRefused)
     expect((error as Error).message).toContain('Mac')
   })
+
+  it('fails at once, instead of waiting forever, when asked while the link waits to reconnect', async () => {
+    await connect()
+    relay.sockets[0]!.close()
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(fetchAskImage(link, 'a-1', 'shots/board.png')).rejects.toThrow('Mac is not connected')
+  })
 })
