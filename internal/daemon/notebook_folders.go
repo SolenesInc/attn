@@ -123,11 +123,16 @@ func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) err
 		if profileID == target.ID {
 			return homeNotebookRoot(msg.Value)
 		}
-		return d.notebookRoot(profileID)
+		root, err := d.notebookRoot(profileID)
+		if err != nil {
+			return "", nil
+		}
+		return root, nil
 	})
 	if err != nil {
 		return err
 	}
+	notebooks = slices.DeleteFunc(notebooks, func(nb profileNotebook) bool { return nb.path == "" })
 	for _, n := range notebookNestings(notebooks) {
 		if n.inner.profileID == target.ID || n.outer.profileID == target.ID {
 			return fmt.Errorf("%s; outposts sync each Notebook folder on its own, so one cannot hold another while outposts are paired", n)
