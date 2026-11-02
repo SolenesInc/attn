@@ -42,8 +42,9 @@ instance's daemon and plant a seed to move.
 
 `gardenpushperf` and `sessionfactperf` change the daemon they reach, so run
 them, and the scripts that start them, in the instance's environment. They
-refuse to run without a non-production instance. Given `-vars`, they also refuse before any change when
-that endpoint serves a different daemon from the instance's WebSocket.
+refuse to run without a non-production instance. Given `-vars`, they connect
+to the WebSocket listener that endpoint's daemon reports, and refuse before
+any change when that listener is not on the instance's port.
 
 The Go tool reports bytes and move-to-update latency for notes and for wither
 and replant moves:
@@ -135,8 +136,8 @@ curl -s http://127.0.0.1:6060/debug/vars | jq
 go tool pprof -top http://127.0.0.1:6060/debug/pprof/heap
 ```
 
-`/debug/vars` names the daemon in `daemon_instance_id`, the same id the
-WebSocket's `initial_state` carries, and lists `worker_pids`. Per-session
-memory lives in those workers, not the daemon heap. `/debug/vars` also reports `doc_subscriptions`, which counts
+`/debug/vars` gives the daemon's WebSocket listener in `ws_addr` and lists
+`worker_pids`. Per-session memory lives in those workers, not the daemon heap.
+`/debug/vars` also reports `doc_subscriptions`, which counts
 the live document queries that connected clients hold and drops when a client
 disconnects.

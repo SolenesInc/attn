@@ -3,6 +3,7 @@ package perfdaemon
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
@@ -10,11 +11,11 @@ import (
 )
 
 type Vars struct {
-	CPUTimeMS        int64  `json:"cpu_time_ms"`
-	DaemonInstanceID string `json:"daemon_instance_id"`
+	CPUTimeMS int64  `json:"cpu_time_ms"`
+	WSAddr    string `json:"ws_addr"`
 }
 
-func WebSocketURL(writes string) (string, error) {
+func WebSocketURL(writes, varsURL string) (string, error) {
 	instance, err := config.NormalizeInstanceName(os.Getenv("ATTN_INSTANCE"))
 	if err != nil {
 		return "", fmt.Errorf("ATTN_INSTANCE: %w", err)
@@ -25,7 +26,18 @@ func WebSocketURL(writes string) (string, error) {
 	if err := config.ValidateInstanceRouting(); err != nil {
 		return "", err
 	}
-	return "ws://localhost:" + config.WSPortForInstance(instance) + "/ws", nil
+	port := config.WSPortForInstance(instance)
+	if varsURL == "" {
+		return "ws://localhost:" + port + "/ws", nil
+	}
+	vars, err := ReadVars(varsURL)
+	if err != nil {
+		return "", err
+	}
+	if _, served, _ := net.SplitHostPort(vars.WSAddr); served != port {
+		return "", fmt.Errorf("-vars %s belongs to the daemon listening on %q, not instance %s's daemon on port %s; point -vars at that instance's daemon", varsURL, vars.WSAddr, instance, port)
+	}
+	return "ws://" + vars.WSAddr + "/ws", nil
 }
 
 func ReadVars(url string) (Vars, error) {
@@ -39,21 +51,4 @@ func ReadVars(url string) (Vars, error) {
 		return Vars{}, fmt.Errorf("decoding %s: %w", url, err)
 	}
 	return out, nil
-}
-
-func RequireSameDaemon(varsURL, wsURL string, initialState []byte) error {
-	var initial struct {
-		DaemonInstanceID string `json:"daemon_instance_id"`
-	}
-	if err := json.Unmarshal(initialState, &initial); err != nil {
-		return fmt.Errorf("decoding initial_state: %w", err)
-	}
-	vars, err := ReadVars(varsURL)
-	if err != nil {
-		return err
-	}
-	if vars.DaemonInstanceID == "" || vars.DaemonInstanceID != initial.DaemonInstanceID {
-		return fmt.Errorf("-vars %s serves daemon %q, but the WebSocket %s serves daemon %q; point -vars at the daemon of instance %s", varsURL, vars.DaemonInstanceID, wsURL, initial.DaemonInstanceID, config.Instance())
-	}
-	return nil
 }

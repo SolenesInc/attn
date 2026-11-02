@@ -13,7 +13,7 @@ import (
 )
 
 type Stats struct {
-	DaemonInstanceID string         `json:"daemon_instance_id"`
+	WSAddr           string         `json:"ws_addr"`
 	Sessions         int            `json:"sessions"`
 	PtyBackend       string         `json:"pty_backend"`
 	WorkerPIDs       map[string]int `json:"worker_pids,omitempty"`
@@ -73,19 +73,19 @@ func (s *Server) handleVars(w http.ResponseWriter, _ *http.Request) {
 	process := Sample()
 
 	out := map[string]any{
-		"pid":                os.Getpid(),
-		"daemon_instance_id": stats.DaemonInstanceID,
-		"goroutines":         process.Goroutines,
-		"resident_bytes":     process.ResidentBytes,
-		"cpu_time_ms":        process.CPUTimeMS,
-		"open_fds":           process.OpenFDs,
-		"gomaxprocs":         runtime.GOMAXPROCS(0),
-		"num_cpu":            runtime.NumCPU(),
-		"go_version":         runtime.Version(),
-		"sessions":           stats.Sessions,
-		"pty_backend":        stats.PtyBackend,
-		"worker_pids":        stats.WorkerPIDs,
-		"doc_subscriptions":  stats.DocSubscriptions,
+		"pid":               os.Getpid(),
+		"ws_addr":           stats.WSAddr,
+		"goroutines":        process.Goroutines,
+		"resident_bytes":    process.ResidentBytes,
+		"cpu_time_ms":       process.CPUTimeMS,
+		"open_fds":          process.OpenFDs,
+		"gomaxprocs":        runtime.GOMAXPROCS(0),
+		"num_cpu":           runtime.NumCPU(),
+		"go_version":        runtime.Version(),
+		"sessions":          stats.Sessions,
+		"pty_backend":       stats.PtyBackend,
+		"worker_pids":       stats.WorkerPIDs,
+		"doc_subscriptions": stats.DocSubscriptions,
 		"memstats": map[string]any{
 			"heap_alloc":        process.HeapAlloc,
 			"heap_sys":          process.HeapSys,

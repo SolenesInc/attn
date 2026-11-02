@@ -27,7 +27,7 @@ func main() {
 	if *seed == "" {
 		fail(fmt.Errorf("-seed is required"))
 	}
-	url, err := perfdaemon.WebSocketURL("writes notes and moves to seed " + *seed)
+	url, err := perfdaemon.WebSocketURL("writes notes and moves to seed "+*seed, *vars)
 	if err != nil {
 		fail(err)
 	}
@@ -50,11 +50,6 @@ func main() {
 		SeedsTotal int             `json:"seeds_total"`
 	}
 	_ = json.Unmarshal(initial.data, &state)
-	if *vars != "" {
-		if err := perfdaemon.RequireSameDaemon(*vars, url, initial.data); err != nil {
-			fail(err)
-		}
-	}
 	fmt.Printf("initial_state: %d bytes, seeds part %d bytes, total seeds %d, %s\n",
 		len(initial.data), len(state.Seeds), state.SeedsTotal, time.Since(first).Round(time.Millisecond))
 

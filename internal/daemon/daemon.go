@@ -2389,7 +2389,7 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{DaemonInstanceID: d.daemonInstanceID, PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
+	stats := diag.Stats{WSAddr: d.httpListener.Addr().String(), PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
 	if d.ptyBackend == nil {
 		stats.PtyBackend = "embedded"
 		return stats

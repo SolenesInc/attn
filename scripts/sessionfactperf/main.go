@@ -38,7 +38,7 @@ func main() {
 	if *vars == "" {
 		fail(fmt.Errorf("-vars is required"))
 	}
-	url, err := perfdaemon.WebSocketURL("rewrites " + repriceKey + " and reprices every session")
+	url, err := perfdaemon.WebSocketURL("rewrites "+repriceKey+" and reprices every session", *vars)
 	if err != nil {
 		fail(err)
 	}
@@ -55,9 +55,7 @@ func main() {
 	})
 	frames := make(chan frame, 1<<16)
 	go read(ctx, conn, frames)
-	if err := perfdaemon.RequireSameDaemon(*vars, url, waitFor(frames, "initial_state", 60*time.Second).data); err != nil {
-		fail(err)
-	}
+	waitFor(frames, "initial_state", 60*time.Second)
 	drain(frames, 2*time.Second)
 
 	idle := idleRate(*vars, 5*time.Second)
@@ -156,13 +154,13 @@ func read(ctx context.Context, conn *websocket.Conn, out chan<- frame) {
 	}
 }
 
-func waitFor(frames <-chan frame, event string, limit time.Duration) frame {
+func waitFor(frames <-chan frame, event string, limit time.Duration) {
 	deadline := time.After(limit)
 	for {
 		select {
 		case f := <-frames:
 			if f.event == event {
-				return f
+				return
 			}
 		case <-deadline:
 			fail(fmt.Errorf("no %s within %s", event, limit))
