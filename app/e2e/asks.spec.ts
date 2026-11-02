@@ -23,10 +23,13 @@ function pause(page: Page, ms: number) {
   return paced ? page.waitForTimeout(ms) : Promise.resolve();
 }
 
-function attnCli(socketPath: string, args: string[], input?: string): string {
+const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+function attnCli(socketPath: string, args: string[], input?: string, cwd?: string): string {
   const dataDir = path.dirname(socketPath);
   return execFileSync(resolveAttnBinaryPath(), args, {
     input,
+    cwd,
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -148,6 +151,43 @@ test.describe('Asks', () => {
       if (spawned) {
         try {
           attnCli(socketPath, ['agent', 'close', sessionId, '-m', 'answered', '--source-session', sessionId]);
+        } catch (error) {
+          console.warn(`[asks] could not close ${sessionId}; its stub agent outlives the daemon: ${error}`);
+        }
+      }
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  test('an ask keeps showing its image after the agent deletes the file', async ({ page, daemon }) => {
+    const { wsUrl, socketPath } = await daemon.start();
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-asks-image-'));
+    const sessionId = 'asks-image-agent';
+    let spawned = false;
+    try {
+      const shot = path.join(cwd, 'shots', 'banner.png');
+      fs.mkdirSync(path.dirname(shot), { recursive: true });
+      fs.writeFileSync(shot, Buffer.from(ONE_PIXEL_PNG, 'base64'));
+      attnCli(socketPath, ['settings', 'set', 'asks_enabled', 'true']);
+      await page.goto('/');
+      await page.waitForSelector('.dashboard');
+      await spawnClaude(wsUrl, { id: sessionId, cwd, label: 'image-agent' });
+      spawned = true;
+
+      const asked = attnCli(socketPath, ['ask', '--session', sessionId, '--subject', 'Banner'],
+        'The banner overlaps the tabs:\n\n![the banner](shots/banner.png)\n\n:::question\nShip it?\n- [ ] Yes\n- [ ] No\n:::\n', cwd);
+      const askId = /^Asked (\S+): "Banner"\./.exec(asked)?.[1];
+      expect(askId, asked).toBeTruthy();
+      fs.rmSync(path.join(cwd, 'shots'), { recursive: true });
+
+      await page.keyboard.press('Meta+Shift+r');
+      const image = page.getByRole('region', { name: 'Asks' }).getByTestId(`ask-${askId}`).getByRole('img', { name: 'the banner' });
+      await expect(image).toBeVisible();
+      await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1);
+    } finally {
+      if (spawned) {
+        try {
+          attnCli(socketPath, ['agent', 'close', sessionId, '-m', 'shown', '--source-session', sessionId]);
         } catch (error) {
           console.warn(`[asks] could not close ${sessionId}; its stub agent outlives the daemon: ${error}`);
         }

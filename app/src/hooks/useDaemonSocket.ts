@@ -36,6 +36,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
   AskAnswer,
+  AskImageResultMessage,
   CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
@@ -3594,6 +3595,9 @@ export function useDaemonSocket({
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
+  const sendAskImage = useCallback((askId: string, path: string): Promise<AskImageResultMessage> =>
+    sendRequest('ask_image', { ask_id: askId, path }, 'Loading the image timed out'), [sendRequest]);
+
   const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
     sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
 
@@ -4321,6 +4325,7 @@ export function useDaemonSocket({
     sendSetVentSend,
     sendSetVentKind,
     sendAskAnswer,
+    sendAskImage,
     sendRestartSharedCodex,
     sendInstallCodexUpdate,
     sendRecentFiles,

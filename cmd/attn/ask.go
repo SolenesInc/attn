@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -93,7 +94,15 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, fi
 	if err != nil {
 		return err
 	}
-	opened, err := c.AskOpen(sessionID, seedID, markdown, subject, baseDir)
+	parts, err := ask.Parse(markdown)
+	if err != nil {
+		return err
+	}
+	images, err := readAskImages(ask.ImagePaths(parts, baseDir))
+	if err != nil {
+		return err
+	}
+	opened, err := c.AskOpen(sessionID, seedID, markdown, subject, baseDir, images...)
 	if err != nil {
 		return err
 	}
@@ -107,6 +116,33 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, fi
 	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer goes to whoever tends the seed by then, and the seed keeps it as a note: attn seed notes %s\n",
 		opened.ID, askSeedName(*opened), opened.Subject, *opened.SeedID)
 	return nil
+}
+
+func readAskImages(paths []string) ([]protocol.AskImage, error) {
+	total := int64(0)
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("the ask shows the image %s, which cannot be read: %w", path, errors.Unwrap(err))
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("the ask shows the image %s, which is not a file", path)
+		}
+		total += info.Size()
+	}
+	if total > ask.MaxImageBytes {
+		return nil, fmt.Errorf("an ask's images are copied with it and hold at most max_ask_image_bytes=%d (%d MiB) together; these %d images hold %d bytes. Show fewer or smaller images",
+			ask.MaxImageBytes, ask.MaxImageBytes>>20, len(paths), total)
+	}
+	images := make([]protocol.AskImage, 0, len(paths))
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("the ask shows the image %s, which cannot be read: %w", path, err)
+		}
+		images = append(images, protocol.AskImage{Path: path, DataBase64: base64.StdEncoding.EncodeToString(data)})
+	}
+	return images, nil
 }
 
 func askSeedName(a protocol.Ask) string {
@@ -203,6 +239,10 @@ A block's first line is the question; the rest is context. Choices are
   :::
   ASK
 
+Images (![alt](path)) resolve against the working directory, or beside
+--file. attn copies them when the ask opens, at most 5 MiB in all, so the
+user sees them as they were. An image that cannot be read refuses the ask.
+
 attn ask prints the ask's id and returns at once. Carry on with work that does
 not depend on the answer. When the user answers, attn types the answer into
 the conversation as their message, approvals included. By then they have
@@ -219,7 +259,6 @@ flags:
                          the seed your delegation assigned you)
   --subject <text>       the ask's subject (defaults to its first question)
   --file <path>          read the ask from a file; images resolve beside it
-                         instead of the working directory
   --session <id>         session id (defaults to the current session)
   --json                 print the result as JSON
 `)

@@ -12,6 +12,7 @@ the seed. Asks are an experimental setting, off by default.
 ## Sub-features
 
 - `ask-open`: an agent opens an ask from markdown on stdin or a file and gets its id at once.
+- `ask-images`: the local images an ask shows, copied to the home when the ask opens and shown in the drawer from that copy.
 - `ask-questions`: `:::question`, `:::question-multi` and `:::question-text` blocks, with choices, reasons and a recommended choice.
 - `ask-drawer`: the drawer where people read and answer asks one after another.
 - `ask-answer`: the user's answer, typed into the addressee's conversation as the user's message.
@@ -37,7 +38,7 @@ the seed. Asks are an experimental setting, off by default.
 
 ### Agents
 
-- `attn ask` (`cmd/attn/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
+- `attn ask` (`cmd/attn/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. It reads each local image the markdown shows (resolved against the working directory, or beside `--file`) and sends the bytes with the ask; an unreadable image or more than 5 MiB of images refuses the ask. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
 - Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`), and the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
 
 ### Triggers
@@ -108,14 +109,16 @@ Preconditions:
   - Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
 - **List and withdraw from the agent.** Run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "list asks" --enter`: peek shows `<ask>  Cache store`. Run `wsctl input --id <terminal> --text "withdraw <ask>" --enter`: peek shows `Withdrew <ask>.`, and the drawer shows `.asks-empty`. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
 - **Ask from a file, as JSON.** Run `wsctl input --id <terminal> --text "file ask" --enter`: peek shows the ask as JSON with `"subject":"Ship day"` and its `"id"`. Run `wsctl input --id <terminal> --text "json list" --enter`: peek shows `{"asks":[...]` naming that id and `"enabled":true`. Withdraw it as above.
+- **Images travel with the ask.** Save a png as `$A/shots/shot.png` and run `./attn ask --session ask-agent` from `$A` with `![shot](shots/shot.png)` and a `:::question-text` block on stdin. Delete `$A/shots`, open the drawer with ⌘⇧R: `bridge dom_wait '{"selector":".asks-markdown img[src^=\"data:image/png\"]","timeoutMs":5000}'` matches. From an outpost session, the same ask shows its image at the home. `ls <data-dir>/asks/<ask>` lists the copy; after `./attn ask close <ask> --session ask-agent` the folder is gone. An image over the limit refuses with `max_ask_image_bytes=5242880`.
 - **From the person's shell.** `./attn ask list --session ask-agent` prints `No open asks.` and `./attn ask list --session ask-early` prints `Asks are off for this session.`
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek ask-agent` after each ask and after each answer lands, `./attn seed notes <seed>`, `bridge dom_text` of the ask before answering and of the replied list, and `bridge capture_screenshot '{"path":"<P>/asks-drawer.png"}'` with an open ask on screen, where `<P>` is the folder's path written out. Name each file for its way in, such as `asks-chip-seed-notes.txt`.
 
 ## Contexts
 
-- **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The drawer shows answered asks for a day.
+- **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The home keeps an ask's images under `<data-dir>/asks/<ask>/` until the ask's record goes.
+- **Outposts**: `attn ask` on an outpost reads the images there and the home keeps the copy, so the drawer shows them. Relative links to other files still resolve on the asker's machine and do not open from an outpost ask. The drawer shows answered asks for a day.
 - **Linux**: `attn ask` works the same where the daemon and CLI run on Linux. `dock.asks` is Ctrl+Alt+R there, and Ctrl+Enter sends from the drawer.
-- **Performance and idle cost**: an ask's markdown is at most 64 KiB. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.
+- **Performance and idle cost**: an ask's markdown is at most 64 KiB, and its images at most 5 MiB together. The drawer loads each image once per ask it shows. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep the harness's own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
@@ -124,7 +127,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/asks_wire_test.go`.
-- Stack: `cmd/attn/ask_stack_test.go`, `app/e2e/asks.spec.ts`.
+- Stack: `cmd/attn/ask_stack_test.go`, `cmd/attn/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
 - Kernel: `internal/ask/ask_test.go`.
 - App: `app/src/App.asks.test.tsx`.
 

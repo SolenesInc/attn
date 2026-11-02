@@ -250,6 +250,64 @@ function SeedArtifactImage({
   );
 }
 
+export type LocalImageLoader = (path: string) => Promise<string>;
+
+const LocalImageLoaderContext = createContext<LocalImageLoader | null>(null);
+
+function LocalImage({
+  path,
+  alt,
+  imageProps,
+  onImageClick,
+}: {
+  path: string;
+  alt: string | undefined;
+  imageProps: HTMLAttributes<HTMLImageElement>;
+  onImageClick: (src: string, alt: string) => void;
+}) {
+  const loadImage = useContext(LocalImageLoaderContext);
+  const [loaded, setLoaded] = useState<{ path: string; src: string } | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!loadImage) return undefined;
+    let current = true;
+    setLoaded(null);
+    setFailed(null);
+    void loadImage(path)
+      .then((src) => { if (current) setLoaded({ path, src }); })
+      .catch((error: unknown) => {
+        if (!current) return;
+        console.warn('[MarkdownReader] Failed to load image:', error);
+        setFailed(error instanceof Error ? error.message : String(error));
+      });
+    return () => { current = false; };
+  }, [loadImage, path]);
+
+  const altText = alt ?? tilePathBasename(path);
+  if (loadImage && failed) {
+    return <span className="md-reader-blocked-image" title={failed} data-md-chrome="1">[missing image: {altText}]</span>;
+  }
+  const src = loadImage ? (loaded?.path === path ? loaded.src : '') : convertFileSrc(path);
+  if (!src) {
+    return <span className="md-reader-image-loading" data-md-chrome="1">[loading image: {altText}]</span>;
+  }
+  return (
+    <img
+      {...imageProps}
+      className="md-reader-image"
+      src={src}
+      alt={altText}
+      title={path}
+      loading="lazy"
+      onClick={(event) => {
+        event.stopPropagation();
+        onImageClick(src, alt ?? '');
+      }}
+    />
+  );
+}
+
 function readerComponents(
   documentPath: string,
   allowLocalTargets: boolean,
@@ -372,23 +430,7 @@ function readerComponents(
           </span>
         );
       }
-      // Tauri's asset protocol, scoped to $HOME in tauri.conf.json.
-      const resolvedSrc = convertFileSrc(target.value);
-      const altText = alt ?? tilePathBasename(target.value);
-      return (
-        <img
-          {...safeProps}
-          className="md-reader-image"
-          src={resolvedSrc}
-          alt={altText}
-          title={target.value}
-          loading="lazy"
-          onClick={(event) => {
-            event.stopPropagation();
-            onImageClick(resolvedSrc, alt ?? '');
-          }}
-        />
-      );
+      return <LocalImage path={target.value} alt={alt} imageProps={safeProps} onImageClick={onImageClick} />;
     },
   };
 }
@@ -441,6 +483,7 @@ export interface MarkdownReaderProps {
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
   seedArtifacts?: readonly SeedArtifact[];
   onOpenSeed?: (seedId: string) => void;
+  loadLocalImage?: LocalImageLoader;
 }
 
 interface MarkdownReaderBodyProps {
@@ -488,6 +531,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   annotationsSendRef,
   seedArtifacts = EMPTY_SEED_ARTIFACTS,
   onOpenSeed,
+  loadLocalImage,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
@@ -557,15 +601,17 @@ export const MarkdownReader = memo(function MarkdownReader({
       <div className="md-reader-doc">
         <div className="md-reader-wrap">
           <SeedArtifactReaderContext.Provider value={seedArtifactContext}>
-            <MarkdownReaderBody
-              content={content}
-              path={path}
-              allowLocalTargets={localTargetsEnabled}
-              seedDocument={source.kind === 'seed'}
-              rootRef={rootRef}
-              onImageClick={handleImageClick}
-              onOpenSeed={onOpenSeed}
-            />
+            <LocalImageLoaderContext.Provider value={loadLocalImage ?? null}>
+              <MarkdownReaderBody
+                content={content}
+                path={path}
+                allowLocalTargets={localTargetsEnabled}
+                seedDocument={source.kind === 'seed'}
+                rootRef={rootRef}
+                onImageClick={handleImageClick}
+                onOpenSeed={onOpenSeed}
+              />
+            </LocalImageLoaderContext.Provider>
           </SeedArtifactReaderContext.Provider>
         </div>
       </div>

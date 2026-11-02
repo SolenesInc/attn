@@ -649,6 +649,48 @@ type AskCloseMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
+type AskImage struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 string `json:"data_base64"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type AskImageMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AskImageResultMessage struct {
+	// DataBase64 corresponds to the JSON schema field "data_base64".
+	DataBase64 *string `json:"data_base64,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// MimeType corresponds to the JSON schema field "mime_type".
+	MimeType *string `json:"mime_type,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type AskListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -671,6 +713,9 @@ type AskOpenMessage struct {
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Images corresponds to the JSON schema field "images".
+	Images []AskImage `json:"images,omitempty,omitzero"`
 
 	// Markdown corresponds to the JSON schema field "markdown".
 	Markdown string `json:"markdown"`

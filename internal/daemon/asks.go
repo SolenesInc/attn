@@ -49,6 +49,11 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
+	images, err := parseAskImages(msg.Images)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	to, err := d.askAddressOf(session, strings.TrimSpace(protocol.Deref(msg.SeedID)))
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -79,7 +84,15 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, err.Error())
 		return
 	}
-	switch err := d.store.AddAsk(stored); {
+	if err := writeAskImages(id, images); err != nil {
+		d.sendError(conn, fmt.Sprintf("keep the ask's images: %v", err))
+		return
+	}
+	err = d.store.AddAsk(stored)
+	if err != nil {
+		d.forgetAskImages([]string{id})
+	}
+	switch {
 	case errors.Is(err, store.ErrAskerGone):
 		d.sendError(conn, errSessionNotLive(session.ID).Error())
 		return
@@ -198,7 +211,7 @@ func (d *Daemon) handleAskClose(conn net.Conn, msg *protocol.AskCloseMessage) {
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
-	d.publishFact(FactAskClosed, stored.ID, nil)
+	d.announceClosedAsks([]string{stored.ID})
 }
 
 func (d *Daemon) handleAskAnswer(client *wsClient, msg *protocol.AskAnswerMessage) {
@@ -282,11 +295,20 @@ func (d *Daemon) announceClosedAsks(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
+	d.forgetAskImages(ids)
 	d.coalesceSnapshots(func() {
 		for _, id := range ids {
 			d.publishFact(FactAskClosed, id, nil)
 		}
 	})
+}
+
+func (d *Daemon) forgetAskImages(ids []string) {
+	for _, id := range ids {
+		if err := removeAskImages(id); err != nil {
+			d.logf("asks: removing the images of %s: %v", id, err)
+		}
+	}
 }
 
 type shownAsk struct {

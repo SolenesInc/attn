@@ -827,8 +827,8 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	return op.Result, nil
 }
 
-func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject, baseDir string) (*protocol.Ask, error) {
-	msg := protocol.AskOpenMessage{Cmd: protocol.CmdAskOpen, SessionID: sessionID, Markdown: markdown, BaseDir: baseDir}
+func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject, baseDir string, images ...protocol.AskImage) (*protocol.Ask, error) {
+	msg := protocol.AskOpenMessage{Cmd: protocol.CmdAskOpen, SessionID: sessionID, Markdown: markdown, BaseDir: baseDir, Images: images}
 	if seedID = strings.TrimSpace(seedID); seedID != "" {
 		msg.SeedID = protocol.Ptr(seedID)
 	}

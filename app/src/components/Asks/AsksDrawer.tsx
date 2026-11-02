@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { Ask, AskAnswer, AskReply } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
@@ -54,7 +54,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
   const focusRequest = useAsksStore((state) => state.focusRequest);
   const { selectAsk, setDraft, toggleReplied } = useAsksStore.getState();
-  const { sendAskAnswer } = useDaemonApi();
+  const { sendAskAnswer, sendAskImage } = useDaemonApi();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const index = Math.max(0, items.findIndex((item) => item.ask.id === selectedAskId));
@@ -66,6 +66,10 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const listRef = useRef<HTMLOListElement>(null);
   const sourcePath = ask ? `${ask.base_dir}/${ask.id}.md` : '';
   const source = useMemo(() => fileMarkdownSource(sourcePath), [sourcePath]);
+  const loadImage = useCallback(
+    (path: string) => sendAskImage(askId ?? '', path).then((image) => `data:${image.mime_type};base64,${image.data_base64}`),
+    [askId, sendAskImage],
+  );
 
   useEffect(() => () => selectAsk(null), [selectAsk]);
   useEffect(() => {
@@ -179,11 +183,12 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
               question={part.question}
               answer={shownAnswers[part.question.key]}
               source={source}
+              loadImage={loadImage}
               onChange={reply ? undefined : changeAnswer}
             />
           ) : (
             <div key={`markdown-${partIndex}`} className="asks-markdown">
-              <MarkdownReader content={part.markdown ?? ''} source={source} />
+              <MarkdownReader content={part.markdown ?? ''} source={source} loadLocalImage={loadImage} />
             </div>
           )
         ))}

@@ -4000,6 +4000,33 @@ model AskOpenMessage {
   markdown: string;
   subject?: string;
   base_dir: string;
+  images?: AskImage[];
+}
+
+// A local image the ask's markdown shows, read by the asking CLI. path is the
+// image's absolute path on the asker's machine, as the markdown resolves
+// against base_dir; the home keeps the bytes for as long as it keeps the ask.
+model AskImage {
+  path: string;
+  data_base64: string;
+}
+
+// Read one image of an ask from the home's copy. path is the absolute path the
+// ask's markdown resolves the image to against its base_dir.
+model AskImageMessage {
+  cmd: "ask_image";
+  request_id: string;
+  ask_id: string;
+  path: string;
+}
+
+model AskImageResultMessage {
+  event: "ask_image_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  mime_type?: string;
+  data_base64?: string;
 }
 
 @extension("x-on", #{ home: true })
@@ -8489,6 +8516,7 @@ alias DaemonEvent =
   | CommandErrorMessage
   | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
+  | AskImageResultMessage
   | AsksUpdatedMessage
   | SetVentDismissedResultMessage
   | PlantVentSeedResultMessage
