@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -183,12 +182,11 @@ func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
 	if err != nil || profile.Deleted() {
 		return d.gatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.device.ProfileID))
 	}
-	homeName, _ := os.Hostname()
 	conn.api = min(hello.API, gateway.APIVersion)
 	if err := gatewaySend(conn, gateway.GatewayWelcome{
 		Event:    "welcome",
 		API:      conn.api,
-		HomeName: homeName,
+		HomeName: homeDisplayName(),
 		Profile:  gateway.GatewayProfile{ID: profile.ID, Name: profile.Name},
 	}); err != nil {
 		return err

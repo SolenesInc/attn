@@ -62,8 +62,7 @@ func (d *Daemon) startCloudLink() {
 		return
 	}
 	d.phones.whyUnlinked = ""
-	homeName, _ := os.Hostname()
-	link := cloudlink.New(cloudlink.Config{CloudURL: cloudURL(), HomeName: homeName, Identity: identity, Home: phoneHome{d}})
+	link := cloudlink.New(cloudlink.Config{CloudURL: cloudURL(), HomeName: homeDisplayName(), Identity: identity, Home: phoneHome{d}})
 	ctx, cancel := context.WithCancel(d.life.Context())
 	done := make(chan struct{})
 	if !d.life.Go("cloudLink", func() {
