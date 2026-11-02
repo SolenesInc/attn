@@ -260,7 +260,8 @@ describe('asks on the phone', () => {
   it('loads an image the ask writes as an HTML img tag, as the desktop shows it', () => {
     const htmlAsk = ask('a-html', 1, [
       {
-        markdown: '<p align="center"><img src="shots/wide.png" alt="the wide board" width="600"></p>',
+        markdown:
+          '<p align="center"><img src="shots/wide&#45;board&amp;.png" alt="the wide board" width="600"></p>',
         question: null,
       },
       { markdown: null, question: choiceQuestion },
@@ -270,8 +271,8 @@ describe('asks on the phone', () => {
       Scene.given(online(personal)),
       arrive(personal, [htmlAsk]),
       Scene.Command.resolve(
-        LoadImage({ pairingId: personal.id, askId: 'a-html', src: 'shots/wide.png' }),
-        Message.LoadedImage({ key: `${personal.id}\na-html\nshots/wide.png`, url: 'blob:wide' }),
+        LoadImage({ pairingId: personal.id, askId: 'a-html', src: 'shots/wide-board&.png' }),
+        Message.LoadedImage({ key: `${personal.id}\na-html\nshots/wide-board&.png`, url: 'blob:wide' }),
       ),
       Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
       Scene.expect(Scene.role('img', { name: 'the wide board' })).toHaveAttr('src', 'blob:wide'),

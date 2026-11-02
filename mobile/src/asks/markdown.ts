@@ -24,8 +24,18 @@ const walk = (node: Nodes, visit: (node: Nodes) => void) => {
 const attribute = (tag: string, name: string): string | undefined => {
   const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag)
   const value = match?.[1] ?? match?.[2] ?? match?.[3]
-  return value?.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')
+  return value === undefined ? undefined : decodeReferences(value)
 }
+
+const namedReferences: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
+
+const decodeReferences = (value: string) =>
+  value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (reference, name: string) => {
+    if (name[0] !== '#') return namedReferences[name.toLowerCase()] ?? reference
+    const code =
+      name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10)
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : reference
+  })
 
 const htmlImages = (html: string): ReadonlyArray<{ readonly src: string; readonly alt: string }> =>
   [...html.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
