@@ -141,3 +141,30 @@ go tool pprof -top http://127.0.0.1:6060/debug/pprof/heap
 `/debug/vars` also reports `doc_subscriptions`, which counts
 the live document queries that connected clients hold and drops when a client
 disconnects.
+
+## Verification cost
+
+`scripts/measure-verification-cost.py` measures what checking a change costs:
+one land, three concurrent lands on one machine, the full Go and Vitest suites,
+and CI. Run it to show that a change to `scripts/land.sh`, the test runners or
+`ci.yml` makes verification cheaper, on the same machine before and after. The
+local baselines measure the checkout's committed `HEAD`:
+
+```bash
+scripts/measure-verification-cost.py                 # every baseline, 3 runs each
+scripts/measure-verification-cost.py --runs 1 land   # one baseline
+```
+
+Each local baseline prints every run's outcome, wall seconds, CPU-seconds and
+1-minute load average before and after it, then the median and range over the
+runs that succeeded, or over the failed runs, labelled, when none did. Lands
+also print how many times each land ran its checks. Runs on one machine take
+turns through a lock on `/tmp/attn-verification-cost.lock`, so several agents
+can measure at once without disturbing each other; a waiting run prints who
+holds the lock.
+
+The lands run in a scratch clone beside the checkout, whose `origin` is a local
+bare repository, with a copy of this checkout's test-history mirror and no
+service token, so they never push to the real `main` or upload receipts. `--keep` keeps the
+scratch folder and each run's log. The `ci` baseline reads the last 5 green
+`ci.yml` runs on `main` through `gh`.
