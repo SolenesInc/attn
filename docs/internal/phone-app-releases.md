@@ -39,7 +39,8 @@ mobile/scripts/testflight.sh
 The script:
 
 1. Reads the App Store Connect API key from the secrets below.
-2. Builds the web app and copies it into the iOS project with `cap sync ios`.
+2. Fetches the pinned `ghostty-vt.wasm` the terminal view needs, builds the
+   web app, and copies it into the iOS project with `cap sync ios`.
 3. Archives the Release build with the build number set to the UTC time, as
    `YYYYMMDD.HHMMSS`, so every upload has a higher number than the last.
    `MARKETING_VERSION` in the Xcode project stays the version people see.

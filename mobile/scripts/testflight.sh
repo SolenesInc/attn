@@ -69,6 +69,7 @@ run_logged() {
 }
 
 step "Web app"
+bash "${MOBILE_DIR}/../app/scripts/ensure-ghostty-vt-wasm.sh"
 pnpm --dir "${MOBILE_DIR}" install --frozen-lockfile
 pnpm --dir "${MOBILE_DIR}" run build
 (cd "${MOBILE_DIR}" && pnpm exec cap sync ios)
