@@ -1354,11 +1354,13 @@ const keyLabels: Record<TerminalKey, string> = {
   ShiftTab: '⇧Tab',
 }
 
-const keysBar = (live: boolean, h: HtmlBuilder<Message>): Html =>
+const keysBar = (live: boolean, keyboardOpen: boolean, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('keys'), h.OnMount(KeepFocus())],
     [
-      h.button([h.Attribute('aria-label', 'Hide keyboard'), h.OnClick(Message.ClickedHideKeyboard())], ['⌄']),
+      keyboardOpen
+        ? h.button([h.Class('hide-keyboard'), h.OnClick(Message.ClickedHideKeyboard())], ['Hide'])
+        : h.empty,
       ...terminalKeys.map((key) =>
         h.button([h.Key(key), h.Disabled(!live), h.OnClick(Message.ClickedKey({ key }))], [keyLabels[key]]),
       ),
@@ -1487,7 +1489,7 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
             ],
           ),
       model.terminalStatus ? h.p([h.Class('terminal-status muted')], [model.terminalStatus]) : h.empty,
-      keysBar(live, h),
+      keysBar(live, model.keyboardHeight > 0, h),
       composerView(composerOf(model, composerKey(open)!), live, h),
     ],
   )

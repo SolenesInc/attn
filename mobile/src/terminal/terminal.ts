@@ -60,6 +60,7 @@ export const mountTerminal = (
   let scale = 1
   let panX = 0
   let panY = 0
+  let followBottom = true
   let requested: TerminalRequest = { cols: 0, rows: 0 }
   let stableWidth = 0
   let stableHeight = 0
@@ -91,14 +92,12 @@ export const mountTerminal = (
     const shownHeight = height * scale
     panX =
       shownWidth <= viewport.clientWidth ? 0 : Math.min(0, Math.max(viewport.clientWidth - shownWidth, panX))
-    panY =
-      shownHeight <= viewport.clientHeight
-        ? viewport.clientHeight - shownHeight
-        : Math.min(0, Math.max(viewport.clientHeight - shownHeight, panY))
+    const bottom = viewport.clientHeight - shownHeight
+    panY = shownHeight <= viewport.clientHeight || followBottom ? bottom : Math.min(0, Math.max(bottom, panY))
     stage.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`
   }
   const anchorBottom = () => {
-    panY = Number.NEGATIVE_INFINITY
+    followBottom = true
     place()
   }
 
@@ -180,7 +179,9 @@ export const mountTerminal = (
     panX += event.clientX - dragFrom.x
     panY += event.clientY - dragFrom.y
     dragFrom = { x: event.clientX, y: event.clientY }
+    followBottom = false
     place()
+    followBottom = panY <= viewport.clientHeight - canvasSize().height * scale
   }
   const up = () => {
     dragFrom = null

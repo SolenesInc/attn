@@ -501,6 +501,21 @@ describe('answering an agent from the phone', () => {
     )
   })
 
+  it('offers Hide to close the keyboard only while the keyboard is open', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      ...openSession('Land the fix', 't-a'),
+      Scene.expect(Scene.role('button', { name: 'Hide' })).not.toExist(),
+      Scene.Subscription.emit(Message.ChangedKeyboard({ height: 336 })),
+      Scene.click(Scene.role('button', { name: 'Hide' })),
+      Scene.Command.expectHas(HideKeyboard),
+      Scene.Command.resolve(HideKeyboard, Message.CompletedCommand()),
+      Scene.Subscription.emit(Message.ChangedKeyboard({ height: 0 })),
+      Scene.expect(Scene.role('button', { name: 'Hide' })).not.toExist(),
+    )
+  })
+
   it('says why when the home is too old to open terminals', () => {
     Scene.scene(
       { update, view },

@@ -781,3 +781,10 @@ textarea.note:focus {
   font: inherit;
   resize: none;
 }
+
+.keys button.hide-keyboard {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-weight: 600;
+}

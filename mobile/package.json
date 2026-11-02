@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "verify:ghostty-vt": "bash ../app/scripts/ensure-ghostty-vt-wasm.sh",
+    "dev": "pnpm run verify:ghostty-vt && vite",
+    "build": "pnpm run verify:ghostty-vt && vite build",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
     "lint": "oxlint --deny-warnings src",
