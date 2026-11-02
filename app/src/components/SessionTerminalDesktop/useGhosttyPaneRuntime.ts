@@ -9,6 +9,7 @@ import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisible
 import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
 import type { OutpostReach } from '../../types/generated';
 import { isTypedInput, useTerminalRefusals } from '../../store/terminalRefusals';
+import type { TerminalBinding } from '../../dictation/terminal';
 
 interface TerminalResizeOptions {
   reason?: string;
@@ -45,7 +46,7 @@ export interface GhosttyPaneRuntime {
   setTerminalHandle: (paneId: string, handle: GhosttyTerminalHandle | null) => void;
   handleTerminalReady: (paneId: string) => (terminal: GhosttyTerminalHandle) => Promise<void>;
   handleTerminalInput: (paneId: string) => (data: string, source?: string, traceId?: string) => void;
-  handleDictationPaste: (paneId: string) => (data: string, runtimeId: string) => boolean;
+  handleDictationPaste: (paneId: string) => (data: string, binding: TerminalBinding) => boolean;
   handleTerminalResize: (paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => void;
   focusPane: (paneId: string, retries?: number) => void;
   fitPane: (paneId: string) => void;
@@ -413,9 +414,9 @@ export function useGhosttyPaneRuntime(
     deliverInput(paneFor(paneId), data, source, traceId);
   }, [deliverInput, paneFor]);
 
-  const handleDictationPaste = useCallback((paneId: string) => (data: string, runtimeId: string) => {
+  const handleDictationPaste = useCallback((paneId: string) => (data: string, binding: TerminalBinding) => {
     const pane = paneFor(paneId);
-    return pane?.runtimeId === runtimeId && deliverInput(pane, data, 'user');
+    return pane?.runtimeId === binding.runtimeId && pane.sessionId === binding.sessionId && deliverInput(pane, data, 'user');
   }, [deliverInput, paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {

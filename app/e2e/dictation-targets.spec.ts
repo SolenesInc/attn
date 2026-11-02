@@ -187,6 +187,21 @@ test.describe('terminal', () => {
     await expect.poll(() => writes(page).then(list => list[1])).toEqual({ runtime: 'term-1', data: '\x1b[200~Alpha.\rBeta.\x1b[201~' });
   });
 
+  test('a terminal whose conversation changed while refining receives nothing, Enter reaches the new conversation, and the text is offered', async ({ page }) => {
+    await open(page);
+    await focusTerminal(page);
+    const recording = await record(page);
+    await transcribe(page, recording, 'first conversation text');
+    const request = await refineRequest(page, 0);
+    await page.evaluate(() => window.__targets.succeedSession());
+    await focusTerminal(page);
+    await page.keyboard.press('Enter');
+    await expect.poll(() => writes(page)).toEqual([{ runtime: 'term-1', data: '\r' }]);
+    await answer(page, request.requestId, { ok: true, text: 'First conversation text.' });
+    await expect(page.getByTestId('dictation-card')).toContainText('nothing was pasted');
+    expect(await writes(page)).toEqual([{ runtime: 'term-1', data: '\r' }]);
+  });
+
   test('a terminal whose runtime was replaced or whose outpost went offline receives nothing, and the text is offered', async ({ page }) => {
     await open(page);
     await focusTerminal(page);

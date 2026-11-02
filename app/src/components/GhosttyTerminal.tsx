@@ -167,7 +167,7 @@ import {
   TerminalSeedPreview,
   type TerminalSeedAnchor,
 } from './TerminalSeedPreview';
-import { consumeDictationEnter, registerTerminalInput } from '../dictation/terminal';
+import { consumeDictationEnter, registerTerminalInput, type TerminalBinding } from '../dictation/terminal';
 import './GhosttyTerminal.css';
 
 export interface GhosttyTerminalProps {
@@ -186,7 +186,7 @@ export interface GhosttyTerminalProps {
     paneCount: number;
   };
   onInput: (data: string, source?: string, traceId?: string) => void;
-  onDictationPaste?: (data: string, runtimeId: string) => boolean;
+  onDictationPaste?: (data: string, binding: TerminalBinding) => boolean;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onPathRefused?: (message: string) => void;
@@ -2073,12 +2073,17 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         },
       });
       const unregisterDictation = registerTerminalInput(container, {
-        runtime: () => onDictationPasteRef.current && inputReadyRef.current && terminalRef.current ? runtimeMetaRef.current?.runtimeId ?? null : null,
-        paste: (text, runtimeId) => {
+        binding: () => {
+          const meta = runtimeMetaRef.current;
+          return onDictationPasteRef.current && inputReadyRef.current && terminalRef.current && meta
+            ? { runtimeId: meta.runtimeId, sessionId: meta.sessionId }
+            : null;
+        },
+        paste: (text, binding) => {
           const terminal = terminalRef.current;
           const deliver = onDictationPasteRef.current;
           if (!terminal || !deliver) return false;
-          return deliver(terminal.formatPaste(text), runtimeId);
+          return deliver(terminal.formatPaste(text), binding);
         },
       });
       return () => {

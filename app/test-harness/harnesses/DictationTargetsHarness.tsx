@@ -15,6 +15,7 @@ interface TargetsControl {
   ptyWrites(): { runtime: string; data: string }[];
   output(data: string): void;
   replaceRuntime(): void;
+  succeedSession(): void;
   setReach(reach: TerminalReach): void;
   runtime(): string;
 }
@@ -36,6 +37,7 @@ export function DictationTargetsHarness({ onReady }: HarnessProps) {
   const [doc, setDoc] = useState('# Notes\n\nFirst line.\n');
   const [notes, setNotes] = useState('');
   const [runtime, setRuntime] = useState('term-1');
+  const [session, setSession] = useState('term');
   const [reach, setReach] = useState<TerminalReach>('reachable');
   const router = useMemo(() => createPaneRuntimeEventRouterController(), []);
 
@@ -60,6 +62,7 @@ export function DictationTargetsHarness({ onReady }: HarnessProps) {
       ptyWrites: () => writes,
       output: data => { expectedOutput = [...expectedOutput, data]; window.__TEST_EMIT_PTY_DATA?.(current, data); },
       replaceRuntime: () => { current = current === 'term-1' ? 'term-2' : 'term-1'; setRuntime(current); },
+      succeedSession: () => setSession(id => `${id}-next`),
       setReach,
       runtime: () => current,
     };
@@ -68,7 +71,7 @@ export function DictationTargetsHarness({ onReady }: HarnessProps) {
   }, [onReady, probe, router]);
 
   const desktop: TerminalDesktopState = {
-    agents: [{ id: 'term', runtimeId: runtime, sessionId: 'term', title: 'Shell' }],
+    agents: [{ id: 'term', runtimeId: runtime, sessionId: session, title: 'Shell' }],
     layoutTree: { type: 'pane', paneId: 'term' },
   };
 
@@ -76,7 +79,7 @@ export function DictationTargetsHarness({ onReady }: HarnessProps) {
     <style>{appStyles}</style>
     <div style={{ position: 'relative' }}>
       <SessionTerminalDesktop desktopId="d" terminalState={desktop} activePaneId="term"
-        desktopSessions={[{ id: 'term', label: 'Shell', agent: 'claude', cwd: '/tmp/dictation', state: 'idle', reach }]}
+        desktopSessions={[{ id: session, label: 'Shell', agent: 'claude', cwd: '/tmp/dictation', state: 'idle', reach }]}
         fontSize={14} enabled isActiveSession isSessionViewVisible eventRouter={router}
         onSplitPane={noop} onClosePane={noop} onFocusPane={noop} onNavigateOutOfSession={noop} />
     </div>

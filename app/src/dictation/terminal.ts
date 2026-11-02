@@ -1,13 +1,26 @@
 import { DictationTextFormat } from '../types/generated';
 import type { PasteTarget } from './target';
 
+export interface TerminalBinding {
+  runtimeId: string;
+  sessionId: string;
+}
+
 export interface TerminalInput {
-  runtime(): string | null;
-  paste(text: string, runtime: string): boolean;
+  binding(): TerminalBinding | null;
+  paste(text: string, binding: TerminalBinding): boolean;
+}
+
+interface EnterClaim {
+  binding: TerminalBinding;
+  onEnter(): void;
 }
 
 const terminals = new WeakMap<Element, TerminalInput>();
-const enterClaims = new WeakMap<Element, (() => void)[]>();
+const enterClaims = new WeakMap<Element, EnterClaim[]>();
+
+const sameBinding = (a: TerminalBinding | null | undefined, b: TerminalBinding) =>
+  a?.runtimeId === b.runtimeId && a.sessionId === b.sessionId;
 
 export function registerTerminalInput(element: Element, input: TerminalInput) {
   terminals.set(element, input);
@@ -16,33 +29,36 @@ export function registerTerminalInput(element: Element, input: TerminalInput) {
 
 export function consumeDictationEnter(element: Element, event: KeyboardEvent) {
   if (event.type !== 'keydown' || event.key !== 'Enter' || event.repeat || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
-  const onEnter = enterClaims.get(element)?.[0];
-  if (!onEnter) return false;
-  onEnter();
+  const claims = enterClaims.get(element);
+  if (!claims?.length) return false;
+  const current = terminals.get(element)?.binding();
+  const live = claims.filter(claim => sameBinding(current, claim.binding));
+  enterClaims.set(element, live);
+  const claim = live[0];
+  if (!claim) return false;
+  claim.onEnter();
   return true;
 }
 
 export function terminalTarget(focused: Element | null): PasteTarget | null {
   const element = focused?.closest('.ghostty-terminal');
   const input = element ? terminals.get(element) : undefined;
-  const runtime = input?.runtime();
-  if (!element || !input || !runtime) return null;
-  let claim: (() => void) | null = null;
+  const binding = input?.binding();
+  if (!element || !input || !binding) return null;
+  let claim: EnterClaim | null = null;
   const unclaim = () => {
     const claims = enterClaims.get(element);
-    if (claims && claim) claims.splice(claims.indexOf(claim), 1);
+    if (claims && claim) enterClaims.set(element, claims.filter(other => other !== claim));
     claim = null;
   };
   return {
     kind: 'paste',
     format: DictationTextFormat.Plain,
-    paste: text => element.isConnected && terminals.get(element) === input && input.paste(text, runtime) ? 'inserted' : 'targetGone',
+    paste: text => element.isConnected && terminals.get(element) === input && input.paste(text, binding) ? 'inserted' : 'targetGone',
     claimEnter: onEnter => {
       unclaim();
-      claim = onEnter;
-      const claims = enterClaims.get(element);
-      if (claims) claims.push(onEnter);
-      else enterClaims.set(element, [onEnter]);
+      claim = { binding, onEnter };
+      enterClaims.set(element, [...(enterClaims.get(element) ?? []), claim]);
     },
     release: unclaim,
   };
