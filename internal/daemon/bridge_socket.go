@@ -124,10 +124,10 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingOutpostState))
+			d.publishFact(FactSettingChanged, string(settingOutpostState), nil)
 		}
 		if errorChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingOutpostLastError))
+			d.publishFact(FactSettingChanged, string(settingOutpostLastError), nil)
 		}
 	})
 }

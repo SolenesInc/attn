@@ -17,7 +17,7 @@ Appearance.
 - `home-and-machine`: home settings decided at the home and read-only on outposts, and machine settings per machine.
 - `experimental`: the switches for features still in development, off by default.
 - `appearance`: theme, and text size for the app and for the garden.
-- `mobile-and-hosts`: Tailscale Serve for a phone's browser, and the GitHub hosts attn found.
+- `github-hosts`: the GitHub hosts attn found.
 
 ## How to get to it
 
@@ -30,7 +30,7 @@ Appearance.
 - In the dialog (`app/src/components/SettingsModal.tsx`, sections in `app/src/components/useSettingsModalState.ts`): the nav buttons `[data-testid="settings-nav-<section>"]`, "Search settings", the close button `[data-testid="settings-close"]`, the backdrop, and Escape. The sections and the feature that owns each:
   - attn: Appearance (`general`, this file). Files and locations (`desktop`: [worktrees.md](worktrees.md), [notebook.md](notebook.md), [markdown.md](markdown.md), and the Projects Directory for [pull-requests.md](pull-requests.md)). Attention queue (`hygiene`: [queue-flow.md](queue-flow.md), and muted repositories and authors for [pull-requests.md](pull-requests.md)).
   - Agents: Agents and models (`agents`) and Models (`models`), [harnesses.md](harnesses.md). Background agents (`backgroundAgents`), the garden advisor in [garden.md](garden.md) and the chief in [crew.md](crew.md). Delegation (`delegation`), [delegation.md](delegation.md).
-  - Connectivity: Mobile and hosts (`connectivity`), Tailscale Serve for a phone's browser (`tailscale_enabled`) and the GitHub hosts attn found for [pull-requests.md](pull-requests.md). No other file covers Tailscale, so this one does. Outposts (`outposts`), shown while Outposts is on, [outposts.md](outposts.md).
+  - Connectivity: GitHub hosts (`connectivity`), the hosts [pull-requests.md](pull-requests.md) uses. Outposts (`outposts`), shown while Outposts is on, [outposts.md](outposts.md).
   - Extensions: Plugins (`plugins`), [harnesses.md](harnesses.md).
   - System: Experimental (`experimental`), each switch with its feature. Task runner (`backgroundTasks`) and Event bus (`eventBus`), [diagnostics.md](diagnostics.md). Analytics (`analytics`), shown while analytics is on, [telemetry.md](telemetry.md).
 - Where people see what agents do: a setting an agent changes with `attn settings set` shows in the open dialog as the toggle's new value. `theme` and `uiScale` are the exceptions, because the open app reads them from the daemon only once (see Gotchas).
@@ -70,7 +70,7 @@ Preconditions:
 - **A change from the shell shows in the dialog.** Click `[data-testid="settings-nav-desktop"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-worktree-sweep-toggle\"]"}'` reads `Disable`. Run `./attn settings set worktree_sweep_enabled false`: the toggle reads `Enable`. Run `./attn settings set worktree_sweep_enabled true`: the toggle reads `Disable` again.
 - **Autosave, a refusal and Retry.** With Files and locations still open, click `[data-testid="settings-projects-directory-input"]` natively. Press ⌘A (`bridge native_key '{"key":"a","modifiers":["command"]}'`), type `relative/dir` with `bridge native_text`, and press Enter. `bridge dom_text '{"selector":".settings-autosave-status"}'` reads the refusal, `projects directory must be an absolute path`, beside `Retry`, and `./attn settings get projects_directory` still prints the old value. Press ⌘A, type the proof folder's path, written out, with `bridge native_text`, and press Enter: `bridge dom_wait '{"selector":".settings-autosave-status","textIncludes":"Saved","timeoutMs":5000}'` matches, and `./attn settings get projects_directory` prints that path.
 - **An agent changes a setting.** Run `wsctl add-session --cwd $A --agent claude --label settings-agent --id settings-agent --place`, find its terminal in `wsctl list`, and run `wsctl input --id <terminal> --text "sweep off" --enter`. `./attn agent peek settings-agent` shows `worktree_sweep_enabled = false`, and the open dialog's toggle reads `Enable`. `wsctl input --id <terminal> --text "read theme" --enter` shows `dark` in peek. Put the sweep back with `./attn settings set worktree_sweep_enabled true`.
-- **Mobile and hosts.** Clear the earlier search: click `[aria-label="Search settings"]` natively, press ⌘A (`bridge native_key '{"key":"a","modifiers":["command"]}'`), then Backspace (`bridge native_key '{"key":"Backspace"}'`). Click `[data-testid="settings-nav-connectivity"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-section-connectivity\"]"}'` reads "Mobile Web Client", with Tailscale Serve's Enable button, and "GitHub Hosts" with the hosts attn found. `./attn settings get tailscale_enabled` prints an empty line. Turning Tailscale on needs the machine's own Tailscale client signed in. The baseline does not assume a signed-in client.
+- **GitHub hosts.** Clear the earlier search: click `[aria-label="Search settings"]` natively, press ⌘A (`bridge native_key '{"key":"a","modifiers":["command"]}'`), then Backspace (`bridge native_key '{"key":"Backspace"}'`). Click `[data-testid="settings-nav-connectivity"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-section-connectivity\"]"}'` reads "GitHub Hosts" with the hosts attn found.
 - **Experimental.** Click `[data-testid="settings-nav-experimental"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-section-experimental\"]"}'` lists the opt-in switches, Outposts among them. Drive each switch in its feature's file. Drive Outposts in [outposts.md](outposts.md).
 - **Close.** Click `[data-testid="settings-close"]` natively: `settings_get_state` shows `open: false`. Open the dialog with ⌘, again, and click natively just left of the dialog, at `bridge dom_native_point '{"selector":".settings-modal","at":{"x":0,"y":0.5},"offset":{"x":-10,"y":0}}'`: the click lands on the backdrop and `open` is false. Open the dialog once more and press Escape: `open` is false, and nothing reads "Saving…".
 - **Home and machine settings on an outpost.** With an outpost paired, as [outposts.md](outposts.md) describes, run on the outpost `attn settings list --all`: home settings such as `theme` carry `read-only`. `attn settings set theme system` there prints `theme = system`, and the home's `./attn settings get theme` prints `system`. `attn settings set worktree_sweep_enabled false` there leaves the home's value alone. With the home unreachable, the outpost's home-setting write fails and names the home as unreachable. On the baseline, which has no outpost, this step fails as Gotchas says.
@@ -87,14 +87,14 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `internal/daemon/tailscale_wire_test.go`.
+- Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`.
 - Stack: `cmd/attn/settings_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
 - Scenario: `focusless-native` (parked macOS native input), `agent-settings`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
 ## Gotchas
 
-- The dialog first opens on Mobile and hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge settings_get_state` shows a `search`, clear it as the Mobile and hosts step does before clicking a `settings-nav-<section>` button.
+- The dialog first opens on GitHub hosts (`connectivity`), not Appearance, and keeps the last section and the last search while the app runs. A search that leaves a section out hides its nav button: when `bridge settings_get_state` shows a `search`, clear it as the GitHub hosts step does before clicking a `settings-nav-<section>` button.
 - The dialog shows the shell's `theme light` only because a fresh instance has no theme yet, and the app takes the first value it sees. On an instance that already had a theme, run the theme steps from the dialog first.
 - The Outposts and Analytics sections exist only while `outposts_enabled` or `analytics.enabled` is true. `bridge settings_select_section` refuses an unknown id and needs the dialog open. Like `set_setting`, it skips native input and serves only as setup.
 - `""` restores a default only where the key's description says so. `attn settings set theme ""` is refused as an invalid theme.

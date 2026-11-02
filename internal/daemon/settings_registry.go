@@ -43,7 +43,6 @@ const (
 	SettingSharedPTYHostActive           = settingkeys.SettingSharedPTYHostActive
 	SettingTheme                         = settingkeys.SettingTheme
 	SettingReviewerModel                 = settingkeys.SettingReviewerModel
-	SettingTailscaleEnabled              = settingkeys.SettingTailscaleEnabled
 	SettingQueueModeEnabled              = settingkeys.SettingQueueModeEnabled
 	SettingQueueCrewEnabled              = settingkeys.SettingQueueCrewEnabled
 	SettingQueueShowHiddenSessions       = settingkeys.SettingQueueShowHiddenSessions
@@ -187,9 +186,6 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
-	{key: string(SettingTailscaleEnabled), scope: daemonScope, description: "Expose attn through Tailscale: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
 	{key: string(SettingAutoApproveEnabled), scope: daemonScope, description: "Auto-approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
@@ -321,11 +317,6 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: "db.last_backup_at", scope: daemonScope, description: "Time of the last database backup.", readOnly: true},
 	{key: "headless_tasks.enabled.stored", scope: daemonScope, description: "Stored background model task switch.", readOnly: true},
 	{key: "headless_tasks.enabled.override", scope: daemonScope, description: "Environment override for background model tasks.", readOnly: true},
-	{key: "tailscale_status", scope: daemonScope, description: "Current Tailscale connection status.", readOnly: true},
-	{key: "tailscale_domain", scope: daemonScope, description: "Current Tailscale domain.", readOnly: true},
-	{key: "tailscale_url", scope: daemonScope, description: "Current Tailscale app URL.", readOnly: true},
-	{key: "tailscale_auth_url", scope: daemonScope, description: "Tailscale sign-in URL.", readOnly: true},
-	{key: "tailscale_error", scope: daemonScope, description: "Current Tailscale error.", readOnly: true},
 })
 
 func classifiedSettings(specs []settingSpec) []settingSpec {

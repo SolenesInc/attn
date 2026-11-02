@@ -27,8 +27,6 @@ import type { SettingsModalState } from './useSettingsModalState';
 export function SectionStatusPills({
   selectedSection,
   delegationPolicy,
-  tailscaleEnabled,
-  tailscaleStatus,
   pluginProblemCount,
   activePluginCount,
   plugins,
@@ -41,8 +39,6 @@ export function SectionStatusPills({
   SettingsModalState,
   | 'selectedSection'
   | 'delegationPolicy'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
@@ -55,13 +51,6 @@ export function SectionStatusPills({
   switch (selectedSection) {
     case 'delegation':
       return <DelegationSwitch policy={delegationPolicy} />;
-    case 'connectivity':
-      return (
-        <ConnectivityStatusPills
-          tailscaleEnabled={tailscaleEnabled}
-          tailscaleStatus={tailscaleStatus}
-        />
-      );
     case 'plugins':
       return (
         <PluginsStatusPills
@@ -432,45 +421,6 @@ export function DesktopSettings({
           </div>
         </div>
       </section>
-    </>
-  );
-}
-
-export function ConnectivitySettings({
-  tailscaleURL,
-  tailscaleDomain,
-  handleToggleTailscale,
-  tailscaleEnabled,
-  tailscaleStatus,
-  tailscaleAuthURL,
-  tailscaleError,
-  githubPollingOffReason,
-  githubHosts,
-}: Pick<
-  SettingsModalState,
-  | 'tailscaleURL'
-  | 'tailscaleDomain'
-  | 'handleToggleTailscale'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
-  | 'tailscaleAuthURL'
-  | 'tailscaleError'
-  | 'githubPollingOffReason'
-  | 'githubHosts'
->) {
-  return (
-    <>
-      <MobileWebSettings
-        tailscaleURL={tailscaleURL}
-        tailscaleDomain={tailscaleDomain}
-        handleToggleTailscale={handleToggleTailscale}
-        tailscaleEnabled={tailscaleEnabled}
-        tailscaleStatus={tailscaleStatus}
-        tailscaleAuthURL={tailscaleAuthURL}
-        tailscaleError={tailscaleError}
-      />
-
-      <GitHubHostsSettings githubPollingOffReason={githubPollingOffReason} githubHosts={githubHosts} />
     </>
   );
 }
@@ -1401,86 +1351,6 @@ export function EventBusSection({
   return <EventBusSettings getBusStatus={sendBusStatusGet} setConsumerEnabled={sendBusSetConsumerEnabled} />;
 }
 
-export function MobileWebSettings({
-  tailscaleURL,
-  tailscaleDomain,
-  handleToggleTailscale,
-  tailscaleEnabled,
-  tailscaleStatus,
-  tailscaleAuthURL,
-  tailscaleError,
-}: Pick<
-  SettingsModalState,
-  | 'tailscaleURL'
-  | 'tailscaleDomain'
-  | 'handleToggleTailscale'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
-  | 'tailscaleAuthURL'
-  | 'tailscaleError'
->) {
-  return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <h3>Mobile Web Client</h3>
-        <p className="settings-description">
-          Expose this daemon through the existing Tailscale device identity for mobile browser access.
-        </p>
-      </div>
-      <div className="settings-block-body">
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Tailscale Serve</p>
-            <p className="settings-row-copy">
-              {tailscaleURL ||
-                tailscaleDomain ||
-                'Uses the host Tailscale client and does not register a second tailnet device for attn.'}
-            </p>
-          </div>
-          <button className="settings-action" onClick={handleToggleTailscale}>
-            {tailscaleEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card compact">
-          <div>
-            <p className="settings-row-title">Sign-in status</p>
-            <p className="settings-row-copy">Status: {tailscaleStatus}</p>
-          </div>
-          <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
-            {tailscaleEnabled ? tailscaleStatus : 'disabled'}
-          </span>
-        </div>
-        <div className="settings-hint">
-          This uses the host Tailscale client and does not register a second tailnet device for attn.
-        </div>
-        {tailscaleDomain && (
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Device DNS</span>
-            <code>{tailscaleDomain}</code>
-          </div>
-        )}
-        {tailscaleURL && (
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Web URL</span>
-            <a href={tailscaleURL} target="_blank" rel="noreferrer">
-              {tailscaleURL}
-            </a>
-          </div>
-        )}
-        {tailscaleAuthURL && (
-          <div className="settings-warning">
-            Sign this machine into Tailscale:{' '}
-            <a href={tailscaleAuthURL} target="_blank" rel="noreferrer">
-              {tailscaleAuthURL}
-            </a>
-          </div>
-        )}
-        {tailscaleError && <div className="settings-warning">{tailscaleError}</div>}
-      </div>
-    </section>
-  );
-}
-
 export function GitHubHostsSettings({
   githubPollingOffReason,
   githubHosts,
@@ -1514,17 +1384,6 @@ export function GitHubHostsSettings({
         )}
       </div>
     </section>
-  );
-}
-
-export function ConnectivityStatusPills({
-  tailscaleEnabled,
-  tailscaleStatus,
-}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus'>) {
-  return (
-    <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
-      {tailscaleEnabled ? tailscaleStatus : 'mobile off'}
-    </span>
   );
 }
 

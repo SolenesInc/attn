@@ -23,12 +23,11 @@ creates=$(sqlite3 "$data/attn.db.copying" "SELECT sql || ';' FROM sqlite_master 
 sqlite3 "$data/attn.db.copying" <<SQL
 BEGIN;
 $drops
-DELETE FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled');
+DELETE FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'analytics.sharing_enabled');
 INSERT INTO settings (key, value) VALUES
   ('notebook.root', '$data/notebook-scratch'),
   ('worktree_sweep_enabled', 'false'),
   ('outposts_enabled', 'false'),
-  ('tailscale_enabled', 'false'),
   ('analytics.sharing_enabled', 'false');
 $creates
 UPDATE automation_definitions SET enabled = 0;
@@ -37,4 +36,4 @@ SQL
 sqlite3 "$data/attn.db.copying" ".backup '$data/attn.db'"
 rm -f "$data/attn.db.copying" "$data/attn.db.copying-wal" "$data/attn.db.copying-shm"
 
-sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'tailscale_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"
+sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"

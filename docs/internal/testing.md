@@ -200,10 +200,6 @@ repair it to match the new internals.
 Every test that reaches config paths follows the
 [test safety contract](../../AGENTS.md#test-safety).
 
-Wire and CLI stack worlds see an unavailable Tailscale backend by default.
-Tests of Tailscale provide their own CLI fake. They never use the host's
-installed CLI.
-
 ## Running tests
 
 Before landing, run targeted tests for the behavior you changed, such as

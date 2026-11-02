@@ -4,7 +4,6 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type Fo
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { recordAppAction } from '../analytics/appActions';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
-import { DaemonSettings } from '../hooks/useDaemonSocket';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
@@ -133,14 +132,6 @@ export function useSettingsModalState({
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
-  const {
-    tailscaleEnabled,
-    tailscaleStatus,
-    tailscaleURL,
-    tailscaleDomain,
-    tailscaleAuthURL,
-    tailscaleError,
-  } = settingsConnection(settings);
   const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
@@ -385,10 +376,6 @@ export function useSettingsModalState({
     }
   }, [onSetSetting, setProjectsDir]);
 
-  const handleToggleTailscale = useCallback(() => {
-    onSetSetting('tailscale_enabled', tailscaleEnabled ? 'false' : 'true');
-  }, [onSetSetting, tailscaleEnabled]);
-
   const handleToggleAutoSettle = useCallback(() => {
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
@@ -549,9 +536,9 @@ export function useSettingsModalState({
         items: [
           {
             id: 'connectivity',
-            label: 'Mobile and hosts',
-            description: 'Controls for mobile browser access and GitHub host detection.',
-            keywords: 'tailscale mobile web github hosts',
+            label: 'GitHub hosts',
+            description: 'The GitHub hosts attn detected.',
+            keywords: 'github hosts',
           },
           ...(outpostsEnabled ? [{
             id: 'outposts' as const,
@@ -629,8 +616,6 @@ export function useSettingsModalState({
     selectedSection,
     outpostsEnabled,
     delegationPolicy,
-    tailscaleEnabled,
-    tailscaleStatus,
     pluginProblemCount,
     activePluginCount,
     plugins,
@@ -664,11 +649,6 @@ export function useSettingsModalState({
     effectiveNotebookRoot,
     handleBrowseNotebookRoot,
     handleToggleOpenSentFiles,
-    tailscaleURL,
-    tailscaleDomain,
-    handleToggleTailscale,
-    tailscaleAuthURL,
-    tailscaleError,
     githubPollingOffReason,
     githubHosts,
     pluginPanel,
@@ -737,20 +717,3 @@ export function useSettingsModalState({
 }
 
 export type SettingsModalState = ReturnType<typeof useSettingsModalState>;
-
-export function settingsConnection(settings: DaemonSettings) {
-  const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
-  const tailscaleStatus = settings.tailscale_status || 'disabled';
-  const tailscaleURL = settings.tailscale_url || '';
-  const tailscaleDomain = settings.tailscale_domain || '';
-  const tailscaleAuthURL = settings.tailscale_auth_url || '';
-  const tailscaleError = settings.tailscale_error || '';
-  return {
-    tailscaleEnabled,
-    tailscaleStatus,
-    tailscaleURL,
-    tailscaleDomain,
-    tailscaleAuthURL,
-    tailscaleError,
-  };
-}

@@ -21,7 +21,6 @@ import (
 
 func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 	d.logf("Getting settings")
-	d.refreshTailscaleServeState()
 	d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 		Event:    protocol.EventSettingsUpdated,
 		Settings: d.settingsSnapshot(d.profileForClient(client)),
@@ -88,7 +87,7 @@ func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMe
 	if msg.Key == string(SettingNotebookRoot) {
 		d.notebookFoldersChanged()
 	}
-	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	d.publishFact(FactSettingChanged, msg.Key, nil)
 	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, profile.ID))
 	return &entry, nil
 }
@@ -113,9 +112,6 @@ func (d *Daemon) settingChanged(key, value string) {
 		}
 		d.queueAnalyticsShip()
 	}
-	if key == string(SettingTailscaleEnabled) {
-		d.ensureTailscaleServeFromSettings()
-	}
 	if key == string(SettingHeadlessContextWindowCap) {
 		d.applyHeadlessContextWindowCap()
 	}
@@ -138,7 +134,7 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(SettingActivityEnabled) && !parseBooleanSetting(value) {
 		d.clearAllSessionActivity()
 	}
-	d.publishSettingsFact(FactSettingChanged, key)
+	d.publishFact(FactSettingChanged, key, nil)
 	d.codexShared().settingChanged(key)
 }
 
@@ -154,11 +150,6 @@ func (d *Daemon) refreshChangedSettings(before map[string]string) {
 			d.settingChanged(key, value)
 		}
 	}
-}
-
-func (d *Daemon) publishSettingsFact(name, subject string) {
-	d.refreshTailscaleServeState()
-	d.publishFact(name, subject, nil)
 }
 
 func (d *Daemon) projectSettingsUpdated(changedKey string) {
@@ -277,7 +268,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if !lastBackupAt.IsZero() {
 		settings[string(SettingDBLastBackupAt)] = lastBackupAt.Format(time.RFC3339)
 	}
-	settings[string(SettingTailscaleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingTailscaleEnabled)]))
 	settings[string(SettingQueueModeEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueModeEnabled)]))
 	settings[string(SettingDirectAgentLaunchEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingDirectAgentLaunchEnabled)]))
 	settings[string(SettingQueueCrewEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueCrewEnabled)]))
@@ -331,20 +321,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(settingOutpostState)] = state
 	settings[string(settingOutpostHome)] = home
 	settings[string(settingOutpostLastError)] = lastError
-	tailscale := d.tailscaleStateSnapshot()
-	if tailscale.status != "" {
-		settings["tailscale_status"] = tailscale.status
-	}
-	if tailscale.domain != "" {
-		settings["tailscale_domain"] = tailscale.domain
-		settings["tailscale_url"] = "https://" + tailscale.domain + "/"
-	}
-	if tailscale.authURL != "" {
-		settings["tailscale_auth_url"] = tailscale.authURL
-	}
-	if tailscale.lastError != "" {
-		settings["tailscale_error"] = tailscale.lastError
-	}
 	return settings
 }
 

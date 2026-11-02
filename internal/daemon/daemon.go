@@ -232,7 +232,6 @@ type Daemon struct {
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
-	tailscale           *tailscaleRuntime
 	plugins             *pluginRegistry
 	pluginSupervisorMu  sync.Mutex
 	pluginSupervisor    *pluginSupervisor
@@ -525,7 +524,6 @@ func New(socketPath string) *Daemon {
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
 
-		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
 		jobQueueRoleChanged: make(chan struct{}, 1),
@@ -562,7 +560,6 @@ func NewForTesting(socketPath string) *Daemon {
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
 
-		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
@@ -596,9 +593,6 @@ func (d *Daemon) Start() error {
 	}
 	if d.ptyBackend == nil {
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
-	}
-	if d.tailscale == nil {
-		d.tailscale = newTailscaleRuntime()
 	}
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
@@ -815,8 +809,6 @@ func (d *Daemon) Start() error {
 	httpListener := d.httpListener
 	d.life.Go("runHTTPServer", func() { d.runHTTPServer(httpListener) })
 	d.maybeStartDiagServer()
-	d.removeLegacyEmbeddedTailscaleState()
-	d.life.Go("ensureTailscaleServeFromSettingsAndBroadcast", d.ensureTailscaleServeFromSettingsAndBroadcast)
 
 	githubHostsReady := make(chan struct{})
 	d.life.Go("refreshGitHubHosts", func() {

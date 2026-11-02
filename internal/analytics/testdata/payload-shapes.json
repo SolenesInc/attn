@@ -296,7 +296,6 @@
   "session.workspace.changed": null,
   "setting.changed": null,
   "shared_codex.changed": null,
-  "tailscale.serve.changed": null,
   "task.changed": null,
   "ticket.commented": null,
   "workspace.registered": null,

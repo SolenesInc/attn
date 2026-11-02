@@ -42,7 +42,7 @@ describe('SettingsModal', () => {
 
   it('closes on escape', async () => {
     const { daemon } = await renderSettings();
-    expect(screen.getByText('Mobile Web Client')).toBeInTheDocument();
+    expect(screen.getByText('GitHub Hosts')).toBeInTheDocument();
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
@@ -166,19 +166,6 @@ describe('SettingsModal', () => {
 
     expect(screen.getByText('connected')).toBeInTheDocument();
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
-  });
-
-  it('toggles tailscale serve on the existing device', async () => {
-    const { daemon } = await renderSettings({ settings: {
-      tailscale_enabled: 'false',
-      tailscale_status: 'disabled',
-      tailscale_domain: 'macbook-epidemic.tail1bfe77.ts.net',
-    } });
-
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Enable')));
-
-    expect(savedSettings(daemon)).toEqual([['tailscale_enabled', 'true']]);
-    expect(screen.getByText(/does not register a second tailnet device/i)).toBeInTheDocument();
   });
 
   it('does not carry an agent-queue toggle', async () => {

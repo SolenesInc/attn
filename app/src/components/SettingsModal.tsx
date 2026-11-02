@@ -10,7 +10,7 @@ import {
   AppearanceSettings,
   BackgroundAgentSettings,
   BackgroundTasksSection,
-  ConnectivitySettings,
+  GitHubHostsSettings,
   EventBusSection,
   HygieneSettings,
   PluginSettings,
@@ -111,8 +111,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                   <SectionStatusPills
                     selectedSection={state.selectedSection}
                     delegationPolicy={state.delegationPolicy}
-                    tailscaleEnabled={state.tailscaleEnabled}
-                    tailscaleStatus={state.tailscaleStatus}
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
@@ -298,14 +296,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'connectivity':
     default:
       return (
-        <ConnectivitySettings
-          tailscaleURL={state.tailscaleURL}
-          tailscaleDomain={state.tailscaleDomain}
-          handleToggleTailscale={state.handleToggleTailscale}
-          tailscaleEnabled={state.tailscaleEnabled}
-          tailscaleStatus={state.tailscaleStatus}
-          tailscaleAuthURL={state.tailscaleAuthURL}
-          tailscaleError={state.tailscaleError}
+        <GitHubHostsSettings
           githubPollingOffReason={state.githubPollingOffReason}
           githubHosts={state.githubHosts}
         />

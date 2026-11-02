@@ -37,7 +37,7 @@ footprint change, never to silence a regression you don't understand.
 garden. Copy the database into a named instance with
 `scripts/gardenpushperf/copy-production.sh <name>`, which reads production
 read-only and turns off what the copy would otherwise reach: the real Notebook
-root, worktree removal, outposts, Tailscale and every automation. Start the
+root, worktree removal, outposts and every automation. Start the
 instance's daemon and plant a seed to move.
 
 `gardenpushperf` and `sessionfactperf` change the daemon they reach, so run

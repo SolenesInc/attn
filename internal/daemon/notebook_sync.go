@@ -1315,10 +1315,10 @@ func (d *Daemon) publishNotebookSyncSettings() {
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingNotebookSyncState))
+			d.publishFact(FactSettingChanged, string(settingNotebookSyncState), nil)
 		}
 		if errorChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingNotebookSyncLastError))
+			d.publishFact(FactSettingChanged, string(settingNotebookSyncLastError), nil)
 		}
 	})
 }

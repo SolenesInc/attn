@@ -110,7 +110,6 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 }
 
 func (d *Daemon) handleGetSettings(conn net.Conn, msg *protocol.GetSettingsMessage) {
-	d.refreshTailscaleServeState()
 	list, entry, err := d.settingsList(msg)
 	if err != nil {
 		d.sendError(conn, err.Error())

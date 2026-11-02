@@ -114,6 +114,6 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	migrating.SetSharedForNewSessions(active)
 	d.ptySettingsMu.Unlock()
 	if changed {
-		d.publishSettingsFact(FactSettingChanged, string(SettingSharedPTYHostActive))
+		d.publishFact(FactSettingChanged, string(SettingSharedPTYHostActive), nil)
 	}
 }

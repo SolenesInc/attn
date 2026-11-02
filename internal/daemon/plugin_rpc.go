@@ -478,7 +478,7 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 		}
 		d.armPluginDriverSilenceWatch(plugin.name)
 		plugin.closePending(io.EOF)
-		d.publishSettingsFact(FactPluginDisconnected, plugin.name)
+		d.publishFact(FactPluginDisconnected, plugin.name, nil)
 	}()
 
 	if err := plugin.send(jsonRPCResult(helloID, pluginHelloResult{OK: true})); err != nil {

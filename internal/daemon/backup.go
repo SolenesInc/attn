@@ -64,7 +64,7 @@ func (d *Daemon) performDatabaseBackup() {
 	d.lastBackupAt = d.clock.Now().UTC()
 	d.lastBackupMu.Unlock()
 
-	d.publishSettingsFact(FactBackupWritten, path)
+	d.publishFact(FactBackupWritten, path, nil)
 	d.pruneEligibleDatabaseBackups()
 }
 

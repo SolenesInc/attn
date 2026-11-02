@@ -31,8 +31,6 @@ func TestTheDaemonAcceptsOnlyValidSettingValues(t *testing.T) {
 		{"gardenScale", "3.0", false},
 		{"gardenScale", "big", false},
 		{"ticketBoardScale", "1.2", false},
-		{"tailscale_enabled", "false", true},
-		{"tailscale_enabled", "maybe", false},
 		{"queue_crew_enabled", "true", true},
 		{"queue_crew_enabled", "maybe", false},
 		{"keybindings_config", "", true},

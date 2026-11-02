@@ -76,10 +76,9 @@ const (
 	FactPluginHealthChanged    = "plugin.health.changed"
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
-	FactOutpostChanged        = "outpost.changed"
-	FactSettingChanged        = "setting.changed"
-	FactBackupWritten         = "backup.written"
-	FactTailscaleServeChanged = "tailscale.serve.changed"
+	FactOutpostChanged = "outpost.changed"
+	FactSettingChanged = "setting.changed"
+	FactBackupWritten  = "backup.written"
 
 	FactNotificationCreated = "notification.created"
 	FactNotificationRead    = "notification.read"
@@ -361,7 +360,7 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactPluginDisconnected, FactPluginDriverRegistered,
-				FactBackupWritten, FactTailscaleServeChanged},
+				FactBackupWritten},
 			apply: func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
 		},
 		{
