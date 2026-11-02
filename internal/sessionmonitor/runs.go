@@ -44,8 +44,9 @@ type trackedRun struct {
 }
 
 type runRecorder struct {
-	open  *trackedRun
-	ended []trackedRun
+	open       *trackedRun
+	ended      []trackedRun
+	unreadStop time.Time
 }
 
 func (r *runState) start() RunStart {
@@ -65,13 +66,16 @@ func (r *runState) start() RunStart {
 
 func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, opened bool, now time.Time) []Run {
 	phase, open := m.state.State, m.runs.open
+	if runsIn(previous) && !runsIn(phase) {
+		m.runs.unreadStop = now
+	}
 	switch {
 	case phase == protocol.SessionStateWorking && open == nil:
 		_, recovered := cause.(StartupRecovery)
-		if recovered || previous == protocol.SessionStateWorking || previous == protocol.SessionStatePendingApproval || m.input.run == nil {
+		if recovered || runsIn(previous) || m.input.run == nil {
 			return nil
 		}
-		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: len(m.runs.ended) > 0}
+		m.runs.open = &trackedRun{Run: Run{StartedBy: m.input.run.start(), StartedAt: now}, startKnown: m.input.run.prompted || !m.runStartInFlightLocked(), costAtStart: m.cost, awaitsBaseline: !m.runs.unreadStop.IsZero()}
 	case open == nil, phase == protocol.SessionStateWorking:
 	case phase == protocol.SessionStatePendingApproval:
 		if previous != protocol.SessionStatePendingApproval {
@@ -86,6 +90,10 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 		}
 	}
 	return nil
+}
+
+func runsIn(state protocol.SessionState) bool {
+	return state == protocol.SessionStateWorking || state == protocol.SessionStatePendingApproval
 }
 
 func (m *Monitor) runStartInFlightLocked() bool {
@@ -122,7 +130,11 @@ func (m *Monitor) takeEndedRunsLocked(measuredFrom time.Time, unmeasured bool) [
 		}
 	}
 	m.runs.ended = kept
-	if open := m.runs.open; open != nil && open.awaitsBaseline && len(kept) == 0 && !unmeasured {
+	if unmeasured || !m.runs.unreadStop.Before(measuredFrom) {
+		return taken
+	}
+	m.runs.unreadStop = time.Time{}
+	if open := m.runs.open; open != nil && open.awaitsBaseline {
 		open.costAtStart, open.awaitsBaseline = m.cost, false
 	}
 	return taken

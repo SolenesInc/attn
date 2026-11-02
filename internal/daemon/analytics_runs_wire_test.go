@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -225,6 +227,45 @@ func TestARunStartedBeforeThePreviousRunWasReadCountsOnlyItsOwnTokens(t *testing
 
 	assertRuns(t, runRecords(t, w, app, session), []string{
 		fmt.Sprintf("started_by=user ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(reply)),
+	})
+}
+
+func TestARunAfterARecoveredRunCountsOnlyItsOwnTokens(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "read the failing build")
+		synctest.Wait()
+		agent.reply("The tax tests fail. <!-- attn:state=idle -->")
+		w.advance(500 * time.Millisecond)
+
+		app.TypeLine(agent.id, "find the flaky test")
+		agent.term.Heartbeat("busy", "Claude Code")
+		synctest.Wait()
+		w.restart()
+		app = w.App()
+		agent.cli = w.Client()
+		w.advance(500 * time.Millisecond)
+		agent.reply("It races the tax lookup. <!-- attn:state=idle -->")
+		agent.term.Heartbeat("not_busy", "Claude Code")
+		synctest.Wait()
+		if got := queriedSession(t, agent.cli, agent.id).State; got != protocol.SessionStateIdle {
+			t.Fatalf("the recovered run ended in %s, want idle", got)
+		}
+
+		setAnalyticsEnabled(app, "true")
+		app.TypeLine(agent.id, "fix it")
+		synctest.Wait()
+		w.advance(500 * time.Millisecond)
+		reply := "Fixed the race. <!-- attn:state=idle -->"
+		agent.reply(reply)
+		agent.term.Heartbeat("not_busy", "Claude Code")
+		synctest.Wait()
+		w.advance(500 * time.Millisecond)
+
+		assertRuns(t, runRecords(t, w, app, agent.id), []string{
+			fmt.Sprintf("started_by=user ended=idle opened_turn=false approvals=0 usage=known tokens=%d harness=claude", claudeTokens(reply)),
+		})
 	})
 }
 
