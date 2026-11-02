@@ -330,7 +330,7 @@ async function main() {
         `${JSON.stringify(transcriptMessages(transcript), null, 2)}\n`);
     });
 
-    await runner.step('new_delegation_watches_for_successor_only', async () => {
+    await runner.step('new_delegation_restores_dispatcher_watch', async () => {
       cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
       const known = new Set(observer.sessionsById.keys());
       await submitPrompt(client, watcher.sessionId, watcher.paneId, DISPATCH_PROMPT);
@@ -342,15 +342,14 @@ async function main() {
       const successorView = JSON.parse(cli(['seed', 'show', seed, '--session', delegated, '--json']));
       runner.assert(successorView.watching_via.includes(seed),
         'a new delegation gives the successor an ordinary watch', { via: successorView.watching_via });
-      const predecessorView = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
-      runner.assert(!predecessorView.watching && predecessorView.watching_via.length === 0,
-        'delegation does not restore a watch the predecessor removed', { via: predecessorView.watching_via });
+      const dispatcherView = JSON.parse(cli(['seed', 'show', seed, '--session', watcher.sessionId, '--json']));
+      runner.assert(dispatcherView.watching && dispatcherView.watching_via.includes(seed),
+        'a new delegation starts the watch again for the dispatcher that removed it', { via: dispatcherView.watching_via });
     });
 
     let keptChild;
     let droppedChild;
     await runner.step('hold_watcher_and_queue_descendant_updates', async () => {
-      cli(['seed', 'watch', seed, '--session', watcher.sessionId]);
       await submitPrompt(client, watcher.sessionId, watcher.paneId, HOLD_PROMPT);
       await observer.waitFor(() => fs.existsSync(path.join(watcherCwd, HOLD_READY)), 'watcher holding its turn');
       keptChild = JSON.parse(cli(['seed', 'plant', 'Keep child subscription', '--part-of', seed, '--json'])).id;
