@@ -45,6 +45,7 @@ const online = (...pairings: ReadonlyArray<Pairing>): Model => ({
     status: 'online',
     reason: '',
     sessions: [],
+    listed: true,
     asks: [],
   })),
   pairingFlow: 'idle',

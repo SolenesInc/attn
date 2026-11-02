@@ -370,6 +370,7 @@ const newHome = (pairing: Pairing): Home => ({
   status: 'connecting',
   reason: '',
   sessions: [],
+  listed: false,
   asks: [],
 })
 
@@ -528,7 +529,13 @@ export const update = (model: Model, message: Message) =>
       return { model: welcomed, commands: renamed ? [saved(welcomed.homes)] : [] }
     },
     ReceivedSessions: ({ pairingId, sessions }) => ({
-      model: updateHome(model, pairingId, (home) => ({ ...home, status: 'online', reason: '', sessions })),
+      model: updateHome(model, pairingId, (home) => ({
+        ...home,
+        status: 'online',
+        reason: '',
+        sessions,
+        listed: true,
+      })),
     }),
     ReceivedAsks: ({ pairingId, asks }) => receiveAsks(model, pairingId, asks),
     ClickedAsk: ({ pairingId, askId }) => ({
@@ -1013,8 +1020,9 @@ const queueView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const asks = askRows(model.homes)
   const actions = askActions(model)
   const sessions = (rows: ReadonlyArray<SessionRow>) => rows.map((row) => sessionRow(row, model.now, h))
-  const nothing =
-    asks.length + queue.waiting.length + queue.working.length + queue.rest.length + queue.offline.length === 0
+  const entries =
+    asks.length + queue.waiting.length + queue.working.length + queue.rest.length + queue.offline.length
+  const nothing = entries === 0 && model.homes.every((home) => home.listed)
   return h.div(
     [h.Class('queue')],
     [

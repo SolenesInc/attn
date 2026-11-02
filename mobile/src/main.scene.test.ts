@@ -74,6 +74,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
     status: 'connecting',
     reason: '',
     sessions: [],
+    listed: false,
     asks: [],
   })),
   pairingFlow: 'idle',
@@ -292,6 +293,21 @@ describe('the queue merges every pairing into one list', () => {
   })
 })
 
+describe('an empty queue', () => {
+  it('says there are no agents only once the welcomed home has listed its sessions', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ api: 4, pairingId: personal.id, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.expect(Scene.text('No agents yet.')).toBeAbsent(),
+      Scene.Subscription.emit(Message.ReceivedSessions({ pairingId: personal.id, sessions: [] })),
+      Scene.expect(Scene.text('No agents yet.')).toExist(),
+    )
+  })
+})
+
 describe('pairing again', () => {
   it('connects afresh even when the home and profile are the ones already paired', () => {
     const before = {
@@ -303,6 +319,7 @@ describe('pairing again', () => {
           status: 'closed' as const,
           reason: 'Mac ended this pairing',
           sessions: [],
+          listed: false,
           asks: [],
         },
       ],
@@ -342,6 +359,7 @@ const withSession = (api: number): Model => ({
       status: 'online',
       reason: '',
       sessions: [{ ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' }],
+      listed: true,
       asks: [],
     },
   ],

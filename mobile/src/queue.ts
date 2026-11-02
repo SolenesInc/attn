@@ -36,6 +36,7 @@ export const Home = Schema.Struct({
   status: LinkStatus,
   reason: Schema.String,
   sessions: Schema.Array(QueueSession),
+  listed: Schema.Boolean,
   asks: Schema.Array(PhoneAsk),
 })
 export type Home = typeof Home.Type
