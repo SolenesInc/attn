@@ -2468,8 +2468,9 @@ model BusSetConsumerEnabledResultMessage {
 
 // Records the size this client asks for. It applies only while this client is
 // the terminal's size owner: the client the user last typed in, pointed at or
-// focused (pty_input, terminal_pointer_activity, terminal_focus) among the
-// clients that asked for a size. Every other client follows pty_resized.
+// focused (pty_input of the user's keys, terminal_pointer_activity,
+// terminal_focus) among the clients that asked for a size. Every other client
+// follows pty_resized.
 //
 // xpixel/ypixel are the pane's TOTAL size in device pixels, the units
 // TIOCGWINSZ's ws_xpixel/ws_ypixel and XTWINOPS speak, so image emitters can

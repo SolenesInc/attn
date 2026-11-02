@@ -13,8 +13,9 @@ type terminalSizes struct {
 }
 
 type sizeClaims struct {
-	owner    *wsClient
-	requests []sizeRequest
+	owner              *wsClient
+	requests           []sizeRequest
+	claimedBeforeAsked *wsClient
 }
 
 type sizeRequest struct {
@@ -44,20 +45,26 @@ func (c *sizeClaims) mostRecent(request sizeRequest) {
 	c.requests = append(c.requests, request)
 }
 
-func (s *terminalSizes) request(client *wsClient, size protocol.PtyResizeMessage) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *terminalSizes) claimsFor(terminal protocol.TerminalID) *sizeClaims {
 	if s.byTerminal == nil {
 		s.byTerminal = make(map[protocol.TerminalID]*sizeClaims)
 	}
-	claims := s.byTerminal[size.ID]
+	claims := s.byTerminal[terminal]
 	if claims == nil {
 		claims = &sizeClaims{}
-		s.byTerminal[size.ID] = claims
+		s.byTerminal[terminal] = claims
 	}
+	return claims
+}
+
+func (s *terminalSizes) request(client *wsClient, size protocol.PtyResizeMessage) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	claims := s.claimsFor(size.ID)
 	claims.mostRecent(sizeRequest{client: client, size: size})
-	if claims.owner == nil {
+	if claims.owner == nil || claims.claimedBeforeAsked == client {
 		claims.owner = client
+		claims.claimedBeforeAsked = nil
 	}
 	return claims.owner == client
 }
@@ -65,14 +72,13 @@ func (s *terminalSizes) request(client *wsClient, size protocol.PtyResizeMessage
 func (s *terminalSizes) claim(client *wsClient, terminal protocol.TerminalID) (protocol.PtyResizeMessage, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	claims := s.byTerminal[terminal]
-	if claims == nil {
-		return protocol.PtyResizeMessage{}, false
-	}
+	claims := s.claimsFor(terminal)
 	request, asked := claims.requestOf(client)
 	if !asked {
+		claims.claimedBeforeAsked = client
 		return protocol.PtyResizeMessage{}, false
 	}
+	claims.claimedBeforeAsked = nil
 	claims.mostRecent(request)
 	if claims.owner == client {
 		return protocol.PtyResizeMessage{}, false
@@ -105,11 +111,18 @@ func (s *terminalSizes) releaseLocked(client *wsClient, terminal protocol.Termin
 		return ownerSize{}, false
 	}
 	claims.forget(client)
-	if len(claims.requests) == 0 {
+	if claims.claimedBeforeAsked == client {
+		claims.claimedBeforeAsked = nil
+	}
+	if len(claims.requests) == 0 && claims.claimedBeforeAsked == nil {
 		delete(s.byTerminal, terminal)
 		return ownerSize{}, false
 	}
 	if claims.owner != client {
+		return ownerSize{}, false
+	}
+	if len(claims.requests) == 0 {
+		claims.owner = nil
 		return ownerSize{}, false
 	}
 	next := claims.requests[len(claims.requests)-1]

@@ -98,6 +98,7 @@ import {
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
   isDesktopSuspensionAnimating,
+  drawnScale,
   recoveryDelayMs,
   scaledToFitTransform,
 } from './ghosttyGeometry';
@@ -1841,8 +1842,14 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         container.clientWidth,
         container.clientHeight,
       );
-      if (canvas.style.transform !== transform) canvas.style.transform = transform;
+      if (canvas.style.transform === transform) return;
+      canvas.style.transform = transform;
+      refreshSeedOccurrencesRef.current?.();
     }, []);
+
+    const keepScaledPtyFitted = useCallback(() => {
+      if (canvasRef.current?.style.transform) scaleSmallerPtyToFit();
+    }, [scaleSmallerPtyToFit]);
 
     const resizeLocal = useCallback((
       cols: number,
@@ -1961,7 +1968,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'inactiveSession', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
-      scaleSmallerPtyToFit();
+      keepScaledPtyFitted();
       if (surfaceReleasedRef.current) {
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'surfaceReleased', cw: container.clientWidth, ch: container.clientHeight });
         return;
@@ -1991,7 +1998,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         );
       }
       fitResizeCoalescerRef.current.submit(dims);
-    }, [scaleSmallerPtyToFit]);
+    }, [keepScaledPtyFitted]);
 
     fitRef.current = fit;
 
@@ -2457,7 +2464,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const canvas = canvasRef.current;
       const rect = canvas?.getBoundingClientRect();
       if (!renderer || !canvas || !rect) return null;
-      const scale = canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1;
+      const scale = drawnScale(canvas, rect);
       if (
         event.clientX < rect.left
         || event.clientX >= rect.right
@@ -2690,11 +2697,14 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const frameRect = frame.getBoundingClientRect();
       const canvasLeft = canvasRect.left - frameRect.left;
       const canvasTop = canvasRect.top - frameRect.top;
+      const scale = drawnScale(canvas, canvasRect);
+      const cellWidth = renderer.cellWidth * scale;
+      const cellHeight = renderer.cellHeight * scale;
       const signature = [
         canvasLeft,
         canvasTop,
-        renderer.cellWidth,
-        renderer.cellHeight,
+        cellWidth,
+        cellHeight,
         ...segments.map((segment) => (
           `${segment.seedId}:${segment.row}:${segment.startCol}:${segment.endCol}`
         )),
@@ -2703,8 +2713,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         signature,
         canvasLeft,
         canvasTop,
-        cellWidth: renderer.cellWidth,
-        cellHeight: renderer.cellHeight,
+        cellWidth,
+        cellHeight,
         segments,
       });
       syncSeedPreviewAfterRefreshRef.current?.();
@@ -2902,9 +2912,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       cell: { row: number; col: number },
     ): TerminalSeedAnchor | null => {
       const renderer = rendererRef.current;
-      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const canvas = canvasRef.current;
+      const canvasRect = canvas?.getBoundingClientRect();
       const frameRect = containerRef.current?.parentElement?.getBoundingClientRect();
-      if (!renderer || !canvasRect || !frameRect) return null;
+      if (!renderer || !canvas || !canvasRect || !frameRect) return null;
+      const scale = drawnScale(canvas, canvasRect);
+      const cellWidth = renderer.cellWidth * scale;
+      const cellHeight = renderer.cellHeight * scale;
       const segment = seedOccurrenceSegments(occurrence).find((candidate) => (
         candidate.row === cell.row
         && cell.col >= candidate.startCol
@@ -2912,10 +2926,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       ));
       if (!segment) return null;
       return {
-        left: canvasRect.left + segment.startCol * renderer.cellWidth,
-        right: canvasRect.left + segment.endCol * renderer.cellWidth,
-        top: canvasRect.top + segment.row * renderer.cellHeight,
-        bottom: canvasRect.top + (segment.row + 1) * renderer.cellHeight,
+        left: canvasRect.left + segment.startCol * cellWidth,
+        right: canvasRect.left + segment.endCol * cellWidth,
+        top: canvasRect.top + segment.row * cellHeight,
+        bottom: canvasRect.top + (segment.row + 1) * cellHeight,
         bounds: {
           left: frameRect.left,
           right: frameRect.right,

@@ -52,6 +52,10 @@ export function scaledToFitTransform(
   return `translate(${x}px, ${y}px) scale(${scale})`;
 }
 
+export function drawnScale(canvas: HTMLElement, drawn: DOMRect): number {
+  return canvas.offsetWidth > 0 ? drawn.width / canvas.offsetWidth : 1;
+}
+
 // The bail protects a healthy grid only: refused when the live model already
 // overflows, or is itself suspicious and `dims` would not shrink it.
 export function fitShouldBailAsSuspicious(

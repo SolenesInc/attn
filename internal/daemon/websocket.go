@@ -668,6 +668,7 @@ func (d *Daemon) wsMsgPump(client *wsClient) {
 		d.handleClientMessage(client, data)
 	}
 
+	d.releasePtySizes(client)
 	d.browserControl.failFor(client, browserControlResult{err: "the in-app browser host disconnected"})
 	d.calloutRequests.failFor(client, calloutReply{err: fmt.Errorf("the attn app disconnected")})
 	d.logf("WebSocket message pump exited")

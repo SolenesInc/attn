@@ -221,6 +221,9 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 	for _, stream := range streams {
 		_ = stream.Close()
 	}
+}
+
+func (d *Daemon) releasePtySizes(client *wsClient) {
 	for _, next := range d.ptySizes.releaseAll(client) {
 		d.applyPtySize(next.owner, next.size)
 	}
@@ -716,7 +719,9 @@ func (d *Daemon) sendPTYDesync(client *wsClient, terminalID protocol.TerminalID,
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {
-	d.claimPtySize(client, msg.ID)
+	if sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
+		d.claimPtySize(client, msg.ID)
+	}
 	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
 		receivedAt := time.Now()
 		source := strings.TrimSpace(protocol.Deref(msg.Source))

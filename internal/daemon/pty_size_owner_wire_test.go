@@ -18,8 +18,8 @@ func TestTheClientTheUserLastUsedOwnsThePtySize(t *testing.T) {
 	resize := func(p *testworld.Peer, cols, rows int) {
 		p.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: cols, Rows: rows})
 	}
-	handled := func(p *testworld.Peer) {
-		testworld.Request(p, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
+	handled := func(p *testworld.Peer) protocol.GetScreenSnapshotResultMessage {
+		return testworld.Request(p, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
 			protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal })
 	}
 	step := 0
@@ -50,6 +50,11 @@ func TestTheClientTheUserLastUsedOwnsThePtySize(t *testing.T) {
 	desktop.Send(protocol.TerminalFocusMessage{Cmd: protocol.CmdTerminalFocus, ID: terminal})
 	awaitResized(desktop, mark, 120, 36)
 
+	phone.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: " ", Source: protocol.Ptr("response")})
+	if answer := handled(phone); protocol.Deref(answer.Cols) != 120 || protocol.Deref(answer.Rows) != 36 {
+		t.Fatalf("a terminal reply the phone forwarded resized the terminal to %dx%d; the desktop's 120x36 should hold", protocol.Deref(answer.Cols), protocol.Deref(answer.Rows))
+	}
+
 	mark = len(phone.Log())
 	desktop.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	awaitResized(phone, mark, 50, 30)
@@ -57,10 +62,16 @@ func TestTheClientTheUserLastUsedOwnsThePtySize(t *testing.T) {
 
 	laptop := w.App()
 	laptop.Watch(session)
-	resize(laptop, 80, 24)
 	mark = len(laptop.Log())
-	laptop.Send(protocol.TerminalPointerActivityMessage{Cmd: protocol.CmdTerminalPointerActivity, ID: terminal})
+	laptop.Send(protocol.TerminalFocusMessage{Cmd: protocol.CmdTerminalFocus, ID: terminal})
+	resize(laptop, 80, 24)
 	awaitResized(laptop, mark, 80, 24)
+
+	mark = len(phone.Log())
+	phone.Send(protocol.TerminalPointerActivityMessage{Cmd: protocol.CmdTerminalPointerActivity, ID: terminal})
+	awaitResized(phone, mark, 50, 30)
+
+	sizeInSession(laptop, 80, 24)
 
 	mark = len(phone.Log())
 	laptop.Close()
