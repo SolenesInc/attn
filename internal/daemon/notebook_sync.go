@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -464,7 +465,7 @@ func (d *Daemon) notebookEngineConfig(peers []string, folders, paused map[string
 		folder.Versioning.Params = map[string]string{"cleanoutDays": strconv.Itoa(notebookTrashDays)}
 		folder.Devices = slices.Clone(devices)
 		for _, rel := range excludes[folderID] {
-			folder.IgnorePatterns = append(folder.IgnorePatterns, "/"+notebookIgnoreEscaper.Replace(rel))
+			folder.IgnorePatterns = append(folder.IgnorePatterns, notebookIgnorePattern(rel))
 		}
 		cfg.Folders = append(cfg.Folders, folder)
 	}
@@ -477,7 +478,23 @@ func (d *Daemon) notebookEngineConfig(peers []string, folders, paused map[string
 	return cfg
 }
 
-var notebookIgnoreEscaper = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`, `{`, `\{`, `}`, `\}`)
+func notebookIgnorePattern(rel string) string {
+	var pattern strings.Builder
+	pattern.WriteByte('/')
+	for _, r := range rel {
+		switch {
+		case r == '\n' || r == '\r':
+			pattern.WriteByte('?')
+		case unicode.IsSpace(r):
+			pattern.WriteString("[" + string(r) + "]")
+		case strings.ContainsRune(`\*?[]{}`, r):
+			pattern.WriteString(`\` + string(r))
+		default:
+			pattern.WriteRune(r)
+		}
+	}
+	return pattern.String()
+}
 
 func (d *Daemon) saveNotebookSyncDiskLocked(disk notebookSyncDisk) error {
 	dir := d.notebookSyncDir()

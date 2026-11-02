@@ -470,20 +470,20 @@ func TestANestedFolderNeverSyncsThroughTheFolderAroundIt(t *testing.T) {
 	if !created.Success {
 		t.Fatalf("create Side: %+v", created)
 	}
-	outer, inner := notebookPath(home), notebookPath(home, "inner[1]")
-	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner, "--profile", "Side"))
+	outer, inner := notebookPath(home), notebookPath(home, "inner[1]\t ")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", inner+"/.", "--profile", "Side"))
 	writeFileAt(t, filepath.Join(inner, "home-inner.md"), "Side's file at the home")
 	writeFileAt(t, filepath.Join(outer, "outer.md"), "the outer folder syncs")
 	pair.Connect()
 	copied := outpostCopyPlacement(outpost, "notebook", outer)
 	awaitOutpostFile(t, pair, filepath.Join(copied, "outer.md"), "the outer folder syncs", false)
 	awaitNotebookError(t, pair, "Side", inner, "Default", outer)
-	if _, err := os.Stat(filepath.Join(copied, "inner[1]", "home-inner.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(copied, filepath.Base(inner), "home-inner.md")); !os.IsNotExist(err) {
 		t.Fatalf("Side's home file reached the outpost through the outer copy: %v", err)
 	}
 
-	writeFileAt(t, filepath.Join(copied, "inner[1]", "home-inner.md"), "edited on the outpost's outer copy")
-	writeFileAt(t, filepath.Join(copied, "inner[1]", "outpost-inner.md"), "written on the outpost's outer copy")
+	writeFileAt(t, filepath.Join(copied, filepath.Base(inner), "home-inner.md"), "edited on the outpost's outer copy")
+	writeFileAt(t, filepath.Join(copied, filepath.Base(inner), "outpost-inner.md"), "written on the outpost's outer copy")
 	writeFileAt(t, filepath.Join(copied, "back.md"), "the outer copy syncs back")
 	awaitHomeFile(t, home.App(), home, filepath.Join(outer, "back.md"), "the outer copy syncs back", false)
 	if !fileHolds(filepath.Join(inner, "home-inner.md"), "Side's file at the home", false) || !fileHolds(filepath.Join(inner, "outpost-inner.md"), "", true) {
