@@ -681,17 +681,30 @@ func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
 		link.sendAllowlist()
 		link.cfg.Home.Changed()
 	}
-	st := &stream{dev: d, in: make(chan []byte, 1), done: make(chan struct{})}
-	st.in <- plaintext
-	d.session.mu.Lock()
-	d.device = Device{ID: d.pairing.DeviceID, ProfileID: d.pairing.ProfileID}
-	d.stream = st
-	d.session.mu.Unlock()
+	if err := d.openStreamIfStillPaired(plaintext); err != nil {
+		return err
+	}
 	d.session.serving.Add(1)
 	go func() {
 		defer d.session.serving.Done()
 		link.cfg.Home.Serve(d.device, d.stream)
 	}()
+	return nil
+}
+
+func (d *deviceConn) openStreamIfStillPaired(first []byte) error {
+	s := d.session
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.devices[d.connID] != d {
+		return errors.New("the device's connection closed during its handshake")
+	}
+	if _, err := s.link.findPairing(d.pairing.DeviceID, d.pairing.ProfileID); err != nil {
+		return err
+	}
+	d.device = Device{ID: d.pairing.DeviceID, ProfileID: d.pairing.ProfileID}
+	d.stream = &stream{dev: d, in: make(chan []byte, 1), done: make(chan struct{})}
+	d.stream.in <- first
 	return nil
 }
 

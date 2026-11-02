@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -24,17 +25,23 @@ func cloudURL() string {
 }
 
 type phonesRuntime struct {
-	mu   sync.Mutex
-	link *cloudlink.Link
-	stop context.CancelFunc
-	done chan struct{}
+	mu          sync.Mutex
+	link        *cloudlink.Link
+	stop        context.CancelFunc
+	done        chan struct{}
+	whyUnlinked string
 }
 
+const outpostUnlinked = "this daemon is an outpost; phones reach its agents through its home, so turn on phone access there"
+
 func (d *Daemon) configurePhoneAccess() {
-	if d.phoneAccessEnabled() {
+	switch {
+	case !d.phoneAccessEnabled():
+		d.stopCloudLink("")
+	case !d.enrollmentStatus().IsHome():
+		d.stopCloudLink(outpostUnlinked)
+	default:
 		d.startCloudLink()
-	} else {
-		d.stopCloudLink()
 	}
 	d.publishFact(FactPhonesChanged, "", nil)
 }
@@ -47,9 +54,11 @@ func (d *Daemon) startCloudLink() {
 	}
 	identity, err := cloudlink.LoadIdentity(d.dataRoot)
 	if err != nil {
-		d.logf("cloudlink: loading the home's keys: %v", err)
+		d.phones.whyUnlinked = fmt.Sprintf("phone access is on, but this home's Attn Cloud keys could not be loaded: %v. Move cloud_sign_key and cloud_noise_key out of %s and turn phone access off and on to create new keys; every phone then pairs again", err, d.dataRoot)
+		d.logf("cloudlink: %s", d.phones.whyUnlinked)
 		return
 	}
+	d.phones.whyUnlinked = ""
 	homeName, _ := os.Hostname()
 	link := cloudlink.New(cloudlink.Config{CloudURL: cloudURL(), HomeName: homeName, Identity: identity, Home: phoneHome{d}})
 	ctx, cancel := context.WithCancel(d.life.Context())
@@ -64,10 +73,11 @@ func (d *Daemon) startCloudLink() {
 	d.phones.link, d.phones.stop, d.phones.done = link, cancel, done
 }
 
-func (d *Daemon) stopCloudLink() {
+func (d *Daemon) stopCloudLink(whyUnlinked string) {
 	d.phones.mu.Lock()
 	stop, done := d.phones.stop, d.phones.done
 	d.phones.link, d.phones.stop, d.phones.done = nil, nil, nil
+	d.phones.whyUnlinked = whyUnlinked
 	d.phones.mu.Unlock()
 	if stop == nil {
 		return
@@ -134,6 +144,12 @@ func (d *Daemon) phonesSnapshot() protocol.PhonesUpdatedMessage {
 		Offers:   []protocol.PhonePairingOffer{},
 		Pairings: []protocol.PhonePairing{},
 	}
+	d.phones.mu.Lock()
+	whyUnlinked := d.phones.whyUnlinked
+	d.phones.mu.Unlock()
+	if whyUnlinked != "" {
+		message.Link.Error = protocol.Ptr(whyUnlinked)
+	}
 	if link := d.cloudLink(); link != nil {
 		status := link.Status()
 		message.Link.State = protocol.PhoneLinkState(status.State)
@@ -197,7 +213,13 @@ func (d *Daemon) handlePhonePairBegin(client *wsClient, msg *protocol.PhonePairB
 func (d *Daemon) beginPhonePairing(profileID string) (protocol.PhonePairingOffer, error) {
 	link := d.cloudLink()
 	if link == nil {
-		return protocol.PhonePairingOffer{}, fmt.Errorf("%s", phoneAccessOff)
+		d.phones.mu.Lock()
+		whyUnlinked := d.phones.whyUnlinked
+		d.phones.mu.Unlock()
+		if whyUnlinked != "" {
+			return protocol.PhonePairingOffer{}, errors.New(whyUnlinked)
+		}
+		return protocol.PhonePairingOffer{}, errors.New(phoneAccessOff)
 	}
 	profile, err := d.store.GetProfile(profileID)
 	if err != nil || profile.Deleted() {

@@ -3,6 +3,9 @@ package main_test
 import (
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +144,48 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 	})
 }
 
+func TestARevokeReachesAPhoneBetweenItsHandshakeAndHello(t *testing.T) {
+	t.Parallel()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t)
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	s.Start()
+	app := s.App()
+	profile := app.SelectedProfile()
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair").Qr)
+	phone := testworld.NewPhone(t, cloud, "Test iPhone")
+	paired, err := phone.Dial(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := paired.Pair(qr); err != nil {
+		t.Fatal(err)
+	}
+	paired.Hello()
+
+	beginPairing(t, app, profile, "window-open")
+	resumed, err := phone.Dial(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resumed.Resume(qr); err != nil {
+		t.Fatal(err)
+	}
+	result := testworld.Request(app, protocol.PhonePairingRevokeMessage{Cmd: protocol.CmdPhonePairingRevoke, RequestID: "revoke", DeviceID: phone.DeviceID(), ProfileID: profile},
+		protocol.EventPhonePairingRevokeResult, func(m protocol.PhonePairingRevokeResultMessage) bool { return m.RequestID == "revoke" })
+	if !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	resumed.Send(map[string]any{"cmd": "hello", "api": 1, "device_id": phone.DeviceID()})
+	if message, err := resumed.Next(); err == nil {
+		t.Fatalf("a revoked phone's hello was answered: %s", message)
+	} else if code := websocket.CloseStatus(err); code != 4000 {
+		t.Fatalf("a revoked phone's hello ended with %v, want the home's close (4000)", err)
+	}
+}
+
 func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 	t.Parallel()
 	cloud := testworld.StartCloud(t)
@@ -188,6 +233,65 @@ func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 	}
 	if code := closeCode(t, again.Resume(qr)); code != 4000 {
 		t.Fatalf("the deleted profile's phone reconnected; its handshake closed with %d, want the home's close (4000)", code)
+	}
+}
+
+func TestOnlyTheHomeConnectsToTheCloud(t *testing.T) {
+	homeCloud, outpostCloud := testworld.StartCloud(t), testworld.StartCloud(t)
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	home.Vars = append(home.Vars, "ATTN_CLOUD_URL="+homeCloud.HomeURL)
+	outpost.Vars = append(outpost.Vars, "ATTN_CLOUD_URL="+outpostCloud.HomeURL)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	outpostApp := outpost.App()
+
+	setPhoneAccess(t, pair.App, true)
+	testworld.Await(pair.App, protocol.EventPhonesUpdated, linkConnected)
+	refused := testworld.Await(outpostApp, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
+		return m.Link.State == protocol.PhoneLinkStateOff && m.Link.Error != nil
+	})
+	if !strings.Contains(*refused.Link.Error, "this daemon is an outpost") {
+		t.Fatalf("outpost's phone link = %+v, want it off for being an outpost", refused.Link)
+	}
+	if open := outpostCloud.Open(); open != 0 {
+		t.Fatalf("the outpost holds %d connections to the Cloud", open)
+	}
+	select {
+	case <-outpostCloud.Dials():
+		t.Fatal("the outpost dialed the Cloud")
+	default:
+	}
+}
+
+func TestUnreadableCloudKeysAreShownAndKept(t *testing.T) {
+	t.Parallel()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t)
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	broken := []byte("not a key")
+	if err := os.WriteFile(filepath.Join(s.Dir, "cloud_sign_key"), broken, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	app := s.App()
+
+	setPhoneAccess(t, app, true)
+	shown := testworld.Request(app, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
+		return m.Link.Error != nil
+	})
+	if shown.Link.State != protocol.PhoneLinkStateOff || !strings.Contains(*shown.Link.Error, "cloud_sign_key holds 9 bytes") || !strings.Contains(*shown.Link.Error, "Move cloud_sign_key and cloud_noise_key out of") {
+		t.Fatalf("link = %+v, want it off with the key's problem and the way out", shown.Link)
+	}
+	result := testworld.Request(app, protocol.PhonePairBeginMessage{Cmd: protocol.CmdPhonePairBegin, RequestID: "pair", ProfileID: app.SelectedProfile()},
+		protocol.EventPhonePairBeginResult, func(m protocol.PhonePairBeginResultMessage) bool { return m.RequestID == "pair" })
+	if result.Success || protocol.Deref(result.Error) != *shown.Link.Error {
+		t.Fatalf("phone_pair_begin = %+v, want the key's problem", result)
+	}
+	if kept, err := os.ReadFile(filepath.Join(s.Dir, "cloud_sign_key")); err != nil || string(kept) != string(broken) {
+		t.Fatalf("cloud_sign_key now holds %q (%v); attn must leave an unreadable key in place", kept, err)
+	}
+	if cloud.Open() != 0 {
+		t.Fatalf("the home holds %d connections to the Cloud without its keys", cloud.Open())
 	}
 }
 

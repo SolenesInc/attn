@@ -193,6 +193,7 @@ func (d *Daemon) dropStaleCopy() error {
 		return err
 	}
 	d.refreshChangedSettings(before)
+	d.configurePhoneAccess()
 	d.refreshJobQueueRole()
 	d.pruneRuntimesWithoutSession(d.life.Context())
 	for profile, link := range released {
