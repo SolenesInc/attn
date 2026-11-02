@@ -1,0 +1,4 @@
+CREATE TABLE paired_senders (
+ id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, token_hash TEXT NOT NULL UNIQUE,
+ created_at TEXT NOT NULL, last_used_at TEXT NOT NULL DEFAULT ''
+);

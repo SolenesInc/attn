@@ -106,6 +106,7 @@ type Daemon struct {
 	outpost             outpostRuntime
 	gateway             gatewayConns
 	phones              phonesRuntime
+	senders             senderPairings
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	socketPath          string
@@ -2903,6 +2904,21 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		d.handleQuickCapture(conn, msg)
+	case protocol.CmdSenderPair:
+		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage))
+	case protocol.CmdSenderList:
+		senders, err := d.store.PairedSenders()
+		if err != nil {
+			d.sendError(conn, err.Error())
+		} else {
+			_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, PairedSenders: senders})
+		}
+	case protocol.CmdSenderUnpair:
+		if err := d.unpairSender(msg.(*protocol.SenderUnpairMessage).Sender); err != nil {
+			d.sendError(conn, err.Error())
+		} else {
+			d.sendOK(conn)
+		}
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:

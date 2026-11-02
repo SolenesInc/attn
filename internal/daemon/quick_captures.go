@@ -147,8 +147,27 @@ func (d *Daemon) quickCaptureRequest(profileID string, msg any, downloadChunkByt
 	}
 	return nil, fmt.Errorf("unknown quick capture operation")
 }
+func quickCaptureSenderToken(msg any) (string, bool) {
+	switch m := msg.(type) {
+	case *protocol.QuickCaptureSendMessage:
+		return protocol.Deref(m.SenderToken), true
+	case *protocol.QuickCaptureAttachmentPutMessage:
+		return protocol.Deref(m.SenderToken), true
+	case *protocol.QuickCaptureAttachmentDiscardMessage:
+		return protocol.Deref(m.SenderToken), true
+	}
+	return "", false
+}
+
 func (d *Daemon) handleQuickCapture(conn net.Conn, msg any) {
-	profileID, err := d.quickCaptureProfile(msg, "")
+	var err error
+	if token, authoring := quickCaptureSenderToken(msg); authoring {
+		err = d.requirePairedSender(token)
+	}
+	var profileID string
+	if err == nil {
+		profileID, err = d.quickCaptureProfile(msg, "")
+	}
 	var result *protocol.QuickCaptureResult
 	if err == nil {
 		result, err = d.quickCaptureRequest(profileID, msg, quickCaptureSocketDownloadBytes)

@@ -875,6 +875,8 @@ model QuickCaptureListResult {
 model QuickCaptureSendMessage {
   profile_id?: string;
   cmd: "quick_capture_send";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   mailbox: QuickCaptureMailbox;
@@ -900,6 +902,8 @@ model QuickCaptureListMessage {
 model QuickCaptureAttachmentPutMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_put";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   attachment_id: string;
@@ -922,6 +926,8 @@ model QuickCaptureAttachmentGetMessage {
 model QuickCaptureAttachmentDiscardMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_discard";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   attachment_id: string;
@@ -6875,6 +6881,9 @@ model Response {
   agent_close_result?: AgentCloseResult;
   agent_reload_result?: AgentReloadResult;
   quick_capture_result?: QuickCaptureResult;
+  sender_pairing?: SenderPairingRequest;
+  paired_sender_token?: PairedSenderToken;
+  paired_senders?: PairedSender[];
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -8468,6 +8477,87 @@ model PhonePairingRevokeResultMessage {
   error?: string;
 }
 
+// Paired senders
+
+// A program the user allowed, in the app, to send messages as them with attn send.
+model PairedSender {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
+// A program waiting for the user to allow or deny it in the app. The program
+// shows the same code, so the user can match the two.
+model SenderPairingRequest {
+  id: string;
+  name: string;
+  code: string;
+  requested_at: string;
+}
+
+// The token is returned once, when the user allows the pairing.
+model PairedSenderToken {
+  sender: PairedSender;
+  token: string;
+}
+
+// Asks the user to pair a sender. The daemon replies twice on one connection:
+// first with sender_pairing, then with paired_sender_token or an error. Closing
+// the connection withdraws the request.
+@extension("x-on", #{ home: true })
+model SenderPairMessage {
+  cmd: "sender_pair";
+  name: string;
+}
+
+@extension("x-on", #{ home: true })
+model SenderListMessage {
+  cmd: "sender_list";
+}
+
+// sender: the paired sender's id or name.
+@extension("x-on", #{ home: true })
+model SenderUnpairMessage {
+  cmd: "sender_unpair";
+  request_id?: string;
+  sender: string;
+}
+
+model SenderUnpairResultMessage {
+  event: "sender_unpair_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+model SendersGetMessage {
+  cmd: "senders_get";
+}
+
+// Pairing requests waiting for the user, and paired senders. Sent in answer
+// to senders_get and whenever either changes.
+model SendersUpdatedMessage {
+  event: "senders_updated";
+  requests: SenderPairingRequest[];
+  senders: PairedSender[];
+}
+
+// The authenticated app only.
+model SenderPairDecideMessage {
+  cmd: "sender_pair_decide";
+  request_id: string;
+  pairing_id: string;
+  allow: boolean;
+}
+
+model SenderPairDecideResultMessage {
+  event: "sender_pair_decide_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 alias DaemonEvent =
   InitialStateMessage
   | SessionRegisteredMessage
@@ -8624,6 +8714,9 @@ alias DaemonEvent =
   | PhonesUpdatedMessage
   | PhonePairBeginResultMessage
   | PhonePairingRevokeResultMessage
+  | SendersUpdatedMessage
+  | SenderPairDecideResultMessage
+  | SenderUnpairResultMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage
   | InstallCodexUpdateResultMessage

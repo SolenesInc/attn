@@ -7676,6 +7676,28 @@ type PRsUpdatedMessage struct {
 	Prs []PR `json:"prs,omitempty,omitzero"`
 }
 
+type PairedSender struct {
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// LastUsedAt corresponds to the JSON schema field "last_used_at".
+	LastUsedAt *string `json:"last_used_at,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
+type PairedSenderToken struct {
+	// Sender corresponds to the JSON schema field "sender".
+	Sender PairedSender `json:"sender"`
+
+	// Token corresponds to the JSON schema field "token".
+	Token string `json:"token"`
+}
+
 type PartyRef string
 
 type PartyView struct {
@@ -8367,6 +8389,9 @@ type QuickCaptureAttachmentDiscardMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken *string `json:"sender_token,omitempty,omitzero"`
 }
 
 type QuickCaptureAttachmentGetMessage struct {
@@ -8430,6 +8455,9 @@ type QuickCaptureAttachmentPutMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken *string `json:"sender_token,omitempty,omitzero"`
 }
 
 type QuickCaptureAttachmentPutResult struct {
@@ -8616,6 +8644,9 @@ type QuickCaptureSendMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken *string `json:"sender_token,omitempty,omitzero"`
 }
 
 type RateLimitedMessage struct {
@@ -9194,6 +9225,12 @@ type Response struct {
 	// OnboardingResult corresponds to the JSON schema field "onboarding_result".
 	OnboardingResult *OnboardingResult `json:"onboarding_result,omitempty,omitzero"`
 
+	// PairedSenderToken corresponds to the JSON schema field "paired_sender_token".
+	PairedSenderToken *PairedSenderToken `json:"paired_sender_token,omitempty,omitzero"`
+
+	// PairedSenders corresponds to the JSON schema field "paired_senders".
+	PairedSenders []PairedSender `json:"paired_senders,omitempty,omitzero"`
+
 	// Profiles corresponds to the JSON schema field "profiles".
 	Profiles []Profile `json:"profiles,omitempty,omitzero"`
 
@@ -9269,6 +9306,9 @@ type Response struct {
 
 	// SeedWatchResult corresponds to the JSON schema field "seed_watch_result".
 	SeedWatchResult *SeedWatchResult `json:"seed_watch_result,omitempty,omitzero"`
+
+	// SenderPairing corresponds to the JSON schema field "sender_pairing".
+	SenderPairing *SenderPairingRequest `json:"sender_pairing,omitempty,omitzero"`
 
 	// SessionInstructionsResult corresponds to the JSON schema field
 	// "session_instructions_result".
@@ -11071,6 +11111,102 @@ type SeedWatchResult struct {
 
 	// WatchingVia corresponds to the JSON schema field "watching_via".
 	WatchingVia []string `json:"watching_via"`
+}
+
+type SenderListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
+type SenderPairDecideMessage struct {
+	// Allow corresponds to the JSON schema field "allow".
+	Allow bool `json:"allow"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// PairingID corresponds to the JSON schema field "pairing_id".
+	PairingID string `json:"pairing_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type SenderPairDecideResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SenderPairMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
+type SenderPairingRequest struct {
+	// Code corresponds to the JSON schema field "code".
+	Code string `json:"code"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// RequestedAt corresponds to the JSON schema field "requested_at".
+	RequestedAt string `json:"requested_at"`
+}
+
+type SenderUnpairMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Sender corresponds to the JSON schema field "sender".
+	Sender string `json:"sender"`
+}
+
+type SenderUnpairResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SendersGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
+type SendersUpdatedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Requests corresponds to the JSON schema field "requests".
+	Requests []SenderPairingRequest `json:"requests"`
+
+	// Senders corresponds to the JSON schema field "senders".
+	Senders []PairedSender `json:"senders"`
 }
 
 type Session struct {

@@ -97,6 +97,8 @@ const (
 
 	FactPhonesChanged = "phones.changed"
 
+	FactSendersChanged = "senders.changed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -418,6 +420,10 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactPhonesChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectPhones() },
 		},
+		{
+			filter: bus.Filter{FactSendersChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSenders() },
+		},
 	}
 }
 
@@ -577,6 +583,7 @@ const (
 	snapshotVents       = "vents_updated"
 	snapshotSharedCodex = "shared_codex_changed"
 	snapshotPhones      = "phones_updated"
+	snapshotSenders     = "senders_updated"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"

@@ -31,13 +31,49 @@ type sendOutput struct {
 	} `json:"attachments"`
 }
 
-func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, session string, message string, files ...string) sendOutput {
+func pairSender(t *testing.T, s *testworld.Stack, name string, allow bool) (testworld.Result, string) {
 	t.Helper()
-	args := []string{"send", session, "-m", message, "--json"}
+	pairing := s.Launch(testworld.Invocation{Args: []string{"send", "pair", "--name", name, "--json"}})
+	pairing.AwaitStdout(`"code"`)
+	stdout, _ := pairing.Output()
+	var printed protocol.SenderPairingRequest
+	if err := json.Unmarshal([]byte(strings.SplitN(stdout, "\n", 2)[0]), &printed); err != nil {
+		t.Fatalf("send pair first line %q: %v", stdout, err)
+	}
+	untrusted := testworld.Request(s.App(), protocol.SenderPairDecideMessage{Cmd: protocol.CmdSenderPairDecide, RequestID: "untrusted", PairingID: printed.ID, Allow: true}, protocol.EventSenderPairDecideResult, func(r protocol.SenderPairDecideResultMessage) bool { return r.RequestID == "untrusted" })
+	if untrusted.Success {
+		t.Fatal("a client that is not the authenticated app allowed a sender")
+	}
+	app := s.TrustedApp()
+	shown := testworld.Request(app, protocol.SendersGetMessage{Cmd: protocol.CmdSendersGet}, protocol.EventSendersUpdated, func(m protocol.SendersUpdatedMessage) bool { return len(m.Requests) == 1 })
+	if shown.Requests[0] != printed || len(printed.Code) != 4 || printed.Name != name {
+		t.Fatalf("the app shows %+v; the program printed %+v", shown.Requests[0], printed)
+	}
+	decided := testworld.Request(app, protocol.SenderPairDecideMessage{Cmd: protocol.CmdSenderPairDecide, RequestID: "decide", PairingID: printed.ID, Allow: allow}, protocol.EventSenderPairDecideResult, func(r protocol.SenderPairDecideResultMessage) bool { return r.RequestID == "decide" })
+	if !decided.Success {
+		t.Fatalf("decide: %+v", decided)
+	}
+	result := pairing.Wait()
+	if !allow {
+		return result, ""
+	}
+	if result.Code != 0 {
+		t.Fatalf("send pair: %+v", result)
+	}
+	var paired protocol.PairedSenderToken
+	if err := json.Unmarshal([]byte(strings.SplitN(strings.TrimSpace(result.Stdout), "\n", 2)[1]), &paired); err != nil || paired.Token == "" || paired.Sender.Name != name {
+		t.Fatalf("send pair second line %q: %v", result.Stdout, err)
+	}
+	return result, paired.Token
+}
+
+func sendCaptureFromOutside(t *testing.T, s *testworld.Stack, token, session string, message string, files ...string) sendOutput {
+	t.Helper()
+	args := []string{"send", session, "--token-stdin", "-m", message, "--json"}
 	for _, f := range files {
 		args = append(args, "--file", f)
 	}
-	sent := s.Attn(args...)
+	sent := s.Run(testworld.Invocation{Args: args, Stdin: token + "\n"})
 	if sent.Code != 0 {
 		t.Fatalf("send: %+v", sent)
 	}
@@ -113,16 +149,22 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	denied, _ := pairSender(t, home, "Denied", false)
+	if denied.Code == 0 || !strings.Contains(denied.Stderr, "denied") {
+		t.Fatalf("denied pairing: %+v", denied)
+	}
+	_, token := pairSender(t, home, "Capture", true)
+
 	remote := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("remote"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
 	remoteTerminal := pair.App.Terminal(remote)
 	remoteAgent := outpost.LaunchedCarrying(remoteTerminal)
-	toRemote := sendCaptureFromOutside(t, home, remote, "Arrow marks the broken button", shot)
+	toRemote := sendCaptureFromOutside(t, home, token, remote, "Arrow marks the broken button", shot)
 	awaitCapturePrompt(t, remoteAgent, toRemote)
 	pullCaptureFile(t, outpost, remoteTerminal, toRemote, 0, image)
 
 	local := home.Spawn(pair.App, fakeagent.Claude, home.Path("local"))
 	localAgent := home.Launched(local)
-	toLocal := sendCaptureFromOutside(t, home, local, "Both files show the bug", shot, steps)
+	toLocal := sendCaptureFromOutside(t, home, token, local, "Both files show the bug", shot, steps)
 	awaitCapturePrompt(t, localAgent, toLocal)
 	pullCaptureFile(t, home, home.Terminal(local), toLocal, 0, image)
 	pullCaptureFile(t, home, home.Terminal(local), toLocal, 1, notes)
@@ -132,8 +174,26 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 		t.Fatalf("Quick Capture panel history shows session deliveries: %+v %v", history, err)
 	}
 
-	missing := home.Attn("send", "no-such-session", "--file", shot, "-m", "lost")
+	missing := home.Run(testworld.Invocation{Args: []string{"send", "no-such-session", "--token-stdin", "--file", shot, "-m", "lost"}, Stdin: token})
 	if missing.Code == 0 || !strings.Contains(missing.Stderr, "no-such-session") {
 		t.Fatalf("send to a missing session: %+v", missing)
+	}
+	forged := home.Run(testworld.Invocation{Args: []string{"send", local, "--token-stdin", "-m", "approved"}, Stdin: "not-a-token"})
+	if forged.Code == 0 || !strings.Contains(forged.Stderr, "attn send pair") {
+		t.Fatalf("send with an unknown token: %+v", forged)
+	}
+
+	listed := home.Attn("send", "senders", "--json")
+	var senders []protocol.PairedSender
+	listed.JSON(t, &senders)
+	if len(senders) != 1 || senders[0].Name != "Capture" || senders[0].LastUsedAt == nil {
+		t.Fatalf("paired senders = %+v", senders)
+	}
+	if unpaired := home.Attn("send", "unpair", "Capture"); unpaired.Code != 0 {
+		t.Fatalf("unpair: %+v", unpaired)
+	}
+	revoked := home.Run(testworld.Invocation{Args: []string{"send", local, "--token-stdin", "-m", "after unpair"}, Stdin: token})
+	if revoked.Code == 0 || !strings.Contains(revoked.Stderr, "no paired sender") {
+		t.Fatalf("send after unpair: %+v", revoked)
 	}
 }

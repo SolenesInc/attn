@@ -178,6 +178,9 @@ var Placements = map[string][]Placement{
 	"seed_show":                        {Placement{LocatorHome, ""}},
 	"seed_transition":                  {Placement{LocatorHome, ""}},
 	"seed_watch":                       {Placement{LocatorHome, ""}},
+	"sender_list":                      {Placement{LocatorHome, ""}},
+	"sender_pair":                      {Placement{LocatorHome, ""}},
+	"sender_unpair":                    {Placement{LocatorHome, ""}},
 	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
 	"session_place":                    {Placement{LocatorSession, "session_id"}},
@@ -2102,6 +2105,42 @@ func (m SeedWatchMessage) Placement() Placement {
 }
 
 func (m SeedWatchMessage) Locate() string {
+	return ""
+}
+
+func (SenderListMessage) CommandName() string {
+	return "sender_list"
+}
+
+func (m SenderListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderListMessage) Locate() string {
+	return ""
+}
+
+func (SenderPairMessage) CommandName() string {
+	return "sender_pair"
+}
+
+func (m SenderPairMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderPairMessage) Locate() string {
+	return ""
+}
+
+func (SenderUnpairMessage) CommandName() string {
+	return "sender_unpair"
+}
+
+func (m SenderUnpairMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderUnpairMessage) Locate() string {
 	return ""
 }
 
