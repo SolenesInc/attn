@@ -61,7 +61,19 @@ func writeAskImage(askID string, image askImage) error {
 	if err := os.MkdirAll(askImagesDir(askID), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(askImageFile(askID, image.path), image.data, 0o600)
+	staged, err := os.CreateTemp(askImagesDir(askID), ".staged-*")
+	if err != nil {
+		return err
+	}
+	_, err = staged.Write(image.data)
+	err = errors.Join(err, staged.Close())
+	if err == nil {
+		err = os.Rename(staged.Name(), askImageFile(askID, image.path))
+	}
+	if err != nil {
+		return errors.Join(err, os.Remove(staged.Name()))
+	}
+	return nil
 }
 
 func removeAskImages(askID string) error {
