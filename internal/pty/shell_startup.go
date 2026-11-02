@@ -25,17 +25,30 @@ func removeShellOverlay(dir string) {
 type shellStartupStrategy func(shellPath string, env []string) (shellPaneLaunch, error)
 
 var shellStartupStrategies = map[string]shellStartupStrategy{
-	"zsh":  prepareZshShellPaneLaunch,
-	"bash": preparePOSIXShellPaneLaunch,
-	"sh":   preparePOSIXShellPaneLaunch,
+	"zsh": prepareZshShellPaneLaunch,
+	"bash": func(shellPath string, env []string) (shellPaneLaunch, error) {
+		return preparePOSIXShellPaneLaunch(shellPath, env, true)
+	},
+	"sh": func(shellPath string, env []string) (shellPaneLaunch, error) {
+		return preparePOSIXShellPaneLaunch(shellPath, env, false)
+	},
 	"fish": prepareFishShellPaneLaunch,
 }
 
-func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
+// shellKind names the startup strategy a shell gets: the first of its names, as invoked and then resolved, that has
+// one. /bin/sh linked to bash is "sh", because bash invoked as sh starts in POSIX mode.
+func shellKind(shellPath string) string {
 	for _, name := range shellNames(shellPath) {
-		if strategy, ok := shellStartupStrategies[name]; ok {
-			return strategy(shellPath, env)
+		if _, ok := shellStartupStrategies[name]; ok {
+			return name
 		}
+	}
+	return ""
+}
+
+func prepareShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
+	if strategy, ok := shellStartupStrategies[shellKind(shellPath)]; ok {
+		return strategy(shellPath, env)
 	}
 	return shellPaneLaunch{
 		command: exec.Command(shellPath, "-l"),
@@ -305,7 +318,7 @@ unset ATTN_SHELL_INIT_DIR ATTN_SHELL_LAUNCH_PATH ATTN_SHELL_USER_ZDOTDIR ATTN_SH
 `
 }
 
-func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
+func preparePOSIXShellPaneLaunch(shellPath string, env []string, isBash bool) (shellPaneLaunch, error) {
 	overlay, err := os.MkdirTemp("", "attn-shell-startup-")
 	if err != nil {
 		return shellPaneLaunch{}, fmt.Errorf("create shell startup overlay: %w", err)
@@ -322,7 +335,6 @@ func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunc
 		return shellPaneLaunch{}, errors.New("launch environment is missing HOME")
 	}
 
-	isBash := filepath.Base(shellPath) == "bash"
 	profile := posixStartupOverlay(isBash)
 	if err := os.WriteFile(filepath.Join(overlay, ".bash_profile"), []byte(profile), 0o600); err != nil {
 		cleanup()
@@ -411,11 +423,9 @@ func ShellIntegrationExpected(path string, env []string) bool {
 	if disabled, _ := LookupEnv(env, "ATTN_NO_SHELL_INTEGRATION"); disabled != "" {
 		return false
 	}
-	for _, name := range shellNames(path) {
-		switch name {
-		case "fish", "zsh", "bash":
-			return true
-		}
+	switch shellKind(path) {
+	case "fish", "zsh", "bash":
+		return true
 	}
 	return false
 }

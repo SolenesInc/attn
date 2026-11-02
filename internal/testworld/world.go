@@ -105,6 +105,9 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 		config.AnalyticsIngestURLEnv + "=",
 		config.CloudURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
+		// Some hosts' /etc/profile runs /etc/bashrc, which sets a window-title PROMPT_COMMAND when none is set
+		// (Fedora). A world's shells keep the titles their tests write.
+		"PROMPT_COMMAND=:",
 	}
 	if w.kit != nil {
 		w.Vars = append(w.Vars, w.kit.Env()...)
