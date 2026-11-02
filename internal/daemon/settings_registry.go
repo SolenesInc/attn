@@ -264,11 +264,15 @@ var settingSpecs = classifiedSettings([]settingSpec{
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
 	{key: string(SettingNotebookRoot), scope: profileScope, description: "This profile's folder for the Notebook, journal and seed artifacts, synced with outposts. Absolute or ~/ path outside attn's data folder. Changing it repoints without moving files. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
-		if config.HarnessNotebookRoot() != "" && strings.TrimSpace(value) != "" {
-			root, err := expandNotebookRoot(strings.TrimSpace(value))
-			if err != nil {
-				return err
-			}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil
+		}
+		root, err := expandNotebookRoot(value)
+		if err != nil {
+			return fmt.Errorf("%s %w", key, err)
+		}
+		if config.HarnessNotebookRoot() != "" {
 			if !filepath.IsAbs(root) {
 				return fmt.Errorf("%s must be an absolute path", key)
 			}

@@ -256,6 +256,7 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 	}{
 		{"notebook.root", "relative/path", "", false},
 		{"notebook.root", fsDir(t, "outside"), "", false},
+		{"notebook.root", filepath.Join(root, "line\nbreak"), "", false},
 		{"notebook.root", inside, inside, true},
 		{"notebook.root", "", root, true},
 		{"notebook.root.effective", "/tmp/whatever", "", false},

@@ -110,6 +110,9 @@ func (d *Daemon) profileNotebookRoot(profileID string) string {
 }
 
 func expandNotebookRoot(configured string) (string, error) {
+	if strings.Contains(configured, "\n") {
+		return "", fmt.Errorf("%q has a line break, which a Notebook folder path cannot hold", configured)
+	}
 	if strings.HasPrefix(configured, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {

@@ -483,8 +483,6 @@ func notebookIgnorePattern(rel string) string {
 	pattern.WriteByte('/')
 	for _, r := range rel {
 		switch {
-		case r == '\n':
-			pattern.WriteByte('?')
 		case unicode.IsSpace(r):
 			pattern.WriteString("[" + string(r) + "]")
 		case strings.ContainsRune(`\*?[]{}`, r):
