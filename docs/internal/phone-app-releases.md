@@ -59,6 +59,21 @@ rm ~/Downloads/AuthKey_<key id>.p8
 
 This key is not the APNs key that Attn Cloud uses to send push notifications.
 
+## One-time setup
+
+App Store Connect needs two things before the first upload. Without them the
+upload fails with `Error Downloading App Information`, and the script says the
+app record is missing.
+
+1. The bundle id `codes.attn.mobile`, registered in team `VMGP8G85TK` under
+   [Identifiers](https://developer.apple.com/account/resources/identifiers/list).
+   Development builds sign with the team's wildcard id, and archiving does not
+   register the explicit one.
+2. The app record, made in [Apps](https://appstoreconnect.apple.com/apps) with
+   **+ → New App**: platform iOS, name `attn`, primary language English (U.S.),
+   bundle id `codes.attn.mobile`, SKU `attn-mobile`, full access. The bundle id
+   of an app record cannot change.
+
 ## Add a tester
 
 Testers in the team are internal testers. They get each build once processing
