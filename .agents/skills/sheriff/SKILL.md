@@ -225,8 +225,8 @@ session or the re-land seed.
   since the last green run.
 - You own a test that is still red on `main`. The
   [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
-- "is not on this daemon" from `attn agent msg` means the session is gone:
-  plant the re-land seed.
+- "no session or crew member matches" or "is not on this daemon" from
+  `attn agent msg` means the session is gone: plant the re-land seed.
 - This clone holds no work: never commit in it.
 
 ## Never

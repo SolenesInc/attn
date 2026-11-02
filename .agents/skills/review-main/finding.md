@@ -20,17 +20,29 @@ Report a finding only when all of these hold:
 - The unit introduced the problem, and the problem is still there at `<head>`.
 - The unit's author would fix the problem if told. The problem is one discrete
   problem, not a pattern across the codebase or a taste.
-- You can name the input, sequence or state that triggers the problem, and
-  cite the `file:line` that proves each claim. A claim inferred from a name is
-  not proof.
+- For a bug, you can name the input, sequence or state that triggers it, and
+  who hits it: a user, an agent attn runs, or an install, doing what they do
+  in real use. Cite the `file:line` that proves each claim. A claim inferred
+  from a name is not proof.
 - The problem is P0 or P1:
   - P0: breaks attn for everyone who uses the feature, loses data, opens a
     security hole, or blocks a release.
-  - P1: a real bug on a path users or agents take, a violation of a rule in
-    `AGENTS.md` (including code that nothing uses and nothing explains), or a
-    slice that moves away from its plan or that a later slice will have to
-    undo. A race on a rare, user-driven event that costs one stray action or
-    a short delay is not a P1, even when a test can reproduce the race.
+  - P1: a real bug on a path users or agents take; a new layer, option,
+    fallback, cache or copy of state that no current requirement needs,
+    including code that nothing uses and nothing explains; or a slice that
+    moves away from its plan or that a later slice will have to undo.
+
+These are not P1, unless they lose data or open a security hole:
+
+- A rule broken with no effect on behavior or design: an explanatory comment,
+  a test that polls or sleeps, a missing regression test, test style.
+- Maintainer docs, feature-map recipes and tooling only developers run.
+- Inputs nobody produces, such as control characters or trailing spaces in a
+  name, or counts far past real use.
+- A race on a rare, user-driven event that costs one stray action or a short
+  delay, even when a test can reproduce the race.
+- A finding in a commit that fixes an earlier finding, when the new trigger
+  is less likely than the one the commit fixed.
 
 Look in this order:
 
@@ -39,8 +51,7 @@ Look in this order:
    requirement it serves. If none does, say what to remove and why behavior
    stays the same.
 2. Behavior. Edge cases, concurrency, restarts, Linux, what the user sees.
-3. Tests. Would they fail if the code broke? Do they rely only on promises
-   (`docs/internal/testing.md`)?
+3. Tests that pass while the behavior they guard is broken.
 
 Leave out style, naming, anything CI checks, and what predates the unit.
 When you are not sure, leave the finding out. Return no finding rather than a
@@ -49,7 +60,7 @@ weak one.
 Return each finding as: commit sha, `file:line`, P0 or P1, a one-line title,
 the trigger, why it matters, and what a fix needs. Or return "no findings".
 
-If you are the verifier, you get one finding. Try to refute the finding
-against the code at `<head>`. When a targeted test can settle whether the
-finding holds, run the test in a throwaway worktree. Return "confirmed",
-"refuted" or "uncertain", with the evidence.
+If you are a verifier, you get one or more findings. Try to refute each
+against the code at `<head>`. When a targeted test can settle whether a
+finding holds, run it in a throwaway worktree. Return "confirmed", "refuted"
+or "uncertain" for each, with the evidence.
