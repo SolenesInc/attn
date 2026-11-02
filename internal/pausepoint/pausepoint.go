@@ -82,6 +82,8 @@ const (
 	AutomationRunFinalizing    = "automation-run-finalizing"
 	RemoteRecentRecorded       = "remote-recent-recorded"
 	KittyImageRequested        = "kitty-image-requested"
+	PtySizeOwnerChecked        = "pty-size-owner-checked"
+	PtySizesReleased           = "pty-sizes-released"
 )
 
 type armed struct {

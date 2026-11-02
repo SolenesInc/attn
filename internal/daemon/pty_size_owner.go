@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -14,6 +15,7 @@ type terminalSizes struct {
 
 type sizeClaims struct {
 	applying           sync.Mutex
+	applies            int
 	owner              *wsClient
 	requests           []sizeRequest
 	claimedBeforeAsked *wsClient
@@ -91,21 +93,38 @@ func (s *terminalSizes) claim(client *wsClient, terminal protocol.TerminalID) bo
 func (s *terminalSizes) applyIfOwner(client *wsClient, terminal protocol.TerminalID, apply func(protocol.PtyResizeMessage)) bool {
 	s.mu.Lock()
 	claims := s.byTerminal[terminal]
-	s.mu.Unlock()
 	if claims == nil {
+		s.mu.Unlock()
 		return false
 	}
+	claims.applies++
+	s.mu.Unlock()
+	defer s.endApply(terminal, claims)
 	claims.applying.Lock()
 	defer claims.applying.Unlock()
 	s.mu.Lock()
 	request, asked := claims.requestOf(client)
-	owns := asked && claims.owner == client && s.byTerminal[terminal] == claims
+	owns := asked && claims.owner == client
 	s.mu.Unlock()
 	if !owns {
 		return false
 	}
+	pausepoint.At(pausepoint.PtySizeOwnerChecked)
 	apply(request.size)
 	return true
+}
+
+func (s *terminalSizes) endApply(terminal protocol.TerminalID, claims *sizeClaims) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	claims.applies--
+	s.dropIfIdle(terminal, claims)
+}
+
+func (s *terminalSizes) dropIfIdle(terminal protocol.TerminalID, claims *sizeClaims) {
+	if len(claims.requests) == 0 && claims.claimedBeforeAsked == nil && claims.applies == 0 {
+		delete(s.byTerminal, terminal)
+	}
 }
 
 func (s *terminalSizes) release(client *wsClient, terminal protocol.TerminalID) (handoff, bool) {
@@ -135,15 +154,12 @@ func (s *terminalSizes) releaseLocked(client *wsClient, terminal protocol.Termin
 	if claims.claimedBeforeAsked == client {
 		claims.claimedBeforeAsked = nil
 	}
-	if len(claims.requests) == 0 && claims.claimedBeforeAsked == nil {
-		delete(s.byTerminal, terminal)
-		return handoff{}, false
-	}
+	defer s.dropIfIdle(terminal, claims)
 	if claims.owner != client {
 		return handoff{}, false
 	}
+	claims.owner = nil
 	if len(claims.requests) == 0 {
-		claims.owner = nil
 		return handoff{}, false
 	}
 	next := claims.requests[len(claims.requests)-1]

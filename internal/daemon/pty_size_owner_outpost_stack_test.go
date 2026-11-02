@@ -72,3 +72,38 @@ func TestAnOldOwnersDelayedResizeLeavesTheNewOwnersOutpostSize(t *testing.T) {
 	}
 	sizeInSession(phone, 50, 36)
 }
+
+func TestADepartedOwnersLateResizeLeavesTheNextClientsOutpostSize(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t)
+	ownerChecked := home.PauseAt(pausepoint.PtySizeOwnerChecked)
+	released := home.PauseAt(pausepoint.PtySizesReleased)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	desktop := pair.App
+	session := home.Spawn(desktop, shellHarness, outpost.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	terminal := protocol.TerminalID(home.Terminal(session))
+	desktop.Watch(session)
+
+	desktop.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 110, Rows: 36})
+	ownerChecked.Await()
+	desktop.Close()
+	released.Await()
+	released.Release()
+
+	phone := home.App()
+	phone.Watch(session)
+	phone.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 50, Rows: 36})
+	testworld.Request(phone, protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, protocol.EventSettingsUpdated, func(protocol.SettingsUpdatedMessage) bool { return true })
+	ownerChecked.Release()
+
+	phone.Send(protocol.TerminalFocusMessage{Cmd: protocol.CmdTerminalFocus, ID: terminal})
+	phone.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: " ", Source: protocol.Ptr("user")})
+	got := testworld.Request(phone, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
+		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal })
+	if protocol.Deref(got.Cols) != 50 || protocol.Deref(got.Rows) != 36 {
+		t.Fatalf("after the departed desktop's late 110x36 resize and the phone's focus and typing, the terminal is %dx%d; the phone owns the size and asked for 50x36", protocol.Deref(got.Cols), protocol.Deref(got.Rows))
+	}
+	phone.TypeLine(session, `printf 'size=%s.\n' "$(stty size)"`)
+	phone.AwaitScreen(session, "size=36 50.")
+}

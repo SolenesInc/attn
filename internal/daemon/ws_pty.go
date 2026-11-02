@@ -227,6 +227,7 @@ func (d *Daemon) releasePtySizes(client *wsClient) {
 	for _, next := range d.ptySizes.releaseAll(client) {
 		d.applyPtySize(next.owner, next.terminal)
 	}
+	pausepoint.At(pausepoint.PtySizesReleased)
 }
 
 func normalizeSpawnAgent(raw string) string {
