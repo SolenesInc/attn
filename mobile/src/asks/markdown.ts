@@ -21,6 +21,18 @@ const walk = (node: Nodes, visit: (node: Nodes) => void) => {
   if ('children' in node) for (const child of node.children) walk(child, visit)
 }
 
+const attribute = (tag: string, name: string): string | undefined => {
+  const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag)
+  const value = match?.[1] ?? match?.[2] ?? match?.[3]
+  return value?.replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&')
+}
+
+const htmlImages = (html: string): ReadonlyArray<{ readonly src: string; readonly alt: string }> =>
+  [...html.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
+    const src = attribute(tag, 'src')
+    return src ? [{ src, alt: attribute(tag, 'alt') ?? '' }] : []
+  })
+
 export type Visuals = { readonly images: ReadonlyArray<string>; readonly diagrams: ReadonlyArray<string> }
 
 // The image sources and mermaid diagrams a piece of markdown shows, each once, in reading order.
@@ -30,6 +42,7 @@ export const visualsOf = (markdowns: ReadonlyArray<string>): Visuals => {
   for (const markdown of markdowns) {
     walk(parseMarkdown(markdown), (node) => {
       if (node.type === 'image' && node.url) images.add(node.url)
+      if (node.type === 'html') for (const image of htmlImages(node.value)) images.add(image.src)
       if (node.type === 'code' && node.lang === 'mermaid') diagrams.add(node.value)
     })
   }
@@ -159,8 +172,15 @@ export const renderMarkdown = <Message>(
         return h.tr([], children(node))
       case 'tableCell':
         return h.td([], children(node))
-      case 'html':
-        return h.code([h.Class('md-html')], [node.value])
+      case 'html': {
+        const images = htmlImages(node.value)
+        return images.length > 0
+          ? h.span(
+              [],
+              images.map((shown) => image(shown.src, shown.alt)),
+            )
+          : h.code([h.Class('md-html')], [node.value])
+      }
       default:
         return textOf(node)
     }
