@@ -31,7 +31,9 @@ function linkText(link: PhoneLink): { text: string; tone: string } {
         ? { text: `Reconnecting to Attn Cloud at ${link.cloud_url}. Last error: ${link.error}`, tone: 'bad' }
         : { text: `Connecting to Attn Cloud at ${link.cloud_url}…`, tone: '' };
     default:
-      return { text: 'Phone access is off, so this home holds no connection to Attn Cloud.', tone: '' };
+      return link.error
+        ? { text: link.error, tone: 'bad' }
+        : { text: 'Phone access is off, so this home holds no connection to Attn Cloud.', tone: '' };
   }
 }
 
@@ -80,12 +82,12 @@ function PairedPhone({ pairing, onRevoke }: { pairing: PhonePairing; onRevoke: (
 }
 
 export function PhonesSettings() {
-  const { sendPhonesGet, sendPhonePairBegin, sendPhonePairingRevoke } = useDaemonApi();
+  const { sendPhonesGet, sendPhonePairBegin, sendPhonePairingRevoke, connectionGeneration } = useDaemonApi();
   const phones = usePhonesStore((state) => state.phones);
   const profiles = useProfilesStore((state) => state.profiles);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => { sendPhonesGet(); }, [sendPhonesGet]);
+  useEffect(() => { sendPhonesGet(); }, [sendPhonesGet, connectionGeneration]);
 
   function failed(profileId: string, error: unknown) {
     setErrors((current) => ({ ...current, [profileId]: error instanceof Error ? error.message : String(error) }));

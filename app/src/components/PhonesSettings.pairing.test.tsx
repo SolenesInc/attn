@@ -75,4 +75,18 @@ describe('Settings → Phones', () => {
     await gesture(daemon, () => fireEvent.click(within(profileSection()).getByRole('button', { name: 'Pair a phone' })));
     expect(within(profileSection()).getByRole('alert')).toHaveTextContent('this home has not registered with Attn Cloud yet');
   });
+
+  it('reads the phones again after the daemon connection comes back', async () => {
+    const offer = offerAt(new Date(Date.now() + 10 * 60_000));
+    let current = phones({ offers: [offer] });
+    const daemon = await openPhones((d) => d.on('phones_get', () => current));
+    expect(within(profileSection()).getByRole('img', { name: 'Pairing code for Default' })).toBeInTheDocument();
+
+    current = phones({ pairings: [{ ...phone, connected: false }] });
+    await daemon.reconnect();
+    await daemon.idle();
+    expect(within(profileSection()).queryByRole('img', { name: 'Pairing code for Default' })).toBeNull();
+    expect(within(profileSection()).getByRole('listitem', { name: 'Victor’s iPhone' })).toHaveTextContent('Last seen');
+    expect(daemon.sentOf('phones_get')).toHaveLength(2);
+  });
 });
