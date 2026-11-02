@@ -571,7 +571,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         now: () => Date.now(),
         homes: (homes) =>
           foreground
-            ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '' }))
+            ? homes.map((home) => ({ ...home, status: 'connecting' as const, reason: '', listed: false }))
             : homes.map((home) => ({ ...home, link: 0 })),
       }),
     }),
@@ -1400,6 +1400,14 @@ const composerView = (composer: Composer, live: boolean, h: HtmlBuilder<Message>
     ],
   )
 
+const unlistedSessionText = (model: Model, home: Home | undefined): string => {
+  if (!home) return model.loaded ? 'This session is gone.' : 'Connecting…'
+  if (home.listed) return 'This session is gone.'
+  return home.status === 'connecting' || home.status === 'online'
+    ? `Connecting to ${home.pairing.homeName}…`
+    : home.reason
+}
+
 const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const open = model.openSession
   const home = model.homes.find((candidate) => candidate.pairing.id === open?.pairingId)
@@ -1409,9 +1417,13 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
   if (!open || !home || !session) {
     return h.div(
       [h.Class('session-screen')],
-      [h.header([h.Class('session-top')], [back]), h.p([h.Class('empty muted')], ['This session is gone.'])],
+      [
+        h.header([h.Class('session-top')], [back]),
+        h.p([h.Class('empty muted')], [unlistedSessionText(model, home)]),
+      ],
     )
   }
+  const connecting = home.status === 'connecting' && !session.offline
   const header = h.header(
     [h.Class('session-top')],
     [
@@ -1422,7 +1434,9 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
           h.div([h.Class('row-title')], [session.title || session.id]),
           h.div(
             [h.Class('row-where')],
-            [`${live ? stateLabel[session.state] : 'offline'} · ${where(home.pairing, session.host)}`],
+            [
+              `${live ? stateLabel[session.state] : connecting ? 'connecting…' : 'offline'} · ${where(home.pairing, session.host)}`,
+            ],
           ),
         ],
       ),
@@ -1464,7 +1478,7 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
               ],
               [],
             ),
-      live
+      live || connecting
         ? h.empty
         : h.p(
             [h.Class('terminal-status error'), h.DataAttribute('testid', 'home-offline')],

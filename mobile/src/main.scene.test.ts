@@ -593,4 +593,83 @@ describe('push notifications', () => {
       Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
     )
   })
+
+  it('shows the tapped session connecting, never offline or gone, while the app comes back', () => {
+    const started = session('c', 'Ship the release', 'waiting', minutesAgo(1))
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: false })),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: true })),
+      Scene.Subscription.emit(
+        Message.TappedNotification({ pairingId: personal.id, sessionId: 'c', askId: '' }),
+      ),
+      ...connectingTo('Mac'),
+      Scene.Subscription.emit(Message.StartedLink({ pairingId: personal.id, link: 2 })),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 4, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      ...connectingTo('Mac'),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({ pairingId: personal.id, sessions: [{ ...started, terminalId: 't-c' }] }),
+      ),
+      keepFocus,
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-c', link: 2 })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+      Scene.expect(Scene.text('Ship the release')).toExist(),
+    )
+  })
+
+  it('shows a cached session connecting, not offline, until its home is back', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: false })),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: true })),
+      Scene.Subscription.emit(
+        Message.TappedNotification({ pairingId: personal.id, sessionId: 'a', askId: '' }),
+      ),
+      keepFocus,
+      Scene.expect(Scene.text('Connecting to Mac…')).toExist(),
+      Scene.expect(Scene.testId('home-offline')).not.toExist(),
+      Scene.expect(Scene.text('connecting… · Mac · personal')).toExist(),
+      Scene.Subscription.emit(Message.StartedLink({ pairingId: personal.id, link: 2 })),
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a', link: 2 })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+      Scene.expect(Scene.testId('home-offline')).not.toExist(),
+    )
+  })
+
+  it('shows the tapped session connecting when the tap launches the app', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given({ ...paired(), loaded: false }),
+      Scene.Subscription.emit(
+        Message.TappedNotification({ pairingId: personal.id, sessionId: 'a', askId: '' }),
+      ),
+      ...connectingTo(''),
+      Scene.Subscription.emit(Message.LoadedPairings({ pairings: [personal] })),
+      ...connectingTo('Mac'),
+      Scene.Subscription.emit(Message.StartedLink({ pairingId: personal.id, link: 1 })),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 4, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [{ ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' }],
+        }),
+      ),
+      keepFocus,
+      Scene.Mount.expectHas(TerminalMount({ pairingId: personal.id, terminalId: 't-a', link: 1 })),
+      Scene.Mount.resolve(TerminalMount, Message.ChangedTerminalStatus({ text: '' })),
+    )
+  })
 })
+
+const connectingTo = (homeName: string) =>
+  [
+    Scene.expect(Scene.text(homeName ? `Connecting to ${homeName}…` : 'Connecting…')).toExist(),
+    Scene.expect(Scene.text('This session is gone.')).not.toExist(),
+    Scene.expect(Scene.testId('home-offline')).not.toExist(),
+  ] as const
