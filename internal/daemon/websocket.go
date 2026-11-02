@@ -926,6 +926,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleForgetAnalyticsInstall", func() { d.handleForgetAnalyticsInstall(client, msg.(*protocol.ForgetAnalyticsInstallMessage)) })
 	case protocol.CmdSetVentSend:
 		d.life.Go("handleSetVentSend", func() { d.handleSetVentSend(client, msg.(*protocol.SetVentSendMessage)) })
+	case protocol.CmdPhonesGet:
+		d.life.Go("handlePhonesGet", func() { d.handlePhonesGet(client) })
+	case protocol.CmdPhonePairBegin:
+		d.life.Go("handlePhonePairBegin", func() { d.handlePhonePairBegin(client, msg.(*protocol.PhonePairBeginMessage)) })
+	case protocol.CmdPhonePairingRevoke:
+		d.life.Go("handlePhonePairingRevoke", func() { d.handlePhonePairingRevoke(client, msg.(*protocol.PhonePairingRevokeMessage)) })
 	case protocol.CmdSetVentKind:
 		d.life.Go("handleSetVentKind", func() { d.handleSetVentKind(client, msg.(*protocol.SetVentKindMessage)) })
 	case protocol.CmdNotificationMarkRead:

@@ -579,6 +579,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if closedAsks, err = closeProfileMailboxAsks(tx, id); err != nil {
 			return err
 		}
+		if _, err = tx.Exec(`DELETE FROM phone_pairings WHERE profile_id = ?`, id); err != nil {
+			return err
+		}
 		profile.CurrentDesktopID = ""
 		profile.ChiefSessionID = ""
 		profile.DeletedAt = now

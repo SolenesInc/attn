@@ -415,9 +415,13 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				}
 			}
 		})
+		if link := d.cloudLink(); link != nil {
+			link.ProfileRemoved(deleted.ID)
+		}
 		return profileActionOutcome{arranges: true, publish: func() {
 			d.notebookFoldersChanged()
 			d.announceClosedAsks(closedAsks)
+			d.publishFact(FactPhonesChanged, deleted.ID, nil)
 			d.publishFact(FactProfileDeleted, deleted.ID, nil)
 		}}, nil
 	})

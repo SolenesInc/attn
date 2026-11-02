@@ -95,6 +95,8 @@ const (
 
 	FactSharedCodexChanged = "shared_codex.changed"
 
+	FactPhonesChanged = "phones.changed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -412,6 +414,10 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSharedCodexChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
 		},
+		{
+			filter: bus.Filter{FactPhonesChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectPhones() },
+		},
 	}
 }
 
@@ -570,6 +576,7 @@ const (
 	snapshotAsks        = "asks_updated"
 	snapshotVents       = "vents_updated"
 	snapshotSharedCodex = "shared_codex_changed"
+	snapshotPhones      = "phones_updated"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"

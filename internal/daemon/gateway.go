@@ -157,7 +157,7 @@ func (d *Daemon) gatewayWelcome(conn *gatewayConn) error {
 		return d.gatewayRefuse(conn, fmt.Sprintf("hello asked for api %d; this home serves api 1 to %d", hello.API, gateway.APIVersion))
 	}
 	profile, err := d.store.GetProfile(conn.device.ProfileID)
-	if err != nil {
+	if err != nil || profile.Deleted() {
 		return d.gatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.device.ProfileID))
 	}
 	homeName, _ := os.Hostname()

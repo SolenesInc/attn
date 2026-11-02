@@ -8387,6 +8387,86 @@ model WebSocketEvent {
   total?: int32;
 }
 
+// Phones
+
+// off: phone access is off and the home holds no connection to Attn Cloud.
+enum PhoneLinkState {
+  off: "off",
+  connecting: "connecting",
+  connected: "connected",
+}
+
+// error: why the last attempt to reach Attn Cloud failed; the link keeps
+// retrying. home_id: absent until the home first registered.
+model PhoneLink {
+  state: PhoneLinkState;
+  cloud_url: string;
+  error?: string;
+  home_id?: string;
+}
+
+// A live QR code for pairing a phone with one profile. Its secret works once,
+// until expires_at.
+model PhonePairingOffer {
+  profile_id: string;
+  expires_at: string;
+  qr: string;
+}
+
+// One device's access to one profile. connected: the device holds a gateway
+// conversation right now.
+model PhonePairing {
+  device_id: string;
+  profile_id: string;
+  name: string;
+  created_at: string;
+  last_seen_at: string;
+  connected: boolean;
+}
+
+model PhonesGetMessage {
+  cmd: "phones_get";
+}
+
+// The home's cloud link, live pairing offers and pairings, for every profile.
+// Sent in answer to phones_get and whenever one of them changes.
+model PhonesUpdatedMessage {
+  event: "phones_updated";
+  link: PhoneLink;
+  offers: PhonePairingOffer[];
+  pairings: PhonePairing[];
+}
+
+// Shows a new QR code for the profile, replacing its earlier one.
+model PhonePairBeginMessage {
+  cmd: "phone_pair_begin";
+  request_id: string;
+  profile_id: string;
+}
+
+model PhonePairBeginResultMessage {
+  event: "phone_pair_begin_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  offer?: PhonePairingOffer;
+}
+
+// Removes the pairing and disconnects the device from that profile.
+model PhonePairingRevokeMessage {
+  cmd: "phone_pairing_revoke";
+  request_id: string;
+  device_id: string;
+  profile_id: string;
+}
+
+model PhonePairingRevokeResultMessage {
+  event: "phone_pairing_revoke_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 alias DaemonEvent =
   InitialStateMessage
   | SessionRegisteredMessage
@@ -8540,6 +8620,9 @@ alias DaemonEvent =
   | SetVentSendResultMessage
   | SetVentKindResultMessage
   | VentsUpdatedMessage
+  | PhonesUpdatedMessage
+  | PhonePairBeginResultMessage
+  | PhonePairingRevokeResultMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage
   | InstallCodexUpdateResultMessage

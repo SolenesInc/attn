@@ -85,6 +85,7 @@ CREATE TABLE notifications ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT
 CREATE TABLE "outpost_outbox" ( id INTEGER PRIMARY KEY AUTOINCREMENT, host TEXT NOT NULL, tbl TEXT NOT NULL, key TEXT NOT NULL, UNIQUE (host, tbl, key) );
 CREATE TABLE outposts ( id TEXT PRIMARY KEY, name TEXT NOT NULL, destination TEXT NOT NULL UNIQUE, host_key TEXT, daemon_id TEXT UNIQUE, added_at TEXT NOT NULL, paired_at TEXT , home TEXT);
 CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL );
+CREATE TABLE phone_pairings ( device_id TEXT NOT NULL, profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, device_sign_pub BLOB NOT NULL, device_noise_pub BLOB NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, PRIMARY KEY (device_id, profile_id) );
 CREATE TABLE pr_interactions ( pr_id TEXT PRIMARY KEY, last_visited_at TEXT, last_approved_at TEXT, last_seen_sha TEXT, last_seen_comment_count INTEGER , last_seen_ci_status TEXT);
 CREATE TABLE profile_migration ( id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL, phase TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, imported_groups TEXT NOT NULL DEFAULT '', draft TEXT NOT NULL DEFAULT '' , launch_review_complete INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE profile_settings ( profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (profile_id, key) );

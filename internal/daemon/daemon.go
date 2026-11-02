@@ -105,6 +105,7 @@ type Daemon struct {
 	outposts            outpostsRuntime
 	outpost             outpostRuntime
 	gateway             gatewayConns
+	phones              phonesRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	socketPath          string
@@ -657,6 +658,7 @@ func (d *Daemon) Start() error {
 	}
 	d.run = run
 	d.configureAnalytics()
+	d.configurePhoneAccess()
 	d.recordAnalytics(analytics.StreamSample, "daemon_start", d.run.ID, previous)
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()

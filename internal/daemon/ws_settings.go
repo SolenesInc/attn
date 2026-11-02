@@ -106,6 +106,9 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(SettingAnalyticsEnabled) {
 		d.configureAnalytics()
 	}
+	if key == string(SettingPhoneAccessEnabled) {
+		d.configurePhoneAccess()
+	}
 	if key == string(SettingAnalyticsEnabled) || key == string(SettingAnalyticsSharingEnabled) {
 		if !d.analyticsSharing() {
 			d.analyticsUpload.withdraw()

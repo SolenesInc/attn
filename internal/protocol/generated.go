@@ -7709,6 +7709,132 @@ type PathInspection struct {
 	ResolvedPath string `json:"resolved_path"`
 }
 
+type PhoneLink struct {
+	// CloudURL corresponds to the JSON schema field "cloud_url".
+	CloudURL string `json:"cloud_url"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// HomeID corresponds to the JSON schema field "home_id".
+	HomeID *string `json:"home_id,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State PhoneLinkState `json:"state"`
+}
+
+type PhoneLinkState string
+
+const PhoneLinkStateConnected PhoneLinkState = "connected"
+const PhoneLinkStateConnecting PhoneLinkState = "connecting"
+const PhoneLinkStateOff PhoneLinkState = "off"
+
+type PhonePairBeginMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type PhonePairBeginResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Offer corresponds to the JSON schema field "offer".
+	Offer *PhonePairingOffer `json:"offer,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type PhonePairing struct {
+	// Connected corresponds to the JSON schema field "connected".
+	Connected bool `json:"connected"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt string `json:"created_at"`
+
+	// DeviceID corresponds to the JSON schema field "device_id".
+	DeviceID string `json:"device_id"`
+
+	// LastSeenAt corresponds to the JSON schema field "last_seen_at".
+	LastSeenAt string `json:"last_seen_at"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
+type PhonePairingOffer struct {
+	// ExpiresAt corresponds to the JSON schema field "expires_at".
+	ExpiresAt string `json:"expires_at"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Qr corresponds to the JSON schema field "qr".
+	Qr string `json:"qr"`
+}
+
+type PhonePairingRevokeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DeviceID corresponds to the JSON schema field "device_id".
+	DeviceID string `json:"device_id"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type PhonePairingRevokeResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type PhonesGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
+type PhonesUpdatedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Link corresponds to the JSON schema field "link".
+	Link PhoneLink `json:"link"`
+
+	// Offers corresponds to the JSON schema field "offers".
+	Offers []PhonePairingOffer `json:"offers"`
+
+	// Pairings corresponds to the JSON schema field "pairings".
+	Pairings []PhonePairing `json:"pairings"`
+}
+
 type PlantVentSeedMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
