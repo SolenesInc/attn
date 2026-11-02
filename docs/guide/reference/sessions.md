@@ -92,7 +92,8 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 
 A program on the computer that runs Attn can send files and a message to any
 running agent, local or on an outpost. The agent receives them as a message
-from you, so only a program you paired can send.
+from you, so only a program you paired can send. This does not need the Quick
+Capture setting.
 
 Pair a program once:
 
