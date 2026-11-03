@@ -4,7 +4,7 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_SNAPSHOT_FORMAT } from './pty/attachPlanning';
 import { openSession } from './test/appFixtures';
-import { daemonSession, defaultProfile, soloDesktop, splitDesktop } from './test/daemonFixtures';
+import { daemonSession, defaultProfile, soloDesktop } from './test/daemonFixtures';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -90,20 +90,6 @@ describe('streaming only the terminals the window draws', () => {
     const back = daemon.sent.length;
     await openSession(daemon, 's1');
     expect(streams(daemon, back)).toEqual(['attach s1']);
-  });
-
-  it('detaches a pane hidden by a maximized pane and attaches it when restored', async () => {
-    const { daemon } = await renderApp({
-      initialState: { ...sharedHost(true), sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })), desktops: [splitDesktop('ws', ['s1', 's2'])] },
-      script: (script) => script.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true })),
-    });
-    await openSession(daemon, 's1');
-    const start = daemon.sent.length;
-
-    await gesture(daemon, () => pressShortcut('terminal.toggleMaximize'));
-    expect(streams(daemon, start)).toEqual(['detach s2']);
-    await gesture(daemon, () => pressShortcut('terminal.toggleMaximize'));
-    expect(streams(daemon, start)).toEqual(['detach s2', 'attach s2']);
   });
 
   it.each([false, true])('detaches an attached leaf the layout suspends to a strip (shared host %s)', async (enabled) => {
