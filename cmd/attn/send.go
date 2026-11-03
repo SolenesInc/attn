@@ -275,6 +275,9 @@ func executeSendSessions(args []string, stdin io.Reader, stdout, stderr io.Write
 		return 1
 	}
 	if *asJSON {
+		if sessions == nil {
+			sessions = []protocol.SenderSession{}
+		}
 		printJSONLine(stdout, sessions)
 		return 0
 	}

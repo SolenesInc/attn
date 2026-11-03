@@ -152,6 +152,9 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 	}
 
 	token := pairSender(t, home, "Capture")
+	if none := home.Run(testworld.Invocation{Args: []string{"send", "sessions", "--token-stdin", "--json"}, Stdin: token + "\n"}); none.Code != 0 || strings.TrimSpace(none.Stdout) != "[]" {
+		t.Fatalf("send sessions --json with no sessions = %+v; an app reads an empty JSON array", none)
+	}
 
 	remote := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("remote"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
 	remoteTerminal := pair.App.Terminal(remote)
