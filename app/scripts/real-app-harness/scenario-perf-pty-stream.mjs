@@ -57,6 +57,7 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(extras.keys) || extras.keys < 0) throw new Error(`--keys must be a non-negative integer, got ${extras.keys}`);
   if (extras.pprofPort !== null && !extras.profileDir) throw new Error('--pprof-port needs --profile-dir');
+  if (extras.profileDir && extras.sharedHost === 'false') throw new Error('--profile-dir samples the shared PTY host, so it needs --shared-host true');
   return { options: parseCommonArgs(passthrough), extras, help: args.includes('--help') || args.includes('-h') };
 }
 
@@ -77,7 +78,8 @@ Measures what streaming terminal output costs, with the shared terminal host on 
                   Profiling costs CPU, so profiled runs are not baselines.
   --pprof-port P  restart the instance's daemon with ATTN_PPROF=P so the daemon profile is taken too
   --shared-host true|false
-                  pty_shared_host_enabled for the run (default true); it also turns on streaming only to drawn panes
+                  pty_shared_host_enabled for the run (default true); it also turns on streaming only to drawn panes.
+                  With false, pty_host CPU is the sum of the Go PTY workers.
 
 Prints one {"type":"run"} JSON line per run, then one {"type":"summary"} line with the
 median, min and max of each number.`);
@@ -116,10 +118,25 @@ function liveSharedHostPid(dataDir) {
   return candidates[0];
 }
 
-function classifyProcess(proc, { appPid, daemonPid, hostPid }) {
+function liveGoWorkerPids(dataDir) {
+  const pids = [];
+  for (const daemonInstance of fs.existsSync(path.join(dataDir, 'workers')) ? fs.readdirSync(path.join(dataDir, 'workers')) : []) {
+    const registry = path.join(dataDir, 'workers', daemonInstance, 'registry');
+    for (const file of fs.existsSync(registry) ? fs.readdirSync(registry).filter((name) => name.endsWith('.json')) : []) {
+      try {
+        const pid = JSON.parse(fs.readFileSync(path.join(registry, file), 'utf8')).worker_pid;
+        process.kill(pid, 0);
+        pids.push(pid);
+      } catch {}
+    }
+  }
+  return pids;
+}
+
+function classifyProcess(proc, { appPid, daemonPid, ptyPids }) {
   if (proc.pid === appPid) return 'app';
   if (proc.pid === daemonPid) return 'daemon';
-  if (proc.pid === hostPid) return 'pty_host';
+  if (ptyPids.has(proc.pid)) return 'pty_host';
   if (proc.command.includes('com.apple.WebKit.WebContent')) return 'webkit_webcontent';
   if (proc.command.includes('com.apple.WebKit.Networking')) return 'webkit_networking';
   if (proc.command.includes('com.apple.WebKit.GPU')) return 'webkit_gpu';
@@ -131,13 +148,13 @@ async function webKitPidsLaunchedSince(webkitBaseline) {
   return new Set(table.filter((proc) => isRelevantWebKitProcess(proc) && !webkitBaseline.has(proc.pid)).map((proc) => proc.pid));
 }
 
-async function appProcessTree({ appPid, daemonPid, hostPid, appWebKitPids }) {
+async function appProcessTree({ appPid, daemonPid, ptyPids, appWebKitPids }) {
   const table = await readProcessTable();
   const appTree = collectDescendantPids(table, appPid);
   const tree = [];
   for (const proc of table) {
-    if (!appTree.has(proc.pid) && !appWebKitPids.has(proc.pid) && proc.pid !== daemonPid && proc.pid !== hostPid) continue;
-    const processClass = classifyProcess(proc, { appPid, daemonPid, hostPid });
+    if (!appTree.has(proc.pid) && !appWebKitPids.has(proc.pid) && proc.pid !== daemonPid && !ptyPids.has(proc.pid)) continue;
+    const processClass = classifyProcess(proc, { appPid, daemonPid, ptyPids });
     if (processClass) tree.push({ pid: proc.pid, processClass });
   }
   return tree;
@@ -494,7 +511,8 @@ async function measureRun({ client, driver, observer, extras, runner, runIndex, 
     const workload = await buildWorkload({ client, observer, extras, cwd, runIndex, createdSessionIds });
     await assertStreaming(observer, workload.streams);
     await delay(WARMUP_MS);
-    const pids = { ...launchPids, hostPid: liveSharedHostPid(dataDir) };
+    const hostPid = extras.sharedHost === 'true' ? liveSharedHostPid(dataDir) : null;
+    const pids = { ...launchPids, hostPid, ptyPids: new Set(hostPid ? [hostPid] : liveGoWorkerPids(dataDir)) };
 
     const tree = await appProcessTree(pids);
     const webContentPids = tree.filter((entry) => entry.processClass === 'webkit_webcontent').map((entry) => entry.pid);
