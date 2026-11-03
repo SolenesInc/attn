@@ -52,7 +52,8 @@ landing changes, and pushes:
 
 When only protocol types or prompt catalogs conflict, `land.sh` regenerates
 them. When `main` moves during landing, `land.sh` rebases, runs the gate again
-on the new combination, and pushes.
+on the new combination, and pushes. Go's test cache answers for the Go landing
+tests the new commits do not reach.
 
 ## Verifying before landing
 

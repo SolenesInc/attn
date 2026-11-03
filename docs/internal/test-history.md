@@ -198,6 +198,17 @@ runs:
 failure stops the push. `land.sh` prints each test's result, skipped tests
 included, and the command that reruns a failed test.
 
+Go's test cache answers for Go landing tests whose inputs did not change, so
+after a rebase only the tests the new commits reach run again, and the others
+print `(cached)`. Go keys a cached result on the test binary, its flags, and
+the environment variables and files the test read, and every worktree on the
+machine shares the cache. The attn binary that stack tests run counts as an
+input. A test whose result depends on something else Go cannot see, such as
+a server or a binary built during the test from source outside the test's
+package, must be listed in `scripts/landing-tests.sh`, which runs it with
+`-count=1`. The ClickHouse tests, and a test that builds attn at another
+version, are listed there.
+
 - `land` prints each added test with the commit and lane where it failed, its
   passes since, and how many more passes clear it. `land` also prints each red test, each missing baseline unit, and each unavailable test with its reason, the baseline's size, and how many failures have cleared or are gone from the checkout. `land`
   requests a baseline unit missing from the checkout, such as a renamed test,

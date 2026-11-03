@@ -226,10 +226,7 @@ func TestMigratingHost_RecoversLegacyAndSharedSessionsWithoutMovingEither(t *tes
 	if hostBinary == "" {
 		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
 	}
-	workerBinary := os.Getenv("ATTN_E2E_BIN")
-	if workerBinary == "" {
-		workerBinary = buildAttnBinary(t)
-	}
+	workerBinary := buildAttnBinary(t)
 	root, err := os.MkdirTemp("/tmp", "attn-mixed-host-recovery-")
 	if err != nil {
 		t.Fatal(err)

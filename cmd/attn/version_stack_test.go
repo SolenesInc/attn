@@ -13,6 +13,7 @@ import (
 func TestTheVersionFlagsPrintWhatBootstrapAndTheHarnessRead(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
+	s.RunFrom(testworld.AttnBinaryAt(t, "dev"))
 
 	var build struct {
 		Version           string `json:"version"`

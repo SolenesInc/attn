@@ -53,25 +53,49 @@ summarize() {
   [ "$status" -eq 0 ] && [ ! -s "$work/unsettled" ]
 }
 
-go_entries="$(awk '$1 == "go"' <<<"$entries")"
-if [ -n "$go_entries" ]; then
-  packages=()
+# Go replays a test's cached pass while its test binary, its flags, and the
+# environment variables and files it read are unchanged, so a rebase reruns only
+# the tests its commits reach. These tests also depend on something Go cannot
+# see, so they run every time: a ClickHouse server, or attn built during the test
+# at another version.
+uncached_go_units="go ./internal/daemon TestEachUploadBatchCarriesTheBuildThatRecordedItsRecords
+go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
+go ./internal/daemon TestAttnIngestRefusingTheDaysBytesIsShownAndWaitedOut
+go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
+go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
+go ./internal/daemon TestRecordsMadeAfterClearingDuringAnUploadAreStillSent
+go ./cmd/attn-ingest TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted
+go ./cmd/attn-ingest TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected
+go ./cmd/attn-ingest TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay
+go ./cmd/attn-ingest TestOneAddressRegistersAtMostTwentyInstallsAnHour
+go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
+go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
+go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
+go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes"
+
+run_go_units() {
+  local name="$1" go_entries="$2" status=0 package unit
+  shift 2
+  local packages=() units=() unit_options=() run_regex
   while IFS= read -r package; do packages+=("$package"); done < <(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
-  units=()
   while IFS= read -r unit; do units+=("$unit"); done <<<"$go_entries"
-  unit_options=()
   for unit in "${units[@]}"; do unit_options+=(--unit "$unit"); done
   run_regex="^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$"
-  echo "landing tests: go test -run '$run_regex' ${packages[*]}"
-  go_status=0
-  ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/go.json" \
-    -count=1 -run "$run_regex" "${packages[@]}" >"$work/go.log" 2>&1 || go_status=$?
-  if ! summarize "$work/go.json" "$go_status" "${units[@]}"; then
-    cat "$work/go.log" >&2
+  echo "landing tests: go test${*:+ $*} -run '$run_regex' ${packages[*]}"
+  ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/$name.json" \
+    "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
+  if ! summarize "$work/$name.json" "$status" "${units[@]}"; then
+    cat "$work/$name.log" >&2
     failed=1
     awk '$1 != "PASS" && $1 != "SKIP" { print "rerun: ./scripts/test-go.sh --packages -count=1 -run '\''^" $4 "$'\'' " $3 }' "$work/lines" >>"$work/reruns"
   fi
-fi
+}
+
+go_entries="$(awk '$1 == "go"' <<<"$entries")"
+cached_go_entries="$(grep -vxF -- "$uncached_go_units" <<<"$go_entries" || true)"
+uncached_go_entries="$(grep -xF -- "$uncached_go_units" <<<"$go_entries" || true)"
+if [ -n "$cached_go_entries" ]; then run_go_units go "$cached_go_entries"; fi
+if [ -n "$uncached_go_entries" ]; then run_go_units go-uncached "$uncached_go_entries" -count=1; fi
 
 app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"
 if [ -n "$app_entries" ]; then

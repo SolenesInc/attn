@@ -34,6 +34,9 @@ func waitForPIDsGone(timeout time.Duration, pids ...int) bool {
 
 func buildAttnBinary(t *testing.T) string {
 	t.Helper()
+	if binary := os.Getenv("ATTN_E2E_BIN"); binary != "" {
+		return binary
+	}
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatal(err)

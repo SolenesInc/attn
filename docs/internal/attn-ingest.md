@@ -133,7 +133,9 @@ OrbStack or the Docker daemon. When no Docker daemon answers, the tests skip and
 name what is missing. Under CI, or with `ATTN_TEST_REQUIRE_CLICKHOUSE` set, the
 tests fail instead. `scripts/landing-tests.sh` sets that variable. The landing
 tests' `clickhouse` group runs the tests when a landing touches the analytics or
-ingest code.
+ingest code. Go's test cache cannot see the ClickHouse server, so
+`scripts/landing-tests.sh` names every ClickHouse test and runs it with
+`-count=1`; add a new one there.
 
 ## ClickHouse memory
 
