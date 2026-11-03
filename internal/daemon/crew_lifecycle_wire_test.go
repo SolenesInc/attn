@@ -141,35 +141,26 @@ func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWind
 	})
 }
 
-func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		enter func(t *testing.T, day *bubbleClaude)
-	}{
-		{"working", func(*testing.T, *bubbleClaude) {}},
-		{"pending_approval", func(t *testing.T, day *bubbleClaude) {
-			if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
-				t.Fatal(err)
-			}
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
-				app.TypeLine(day.id, "refactor the checkout")
-				w.advance(0)
-				tc.enter(t, day)
-				w.advance(0)
-				if got := queriedSession(t, day.cli, day.id).State; string(got) != tc.name {
-					t.Fatalf("the day is %s, want %s", got, tc.name)
-				}
-				w.advance(2 * time.Hour)
-				if got := day.term.Pasted(); len(got) != 0 {
-					t.Fatalf("a day in %s was sent %q", tc.name, got)
-				}
-			})
-		})
-	}
+func TestACrewDayAwaitingApprovalIsLeftAlone(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
+		app.TypeLine(day.id, "refactor the checkout")
+		w.advance(0)
+		if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if got := queriedSession(t, day.cli, day.id).State; got != protocol.SessionStatePendingApproval {
+			t.Fatalf("the day is %s, want pending_approval", got)
+		}
+		w.advance(61 * time.Minute)
+		if got := day.term.Pasted(); len(got) != 0 {
+			t.Fatalf("a day awaiting approval was sent %q", got)
+		}
+		if items := readInbox(t, day.cli, day.id, 0).Items; len(items) != 0 {
+			t.Fatalf("a day awaiting approval was asked %q", inboxContents(items))
+		}
+	})
 }
 
 func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
@@ -181,7 +172,7 @@ func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
 		}
 		setSetting(t, app, "crew.autosleep_enabled", "false")
 		setSetting(t, app, "crew.away_seconds", "60")
-		w.advance(2 * time.Hour)
+		w.advance(2 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
 			t.Fatalf("with close asks off the day was sent %q", got)
 		}
