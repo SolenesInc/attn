@@ -413,7 +413,7 @@ func (l *pipeListener) dial(ctx context.Context) (net.Conn, error) {
 type pipeAddr struct{}
 
 func (pipeAddr) Network() string { return "pipe" }
-func (pipeAddr) String() string  { return "pipe" }
+func (pipeAddr) String() string  { return "localhost" }
 
 func (w *world) RefuseDatabaseCommits() func() {
 	return w.daemon.RefuseDatabaseCommits()
