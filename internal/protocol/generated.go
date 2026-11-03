@@ -12094,6 +12094,26 @@ type SessionPullRequest struct {
 	Watching *bool `json:"watching,omitempty,omitzero"`
 }
 
+type SessionPullRequestSaveMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Number corresponds to the JSON schema field "number".
+	Number int `json:"number"`
+
+	// PRID corresponds to the JSON schema field "pr_id".
+	PRID string `json:"pr_id"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
 type SessionRegisteredMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

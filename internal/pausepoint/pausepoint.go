@@ -59,6 +59,7 @@ const (
 	ConversationDropped        = "conversation-dropped"
 	ConversationReportReady    = "conversation-report-ready"
 	ConversationApplyAwaited   = "conversation-apply-awaited"
+	OutpostConversationApplied = "outpost-conversation-applied"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
 	TerminalExitReconciled     = "terminal-exit-reconciled"

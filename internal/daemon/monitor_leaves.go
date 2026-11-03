@@ -19,6 +19,7 @@ func (d *Daemon) registerMonitorParts(parts map[string]machinePart) {
 	runs(parts, false, d.runMonitorCommand)
 	runs(parts, false, d.placeSessionInput)
 	runs(parts, false, d.changePullRequestLink)
+	runs(parts, false, d.saveSessionPullRequest)
 	runs(parts, false, d.renameLink)
 	runs(parts, true, d.readTranscriptActivity)
 	runs(parts, true, d.readMonitorAssistantWindow)
@@ -102,7 +103,7 @@ func (d *Daemon) placeDelivery(ctx context.Context, session protocol.SessionID, 
 	return sessionmonitor.AttemptFromResult(result)
 }
 
-func (d *Daemon) changePullRequestLink(_ context.Context, msg protocol.PullRequestLinkMessage) (protocol.PullRequestLinkResult, error) {
+func (d *Daemon) changePullRequestLink(ctx context.Context, msg protocol.PullRequestLinkMessage) (protocol.PullRequestLinkResult, error) {
 	monitor := d.sessionMonitor(msg.SessionID)
 	if monitor == nil {
 		return protocol.PullRequestLinkResult{}, fmt.Errorf("session %s: no monitor runs it", msg.SessionID)
@@ -117,23 +118,27 @@ func (d *Daemon) changePullRequestLink(_ context.Context, msg protocol.PullReque
 	if d.sessionMonitor(msg.SessionID) == monitor {
 		return protocol.PullRequestLinkResult{}, nil
 	}
-	if err := d.recordLinkOfStoppedMonitor(msg.SessionID, msg.PRID, link); err != nil {
+	save := protocol.SessionPullRequestSaveMessage{Cmd: protocol.CmdSessionPullRequestSave, SessionID: msg.SessionID, PRID: msg.PRID, Repository: link.Repository, Number: link.Number, URL: link.URL}
+	if _, err := Call[struct{}](ctx, d.router(), save); err != nil {
 		return protocol.PullRequestLinkResult{}, err
 	}
 	return protocol.PullRequestLinkResult{Applied: true}, nil
 }
 
-func (d *Daemon) recordLinkOfStoppedMonitor(session protocol.SessionID, prID string, link sessionmonitor.PullRequest) error {
+func (d *Daemon) saveSessionPullRequest(ctx context.Context, msg protocol.SessionPullRequestSaveMessage) (struct{}, error) {
+	if origin, remote := OriginOf(ctx); remote && d.sessionHost(msg.SessionID) != origin.Host {
+		return struct{}{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
+	}
 	recorded, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
-		SessionID: session, PRID: prID, Repository: link.Repository, Number: link.Number, URL: link.URL,
+		SessionID: msg.SessionID, PRID: msg.PRID, Repository: msg.Repository, Number: msg.Number, URL: msg.URL,
 	}, time.Now())
 	if err != nil {
-		return fmt.Errorf("pull request %s: %w", prID, err)
+		return struct{}{}, fmt.Errorf("pull request %s: %w", msg.PRID, err)
 	}
 	if recorded {
-		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: prID})
+		d.publishFact(FactSessionPullRequestChanged, string(msg.SessionID), sessionPullRequestFact{PRID: msg.PRID})
 	}
-	return nil
+	return struct{}{}, nil
 }
 
 func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (struct{}, error) {

@@ -28,10 +28,13 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Conversa
 	if !h.apply(view, false) {
 		return sessionmonitor.ConversationOutcome{}, false
 	}
+	pending := view.PendingConversation.V
 	if h.daemon.monitors().copied(h.sessionID()) {
+		if current := view.Conversation.V.NativeID; pending.Terminal != "" && current != "" && pending.NativeID != current {
+			pausepoint.At(pausepoint.OutpostConversationApplied)
+		}
 		return sessionmonitor.ConversationOutcome{}, true
 	}
-	pending := view.PendingConversation.V
 	if pending.NativeID != "" && pending.Terminal == "" {
 		pausepoint.At(pausepoint.ConversationReportReady)
 	}

@@ -185,6 +185,7 @@ var Placements = map[string][]Placement{
 	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
 	"session_place":                    {Placement{LocatorSession, "session_id"}},
+	"session_pull_request_save":        {Placement{LocatorHome, ""}},
 	"session_reopen":                   {Placement{LocatorHome, ""}},
 	"session_show":                     {Placement{LocatorHome, ""}},
 	"session_transcript":               {Placement{LocatorHome, ""}},
@@ -2191,6 +2192,18 @@ func (m SessionPlaceMessage) Placement() Placement {
 
 func (m SessionPlaceMessage) Locate() string {
 	return string(m.SessionID)
+}
+
+func (SessionPullRequestSaveMessage) CommandName() string {
+	return "session_pull_request_save"
+}
+
+func (m SessionPullRequestSaveMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionPullRequestSaveMessage) Locate() string {
+	return ""
 }
 
 func (SessionReopenMessage) CommandName() string {

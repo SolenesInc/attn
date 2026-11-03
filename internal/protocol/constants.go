@@ -589,6 +589,7 @@ const (
 	CmdMonitorCommand         = "monitor_command"
 	CmdSessionPlace           = "session_place"
 	CmdPullRequestLink        = "pull_request_link"
+	CmdSessionPullRequestSave = "session_pull_request_save"
 	CmdLinkRename             = "link_rename"
 	CmdTranscriptActivity     = "transcript_activity"
 	CmdMonitorAssistantWindow = "monitor_assistant_window"

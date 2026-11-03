@@ -8864,6 +8864,17 @@ model PullRequestLinkMessage {
 }
 model PullRequestLinkResult { applied: boolean; }
 
+// Saves a pull request link on a session at the home, for a report its monitor stopped before saving.
+@extension("x-on", #{ home: true })
+model SessionPullRequestSaveMessage {
+  cmd: "session_pull_request_save";
+  session_id: SessionID;
+  pr_id: string;
+  repository: string;
+  number: int32;
+  url: string;
+}
+
 @extension("x-on", #{ session: "session_id" })
 model LinkRenameMessage {
   cmd: "link_rename";
