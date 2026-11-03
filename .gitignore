@@ -56,3 +56,4 @@ app/src-tauri/*.gen.conf.json
 /cmd/attn-ingest/attn-ingest
 
 /internal/ghosttyvt/native_paths_generated_*.go
+__pycache__/
