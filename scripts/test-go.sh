@@ -6,7 +6,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
 cli_package="github.com/victorarias/attn/cmd/attn"
-shard_count="${ATTN_GO_TEST_SHARDS:-5}"
+shard_count="${ATTN_GO_TEST_SHARDS:-4}"
 cli_shard_count=6
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"

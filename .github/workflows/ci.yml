@@ -310,11 +310,11 @@ jobs:
           - group: 1
             jobs: packages race attn-1
           - group: 2
-            jobs: daemon-1 daemon-2 attn-2
+            jobs: daemon-1 attn-2 attn-3
           - group: 3
-            jobs: daemon-3 daemon-4 attn-3
+            jobs: daemon-2 attn-4 attn-5
           - group: 4
-            jobs: daemon-5 attn-4 attn-5 attn-6
+            jobs: daemon-3 daemon-4 attn-6
     steps:
       - uses: actions/checkout@v4
 
@@ -785,10 +785,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
+    # Planned heaviest shard 258s of a 2030s matrix in 8 shards (scenario-durations.json, 2026-11-03); 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
@@ -925,7 +925,7 @@ jobs:
         continue-on-error: true
         run: >-
           node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 10
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 8
           --out "$RUNNER_TEMP/matrix-digest.txt"
 
       - name: Upload the aggregated digest
