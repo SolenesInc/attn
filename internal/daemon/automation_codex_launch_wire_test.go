@@ -60,40 +60,17 @@ func awaitRunState(t *testing.T, w *world, app *testworld.Peer, runID string, do
 	}
 }
 
-func TestACodexAutomationWhoseConversationIsStillBeingWrittenIsNeverDeliveredAndFailsWithItsStartupScreen(t *testing.T) {
+func TestACodexAutomationIsDeliveredWhileItsOpeningNoteIsStillBeingWritten(t *testing.T) {
 	w, app := codexAutomationWorld(t, true)
 	arrived, release := w.CodexServer().HoldNextInjectReply()
-	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "held"})
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "slow-note"})
 	arrived()
-	answered := awaitAutomationRunResult(app, "held")
-	runs := automationRuns(t, w.Client(), 1)
-	if len(runs) != 1 || runs[0].State == "delivered" {
-		t.Fatalf("while its conversation is still being written the run answered %s with runs %+v, want it not delivered", describeRunAnswer(answered), runs)
+	awaitAutomationRunResult(app, "slow-note")
+	run := awaitOnlyRunSettled(t, w, app)
+	if run.State != "delivered" {
+		t.Fatalf("a run whose opening note is still being written is %s with %q, want it delivered", run.State, protocol.Deref(run.LastError))
 	}
-
 	release("disk I/O error")
-	failed := awaitRunState(t, w, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-	failure := protocol.Deref(failed.LastError)
-	if failed.State != "failed" || !strings.Contains(failure, "exited with code 1 before its first turn") || !strings.Contains(failure, "thread/start failed during TUI bootstrap") {
-		t.Fatalf("after Codex exited at bootstrap the run is %s with %q, want failed with the startup screen", failed.State, failure)
-	}
-	seed, err := w.Client().SeedShow("", protocol.Deref(failed.SeedID))
-	if err != nil || seed.Seed.Status != "withered" {
-		t.Fatalf("the failed run's seed = %+v (%v), want it withered", seed, err)
-	}
-}
-
-func TestACodexAutomationRefusedAtBootstrapFailsWithoutEverBeingDelivered(t *testing.T) {
-	w, app := codexAutomationWorld(t, true)
-	arrived, release := w.CodexServer().HoldNextInjectReply()
-	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "refused"})
-	arrived()
-	release("disk I/O error")
-	awaitAutomationRunResult(app, "refused")
-	failed := awaitOnlyRunSettled(t, w, app)
-	if failure := protocol.Deref(failed.LastError); failed.State != "failed" || !strings.Contains(failure, "thread/start failed during TUI bootstrap") || !strings.Contains(failure, "disk I/O") {
-		t.Fatalf("a run whose conversation was refused is %s with %q, want it failed with the startup screen and never delivered", failed.State, failure)
-	}
 }
 
 func TestAPlainCodexAutomationThatExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {

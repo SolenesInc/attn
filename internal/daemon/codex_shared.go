@@ -38,6 +38,7 @@ const (
 	codexClientName           = "codex-tui"
 	codexServerStartLimit     = 30 * time.Second
 	codexServerCallLimit      = 5 * time.Second
+	codexOpeningNoteLimit     = 60 * time.Second
 )
 
 const codexServerLaunchScript = `
@@ -723,11 +724,8 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		if !opened {
 			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
-		} else if err := r.materialize(v.terminal, v.profile, thread.ID); err != nil {
-			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
-			reply.Result = nil
-			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
-			return
+		} else {
+			r.d.life.Go("codexOpeningNote", func() { r.materialize(v.terminal, v.profile, thread.ID) })
 		}
 		r.show(v, thread.ID, opened)
 		if !firstOfItsSession {
@@ -833,7 +831,7 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string,
 	return launch.Content
 }
 
-func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) error {
+func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -843,9 +841,9 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 	}
 	if client == nil {
 		r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
-		return errors.New("no connection to its app-server")
+		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), codexServerCallLimit)
+	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexOpeningNoteLimit)
 	defer cancel()
 	note := prompts.RenderText("session", "codex-opened", nil)
 	started := time.Now()
@@ -857,8 +855,7 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 		}},
 	})
 	r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
-		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexServerCallLimit, codexCallOutcome(err))
-	return err
+		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexOpeningNoteLimit, codexCallOutcome(err))
 }
 
 func codexCallOutcome(err error) string {

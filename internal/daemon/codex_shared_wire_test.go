@@ -131,6 +131,7 @@ func TestASharedCodexAppServerThatExitsStartsAgainAndTheTerminalCarriesOn(t *tes
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	conversation := codex.ConversationID
+	w.CodexServer().AwaitWritten(conversation)
 
 	codex.CrashAppServer()
 	app.TypeLine(session, "add a discount field")

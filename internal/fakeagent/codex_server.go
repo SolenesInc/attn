@@ -35,6 +35,7 @@ const (
 	methodFakeTerminal   = "attn-fake/terminal"
 	methodThreadName     = "thread_name"
 	methodAwaitArchived  = "await_archived"
+	methodAwaitWritten   = "await_written"
 	methodAskQuestion    = "ask_question"
 	methodWork           = "work"
 	methodInstructions   = "instructions"
@@ -71,6 +72,7 @@ type codexAppServer struct {
 	prompts  map[string]chan string
 	named    chan struct{}
 	archived chan struct{}
+	written  chan struct{}
 	listed   chan struct{}
 	held     map[string]*codexHeldReply
 }
@@ -153,6 +155,7 @@ func runCodexAppServer(cfg config) int {
 		prompts:  map[string]chan string{},
 		named:    make(chan struct{}),
 		archived: make(chan struct{}),
+		written:  make(chan struct{}),
 		listed:   make(chan struct{}),
 		held:     map[string]*codexHeldReply{},
 	}
@@ -656,7 +659,16 @@ func (s *codexAppServer) write(t *codexServerThread, lines ...any) error {
 		}
 		lines = append([]any{meta, codexTurnContext(t.c.approvals)}, lines...)
 	}
-	return appendLines(t.c.transcript, lines...)
+	if err := appendLines(t.c.transcript, lines...); err != nil {
+		return err
+	}
+	if first {
+		s.mu.Lock()
+		close(s.written)
+		s.written = make(chan struct{})
+		s.mu.Unlock()
+	}
+	return nil
 }
 
 func codexTurnContext(p CodexPermissions) map[string]any {
@@ -1058,6 +1070,21 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			case <-archived:
 			case <-deadline:
 				return nil, fmt.Errorf("conversation %s is not archived after %s", p.ThreadID, HangGuard)
+			}
+		}
+	case methodAwaitWritten:
+		deadline := time.After(HangGuard)
+		for {
+			s.mu.Lock()
+			written := s.written
+			s.mu.Unlock()
+			if path, _ := s.findRollout(p.ThreadID); path != "" {
+				return struct{}{}, nil
+			}
+			select {
+			case <-written:
+			case <-deadline:
+				return nil, fmt.Errorf("conversation %s is not on disk after %s", p.ThreadID, HangGuard)
 			}
 		}
 	case methodAskApproval:
