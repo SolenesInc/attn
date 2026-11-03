@@ -222,7 +222,8 @@ session or the re-land seed.
 - CI runs one push at a time and keeps only the newest push waiting. When a
   newer push arrives while another push is waiting, the waiting push's run
   concludes `cancelled` with no jobs. A red run therefore covers every commit
-  since the last green run.
+  since the last green run. A release commit is the exception: its run starts
+  at once, beside the run in progress, and is never dropped.
 - You own a test that is still red on `main`. The
   [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
 - "no session or crew member matches" or "is not on this daemon" from

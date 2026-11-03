@@ -32,9 +32,11 @@ When `reviewed` does not contain the head yet, the script stops. Run the
 Otherwise the script cuts `release/vX.Y.Z` from that commit, compiles the
 commits since the last release into `CHANGELOG.md`, bumps every version, and
 opens a PR to `main`. Merge the PR once `PR gate` and `App acceptance` are
-green. The merged commit is the release commit. CI tags and publishes the
-release commit once both hold: its Acceptance is green and `reviewed` contains
-it. Whichever happens last triggers the publish: CI finishing on the release
+green. The merged commit is the release commit. CI on `main` runs one push at a
+time and drops a waiting push when a newer one arrives, but the release commit
+gets a run of its own that later landings cannot drop. CI tags and publishes
+the release commit once both hold: its Acceptance is green and `reviewed`
+contains it. Whichever happens last triggers the publish: CI finishing on the release
 commit, or a review moving `reviewed` to contain it.
 
 `main` may keep moving while the release PR is open. Changes that land after
