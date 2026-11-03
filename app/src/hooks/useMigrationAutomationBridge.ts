@@ -4,7 +4,7 @@ import {
   APP_BUILD_IDENTITY,
   NOT_A_DOM_ACTION,
   runDomAutomationAction,
-  useAutomationRequestListener,
+  useAutomationRequestHandler,
   type AutomationRequest,
 } from './uiAutomationDomActions';
 
@@ -24,5 +24,5 @@ export function useMigrationAutomationBridge() {
         );
     }
   }, []);
-  useAutomationRequestListener(handleAutomationRequest);
+  useAutomationRequestHandler(handleAutomationRequest);
 }

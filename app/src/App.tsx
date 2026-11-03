@@ -21,6 +21,7 @@ import {
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
+import { useAutomationRequestListener } from './hooks/uiAutomationDomActions';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import { hideBootSplash } from './utils/bootSplash';
@@ -28,6 +29,7 @@ import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { setAppActionSink } from './analytics/appActions';
 
 function App() {
+  useAutomationRequestListener();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
   const [daemonPlugins, setDaemonPlugins] = useState<DaemonPlugin[]>([]);

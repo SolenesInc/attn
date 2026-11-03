@@ -34,7 +34,7 @@ import {
   runDomAutomationAction,
   setControlValue,
   setInputValue,
-  useAutomationRequestListener,
+  useAutomationRequestHandler,
   type AutomationRequest,
   type ClickModifiers,
 } from './uiAutomationDomActions';
@@ -3705,5 +3705,5 @@ export function useUiAutomationBridge({
     splitPane,
   ]);
 
-  useAutomationRequestListener(handleAutomationRequest);
+  useAutomationRequestHandler(handleAutomationRequest);
 }

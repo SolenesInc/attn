@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -596,14 +596,22 @@ export async function runDomAutomationAction(
   }
 }
 
-export function useAutomationRequestListener(handleAutomationRequest: (request: AutomationRequest) => Promise<unknown>) {
-  const handleAutomationRequestRef = useRef(handleAutomationRequest);
-  // The dispatcher dereferences this two frames after the request arrives, so only a committed
+type AutomationRequestHandler = (request: AutomationRequest) => Promise<unknown>;
+
+let mountedScreenHandler: AutomationRequestHandler | null = null;
+
+export function useAutomationRequestHandler(handleAutomationRequest: AutomationRequestHandler) {
+  // The listener dereferences this two frames after the request arrives, so only a committed
   // render may publish here: a concurrent render React discards must not become the handler.
   useLayoutEffect(() => {
-    handleAutomationRequestRef.current = handleAutomationRequest;
+    mountedScreenHandler = handleAutomationRequest;
+    return () => {
+      if (mountedScreenHandler === handleAutomationRequest) mountedScreenHandler = null;
+    };
   }, [handleAutomationRequest]);
+}
 
+export function useAutomationRequestListener() {
   useEffect(() => {
     // Runtime gate injected by the Rust shell; the rule lives in
     // app/src-tauri/src/instance.rs::automation_enabled.
@@ -613,17 +621,20 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
       return;
     }
 
-    void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
+    let stopped = false;
     const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
       const request = event.payload;
       const receivedAt = performance.now();
       recordUiDiagToFileOnly({ kind: 'automation_request_received', requestId: request.request_id, action: request.action });
       let response: AutomationResponse;
       try {
-        // Settle before reading the ref: the wait spans renders, so a handler picked
+        // Settle before reading the handler: the wait spans renders, so a handler picked
         // beforehand would answer with a settled DOM and the props of an older render.
         await settleBeforeBridgeRequest(request.action);
-        const result = await handleAutomationRequestRef.current(request);
+        if (!mountedScreenHandler) {
+          throw new Error(`${request.action} has no screen to answer it: neither the migration screens nor the app shell is mounted`);
+        }
+        const result = await mountedScreenHandler(request);
         response = {
           request_id: request.request_id,
           ok: true,
@@ -645,8 +656,12 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
       });
       await emit(UI_AUTOMATION_RESPONSE_EVENT, response);
     });
+    void unlistenPromise.then(() => {
+      if (!stopped) void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
+    });
 
     return () => {
+      stopped = true;
       disarmNativeInputWitness();
       void unlistenPromise.then((unlisten) => unlisten());
     };
