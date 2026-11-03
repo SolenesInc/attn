@@ -473,12 +473,15 @@ check-migrations:
 	go run ./cmd/db-migrations check-history --base "$(MIGRATION_BASE)"
 
 generate-schema:
+	go run ./scripts/generate-schema --image > internal/store/schema.sqlite.gz
 	go run ./scripts/generate-schema > internal/store/schema.sql
 
 check-schema:
-	@dump=$$(mktemp); trap 'rm -f "$$dump"' EXIT; \
+	@dump=$$(mktemp); image=$$(mktemp); trap 'rm -f "$$dump" "$$image"' EXIT; \
 		go run ./scripts/generate-schema > "$$dump" && \
-		diff -u internal/store/schema.sql "$$dump"
+		diff -u internal/store/schema.sql "$$dump" && \
+		go run ./scripts/generate-schema --image > "$$image" && \
+		cmp internal/store/schema.sqlite.gz "$$image"
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

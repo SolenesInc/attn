@@ -10,10 +10,23 @@ import (
 )
 
 func main() {
-	if err := dump(); err != nil {
+	write := dump
+	if len(os.Args) == 2 && os.Args[1] == "--image" {
+		write = image
+	}
+	if err := write(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func image() error {
+	compressed, err := store.GenerateSchemaImage()
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(compressed)
+	return err
 }
 
 func dump() error {

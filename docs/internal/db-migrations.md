@@ -37,11 +37,17 @@ or restore a backup taken before the upgrade with `attn db restore`.
   `make check-migrations` compares all of these with `origin/main` and checks that
   merged SQL and Go files keep their paths and contents. CI uses the PR base or
   the previous push as the baseline.
-- Run `make generate-schema` and commit `internal/store/schema.sql` with the
-  migration. CI runs `make check-schema` to check that the file is current.
+- Run `make generate-schema` and commit `internal/store/schema.sql` and
+  `internal/store/schema.sqlite.gz` with the migration. CI runs
+  `make check-schema` to check that both are current. A new database starts as
+  a copy of `schema.sqlite.gz`, the database that replaying every migration
+  makes, and then gets its own Default profile id and timestamps. While the
+  file is behind the migrations, every new database replays them all instead.
 - A `schema.sql` conflict on rebase means another PR touched the same table.
   Read both migrations and make yours correct on top of theirs. Give your
-  file a fresh timestamp if it must run after theirs, then regenerate `internal/store/schema.sql`.
+  file a fresh timestamp if it must run after theirs. A conflict on
+  `schema.sqlite.gz` comes with any other migration. In both cases, run
+  `make generate-schema` again.
 - A migration changes every row it matches, including the rows an outpost
   keeps as read-only copies of its home's. The home runs the same migration on
   its own rows, so the copy stays in step.
