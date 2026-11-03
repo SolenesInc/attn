@@ -63,27 +63,6 @@ func answerTurnVerdict(t *testing.T, w *world, verdict string) {
 	task.Answer(`{"verdict":"` + verdict + `"}`)
 }
 
-func TestEachAgentTitlesASessionFromThePromptItWasSpawnedWith(t *testing.T) {
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		t.Run(string(h), func(t *testing.T) {
-			w := newTitlingWorld(t, h)
-			app := w.App()
-			session := w.Spawn(app, h, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-				m.InitialPrompt = protocol.Ptr("investigate the retry queue")
-			})
-			agent := w.Launched(session)
-
-			task := w.HeadlessTask()
-			if task.Harness != h || !strings.Contains(task.Prompt, "investigate the retry queue") {
-				t.Fatalf("the title task went to %s asking %q, want %s asked about the initial prompt", task.Harness, task.Prompt, h)
-			}
-			task.Answer("Retry queue investigation")
-			awaitLabel(app, session, "Retry queue investigation")
-			agent.Prompted()
-		})
-	}
-}
-
 func TestACodexInitialPromptTitlesItsSessionAfterItsConversationBinds(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()

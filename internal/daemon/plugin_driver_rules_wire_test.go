@@ -115,6 +115,9 @@ func TestOnlyIfUnknownRestatesOnlyASessionAttnCouldNotTell(t *testing.T) {
 	}
 	testworld.AwaitSession(app, lost, func(s protocol.Session) bool { return s.State == protocol.SessionStateUnknown })
 	before := testworld.AwaitSession(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if before.Usage != nil {
+		t.Errorf("a session of a harness that reports no usage shows usage %+v, want none", before.Usage)
+	}
 
 	restate := func(run driverLaunch, state string) {
 		t.Helper()

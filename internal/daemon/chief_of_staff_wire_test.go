@@ -86,6 +86,9 @@ func TestCreatingASessionAsChiefAssignsTheRoleOnlyWhenItCan(t *testing.T) {
 	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == failed }); result.Success {
 		t.Fatalf("a spawn into missing directory %s succeeded", missingDirectory)
 	}
+	if slices.ContainsFunc(w.App().Initial.Sessions, func(s protocol.Session) bool { return string(s.ID) == failed }) {
+		t.Errorf("the spawn whose agent could not start left session %s registered", failed)
+	}
 
 	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), asChief)
 	w.Launched(chief)

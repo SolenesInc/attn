@@ -44,8 +44,8 @@ func titleTaskFor(t *testing.T, w *world, h fakeagent.Harness) *fakeagent.Headle
 	})
 	agent := w.Launched(session)
 	task := w.HeadlessTask()
-	if task.Harness != h {
-		t.Fatalf("the title task went to %s, want %s", task.Harness, h)
+	if task.Harness != h || !strings.Contains(task.Prompt, "investigate the retry queue") {
+		t.Fatalf("the title task went to %s asking %q, want %s asked about the initial prompt", task.Harness, task.Prompt, h)
 	}
 	task.Answer("Retry queue investigation")
 	awaitLabel(app, session, "Retry queue investigation")
@@ -56,6 +56,7 @@ func titleTaskFor(t *testing.T, w *world, h fakeagent.Harness) *fakeagent.Headle
 func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *testing.T) {
 	for _, tc := range []struct {
 		harness    fakeagent.Harness
+		model      string
 		readOnly   [][]string
 		forbidden  []string
 		keptEnv    []string
@@ -65,6 +66,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 	}{
 		{
 			harness: fakeagent.Claude,
+			model:   "claude-haiku-fake",
 			readOnly: [][]string{
 				{"--disallowedTools", "*"}, {"--permission-mode", "dontAsk"}, {"--setting-sources", ""},
 				{"--strict-mcp-config"}, {"--no-session-persistence"}, {"--disable-slash-commands"},
@@ -80,6 +82,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 		},
 		{
 			harness: fakeagent.Codex,
+			model:   "gpt-6-luna",
 			readOnly: [][]string{
 				{"--sandbox", "read-only"}, {"-c", `approval_policy="never"`}, {"-c", "features.shell_tool=false"},
 				{"-c", `web_search="disabled"`}, {"--ignore-user-config"}, {"--ignore-rules"}, {"--ephemeral"},
@@ -93,9 +96,12 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 		},
 	} {
 		t.Run(string(tc.harness), func(t *testing.T) {
-			w := newTitlingWorld(t, tc.harness)
 			for _, name := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"} {
 				t.Setenv(name, "")
+			}
+			w := newTitlingWorld(t, tc.harness)
+			if capable := w.App().Initial.Settings[string(tc.harness)+"_cap_headless_task"]; capable != "true" {
+				t.Fatalf("the app is told %s can run headless tasks: %v, want true", tc.harness, capable)
 			}
 			for key, value := range map[string]string{
 				"ANTHROPIC_BASE_URL": "https://anthropic.example", "OPENAI_BASE_URL": "https://openai.example",
@@ -107,6 +113,9 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			setSetting(t, w.App(), "headless_context_window_cap", "150000")
 
 			task := titleTaskFor(t, w, tc.harness)
+			if task.Model != tc.model {
+				t.Errorf("the title task ran %s on %q, want its light default %s", tc.harness, task.Model, tc.model)
+			}
 			for _, flag := range tc.readOnly {
 				if !hasArgs(task.Argv, flag...) {
 					t.Errorf("the title task ran %s without %q: %q", tc.harness, flag, task.Argv)

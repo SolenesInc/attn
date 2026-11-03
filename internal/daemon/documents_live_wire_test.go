@@ -611,6 +611,10 @@ func TestDocumentsOverTheCLIClientDeliverResumeAndEnd(t *testing.T) {
 	if code, isEnd := client.DocSubscriptionCode(<-ended); !isEnd || code != protocol.ErrorCodeCollectionUndefined {
 		t.Fatalf("undefining the collection ended the subscription with code %q (a subscription ending: %v), want %q", code, isEnd, protocol.ErrorCodeCollectionUndefined)
 	}
+	defineRequests(t, cli, gateNS)
+	if got := query(t, cli, q); len(got) != 0 {
+		t.Fatalf("the redefined collection holds %s", docIDs(got))
+	}
 }
 
 func TestAnAppThatDisconnectsReleasesEveryLiveQueryItHeld(t *testing.T) {

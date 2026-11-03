@@ -380,22 +380,6 @@ func isConflictOn(err error, found bool) bool {
 	return errors.As(err, &refused) && refused.Code == protocol.ErrorCodeConflict && refused.Conflict != nil && refused.Conflict.Found == found
 }
 
-func TestRedefiningAnUndefinedCollectionStartsItEmpty(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	defineRequests(t, cli, gateNS)
-	put(t, cli, gateNS, "a", `{"status":"pending"}`)
-	put(t, cli, gateNS, "b", `{"status":"pending"}`)
-
-	if _, err := cli.DocUndefine(gateNS, requests); err != nil {
-		t.Fatal(err)
-	}
-	defineRequests(t, cli, gateNS)
-	if got := query(t, cli, requestsWhere(gateNS)); len(got) != 0 {
-		t.Fatalf("the redefined collection holds %s", docIDs(got))
-	}
-}
-
 func TestDocumentsSurviveADaemonRestart(t *testing.T) {
 	w := newWorld(t)
 	defineRequests(t, w.Client(), gateNS)

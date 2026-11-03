@@ -466,7 +466,11 @@ func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDra
 	conversation := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
 	codex.Reply("Added. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	hidden := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	var counted int
+	if hidden.Usage != nil {
+		counted = hidden.Usage.TotalTokens
+	}
 	typeInto(app, terminal, "half a thought")
 
 	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success || got.status != "delivered" {
@@ -478,7 +482,9 @@ func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDra
 	}
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Locked it. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && s.Usage != nil && s.Usage.TotalTokens > counted
+	})
 
 	typeInto(app, terminal, " more\r")
 	if got := codex.Prompted(); got != "half a thought more" {
@@ -858,28 +864,6 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the chief of staff") || !strings.Contains(got, agentGuidanceLead) {
 		t.Errorf("the conversation /new started in the chief's terminal began with:\n%s\nwant only the agent guidance", got)
 	}
-}
-
-func TestAHiddenSharedCodexSessionCountsTheTurnsItsInputStarts(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
-	conversation := codex.ConversationID
-	moveOn(t, app, codex, terminal, "/new", "add a discount field")
-	codex.Reply("Added. <!-- attn:state=idle -->")
-	before := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
-	var counted int
-	if before.Usage != nil {
-		counted = before.Usage.TotalTokens
-	}
-
-	if got := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !got.success {
-		t.Fatalf("feedback to the hidden session = %+v", got)
-	}
-	w.CodexServer().Prompted(conversation)
-	w.CodexServer().Reply(conversation, "Fixed what the notes asked for. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens > counted })
 }
 
 func TestAHiddenSharedCodexConversationReloadsWithItsSessionsContextCap(t *testing.T) {

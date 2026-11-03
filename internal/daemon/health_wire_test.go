@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestHealthReportsCanonicalRoutingPathsForRelativeSymlinkedOverrides(t *testing.T) {
@@ -32,11 +34,15 @@ func TestHealthReportsCanonicalRoutingPathsForRelativeSymlinkedOverrides(t *test
 		DataDir          string `json:"data_dir"`
 		SocketPath       string `json:"socket_path"`
 		RoutingPathError string `json:"routing_path_error"`
+		DaemonInstanceID string `json:"daemon_instance_id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		t.Fatal(err)
 	}
 	if want := filepath.Join(canonicalDataDir, "attn.sock"); health.DataDir != canonicalDataDir || health.SocketPath != want || health.RoutingPathError != "" {
 		t.Errorf("health routes to data_dir %q and socket_path %q (error %q), want %q and %q", health.DataDir, health.SocketPath, health.RoutingPathError, canonicalDataDir, want)
+	}
+	if got := protocol.Deref(w.App().Initial.DaemonInstanceID); got == "" || got != health.DaemonInstanceID {
+		t.Errorf("the app is told it reached daemon instance %q, want the running one %q", got, health.DaemonInstanceID)
 	}
 }

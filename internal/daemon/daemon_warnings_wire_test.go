@@ -1,35 +1,13 @@
 package daemon_test
 
 import (
-	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-func TestTheAppIsToldWhichDaemonInstanceItReached(t *testing.T) {
-	w := newWorld(t)
-	resp, err := http.Get("http://" + w.WSAddr + "/health")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	var health struct {
-		DaemonInstanceID string `json:"daemon_instance_id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		t.Fatal(err)
-	}
-	if got := protocol.Deref(w.App().Initial.DaemonInstanceID); got == "" || got != health.DaemonInstanceID {
-		t.Fatalf("the app is told it reached daemon instance %q, want the running one %q", got, health.DaemonInstanceID)
-	}
-}
 
 func TestTheAppIsToldEveryGitHubHostGHIsSignedInTo(t *testing.T) {
 	bin := t.TempDir()

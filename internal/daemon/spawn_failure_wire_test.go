@@ -10,20 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestASpawnWhoseAgentCannotStartRegistersNothing(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	failed, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.Cwd = w.Path("shop", "deleted")
-	})
-	if failed.Success {
-		t.Fatal("a spawn into a deleted directory succeeded")
-	}
-	if sessions := w.App().Initial.Sessions; len(sessions) != 0 {
-		t.Errorf("the spawn whose agent could not start left sessions %+v", sessions)
-	}
-}
-
 func TestARespawnWhoseAgentCannotStartKeepsTheSessionAndItsAttemptedLaunch(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

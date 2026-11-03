@@ -108,24 +108,17 @@ func TestFsWatchReportsNewAndMovedTreesWithoutHiddenDirectories(t *testing.T) {
 	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
 		return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, "moved/deep/moved.txt")
 	})
-}
 
-func TestFsWatchReportsATreeMovedOutOfItsRoot(t *testing.T) {
-	w := newFsWorld(t)
-	app := pickerApp(w)
-	root := fsDir(t, "watched")
-	fsWriteFile(t, filepath.Join(root, "tree", "deep", "note.txt"), []byte("before"))
-	fsMustWatch(t, app, root)
-	outside := fsDir(t, "outside")
-	if err := os.Rename(filepath.Join(root, "tree"), filepath.Join(outside, "tree")); err != nil {
+	movingOut := len(app.Log())
+	if err := os.Rename(filepath.Join(root, "moved"), filepath.Join(outside, "moved-out")); err != nil {
 		t.Fatal(err)
 	}
-	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+	testworld.AwaitSince(app, movingOut, protocol.EventFsChanged, func(m protocol.FsChangedMessage) bool {
 		if m.Root != root || m.Origin != "external" {
 			return false
 		}
 		return slices.ContainsFunc(m.Paths, func(path string) bool {
-			return path == "tree" || strings.HasPrefix(path, "tree/")
+			return path == "moved" || strings.HasPrefix(path, "moved/")
 		})
 	})
 }

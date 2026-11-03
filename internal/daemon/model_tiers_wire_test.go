@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,8 +24,18 @@ func TestModelTiersAndDefaultsFollowReportedOrderAndOverridesWithoutRediscovery(
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
 	claude := harnessCatalog(app, "claude", false)
-	if !claude.Success || len(claude.Models) != 4 {
-		t.Fatalf("Claude catalog = %+v", claude)
+	if !claude.Success || len(claude.Models) != len(fakeagent.ClaudeModels) {
+		t.Fatalf("Claude catalog = %+v, want the %d models its CLI reports", claude, len(fakeagent.ClaudeModels))
+	}
+	for index, reported := range fakeagent.ClaudeModels {
+		offered := claude.Models[index]
+		support := protocol.ModelCapabilitySupportUnsupported
+		if reported.SupportsEffort {
+			support = protocol.ModelCapabilitySupportSupported
+		}
+		if offered.ID != reported.Value || offered.EffortSupport != support || !slices.Equal(offered.EffortLevels, reported.SupportedEffortLevels) {
+			t.Errorf("model at position %d = %+v, want %s with effort %s %v in harness reported order", index, offered, reported.Value, support, reported.SupportedEffortLevels)
+		}
 	}
 	if claude.Models[0].Tier != nil || claude.Models[0].TierSource != protocol.ModelTierSourceAlias {
 		t.Errorf("default alias = %+v, want no tier", claude.Models[0])
@@ -123,21 +134,6 @@ fi
 			after := harnessCatalog(app, "codex", false)
 			if protocol.Deref(after.TierDefaults.Deep) != "gpt-6.1-sol" {
 				t.Errorf("alternate launch replaced the daemon catalog: %+v", after)
-			}
-		})
-	}
-}
-
-func TestSessionTitlesUseTheirHarnessLightDefault(t *testing.T) {
-	for _, row := range []struct {
-		harness fakeagent.Harness
-		model   string
-	}{{fakeagent.Claude, "claude-haiku-fake"}, {fakeagent.Codex, "gpt-6-luna"}} {
-		t.Run(string(row.harness), func(t *testing.T) {
-			w := newTitlingWorld(t, row.harness)
-			task := titleTaskFor(t, w, row.harness)
-			if task.Model != row.model {
-				t.Errorf("title used %q, want %s", task.Model, row.model)
 			}
 		})
 	}

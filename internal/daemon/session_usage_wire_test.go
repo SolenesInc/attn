@@ -11,21 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnAgentWithoutUsageReportingShowsNoUsage(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	driver := connectDriver(t, w, "attn-house", "house", map[string]bool{"state_reporting": true})
-	awaitDriverAvailable(app, "house")
-	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	if err := driver.state(run, 1, "idle"); err != nil {
-		t.Fatal(err)
-	}
-	settled := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if settled.Usage != nil {
-		t.Errorf("a session of a harness that reports no usage shows usage %+v, want none", settled.Usage)
-	}
-}
-
 func TestAResumedConversationCountsOnlyTheUsageAfterTheResume(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
