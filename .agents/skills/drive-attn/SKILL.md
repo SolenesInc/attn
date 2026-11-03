@@ -179,11 +179,9 @@ use them to set up, never as proof of a person's way in. The actions are the
 **Scenarios.** Read the scenario and the harness guide before running one.
 On a shared Mac, use a focus-free scenario directly, such as
 `node app/scripts/real-app-harness/scenario-focusless-native.mjs`, or the
-serial matrix with `--no-fresh-world --scenario <id>`. The default matrix
-calls `freshWorld.mjs`, whose pattern-based worker cleanup violates the
-repository's PID rule. Inspect other scenarios for activation, physical input
-and fresh-world calls too. Native captures and recordings need Screen
-Recording permission for the instance's app or your terminal.
+serial matrix with `--scenario <id>`. Inspect other scenarios for activation
+and physical input too. Native captures and recordings need Screen Recording
+permission for the instance's app or your terminal.
 
 ## Evidence
 

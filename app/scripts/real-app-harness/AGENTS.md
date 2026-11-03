@@ -6,10 +6,14 @@ repository root.
 
 ## Running
 
-- Scenarios share one display and run serially:
+- On one display, scenarios run serially:
   `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
-  On a shared Mac, use `--no-fresh-world` or invoke a focus-free scenario
-  directly: the default fresh-world cleanup selects worker PIDs by pattern.
+  On a shared Mac, invoke a focus-free scenario directly.
+- On Linux, `pnpm --dir app run real-app:parallel-matrix -- --workers N` runs
+  N serial matrices at once, each on its own Xvfb display against its own
+  instance (`acc1`..`accN` by default; `--instance-prefix` changes it). Install
+  each instance from the checkout first: `make install INSTANCE=acc1`, and so
+  on.
 - The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
   An `--app-path` that names another instance is refused. Production needs an
   empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and explicit approval.

@@ -2,7 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { formatResultTable } from './matrixDigest.mjs';
+import { formatShardDigest } from './matrixDigest.mjs';
 import { resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
 import { aggregateShards } from './shardPlan.mjs';
 
@@ -51,24 +51,10 @@ function main() {
   const expectedIds = resolveScenarios([], scenarioCatalog).map((scenario) => scenario.id);
   const aggregate = aggregateShards({ shardResults, expectedIds, shardCount });
 
-  for (const shard of [...shardResults].sort((a, b) => (a.shard?.index ?? 0) - (b.shard?.index ?? 0))) {
-    const seconds = (shard.results || []).reduce((total, result) => total + (result.durationMs || 0), 0) / 1000;
-    console.log(`shard ${shard.shard?.index ?? '?'}/${shard.shard?.count ?? '?'}: `
-      + `${(shard.results || []).length} scenarios, ${seconds.toFixed(1)}s (${shard.source})`);
+  const { shardLines, digest } = formatShardDigest(shardResults, aggregate);
+  for (const line of shardLines) {
+    console.log(line);
   }
-
-  const rows = formatResultTable(aggregate.results.map((result) => ({
-    ...result,
-    durationMs: result.durationMs ?? 0,
-  }))).split('\n');
-  const table = aggregate.results.map((result, index) => `s${result.shard}  ${rows[index]}`).join('\n');
-  const failureSections = aggregate.failed
-    .map((result) => `--- ${result.id} (shard ${result.shard}) ---\n${result.outputTail || '(no output captured)'}`)
-    .join('\n\n');
-  const problemSection = aggregate.problems.length > 0
-    ? `\n\nShard coverage problems:\n${aggregate.problems.map((problem) => `  - ${problem}`).join('\n')}`
-    : '';
-  const digest = `${table}${problemSection}${failureSections ? `\n\n${failureSections}` : ''}\n`;
   console.log(`\n${digest}`);
   if (out) {
     fs.mkdirSync(path.dirname(out), { recursive: true });

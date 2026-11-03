@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what verifying a change costs: lands, the full suites and CI.
 
-usage: scripts/measure-verification-cost.py [--runs N] [--keep] [--ci-run ID]... [baseline...]
+usage: scripts/measure-verification-cost.py [--runs N] [--keep] [--ci-run ID]... [--workers N,...] [baseline...]
 
 Baselines (all by default):
   land     one scripts/land.sh landing a one-file Go change
@@ -11,6 +11,7 @@ Baselines (all by default):
            ./cmd/attn: the two packages whose tests start daemons
   ci       ci.yml wall time, its slowest chains and the longest job queue wait
            over the last 5 green main runs, or the runs --ci-run names
+  acceptance  the Linux acceptance matrix with 1 worker, then each --workers count
 
 Local baselines measure this checkout's HEAD commit. They print each run's
 outcome, wall seconds, CPU-seconds and the 1-minute load average before and
@@ -39,6 +40,14 @@ seeded with a copy of this checkout's mirror, so lands choose landing tests as a
 real land would. Lands see an empty XDG_CONFIG_HOME, so test-history finds no
 service token and sync stops before it connects. The suites record receipts
 into the scratch spool, and nothing syncs it.
+
+The acceptance baseline runs on Linux in this checkout, not a scratch clone,
+because it drives installed packaged apps: install instances acc1..accN from
+this checkout first (`make install INSTANCE=acc1` and so on). It runs
+app/scripts/real-app-harness/run-parallel-matrix.mjs, each worker on its own
+Xvfb display, inside a systemd user scope, and reads the scope's CPU time, so
+the apps, daemons and PTY workers the matrix starts count toward its CPU. One
+worker is the serial matrix. A run is ok when every scenario passed.
 """
 
 import argparse
@@ -57,7 +66,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-BASELINES = ("land", "lands3", "suites", "daemon", "ci")
+BASELINES = ("land", "lands3", "suites", "daemon", "ci", "acceptance")
 LAND_PACKAGES = ("internal/daemon", "internal/store", "cmd/attn")
 CI_GREEN_RUNS = 5
 LAND_STAGGER_SECONDS = 1
@@ -270,6 +279,36 @@ def measure_commands(scratch, runs, suites):
         print(f"full {name} suite, {outcome(rows)}: wall {fmt(rows, 'wall')}, cpu {fmt(rows, 'cpu')}", flush=True)
 
 
+def run_in_scope(command, cwd, env, log_path):
+    reader = 'stat="$1"; shift; status=0; "$@" || status=$?; cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cpu.stat" >"$stat"; exit $status'
+    stat_path = Path(f"{log_path}.cpu")
+    scoped = ["systemd-run", "--user", "--scope", "--quiet", "--collect", "sh", "-c", reader, "sh", str(stat_path), *command]
+    with open(log_path, "w") as out:
+        start = time.monotonic()
+        process = subprocess.run(scoped, cwd=cwd, env=env, stdout=out, stderr=subprocess.STDOUT)
+        wall = time.monotonic() - start
+    usage = dict(line.split() for line in stat_path.read_text().splitlines())
+    return {"exit": process.returncode, "wall": wall, "cpu": int(usage["usage_usec"]) / 1e6, "log": str(log_path)}
+
+
+def measure_acceptance(source, runs, worker_counts, logs):
+    env = {key: value for key, value in os.environ.items() if not key.startswith("ATTN_")}
+    for workers in [1, *[count for count in worker_counts if count != 1]]:
+        rows = []
+        for run in range(1, runs + 1):
+            artifacts = logs / f"acceptance-w{workers}-{run}"
+            command = ["node", "app/scripts/real-app-harness/run-parallel-matrix.mjs", "--workers", str(workers)]
+            with measurement(f"acceptance {workers} workers run {run}") as load:
+                result = run_in_scope(command, source, {**env, "ATTN_REAL_APP_ARTIFACTS_DIR": str(artifacts)}, logs / f"acceptance-w{workers}-{run}.log")
+            result.update(load)
+            result["ok"] = result["exit"] == 0
+            digest = artifacts / "matrix-digest.txt"
+            failed = len(re.findall(r"^s\d+  FAIL", digest.read_text(), re.MULTILINE)) if digest.exists() else "unknown"
+            print(f"  acceptance {workers} workers run {run}: {describe(result)}, {failed} scenarios failed, {fmt_load(result)}, log {result['log']}", flush=True)
+            rows.append(result)
+        print(f"acceptance matrix, {workers} workers, {outcome(rows)}: wall {fmt(rows, 'wall')}, cpu {fmt(rows, 'cpu')}", flush=True)
+
+
 def gh(path, source):
     return json.loads(subprocess.run(["gh", "api", path], cwd=source, check=True, capture_output=True, text=True).stdout)
 
@@ -357,6 +396,7 @@ def main():
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--keep", action="store_true", help="keep the scratch folder and its logs")
     parser.add_argument("--ci-run", action="append", default=[], metavar="ID", help="measure these ci.yml runs, such as a pull request's, instead of the last green main runs")
+    parser.add_argument("--workers", default="4", help="acceptance: comma-separated worker counts to measure after 1 worker (default 4)")
     parser.add_argument("baselines", nargs="*", default=list(BASELINES))
     args = parser.parse_args()
     unknown = set(args.baselines) - set(BASELINES)
@@ -366,7 +406,7 @@ def main():
     selected = [b for b in BASELINES if b in args.baselines]
     print(f"host {os.uname().nodename}, {os.cpu_count()} cores, {time.strftime('%Y-%m-%d %H:%M %Z')}", flush=True)
 
-    local = [b for b in selected if b != "ci"]
+    local = [b for b in selected if b not in ("ci", "acceptance")]
     if local:
         if git("status", "--porcelain", cwd=source):
             log("the checkout has uncommitted changes; the local baselines measure its HEAD commit without them")
@@ -389,6 +429,10 @@ def main():
                 shutil.rmtree(root, ignore_errors=True)
     if "ci" in selected:
         measure_ci(source, args.ci_run)
+    if "acceptance" in selected:
+        logs = Path(tempfile.mkdtemp(prefix=".attn-acceptance-cost.", dir=source.parent))
+        print(f"acceptance: measuring the installed acc instances from {source}, logs {logs}", flush=True)
+        measure_acceptance(source, args.runs, [int(count) for count in args.workers.split(",")], logs)
 
 
 if __name__ == "__main__":

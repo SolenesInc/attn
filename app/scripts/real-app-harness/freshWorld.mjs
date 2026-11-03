@@ -9,6 +9,7 @@ import {
   defaultAppPathForInstance,
   isProductionHarnessTarget,
   instanceCliEnv,
+  appExecutableInAppTree,
 } from './harnessInstance.mjs';
 
 export function assertFreshWorldTargetSafe({ instance, appPath } = {}) {
@@ -63,8 +64,6 @@ export function assertDaemonStopKeepsTerminals({ instance, appPath, run = execFi
   }
 }
 
-// Matching keys on this full app path, never a bare "pty-worker" pattern, so one
-// instance's cleanup can never touch another instance's or production's workers.
 function attnBinaryPath(appPath) {
   return appDaemonInTree(appPath);
 }
@@ -87,59 +86,69 @@ function requestAppQuit({ instance, appPath, bundleId }) {
   });
 }
 
-// pgrep -f exits 1 on no matches; that is "no pids", not an error.
-function pgrepFullCommand(pattern) {
-  const result = spawnSync('pgrep', ['-f', pattern], { encoding: 'utf8' });
-  if (result.status !== 0 && result.status !== 1) {
-    throw new Error(`pgrep -f ${JSON.stringify(pattern)} failed: ${result.stderr || result.status}`);
-  }
-  return (result.stdout || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => Number(line))
-    .filter((pid) => Number.isInteger(pid));
-}
-
 function commandLineForPid(pid) {
   const result = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
   return (result.stdout || '').trim();
-}
-
-function findLeakedWorkerPids(appPath) {
-  const binPath = attnBinaryPath(appPath);
-  return pgrepFullCommand(binPath).filter((pid) => commandLineForPid(pid).includes('pty-worker'));
 }
 
 export function commandRunsExecutable(command, executablePath) {
   return command === executablePath || command.startsWith(`${executablePath} `);
 }
 
-export function registeredPtyHostPids({ dataDir, executablePath, commandLineFor = commandLineForPid }) {
-  const hostsRoot = path.join(dataDir, 'pty-hosts');
-  if (!fs.existsSync(hostsRoot)) return [];
-  const pids = new Set();
-  for (const daemonInstance of fs.readdirSync(hostsRoot)) {
-    const hostsDir = path.join(hostsRoot, daemonInstance, 'hosts');
-    if (!fs.existsSync(hostsDir)) continue;
-    for (const name of fs.readdirSync(hostsDir)) {
-      if (!name.endsWith('.json')) continue;
-      let entry;
-      try {
-        entry = JSON.parse(fs.readFileSync(path.join(hostsDir, name), 'utf8'));
-      } catch {
-        continue;
-      }
-      const pid = Number(entry.host_pid);
-      if (!Number.isInteger(pid) || pid <= 1) continue;
-      if (commandRunsExecutable(commandLineFor(pid), executablePath)) pids.add(pid);
-    }
+function readJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
   }
-  return [...pids];
 }
 
-function findAnySurvivingPids(appPath) {
-  return pgrepFullCommand(attnBinaryPath(appPath));
+function readFileOrEmpty(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+function readPid(value) {
+  const pid = Number(value);
+  return Number.isInteger(pid) && pid > 1 ? pid : null;
+}
+
+function registeredPids(dataDir, root, registry, field) {
+  const rootDir = path.join(dataDir, root);
+  if (!fs.existsSync(rootDir)) return [];
+  const pids = [];
+  for (const daemonInstance of fs.readdirSync(rootDir)) {
+    const registryDir = path.join(rootDir, daemonInstance, registry);
+    if (!fs.existsSync(registryDir)) continue;
+    for (const name of fs.readdirSync(registryDir)) {
+      if (!name.endsWith('.json')) continue;
+      const pid = readPid(readJson(path.join(registryDir, name))?.[field]);
+      if (pid) pids.push(pid);
+    }
+  }
+  return pids;
+}
+
+function runningPids(pids, executablePath, commandLineFor) {
+  return [...new Set(pids.filter(Boolean))].filter((pid) => commandRunsExecutable(commandLineFor(pid), executablePath));
+}
+
+export function registeredPtyHostPids({ dataDir, executablePath, commandLineFor = commandLineForPid }) {
+  return runningPids(registeredPids(dataDir, 'pty-hosts', 'hosts', 'host_pid'), executablePath, commandLineFor);
+}
+
+export function instanceProcesses({ appPath, dataDir, commandLineFor = commandLineForPid }) {
+  const attn = attnBinaryPath(appPath);
+  const running = {
+    app: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'app.pid')))], appExecutableInAppTree(appPath), commandLineFor),
+    daemon: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'attn.pid')))], attn, commandLineFor),
+    'pty-worker': runningPids(registeredPids(dataDir, 'workers', 'registry', 'worker_pid'), attn, commandLineFor),
+    'attn-pty-host': registeredPtyHostPids({ dataDir, executablePath: ptyHostBinaryPath(appPath), commandLineFor }),
+  };
+  return Object.entries(running).flatMap(([name, pids]) => pids.map((pid) => ({ name, pid })));
 }
 
 async function sleep(ms) {
@@ -179,7 +188,8 @@ export async function ensureFreshWorld({
 } = {}) {
   assertFreshWorldTargetSafe({ instance, appPath });
 
-  const appWasRunning = findAnySurvivingPids(appPath).length > 0;
+  const processes = () => instanceProcesses({ appPath, dataDir });
+  const appWasRunning = processes().some(({ name }) => name === 'app');
   const bundleId = bundleIdentifierForInstance(instance);
 
   log(`quitting app bundle ${bundleId}${appWasRunning ? ' (was running)' : ' (not running)'}`);
@@ -199,26 +209,28 @@ export async function ensureFreshWorld({
     log(`daemon stop exited ${stopResult.status} (no daemon running is expected here)`);
   }
 
-  const leakedPids = findLeakedWorkerPids(appPath);
-  const leakedPtyHostPids = registeredPtyHostPids({ dataDir, executablePath: ptyHostBinaryPath(appPath) });
-  await terminateProcesses({ pids: leakedPids, name: 'pty-worker', log });
+  const leaked = processes();
+  const leakedPids = (name) => leaked.filter((entry) => entry.name === name).map((entry) => entry.pid);
+  const leakedWorkerPids = leakedPids('pty-worker');
+  const leakedPtyHostPids = leakedPids('attn-pty-host');
+  await terminateProcesses({ pids: leakedWorkerPids, name: 'pty-worker', log });
   await terminateProcesses({ pids: leakedPtyHostPids, name: 'attn-pty-host', log });
 
   const deadline = Date.now() + timeoutMs;
-  let survivors = findAnySurvivingPids(appPath);
+  let survivors = processes();
   while (survivors.length > 0 && Date.now() < deadline) {
     await sleep(200);
-    survivors = findAnySurvivingPids(appPath);
+    survivors = processes();
   }
   if (survivors.length > 0) {
-    const detail = survivors.map((pid) => `${pid}: ${commandLineForPid(pid)}`).join('; ');
+    const detail = survivors.map(({ name, pid }) => `${name} ${pid}: ${commandLineForPid(pid)}`).join('; ');
     throw new Error(`fresh-world preflight failed: processes survived cleanup — ${detail}`);
   }
 
   const summary = {
     appWasRunning,
     daemonStopped,
-    leakedWorkersKilled: leakedPids.length,
+    leakedWorkersKilled: leakedWorkerPids.length,
     leakedPtyHostsKilled: leakedPtyHostPids.length,
   };
   log(`fresh world ready: appWasRunning=${summary.appWasRunning} daemonStopped=${summary.daemonStopped} leakedWorkersKilled=${summary.leakedWorkersKilled} leakedPtyHostsKilled=${summary.leakedPtyHostsKilled}`);

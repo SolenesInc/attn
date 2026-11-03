@@ -106,8 +106,8 @@ Target: defaults to the dev install (~/Applications/attn-dev.app, port 29849)
   --run-against-prod acknowledgement.
 
 Before the first scenario, the matrix quits the app, stops the daemon, and
-  kills any leaked pty-worker processes from a prior aborted run (skipped for
-  production targets, or entirely via --no-fresh-world).
+  stops the PTY workers and hosts the instance recorded from a prior aborted
+  run (skipped for production targets, or entirely via --no-fresh-world).
 
 Available scenarios:
 ${resolveScenariosFromCatalog([], scenarioCatalog).map((scenario) => `  - ${scenario.id}: ${scenario.label}`).join('\n')}
