@@ -41,8 +41,12 @@ func TestAFullDeliveryHistoryRefusesNewInputAndStillAnswersRetries(t *testing.T)
 				t.Fatalf("retry at capacity = %+v, want its original receipt", result)
 			}
 		}
-		if got := len(agent.term.Submitted()); got != capacity {
-			t.Fatalf("submitted %d prompts, want %d distinct accepted deliveries", got, capacity)
+		submitted := agent.term.Submitted()
+		if len(submitted) != capacity {
+			t.Fatalf("submitted %d prompts, want %d distinct accepted deliveries", len(submitted), capacity)
+		}
+		if submitted[0] != "Use blue for the banner" || submitted[capacity-1] != "Use blue for the banner" {
+			t.Fatalf("delivered prompts %q … %q, want the annotation text", submitted[0], submitted[capacity-1])
 		}
 		t.Logf("%d distinct IDs placed; new ID refused with %q; oldest and newest retries placed no extra input", capacity, protocol.Deref(result.Error))
 	})
