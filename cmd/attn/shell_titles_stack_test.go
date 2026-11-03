@@ -3,6 +3,7 @@ package main_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -112,6 +113,52 @@ func TestUnmarkedShellDropsAProgramsTitleWhenItsForegroundGroupReturns(t *testin
 			}
 			app.TypeLine(shell, `sh -c 'printf "\033]0;unmarked program\007"; cat `+release+`'`)
 			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "unmarked program" })
+			if err := os.WriteFile(release, []byte("done\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "shop" })
+		})
+	}
+}
+
+func TestShellProgramTitleInsideHeavyOutputIsKept(t *testing.T) {
+	t.Parallel()
+	for _, shared := range []bool{false, true} {
+		name := "worker"
+		if shared {
+			name = "shared host"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t)
+			s.Vars = append(s.Vars, "SHELL=/bin/sh")
+			if shared {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run shared host titles")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			if shared {
+				enableSharedHost(t, s.App())
+			}
+			app := s.App()
+			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "shop" })
+			line := strings.Repeat("x", 1023) + "\n"
+			heavy := strings.Repeat(line, 256)
+			output := filepath.Join(s.Dir, "output")
+			if err := os.WriteFile(output, []byte(heavy+"\x1b]0;title amid output\x07"+heavy+"output-done\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			release := filepath.Join(s.Dir, "release")
+			if err := syscall.Mkfifo(release, 0600); err != nil {
+				t.Fatal(err)
+			}
+			app.TypeLine(shell, `sh -c 'cat `+output+`; cat `+release+`'`)
+			app.AwaitScreen(shell, "output-done")
+			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "title amid output" })
 			if err := os.WriteFile(release, []byte("done\n"), 0600); err != nil {
 				t.Fatal(err)
 			}

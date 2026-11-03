@@ -137,10 +137,6 @@ impl SignalObserver {
             return Vec::new();
         }
         self.pending.extend_from_slice(chunk);
-        if self.pending.len() > MAX_PENDING {
-            let keep = self.pending.len().min(32);
-            self.pending.drain(..self.pending.len() - keep);
-        }
 
         let mut frames = Vec::new();
         let mut cursor = 0;
@@ -161,6 +157,9 @@ impl SignalObserver {
             let keep = usize::from(self.pending.ends_with(b"\x1b"));
             let discard = self.pending.len().saturating_sub(keep);
             self.pending.drain(..discard);
+        }
+        if self.pending.len() > MAX_PENDING {
+            self.pending.drain(..self.pending.len() - 32);
         }
 
         let mut out = Vec::new();
@@ -476,6 +475,38 @@ mod tests {
         let observations = observer.observe(b"\x90 working\x07", || None);
         assert_eq!(observations.len(), 1);
         assert_eq!(observations[0].claim, "busy");
+    }
+
+    #[test]
+    fn markers_survive_any_grouping_of_heavy_output() {
+        let heavy = vec![b'x'; 300 * 1024];
+        let marker = b"\x1b]133;C;cmdline_url=make\x07";
+        let mut whole = heavy.clone();
+        whole.extend_from_slice(marker);
+        whole.extend_from_slice(&heavy);
+        let split = whole.len() - heavy.len() - 6;
+        for chunks in [vec![&whole[..]], vec![&whole[..split], &whole[split..]]] {
+            let mut observer = SignalObserver::new("shell", "");
+            let claims: Vec<_> = chunks
+                .into_iter()
+                .flat_map(|chunk| observer.observe(chunk, || None))
+                .map(|observation| observation.claim)
+                .collect();
+            assert_eq!(claims, ["busy"]);
+        }
+    }
+
+    #[test]
+    fn oversized_unterminated_sequence_is_dropped() {
+        let mut observer = SignalObserver::new("shell", "");
+        let mut chunk = b"\x1b]0;".to_vec();
+        chunk.extend_from_slice(&vec![b'x'; 300 * 1024]);
+        assert!(observer.observe(&chunk, || None).is_empty());
+        assert!(observer.observe(b"\x07", || None).is_empty());
+        assert_eq!(
+            observer.observe(b"\x1b]133;D;0\x07", || None)[0].claim,
+            "not_busy"
+        );
     }
 
     #[test]
