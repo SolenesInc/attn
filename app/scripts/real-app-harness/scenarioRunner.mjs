@@ -75,6 +75,10 @@ export function packagedAppScenarioLockPath() {
   return process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH || path.join(os.tmpdir(), 'attn-real-app-harness-scenario.lock');
 }
 
+export function instanceScenarioLockPath(instance) {
+  return path.join(os.tmpdir(), `attn-real-app-harness-${instance}.lock`);
+}
+
 const SCENARIO_LOCK_POLL_MS = 2_000;
 const SCENARIO_LOCK_HEARTBEAT_MS = 15_000;
 // 20 missed 15s heartbeats. A SERIAL-MATRIX holder legitimately runs for hours,

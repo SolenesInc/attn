@@ -13,7 +13,11 @@ repository root.
   N serial matrices at once, each on its own Xvfb display against its own
   instance (`acc1`..`accN` by default; `--instance-prefix` changes it). Install
   each instance from the checkout first: `make install INSTANCE=acc1`, and so
-  on.
+  on. A run holds its instances until it ends, so a second run that needs one
+  waits. Each run writes its workers' output to
+  `<artifacts>/parallel-<time>/w<k>/`, so earlier runs' evidence stays. Each
+  run replaces the combined `<artifacts>/last-matrix.json` and
+  `matrix-digest.txt`.
 - The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
   An `--app-path` that names another instance is refused. Production needs an
   empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and explicit approval.

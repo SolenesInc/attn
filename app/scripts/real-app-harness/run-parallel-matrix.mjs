@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { emitVerdict, harnessArtifactsRoot } from './common.mjs';
+import { emitVerdict, harnessArtifactsRoot, timestampSlug } from './common.mjs';
 import { instanceCliEnv } from './harnessInstance.mjs';
 import { formatShardDigest, selectFailedScenarios } from './matrixDigest.mjs';
 import { resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
+import { acquireScenarioLock, instanceScenarioLockPath } from './scenarioRunner.mjs';
 import { aggregateShards } from './shardPlan.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -31,8 +32,11 @@ Defaults: ${DEFAULT_WORKERS} workers, instances ${DEFAULT_INSTANCE_PREFIX}1..${D
 Install every worker's instance from this checkout first:
   for k in $(seq 1 N); do make install INSTANCE=<prefix>$k; done
 
-Each worker's full output is in <artifacts>/w<k>/matrix.log; the combined
-result is <artifacts>/last-matrix.json and <artifacts>/matrix-digest.txt.`;
+The run holds each worker's instance for its whole length; a second run that
+needs one of them waits for it. Each run writes to a new
+<artifacts>/parallel-<time>/ folder, so earlier runs' evidence stays: worker k's
+full output is in its w<k>/matrix.log. The combined result is
+<artifacts>/last-matrix.json and <artifacts>/matrix-digest.txt.`;
 }
 
 function parseArgs(argv) {
@@ -114,6 +118,7 @@ function startDisplay(logPath) {
 }
 
 function runWorker({ index, count, instance, display, dir, scenarioIds, passThrough }) {
+  const lockPath = instanceScenarioLockPath(instance);
   const args = [SERIAL_MATRIX, '--shard', `${index}/${count}`, ...passThrough];
   for (const id of scenarioIds) {
     args.push('--scenario', id);
@@ -123,7 +128,7 @@ function runWorker({ index, count, instance, display, dir, scenarioIds, passThro
     DISPLAY: display,
     ATTN_REAL_APP_ARTIFACTS_DIR: dir,
     ATTN_REAL_APP_SESSION_ROOT: path.join(dir, 'sessions'),
-    ATTN_REAL_APP_SCENARIO_LOCK_PATH: path.join(dir, 'scenario.lock'),
+    ATTN_REAL_APP_SCENARIO_LOCK_PATH: `${lockPath}.children-${process.pid}`,
   });
   delete env.ATTN_TEST_RESULTS;
   const log = fs.createWriteStream(path.join(dir, 'matrix.log'));
@@ -145,12 +150,26 @@ function runWorker({ index, count, instance, display, dir, scenarioIds, passThro
   return { child, exited };
 }
 
-function readShardResult(dir, index) {
+function readShardResult(artifactsRoot, dir) {
   const file = path.join(dir, 'last-matrix.json');
   if (!fs.existsSync(file)) {
     return null;
   }
-  return { ...JSON.parse(fs.readFileSync(file, 'utf8')), source: `w${index}/last-matrix.json` };
+  return { ...JSON.parse(fs.readFileSync(file, 'utf8')), source: path.relative(artifactsRoot, file) };
+}
+
+function holdInstances(instances, runDir) {
+  const releases = [];
+  process.once('exit', () => releases.forEach((release) => release()));
+  for (const instance of instances) {
+    releases.push(acquireScenarioLock({
+      scenarioId: 'PARALLEL-MATRIX',
+      tier: 'matrix',
+      runId: path.basename(runDir),
+      runDir,
+      appPath: null,
+    }, instanceScenarioLockPath(instance)));
+  }
 }
 
 async function main() {
@@ -169,7 +188,12 @@ async function main() {
   if (count < options.workers) {
     console.log(`${scenarioIds.length} scenarios selected, so ${count} workers instead of ${options.workers}.`);
   }
+  const runDir = path.join(artifactsRoot, `parallel-${timestampSlug()}`);
+  const instances = Array.from({ length: count }, (_, offset) => `${options.instancePrefix}${offset + 1}`);
+  holdInstances(instances, runDir);
   fs.mkdirSync(artifactsRoot, { recursive: true });
+  fs.mkdirSync(runDir);
+  console.log(`Run folder: ${runDir}`);
 
   const workers = [];
   let stopSignal = null;
@@ -185,10 +209,9 @@ async function main() {
 
   try {
     for (let index = 1; index <= count && !stopSignal; index += 1) {
-      const instance = `${options.instancePrefix}${index}`;
-      const dir = path.join(artifactsRoot, `w${index}`);
-      fs.rmSync(dir, { recursive: true, force: true });
-      fs.mkdirSync(dir, { recursive: true });
+      const instance = instances[index - 1];
+      const dir = path.join(runDir, `w${index}`);
+      fs.mkdirSync(dir);
       const worker = { index, instance, dir };
       workers.push(worker);
       Object.assign(worker, await startDisplay(path.join(dir, 'xvfb.log')));
@@ -204,7 +227,7 @@ async function main() {
     }
   }
 
-  const shardResults = workers.map(({ dir, index }) => readShardResult(dir, index)).filter(Boolean);
+  const shardResults = workers.map(({ dir }) => readShardResult(artifactsRoot, dir)).filter(Boolean);
   const aggregate = aggregateShards({ shardResults, expectedIds: scenarioIds, shardCount: count });
   const { shardLines, digest } = formatShardDigest(shardResults, aggregate);
   console.log(`\n${shardLines.join('\n')}\n\n${digest}`);
