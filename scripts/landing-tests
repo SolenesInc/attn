@@ -37,6 +37,7 @@ go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRu
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
 go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
+go ./scripts/test-history TestATerminationSentToCaptureReachesTheCommand
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
 go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout
 go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript

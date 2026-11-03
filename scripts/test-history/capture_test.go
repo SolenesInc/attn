@@ -313,7 +313,7 @@ func TestSummaryFailsARequestedUnitThatReportedNothing(t *testing.T) {
 
 func TestATerminationSentToCaptureReachesTheCommand(t *testing.T) {
 	spool := t.TempDir()
-	capture := historyCommand(t, spool, t.TempDir(), "capture", "native", "--", "sh", "-c", `trap 'exit 9' TERM; echo ready; read -r _`)
+	capture := historyCommand(t, spool, t.TempDir(), "capture", "native", "--", "sh", "-c", `echo ready; exec cat`)
 	commandIn, stdin, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -335,12 +335,12 @@ func TestATerminationSentToCaptureReachesTheCommand(t *testing.T) {
 	if err := capture.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	if got := exitCode(capture.Wait()); got != 9 {
-		t.Fatalf("capture exited %d, want the command's 9", got)
+	if got := exitCode(capture.Wait()); got != 128+int(syscall.SIGTERM) {
+		t.Fatalf("capture exited %d, want the command's death by SIGTERM", got)
 	}
 	receipt := onlyReceipt(t, spool)
-	if receipt.Command.Interrupted != "SIGTERM" || receipt.Command.Exit == nil || receipt.Command.Exit.Code != 9 {
-		t.Fatalf("receipt command = %+v, want interrupted by SIGTERM with exit 9", receipt.Command)
+	if receipt.Command.Interrupted != "SIGTERM" || receipt.Command.Exit == nil || receipt.Command.Exit.Signal != "SIGTERM" {
+		t.Fatalf("receipt command = %+v, want interrupted by SIGTERM and ended by it", receipt.Command)
 	}
 }
 
