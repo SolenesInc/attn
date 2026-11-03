@@ -439,38 +439,29 @@ func (h *wsHub) ClientCount() int {
 	return len(h.clients)
 }
 
-func isAllowedWSOrigin(origin string, requestHost string) bool {
-	if origin == "" {
-		return true
-	}
-	if isAllowedLocalOrigin(origin) {
-		return true
-	}
-	parsed, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	return normalizeWSHost(parsed.Host) != "" && normalizeWSHost(parsed.Host) == normalizeWSHost(requestHost)
+func (d *Daemon) refuseRebindableHosts(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isUnrebindableHost(r.Host) {
+			d.logf("HTTP request refused: Host %q is neither a localhost name nor an IP address", r.Host)
+			http.Error(w, fmt.Sprintf("Host %q refused: attn answers only requests addressed to localhost or an IP address, such as 127.0.0.1:%s", r.Host, config.WSPort()), http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
-func isAllowedLocalOrigin(origin string) bool {
-	allowedPrefixes := []string{
-		"tauri://localhost",
-		"http://tauri.localhost",
-		"http://localhost",
-		"http://127.0.0.1",
-		"https://localhost",
-		"https://127.0.0.1",
-		"localhost:",
-		"127.0.0.1:",
-		"tauri.localhost",
-	}
-	for _, prefix := range allowedPrefixes {
-		if strings.HasPrefix(origin, prefix) {
-			return true
-		}
-	}
-	return false
+func isUnrebindableHost(hostport string) bool {
+	host := strings.TrimSuffix(strings.TrimPrefix(normalizeWSHost(hostport), "["), "]")
+	return host == "localhost" || strings.HasSuffix(host, ".localhost") || net.ParseIP(host) != nil
+}
+
+var localOriginPatterns = []string{
+	"localhost",
+	"localhost:*",
+	"127.0.0.1",
+	"127.0.0.1:*",
+	"tauri.localhost",
+	"tauri.localhost:*",
 }
 
 func isTrustedTauriOrigin(origin string) bool {
@@ -500,31 +491,10 @@ func normalizeWSHost(value string) string {
 	return trimmed
 }
 
-func websocketOriginPatternsForRequest(r *http.Request) []string {
-	patterns := []string{
-		"localhost",
-		"localhost:*",
-		"127.0.0.1",
-		"127.0.0.1:*",
-		"tauri.localhost",
-		"tauri.localhost:*",
-	}
-	host := normalizeWSHost(r.Host)
-	if host != "" && host != "localhost" && host != "127.0.0.1" && host != "tauri.localhost" {
-		patterns = append(patterns, host)
-	}
-	return patterns
-}
-
 func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
-	if !isAllowedWSOrigin(origin, r.Host) {
-		d.logf("WebSocket rejected origin: %s", origin)
-		http.Error(w, "forbidden origin", http.StatusForbidden)
-		return
-	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: websocketOriginPatternsForRequest(r),
+		OriginPatterns: localOriginPatterns,
 	})
 	if err != nil {
 		d.logf("WebSocket accept error: %v", err)

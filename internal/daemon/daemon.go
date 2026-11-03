@@ -2317,7 +2317,7 @@ func (d *Daemon) initHTTPServer() {
 		setNoStoreHeaders(w.Header())
 		w.WriteHeader(http.StatusNoContent)
 	})
-	d.httpHandler = mux
+	d.httpHandler = d.refuseRebindableHosts(mux)
 
 	d.httpServer = &http.Server{
 		Addr:        net.JoinHostPort(config.WSBindAddress(), config.WSPort()),
