@@ -111,6 +111,7 @@ func (m *Monitor) publishOrQueue(view View) (bool, *conversationApply) {
 	m.mu.Lock()
 	m.conversationApplying = nil
 	m.mu.Unlock()
+	close(apply.done)
 	return false, nil
 }
 
