@@ -316,13 +316,17 @@ func TestANamedDesktopIsNeverRemovedUntilItsNameIsCleared(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		profile := app.SelectedProfile()
+		left := viewProfile(t, w, profile).profile.CurrentDesktopID
 		named := createDesktop(app, profile)
 		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "name", DesktopID: named.ID, Name: "Notes"}, "name")
-		createDesktop(app, profile)
+		shown := createDesktop(app, profile)
 		w.advance(time.Hour)
-		_, exists := viewProfile(t, w, profile).desktops[named.ID]
-		if !exists {
+		view := viewProfile(t, w, profile)
+		if _, exists := view.desktops[named.ID]; !exists {
 			t.Fatal("an empty named desktop was removed")
+		}
+		if _, exists := view.desktops[left]; exists || len(view.desktops) != 2 || view.profile.CurrentDesktopID != shown.ID {
+			t.Fatalf("after an hour the profile holds %v with %s current, want the empty desktop the user left removed and the empty current desktop %s kept", view.desktops, view.profile.CurrentDesktopID, shown.ID)
 		}
 		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: named.ID, Name: ""}, "unname")
 		w.advance(29 * time.Second)
@@ -333,28 +337,6 @@ func TestANamedDesktopIsNeverRemovedUntilItsNameIsCleared(t *testing.T) {
 		testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
 			return !slices.ContainsFunc(m.Desktops, func(d protocol.Desktop) bool { return d.ID == named.ID })
 		})
-	})
-}
-
-func TestAnEmptyDesktopTheUserLeftIsRemovedThirtySecondsLaterAndTheCurrentOneNever(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		profile := app.SelectedProfile()
-		left := viewProfile(t, w, profile).profile.CurrentDesktopID
-		shown := createDesktop(app, profile)
-		w.advance(29 * time.Second)
-		if _, exists := viewProfile(t, w, profile).desktops[left]; !exists {
-			t.Fatal("an empty desktop the user left 29s ago was removed")
-		}
-		w.advance(time.Second)
-		testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
-			return !slices.ContainsFunc(m.Desktops, func(d protocol.Desktop) bool { return d.ID == left })
-		})
-		w.advance(time.Hour)
-		view := viewProfile(t, w, profile)
-		if _, exists := view.desktops[left]; exists || len(view.desktops) != 1 || view.profile.CurrentDesktopID != shown.ID {
-			t.Fatalf("after an hour the profile holds %v with %s current, want only the empty current desktop %s", view.desktops, view.profile.CurrentDesktopID, shown.ID)
-		}
 	})
 }
 

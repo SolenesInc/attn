@@ -82,6 +82,10 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		}
 		return false
 	})
+	renamedSeed := plantSeedAs(t, w.Client(), plain, "Robert takes this")
+	if tended, err := scoped.SeedTransition(protocol.SessionID(plain), renamedSeed, "tend", "", false, client.SeedTransitionOptions{Assignee: "robert"}); err != nil || tenderMemberOf(tended.Seed) != "bob" {
+		t.Fatalf("tend for Robert: %+v %v", tended, err)
+	}
 	if got, err := w.Client().WithGardenProfile(home, "").CrewList(); err != nil || len(got.Members) != 4 || !slices.ContainsFunc(got.Members, func(m protocol.CrewMember) bool { return protocol.Deref(m.Chief) }) {
 		t.Fatalf("home roster: %+v %v", got, err)
 	}
@@ -308,20 +312,6 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 		if err != nil || planterMemberOf(shown.Seed) != "keel" {
 			t.Fatalf("plot seed after another rename and restart: %+v %v", shown, err)
 		}
-	}
-}
-
-func TestATenderNamedByTheUserIsStoredByKey(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
-	cli := w.Client()
-	if _, err := cli.CrewRename("Keel", "Alfred"); err != nil {
-		t.Fatal(err)
-	}
-	app := w.App()
-	planter := w.Spawn(app, fakeagent.Claude, w.Path("planter"))
-	seed := plantSeedAs(t, cli, planter, "Alfred takes this")
-	if tended := lifeMove(t, cli, planter, seed, "tend", "", "alfred"); tenderMemberOf(tended) != "keel" {
-		t.Fatalf("tender: %+v", tended)
 	}
 }
 

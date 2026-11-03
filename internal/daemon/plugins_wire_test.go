@@ -62,28 +62,18 @@ func TestAPluginsPriorityOrdersTheListAndSurvivesARestart(t *testing.T) {
 	pluginsListed(w.App(), "beta-provider still first at priority 50 after a restart", betaFirst)
 }
 
-func TestAPluginThatExitsIsShownBackingOffWithItsExit(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	checkout := pluginsCheckout(t, w.Path("checkouts", "flaky-provider"), "flaky-provider", "0.1.0", pluginsCrash)
-
-	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout, Link: protocol.Ptr(true)}, "link", "flaky-provider")
-
-	backingOff := testworld.Await(app, protocol.EventPluginsUpdated, func(m protocol.PluginsUpdatedMessage) bool {
-		p, ok := pluginsNamed(m.Plugins, "flaky-provider")
-		return ok && protocol.Deref(p.RuntimePhase) == "backoff"
-	})
-	p, _ := pluginsNamed(backingOff.Plugins, "flaky-provider")
-	if protocol.Deref(p.RestartAttempt) != 1 || protocol.Deref(p.NextRestartAt) == "" || !strings.Contains(protocol.Deref(p.LastExit), "exit status 17") || p.RuntimeState != "degraded" {
-		t.Errorf("the exited plugin is listed %s on attempt %d, next restart %q, last exit %q; want it degraded on its first backoff with a next restart time and exit status 17", p.RuntimeState, protocol.Deref(p.RestartAttempt), protocol.Deref(p.NextRestartAt), protocol.Deref(p.LastExit))
-	}
-}
-
 func TestAPluginThatNeverStaysUpIsParkedWithACriticalNotificationThatSurvivesARestart(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		checkout := pluginsCheckout(t, w.Path("checkouts", "looper"), "looper", "0.1.0", pluginsCrash)
 		pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout, Link: protocol.Ptr(true)}, "link", "looper")
+		backingOff := testworld.Await(app, protocol.EventPluginsUpdated, func(m protocol.PluginsUpdatedMessage) bool {
+			p, ok := pluginsNamed(m.Plugins, "looper")
+			return ok && protocol.Deref(p.RuntimePhase) == "backoff"
+		})
+		if p, _ := pluginsNamed(backingOff.Plugins, "looper"); protocol.Deref(p.RestartAttempt) != 1 || protocol.Deref(p.NextRestartAt) == "" || !strings.Contains(protocol.Deref(p.LastExit), "exit status 17") || p.RuntimeState != "degraded" {
+			t.Errorf("the exited plugin is listed %s on attempt %d, next restart %q, last exit %q; want it degraded on its first backoff with a next restart time and exit status 17", p.RuntimeState, protocol.Deref(p.RestartAttempt), protocol.Deref(p.NextRestartAt), protocol.Deref(p.LastExit))
+		}
 
 		w.advance(3 * time.Minute)
 		parked := pluginsListed(app, "looper parked", func(plugins []protocol.PluginInfo) bool {

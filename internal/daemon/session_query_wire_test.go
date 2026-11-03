@@ -44,20 +44,3 @@ func TestQueryFiltersByStateAndOrdersByLabelThenID(t *testing.T) {
 		t.Errorf("query working = %v, want [a-id]", got)
 	}
 }
-
-func TestARenameReachesTheSession(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	cli := w.Client()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	w.Launched(session)
-	before := queriedSession(t, cli, session)
-
-	if err := cli.RenameSession(protocol.SessionID(session), "checkout"); err != nil {
-		t.Fatalf("rename: %v", err)
-	}
-	renamed := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "checkout" })
-	if renamed.Directory != before.Directory || renamed.ProfileID != before.ProfileID || renamed.Agent != before.Agent {
-		t.Errorf("rename changed more than the label: before=%+v after=%+v", before, renamed)
-	}
-}

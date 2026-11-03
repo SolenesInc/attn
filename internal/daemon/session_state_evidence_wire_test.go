@@ -53,12 +53,13 @@ func TestAReplyWithoutAUsableMarkerSettlesIdle(t *testing.T) {
 func TestAnIdleSessionStaysIdleHoweverLongItIsQuiet(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
+		reason string
 		settle func(w *world, cli *client.Client) error
 	}{
-		{"idle at its prompt", func(w *world, cli *client.Client) error {
+		{"idle at its prompt", "prompt_idle", func(w *world, cli *client.Client) error {
 			return cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input")
 		}},
-		{"idle with only a cron pending", func(w *world, cli *client.Client) error {
+		{"idle with only a cron pending", "cron_pending", func(w *world, cli *client.Client) error {
 			return cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{PendingSessionCrons: 1})
 		}},
 	} {
@@ -66,10 +67,25 @@ func TestAnIdleSessionStaysIdleHoweverLongItIsQuiet(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
 				sessionStateEvidenceAtWork(t, w, app, cli)
+				atWork := len(sessionUpdatesOf(app, "s1"))
+				if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "some_future_type", "something new"); err != nil {
+					t.Fatalf("notify some_future_type: %v", err)
+				}
+				w.advance(time.Second)
+				if updates := sessionUpdatesOf(app, "s1")[atWork:]; len(updates) != 0 {
+					t.Fatalf("an unknown notification type moved the session: %s", describeUpdates(updates))
+				}
 				if err := tc.settle(w, cli); err != nil {
 					t.Fatalf("settle: %v", err)
 				}
-				idle := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+				idle := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
+					return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == tc.reason
+				})
+				for _, s := range sessionUpdatesOf(app, "s1") {
+					if s.State == protocol.SessionStatePendingApproval {
+						t.Fatalf("settling idle showed an approval: %s", describeUpdates(sessionUpdatesOf(app, "s1")))
+					}
+				}
 				before := stateChangesOf(app, "s1")
 
 				w.advance(3*90*time.Second + time.Second)
@@ -174,34 +190,6 @@ func TestASessionMadeChiefStopsWithoutWaitingOnItsBackgroundWork(t *testing.T) {
 		w.advance(time.Minute)
 		if got := queriedSession(t, cli, "s1"); protocol.Deref(got.StateReason) == "background_work" {
 			t.Fatalf("a minute after its stop the chief is still held %s on its background work", got.State)
-		}
-	})
-}
-
-func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		sessionStateEvidenceAtWork(t, w, app, cli)
-		before := len(sessionUpdatesOf(app, "s1"))
-
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "some_future_type", "something new"); err != nil {
-			t.Fatalf("notify some_future_type: %v", err)
-		}
-		w.advance(time.Second)
-		if updates := sessionUpdatesOf(app, "s1")[before:]; len(updates) != 0 {
-			t.Fatalf("an unknown notification type moved the session: %s", describeUpdates(updates))
-		}
-
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "idle_prompt", "Claude is waiting for your input"); err != nil {
-			t.Fatalf("notify idle_prompt: %v", err)
-		}
-		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "prompt_idle"
-		})
-		for _, s := range sessionUpdatesOf(app, "s1") {
-			if s.State == protocol.SessionStatePendingApproval {
-				t.Fatalf("an idle prompt was shown as an approval: %s", describeUpdates(sessionUpdatesOf(app, "s1")))
-			}
 		}
 	})
 }

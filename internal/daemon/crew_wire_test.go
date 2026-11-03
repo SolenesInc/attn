@@ -385,7 +385,16 @@ func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 	wake("an unset agent wakes on the default harness and its historical model", "trellis", "",
 		launch{harness: fakeagent.Claude, model: "fable", roster: "fable"})
 
-	setSetting(t, app, "default_model_claude", "claude-opus-4-1")
+	defaultReachesRoster := func(key, value string, resolved func(protocol.CrewMember) string) {
+		t.Helper()
+		mark := app.EventCount()
+		setSetting(t, app, key, value)
+		testworld.AwaitSince(app, mark, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
+			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "trellis" && resolved(m) == value })
+		})
+	}
+
+	defaultReachesRoster("default_model_claude", "claude-opus-4-1", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedModel) })
 	wake("the harness's configured default model wins over the historical one", "trellis", "",
 		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", roster: "claude-opus-4-1"})
 
@@ -399,7 +408,7 @@ func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 	wake("a one-day codex wake takes codex's configured default model", "keel", "codex",
 		launch{harness: fakeagent.Codex, model: "gpt-5.6-sol", roster: "claude-opus-4-1"})
 
-	setSetting(t, app, "default_effort_claude", "medium")
+	defaultReachesRoster("default_effort_claude", "medium", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedEffort) })
 	set := setCrew(t, cli, "trellis", protocol.CrewSetMessage{Effort: protocol.Ptr("HIGH")})
 	if protocol.Deref(set.Effort) != "high" || protocol.Deref(set.ResolvedEffort) != "high" {
 		t.Fatalf("effort HIGH stored %q resolving to %q, want high", protocol.Deref(set.Effort), protocol.Deref(set.ResolvedEffort))
@@ -734,23 +743,6 @@ func crewPriming(t *testing.T, cli *client.Client, session string) string {
 		t.Fatalf("prime %s: %v", session, err)
 	}
 	return protocol.Deref(primed.Guidance)
-}
-
-func TestADefaultModelOrEffortChangeReachesTheRoster(t *testing.T) {
-	w := newCrewWorld(t)
-	app := w.App()
-	for _, change := range []struct {
-		key, value string
-		resolved   func(protocol.CrewMember) string
-	}{
-		{"default_model_claude", "claude-opus-5", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedModel) }},
-		{"default_effort_claude", "high", func(m protocol.CrewMember) string { return protocol.Deref(m.ResolvedEffort) }},
-	} {
-		setSetting(t, app, change.key, change.value)
-		testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-			return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool { return m.ID == "trellis" && change.resolved(m) == change.value })
-		})
-	}
 }
 
 func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {

@@ -51,7 +51,7 @@ func TestAConsumerKeepsItsCursorAndItsKillSwitchAcrossARestart(t *testing.T) {
 	if !killed.Success {
 		t.Fatalf("disabling garden-seed-bells: %s", protocol.Deref(killed.Error))
 	}
-	put(t, cli, gateNS, "b", `{}`)
+	b := put(t, cli, gateNS, "b", `{}`)
 	before := busStatus(t, app)
 
 	w.restart()
@@ -64,7 +64,7 @@ func TestAConsumerKeepsItsCursorAndItsKillSwitchAcrossARestart(t *testing.T) {
 			t.Errorf("%s restarted at cursor %d (enabled=%t), was at %d (enabled=%t)", name, is.Cursor, is.Enabled, was.Cursor, was.Enabled)
 		}
 	}
-	if bells := consumer(t, after, "garden-seed-bells"); bells.Enabled || bells.Lag == 0 {
-		t.Errorf("the killed consumer came back as %+v; want it still disabled, behind the writes made after the kill", bells)
+	if bells := consumer(t, after, "garden-seed-bells"); bells.Enabled || bells.Cursor >= b.Seq || bells.Lag != after.Head-bells.Cursor {
+		t.Errorf("the killed consumer came back as %+v with the head at %d; want it still disabled, its cursor short of the write at seq %d made after the kill and its lag counted to the head", bells, after.Head, b.Seq)
 	}
 }

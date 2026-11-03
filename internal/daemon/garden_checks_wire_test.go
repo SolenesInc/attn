@@ -24,7 +24,9 @@ func TestAPlotSharesItsChecksWithEverySeedBelowIt(t *testing.T) {
 		inner := gardenNudgePlant(t, cli, sessions["planner"], "inner plot", plot.Crown.ID)
 		innerLeaf := gardenNudgePlant(t, cli, sessions["planner"], "inner leaf", inner)
 		harvested := plot.Children[1].ID
-		gardenNudgeMove(t, cli, sessions["builder"], harvested, "harvest")
+		if moved := gardenNudgeMove(t, cli, sessions["builder"], harvested, "harvest"); moved.Seed.Status != "harvested" || len(moved.Seed.Checks) != 2 || checkByID(moved.Seed.Checks, "C2").State != "open" {
+			t.Errorf("harvest with open checks = %s with checks %+v, want harvested carrying both open checks", moved.Seed.Status, moved.Seed.Checks)
+		}
 
 		daemonChild := checksShow(t, cli, plot.Children[0].ID)
 		if got := checkIDsFrom(daemonChild.Checks); !slices.Equal(got, []string{"C1", "C5@" + plot.Crown.ID}) {
@@ -626,18 +628,6 @@ func TestAReportReachesTheAppWithTheSeedAndItsPlot(t *testing.T) {
 		}
 		if len(crown.SharedChecks) != 1 || rollupState(crown.SharedChecks[0], plot.Children[0].ID) != "reported" {
 			t.Errorf("the plot arrives with shared checks %+v, want C5 reported by the child", crown.SharedChecks)
-		}
-	})
-}
-
-func TestHarvestIgnoresOpenChecksAndCarriesThem(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		sessions := spawnCheckSessions(w, app, "planner", "builder")
-		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
-		harvested := gardenNudgeMove(t, cli, sessions["builder"], seed, "harvest")
-		if harvested.Seed.Status != "harvested" || len(harvested.Seed.Checks) != 2 || checkByID(harvested.Seed.Checks, "C1").State != "open" {
-			t.Errorf("harvest with open checks = %s with checks %+v, want harvested carrying both open checks", harvested.Seed.Status, harvested.Seed.Checks)
 		}
 	})
 }

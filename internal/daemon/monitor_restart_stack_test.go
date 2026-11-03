@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -69,21 +68,6 @@ func restartedSession(app *testworld.Peer, id string) protocol.Session {
 	}
 	app.T.Fatalf("after the restart the app lists no session %s", id)
 	return protocol.Session{}
-}
-
-func TestASnoozeTheMonitorSavedIsStillSnoozedAfterARestart(t *testing.T) {
-	t.Parallel()
-	s, id := waitingAgentStack(t)
-	until := time.Now().Add(time.Hour)
-	app := s.App()
-	snoozeUntil(app, id, until)
-	testworld.AwaitSession(app, id, func(x protocol.Session) bool { return snoozedUntil(x).Equal(until) })
-	s.Stop()
-
-	s.Start()
-	if got := snoozedUntil(restartedSession(s.App(), id)); !got.Equal(until) {
-		t.Fatalf("after the restart the session is snoozed until %v, want %v, as its monitor saved", got, until)
-	}
 }
 
 func TestAPullRequestLinkSavedJustBeforeACrashIsStillLinkedAfterTheRestart(t *testing.T) {

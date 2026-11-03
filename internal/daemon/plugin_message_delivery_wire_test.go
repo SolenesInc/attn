@@ -67,7 +67,11 @@ func TestAMessageDeliveringDriverCarriesAttnsInputInsteadOfItsTerminal(t *testin
 
 	submitted := sendFeedback(app, session, "check the rounding")
 	var message deliveredMessage
-	driver.answer(driver.asked("driver.deliver_message", &message), map[string]bool{"ok": true})
+	held := driver.asked("driver.deliver_message", &message)
+	typist := w.App()
+	typist.TypeLine(session, "the user's live bytes")
+	typist.AwaitScreen(session, "the user's live bytes")
+	driver.answer(held, map[string]bool{"ok": true})
 	if message.SessionID != run.SessionID || message.RunID != run.RunID || message.Text != "check the rounding" || message.InputID == "" {
 		t.Errorf("the driver was handed %+v, want the feedback for run %s with an input id", message, run.RunID)
 	}
@@ -107,25 +111,6 @@ func TestADeliveryTheDriverDeclinesFailsWithoutTypingIntoTheTerminal(t *testing.
 		t.Errorf("the declined feedback was answered %+v, want a failure saying the plugin declined it", result)
 	}
 	screenLacks(t, app, session, "check the rounding")
-}
-
-func TestTheUsersKeystrokesReachTheTerminalWhileTheDriverHoldsADelivery(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
-	awaitDriverAvailable(app, "snipe")
-	session, run := spawnDriven(w, app, driver, w.Path("shop"))
-	awaitingInput(t, app, driver, session, run)
-
-	submitted := sendFeedback(app, session, "check the rounding")
-	held := driver.asked("driver.deliver_message", nil)
-	typist := w.App()
-	typist.TypeLine(session, "the user's live bytes")
-	typist.AwaitScreen(session, "the user's live bytes")
-	driver.answer(held, map[string]bool{"ok": true})
-	if result := feedbackResult(app, submitted); !result.Success || result.Status != "delivered" {
-		t.Errorf("the held feedback was answered %+v, want it delivered once the driver took it", result)
-	}
 }
 
 func TestAUserTurnCarriedByTheDriverTitlesTheSession(t *testing.T) {

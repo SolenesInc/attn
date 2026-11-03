@@ -30,14 +30,18 @@ func TestARenamedSessionKeepsItsNameAcrossRespawn(t *testing.T) {
 	if err := cli.RenameSession(protocol.SessionID(session), strings.Repeat("x", 49)); err == nil || !strings.Contains(err.Error(), "over the 48-character limit") {
 		t.Errorf("renaming to 49 characters over the CLI = %v, want a refusal naming the 48-character limit", err)
 	}
-	if label := queriedSession(t, cli, session).Label; label != "original" {
-		t.Errorf("label after the refused renames = %q, want original", label)
+	before := queriedSession(t, cli, session)
+	if before.Label != "original" {
+		t.Errorf("label after the refused renames = %q, want original", before.Label)
 	}
 
 	if err := cli.RenameSession(protocol.SessionID(session), "  review store tripwires  "); err != nil {
 		t.Fatalf("rename over the CLI: %v", err)
 	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "review store tripwires" })
+	cliRenamed := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.Label == "review store tripwires" })
+	if cliRenamed.Directory != before.Directory || cliRenamed.ProfileID != before.ProfileID || cliRenamed.Agent != before.Agent {
+		t.Errorf("rename changed more than the label: before=%+v after=%+v", before, cliRenamed)
+	}
 
 	renamed := renameFromApp(app, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(session), Label: "renamed"}, session)
 	if !renamed.Success {

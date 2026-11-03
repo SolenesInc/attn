@@ -170,7 +170,7 @@ func TestAPendingSnoozeOutlivesARestart(t *testing.T) {
 	run.Reply("Before or after tax? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 
-	until := time.Now().Add(time.Hour).Truncate(time.Second)
+	until := time.Now().Add(time.Hour)
 	snoozeUntil(app, session, until)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return snoozedUntil(s).Equal(until) })
 
