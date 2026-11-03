@@ -33,6 +33,9 @@ func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.
 		if session.ProfileID != profileID {
 			return who.Address{}, fmt.Errorf("session %s belongs to another profile", id)
 		}
+		if !sessionReadsInboxDoorbells(session) {
+			return who.Address{}, fmt.Errorf("session %s is a shell; a capture goes only to an agent session", id)
+		}
 		return d.inboxAddressOf(session.ID), nil
 	case protocol.QuickCaptureMailboxKindChief:
 		if mailbox.MemberID != nil {

@@ -180,6 +180,8 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 	}
 	side := home.Spawn(home.AppOn(created.Profile.ID), fakeagent.Claude, home.Path("side"))
 	home.Launched(side)
+	shell := home.Spawn(pair.App, fakeagent.Harness(protocol.AgentShellValue), home.Path("shell"))
+	pair.App.Send(protocol.TerminalFocusMessage{Cmd: protocol.CmdTerminalFocus, ID: protocol.TerminalID(home.Terminal(shell))})
 
 	listed := home.Run(testworld.Invocation{Args: []string{"send", "sessions", "--token-stdin", "--json"}, Stdin: token + "\n"})
 	if listed.Code != 0 {
@@ -199,7 +201,12 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 		local:  {"agent", "id", "label", "last_focused_at", "state"},
 		remote: {"agent", "host", "id", "label", "state"},
 	}; !reflect.DeepEqual(keysByID, want) {
-		t.Fatalf("send sessions --json = %s; the app reads %v and never another profile's session %s", listed.Stdout, want, side)
+		t.Fatalf("send sessions --json = %s; the app reads %v and never another profile's session %s or the shell %s", listed.Stdout, want, side, shell)
+	}
+
+	toShell := home.Run(testworld.Invocation{Args: []string{"send", shell, "--token-stdin", "-m", "a shell cannot read this"}, Stdin: token + "\n"})
+	if toShell.Code == 0 || !strings.Contains(toShell.Stderr, shell) || !strings.Contains(toShell.Stderr, "shell") {
+		t.Fatalf("send to a shell session: %+v", toShell)
 	}
 
 	elsewhere := home.Run(testworld.Invocation{Args: []string{"send", side, "--token-stdin", "-m", "wrong profile"}, Stdin: token + "\n"})

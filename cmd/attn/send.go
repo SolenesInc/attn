@@ -306,7 +306,7 @@ Send files and a message to a running agent session, local or on an outpost,
 as the user. Only a sender the user paired can send: pair a program once with
 attn send pair, then give its token on stdin with every send. A sender belongs
 to the profile the app showed when the user allowed it, and sends only to that
-profile's sessions.
+profile's agent sessions. A shell cannot receive a send.
 
 send <session>
   attn types the message into the session's conversation as the user's, with
@@ -323,11 +323,11 @@ send <session>
   files it uploaded and exits nonzero.
 
 sessions --token-stdin
-  list every live session of the sender's profile, the sessions it can send
-  to, in one unpaged list. --json prints an array of objects with id, label,
-  agent, state, host (only for a session on an outpost) and last_focused_at
-  (only once the user has focused the session's terminal in attn). The most
-  recent last_focused_at is the session the user last focused.
+  list every live agent session of the sender's profile, the sessions it can
+  send to, in one unpaged list. --json prints an array of objects with id,
+  label, agent, state, host (only for a session on an outpost) and
+  last_focused_at (only once the user has focused the session's terminal in
+  attn). The most recent last_focused_at is the session the user last focused.
 
 pair --name <name>
   ask the user to pair this program. The attn app asks the user to allow or

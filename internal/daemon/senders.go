@@ -277,7 +277,7 @@ func (d *Daemon) handleSenderSessions(conn net.Conn, msg *protocol.SenderSession
 	}
 	sessions := []protocol.SenderSession{}
 	for _, session := range d.store.List("") {
-		if session.ProfileID != sender.ProfileID {
+		if session.ProfileID != sender.ProfileID || !sessionReadsInboxDoorbells(session) {
 			continue
 		}
 		listed := protocol.SenderSession{ID: session.ID, Label: session.Label, Agent: session.Agent, State: session.State, Host: session.Host}
