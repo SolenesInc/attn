@@ -243,11 +243,82 @@ jobs:
       - name: Regenerate and diff
         run: make check-types check-schema
 
-  backend:
-    name: Daemon
+  go-lint:
+    name: Go vet and lint
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
     runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          go-cache: 'false'
+
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
+      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
+      # prebuilt native archive (download-first, no zig) so vet and lint link.
+      - name: Ensure native VT library
+        run: ./scripts/build-libghostty-vt.sh
+
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted. Run 'gofmt -w .'"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        run: make lint-go
+
+      - name: Check prompt catalog and scenarios
+        run: |
+          make check-prompts
+          go run ./cmd/prompt-editor check
+
+  backend:
+    name: Daemon (${{ matrix.group }})
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: 1
+            jobs: packages race
+          - group: 2
+            jobs: daemon-1 daemon-2
+          - group: 3
+            jobs: daemon-3 daemon-4
+          - group: 4
+            jobs: daemon-5 attn-1
+          - group: 5
+            jobs: attn-2
+          - group: 6
+            jobs: attn-3
     steps:
       - uses: actions/checkout@v4
 
@@ -289,8 +360,6 @@ jobs:
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
-      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
-      # prebuilt native archive (download-first, no zig) so vet/build/test link.
       - name: Ensure native VT library
         run: ./scripts/build-libghostty-vt.sh
 
@@ -304,40 +373,26 @@ jobs:
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
-      - name: Check formatting
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Go files are not formatted. Run 'gofmt -w .'"
-            gofmt -d .
-            exit 1
-          fi
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Lint
-        run: make lint-go
-
       - name: Start ClickHouse for the attn-ingest tests
+        if: contains(matrix.jobs, 'packages')
         run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
 
       - name: Test
-        run: ./scripts/test-go.sh
+        run: |
+          job_args=()
+          for job in ${{ matrix.jobs }}; do job_args+=(--job "$job"); done
+          ./scripts/test-go.sh "${job_args[@]}"
 
       - name: Upload test receipts
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: daemon
-
-      - name: Check prompt catalog and scenarios
-        run: |
-          make check-prompts
-          go run ./cmd/prompt-editor check
+          name: daemon-${{ matrix.group }}
 
       - name: Save Go build cache
         if: >-
-          always() && steps.go-cache.outcome == 'success' &&
+          always() && contains(matrix.jobs, 'packages') &&
+          steps.go-cache.outcome == 'success' &&
           steps.go-cache.outputs.cache-hit != 'true' &&
           github.event_name == 'push' &&
           github.ref == 'refs/heads/main'
@@ -447,6 +502,9 @@ jobs:
         run: make check-browser-runtime
 
       - name: Type check
+        run: pnpm run typecheck
+
+      - name: Build
         run: pnpm run build
 
       - name: Lint
@@ -721,7 +779,7 @@ jobs:
           overwrite: true
 
   app-acceptance-shard:
-    name: App acceptance shard ${{ matrix.shard }}/4
+    name: App acceptance shard ${{ matrix.shard }}/${{ strategy.job-total }}
     needs: [changes, app-acceptance-build]
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
@@ -731,7 +789,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
     # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
@@ -766,7 +824,7 @@ jobs:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: >-
           xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
+          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload test receipts
         if: always()
@@ -831,7 +889,7 @@ jobs:
           if [ "$MATRIX_OUTCOME" = success ]; then
             exit 0
           fi
-          echo "shard ${{ matrix.shard }}/4: the serial matrix is $MATRIX_OUTCOME;" \
+          echo "shard ${{ matrix.shard }}/${{ strategy.job-total }}: the serial matrix is $MATRIX_OUTCOME;" \
             "the App acceptance job aggregates every shard's digest" >&2
           exit 1
 
@@ -871,7 +929,7 @@ jobs:
         continue-on-error: true
         run: >-
           node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 4
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 10
           --out "$RUNNER_TEMP/matrix-digest.txt"
 
       - name: Upload the aggregated digest
@@ -1025,6 +1083,7 @@ jobs:
       - release-candidate
       - generated-types
       - script-tests
+      - go-lint
       - backend
       - pty-compatibility
       - frontend
@@ -1058,6 +1117,7 @@ jobs:
       - changes
       - generated-types
       - script-tests
+      - go-lint
       - backend
       - pty-compatibility
       - frontend

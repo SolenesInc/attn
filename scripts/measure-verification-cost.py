@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Measure what verifying a change costs: lands, the full suites and CI.
 
-usage: scripts/measure-verification-cost.py [--runs N] [--keep] [baseline...]
+usage: scripts/measure-verification-cost.py [--runs N] [--keep] [--ci-run ID]... [baseline...]
 
 Baselines (all by default):
   land     one scripts/land.sh landing a one-file Go change
   lands3   three concurrent lands on one machine, each from its own worktree
   suites   scripts/test-go.sh -count=1, then pnpm --dir app exec vitest run
-  ci       ci.yml wall time and its slowest chains over the last 5 green main runs
+  ci       ci.yml wall time, its slowest chains and the longest job queue wait
+           over the last 5 green main runs, or the runs --ci-run names
 
 Local baselines measure this checkout's HEAD commit. They print each run's
 outcome, wall seconds, CPU-seconds and the 1-minute load average before and
@@ -259,42 +260,75 @@ def seconds(start, end):
     return parse(end) - parse(start)
 
 
-def measure_ci(source):
-    runs = gh("repos/{owner}/{repo}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=50", source)["workflow_runs"]
+def ci_chains(run, jobs):
+    named = lambda prefix: [job for job in jobs if job["name"] == prefix or job["name"].startswith(prefix + " (")]
+    go_tests = named("Daemon")
+    go_lint = named("Go vet and lint") or go_tests
+    shards = [job for job in jobs if job["name"].startswith("App acceptance shard ")]
+    build = next((job for job in jobs if job["name"] == "App acceptance build"), None)
+    macos = next((job for job in jobs if job["name"] == "App acceptance macOS"), None)
+    chain = [*go_tests, *go_lint, build, macos, *shards]
+    if not go_tests or not shards or any(job is None or job["conclusion"] != "success" for job in chain):
+        return None
+    step = lambda job, prefix: next(seconds(s["started_at"], s["completed_at"]) for s in job["steps"] if s["name"].startswith(prefix))
+    job_wall = lambda job: seconds(job["started_at"], job["completed_at"])
+    span = lambda group: seconds(min(job["started_at"] for job in group), max(job["completed_at"] for job in group))
+    started = [job for job in jobs if job["started_at"] and job["conclusion"] != "skipped"]
+    waits = sorted(started, key=lambda job: seconds(job["created_at"], job["started_at"]))
+    return {
+        "ok": True,
+        "run": run["id"],
+        "wall": seconds(run["created_at"], run["updated_at"]),
+        "queue": seconds(run["created_at"], min(job["started_at"] for job in started)),
+        "job_wait": seconds(waits[-1]["created_at"], waits[-1]["started_at"]),
+        "job_wait_name": waits[-1]["name"],
+        "go_tests": span(go_tests),
+        "go_test_runners": len(go_tests),
+        "go_test_step_max": max(step(job, "Test") for job in go_tests),
+        "go_vet": step(go_lint[0], "Vet"),
+        "go_lint": step(go_lint[0], "Lint"),
+        "linux_acceptance": seconds(build["started_at"], max(job["completed_at"] for job in shards)),
+        "linux_build": job_wall(build),
+        "linux_shards": len(shards),
+        "linux_shard_max": max(job_wall(job) for job in shards),
+        "macos_acceptance": job_wall(macos),
+        "macos_build": step(macos, "Build the App acceptance tree"),
+        "macos_scenarios": step(macos, "Run native"),
+    }
+
+
+def measure_ci(source, run_ids):
+    jobs_of = lambda run: gh(f"repos/{{owner}}/{{repo}}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100", source)["jobs"]
+    if run_ids:
+        runs = [gh(f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}", source) for run_id in run_ids]
+        label = f"runs {' '.join(run_ids)}"
+    else:
+        runs = gh("repos/{owner}/{repo}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=50", source)["workflow_runs"]
+        label = f"last {CI_GREEN_RUNS} green main runs with every chain"
     rows = []
     for run in runs:
-        jobs = gh(f"repos/{{owner}}/{{repo}}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100", source)["jobs"]
-        by_name = {job["name"]: job for job in jobs}
-        shards = [job for job in jobs if job["name"].startswith("App acceptance shard ")]
-        needed = [by_name.get("Daemon"), by_name.get("App acceptance build"), by_name.get("App acceptance macOS"), *shards]
-        if not shards or any(job is None or job["conclusion"] != "success" for job in needed):
+        row = ci_chains(run, jobs_of(run))
+        if row is None:
+            if run_ids:
+                log(f"run {run['id']} has a chain that did not succeed; left out")
             continue
-        step = lambda job, prefix: next(seconds(s["started_at"], s["completed_at"]) for s in job["steps"] if s["name"].startswith(prefix))
-        job_wall = lambda job: seconds(job["started_at"], job["completed_at"])
-        daemon, build, macos = by_name["Daemon"], by_name["App acceptance build"], by_name["App acceptance macOS"]
-        rows.append({
-            "ok": True,
-            "run": run["id"],
-            "wall": seconds(run["created_at"], run["updated_at"]),
-            "queue": seconds(run["created_at"], min(job["started_at"] for job in jobs)),
-            "daemon": job_wall(daemon),
-            "daemon_vet": step(daemon, "Vet"),
-            "daemon_lint": step(daemon, "Lint"),
-            "daemon_test": step(daemon, "Test"),
-            "linux_acceptance": seconds(build["started_at"], max(job["completed_at"] for job in shards)),
-            "linux_build": job_wall(build),
-            "linux_shard_max": max(job_wall(job) for job in shards),
-            "macos_acceptance": job_wall(macos),
-            "macos_build": step(macos, "Build the App acceptance tree"),
-            "macos_scenarios": step(macos, "Run native"),
-        })
-        if len(rows) == CI_GREEN_RUNS:
+        rows.append(row)
+        if len(rows) == CI_GREEN_RUNS and not run_ids:
             break
     for row in rows:
-        print(f"  ci run {row['run']}: wall {row['wall']:.0f}s, queue before the first job {row['queue']:.0f}s, daemon {row['daemon']:.0f}s, linux acceptance {row['linux_acceptance']:.0f}s, macos acceptance {row['macos_acceptance']:.0f}s", flush=True)
+        print(
+            f"  ci run {row['run']}: wall {row['wall']:.0f}s, queue before the first job {row['queue']:.0f}s,"
+            f" longest job queue wait {row['job_wait']:.0f}s ({row['job_wait_name']}),"
+            f" go tests {row['go_tests']:.0f}s on {row['go_test_runners']} runners,"
+            f" linux acceptance {row['linux_acceptance']:.0f}s with {row['linux_shards']} shards,"
+            f" macos acceptance {row['macos_acceptance']:.0f}s",
+            flush=True,
+        )
+    if not rows:
+        return
     column = lambda key: fmt(rows, key)
-    print(f"ci.yml, last {len(rows)} green main runs with every chain: wall {column('wall')}, queue before the first job {column('queue')}", flush=True)
-    print(f"  daemon job {column('daemon')}: vet {column('daemon_vet')}, lint {column('daemon_lint')}, test {column('daemon_test')}", flush=True)
+    print(f"ci.yml, {label}: wall {column('wall')}, queue before the first job {column('queue')}, longest job queue wait {column('job_wait')}", flush=True)
+    print(f"  go tests, first runner start to last runner end {column('go_tests')}: slowest Test step {column('go_test_step_max')}; vet {column('go_vet')}, lint {column('go_lint')}", flush=True)
     print(f"  linux acceptance, build start to last shard end {column('linux_acceptance')}: build job {column('linux_build')}, slowest shard {column('linux_shard_max')}", flush=True)
     print(f"  macos acceptance job {column('macos_acceptance')}: build {column('macos_build')}, scenarios {column('macos_scenarios')}", flush=True)
 
@@ -303,6 +337,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--keep", action="store_true", help="keep the scratch folder and its logs")
+    parser.add_argument("--ci-run", action="append", default=[], metavar="ID", help="measure these ci.yml runs, such as a pull request's, instead of the last green main runs")
     parser.add_argument("baselines", nargs="*", default=list(BASELINES))
     args = parser.parse_args()
     unknown = set(args.baselines) - set(BASELINES)
@@ -332,7 +367,7 @@ def main():
             else:
                 shutil.rmtree(root, ignore_errors=True)
     if "ci" in selected:
-        measure_ci(source)
+        measure_ci(source, args.ci_run)
 
 
 if __name__ == "__main__":
