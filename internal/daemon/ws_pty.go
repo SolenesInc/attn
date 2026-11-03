@@ -733,7 +733,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 		receivedAt := time.Now()
 		source := strings.TrimSpace(protocol.Deref(msg.Source))
 		if d.debugLogging {
-			d.logf("pty_input: id=%s bytes=%d preview=%q source=%s", msg.ID, len(msg.Data), previewBinaryForLog([]byte(msg.Data)), source)
+			d.logf("pty_input: id=%s bytes=%d source=%s", msg.ID, len(msg.Data), source)
 		}
 		write := protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: msg.ID, Data: msg.Data, Source: source}
 		d.router().Send(write, func(err error) {
