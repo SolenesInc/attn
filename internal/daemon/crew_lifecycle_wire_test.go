@@ -141,26 +141,46 @@ func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWind
 	})
 }
 
-func TestACrewDayAwaitingApprovalIsLeftAlone(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
-		app.TypeLine(day.id, "refactor the checkout")
-		w.advance(0)
-		if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
-			t.Fatal(err)
-		}
-		w.advance(0)
-		if got := queriedSession(t, day.cli, day.id).State; got != protocol.SessionStatePendingApproval {
-			t.Fatalf("the day is %s, want pending_approval", got)
-		}
-		w.advance(61 * time.Minute)
-		if got := day.term.Pasted(); len(got) != 0 {
-			t.Fatalf("a day awaiting approval was sent %q", got)
-		}
-		if items := readInbox(t, day.cli, day.id, 0).Items; len(items) != 0 {
-			t.Fatalf("a day awaiting approval was asked %q", inboxContents(items))
-		}
-	})
+func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		enter func(t *testing.T, day *bubbleClaude)
+	}{
+		{"working", func(*testing.T, *bubbleClaude) {}},
+		{"pending_approval", func(t *testing.T, day *bubbleClaude) {
+			if err := day.cli.RecordNotification(protocol.TerminalID(day.self), "permission_prompt", "Allow edit?"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, day := crewDayInBubble(t, w, map[string]string{
+					"crew.away_seconds":             "60",
+					"crew.cache_ttl_seconds.claude": "60",
+					"crew.heartbeat_lead_seconds":   "60",
+					"auto_approve_enabled":          "false",
+				})
+				app.TypeLine(day.id, "refactor the checkout")
+				w.advance(0)
+				tc.enter(t, day)
+				w.advance(0)
+				if got := queriedSession(t, day.cli, day.id).State; string(got) != tc.name {
+					t.Fatalf("the day is %s, want %s", got, tc.name)
+				}
+				w.advance(61 * time.Second)
+				if got := queriedSession(t, day.cli, day.id).State; string(got) != tc.name {
+					t.Fatalf("the day left %s for %s before the check", tc.name, got)
+				}
+				if got := day.term.Pasted(); len(got) != 0 {
+					t.Fatalf("a day in %s was sent %q", tc.name, got)
+				}
+				if items := readInbox(t, day.cli, day.id, 0).Items; len(items) != 0 {
+					t.Fatalf("a day in %s was asked %q", tc.name, inboxContents(items))
+				}
+			})
+		})
+	}
 }
 
 func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
