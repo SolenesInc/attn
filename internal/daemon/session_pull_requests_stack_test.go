@@ -29,7 +29,7 @@ func TestAPullRequestRecordedWhileTheSessionsConversationIsAppliedIsListedOnceAc
 		})
 	}()
 	applying.Await()
-	err, release := recordDuringConversationApply(cli.RecordPullRequestCreated, session, applying, awaited)
+	release, err := recordDuringConversationApply(cli.RecordPullRequestCreated, session, applying, awaited)
 	if err != nil {
 		t.Fatalf("record while the session's conversation was applied: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestAPullRequestRecordedWhileAClearIsAppliedIsNotAcknowledgedForTheClosedSe
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
 	deciding.Await()
-	err, release := recordDuringConversationApply(cli.RecordPullRequestCreated, first, deciding, awaited)
+	release, err := recordDuringConversationApply(cli.RecordPullRequestCreated, first, deciding, awaited)
 	release()
 	successor := awaitSuccessor(app, first)
 	if err == nil {
@@ -61,7 +61,7 @@ func TestAPullRequestRecordedWhileAClearIsAppliedIsNotAcknowledgedForTheClosedSe
 	}
 }
 
-func recordDuringConversationApply(record func(protocol.SessionID, string) error, session string, applying, awaited *testworld.Pause) (err error, releaseApply func()) {
+func recordDuringConversationApply(record func(protocol.SessionID, string) error, session string, applying, awaited *testworld.Pause) (releaseApply func(), err error) {
 	recorded := make(chan error, 1)
 	returned := make(chan struct{})
 	go func() {
@@ -69,9 +69,9 @@ func recordDuringConversationApply(record func(protocol.SessionID, string) error
 		close(returned)
 	}()
 	if !awaited.AwaitBefore(returned) {
-		return <-recorded, applying.Release
+		return applying.Release, <-recorded
 	}
 	applying.Release()
 	awaited.Release()
-	return <-recorded, func() {}
+	return func() {}, <-recorded
 }
