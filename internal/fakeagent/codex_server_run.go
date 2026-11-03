@@ -59,11 +59,6 @@ func (s *CodexServer) AwaitName(conversation, name string) {
 	s.call(methodThreadName, serverThreadParams{ThreadID: conversation, Text: name}, nil)
 }
 
-func (s *CodexServer) AwaitWritten(conversation string) {
-	s.t.Helper()
-	s.call(methodAwaitWritten, serverThreadParams{ThreadID: conversation}, nil)
-}
-
 func (s *CodexServer) AwaitArchived(conversation string) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

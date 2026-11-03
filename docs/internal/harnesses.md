@@ -374,6 +374,13 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   even while the server holds the conversation in memory. A `--remote` TUI that
   loses its socket reconnects and resumes the conversation it shows, so a
   conversation never written to disk cannot come back.
+- On 0.166.0 with a read-only `sessions/`, `thread/inject_items` fails with
+  `Permission denied`, but a `turn/start` after it still runs and completes. It
+  writes no rollout and only warns at turn completion. `thread/resume` then
+  fails, even on a fresh server after permissions are repaired. attn therefore
+  refuses a new conversation whose write fails.
+- A `--remote` TUI on 0.166.0 waited the full 60s attn holds the `thread/start`
+  reply, without a limit of its own firing.
 - `thread/resume` ignores `developerInstructions`: a conversation keeps the
   instructions it started with. The `config` that `thread/resume` takes (such
   as `model_auto_compact_token_limit`) applies when the resume loads the

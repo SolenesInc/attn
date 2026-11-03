@@ -724,8 +724,11 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		if !opened {
 			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
-		} else {
-			r.d.life.Go("codexOpeningNote", func() { r.materialize(v.terminal, v.profile, thread.ID) })
+		} else if err := r.materialize(v.terminal, v.profile, thread.ID); err != nil {
+			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
+			reply.Result = nil
+			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
+			return
 		}
 		r.show(v, thread.ID, opened)
 		if !firstOfItsSession {
@@ -831,7 +834,7 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string,
 	return launch.Content
 }
 
-func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) {
+func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) error {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -841,7 +844,7 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 	}
 	if client == nil {
 		r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
-		return
+		return errors.New("no connection to its app-server")
 	}
 	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexOpeningNoteLimit)
 	defer cancel()
@@ -856,6 +859,10 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 	})
 	r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
 		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexOpeningNoteLimit, codexCallOutcome(err))
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("its app-server did not answer thread/inject_items within %s", codexOpeningNoteLimit)
+	}
+	return err
 }
 
 func codexCallOutcome(err error) string {

@@ -60,17 +60,45 @@ func awaitRunState(t *testing.T, w *world, app *testworld.Peer, runID string, do
 	}
 }
 
-func TestACodexAutomationIsDeliveredWhileItsOpeningNoteIsStillBeingWritten(t *testing.T) {
+func TestACodexAutomationWhoseOpeningNoteCouldNotBeWrittenFailsWithItsStartupScreen(t *testing.T) {
+	w, app := codexAutomationWorld(t, true)
+	arrived, release := w.CodexServer().HoldNextInjectReply()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "refused"})
+	arrived()
+	answered := awaitAutomationRunResult(app, "refused")
+	runs := automationRuns(t, w.Client(), 1)
+	if len(runs) != 1 || runs[0].State == "delivered" {
+		t.Fatalf("while its conversation is still being written the run answered %s with runs %+v, want it not delivered", describeRunAnswer(answered), runs)
+	}
+
+	release("disk I/O error")
+	failed := awaitRunState(t, w, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	failure := protocol.Deref(failed.LastError)
+	if failed.State != "failed" || !strings.Contains(failure, "exited with code 1 before its first turn") || !strings.Contains(failure, "thread/start failed during TUI bootstrap") || !strings.Contains(failure, "disk I/O") {
+		t.Fatalf("after Codex exited at bootstrap the run is %s with %q, want failed with the startup screen naming the write error", failed.State, failure)
+	}
+	seed, err := w.Client().SeedShow("", protocol.Deref(failed.SeedID))
+	if err != nil || seed.Seed.Status != "withered" {
+		t.Fatalf("the failed run's seed = %+v (%v), want it withered", seed, err)
+	}
+}
+
+func TestACodexAutomationIsDeliveredOnceItsSlowOpeningNoteIsWritten(t *testing.T) {
 	w, app := codexAutomationWorld(t, true)
 	arrived, release := w.CodexServer().HoldNextInjectReply()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "slow-note"})
 	arrived()
-	awaitAutomationRunResult(app, "slow-note")
+	answered := awaitAutomationRunResult(app, "slow-note")
+	runs := automationRuns(t, w.Client(), 1)
+	if len(runs) != 1 || runs[0].State == "delivered" {
+		t.Fatalf("while its conversation is still being written the run answered %s with runs %+v, want it not delivered", describeRunAnswer(answered), runs)
+	}
+
+	release("")
 	run := awaitOnlyRunSettled(t, w, app)
 	if run.State != "delivered" {
-		t.Fatalf("a run whose opening note is still being written is %s with %q, want it delivered", run.State, protocol.Deref(run.LastError))
+		t.Fatalf("a run whose opening note was written is %s with %q, want it delivered", run.State, protocol.Deref(run.LastError))
 	}
-	release("disk I/O error")
 }
 
 func TestAPlainCodexAutomationThatExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {
