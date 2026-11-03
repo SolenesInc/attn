@@ -7,6 +7,8 @@ Baselines (all by default):
   land     one scripts/land.sh landing a one-file Go change
   lands3   three concurrent lands on one machine, each from its own worktree
   suites   scripts/test-go.sh -count=1, then pnpm --dir app exec vitest run
+  daemon   scripts/test-go.sh --packages -count=1 on ./internal/daemon, then on
+           ./cmd/attn: the two packages whose tests start daemons
   ci       ci.yml wall time and its slowest chains over the last 5 green main runs
 
 Local baselines measure this checkout's HEAD commit. They print each run's
@@ -48,7 +50,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-BASELINES = ("land", "lands3", "suites", "ci")
+BASELINES = ("land", "lands3", "suites", "daemon", "ci")
 LAND_PACKAGES = ("internal/daemon", "internal/store", "cmd/attn")
 CI_GREEN_RUNS = 5
 MEASUREMENT_LOCK = Path("/tmp/attn-verification-cost.lock")
@@ -235,14 +237,22 @@ def measure_lands3(scratch, runs):
 
 
 def measure_suites(scratch, runs):
+    measure_commands(scratch, runs, (("go", ["scripts/test-go.sh", "-count=1"]), ("vitest", ["pnpm", "--dir", "app", "exec", "vitest", "run"])))
+
+
+def measure_daemon_packages(scratch, runs):
+    packages = ("./internal/daemon", "./cmd/attn")
+    measure_commands(scratch, runs, tuple((package, ["scripts/test-go.sh", "--packages", "-count=1", package]) for package in packages))
+
+
+def measure_commands(scratch, runs, suites):
     path = scratch.worktrees[0]
     git("reset", "--quiet", "--hard", scratch.base, cwd=path)
-    suites = (("go", ["scripts/test-go.sh", "-count=1"]), ("vitest", ["pnpm", "--dir", "app", "exec", "vitest", "run"]))
     for name, command in suites:
         rows = []
         for run in range(1, runs + 1):
             with measurement(f"{name} suite run {run}") as load:
-                result = run_measured(command, path, scratch.env, scratch.logs / f"suite-{name}-{run}.log")
+                result = run_measured(command, path, scratch.env, scratch.logs / f"suite-{name.replace('/', '_').strip('._')}-{run}.log")
             result.update(load)
             result["ok"] = result["exit"] == 0
             print(f"  {name} suite run {run}: {describe(result)}, {fmt_load(result)}, log {result['log']}", flush=True)
@@ -326,6 +336,8 @@ def main():
                 measure_lands3(scratch, args.runs)
             if "suites" in local:
                 measure_suites(scratch, args.runs)
+            if "daemon" in local:
+                measure_daemon_packages(scratch, args.runs)
         finally:
             if args.keep:
                 log(f"kept {root}")
