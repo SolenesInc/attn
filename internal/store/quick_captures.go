@@ -32,6 +32,7 @@ type QuickCaptureAsset struct {
 func quickCaptureSubmission(msg protocol.QuickCaptureSendMessage) string {
 	msg.RequestID = nil
 	msg.ProfileID = nil
+	msg.SenderToken = nil
 	msg.Cmd = protocol.CmdQuickCaptureSend
 	b, _ := json.Marshal(msg)
 	return string(b)

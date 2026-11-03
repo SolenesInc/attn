@@ -1,7 +1,10 @@
 package daemon_test
 
 import (
+	"bytes"
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -206,5 +209,39 @@ func TestAPairedSenderBelongsToTheProfileTheAppShowed(t *testing.T) {
 	}
 	if listed, err := cli.PairedSenders(home); err != nil || len(listed) != 1 {
 		t.Fatalf("Home's senders after deleting Side: %+v %v", listed, err)
+	}
+}
+
+func TestAPairedSenderTokenNeverReachesTheDatabase(t *testing.T) {
+	w := newWorld(t)
+	cli, app := w.Client(), w.TrustedApp()
+	registerSessions(t, w, cli, "target")
+	paired := pairSenderInApp(t, cli, app, "Capture")
+	profileID := app.SelectedProfile()
+
+	send := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, ProfileID: &profileID, SenderToken: &paired.Token, CaptureID: uuid.NewString(), Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("target"))}, Content: "Sent once", AttachmentIds: []string{}}
+	for range 2 {
+		if _, err := cli.QuickCapture(send); err != nil {
+			t.Fatalf("sending, then retrying, capture %s: %v", send.CaptureID, err)
+		}
+	}
+	changed := send
+	changed.Content = "Sent twice"
+	if _, err := cli.QuickCapture(changed); err == nil || !strings.Contains(err.Error(), "different payload") {
+		t.Fatalf("reusing capture %s for other content: %v", send.CaptureID, err)
+	}
+
+	files, err := filepath.Glob(filepath.Join(w.Dir, "attn.db*"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("database files in %s: %v %v", w.Dir, files, err)
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte(paired.Token)) {
+			t.Fatalf("%s holds the paired sender's token", file)
+		}
 	}
 }
