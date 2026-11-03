@@ -219,10 +219,10 @@ session or the re-land seed.
 
 ## Gotchas
 
-- CI runs one push at a time and keeps only the newest push waiting. When a
-  newer push arrives while another push is waiting, the waiting push's run
-  concludes `cancelled` with no jobs. A red run therefore covers every commit
-  since the last green run.
+- CI runs every push to `main` in its own run, and the runs overlap, so a newer
+  push's run can finish before an older one. The run list and
+  `ci-main-red.sh` order runs by push, not by finish. A red run covers its
+  commit and every commit since the last green run.
 - You own a test that is still red on `main`. The
   [land-on-main skill](../land-on-main/SKILL.md) says how a landing treats it.
 - "no session or crew member matches" or "is not on this daemon" from
