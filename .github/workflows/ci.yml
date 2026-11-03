@@ -793,10 +793,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # Planned heaviest shard 258s of a 2030s matrix in 8 shards (scenario-durations.json, 2026-11-03); 40m is slack.
+    # Planned heaviest shard 201s of a 1975s matrix in 10 shards (scenario-durations.json, 2026-11-03); the slowest 8-shard job took 430s. 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
@@ -933,7 +933,7 @@ jobs:
         continue-on-error: true
         run: >-
           node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 8
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 10
           --out "$RUNNER_TEMP/matrix-digest.txt"
 
       - name: Upload the aggregated digest
