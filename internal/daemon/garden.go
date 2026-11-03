@@ -366,20 +366,6 @@ func (d *Daemon) readGardenAround(seed garden.Seed) gardenRead {
 	return read
 }
 
-func (d *Daemon) countSeeds(profileID ...string) int {
-	if d.store == nil {
-		return 0
-	}
-	read, found, err := d.store.CountQuery(docstore.Query{
-		Namespace: garden.Namespace, Collection: garden.CollectionSeeds,
-		Filters: gardenProfileFilters(firstProfile(profileID)),
-	})
-	if err != nil || !found {
-		return 0
-	}
-	return read.Count
-}
-
 func (d *Daemon) seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protocol.Seed {
 	stateChangedAt := strings.TrimSpace(seed.StateChangedAt)
 	stateChangedAtExact := stateChangedAt != ""
@@ -459,25 +445,18 @@ func (d *Daemon) seedDetailsWire(read gardenRead, seed garden.Seed, doc docstore
 	return wire
 }
 
-func (d *Daemon) seedsForBroadcast(profileID ...string) []protocol.Seed {
+func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, total int) {
 	if d.store == nil {
-		return nil
+		return nil, 0
 	}
 	read, err := d.readGarden(profileID...)
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
 			d.logf("garden: reading seeds for broadcast: %v", err)
 		}
-		return nil
+		return nil, 0
 	}
-	return read.wire(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)])
-}
-
-func (d *Daemon) countSeedsForBroadcast(profileID ...string) int {
-	if d.store == nil {
-		return 0
-	}
-	return d.countSeeds(profileID...)
+	return read.wire(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)]), len(read.seeds)
 }
 
 func (d *Daemon) projectGardenSeeds() {
@@ -814,7 +793,7 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 		d.sendGardenError(conn, "ls", err)
 		return
 	}
-	result := &protocol.SeedListResult{Total: d.countSeeds(protocol.Deref(msg.ProfileID))}
+	result := &protocol.SeedListResult{Total: len(read.seeds)}
 	seeds := read.seeds
 	if plotID := strings.TrimSpace(protocol.Deref(msg.Plot)); plotID != "" {
 		if protocol.Deref(msg.Stale) {
