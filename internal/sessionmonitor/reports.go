@@ -44,7 +44,7 @@ func (m *Monitor) ReportPullRequest(id string, link PullRequest) bool {
 	m.pullRequests[id] = link
 	view := m.viewLocked()
 	m.mu.Unlock()
-	return m.publish(view)
+	return m.publishAcknowledged(view)
 }
 
 func (m *Monitor) ReportSentFiles(paths []string) bool {
@@ -61,7 +61,7 @@ func (m *Monitor) ReportSentFiles(paths []string) bool {
 	}
 	view := m.viewLocked()
 	m.mu.Unlock()
-	return m.publish(view)
+	return m.publishAcknowledged(view)
 }
 
 func (m *Monitor) HeldExit(lifecycle string) (Exit, bool) {
@@ -115,5 +115,5 @@ func (m *Monitor) ForgetPullRequest(id string) bool {
 	delete(m.pullRequests, id)
 	view := m.viewLocked()
 	m.mu.Unlock()
-	return m.publish(view)
+	return m.publishAcknowledged(view)
 }

@@ -58,6 +58,7 @@ const (
 	MemberRetiredClearSleep    = "member-retired-clear-sleep"
 	ConversationDropped        = "conversation-dropped"
 	ConversationReportReady    = "conversation-report-ready"
+	ConversationApplyAwaited   = "conversation-apply-awaited"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
 	TerminalExitReconciled     = "terminal-exit-reconciled"

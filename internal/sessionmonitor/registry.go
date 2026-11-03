@@ -127,7 +127,7 @@ type Monitor struct {
 	queuedConversation   *ConversationObservation
 	pendingConversations []pendingConversation
 	pendingSession       protocol.SessionID
-	conversationApplying bool
+	conversationApplying *conversationApply
 	pendingDirty         bool
 	titleAttempted       bool
 	titleInitialPrompt   *[sha256.Size]byte

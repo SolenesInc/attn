@@ -36,67 +36,108 @@ func (m *Monitor) Session() protocol.SessionID {
 	return m.session
 }
 
+type conversationApply struct {
+	revision uint64
+	applied  bool
+	done     chan struct{}
+}
+
+var headMoved = &conversationApply{done: closedChannel()}
+
+func closedChannel() chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
+}
+
 func (m *Monitor) publish(view View) bool {
+	applied, _ := m.publishOrQueue(view)
+	return applied
+}
+
+func (m *Monitor) publishAcknowledged(view View) bool {
+	for {
+		applied, queued := m.publishOrQueue(view)
+		if queued == nil {
+			return applied
+		}
+		pausepoint.At(pausepoint.ConversationApplyAwaited)
+		<-queued.done
+		if queued.revision >= view.Revision.V {
+			return queued.applied
+		}
+		m.mu.Lock()
+		view = m.viewLocked()
+		m.mu.Unlock()
+	}
+}
+
+func (m *Monitor) publishOrQueue(view View) (bool, *conversationApply) {
 	m.mu.Lock()
 	stopped := m.stopped
 	m.mu.Unlock()
 	if stopped || !m.save(view) {
-		return false
+		return false, nil
 	}
 	if m.Session() == "" {
 		if !view.Turn.V.OpenedAt.IsZero() {
 			pausepoint.At(pausepoint.ConversationCandidateTurn)
 		}
 		m.react(view)
-		return true
+		return true, nil
 	}
 	if !m.savePending() {
-		return false
+		return false, nil
 	}
 	m.mu.Lock()
 	if view.PendingConversation.V != m.pendingHeadLocked() {
 		m.mu.Unlock()
-		return true
+		return true, headMoved
 	}
-	if m.conversationApplying {
+	if applying := m.conversationApplying; applying != nil {
 		m.mu.Unlock()
-		return true
+		return true, applying
 	}
-	pending := view.PendingConversation.V.NativeID != ""
-	m.conversationApplying = pending
+	if view.PendingConversation.V.NativeID == "" {
+		m.mu.Unlock()
+		return m.applyHome(view), nil
+	}
+	apply := &conversationApply{revision: view.Revision.V, done: make(chan struct{})}
+	m.conversationApplying = apply
 	m.mu.Unlock()
-	if pending {
-		if m.registry.host.Go("applyMonitorConversation", func() { m.applyHome(view, true) }) {
-			return true
-		}
-		m.mu.Lock()
-		m.conversationApplying = false
-		m.mu.Unlock()
-		return false
+	if m.registry.host.Go("applyMonitorConversation", func() { m.applyConversation(view, apply) }) {
+		return true, apply
 	}
-	return m.applyHome(view, pending)
+	m.mu.Lock()
+	m.conversationApplying = nil
+	m.mu.Unlock()
+	return false, nil
 }
 
-func (m *Monitor) applyHome(view View, pending bool) bool {
+func (m *Monitor) applyHome(view View) bool {
 	outcome, applied := m.home.Applied(view)
 	m.react(view)
 	if applied && outcome.Conversation != "" {
 		m.registry.host.ConversationApplied(m, outcome)
 	}
-	if pending {
-		m.mu.Lock()
-		m.conversationApplying = false
-		next := m.pendingHeadLocked()
-		newer := m.revision > view.Revision.V
-		if !applied {
-			m.retrySaveLocked()
-		}
-		m.mu.Unlock()
-		if applied && (newer || next != view.PendingConversation.V) {
-			m.Refresh()
-		}
-	}
 	return applied
+}
+
+func (m *Monitor) applyConversation(view View, apply *conversationApply) {
+	applied := m.applyHome(view)
+	m.mu.Lock()
+	m.conversationApplying = nil
+	next := m.pendingHeadLocked()
+	newer := m.revision > view.Revision.V
+	if !applied {
+		m.retrySaveLocked()
+	}
+	m.mu.Unlock()
+	apply.applied = applied
+	close(apply.done)
+	if applied && (newer || next != view.PendingConversation.V) {
+		m.Refresh()
+	}
 }
 
 func (m *Monitor) save(view View) bool {
