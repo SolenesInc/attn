@@ -106,6 +106,8 @@ describe('App markdown rendering', () => {
 
   it('shows a diagram that fails to render as its source, never as prose', async () => {
     const source = 'flowchart LR\n  E -->|[| C';
+    const { default: mermaid } = await import('mermaid');
+    await expect(mermaid.parse(source)).rejects.toThrow();
     const { daemon, reader, tile } = await openMarkdown(`# Flow\n\n\`\`\`mermaid\n${source}\n\`\`\`\n`);
     await act(() => vi.dynamicImportSettled());
     await daemon.idle();
