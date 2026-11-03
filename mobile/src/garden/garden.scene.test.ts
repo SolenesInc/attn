@@ -302,6 +302,73 @@ describe('the Garden on the phone', () => {
     expect(gone.commands).toHaveLength(1)
   })
 
+  it('does not call a Garden it has not received empty', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given({ ...online(), loaded: false, homes: [] }),
+      Scene.Subscription.emit(Message.LoadedPairings({ pairings: [personal] })),
+      Scene.click(Scene.role('button', { name: 'Garden' })),
+      Scene.expect(Scene.text('Connecting to Mac · personal…')).toExist(),
+      Scene.expect(Scene.text('Nothing is planted.')).not.toExist(),
+      Scene.Subscription.emit(Message.WentOffline({ pairingId: personal.id })),
+      Scene.expect(Scene.text('Mac · personal is offline.')).toExist(),
+      Scene.expect(Scene.text('Nothing is planted.')).not.toExist(),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 6, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.expect(Scene.text('Loading the Garden from Mac · personal…')).toExist(),
+      Scene.Subscription.emit(Message.ReceivedGarden({ pairingId: personal.id, seeds: [] })),
+      Scene.expect(Scene.text('Loading the Garden from Mac · personal…')).not.toExist(),
+      Scene.expect(Scene.text('Nothing is planted.')).toExist(),
+    )
+  })
+
+  it('marks the seeds of a home that went away until it sends its Garden again', () => {
+    const work: Pairing = {
+      ...personal,
+      id: 'box/p-work',
+      homeId: 'box',
+      homeName: 'Box',
+      profileId: 'p-work',
+      profileName: 'work',
+    }
+    const both = online()
+    Scene.scene(
+      { update, view },
+      Scene.given({ ...both, homes: [...both.homes, { ...both.homes[0]!, pairing: work }] }),
+      Scene.click(Scene.role('button', { name: 'Garden' })),
+      garden,
+      Scene.Subscription.emit(
+        Message.ReceivedGarden({ pairingId: work.id, seeds: [seed('s-box', 'Review box')] }),
+      ),
+      Scene.Subscription.emit(Message.WentOffline({ pairingId: personal.id })),
+      Scene.expect(
+        Scene.text('Mac · personal is offline. Its seeds are as of the last connection.'),
+      ).toExist(),
+      Scene.tap((simulation) => {
+        const rows = sectionTitles(simulation.html)
+        expect(rows.find((row) => row.includes('Read seeds'))).toContain('Mac · personal · offline')
+        expect(rows.find((row) => row.includes('Review box'))).toContain('Box · work')
+        expect(rows.find((row) => row.includes('Review box'))).not.toContain('offline')
+      }),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 6, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedGarden({ pairingId: personal.id, seeds: [{ ...reading, status: 'parked' }] }),
+      ),
+      Scene.expect(
+        Scene.text('Mac · personal is offline. Its seeds are as of the last connection.'),
+      ).not.toExist(),
+      Scene.tap((simulation) => {
+        const rows = sectionTitles(simulation.html)
+        expect(rows).toHaveLength(2)
+        expect(rows.join('\n')).not.toContain('offline')
+        expect(rows.find((row) => row.includes('Read seeds'))).toContain('parked')
+      }),
+    )
+  })
+
   it('says which home is too old to show the Garden', () => {
     Scene.scene(
       { update, view },

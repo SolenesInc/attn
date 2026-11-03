@@ -528,7 +528,7 @@ const newHome = (pairing: Pairing): Home => ({
   sessions: [],
   listed: false,
   asks: [],
-  garden: [],
+  garden: null,
 })
 
 const saved = (homes: ReadonlyArray<Home>) => SavePairings({ pairings: homes.map((home) => home.pairing) })
@@ -663,7 +663,7 @@ const receiveGarden = (
   const listed = seeds.find((seed) => seed.id === open.seedId)
   const wasListed = model.homes
     .find((home) => home.pairing.id === pairingId)
-    ?.garden.some((seed) => seed.id === open.seedId)
+    ?.garden?.some((seed) => seed.id === open.seedId)
   const changed = listed ? JSON.stringify(listed) !== JSON.stringify(page.detail.seed) : wasListed === true
   return { model: received, commands: changed ? [GetSeed(open)] : [] }
 }
@@ -1455,6 +1455,8 @@ const gardenView = (model: Model, h: HtmlBuilder<Message>): Html => {
     model.homes.map((home) => ({
       pairing: home.pairing,
       seeds: home.garden,
+      status: home.status,
+      reason: home.reason,
       tooOld: home.api > 0 && home.api < homeGardenApi,
     })),
     gardenActions(model),
@@ -1879,7 +1881,7 @@ const backLabel = (model: Model): string | null => {
   if (!parent) return '‹ Garden'
   const shown = model.homes
     .find((home) => home.pairing.id === parent.pairingId)
-    ?.garden.find((seed) => seed.id === parent.seedId)
+    ?.garden?.find((seed) => seed.id === parent.seedId)
   return `‹ ${shown?.title ?? 'Back'}`
 }
 

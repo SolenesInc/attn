@@ -818,6 +818,22 @@ textarea.note:focus {
   border-color: currentColor;
 }
 
+.row.seed.offline .badge {
+  color: var(--offline);
+  border-color: var(--line);
+}
+
+.garden-home {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.garden-home.unreachable,
+.garden-home.closed {
+  color: var(--error);
+}
+
 .move-buttons {
   display: flex;
   gap: 8px;

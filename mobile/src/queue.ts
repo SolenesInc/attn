@@ -40,7 +40,7 @@ export const Home = Schema.Struct({
   sessions: Schema.Array(QueueSession),
   listed: Schema.Boolean,
   asks: Schema.Array(PhoneAsk),
-  garden: Schema.Array(GardenSeed),
+  garden: Schema.NullOr(Schema.Array(GardenSeed)),
 })
 export type Home = typeof Home.Type
 

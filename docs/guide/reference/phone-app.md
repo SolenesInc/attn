@@ -57,6 +57,11 @@ are part of it, its checks and the newest entries of its log.
 Images in a seed's body open on the computer. A seed whose body is larger
 than the phone can take in one message says so; read it on the computer.
 
+When the phone cannot reach a profile, the Garden says so at the top, and does
+not call a Garden it has not received empty. The profile's seeds stay in the
+list as they were at the last connection, greyed and labelled offline,
+unreachable or connecting, until the home sends its Garden again.
+
 ## Remove a pairing
 
 - To stop a phone reaching a profile, click **Revoke** next to the phone in

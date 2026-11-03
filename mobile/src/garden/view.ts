@@ -2,6 +2,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { verbsFor } from '@attn/components/gardenBoardModel'
 import { renderMarkdown, type MarkdownContext } from '../asks/markdown'
 import type { Pairing } from '../pairing'
+import type { LinkStatus } from '../queue'
 import {
   gardenSections,
   verbSpecs,
@@ -13,7 +14,9 @@ import {
 
 export type GardenHome = {
   readonly pairing: Pairing
-  readonly seeds: ReadonlyArray<GardenSeed>
+  readonly seeds: ReadonlyArray<GardenSeed> | null
+  readonly status: LinkStatus
+  readonly reason: string
   readonly tooOld: boolean
 }
 
@@ -92,6 +95,7 @@ const seedRow = <Message>(
   key: string,
   seed: GardenSeed,
   line: string,
+  current: boolean,
   open: Message,
   h: HtmlBuilder<Message>,
 ): Html =>
@@ -101,7 +105,7 @@ const seedRow = <Message>(
       h.button(
         [
           h.Type('button'),
-          h.Class(`row ask seed status-${seed.status}`),
+          h.Class(`row ask seed status-${seed.status}${current ? '' : ' offline'}`),
           h.DataAttribute('testid', 'seed-entry'),
           h.OnClick(open),
         ],
@@ -130,6 +134,41 @@ const section = <Message>(title: string, rows: ReadonlyArray<Html>, h: HtmlBuild
 
 const where = (pairing: Pairing) => `${pairing.homeName} · ${pairing.profileName}`
 
+const isCurrent = (home: GardenHome) => home.status === 'online' && home.seeds !== null
+
+const staleLabel: Record<LinkStatus, string> = {
+  online: 'loading',
+  connecting: 'connecting',
+  home_offline: 'offline',
+  unreachable: 'unreachable',
+  closed: 'not allowed',
+}
+
+const unavailableText = (home: GardenHome): string => {
+  const name = where(home.pairing)
+  const status = {
+    online: `Loading the Garden from ${name}…`,
+    connecting: `Connecting to ${name}…`,
+    home_offline: `${name} is offline.`,
+    unreachable: `Can’t reach ${name}.`,
+    closed: [`${name} closed the connection.`, home.reason].filter(Boolean).join(' '),
+  }[home.status]
+  return home.seeds && home.seeds.length > 0 ? `${status} Its seeds are as of the last connection.` : status
+}
+
+const homeNotice = <Message>(home: GardenHome, h: HtmlBuilder<Message>): Html => {
+  if (home.tooOld)
+    return h.p(
+      [h.Key(`old/${home.pairing.id}`), h.Class('muted small')],
+      [`attn on ${where(home.pairing)} is too old to show the Garden. Update it to the latest attn.`],
+    )
+  if (isCurrent(home)) return h.empty
+  return h.p(
+    [h.Key(`away/${home.pairing.id}`), h.Class(`garden-home ${home.status}`)],
+    [unavailableText(home)],
+  )
+}
+
 export const gardenScreen = <Message>(
   homes: ReadonlyArray<GardenHome>,
   actions: GardenActions<Message>,
@@ -138,35 +177,33 @@ export const gardenScreen = <Message>(
   const many = homes.length > 1
   const rows = (pick: (sections: ReturnType<typeof gardenSections>) => ReadonlyArray<GardenSeed>) =>
     homes.flatMap((home) => {
-      const titles = new Map(home.seeds.map((seed) => [seed.id, seed.title]))
-      return pick(gardenSections(home.seeds)).map((seed) =>
+      const seeds = home.seeds ?? []
+      const current = isCurrent(home)
+      const titles = new Map(seeds.map((seed) => [seed.id, seed.title]))
+      return pick(gardenSections(seeds)).map((seed) =>
         seedRow(
           `${home.pairing.id}/${seed.id}`,
           seed,
           [
             seedLine(seed, seed.plotId ? (titles.get(seed.plotId) ?? null) : null),
-            many ? where(home.pairing) : '',
+            many || !current ? where(home.pairing) : '',
+            current ? '' : staleLabel[home.status],
           ]
             .filter(Boolean)
             .join(' · '),
+          current,
           actions.openSeed(home.pairing.id, seed.id),
           h,
         ),
       )
     })
-  const shown = homes.some((home) => home.seeds.length > 0)
+  const shown = homes.some((home) => (home.seeds ?? []).length > 0)
+  const known = homes.every((home) => home.seeds !== null || home.tooOld)
   return h.div(
     [h.Class('garden')],
     [
-      ...homes
-        .filter((home) => home.tooOld)
-        .map((home) =>
-          h.p(
-            [h.Key(`old/${home.pairing.id}`), h.Class('muted small')],
-            [`attn on ${where(home.pairing)} is too old to show the Garden. Update it to the latest attn.`],
-          ),
-        ),
-      shown ? h.empty : h.p([h.Class('empty muted')], ['Nothing is planted.']),
+      ...homes.map((home) => homeNotice(home, h)),
+      shown || !known ? h.empty : h.p([h.Class('empty muted')], ['Nothing is planted.']),
       section(
         'Plots',
         rows((s) => s.plots),
@@ -328,6 +365,7 @@ export const seedScreen = <Message>(
                     child.id,
                     child,
                     seedLine(child, null),
+                    open.live,
                     actions.openSeed(open.pairing.id, child.id),
                     h,
                   ),
