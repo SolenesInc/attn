@@ -80,6 +80,7 @@ runs:
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:
+        key: fast-profile
         workspaces: |
           app/src-tauri
           pty-host
@@ -88,8 +89,6 @@ runs:
       shell: bash
       env:
         CI: 'true'
-        # Acceptance tests what ships, not the unoptimized app-core named instances get locally.
-        ATTN_APP_CARGO_PROFILE: release
         MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
       run: make build-app INSTANCE="${{ inputs.instance }}"
 

@@ -39,8 +39,8 @@ describe('scenarioCatalog agent tripwire flags', () => {
 });
 
 describe('the Linux serial matrix', () => {
-  it('plans into the four App acceptance shards from recorded durations', () => {
-    expect(() => planShards(resolveScenarios([]), readRecordedDurations(), 4, 'linux', {})).not.toThrow();
+  it('plans into the eight App acceptance shards from recorded durations', () => {
+    expect(() => planShards(resolveScenarios([]), readRecordedDurations(), 8, 'linux', {})).not.toThrow();
   });
 });
 

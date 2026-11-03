@@ -223,4 +223,7 @@ The lands run in a scratch clone beside the checkout, whose `origin` is a local
 bare repository, with a copy of this checkout's test-history mirror and no
 service token, so they never push to the real `main` or upload receipts. `--keep` keeps the
 scratch folder and each run's log. The `ci` baseline reads the last 5 green
-`ci.yml` runs on `main` through `gh`.
+`ci.yml` runs on `main` through `gh`, or the runs that `--ci-run <id>` names,
+such as a pull request's. It prints the wall time, each chain's time and the
+longest wait of a job for a runner, which grows when a run has more jobs than
+the free plan runs at once.
