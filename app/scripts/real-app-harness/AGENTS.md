@@ -96,10 +96,10 @@ repository root.
   advances.
   - Outpost scenarios advance around observed bridge states. Await a fresh
     timer registration by its name, such as `bridge-retry`, before advancing an
-    asynchronous retry or a dial whose answer is deliberately held. To measure
+    asynchronous retry or a dial whose answer is deliberately held. To check
     a connecting notice, hold new requests at the fake SSH boundary and release
-    them after the explicit wall-time CPU sample; a paused daemon's health
-    check rejects new connections.
+    them once the check is done; a paused daemon's health check rejects new
+    connections.
   - Schedule ticks follow the Go wire tests: `awaitIdle`, `advance('1m')`,
     `awaitIdle`, then read the result. `awaitIdle` returns once the daemon's
     job runner has finished what the tick started.

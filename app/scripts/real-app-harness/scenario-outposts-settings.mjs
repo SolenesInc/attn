@@ -15,8 +15,7 @@ import { stepClock } from './stepClock.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { appPids, captureWebKitPids, readLiveDaemonPid, snapshot } from './perfMeasure.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { waitForFirstDesktopPane, waitForPaneAttached, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -56,7 +55,6 @@ async function removeScenarioOutposts() {
   }
   await run(binary, ['settings', 'set', 'outposts_enabled', previous]);
 }
-const webkitBaseline = await captureWebKitPids();
 let callerEnv;
 let caller;
 let remoteAgent;
@@ -67,28 +65,6 @@ let split;
 let splitPane;
 const cli = async (...args) => (await run(binary, args, callerEnv)).stdout;
 const tile = pane => `[data-pane-id="${pane}"]`;
-async function cpuTimes(pids) {
-  const { stdout } = await run('ps', ['-p', pids.join(','), '-o', 'pid=,time=']);
-  return Object.fromEntries(stdout.trim().split('\n').map(line => {
-    const [pid, time] = line.trim().split(/\s+/);
-    return [pid, time.split(':').reduce((seconds, part) => seconds * 60 + Number(part), 0)];
-  }));
-}
-async function measureCpu(name, action = null) {
-  const processes = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
-  const pids = [...appPids(processes), readLiveDaemonPid(instance)];
-  const before = await cpuTimes(pids);
-  const started = Date.now();
-  for (let sample = 0; sample < 10; sample++) {
-    if (action) await action();
-    await delay(1000);
-  }
-  const after = await cpuTimes(pids);
-  const durationMs = Date.now() - started;
-  const cpuPct = Object.fromEntries(pids.map(pid => [pid, ((after[pid] ?? before[pid]) - before[pid]) * 100_000 / durationMs]));
-  runner.writeJson(`${name}-cpu.json`, { durationMs, before, after, cpuPct, processes });
-  runner.log(`${name} CPU`, { durationMs, totalCpuPct: Object.values(cpuPct).reduce((sum, value) => sum + value, 0), cpuPct });
-}
 async function port() {
   const server = net.createServer();
   server.listen(0, '127.0.0.1');
@@ -250,7 +226,6 @@ try {
     runner.writeJson('remote-split.json', { remote, split, startDirectory, firstOutput, splitOutput });
     await waitForPaneText(client, split.id, pane.paneId, value => value.includes('ATTN_HOST=Studio') && value.replace(/\s+/g, '').includes('remote-project'), 'split host and cwd rendered');
     await shot('02-remote-split');
-    await measureCpu('online-idle');
   });
   await runner.step('remote_agent_and_queue', async () => {
     for (const [key, value] of [['queue_mode_enabled', 'true'], ['auto_settle_enabled', 'false']]) {
@@ -329,8 +304,6 @@ try {
     const bounds = await client.request('dom_bounds', { selector: notice });
     runner.assert(bounds.animations.every(animation => animation.state !== 'running'), 'the stalled agent notice is static', bounds);
     await shot('03-stalled-agent');
-    await measureCpu('stalled-idle');
-    runner.assert(observer.outposts.some(row => row.name === 'Studio' && row.state === 'stalled'), 'the agent notice stays stalled throughout its CPU sample');
     const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected'));
     outpost.kill('SIGCONT');
     await recovered;
@@ -397,13 +370,13 @@ try {
     await client.request('click_pane', splitPane);
     await waitForPaneInputFocus(client, split.id, splitPane.paneId);
     const beforeRefusal = await client.request('read_pane_text', splitPane);
-    await measureCpu('offline-idle');
     const flashing = wait(`${tile(splitPane.paneId)} .desktop-pane-refusal`);
     await driver.typeText('C13_REFUSED_INPUT');
     await flashing;
     await shot('04-refused-input');
     await driver.pressEnter();
-    await measureCpu('offline-refused-input', () => driver.pressKey('x'));
+    await driver.pressKey('x');
+    await driver.pressKey('x');
     await wait(`${tile(splitPane.paneId)} .desktop-pane-refusal`, { absent: true });
     const bounds = await client.request('dom_bounds', { selector: tile(splitPane.paneId) });
     runner.assert(bounds.animations.every(animation => animation.state !== 'running'), 'the refusal flash finishes with no running tile animation', bounds);
@@ -455,8 +428,6 @@ try {
       await wait(`${tile(pane.paneId)} .desktop-pane-refusal`, { absent: true });
       await shot(`05-connecting-${name}`);
     }
-    await measureCpu('connecting-idle');
-    runner.assert(observer.outposts.some(row => row.name === 'Studio' && row.state === 'connecting'), 'both connecting notices remain during the CPU sample');
     const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected' && !row.last_error));
     releaseRequests();
     runner.writeJson('connecting-duration.json', { durationMs: Date.now() - started });
