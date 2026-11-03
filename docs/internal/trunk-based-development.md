@@ -91,8 +91,8 @@ delegation watch, even after harvest. Corrections are new landings.
 
 ## When main is red
 
-CI runs on `main` after every landing, one run per pushed commit, and the runs
-of landings close together overlap. When Acceptance fails, CI opens the
+CI runs on `main` after every landing, and it batches pushes that arrive during
+a run into the next run. When Acceptance fails, CI opens the
 `Branch health: main acceptance` issue. The sheriff automation watches `main`'s
 CI and counts a run as red when any job in it failed, even when the run itself
 concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
