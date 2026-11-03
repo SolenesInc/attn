@@ -174,29 +174,20 @@ func recordMigrationFromANewerBuild(t *testing.T, dbPath string) {
 
 func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 	for _, tc := range []struct{ name, reason string }{
-		{"platform", "Linux amd64 or arm64"}, {"staged-build", "staged build"}, {"newer-schema", "contains migration"}, {"shared-pty-host", "pty_shared_host_enabled"},
+		{"platform", "Linux amd64 or arm64"}, {"newer-schema", "contains migration"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ssh := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
-			old := testworld.AttnUpdateBinary(t, "before-update", "source", "")
-			remote.RunFrom(old)
-			if tc.name == "shared-pty-host" {
-				remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
-				remote.Start()
-				requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
-			} else if tc.name == "newer-schema" {
+			remote.RunFrom(testworld.AttnUpdateBinary(t, "before-update", "source", ""))
+			if tc.name == "newer-schema" {
 				remote.Start()
 				remote.Stop()
 				recordMigrationFromANewerBuild(t, filepath.Join(remote.Dir, "attn.db"))
 			}
 			ssh.Use(home.World)
 			ssh.Route("refused-outpost", remote)
-			asset := testworld.AttnBinary(t)
-			if tc.name == "staged-build" {
-				asset = old
-			}
-			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+asset)
+			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+testworld.AttnBinary(t))
 			if tc.name == "platform" {
 				ssh.MachineCommand(remote, "uname", "echo Darwin arm64")
 			}
@@ -225,47 +216,67 @@ func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
 	}
 }
 
-func TestSSHStagedInstallRefusesANamedInstanceAtDefaultPath(t *testing.T) {
-	s := testworld.NewStack(t)
-	binary := testworld.AttnBinary(t)
-	data, err := os.ReadFile(binary)
-	if err != nil {
-		t.Fatal(err)
+func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
+	for _, tc := range []struct{ name, reason string }{
+		{"named-instance-at-default-path", "refuses default install path"},
+		{"staged-build", "staged build"},
+		{"shared-pty-host", "pty_shared_host_enabled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := testworld.NewStack(t)
+			binary := testworld.AttnBinary(t)
+			data, err := os.ReadFile(binary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := filepath.Join(s.Dir, "install")
+			target := filepath.Join(root, ".local", "bin", "attn")
+			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, []byte("preserve default"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			staged := filepath.Join(filepath.Dir(target), ".attn-install-test")
+			if err := os.WriteFile(staged, data, 0700); err != nil {
+				t.Fatal(err)
+			}
+			build := s.Run(testworld.Invocation{Args: []string{"--build-info-json"}})
+			var info struct {
+				Version     string `json:"version"`
+				Fingerprint string `json:"sourceFingerprint"`
+				Protocol    string `json:"protocolVersion"`
+			}
+			if err := json.Unmarshal([]byte(build.Stdout), &info); err != nil {
+				t.Fatal(err)
+			}
+			home := bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: info.Protocol}
+			env := []string{"ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
+			switch tc.name {
+			case "named-instance-at-default-path":
+				env = append(env, "ATTN_INSTANCE=install-check")
+			case "staged-build":
+				home.Version = "home-" + home.Version
+			case "shared-pty-host":
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
+				s.Start()
+				requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+			}
+			expected, _ := json.Marshal(home)
+			result := s.Run(testworld.Invocation{Binary: staged, Args: []string{"_outpost-install", "--size", fmt.Sprint(len(data)), "--sha256", fmt.Sprintf("%x", sha256.Sum256(data)), "--build", string(expected), "--target", target}, Env: env})
+			if result.Code == 0 || !strings.Contains(result.Stderr, tc.reason) {
+				t.Fatalf("install refusal: %+v", result)
+			}
+			after, err := os.ReadFile(target)
+			if err != nil || string(after) != "preserve default" {
+				t.Fatalf("installed binary changed: %q %v", after, err)
+			}
+			if _, err := os.Stat(staged); !os.IsNotExist(err) {
+				t.Fatalf("failed staged binary left behind: %v", err)
+			}
+			t.Log(strings.TrimSpace(result.Stderr))
+		})
 	}
-	root := filepath.Join(s.Dir, "install")
-	target := filepath.Join(root, ".local", "bin", "attn")
-	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(target, []byte("preserve default"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	staged := filepath.Join(filepath.Dir(target), ".attn-install-test")
-	if err := os.WriteFile(staged, data, 0700); err != nil {
-		t.Fatal(err)
-	}
-	build := s.Run(testworld.Invocation{Args: []string{"--build-info-json"}})
-	var info struct {
-		Version     string `json:"version"`
-		Fingerprint string `json:"sourceFingerprint"`
-		Protocol    string `json:"protocolVersion"`
-	}
-	if err := json.Unmarshal([]byte(build.Stdout), &info); err != nil {
-		t.Fatal(err)
-	}
-	expected, _ := json.Marshal(bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: info.Protocol})
-	result := s.Run(testworld.Invocation{Binary: staged, Args: []string{"_outpost-install", "--size", fmt.Sprint(len(data)), "--sha256", fmt.Sprintf("%x", sha256.Sum256(data)), "--build", string(expected), "--target", target}, Env: []string{"ATTN_INSTANCE=install-check", "ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}})
-	if result.Code == 0 || !strings.Contains(result.Stderr, "refuses default install path") {
-		t.Fatalf("named install refusal: %+v", result)
-	}
-	after, err := os.ReadFile(target)
-	if err != nil || string(after) != "preserve default" {
-		t.Fatalf("default changed: %q %v", after, err)
-	}
-	if _, err := os.Stat(staged); !os.IsNotExist(err) {
-		t.Fatalf("failed staged binary left behind: %v", err)
-	}
-	t.Log(strings.TrimSpace(result.Stderr))
 }
 
 func TestSSHRemoveForgetsAfterRemoteStopFailure(t *testing.T) {
