@@ -7,12 +7,13 @@ import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', plug_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', plug_cap_launch_instructions: 'false', new_session_agent: 'claude' };
+const desktopSettings = { ...available, queue_mode_enabled: 'false', 'notebook.root.effective': '~/attn-notebook-work', crew_v2_enabled: 'true' };
 const slot = () => within(screen.getByTestId('chief-slot'));
 const setup = () => within(screen.getByTestId('chief-setup'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
 
-for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : 'desktop'} flow`, () => {
-  const settings = { ...available, queue_mode_enabled: String(queue), 'notebook.root.effective': '~/attn-notebook-work', crew_v2_enabled: 'true' };
+describe('Chief slot in queue flow', () => {
+  const settings = { ...desktopSettings, queue_mode_enabled: 'true' };
   it('opens first-run setup with the primary action focused and submits the preselected route', async () => {
     const current = member();
     const { daemon } = await renderApp({ initialState: { settings, crew: [current] } });
@@ -283,7 +284,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     const current = member({ agent: 'claude', model: 'opus', binding_session: awake ? 'chief-day' : undefined });
     const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: awake ? [daemonSession('chief-day', { chief_of_staff: true }), daemonSession('agent')] : [], desktops: awake ? [soloDesktop('chief-day'), soloDesktop('agent', { shortcut_slot: 2 })] : [] } });
     const row = () => slot().getByTestId('queue-crew-select-chief-key');
-    if (queue && awake) {
+    if (awake) {
       await gesture(daemon, () => pressShortcut('sidebar.agentList'));
       await act(() => vi.advanceTimersToNextFrame());
     }
@@ -292,7 +293,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.keyDown(setup().getByRole('radio', { name: /Opus/ }), { key: 'Escape' }));
     await act(() => vi.advanceTimersToNextFrame());
     expect(row()).toHaveFocus();
-    if (queue && awake) {
+    if (awake) {
       await gesture(daemon, () => fireEvent.keyDown(row(), { key: 'ArrowDown' }));
       expect(document.activeElement).not.toBe(row());
       expect(document.activeElement?.closest('.queue-sidebar')).not.toBeNull();
@@ -463,6 +464,15 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(daemon.sentOf('crew_set')).toEqual([]);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
     expect(daemon.sentOf('crew_sleep')).toEqual([]);
+  });
+});
+
+describe('Chief slot in desktop flow', () => {
+  it('mounts in the desktop sidebar and opens first-run setup', async () => {
+    await renderApp({ initialState: { settings: desktopSettings, crew: [member()] } });
+    expect(screen.getByTestId('chief-slot').closest('.queue-sidebar')).toBeNull();
+    expect(phase()).toBe('unconfigured');
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveFocus();
   });
 });
 
