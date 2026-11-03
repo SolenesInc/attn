@@ -55,31 +55,34 @@ WebContent for each window, and `--pprof-port <port>` restarts the daemon with
 `ATTN_PPROF` to add its CPU profile. Profiling costs CPU, so profiled runs are
 not baselines.
 
+## A copy of production
+
+The garden and session tools measure a copy of a real database in a named
+instance. `scripts/gardenpushperf/copy-production.sh <name> [<source db>]`
+copies the source read-only, production's `~/.attn/attn.db` by default, and
+turns off what the copy would otherwise reach: the real Notebook root, worktree
+removal, outposts and every automation. Pass a source to measure a copy made
+on another machine, such as a Mac copy under `~/perf-copies/` on ai-sandbox.
+`attn instance resolve --field dataDir` and `--field wsPort` give the copy's
+data directory and port.
+
+Run the tools, and the scripts that start them, in the instance's environment
+(`eval "$(attn instance-env <name>)"`). They refuse to run without a
+non-production instance. Given `-vars`, they refuse when that endpoint's daemon
+is not the instance's, and `gardenpushperf` and `sessionfactperf` connect to
+the WebSocket listener it reports.
+
 ## Garden push
 
 `scripts/gardenpushperf` measures what one garden update costs on a real
-garden. Copy the database into a named instance with
-`scripts/gardenpushperf/copy-production.sh <name>`, which reads production
-read-only and turns off what the copy would otherwise reach: the real Notebook
-root, worktree removal, outposts and every automation. Start the
-instance's daemon and plant a seed to move.
-
-`gardenpushperf` and `sessionfactperf` change the daemon they reach, so run
-them, and the scripts that start them, in the instance's environment. They
-refuse to run without a non-production instance. Given `-vars`, they connect
-to the WebSocket listener that endpoint's daemon reports, and refuse before
-any change when that listener is not on the instance's port.
+garden. Start a copy's daemon and plant a seed to move.
 
 The Go tool reports bytes and move-to-update latency for notes and for wither
 and replant moves:
 
 ```bash
-eval "$(attn instance-env <name>)"
 go run ./scripts/gardenpushperf -seed <id> -n 20
 ```
-
-`attn instance resolve --field dataDir` and `--field wsPort` give the data
-directory and port.
 
 To measure the daemon's CPU per garden mutation instead, start the daemon with
 `ATTN_PPROF=<port>`, plant the seed under a watched plot, and pass the
@@ -105,6 +108,37 @@ pnpm --dir app exec vite preview --outDir <dir> --port <port>
 node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
 ```
 
+## Garden reads
+
+`scripts/gardenreadperf` measures what reading the garden costs on a copy. It
+sends `seed_list` and `seed_ready` with `all` straight to the daemon's socket,
+so process start and CLI decoding stay out of the number, and reports the
+median, minimum and maximum time to first byte and to the whole reply, the
+reply's bytes and its item counts. `-show <seed id>` and `-search <query>` add
+`seed_show` and `seed_search`:
+
+```bash
+go run ./scripts/gardenreadperf -profile <profile id> -n 20 -show <seed id> -search render
+```
+
+Start the daemon with `ATTN_PPROF=<port>` and pass
+`-vars http://127.0.0.1:<port>/debug/vars` to add the daemon's CPU per request
+above its idle rate. The tool first waits for the daemon to settle below 20 CPU
+milliseconds a second, since a daemon fresh from start uses hundreds. Each
+`-cli <attn binary>` also runs `seed ls` and `seed ready --all` through that
+binary and reports wall and CPU time. Several `-cli` binaries run in
+interleaved rounds, so load on the machine reaches each one alike. CPU is the
+number to compare when other agents load the machine.
+
+To compare two builds, run each build's daemon on the same copy in turn. For
+what limits a read, take a CPU profile while a loop of `seed ls` runs, and read
+`handleSeedList` with `go tool pprof -top -cum`:
+
+```bash
+curl -s -o cpu-ls.pprof "http://127.0.0.1:<port>/debug/pprof/profile?seconds=20" &
+end=$((SECONDS+20)); while [ $SECONDS -lt $end ]; do attn seed ls --profile <profile id> >/dev/null; done; wait
+```
+
 ## Session facts
 
 `scripts/sessionfactperf` measures what one session fact, such as a state or
@@ -113,9 +147,7 @@ cost change, costs the daemon and the app. It changes the
 the daemon reprices every session with usage and sends one
 `session_state_changed` for each, while the usage the app shows stays the same.
 
-Copy production into a named instance with
-`scripts/gardenpushperf/copy-production.sh <name>`, as for the garden push, and
-start its daemon with `ATTN_PPROF=<pprof port>`. Each run is one reprice
+Make a copy and start its daemon with `ATTN_PPROF=<pprof port>`. Each run is one reprice
 burst. The tool waits for the daemon to return to idle and reports CPU
 milliseconds per fact above the idle rate, the gaps between frames and their
 sizes:

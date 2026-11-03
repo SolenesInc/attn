@@ -15,29 +15,45 @@ type Vars struct {
 	WSAddr    string `json:"ws_addr"`
 }
 
-func WebSocketURL(writes, varsURL string) (string, error) {
+func Instance(purpose string) (string, error) {
 	instance, err := config.NormalizeInstanceName(os.Getenv("ATTN_INSTANCE"))
 	if err != nil {
 		return "", fmt.Errorf("ATTN_INSTANCE: %w", err)
 	}
 	if instance == "" {
-		return "", fmt.Errorf("set ATTN_INSTANCE to a non-production instance: this tool %s", writes)
+		return "", fmt.Errorf("set ATTN_INSTANCE to a non-production instance: this tool %s", purpose)
 	}
 	if err := config.ValidateInstanceRouting(); err != nil {
 		return "", err
 	}
-	port := config.WSPortForInstance(instance)
-	if varsURL == "" {
-		return "ws://localhost:" + port + "/ws", nil
-	}
-	vars, err := ReadVars(varsURL)
+	return instance, nil
+}
+
+func WebSocketURL(writes, varsURL string) (string, error) {
+	instance, err := Instance(writes)
 	if err != nil {
 		return "", err
 	}
-	if _, served, _ := net.SplitHostPort(vars.WSAddr); served != port {
-		return "", fmt.Errorf("-vars %s belongs to the daemon listening on %q, not instance %s's daemon on port %s; point -vars at that instance's daemon", varsURL, vars.WSAddr, instance, port)
+	if varsURL == "" {
+		return "ws://localhost:" + config.WSPortForInstance(instance) + "/ws", nil
+	}
+	vars, err := InstanceVars(instance, varsURL)
+	if err != nil {
+		return "", err
 	}
 	return "ws://" + vars.WSAddr + "/ws", nil
+}
+
+func InstanceVars(instance, varsURL string) (Vars, error) {
+	vars, err := ReadVars(varsURL)
+	if err != nil {
+		return Vars{}, err
+	}
+	port := config.WSPortForInstance(instance)
+	if _, served, _ := net.SplitHostPort(vars.WSAddr); served != port {
+		return Vars{}, fmt.Errorf("-vars %s belongs to the daemon listening on %q, not instance %s's daemon on port %s; point -vars at that instance's daemon", varsURL, vars.WSAddr, instance, port)
+	}
+	return vars, nil
 }
 
 func ReadVars(url string) (Vars, error) {
