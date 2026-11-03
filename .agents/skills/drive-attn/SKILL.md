@@ -5,18 +5,20 @@ description: Drive attn's CLI, daemon and app on a non-production instance the w
 
 # Drive attn
 
-This skill is for maintainers: the agents and people changing attn. It starts
-attn on a named instance, drives a feature through each way in, and keeps the
-proof. `docs/internal/instances.md` and `app/scripts/real-app-harness/AGENTS.md`
-hold the detail; this file holds the commands you need in hand.
+This skill is for maintainers: the agents and people changing attn. Use it to
+start attn on a named instance, drive a feature through each way in, and keep
+the proof. `docs/internal/instances.md` and
+`app/scripts/real-app-harness/AGENTS.md` hold the detail. This file holds the
+commands you need at hand.
 
-Production stays out of every run: never point a daemon, app, recipe,
-harness or test at `~/.attn` or the production app. A feature that needs
-realistic data copies it out read-only. The `attn` on `PATH` is only for your
-own garden work on your stake, from your own session, as
-[Evidence](#evidence) shows and `AGENTS.md` allows. Never stop a process
-yourself, by PID or by name: `attn instance clean` stops everything an
-instance runs, and every run ends with it, as [Cleanup](#cleanup) says.
+Keep production out of every run. Never point a daemon, app, recipe, harness
+or test at `~/.attn` or the production app. For a feature that needs
+realistic data, copy the data out read-only. Use the `attn` on `PATH` only
+for your own garden work on your stake, from your own session, as
+[Evidence](#evidence) shows and `AGENTS.md` allows. Stop a process
+yourself only by a PID you captured when you started it, never any other
+process. `attn instance clean` stops everything else an instance runs, and you
+end every run with `attn instance clean`, as [Cleanup](#cleanup) says.
 
 ## Launch
 
@@ -28,36 +30,37 @@ make build                                              # ./attn from this check
 . /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github ensure
 ```
 
-Every command after `write-env.sh` runs in the instance shell: it starts with
-`. /tmp/drive-attn-<name>.env &&`. Agents' command tools start a fresh shell
-for each command (Claude Code keeps only the working directory; Codex starts
-a new process), so a selection, variable or function from one command is
-gone by the next. Without the prefix, `./attn` acts on production as your
-own session, `wsctl` and `bridge` are undefined, and the mock GitHub reaches
-the `dev` instance. A missing file stops the command, and the file ends with
-a guard that fails unless `ATTN_INSTANCE` is `<name>`. In a shell that keeps
-its state, such as a person's terminal, source the file once in a terminal
-of its own instead, so your own `attn` keeps pointing at the attn you run
-inside. Code blocks here show the prefix; inline commands, here and in the
-feature map, leave it out.
+Run every command after `write-env.sh` in the instance shell: start the
+command with `. /tmp/drive-attn-<name>.env &&`. Agents' command tools start a
+fresh shell for each command (Claude Code keeps only the working directory,
+and Codex starts a new process), so a selection, variable or function from one
+command is gone by the next. Without the prefix, `./attn` acts on production
+as your own session, `wsctl` and `bridge` are undefined, and the mock GitHub
+reaches the `dev` instance. If the file is missing, the command stops. The
+file ends with a guard that fails unless `ATTN_INSTANCE` is `<name>`. In a
+shell that keeps its state, such as a person's terminal, source the file once
+in a terminal of its own instead, so your own `attn` keeps pointing at the
+attn you run inside. Code blocks here show the prefix. Inline commands, here
+and in the feature map, are written without it.
 
-Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`: `dev` is
-shared with other work and installs the attn skill into your harness homes.
-Keep a list of every name you start: [Cleanup](#cleanup) cleans each one,
-including when you abandon the run.
+Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`, because `dev`
+is shared with other work and installs the attn skill into your harness
+homes. Keep a list of every name you start. Clean each name as
+[Cleanup](#cleanup) says, including when you abandon the run.
 
-The env file selects the instance with `attn instance-env <name>`, which
-clears inherited routing, and moves to this checkout. Its `unset` line drops
-the identity of the session you run in, so the instance does not mistake
-your shell for one of its terminals. Its exports make the daemon launch the
-mock agent for `claude` and `codex`, refuse headless model tasks, and talk
-to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a scratch harness
-home, so a mock conversation a fixture makes resumable lands there and not
-in your `~/.claude` or `~/.codex`. `ATTN_ANALYTICS_INGEST_URL` points
-analytics uploads at an address that goes nowhere, so turning sharing on
-cannot reach the real telemetry service. The file also defines `wsctl`,
-`bridge` and `DRIVE_ENV`, its own path, which recipes append their variables
-to ([features/README.md](features/README.md)). Running `write-env.sh` again
+Sourcing the env file runs `attn instance-env <name>`, which selects the
+instance and clears inherited routing. Sourcing also changes the directory to
+this checkout. The file's `unset` line drops the identity of the session you
+run in, so the instance does not mistake your shell for one of its terminals.
+The `unset` line also drops an inherited `ATTN_ANALYTICS_INGEST_URL`, so
+analytics uploads go nowhere. With the exports in the file, the daemon
+launches the mock agent for `claude` and `codex`, refuses headless model
+tasks, and talks to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a
+scratch harness home, so a mock conversation that a fixture makes resumable
+lands there and not in your `~/.claude` or `~/.codex`. The file also defines
+`wsctl`, `bridge` and `DRIVE_ENV`. `DRIVE_ENV` holds the path of the file
+itself, which recipes append their variables to
+([features/README.md](features/README.md)). Running `write-env.sh` again
 starts the file over.
 
 Daemon only, for CLI and protocol work:
@@ -75,63 +78,69 @@ shell's environment:
 ```
 
 `--launch` starts the app with the instance shell's environment and parks
-its window at the screen's edge. Keep that default on a shared Mac: never
-activate or unpark it, set the parking or always-on-top variables yourself,
-or send physical input. That includes `open`, `make run`, `activateApp`,
-`osascript ... activate`, `cliclick`, the driver's `menu` and scrolling.
+the app window at the screen's edge. Keep that default on a shared Mac. Never
+activate or unpark the window, set the parking or always-on-top variables
+yourself, or send physical input. The forbidden actions include `open`,
+`make run`, `activateApp`, `osascript ... activate`, `cliclick` and the
+driver's `menu`.
 Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
 input failure is a bridge or harness bug to diagnose, not permission to take
 focus. A scenario that requires activation or system input needs a dedicated
-display; it cannot prove a shared-Mac recipe. On macOS, `make run INSTANCE=<name>` opens
-the app through Launch Services instead, which drops these variables. If the
-daemon started without them (the doctor shows a real agent's executable), or
-a recipe needs another variable in the daemon's environment, quit the app
-with `./attn instance stop-app`, stop the daemon with
-`"$(./attn instance resolve --field appDaemon)" daemon stop`, append the
-missing `export` line to the env file, then launch again.
+display. Such a scenario cannot prove a shared-Mac recipe. On macOS,
+`make run INSTANCE=<name>` opens the app through Launch Services, which does
+not pass the env file's exports to the app. On a shared Mac, launch with
+`bridge --launch` instead. If the daemon started without those exports (the
+doctor shows a real agent's executable), or a recipe needs another variable in
+the daemon's environment, do these steps in order:
+
+1. Quit the app with `./attn instance stop-app`.
+2. Stop the daemon with
+   `"$(./attn instance resolve --field appDaemon)" daemon stop`.
+3. Append the missing `export` line to the env file.
+4. Launch again with `bridge --launch --wait-ready ping`.
 
 ## Doctor
 
-One read-only check. With the app installed, through the instance's own
-binary (`appDaemon` is a file inside the installed app, so this fails with
-`no such file or directory` on a daemon-only instance):
+The doctor is one read-only check. With the app installed, run it through the
+instance's own binary. `appDaemon` is a file inside the installed app, so the
+command fails with `no such file or directory` on a daemon-only instance.
 
 ```bash
 . /tmp/drive-attn-<name>.env && "$(./attn instance resolve --field appDaemon)" preflight --agent claude
 ```
 
-It must report `PASS` overall, with `routing.daemon instance=<name>`,
+The check must report `PASS` overall, with `routing.daemon instance=<name>`,
 `protocol.cli_app` and `protocol.app_daemon` (the installed app, CLI and
 daemon speak one protocol), `tool.mockAgent.mjs` (the daemon launches the
 mock, not a real Claude) and `headless.tasks daemon headless tasks off`.
 Most verbs, `seed`, `agent`, `daemon` and `preflight` among them, also print
-`[attn instance=<name> ...]` on stderr; there, no banner means no instance
-is selected. `./attn instance` shows the selection instead. For the build,
-the same binary's `version --json` must show the `sourceFingerprint` that
-`bash scripts/source-fingerprint.sh` prints for your tree, and
-`bridge --wait-ready` refuses an app built from other source. Daemon only,
-run the check through `./attn`:
+`[attn instance=<name> ...]` on stderr. On those verbs, no banner means no
+instance is selected. `./attn instance` shows the selection instead. To check
+the build, run `version --json` on the same binary and compare its
+`sourceFingerprint` with the output of `bash scripts/source-fingerprint.sh`
+for your tree. The two must match. `bridge --wait-ready` refuses an app built
+from other source. For a daemon-only instance, run the check through `./attn`:
 
 ```bash
 . /tmp/drive-attn-<name>.env && ./attn preflight --agent claude
 ```
 
-The two `protocol.` checks fail because no app is installed, so it prints
-`FAIL (2 failed, 0 warnings)` and exits 1. Everything else must pass.
+The two `protocol.` checks fail because no app is installed, so the check
+prints `FAIL (2 failed, 0 warnings)` and exits 1. Everything else must pass.
 
 ## Drive
 
 | Harness | Entrypoint | Reaches | Cannot reach |
 | --- | --- | --- | --- |
-| `./attn <verb>` in the instance shell | A person's own shell; agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app; verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
+| `./attn <verb>` in the instance shell | A person's own shell. Agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app. Verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |
-| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input, a seed page's Resume (`seed-continuation`, `seed-resume`) | What the app shows |
-| `bridge` | People | Native keys, text and clicks inside the window; UI state; screenshots | The macOS menu bar |
+| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input, a seed page's Resume (`seed-continuation`, `seed-resume`), and any request answered by an event carrying its `request_id` (`request --json <payload> --event <event>`) | What the app shows |
+| `bridge` | People | Native keys, text and clicks inside the window, UI state, screenshots | The macOS menu bar |
 | Scenarios | People, as committed proof | The packaged app, through `createWindowDriver({ appPath, client })`, menus included | A quick local loop: CI runs them |
 
 **Mock agent.** The daemon launches `mockAgent.mjs` for `claude` and `codex`.
-It reads `.attn-mock-agent.json` from the session's folder at launch; without
-one it stays silent. Each turn matches a prompt by `includes` and runs its
+The mock agent reads `.attn-mock-agent.json` from the session's folder at
+launch. Without the file, the mock agent stays silent. Each turn matches a prompt by `includes` and runs its
 actions: `attn` runs an attn verb as that session, `reply` prints text,
 `capture` keeps part of the prompt for `{{name}}`.
 
@@ -207,29 +216,32 @@ move on. For each instance you started:
 .agents/skills/drive-attn/scripts/clean.sh <name>
 ```
 
-It sources the env file, runs `./attn instance clean <name>`, stops the
-instance's mock GitHub, and removes the scratch tool home, `$ATTN_TOOL_HOME`,
-and then the env file. It stops at the first command that fails and keeps
-the env file, so you can run it again. Close a terminal that sourced the env
-file.
+The script sources the env file and runs `./attn instance clean <name>`. Then
+it stops the instance's mock GitHub, removes the scratch tool home
+(`$ATTN_TOOL_HOME`), and removes the env file. The script stops at the first
+command that fails and keeps the env file, so you can run the script again.
+Close a terminal that sourced the env file.
 
-`clean` quits the app, stops the daemon, reaps its workers, shared PTY hosts
-and plugin drivers, and removes the app and the data folder. It refuses the
-default (production) instance; never pass it `--force`. If it reports a live
-app, run `./attn instance stop-app` in the instance shell and run `clean.sh`
-again. If it reports anything else it could not stop, leave the process
-alone and bring `clean`'s output to the user; never stop it by PID or name,
-and never delete a data folder by hand.
+`clean` quits the app, stops the daemon, reaps the daemon's workers, shared
+PTY hosts and plugin drivers, and removes the app and the data folder.
+`clean` refuses the default (production) instance. Never pass `--force` to
+`clean`. If `clean` reports a live app, run `./attn instance stop-app` in the
+instance shell and run `clean.sh` again. If `clean` reports anything else it
+could not stop, leave the process alone and bring `clean`'s output to the
+user. Never stop that process by a PID you looked up or by its name, and never
+delete a data folder by hand.
 
-`clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`,
-with whatever the run wrote to the notebook or attached to seeds, and a
-later instance with the same name starts with it. Proof in your own folder
-or on your stake survives; check that it is still there after cleaning.
+`clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`, in
+place, with whatever the run wrote to the notebook or attached to seeds. A
+later instance with the same name starts with that folder. Proof in your own
+folder or on your stake survives cleaning. Check that the proof is still
+there after cleaning.
 
 ## The feature map
 
 Read `features/README.md`, which holds the driving conventions, then
-`features/<id>.md` for the feature you changed. Each file lists the feature's ways in, a recipe that drives them,
-the contexts it answers and where its tests live. Drive every way in it
-lists before calling a change done. When you find a way in, a trap or a test
-the file lacks, fix the file in the same change.
+`features/<id>.md` for the feature you changed. Each feature file lists the
+feature's ways in, a recipe that drives the ways in, the contexts that apply
+to the feature, and where the feature's tests live. Drive every way in that
+the file lists before you call a change done. When you find a way in, a trap
+or a test that the file lacks, fix the file in the same change.

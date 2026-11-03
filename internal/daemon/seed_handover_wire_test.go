@@ -221,21 +221,21 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 }
 
 func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Codex, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
+	pluginDriverSettings(app, "plug")
 	predecessor := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	w.Launched(string(predecessor.SessionID))
 
-	allow := w.RefusePiLaunches("pi could not start: the model provider is unreachable")
+	allow := w.RefusePlugLaunches("plug could not start: the model provider is unreachable")
 	request := seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "Continue from the failing test.")
-	request.Agent = protocol.Ptr(string(fakeagent.Pi))
+	request.Agent = protocol.Ptr(string(fakeagent.Plug))
 	accepted, err := cli.StartDelegation(request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result, err := cli.Delegate(request); err == nil || !strings.Contains(err.Error(), "provider is unreachable") {
-		t.Fatalf("handing over to a pi that cannot start = %+v, %v; want the launch failure", result, err)
+		t.Fatalf("handing over to a plug that cannot start = %+v, %v; want the launch failure", result, err)
 	}
 	seedHandoverHeldBy(t, cli, predecessor.SeedID, string(accepted.SessionID), 1)
 	for _, session := range w.App().Initial.Sessions {
@@ -246,10 +246,10 @@ func TestAHandoverWhoseSuccessorCannotStartKeepsTheSeedWithItsSuccessor(t *testi
 
 	allow()
 	retry := seedHandoverRequest("", predecessor.Directory, predecessor.SeedID, "")
-	retry.RequestID, retry.Agent = "handover-retry", protocol.Ptr(string(fakeagent.Pi))
+	retry.RequestID, retry.Agent = "handover-retry", protocol.Ptr(string(fakeagent.Plug))
 	successor, err := cli.Delegate(retry)
 	if err != nil {
-		t.Fatalf("handing the seed over again once pi can start: %v", err)
+		t.Fatalf("handing the seed over again once plug can start: %v", err)
 	}
 	if prompt := w.Launched(string(successor.SessionID)).Prompted(); !strings.Contains(prompt, "attn seed show "+predecessor.SeedID) {
 		t.Errorf("the successor was prompted %q, want a pointer to its seed", prompt)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndANewConversationCountsItsOwn(t *testing.T) {
@@ -55,4 +56,42 @@ func codexRollout(t *testing.T, w *world, conversation string) string {
 		t.Fatalf("rollout of %s = %v (%v), want exactly one", conversation, rollouts, err)
 	}
 	return rollouts[0]
+}
+
+func TestCodexUsageCountsEveryRequestOnceAcrossARestart(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	cwd := w.Path("shop")
+	session := w.Spawn(app, fakeagent.Codex, cwd)
+	codex := w.Launched(session)
+	app.TypeLine(session, "add a discount field to checkout")
+	codex.Prompted()
+	research := "Checkout applies tax after discounts."
+	codex.Subagent(research)
+	question := "Before or after tax? <!-- attn:state=waiting_input -->"
+	codex.Reply(question)
+	counted := claudeTokens(research) + claudeTokens(question)
+	awaitUsageTokens(app, session, counted)
+
+	w.restart()
+	app = w.App()
+	if restored := queriedSession(t, w.Client(), session).Usage; restored == nil || restored.TotalTokens != counted {
+		t.Fatalf("usage after the restart = %+v, want %d tokens", restored, counted)
+	}
+
+	w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
+		m.ID = protocol.SessionID(session)
+		m.ResumeSessionID = protocol.Ptr(codex.ConversationID)
+	})
+	resumed := w.Launched(session)
+	app.TypeLine(session, "after tax")
+	resumed.Prompted()
+	check := "The discount stays before tax."
+	resumed.Subagent(check)
+	applied := "Applied after tax. <!-- attn:state=idle -->"
+	resumed.Reply(applied)
+	counted += claudeTokens(check) + claudeTokens(applied)
+	if usage := awaitUsageTokens(app, session, counted); usage.MeasurementIncomplete != nil {
+		t.Errorf("usage after resuming = %+v, want it still complete", usage)
+	}
 }

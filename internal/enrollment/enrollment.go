@@ -38,6 +38,18 @@ func (s Status) IsHome() bool {
 	return s.DaemonID != "" && s.DaemonID == s.HomeDaemonID
 }
 
+func (s Status) IsOutpost() bool {
+	return s.HomeDaemonID != "" && !s.IsHome()
+}
+
+// CheckHome refuses homeID when this daemon is enrolled to another home.
+func (s Status) CheckHome(homeID string) error {
+	if s.HomeDaemonID == "" || s.HomeDaemonID == s.DaemonID || s.HomeDaemonID == homeID {
+		return nil
+	}
+	return fmt.Errorf("outpost %s is paired to home %s; home %s refused; run attn enrollment leave on the outpost to release it", s.DaemonID, s.HomeDaemonID, homeID)
+}
+
 func (s Status) Describe() string {
 	if s.IsHome() {
 		return "home"
@@ -199,8 +211,10 @@ func RecordHome(dataRoot, homeID, homeName string) (Status, error) {
 	if err != nil && !errors.Is(err, ErrNoRecord) {
 		return Status{}, err
 	}
-	if err == nil && record.HomeDaemonID != daemonID && record.HomeDaemonID != homeID {
-		return Status{}, fmt.Errorf("outpost %s is paired to home %s; home %s refused; run attn enrollment leave on the outpost to release it", daemonID, record.HomeDaemonID, homeID)
+	if err == nil {
+		if err := (Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}).CheckHome(homeID); err != nil {
+			return Status{}, err
+		}
 	}
 	if err != nil || record.HomeDaemonID != homeID || record.HomeName != homeName {
 		if err := writeRecord(recordPath, Record{HomeDaemonID: homeID, HomeName: homeName, RecordedAt: nowStamp()}); err != nil {

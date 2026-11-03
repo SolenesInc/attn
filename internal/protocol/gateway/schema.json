@@ -1,0 +1,1238 @@
+{
+  "GatewayAsk": {
+    "properties": {
+      "chief": {
+        "type": "boolean"
+      },
+      "created_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "crew_member": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "max_frame_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "parts": {
+        "items": {
+          "$ref": "GatewayAskPart.json"
+        },
+        "type": "array"
+      },
+      "reply": {
+        "$ref": "GatewayAskReply.json"
+      },
+      "seed_slug": {
+        "type": "string"
+      },
+      "seed_title": {
+        "type": "string"
+      },
+      "session_id": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      },
+      "too_large_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id",
+      "session_id",
+      "subject",
+      "parts",
+      "created_at"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswer": {
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "other": {
+        "type": "string"
+      },
+      "picked": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "picked"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswerCommand": {
+    "properties": {
+      "answers": {
+        "items": {
+          "$ref": "GatewayAskAnswer.json"
+        },
+        "type": "array"
+      },
+      "ask_id": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "ask_answer",
+        "type": "string"
+      },
+      "note": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "ask_id",
+      "answers"
+    ],
+    "type": "object"
+  },
+  "GatewayAskAnswerResult": {
+    "properties": {
+      "ask_id": {
+        "type": "string"
+      },
+      "error": {
+        "type": "string"
+      },
+      "event": {
+        "const": "ask_answer_result",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "ask_id"
+    ],
+    "type": "object"
+  },
+  "GatewayAskChoice": {
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "label"
+    ],
+    "type": "object"
+  },
+  "GatewayAskEvent": {
+    "properties": {
+      "ask": {
+        "$ref": "GatewayAsk.json"
+      },
+      "event": {
+        "const": "ask",
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "ask"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImage": {
+    "properties": {
+      "ask_id": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "ask_image",
+        "type": "string"
+      },
+      "offset": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "src": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "ask_id",
+      "src",
+      "offset"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImageChunk": {
+    "properties": {
+      "data_base64": {
+        "type": "string"
+      },
+      "event": {
+        "const": "ask_image_chunk",
+        "type": "string"
+      },
+      "mime_type": {
+        "type": "string"
+      },
+      "offset": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "size": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "offset",
+      "size",
+      "mime_type",
+      "data_base64"
+    ],
+    "type": "object"
+  },
+  "GatewayAskImageError": {
+    "properties": {
+      "event": {
+        "const": "ask_image_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewayAskPart": {
+    "properties": {
+      "markdown": {
+        "type": "string"
+      },
+      "question": {
+        "$ref": "GatewayAskQuestion.json"
+      }
+    },
+    "type": "object"
+  },
+  "GatewayAskQuestion": {
+    "properties": {
+      "choices": {
+        "items": {
+          "$ref": "GatewayAskChoice.json"
+        },
+        "type": "array"
+      },
+      "context": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "GatewayAskQuestionKind.json"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "recommended": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "key",
+      "kind",
+      "prompt",
+      "choices"
+    ],
+    "type": "object"
+  },
+  "GatewayAskQuestionKind": {
+    "enum": [
+      "one",
+      "any",
+      "text",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewayAskReply": {
+    "properties": {
+      "answered_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "answers": {
+        "items": {
+          "$ref": "GatewayAskAnswer.json"
+        },
+        "type": "array"
+      },
+      "note": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "answers",
+      "answered_at"
+    ],
+    "type": "object"
+  },
+  "GatewayAsks": {
+    "properties": {
+      "event": {
+        "const": "asks",
+        "type": "string"
+      },
+      "ids": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "ids"
+    ],
+    "type": "object"
+  },
+  "GatewayCheckState": {
+    "enum": [
+      "open",
+      "reported",
+      "confirmed",
+      "rejected",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewayCheckTally": {
+    "properties": {
+      "confirmed": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "confirmed",
+      "total"
+    ],
+    "type": "object"
+  },
+  "GatewayGarden": {
+    "properties": {
+      "event": {
+        "const": "garden",
+        "type": "string"
+      },
+      "ids": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "ids"
+    ],
+    "type": "object"
+  },
+  "GatewayGardenSeeds": {
+    "properties": {
+      "event": {
+        "const": "garden_seeds",
+        "type": "string"
+      },
+      "seeds": {
+        "items": {
+          "$ref": "GatewaySeed.json"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "seeds"
+    ],
+    "type": "object"
+  },
+  "GatewayHello": {
+    "properties": {
+      "api": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "cmd": {
+        "const": "hello",
+        "type": "string"
+      },
+      "device_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "api",
+      "device_id"
+    ],
+    "type": "object"
+  },
+  "GatewayPing": {
+    "properties": {
+      "cmd": {
+        "const": "ping",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd"
+    ],
+    "type": "object"
+  },
+  "GatewayPlotProgress": {
+    "properties": {
+      "blocked": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "done": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "growing": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "parked": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "ready": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "withered": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total",
+      "done",
+      "withered",
+      "growing",
+      "parked",
+      "ready",
+      "blocked"
+    ],
+    "type": "object"
+  },
+  "GatewayPong": {
+    "properties": {
+      "event": {
+        "const": "pong",
+        "type": "string"
+      }
+    },
+    "required": [
+      "event"
+    ],
+    "type": "object"
+  },
+  "GatewayProfile": {
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "name"
+    ],
+    "type": "object"
+  },
+  "GatewayRefused": {
+    "properties": {
+      "event": {
+        "const": "refused",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewaySeed": {
+    "properties": {
+      "checks": {
+        "$ref": "GatewayCheckTally.json"
+      },
+      "claimed": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "plot_id": {
+        "type": "string"
+      },
+      "progress": {
+        "$ref": "GatewayPlotProgress.json"
+      },
+      "ready": {
+        "type": "boolean"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "slug": {
+        "type": "string"
+      },
+      "state_changed_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "status": {
+        "$ref": "GatewaySeedStatus.json"
+      },
+      "tender": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "waits_for": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "slug",
+      "title",
+      "status",
+      "claimed",
+      "ready",
+      "waits_for",
+      "state_changed_at"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedChanged": {
+    "properties": {
+      "event": {
+        "const": "seed_changed",
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "seed_id"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedCheck": {
+    "properties": {
+      "from": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "GatewayCheckState.json"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "text",
+      "state"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedDetail": {
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "body_too_large_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "checks": {
+        "items": {
+          "$ref": "GatewaySeedCheck.json"
+        },
+        "type": "array"
+      },
+      "children": {
+        "items": {
+          "$ref": "GatewaySeed.json"
+        },
+        "type": "array"
+      },
+      "event": {
+        "const": "seed_detail",
+        "type": "string"
+      },
+      "log": {
+        "items": {
+          "$ref": "GatewaySeedLogEntry.json"
+        },
+        "type": "array"
+      },
+      "log_total": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "max_frame_bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed": {
+        "$ref": "GatewaySeed.json"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "seed",
+      "body",
+      "checks",
+      "children",
+      "log",
+      "log_total"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedError": {
+    "properties": {
+      "event": {
+        "const": "seed_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedGet": {
+    "properties": {
+      "cmd": {
+        "const": "seed_get",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedLogEntry": {
+    "properties": {
+      "author": {
+        "type": "string"
+      },
+      "body": {
+        "type": "string"
+      },
+      "created_at": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "body",
+      "author",
+      "created_at"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedMove": {
+    "properties": {
+      "cmd": {
+        "const": "seed_move",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      },
+      "verb": {
+        "$ref": "GatewaySeedVerb.json"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id",
+      "verb",
+      "text"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedNoteCommand": {
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "seed_note",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "seed_id",
+      "body"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedResult": {
+    "properties": {
+      "error": {
+        "type": "string"
+      },
+      "event": {
+        "const": "seed_result",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "seed_id"
+    ],
+    "type": "object"
+  },
+  "GatewaySeedStatus": {
+    "enum": [
+      "planted",
+      "growing",
+      "parked",
+      "harvested",
+      "withered",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewaySeedVerb": {
+    "enum": [
+      "park",
+      "harvest",
+      "wither",
+      "replant",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewaySession": {
+    "properties": {
+      "agent": {
+        "type": "string"
+      },
+      "host": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "offline": {
+        "type": "boolean"
+      },
+      "state": {
+        "$ref": "GatewaySessionState.json"
+      },
+      "terminal_id": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "waiting_since": {
+        "format": "date-time",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "title",
+      "agent",
+      "state",
+      "offline"
+    ],
+    "type": "object"
+  },
+  "GatewaySessionState": {
+    "enum": [
+      "working",
+      "waiting",
+      "needs_approval",
+      "idle",
+      "scheduled",
+      "launching",
+      "recoverable",
+      "unknown"
+    ],
+    "type": "string"
+  },
+  "GatewaySessions": {
+    "properties": {
+      "event": {
+        "const": "sessions",
+        "type": "string"
+      },
+      "sessions": {
+        "items": {
+          "$ref": "GatewaySession.json"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "event",
+      "sessions"
+    ],
+    "type": "object"
+  },
+  "GatewayWelcome": {
+    "properties": {
+      "api": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "welcome",
+        "type": "string"
+      },
+      "home_name": {
+        "type": "string"
+      },
+      "profile": {
+        "$ref": "GatewayProfile.json"
+      }
+    },
+    "required": [
+      "event",
+      "api",
+      "home_name",
+      "profile"
+    ],
+    "type": "object"
+  },
+  "SubmitPrompt": {
+    "properties": {
+      "cmd": {
+        "const": "submit_prompt",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      },
+      "session_id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "session_id",
+      "text"
+    ],
+    "type": "object"
+  },
+  "SubmitResult": {
+    "properties": {
+      "delivered": {
+        "type": "boolean"
+      },
+      "event": {
+        "const": "submit_result",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "delivered"
+    ],
+    "type": "object"
+  },
+  "TerminalAttach": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_attach",
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "credit": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "cols",
+      "rows",
+      "credit"
+    ],
+    "type": "object"
+  },
+  "TerminalCredit": {
+    "properties": {
+      "bytes": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "cmd": {
+        "const": "terminal_credit",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "bytes"
+    ],
+    "type": "object"
+  },
+  "TerminalDetach": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_detach",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalEnded": {
+    "properties": {
+      "event": {
+        "const": "terminal_ended",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalError": {
+    "properties": {
+      "event": {
+        "const": "terminal_error",
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "message"
+    ],
+    "type": "object"
+  },
+  "TerminalFocus": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_focus",
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id"
+    ],
+    "type": "object"
+  },
+  "TerminalInput": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_input",
+        "type": "string"
+      },
+      "data": {
+        "type": "string"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "data"
+    ],
+    "type": "object"
+  },
+  "TerminalResize": {
+    "properties": {
+      "cmd": {
+        "const": "terminal_resize",
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "terminal_id",
+      "cols",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "TerminalResized": {
+    "properties": {
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "terminal_resized",
+        "type": "string"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "cols",
+      "rows"
+    ],
+    "type": "object"
+  },
+  "TerminalScreen": {
+    "properties": {
+      "ansi": {
+        "type": "string"
+      },
+      "cols": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "event": {
+        "const": "terminal_screen",
+        "type": "string"
+      },
+      "rows": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "seq": {
+        "maximum": 2147483647,
+        "minimum": -2147483648,
+        "type": "integer"
+      },
+      "terminal_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "terminal_id",
+      "cols",
+      "rows",
+      "ansi",
+      "seq"
+    ],
+    "type": "object"
+  }
+}

@@ -97,6 +97,10 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				return err
 			}},
 			{"rollback", func() error { _, err := cross.SeedRollback(b.Seed.ID, nil); return err }},
+			{"authorization", func() error {
+				_, err := cross.SeedAuthorization(b.Seed.ID, "Ask me before pushing.", false)
+				return err
+			}},
 			{"link", func() error { _, err := cross.SeedLink(a.Seed.ID, "blocks", b.Seed.ID, false); return err }},
 			{"note", func() error {
 				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", false, nil)

@@ -114,70 +114,71 @@ func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranch
 
 func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfoMessage) {
 	d.life.Go("handleGetRepoInfoWS", func() {
-		repo := git.CanonicalizePath(msg.Repo)
-		type repoInfo struct {
-			currentBranch string
-			commitHash    string
-			commitTime    string
-			defaultBranch string
-			worktrees     []git.WorktreeEntry
-			worktreesErr  error
-		}
-		info, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
-			currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
-			if runErr != nil {
-				return repoInfo{}, runErr
-			}
-			commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
-			branch, runErr := client.GetDefaultBranch(ctx, repo)
-			if runErr != nil {
-				return repoInfo{}, runErr
-			}
-			defaultBranch := currentBranch
-			for _, ref := range []string{"origin/" + branch, branch} {
-				exists, refErr := client.RefExists(ctx, repo, ref)
-				if refErr != nil {
-					return repoInfo{}, refErr
-				}
-				if exists {
-					defaultBranch = ref
-					break
-				}
-			}
-			listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
-			return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
-		})
+		result, err := Call[protocol.GetRepoInfoResultMessage](context.Background(), d.router(), *msg)
 		if err != nil {
-			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-				Event:     protocol.EventGetRepoInfoResult,
-				RequestID: msg.RequestID,
-				Success:   false,
-				Error:     protocol.Ptr(err.Error()),
-			})
-			return
+			result = protocol.GetRepoInfoResultMessage{Event: protocol.EventGetRepoInfoResult, Error: protocol.Ptr(err.Error())}
 		}
-
-		var worktrees []protocol.Worktree
-		if info.worktreesErr != nil {
-			worktrees = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(repo))
-		} else {
-			worktrees = d.listedWorktreesAsProtocol(repo, info.worktrees)
-		}
-
-		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
-			Event:     protocol.EventGetRepoInfoResult,
-			RequestID: msg.RequestID,
-			Info: &protocol.RepoInfo{
-				Repo:              repo,
-				CurrentBranch:     info.currentBranch,
-				CurrentCommitHash: info.commitHash,
-				CurrentCommitTime: info.commitTime,
-				DefaultBranch:     info.defaultBranch,
-				Worktrees:         worktrees,
-			},
-			Success: true,
-		})
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
 	})
+}
+
+func (d *Daemon) readRepoInfoHere(ctx context.Context, msg protocol.GetRepoInfoMessage) (protocol.GetRepoInfoResultMessage, error) {
+	repo := git.CanonicalizePath(msg.Repo)
+	type repoInfo struct {
+		currentBranch string
+		commitHash    string
+		commitTime    string
+		defaultBranch string
+		worktrees     []git.WorktreeEntry
+		worktreesErr  error
+	}
+	info, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
+		currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
+		if runErr != nil {
+			return repoInfo{}, runErr
+		}
+		commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
+		branch, runErr := client.GetDefaultBranch(ctx, repo)
+		if runErr != nil {
+			return repoInfo{}, runErr
+		}
+		defaultBranch := currentBranch
+		for _, ref := range []string{"origin/" + branch, branch} {
+			exists, refErr := client.RefExists(ctx, repo, ref)
+			if refErr != nil {
+				return repoInfo{}, refErr
+			}
+			if exists {
+				defaultBranch = ref
+				break
+			}
+		}
+		listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
+		return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
+	})
+	if err != nil {
+		return protocol.GetRepoInfoResultMessage{}, err
+	}
+
+	var worktrees []protocol.Worktree
+	if info.worktreesErr != nil {
+		worktrees = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(repo))
+	} else {
+		worktrees = d.listedWorktreesAsProtocol(repo, info.worktrees)
+	}
+	return protocol.GetRepoInfoResultMessage{
+		Event: protocol.EventGetRepoInfoResult,
+		Info: &protocol.RepoInfo{
+			Repo:              repo,
+			CurrentBranch:     info.currentBranch,
+			CurrentCommitHash: info.commitHash,
+			CurrentCommitTime: info.commitTime,
+			DefaultBranch:     info.defaultBranch,
+			Worktrees:         worktrees,
+		},
+		Success: true,
+	}, nil
 }
 
 func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDefaultBranchMessage) {

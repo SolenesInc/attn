@@ -25,7 +25,7 @@ func (d *Daemon) handleTerminalBuildChanged(terminal harness.TerminalID, workerF
 
 func (d *Daemon) upgradeInPlace(terminal harness.TerminalID, workerFormat string) <-chan struct{} {
 	sessionID, shown := d.shownIn(terminal)
-	if !shown || !d.ptyRecovered.Load() {
+	if !shown || !d.ptyRecoveredYet() {
 		return nil
 	}
 	upgrader, canUpgrade := d.ptyBackend.(ptybackend.WorkerUpgrader)
@@ -45,8 +45,23 @@ func (d *Daemon) upgradeInPlace(terminal harness.TerminalID, workerFormat string
 	return done
 }
 
+func (d *Daemon) markPtyRecovered() {
+	if !d.ptyRecoveredYet() {
+		close(d.ptyRecovered)
+	}
+}
+
+func (d *Daemon) ptyRecoveredYet() bool {
+	select {
+	case <-d.ptyRecovered:
+		return true
+	default:
+		return false
+	}
+}
+
 func (d *Daemon) upgradeStaleTerminals() {
-	d.ptyRecovered.Store(true)
+	d.markPtyRecovered()
 	provider, ok := d.ptyBackend.(ptybackend.TerminalBuildProvider)
 	if !ok || d.store == nil {
 		return
@@ -119,7 +134,7 @@ func (d *Daemon) decorateSessionWithTerminalBuild(clone *protocol.Session) {
 	}
 	terminal := d.primaryTerminal(clone.ID)
 	format, known := provider.SessionTerminalBuild(terminal)
-	if known && format != buildinfo.SnapshotFormat && d.ptyRecovered.Load() && !d.workerUpgradeRunning(terminal) {
+	if known && format != buildinfo.SnapshotFormat && d.ptyRecoveredYet() && !d.workerUpgradeRunning(terminal) {
 		clone.TerminalBuildStale = protocol.Ptr(true)
 	}
 }

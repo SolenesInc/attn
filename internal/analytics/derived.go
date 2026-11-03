@@ -21,10 +21,11 @@ type Derived struct {
 }
 
 type SessionTraits struct {
-	Harness string `json:"harness"`
-	Model   string `json:"model,omitempty"`
-	Launch  Launch `json:"launch"`
-	State   string `json:"state"`
+	Harness        string `json:"harness"`
+	Model          string `json:"model,omitempty"`
+	ModelRequested string `json:"model_requested,omitempty"`
+	Launch         Launch `json:"launch"`
+	State          string `json:"state,omitempty"`
 }
 
 type RepoTraits struct {
@@ -34,15 +35,16 @@ type RepoTraits struct {
 	Remote   bool `json:"remote"`
 }
 
-var DerivedSafeValues = Allowlist{
-	"session.harness": true,
-	"session.model":   true,
-	"session.launch":  true,
-	"session.state":   true,
+var DerivedFields = Fields{
+	"session.harness":         Safe,
+	"session.model":           Safe,
+	"session.model_requested": Safe,
+	"session.launch":          Safe,
+	"session.state":           Safe,
 }
 
-func Props(payload json.RawMessage, allow Allowlist, derived Derived) json.RawMessage {
-	props := Redact(payload, allow)
+func Props(payload json.RawMessage, fields Fields, secret []byte, derived Derived) json.RawMessage {
+	props := Redact(payload, fields, secret)
 	if derived == (Derived{}) {
 		return props
 	}
@@ -50,8 +52,8 @@ func Props(payload json.RawMessage, allow Allowlist, derived Derived) json.RawMe
 	if err != nil {
 		return props
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(Redact(encoded, DerivedSafeValues), &fields); err != nil {
+	var traits map[string]json.RawMessage
+	if err := json.Unmarshal(Redact(encoded, DerivedFields, nil), &traits); err != nil {
 		return props
 	}
 	if len(props) > 0 {
@@ -59,10 +61,10 @@ func Props(payload json.RawMessage, allow Allowlist, derived Derived) json.RawMe
 		if err := json.Unmarshal(props, &payloadFields); err != nil {
 			return props
 		}
-		maps.Copy(payloadFields, fields)
-		fields = payloadFields
+		maps.Copy(payloadFields, traits)
+		traits = payloadFields
 	}
-	merged, err := json.Marshal(fields)
+	merged, err := json.Marshal(traits)
 	if err != nil {
 		return props
 	}

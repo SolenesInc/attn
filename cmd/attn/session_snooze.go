@@ -110,7 +110,7 @@ func runSessionSnooze(args []string, snooze bool) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session %s: %v\n", action, err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	caller := currentSessionOrExit()
 	cli := client.New("")
@@ -133,6 +133,6 @@ func runSessionSnooze(args []string, snooze bool) {
 		}
 	}
 	if failed {
-		os.Exit(1)
+		exit(1)
 	}
 }

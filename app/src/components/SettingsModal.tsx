@@ -1,8 +1,9 @@
 import { OutpostsSettings } from './OutpostsSettings';
+import { PhonesSettings } from './PhonesSettings';
+import { SendersSettings } from './SendersSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
 import { AnalyticsSettings } from './Analytics/AnalyticsSettings';
-import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
 import { SettingsAutosaveProvider, SettingsAutosaveStatus } from './SettingsAutosave';
 import './SettingsModal.css';
@@ -11,7 +12,7 @@ import {
   AppearanceSettings,
   BackgroundAgentSettings,
   BackgroundTasksSection,
-  ConnectivitySettings,
+  GitHubHostsSettings,
   EventBusSection,
   HygieneSettings,
   PluginSettings,
@@ -112,12 +113,9 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                   <SectionStatusPills
                     selectedSection={state.selectedSection}
                     delegationPolicy={state.delegationPolicy}
-                    tailscaleEnabled={state.tailscaleEnabled}
-                    tailscaleStatus={state.tailscaleStatus}
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
-                    autoModePolicy={state.autoModePolicy}
                     autoSettleEnabled={state.autoSettleEnabled}
                     mutedRepos={state.mutedRepos}
                     mutedAuthors={state.mutedAuthors}
@@ -139,7 +137,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
 }
 
 function SelectedSection({ state }: { state: SettingsModalState }) {
-  const { selectedSection, delegationPolicy, sendHarnessModels, autoModePolicy } = state;
+  const { selectedSection, delegationPolicy, sendHarnessModels } = state;
 
   switch (selectedSection) {
     case 'general':
@@ -168,7 +166,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           handleToggleWorktreeSweep={state.handleToggleWorktreeSweep}
           worktreeSweepEnabled={state.worktreeSweepEnabled}
           notebookRootDraft={state.notebookRootDraft}
-          notebookProfileRootDraft={state.notebookProfileRootDraft}
           effectiveNotebookRoot={state.effectiveNotebookRoot}
           handleBrowseNotebookRoot={state.handleBrowseNotebookRoot}
           handleToggleOpenSentFiles={state.handleToggleOpenSentFiles}
@@ -184,8 +181,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           handleInstallPlugin={state.handleInstallPlugin}
           pluginIssues={state.pluginIssues}
           plugins={state.plugins}
-          handleInstallBundledPlugin={state.handleInstallBundledPlugin}
-          handleUninstallPlugin={state.handleUninstallPlugin}
           handleRemovePlugin={state.handleRemovePlugin}
           commitPluginPriority={state.commitPluginPriority}
           savedFlash={state.savedFlash}
@@ -233,6 +228,10 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       );
     case 'outposts':
       return state.outpostsEnabled ? <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} /> : null;
+    case 'phones':
+      return <PhonesSettings />;
+    case 'senders':
+      return <SendersSettings />;
     case 'experimental':
       return (
         <ExperimentalSettings
@@ -246,6 +245,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
+          phoneAccessEnabled={state.phoneAccessEnabled}
           crewV2Enabled={state.crewV2Enabled}
           analyticsEnabled={state.analyticsEnabled}
           ptyBackendMode={state.ptyBackendMode}
@@ -299,19 +299,10 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       ) : null;
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
-    case 'autoMode':
-      return <AutoModeSettings policy={autoModePolicy} loadModels={sendHarnessModels} />;
     case 'connectivity':
     default:
       return (
-        <ConnectivitySettings
-          tailscaleURL={state.tailscaleURL}
-          tailscaleDomain={state.tailscaleDomain}
-          handleToggleTailscale={state.handleToggleTailscale}
-          tailscaleEnabled={state.tailscaleEnabled}
-          tailscaleStatus={state.tailscaleStatus}
-          tailscaleAuthURL={state.tailscaleAuthURL}
-          tailscaleError={state.tailscaleError}
+        <GitHubHostsSettings
           githubPollingOffReason={state.githubPollingOffReason}
           githubHosts={state.githubHosts}
         />

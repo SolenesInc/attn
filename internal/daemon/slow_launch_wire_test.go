@@ -28,9 +28,9 @@ func TestTheAppsOtherCommandsAnswerWhileASpawnStartsItsSharedCodexAppServer(t *t
 
 	boot := w.HoldNextBoot()
 	app.Send(spawn)
-	w.AwaitHeldBoot()
+	boot.Await()
 	appCommandAnswers(app)
-	boot()
+	boot.Release()
 	if result := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == spawn.ID }); !result.Success {
 		t.Fatalf("the spawn that waited for its app-server failed: %s", protocol.Deref(result.Error))
 	}
@@ -49,9 +49,9 @@ func TestTheAppsOtherCommandsAnswerWhileAResumeStartsItsSharedCodexAppServer(t *
 
 	boot := w.HoldNextBoot()
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
-	w.AwaitHeldBoot()
+	boot.Await()
 	appCommandAnswers(app)
-	boot()
+	boot.Release()
 	if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !result.Success {
 		t.Fatalf("the resume that waited for its app-server failed: %s", protocol.Deref(result.Error))
 	}
@@ -72,7 +72,7 @@ func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *
 
 			boot := w.HoldNextBoot()
 			app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
-			w.AwaitHeldBoot()
+			boot.Await()
 			if way == "unregister" {
 				if closed := closeFromApp(app, session); !closed.Accepted {
 					t.Fatalf("close %s while its resume waits: %s", session, protocol.Deref(closed.Error))
@@ -81,7 +81,7 @@ func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *
 				t.Fatalf("close the tile of %s while its resume waits: %s", session, protocol.Deref(closed.Error))
 			}
 			appCommandAnswers(app)
-			boot()
+			boot.Release()
 			if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); result.Success {
 				t.Fatal("the resume of a session closed while it waited succeeded")
 			}
@@ -107,14 +107,14 @@ func TestReopeningASessionClosedWhileItsResumeWaitedKeepsItsConversationLive(t *
 	w, app, session, conversation := stoppedSharedCodexSessionWithNoAppServer(t)
 	boot := w.HoldNextBoot()
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
-	w.AwaitHeldBoot()
+	boot.Await()
 	if closed := closeFromApp(app, session); !closed.Accepted {
 		t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
 	}
 
 	reopen := uuid.NewString()
 	app.Send(protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr(reopen), SessionID: protocol.SessionID(session)})
-	boot()
+	boot.Release()
 	if reopened := testworld.Await(app, protocol.EventSessionReopenResult, func(r protocol.SessionReopenResultMessage) bool { return r.RequestID == reopen }); !reopened.Success {
 		t.Fatalf("reopen %s after its close: %s", session, protocol.Deref(reopened.Error))
 	}
@@ -160,13 +160,13 @@ func TestAReviveThatWaitsForItsSharedCodexAppServerHoldsUpOnlyItsOwnTerminal(t *
 
 	boot := w.HoldNextBoot()
 	codexTerminal := sendReviveAttach(app, codex)
-	w.AwaitHeldBoot()
+	boot.Await()
 	claudeTerminal := sendReviveAttach(app, claude)
 	if attached := awaitAttach(app, claudeTerminal); !attached.Success {
 		t.Fatalf("revive %s while another terminal's revive waits: %s", claude, protocol.Deref(attached.Error))
 	}
 	appCommandAnswers(app)
-	boot()
+	boot.Release()
 	if attached := awaitAttach(app, codexTerminal); !attached.Success {
 		t.Fatalf("revive %s after its app-server started: %s", codex, protocol.Deref(attached.Error))
 	}
@@ -178,9 +178,9 @@ func TestADetachSentDuringAWaitingReviveLeavesNoStreamAttached(t *testing.T) {
 
 	boot := w.HoldNextBoot()
 	terminal := sendReviveAttach(app, codex)
-	w.AwaitHeldBoot()
+	boot.Await()
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: protocol.TerminalID(terminal)})
-	boot()
+	boot.Release()
 	awaitAttach(app, terminal)
 	testworld.Request(app, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: protocol.TerminalID(terminal)},
 		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return string(r.ID) == terminal })
@@ -198,9 +198,9 @@ func TestTypingIntoATerminalWhoseReviveWaitsReachesTheRevivedAgent(t *testing.T)
 
 	boot := w.HoldNextBoot()
 	terminal := sendReviveAttach(app, codex)
-	w.AwaitHeldBoot()
+	boot.Await()
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "lock the tax lookup\r"})
-	boot()
+	boot.Release()
 	if attached := awaitAttach(app, terminal); !attached.Success {
 		t.Fatalf("revive %s: %s", codex, protocol.Deref(attached.Error))
 	}

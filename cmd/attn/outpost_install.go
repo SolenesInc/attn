@@ -24,7 +24,7 @@ import (
 func runOutpostInstall() {
 	if err := installOutpostBinary(os.Args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 

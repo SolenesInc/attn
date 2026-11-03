@@ -8,11 +8,11 @@ import (
 )
 
 func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "pi")
+	pluginDriverSettings(app, "plug")
 	cwd := w.Path("shop")
-	session := w.Spawn(app, fakeagent.Pi, cwd)
+	session := w.Spawn(app, fakeagent.Plug, cwd)
 	first := w.Launched(session)
 	converse(t, app, session, first, "price the checkout")
 
@@ -25,11 +25,11 @@ func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.
 		}
 	}
 	if came.State != protocol.SessionStateRecoverable {
-		t.Fatalf("after its agent died with the daemon the pi session is %q, want recoverable", came.State)
+		t.Fatalf("after its agent died with the daemon the plug session is %q, want recoverable", came.State)
 	}
-	pluginDriverSettings(app, "pi")
-	w.Spawn(app, fakeagent.Pi, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
+	pluginDriverSettings(app, "plug")
+	w.Spawn(app, fakeagent.Plug, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
 	if resumed := w.Launched(session); !resumed.Resumed || resumed.ConversationID != first.ConversationID {
-		t.Fatalf("reopening the pi session resumed=%v conversation %s, want %s", resumed.Resumed, resumed.ConversationID, first.ConversationID)
+		t.Fatalf("reopening the plug session resumed=%v conversation %s, want %s", resumed.Resumed, resumed.ConversationID, first.ConversationID)
 	}
 }

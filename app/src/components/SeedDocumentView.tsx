@@ -9,6 +9,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { SeedAuthorization } from './SeedAuthorization';
 import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
 import { checkTally, hasChecks } from './seedCheckPresentation';
 import type { SeedDocumentNote } from './seedArtifacts';
@@ -46,13 +47,13 @@ function progressWords(seed: Seed): string {
   if (progress.growing) parts.push(`${progress.growing} growing`);
   if (progress.ready) parts.push(`${progress.ready} ready`);
   if (progress.blocked) parts.push(`${progress.blocked} blocked`);
-  if (progress.dormant) parts.push(`${progress.dormant} parked`);
+  if (progress.parked) parts.push(`${progress.parked} parked`);
   return parts.join(' · ');
 }
 
 function childSignal(seed: Seed): string {
   if (seed.status === 'growing') return 'growing';
-  if (seed.status === 'dormant') return 'parked';
+  if (seed.status === 'parked') return 'parked';
   if (seed.status === 'harvested') return 'done';
   if (seed.status === 'withered') return 'withered';
   return '';
@@ -198,6 +199,8 @@ export function SeedDocumentView({
       )}
 
       {seed.reason && <p className="seed-document__reason">{seed.reason}</p>}
+
+      <SeedAuthorization seed={seed} sessionLabels={sessionLabels} />
 
       {seed.body.trim() ? (
         <MarkdownReader

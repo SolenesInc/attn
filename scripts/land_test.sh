@@ -90,36 +90,101 @@ expect_checks() {
 
 printf '\n' >>internal/example/example.go
 land 'Go change'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 git rm -q internal/example/other.go internal/removed/removed.go
 land 'Go deletions'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
 land 'Module change'
-expect_checks sync check-go 'GO_PACKAGES=./...' "${go_choice[@]}" sync
+expect_checks check-go 'GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
 land 'App change'
-expect_checks sync check-frontend land --group app "${selected_tests[@]}" sync
+expect_checks check-frontend land --group app "${selected_tests[@]}" sync
+
+mkdir -p mobile/src
+printf 'export {};\n' >mobile/src/example.ts
+land 'Mobile change'
+expect_checks check-mobile sync
+
+mkdir -p app/src/gateway
+printf 'export {};\n' >app/src/gateway/example.ts
+land 'Gateway client shared with the phone'
+expect_checks check-frontend check-mobile land --group app "${selected_tests[@]}" sync
 
 mkdir -p scripts internal/protocol/schema internal/prompts
 printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks sync check-types check-prompts test-scripts land --group prompts "${selected_tests[@]}" sync
+expect_checks check-types check-prompts land --group prompts "${selected_tests[@]}" sync
+expect_output 'the checkout has no script tests'
+
+printf 'gateway\n' >internal/protocol/schema/gateway.tsp
+land 'Gateway API change'
+expect_checks check-types check-gateway-compat sync
+
+mkdir -p scripts/lib
+printf 'true\n' >scripts/lib/shared.sh
+printf 'bash scripts/example.sh\nsource scripts/lib/shared.sh\n' >scripts/example_test.sh
+printf 'source scripts/lib/shared.sh\n' >scripts/other_test.sh
+printf 'true\n' >scripts/unrelated_test.sh
+land 'Script tests arrive'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
+
+printf '\n' >>scripts/example.sh
+land 'Script change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh' sync
+expect_output 'script test scripts/example_test.sh, for scripts/example.sh'
+
+printf '\n' >>scripts/lib/shared.sh
+land 'Shared script change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
+
+mkdir -p .github/workflows fixtures
+printf 'on: push\n' >.github/workflows/example.yml
+printf 'one\n' >fixtures/one.txt
+printf 'grep -q push "$root/.github/workflows/example.yml"\ncp -R "$root/fixtures" "$work"\n' >scripts/reads_test.sh
+land 'Script test that reads checkout files arrives'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+
+printf '\n' >>scripts/example.sh
+printf '\n' >>.github/workflows/example.yml
+land 'Script and workflow change'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/reads_test.sh' sync
+expect_output 'script test scripts/reads_test.sh, for .github/workflows/example.yml'
+
+printf 'two\n' >fixtures/two.txt
+land 'Change inside a directory a script test reads'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+
+printf 'source scripts/lib/deep.sh\n' >scripts/chain.sh
+printf 'true\n' >scripts/lib/deep.sh
+printf 'bash scripts/chain.sh\n' >scripts/chain_test.sh
+land 'Chained script test arrives'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+
+printf '\n' >>scripts/lib/deep.sh
+land 'Change to a script a tested script sources'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+expect_output 'script test scripts/chain_test.sh, for scripts/lib/deep.sh'
+
+printf 'true\n' >scripts/lonely.sh
+land 'Script no test names'
+expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/reads_test.sh scripts/unrelated_test.sh' sync
+expect_output 'no script test names scripts/lonely.sh; running every script test'
 
 printf '\n' >>README.md
 land 'Documentation change'
-expect_checks sync sync
+expect_checks sync
 
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
 land 'Go change while main moves'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" \
+expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" \
   check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>internal/example/example.go
@@ -129,18 +194,17 @@ expect_output 'running the baseline landing tests (--baseline)'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing fails' LAND_SELECT_EXIT=1
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when sync fails' LAND_SYNC_EXIT=1
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
-expect_output 'choosing landing tests from the history already synced'
+expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing writes nothing' LAND_SELECTED=
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {

@@ -70,10 +70,6 @@ func TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout(t *tes
 			if deleted.Success || !strings.Contains(protocol.Deref(deleted.Error), "1 pending delegations") {
 				t.Fatalf("pending operation must block deletion: %+v %s", deleted, protocol.Deref(deleted.Error))
 			}
-			if named {
-				return
-			}
-
 			if owner := queriedSession(t, cli, source).ProfileID; owner != side.ID {
 				t.Fatalf("refused deletion moved the source to %s", owner)
 			}

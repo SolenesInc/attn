@@ -66,6 +66,7 @@ export function AppDesktops() {
   const {
     sendCancelCountdown,
     sendTerminalPointerActivity,
+    sendTerminalFocus,
     sendOpenMarkdown,
     sendRenameSession,
     sendDesktopSetSplitRatio,
@@ -156,6 +157,7 @@ export function AppDesktops() {
           annotationApi={annotationApi}
           onCancelCountdown={sendCancelCountdown}
           onTerminalPointerActivity={sendTerminalPointerActivity}
+          onTerminalFocus={sendTerminalFocus}
           onOpenMarkdown={(path, sessionId) => {
             void openThenShow(() => sendOpenMarkdown(path, sessionId))
               .catch((error) => {

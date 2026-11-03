@@ -26,8 +26,7 @@ func (d *Daemon) gardenWindow(profileID string) gardenWindow {
 	seeds := []protocol.Seed{}
 	held := gardenHeld{profileID: profileID, prints: map[string][sha256.Size]byte{}}
 	if profileID != "" {
-		seeds = d.seedsForBroadcast(profileID)
-		held.total = d.countSeedsForBroadcast(profileID)
+		seeds, held.total = d.seedsForBroadcast(profileID)
 	}
 	for _, seed := range seeds {
 		data, err := json.Marshal(seed)

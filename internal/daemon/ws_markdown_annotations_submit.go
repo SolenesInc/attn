@@ -84,7 +84,7 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			d.sendToClient(client, result)
 			return
 		}
-		delivery := sessionmonitor.AnnotationInput(msg.RequestID, payload)
+		delivery := sessionmonitor.ComposedInput(msg.RequestID, payload)
 		attempt := d.placeDelivery(context.Background(), targetSession, delivery)
 		if attempt.Stage != sessionmonitor.Placed {
 			if sessionmonitor.DeferredError(attempt.Err) {

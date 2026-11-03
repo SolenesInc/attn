@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const CollectionBodyVersions = "body-versions"
@@ -52,7 +53,7 @@ func EditRecipe(id string) string {
 
 func ValidateBodyEdit(body string) error {
 	if strings.TrimSpace(body) == "" {
-		return fmt.Errorf("a body edit needs nonempty text; empty or whitespace-only bodies are refused")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a body edit needs nonempty text; empty or whitespace-only bodies are refused")
 	}
 	return ValidateBody(body)
 }
@@ -61,10 +62,10 @@ func ParseStamped(id, text string) (body, base string, err error) {
 	line, body, found := strings.Cut(text, "\n")
 	stamp := bodyStamp.FindStringSubmatch(strings.TrimSuffix(line, "\r"))
 	if !found || stamp == nil {
-		return "", "", fmt.Errorf("%s", EditRecipe(id))
+		return "", "", protocol.Refuse(protocol.RefusalInvalidInput, "%s", EditRecipe(id))
 	}
 	if stamp[1] != id {
-		return "", "", fmt.Errorf("this export belongs to %s, not %s; %s", stamp[1], id, EditRecipe(id))
+		return "", "", protocol.Refuse(protocol.RefusalInvalidInput, "this export belongs to %s, not %s; %s", stamp[1], id, EditRecipe(id))
 	}
 	if err := ValidateBodyEdit(body); err != nil {
 		return "", "", err

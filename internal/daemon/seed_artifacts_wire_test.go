@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/google/uuid"
 
@@ -388,4 +389,49 @@ func seedArtifactsNotebook(t *testing.T, w *world) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+func TestArtifactChangesMadeWhileTheDaemonWasDownReachTheGardenAtStart(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		root := seedArtifactsNotebook(t, w)
+		seeds := map[string]string{}
+		for _, name := range []string{"rewritten", "added", "removed", "untouched"} {
+			seeds[name] = plantSeedAs(t, cli, "", name)
+			seedArtifactsTransfer(t, cli, seeds[name], "copy", seedArtifactsWrite(t, t.TempDir(), "kept.bin", []byte("kept")), "", "")
+		}
+		folder := func(name string) string { return filepath.Join(root, "seeds", seeds[name]) }
+		synctest.Wait()
+		const changed = "garden.seed.artifact.changed"
+		baseline := producedBy(busStatus(t, w.App()), changed)
+		w.stop()
+
+		rewritten := filepath.Join(folder("rewritten"), "kept.bin")
+		before, err := os.Stat(rewritten)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(rewritten, []byte("same"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(rewritten, before.ModTime(), before.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		seedArtifactsWrite(t, folder("added"), "direct.bin", []byte("direct"))
+		if err := os.Remove(filepath.Join(folder("removed"), "kept.bin")); err != nil {
+			t.Fatal(err)
+		}
+
+		w.start()
+		synctest.Wait()
+		announced := producedBy(busStatus(t, w.App()), changed)
+		if announced-baseline != 3 {
+			t.Errorf("a start after one seed's file was rewritten, one gained a file and one lost its file announced %d artifact changes, want 3", announced-baseline)
+		}
+		w.restart()
+		synctest.Wait()
+		if again := producedBy(busStatus(t, w.App()), changed); again != announced {
+			t.Errorf("a restart with no artifact changes announced %d artifact changes, want none", again-announced)
+		}
+	})
 }

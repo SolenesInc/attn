@@ -27,7 +27,7 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 	if terminalID == "" {
 		return "", nil
 	}
-	_, sessionID, err := c.QueryAs(terminalID)
+	sessionID, err := c.CallerSession(terminalID)
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +45,7 @@ func currentSessionOrExit() protocol.SessionID {
 		} else {
 			fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	return sessionID
 }

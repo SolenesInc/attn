@@ -16,6 +16,7 @@ import { pressShortcutKeys, shownAgentId } from './common.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
+import { workInFolder } from './workedFolder.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -233,6 +234,10 @@ async function main() {
 
     await runner.step('launch_packaged_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+    });
+
+    await runner.step('work_in_the_automation_folder', async () => {
+      await workInFolder({ observer, cwd: fixturePath });
     });
 
     await runner.step('leg1_apply_manual_and_panel_shows_it', async () => {

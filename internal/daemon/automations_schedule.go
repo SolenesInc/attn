@@ -11,6 +11,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -255,6 +256,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 		return claimErr
 	}
 	d.broadcastAutomationsChanged(definition.ID)
+	pausepoint.At(pausepoint.AutomationRunReserved)
 	d.automationMu.Lock()
 	current, loadErr := d.store.GetAutomationRun(run.ID)
 	if loadErr == nil && current != nil && current.State == store.AutomationRunStatePending {

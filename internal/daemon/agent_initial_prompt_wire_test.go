@@ -14,11 +14,11 @@ import (
 const literalInitialPrompt = "list \"quoted\" checkout tests, 'single', \\\\path\n$HOME $(id) `ticks` and λ"
 
 func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Pi} {
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Plug} {
 		t.Run(string(h), func(t *testing.T) {
 			w := newWorld(t, h)
 			app := w.App()
-			if h == fakeagent.Pi {
+			if h == fakeagent.Plug {
 				awaitAgentAvailable(app, string(h))
 			}
 
@@ -32,7 +32,7 @@ func TestEachAgentStartsOnItsInitialPromptAndShowsItsReply(t *testing.T) {
 			run.Reply("Found 14 checkout tests. <!-- attn:state=idle -->")
 			app.AwaitScreen(session, "Found 14 checkout tests.")
 
-			if h != fakeagent.Pi {
+			if h != fakeagent.Plug {
 				run.Exit(3)
 				exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 				if exited.ExitCode != 3 {

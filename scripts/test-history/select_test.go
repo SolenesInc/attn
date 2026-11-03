@@ -88,10 +88,10 @@ func (r *checkoutRepo) receive(receipt testhistory.Receipt) {
 		r.t.Fatal(err)
 	}
 	spool := testhistory.Spool{Dir: r.spool}
-	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
+	if err := os.MkdirAll(spool.MirrorDir(), 0o755); err != nil {
 		r.t.Fatal(err)
 	}
-	if err := os.WriteFile(spool.SharedPath(receipt.InvocationID), testhistory.Compress(data), 0o644); err != nil {
+	if err := os.WriteFile(spool.MirrorPath(receipt.InvocationID), testhistory.Compress(data), 0o644); err != nil {
 		r.t.Fatal(err)
 	}
 }
@@ -279,7 +279,7 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != otherLane().String() {
 			t.Fatalf("failures at the landed commit = %v", point.Failures)
 		}
-		shared, _ := filepath.Glob(filepath.Join(repo.spool, "shared", "*"+testhistory.SharedSuffix))
+		shared, _ := filepath.Glob(filepath.Join(testhistory.Spool{Dir: repo.spool}.MirrorDir(), "*"+testhistory.MirrorSuffix))
 		if want := len(sealedReceipts(t, repo.spool)) + len(shared) - 2; point.Available != want {
 			t.Fatalf("replay used %d receipts, want %d: all but ci-a-fails, which finished after the commit, and the recovered receipt, whose finish is unknown", point.Available, want)
 		}

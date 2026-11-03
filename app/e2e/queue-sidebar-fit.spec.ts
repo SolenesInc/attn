@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('fits waiting rows to the available sidebar height and counts only hidden agents', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 1000 });
   await page.goto('/test-harness/?component=QueueSidebarFit');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 
   const lead = page.locator('.queue-waiting-lead [data-testid^="queue-turn-"]');
   const toggle = page.getByTestId('queue-agents-toggle');
@@ -22,7 +22,7 @@ test('fits waiting rows to the available sidebar height and counts only hidden a
 for (const flow of ['queue', 'desktop']) {
   test(`sleeping crew wake remains clickable beside hover actions in ${flow} flow`, async ({ page }) => {
     await page.goto(`/test-harness/?component=QueueSidebarFit${flow === 'desktop' ? '&desktop' : ''}`);
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const row = page.getByTestId('queue-crew-birch');
     const sun = page.getByTestId('queue-crew-wake-birch');
     await row.hover();
@@ -40,7 +40,7 @@ for (const flow of ['queue', 'desktop']) {
 test('scrolls sleeping crew and desktops together in a short desktop window', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 500 });
   await page.goto('/test-harness/?component=QueueSidebarFit&desktop&largeCrew');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const commands = page.getByRole('button', { name: 'Commands', exact: true });
   await expect(commands).toBeInViewport({ ratio: 1 });
   const header = await commands.boundingBox();

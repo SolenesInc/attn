@@ -28,7 +28,7 @@ function seed(status: string, claim: Pick<Seed, 'tender' | 'claimed'> = { claime
 const MOVES: Record<string, Record<ColumnKey, Verb[]>> = {
   planted: { ready: [], growing: [], parked: ['park'], closed: ['harvest', 'wither'] },
   growing: { ready: ['replant'], growing: [], parked: ['park'], closed: ['harvest', 'wither'] },
-  dormant: { ready: ['replant'], growing: [], parked: [], closed: ['harvest', 'wither'] },
+  parked: { ready: ['replant'], growing: [], parked: [], closed: ['harvest', 'wither'] },
   harvested: { ready: ['replant'], growing: [], parked: [], closed: [] },
   withered: { ready: ['replant'], growing: [], parked: [], closed: [] },
 };

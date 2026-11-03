@@ -10,8 +10,8 @@ import (
 )
 
 func TestAHarnessWithoutAWorkflowSkillDirectoryIsRefusedOnlyForAttnRoles(t *testing.T) {
-	t.Setenv(fakeagent.PiAgentEnv, "house")
-	w := newWorld(t, fakeagent.Pi)
+	t.Setenv(fakeagent.PlugAgentEnv, "house")
+	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
 	pluginDriverSettings(app, "house")
 	onHouse := protocol.DelegationSelection{Harness: "house"}
@@ -23,7 +23,7 @@ func TestAHarnessWithoutAWorkflowSkillDirectoryIsRefusedOnlyForAttnRoles(t *test
 	saved := addAttnDelegationRoles(app, protocol.DelegationPreferences{
 		Enabled: true, WorkflowSkillEnabled: true,
 		Roles: []protocol.DelegationRole{
-			{ID: "build", Name: "Builder", Enabled: true, Instructions: "Check it carefully", StoppingPoint: "Stop once the tests pass",
+			{ID: "build", Name: "Builder", Enabled: true, Instructions: "Check it carefully",
 				DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Everyday", Selection: onHouse}}},
 			attnRole,
 		},

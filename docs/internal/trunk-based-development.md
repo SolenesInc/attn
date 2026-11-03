@@ -1,72 +1,58 @@
 # Trunk-based development
 
 attn is developed trunk-based. Maintainers and their agents commit straight to
-`main`; no pull request stands between a change and `main`. A change is
-reviewed before it lands, scaled to its risk, and again on `main` afterwards. A
-release ships only commits that both CI and review on `main` have passed. Contributors working from a fork use
-[pull requests](pull-requests.md).
+`main`. No pull request stands between a change and `main`. Reviewers read each
+change twice: before it lands, scaled to its risk, and again on `main`
+afterwards. A release ships only commits that have passed both CI and review on `main`.
+Contributors working from a fork use [pull requests](pull-requests.md).
 
 ## Landing
 
 A landing is one push of finished commits to `main` through `scripts/land.sh`.
-Work lands in slices, each as soon as it works, so no branch sits waiting and
-turns into conflicts. Unfinished work lands unwired, or behind an experimental
+Work lands in slices, each as soon as it works, so no branch waits and collects
+conflicts. Unfinished work lands unwired, or behind an experimental
 setting that is off by default. The `land-on-main` skill is the
 procedure, from the working branch to the report after the push.
 
-After the push, everything is automatic: `main`'s CI runs the full test suites
-and scenario matrix, the sheriff gets `main` green again when a landing breaks
-it, the review automation reviews the commits and messages their author or
-dispatches a fixer, and release notes are written from the commits.
+After the push, these run without you. `main`'s CI runs the full test suites and
+the scenario matrix. When a landing breaks `main`, the sheriff gets `main` green
+again. The review automation reviews the commits and messages their author or
+dispatches a fixer. The release process writes release notes from the commits.
 
 ### What land.sh does
 
 `scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the paths the
 landing changes, and pushes:
 
-- Go: compile all packages and tests, run vet and staticcheck on changed
-  packages, and check daemon lifetimes and import boundaries. A module change
-  checks all packages.
+- Go: vet all packages and their tests, which type-checks everything without
+  linking test binaries; run staticcheck on changed packages; and check daemon
+  lifetimes and import boundaries. A module change checks all packages. Link
+  failures surface in the landing tests and in CI.
 - Protocol schema or prompt inputs: check that generated types or catalogs
   are current.
-- `app/`: typecheck and lint.
-- `scripts/`: run the shell script tests.
-- The landing tests, chosen for the commit it is about to push: the baseline,
-  which is the groups in `scripts/landing-tests` whose path pattern matches
-  the changes; the tests the landing changes; and every test that failed on
-  `main` and has since passed there, until it has passed on 30 later commits
-  of `main`. They are a few tests, not a suite. It prints each test it added
-  and why, each test's result, skipped ones included, and the command that
-  reruns a failed one.
+- `app/`: lint, and typecheck with tsrs, a Rust port of the TypeScript 7
+  checker. CI on `main` still typechecks with the TypeScript version that
+  `app/package.json` pins.
+- Script tests: run the shell script tests that cover the changed files. A
+  script test covers itself, the scripts it names, and the scripts those name
+  in turn, so a change to `scripts/lib/` runs every test that sources it. It
+  also covers each file it or those scripts read from the checkout, written as
+  `$root/<path>`, and every file under a directory read that way, so a change
+  to a workflow a test checks runs that test. When no test names a changed
+  script, `land.sh` runs every script test. `land.sh` prints each test it chose
+  and the changed files that chose it. `make test-scripts` runs them all, as
+  CI does.
+- The landing tests. `land.sh` chooses a few tests for the commit it is about to
+  push, not a suite: the groups of `scripts/landing-tests` that match the
+  changed paths, the tests the landing changes, and every test that failed on
+  `main` and has since passed there, until it clears. A test that is still red
+  on `main` is listed, not run. `land.sh` prints each test it added and why.
+  [Test history](test-history.md#selection) specifies the choice, and
+  `scripts/land.sh --baseline` lands with the baseline groups alone.
 
-When only protocol types or prompt catalogs conflict, it regenerates them.
-When `main` moves during landing, it rebases, runs the gate again on the new
-combination, and pushes.
-
-### How the landing tests evolve
-
-attn's test runners record every run, and a shared test history collects the
-runs of CI and of every machine; land.sh syncs it before it chooses and again
-after it pushes. [Test history](test-history.md) is the specification.
-
-- A test that fails on a clean commit of `main`, in CI or on any machine,
-  joins every landing that runs landing tests once it has passed on `main`
-  again. Until then it is red: landings list it and leave it to the sheriff,
-  so it blocks no landing unless it is in the baseline or the landing changes
-  it.
-- It leaves once it has passed afresh on 30 later commits of `main`, in the
-  lane where it failed. A commit where it did not run says nothing, and a new
-  failure starts it over.
-- Runs of unlanded or uncommitted work never count as `main`'s health.
-- A failed test that is gone from the checkout is only counted. Native
-  scenarios have no landing recipe and stay with CI; a landing lists one that
-  has not cleared as unavailable.
-- The baseline still grows from red `main`: when the sheriff's repair lands,
-  the test that caught the failure joins its group if it runs in seconds.
-
-Without a synced history, land.sh runs the baseline and says so.
-`scripts/land.sh --baseline` lands with the baseline alone. It is the way out
-when the history or the choice misbehaves, never a way to skip a failing test.
+When only protocol types or prompt catalogs conflict, `land.sh` regenerates
+them. When `main` moves during landing, `land.sh` rebases, runs the gate again
+on the new combination, and pushes.
 
 ## Verifying before landing
 
@@ -75,49 +61,50 @@ surface it touches, and a review scaled to the change's risk. The full Go and
 frontend suites and the scenario matrix, macOS included, run in CI on `main`
 after landing, and so do the combinations of changes that landed together.
 
-Review before landing catches a defect while its author still holds the
-context, before other slices build on it. Review on `main` still reads every
-commit afterwards, with the slices of a plan side by side.
+Reviewers catch a defect before landing, while the author still remembers the
+work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the
+slices of a plan side by side.
 
-The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones; it is
+The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones. It is
 not a landing step.
 
 ## Commits
 
 Commits made inside attn carry an `Attn-Session:` trailer and one `Attn-Seed:`
 per seed the session works on. Work users will observe has a seed. The
-trailers let review, a red `main` and release notes reach the work and the
-session behind a commit.
+trailers let reviewers, the sheriff on a red `main`, and whoever writes the release notes find
+the work and the session behind a commit.
 
 ## Review on main
 
 A scheduled review automation runs Codex over the commits `main` has gained
 since the `reviewed` branch, grouped by seed, and judges each seed's commits
-against its plan. For each finding it messages the session named by
+against its plan. For each finding, the automation messages the session named by
 `Attn-Session:` while that session is live, and otherwise dispatches an agent
-to fix it. Then it moves `reviewed` forward. The
-`review-main` skill is its procedure.
+to fix the finding. Then the automation moves `reviewed` forward. The
+`review-main` skill is the automation's procedure.
 
-When an Orchestrator coordinates Builders, it reviews their work after landing.
-A rejected seed check rings the Builder through its delegation watch, even
-after harvest. Corrections are new landings.
+When an Orchestrator coordinates Builders, the Orchestrator reviews their work
+after landing. When a seed check is rejected, attn rings the Builder through the
+delegation watch, even after harvest. Corrections are new landings.
 
 ## When main is red
 
-CI runs on `main` after every landing; pushes that arrive during a run are
-batched into the next one. A red `main` opens the
+CI runs on `main` after every landing, and it batches pushes that arrive during
+a run into the next run. When Acceptance fails, CI opens the
 `Branch health: main acceptance` issue. The sheriff automation watches `main`'s
 CI and counts a run as red when any job in it failed, even when the run itself
-concluded `cancelled`. It never re-runs CI: it reads the first failed job as
-soon as it fails, finds the commit that broke it, and delegates an agent to fix
-forward when the fix is small and clear, or to revert the commit when the
-revert is clean. The fix lands like any other, and the next push run on `main`
-judges it. The issue records each failure once, with its owner and the repair
-that landed, so a failure already owned or already repaired gets no second
-fix. Every revert gets an owner: the commit's live session, or a seed to land
-the change again that the chief receives. When neither path is clearly right,
-the sheriff asks the user. The `sheriff` skill is its procedure. Keep landing
-while `main` is red; a release waits for green.
+concluded `cancelled`. The sheriff never re-runs CI. As soon as a job fails, the
+sheriff reads it, finds the commit that broke it, and delegates an agent
+to fix forward when the fix is small and clear, or to revert the commit when the
+revert is clean. The fix lands like any other, and the next push run on
+`main` shows whether the fix worked. The issue records each failure once, with
+the failure's owner and the repair that landed, so the sheriff does not fix a
+failure that already has an owner or a repair. Every revert gets an owner who
+will land the change again: the commit's live session, or a seed that the chief
+receives. When neither fixing forward nor reverting is clearly right, the sheriff asks the
+user. The `sheriff` skill is the sheriff's procedure. Keep landing while `main` is red. A
+release waits for green.
 
 ## Releases
 

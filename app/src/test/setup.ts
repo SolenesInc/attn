@@ -13,7 +13,7 @@ if (typeof HTMLElement !== 'undefined') {
 }
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn(async () => undefined),
   isTauri: vi.fn(() => false),
   convertFileSrc: vi.fn((filePath: string) => `asset://localhost/${filePath}`),
 }));

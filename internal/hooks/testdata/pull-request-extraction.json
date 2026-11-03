@@ -14,7 +14,7 @@
     "want": ["https://github.com/victorarias/attn/pull/71"]
   },
   {
-    "name": "pi sends the bash tool's text output",
+    "name": "a lowercase bash tool sends its text output as a string",
     "tool_name": "bash",
     "tool_input": {"command": "gh pr create --fill"},
     "tool_output": "https://github.com/victorarias/attn/pull/71",

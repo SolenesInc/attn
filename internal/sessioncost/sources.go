@@ -11,6 +11,7 @@ type Observation struct {
 	Purpose       string `json:"purpose,omitempty"`
 	FastMode      bool   `json:"fast_mode,omitempty"`
 	Usage         Usage  `json:"usage"`
+	Final         bool   `json:"-"`
 }
 
 const LegacySource = "_legacy"

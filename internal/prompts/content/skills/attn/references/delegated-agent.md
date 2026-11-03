@@ -1,14 +1,20 @@
 # Delegated-agent guidance
 
-Follow the task and its authorization boundaries. Start further Attn delegations when authorized by the user or assigned task. An Attn delegation is a separate session the user can inspect and steer.
+This reference covers an assigned delegation: how you start, report, and finish. The authorization limits in the skill's "Delegation and reporting" section apply.
 
 ## Start from the seed
 
-Your opening names the seed you tend. Read it with `attn seed show <seed-id>` before starting: under its header are a bookmark and the newest log entries, with a pointer to the freshest handoff when that is older than those. After a resume, read what changed while you were away with `attn seed show <seed-id> --since <bookmark>`, or the whole seed when you no longer have the bookmark. An `edit` entry means the brief changed, so read the body again. Follow any handoff for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. `show` lists the parent plot's outline, and `attn seed show <parent> --section <heading|id>` reads one part of it. You do not inherit the delegator's conversation.
+Your opening names the seed you tend. You do not inherit the delegator's conversation, so start from the seed:
+
+1. Before you start, read the seed with `attn seed show <seed-id>`. The output shows a bookmark and the newest log entries under the seed's header. When the freshest handoff is older than those entries, the output also points to it.
+2. When your opening has an authorization line, that line is the task's authorization: the user's words for what you may do without asking and where you stop. `attn seed show` prints the current words. When someone changes them, attn types the change into your conversation as the user's message. When the user gives you new words directly, record them with `attn seed authorization <seed-id> "<the user's words>"`. When a change applies to work you delegated, update those seeds the same way. Follow any handoff for the next step.
+3. Read the parent sections, sibling results, and artifacts your task needs. `show` does not include the body of a parent or sibling. It does list the parent plot's outline. To read one part of the parent, run `attn seed show <parent> --section <heading|id>`.
+
+After a resume, read what changed while you were away with `attn seed show <seed-id> --since <bookmark>`. When you no longer have the bookmark, read the whole seed. An `edit` entry means the brief changed, so read the body again.
 
 ## Report useful updates
 
-Write when an update helps the delegator or a future tender understand progress, findings, a scope change, a blocker or a decision. Combine related developments; avoid command-by-command narration.
+Write an update when it helps the delegator or a future tender understand progress, findings, a scope change, a blocker or a decision. Combine related developments. Do not narrate command by command.
 
 ```sh
 attn seed note <seed-id> -m "The parser change passes focused checks. Integration verification remains."
@@ -16,30 +22,38 @@ attn seed note <seed-id> -m "The parser change passes focused checks. Integratio
 
 Add `--ring` only when the delegator needs to respond now. A note does not stop or transfer the session.
 
-## Complete the assignment
+## Report each check as you prove it
 
-Make the result readable in the conversation and durable in the seed. Link supporting artifacts and record the verification, remaining gaps and next step. `attn seed show <seed-id>` lists your seed's checks, the plot's shared ones included. Report each one before harvesting, in one call: the first line of -m is a summary line of at most 400 characters, any lines after it are detail, and `--evidence` takes a local file, which attn copies onto the seed, an artifact on the seed, or an http(s) URL:
+`attn seed show <seed-id>` lists your seed's checks, including the shared checks of the plot. Report each check in one call when you prove it, and report every check before you harvest. When the check ran against a Git revision, add the commit it ran on.
 
 ```sh
-attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
+attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> [--commit <rev>]
 ```
 
-A check that does not apply gets a report saying why and citing what shows it. When the brief numbers checks that are not on the seed, report each one in a note with its evidence. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.
+The first line of `-m` is a summary line of at most 400 characters. Put what a reviewer needs beyond the summary on the lines after it. attn keeps those lines in the report's check note. `--evidence` takes a local file, an artifact on the seed, or an http(s) URL. attn copies a local file onto the seed and cites the file in the same call. A refused report lists every problem at once. `--commit` validates a Git revision, so omit it for a check that ran outside Git, such as research, a plan or a Notebook document, and let the evidence carry the proof.
+
+For a check that does not apply, report why and cite what shows it. The reviewer then rules on the check.
+
+Each later run is a new report. The new report replaces the earlier report and clears its verdict, so the seed always shows which evidence is current. When the plan or notes cite the earlier file, cite the new evidence under a new name. Otherwise, to replace the earlier file, cite the new evidence under the same name.
+
+When the brief lists numbered checks that the seed does not have, report each of them in a note with its evidence.
+
+## Complete the assignment
+
+To finish the assignment, do these in order:
+
+1. Link the supporting artifacts to the seed.
+2. Record the result, the verification, the remaining gaps, and the next step on the seed. If they fit in the harvest reason, put them there. Otherwise write one result note first.
+3. When the assigned outcome and required verification are complete, harvest the seed with a concise summary:
 
 ```sh
 attn seed harvest <seed-id> -m "<outcome and verification>"
 ```
 
-When only someone else's pull request merge remains, release the claim and
-keep the outcome and verification as the eventual harvest reason:
+4. Write your final response in the conversation so the user understands the outcome and the next step without inspecting the seed.
 
-```sh
-attn seed harvest <seed-id> --when-merged <pr-url> -m "<outcome and verification>"
-```
+When only the merge of someone else's pull request remains, release your claim with `--when-merged`, as [Harvesting on a merge](garden.md#harvesting-on-a-merge) describes. Keep tending while work remains. Follow [Delivery](delivery.md) for the repository's flow and stopping point.
 
-This command merges nothing. Keep tending while work remains: review notes to answer, docs to write, or verification to finish. Follow the [Delivery](../../attn-workflow/references/delivery.md) reference in `attn-workflow` for the repository's flow and stopping point.
+Harvest only when the assigned outcome and required verification are complete. The harvest command lists the checks that are still open or rejected. Leave a seed open when its plan still needs a decision from the user. Do not treat a finished plan as a finished seed when the assigned outcome includes implementation. To abandon the assignment, record why and wither the seed. A temporary blocker is not abandonment.
 
-Harvest only when the assigned outcome and required verification are complete. Harvest names the checks still open or rejected. A plan awaiting a user decision remains open. Finishing a plan does not finish a seed whose assigned outcome includes implementation. If the assignment should be abandoned, record why and wither it; a temporary blocker is not abandonment.
-
-Use `attn seed guide` for body structure, artifacts and completion rules. The user should understand the outcome and next step from your final response without having to inspect the seed.
-
+Use `attn seed guide` for body structure, artifacts, and completion rules.

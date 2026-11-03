@@ -9,6 +9,7 @@ import {
   queryAllByText,
   queryAllByTitle,
 } from "@testing-library/dom";
+import { installNativeTextUndo } from "../utils/nativeTextUndo";
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
 const SHADOW_KEY = "shadow-6066-11e4-a52e-4f735466cecf";
@@ -649,4 +650,5 @@ function execute(action: string, params: JsonObject): unknown | Promise<unknown>
   }
 }
 
+installNativeTextUndo(document);
 window.__attnBrowser = { version: 1, execute };

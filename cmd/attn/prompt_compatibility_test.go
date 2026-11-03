@@ -12,19 +12,19 @@ import (
 func TestLegacyPromptCompatibility(t *testing.T) {
 	var help bytes.Buffer
 	writeSeedHelp(&help)
-	out := map[string]string{"guide": seedGuideText, "help": help.String()}
+	out := map[string]string{"guide": seedGuideText(), "help": help.String()}
 	for count := 0; count < 3; count++ {
 		for scope := 0; scope < 3; scope++ {
 			for author := 0; author < 2; author++ {
 				r := protocol.SeedReadyResult{}
 				if scope > 0 {
-					r.Crown = &protocol.Seed{ID: "s-plot01", Title: "Plot {{literal}}"}
+					r.Crown = &protocol.SeedRow{ID: "s-plot01", Title: "Plot {{literal}}"}
 				}
 				if scope == 2 {
 					r.Crown.PlotProgress = &protocol.SeedPlotProgress{}
 				}
 				for i := 0; i < count; i++ {
-					r.Seeds = append(r.Seeds, protocol.Seed{ID: fmt.Sprint("s-child", i), StepSlug: "first-child", Title: "Task λ"})
+					r.Seeds = append(r.Seeds, protocol.SeedRow{ID: fmt.Sprint("s-child", i), StepSlug: "first-child", Title: "Task λ"})
 				}
 				if count > 0 {
 					r.Handoffs = []protocol.SeedNote{{SeedID: r.Seeds[0].ID, Body: " Handoff {{literal}} "}}

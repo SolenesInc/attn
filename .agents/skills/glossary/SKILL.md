@@ -5,8 +5,7 @@ description: Use when editing attn's glossary.
 
 # Glossary
 
-Every change to docs/internal/glossary.md must be approved by the user, line by
-line.
+The user must approve every change to docs/internal/glossary.md, line by line.
 
 ## Why
 
@@ -20,7 +19,7 @@ word through the weights of their model. So the glossary maps each coined name
 to the established term that carries its meaning for an agent.
 
 AGENTS.md tells every agent to read the glossary. So every line costs context
-in almost every session. Keep it short.
+in almost every session. Keep the glossary short.
 
 ## Language
 
@@ -30,11 +29,12 @@ domain concepts with the user.
 ## Rules
 
 1. The trees come first. Each tree is one model of attn.
-2. Every term attaches to a tree. If a term does not attach, it is the wrong
-   word or it needs a new tree. A new tree needs the user's approval.
-3. Each relationship in a tree states its count: 1, 0..n, at most 1.
-4. A definition uses only terms that the glossary defines, established terms, or
-   plain English.
+2. Attach every term to a tree. If a term does not attach, the term is the
+   wrong word, or the term needs a new tree. A new tree needs the user's
+   approval.
+3. State the count of each relationship in a tree: 1, 0..n, at most 1.
+4. Write each definition using only terms that the glossary defines,
+   established terms, or plain English.
 5. Define words, not behavior. Timers, limits and sequences go in other docs.
    The glossary can link to them.
 6. Keep each term's text to at most three short sentences. If you need more, use
@@ -43,19 +43,19 @@ domain concepts with the user.
    that already names the same thing.
 8. No tables.
 9. Use they/them for agents and crew members, not it.
-10. Each coined name's definition maps it to the established term that carries
-    its meaning (seed → ticket, plot → epic). Choose established terms with care:
-    they bring all their associations with them.
+10. In the definition of each coined name, map the name to the established term
+    that carries its meaning (seed → ticket, plot → epic). Choose established
+    terms with care, because they bring all their associations with them.
 
 ## Tech debt
 
-The glossary ends with a Tech debt section. It has legacy names and changes to
-make. Put code changes in "Changes to make", not in seeds.
+The glossary ends with a Tech debt section. The section lists legacy names and
+changes to make. Put code changes in "Changes to make", not in seeds.
 
 ### Legacy names
 
-Some old names are still in code, docs and the wire. This is temporary debt that
-the user will pay soon. The glossary maps each old name to its new term.
+Some old names are still in code, docs and the wire. The user will replace these
+names soon. The glossary maps each old name to its new term.
 
 - When you read an old name, understand it as the new term.
 - Never write an old name in new text: docs, prompts, UI, comments or talk with

@@ -70,14 +70,7 @@ should_exclude_path() {
   case "${relative_path}" in
     internal/prompts/content/*) return 1 ;;
     cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
-    plugins/attn-pi/src/*) return 1 ;;
-    plugins/attn-pi/suite/*) return 1 ;;
-    plugins/attn-pi/security/*) return 1 ;;
-    # The receipts are the pin-bump gate, run by hand against a checkout.
-    # Nothing in it is staged into the bundle.
-    plugins/attn-pi/receipts/*) return 0 ;;
-    plugins/attn-pi/package.json|plugins/attn-pi/bun.lock|plugins/attn-pi/attn-plugin.toml|plugins/attn-pi/README.md) return 1 ;;
-    scripts/build-app-instance.sh|scripts/build-bundled-plugins.sh) return 1 ;;
+    scripts/build-app-instance.sh) return 1 ;;
     app/scripts/real-app-harness/*) return 0 ;;
     app/scripts/*)                  return 0 ;;
     app/e2e/*)                      return 0 ;;

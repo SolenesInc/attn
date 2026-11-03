@@ -20,13 +20,16 @@
   "garden.seed.artifact.changed": {
     "caused_by_session_id": "string"
   },
-  "garden.seed.body.edited": null,
+  "garden.seed.body.edited": {
+    "caused_by_session_id": "string"
+  },
   "garden.seed.edge.linked": {
     "caused_by_session_id": "string",
     "edge_kind": "string",
     "target_seed_id": "string"
   },
   "garden.seed.edge.unlinked": {
+    "caused_by_session_id": "string",
     "edge_kind": "string",
     "target_seed_id": "string"
   },
@@ -77,6 +80,9 @@
   },
   "git.operation.finished": {
     "duration_ms": 0,
+    "error": "string",
+    "exit_code": 0,
+    "failure": "string",
     "finished_at": "string",
     "id": "string",
     "kind": "string",
@@ -93,9 +99,6 @@
   },
   "github.host.added": null,
   "github.host.removed": null,
-  "notebook.file.changed": {
-    "origin": "string"
-  },
   "notification.created": null,
   "notification.read": null,
   "plugin.connected": null,
@@ -114,8 +117,16 @@
   },
   "profile.created": null,
   "profile.migration.changed": null,
+  "quick_capture.read": {
+    "profile_id": "string",
+    "read_at": "string"
+  },
   "ratelimit.hit": {
     "reset_at": "string"
+  },
+  "seed_authorization.typed": {
+    "profile_id": "string",
+    "read_at": "string"
   },
   "session.activity.changed": null,
   "session.assistant_window.changed": null,
@@ -245,12 +256,14 @@
     "repository": "string",
     "seed_id": "string",
     "state": "string",
+    "state_reason": "string",
     "state_since": "string",
     "state_updated_at": "string",
     "succeeds": "string",
     "terminal_exit": {
       "at": "string",
-      "code": 0
+      "code": 0,
+      "signal": "string"
     },
     "turn_by_agent": false,
     "turn_opened_at": "string",
@@ -283,39 +296,12 @@
   "session.workspace.changed": null,
   "setting.changed": null,
   "shared_codex.changed": null,
-  "tailscale.serve.changed": null,
   "task.changed": null,
   "ticket.commented": null,
-  "workspace.layout.changed": {
-    "active_pane_id": "string",
-    "layout_json": "string",
-    "panes": [
-      {
-        "kind": "string",
-        "pane_id": "string",
-        "runtime_id": "string",
-        "session_id": "string",
-        "status": "string",
-        "title": "string",
-        "workspace_id": "string"
-      }
-    ],
-    "updated_at": "string",
-    "workspace_id": "string"
-  },
   "workspace.registered": null,
   "workspace.session.associated": null,
   "workspace.session.dissociated": null,
   "workspace.status.changed": null,
-  "workspace.unregistered": {
-    "directory": "string",
-    "id": "string",
-    "muted": false,
-    "pinned": false,
-    "rank": "string",
-    "status": "string",
-    "title": "string"
-  },
   "worktree.created": {
     "branch": "string",
     "created_at": "string",

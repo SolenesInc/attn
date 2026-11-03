@@ -25,7 +25,7 @@ const (
 	StatusGrowing   = "growing"
 	StatusHarvested = "harvested"
 	StatusWithered  = "withered"
-	StatusDormant   = "dormant"
+	StatusParked    = "parked"
 )
 
 const HarvestWhenPullRequestField = "harvest_when_pull_request"
@@ -64,8 +64,25 @@ type Seed struct {
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
 
+	Authorization *Authorization `json:"authorization,omitempty"`
+
 	Checks       []Check                `json:"checks,omitempty"`
 	CheckResults map[string]CheckResult `json:"check_results,omitempty"`
+}
+
+type Authorization struct {
+	Text               string    `json:"text"`
+	SetBy              who.Actor `json:"set_by,omitzero"`
+	SetAt              string    `json:"set_at"`
+	TypedUpdate        string    `json:"typed_update,omitempty"`
+	TenderLastReceived string    `json:"tender_last_received,omitempty"`
+}
+
+func (a *Authorization) Words() string {
+	if a == nil {
+		return ""
+	}
+	return a.Text
 }
 
 type HarvestCondition struct {
@@ -78,10 +95,10 @@ type HarvestCondition struct {
 
 func ValidateHarvestCondition(c HarvestCondition) error {
 	if strings.TrimSpace(c.PullRequest) == "" {
-		return fmt.Errorf("a harvest condition needs the pull request it waits on, as host:owner/repo#number")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a harvest condition needs the pull request it waits on, as host:owner/repo#number")
 	}
 	if strings.TrimSpace(c.URL) == "" {
-		return fmt.Errorf("a harvest condition needs the pull request url, so the seed can point at what it waits on")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a harvest condition needs the pull request url, so the seed can point at what it waits on")
 	}
 
 	return nil
@@ -164,11 +181,11 @@ func NewID() (string, error) { return shortid.New(idPrefix) }
 func ValidateID(id string) error {
 	body, ok := strings.CutPrefix(id, idPrefix)
 	if !ok || len(body) != idBodyLen {
-		return fmt.Errorf("%q is not a seed id: a seed id is %q followed by %d characters, like s-7k3f9m", id, idPrefix, idBodyLen)
+		return protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a seed id: a seed id is %q followed by %d characters, like s-7k3f9m", id, idPrefix, idBodyLen)
 	}
 	for _, r := range body {
 		if !strings.ContainsRune(idAlphabet, r) {
-			return fmt.Errorf("%q is not a seed id: %q is not one of %s (i, l, o and u are left out so an id never misreads)", id, string(r), idAlphabet)
+			return protocol.Refuse(protocol.RefusalInvalidInput, "%q is not a seed id: %q is not one of %s (i, l, o and u are left out so an id never misreads)", id, string(r), idAlphabet)
 		}
 	}
 	return nil
@@ -184,17 +201,17 @@ const (
 func ValidatePlant(title, body string) error {
 	trimmed := strings.TrimSpace(title)
 	if trimmed == "" {
-		return fmt.Errorf("a seed needs a title: `attn seed plant \"what this is\"`")
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a seed needs a title: `attn seed plant \"what this is\"`")
 	}
 	if n := len([]rune(trimmed)); n > MaxTitleChars {
-		return fmt.Errorf("that title is %d characters and the limit is %d; a title names the work in a line — the detail goes in the body (`-m`, or `-m -` to read stdin)", n, MaxTitleChars)
+		return protocol.Refuse(protocol.RefusalLimit, "that title is %d characters and the limit is %d; a title names the work in a line — the detail goes in the body (`-m`, or `-m -` to read stdin)", n, MaxTitleChars)
 	}
 	return ValidateBody(body)
 }
 
 func ValidateBody(body string) error {
 	if n := len(body); n > MaxBodyBytes {
-		return fmt.Errorf("max_body_bytes=%d, asked for %d; a seed's body is a plan, not an archive", MaxBodyBytes, n)
+		return protocol.Refuse(protocol.RefusalLimit, "max_body_bytes=%d, asked for %d; a seed's body is a plan, not an archive", MaxBodyBytes, n)
 	}
 	return nil
 }

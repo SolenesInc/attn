@@ -1,6 +1,8 @@
 package notebook
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -26,6 +28,24 @@ func DefaultRoot(home, instance string) string {
 		return base
 	}
 	return base + "-" + p
+}
+
+func FolderKey(homePath string) string {
+	sum := sha256.Sum256([]byte(homePath))
+	return hex.EncodeToString(sum[:4])
+}
+
+func CopyName(homePath string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		return '-'
+	}, strings.ToLower(filepath.Base(homePath)))
+}
+
+func OutpostCopyRoot(base, name, key string) string {
+	return base + "-" + name + "-" + key
 }
 
 func TicketsDir(root string) string {

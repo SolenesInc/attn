@@ -693,7 +693,7 @@ describe('CrewPanel seeds', () => {
   it('lists a member’s planted seeds with their state and plot, and opens one from the keyboard', async () => {
     const plot = daemonSeed('s-dssvxq', {
       title: 'Garden follow-up work',
-      plot_progress: { total: 5, done: 2, withered: 0, growing: 1, dormant: 1, ready: 1, blocked: 0 },
+      plot_progress: { total: 5, done: 2, withered: 0, growing: 1, parked: 1, ready: 1, blocked: 0 },
     });
     const child = daemonSeed('s-g9yxwv', {
       title: 'Artifact presence comes from the daemon',
@@ -720,7 +720,7 @@ describe('CrewPanel seeds', () => {
     expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
     expect(panel().getByRole('button', { name: /Member claim/ })).toBeInTheDocument();
 
-    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender: undefined, claimed: false }, { ...ownClaim, status: 'harvested', tender: undefined, claimed: false }]);
+    await pushSeeds(daemon, [{ ...claimed, status: 'parked', tender: undefined, claimed: false }, { ...ownClaim, status: 'harvested', tender: undefined, claimed: false }]);
     expect(panel().getByText("Alder isn't tending a seed.")).toBeInTheDocument();
 
     fireEvent.click(panel().getByRole('button', { name: /Planted/ }));

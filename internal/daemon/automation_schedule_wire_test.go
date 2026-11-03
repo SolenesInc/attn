@@ -122,7 +122,7 @@ func automationOccurrenceKeys(runs []protocol.AutomationRunSummary) []string {
 	return keys
 }
 
-func TestEditingAScheduledAutomationKeepsItsThreadUntilItsContractChanges(t *testing.T) {
+func TestEditingAScheduledAutomationKeepsItsSeedAndReplacesItsSessionOnlyForAContractChange(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		definitionID := 0
@@ -150,8 +150,8 @@ func TestEditingAScheduledAutomationKeepsItsThreadUntilItsContractChanges(t *tes
 		if *renamed.SeedID != *original.SeedID || *renamed.SessionID != *original.SessionID {
 			t.Errorf("after a rename the run is on %s/%s, want the thread %s/%s", *renamed.SeedID, *renamed.SessionID, *original.SeedID, *original.SessionID)
 		}
-		if *moved.SeedID == *original.SeedID || *moved.SessionID == *original.SessionID {
-			t.Errorf("after a location change the run stayed on the thread %s/%s", *moved.SeedID, *moved.SessionID)
+		if *moved.SeedID != *original.SeedID || *moved.SessionID == *original.SessionID {
+			t.Errorf("after a location change the run is on %s/%s, want a new session continuing seed %s", *moved.SeedID, *moved.SessionID, *original.SeedID)
 		}
 	})
 }

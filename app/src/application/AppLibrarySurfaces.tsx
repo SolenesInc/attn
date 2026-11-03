@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { GardenFrame } from '../components/GardenFrame';
 import { NotebookBrowser } from '../components/NotebookBrowser';
 import { NotificationsPanel } from '../components/NotificationsPanel';
@@ -158,47 +158,48 @@ export function AppLibrarySurfaces() {
         changeSignal={notebookRootChangeSignal}
         chiefActive={notebookChiefActive}
       />
-      <GardenFrame
-        key={selectedProfileId}
-        mode={gardenMode}
-        dockRect={gardenDockRect}
-        onToggleFrame={toggleGardenFrame}
-        onClose={closeGarden}
-        seeds={seeds}
-        seedsTotal={seedsTotal}
-        tenderSessionLabels={gardenSessionLabels}
-        loaded={hasReceivedInitialState}
-        moveSeed={sendSeedTransition}
-        noteSeed={sendSeedNote}
-        fetchSeedDocument={sendSeedDocumentGet}
-        onOpenAsTile={(seedId) => {
-          closeGarden();
-          handleOpenSeedTile(seedId);
-        }}
-        onOpenMarkdownArtifact={handleOpenMarkdownArtifact}
-        checkArtifactPath={checkArtifactPath}
-        onResumeSeed={handleResumeSeed}
-        onHandoverSeed={handleHandoverSeed}
-        onSendSeedToChief={handleSendSeedToChief}
-        chiefAvailable={hasChiefOfStaff}
-        reviewOverview={seedReviewOverview}
-        showReview={sendSeedReviewShow}
-        startReview={sendSeedReviewStart}
-        retryReviewItem={sendSeedReviewRetry}
-        keepReviewItem={sendSeedReviewKeep}
-        draftReviewHandover={sendSeedReviewDraft}
-      />
-      <NotificationsPanel
-        open={notificationsPanelOpen}
-        onClose={closeNotificationsPanel}
-        listNotifications={sendNotificationList}
-        markRead={sendNotificationMarkRead}
-        retryTask={sendTaskRetry}
-        onOpenSession={handleSelectSession}
-        installingCodexUpdate={installingCodexUpdate}
-        onInstallCodexUpdate={installCodexUpdate}
-        changeSignal={notificationsChangeSignal}
-      />
+      <Fragment key={selectedProfileId}>
+        <GardenFrame
+          mode={gardenMode}
+          dockRect={gardenDockRect}
+          onToggleFrame={toggleGardenFrame}
+          onClose={closeGarden}
+          seeds={seeds}
+          seedsTotal={seedsTotal}
+          tenderSessionLabels={gardenSessionLabels}
+          loaded={hasReceivedInitialState}
+          moveSeed={sendSeedTransition}
+          noteSeed={sendSeedNote}
+          fetchSeedDocument={sendSeedDocumentGet}
+          onOpenAsTile={(seedId) => {
+            closeGarden();
+            handleOpenSeedTile(seedId);
+          }}
+          onOpenMarkdownArtifact={handleOpenMarkdownArtifact}
+          checkArtifactPath={checkArtifactPath}
+          onResumeSeed={handleResumeSeed}
+          onHandoverSeed={handleHandoverSeed}
+          onSendSeedToChief={handleSendSeedToChief}
+          chiefAvailable={hasChiefOfStaff}
+          reviewOverview={seedReviewOverview}
+          showReview={sendSeedReviewShow}
+          startReview={sendSeedReviewStart}
+          retryReviewItem={sendSeedReviewRetry}
+          keepReviewItem={sendSeedReviewKeep}
+          draftReviewHandover={sendSeedReviewDraft}
+        />
+        <NotificationsPanel
+          open={notificationsPanelOpen}
+          onClose={closeNotificationsPanel}
+          listNotifications={sendNotificationList}
+          markRead={sendNotificationMarkRead}
+          retryTask={sendTaskRetry}
+          onOpenSession={handleSelectSession}
+          installingCodexUpdate={installingCodexUpdate}
+          onInstallCodexUpdate={installCodexUpdate}
+          changeSignal={notificationsChangeSignal}
+        />
+      </Fragment>
     </>
   );
 }

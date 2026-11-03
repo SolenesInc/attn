@@ -31,7 +31,6 @@ const (
 	gitTaskAutomation       gitTaskKind = "automation"
 	gitTaskFileIndex        gitTaskKind = "file_index"
 	gitTaskSeedArtifact     gitTaskKind = "seed_artifact"
-	gitTaskAutoMode         gitTaskKind = "auto_mode"
 	gitTaskPluginInstall    gitTaskKind = "plugin_install"
 )
 

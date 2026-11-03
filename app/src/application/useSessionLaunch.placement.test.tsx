@@ -117,7 +117,7 @@ describe('useSessionLaunch from the new-session picker', () => {
     });
 
     await act(async () => {
-      result.current.handleCreateWorktreeSession('/repo/exsin', 'chief', 'main', 'shell', false, undefined, true);
+      result.current.handleCreateWorktreeSession('/repo/exsin', 'chief', 'main', 'shell', false, true);
       await vi.waitFor(() => expect(vi.mocked(ptySpawn)).toHaveBeenCalled());
     });
 

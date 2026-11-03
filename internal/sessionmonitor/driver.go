@@ -3,7 +3,6 @@ package sessionmonitor
 import (
 	"strings"
 
-	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -116,7 +115,6 @@ func (m *Monitor) ReportDriverTranscript(run, path string) bool {
 	m.driver.TranscriptPath = path
 	view := m.viewLocked()
 	m.mu.Unlock()
-	pausepoint.At(pausepoint.DriverTranscriptCaptured)
 	return m.publish(view)
 }
 

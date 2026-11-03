@@ -68,10 +68,10 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 	}
 
 	t.Run("session rename", func(t *testing.T) {
-		if got := inSession("session", "rename", "pi resume support"); got.Code != 0 {
+		if got := inSession("session", "rename", "plugin resume support"); got.Code != 0 {
 			t.Fatalf("rename exited %d: %s", got.Code, got.Stderr)
 		}
-		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.Label == "pi resume support" })
+		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.Label == "plugin resume support" })
 		if got := inSession("session", "rename", "--session", other, "  review store tripwires "); got.Code != 0 {
 			t.Fatalf("rename --session exited %d: %s", got.Code, got.Stderr)
 		}
@@ -81,7 +81,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		}
 		testworld.AwaitSession(app, other, func(x protocol.Session) bool { return x.Label == "checkout" })
 
-		refused(t, inSession("session", "rename", "pi", "resume"), 2, "exactly one name is required")
+		refused(t, inSession("session", "rename", "plugin", "resume"), 2, "exactly one name is required")
 		refused(t, inSession("session", "rename", "   "), 1, "name cannot be empty for an agent")
 		refused(t, s.Attn("session", "rename", "orphan"), 2, "--session")
 	})

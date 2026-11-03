@@ -937,3 +937,24 @@
 .settings-default-row .settings-segmented, .settings-default-row > button { flex-shrink: 0; }
 @media (max-width: 800px) { .settings-default-row { align-items: flex-start; flex-wrap: wrap; gap: 12px; } }
 fieldset.settings-price-card { min-width: 0; margin: 0; }
+
+.settings-phone-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-phone-code {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.settings-phone-qr {
+  width: 176px;
+  height: 176px;
+  flex: none;
+  border-radius: 6px;
+}

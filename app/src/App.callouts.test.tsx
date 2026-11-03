@@ -119,17 +119,38 @@ describe('App callouts', () => {
     expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
   });
 
-  it('shows a dynamic fallback on the queue bar, skips with right arrow, and goes there with Enter', async () => {
+  it('steps through agent and desktop steps with Enter and right arrow in any mix, and goes there only from the last step', async () => {
+    const { daemon } = await launch();
+    await show(daemon, [
+      { anchor: 'sidebar', text: 'One' },
+      { anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Two' },
+      { anchor: 'garden', text: 'Three' },
+      { anchor: 'desktop', desktop_id: 'desktop-first', label: 'First desktop', text: 'Four' },
+      { anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Five' },
+    ]);
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(card()).toHaveTextContent('Two');
+    expect(within(card()).getByRole('button', { name: /Next/ })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
+    expect(card()).toHaveTextContent('Three');
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
+    expect(card()).toHaveTextContent('Four');
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(card()).toHaveTextContent('Five');
+    expect(daemon.sentOf('desktop_show_session')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_current')).toEqual([]);
+    expect(within(card()).getByRole('button', { name: /Go there/ })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
+    expect(daemon.sentOf('desktop_show_session')).toEqual([{ cmd: 'desktop_show_session', session_id: 'second', request_id: expect.any(String) }]);
+    expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+  });
+
+  it('shows a dynamic fallback on the queue bar and Enter goes there', async () => {
     const { daemon } = await launch(true);
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
-    await show(daemon, [{ anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Needs you' }, { anchor: 'sidebar', text: 'Next' }]);
-    expect(within(card()).getByRole('button', { name: /Next/ })).toBeInTheDocument();
+    await show(daemon, [{ anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Needs you' }]);
     expect(card()).toHaveTextContent("Second agent isn't on screen");
     expect(screen.queryByTestId('callout-ring')).not.toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
-    expect(card()).toHaveTextContent('Next');
-    expect(daemon.sentOf('desktop_show_session')).toEqual([]);
-    await show(daemon, [{ anchor: 'agent', session_id: 'second', label: 'Second agent', text: 'Needs you' }], 'fallback');
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
     expect(daemon.sentOf('desktop_show_session')).toEqual([{ cmd: 'desktop_show_session', session_id: 'second', request_id: expect.any(String) }]);
   });

@@ -1,0 +1,3 @@
+kind: added
+area: phone app
+change: Tapping a session's terminal in the phone app closes the keyboard, as the Hide key does.

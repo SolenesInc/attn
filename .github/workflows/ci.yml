@@ -25,8 +25,8 @@ jobs:
       daemon: ${{ steps.filter.outputs.daemon }}
       generated: ${{ steps.filter.outputs.generated }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
       tauri: ${{ steps.filter.outputs.tauri }}
-      plugins: ${{ steps.filter.outputs.plugins }}
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
       app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
     steps:
@@ -80,13 +80,22 @@ jobs:
               - 'app/playwright.config.ts'
               - 'app/tsconfig*.json'
               - 'app/vite.config.ts'
+              - 'app/vite.browser-runtime.config.ts'
+              - 'app/src-tauri/generated/**'
               - 'app/lint/**'
               - '.oxlintrc.json'
-              - 'plugins/**'
               - 'app/pnpm-workspace.yaml'
               - 'internal/protocol/schema/**'
               - 'ghostty-vt.pin'
               - 'ghostty-vt-wasm.lock'
+              - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
+            mobile:
+              - 'mobile/**'
+              - 'app/src/gateway/**'
+              - 'app/src/types/gateway*'
+              - 'internal/cloudlink/testdata/**'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
@@ -119,26 +128,10 @@ jobs:
               - 'Makefile'
               - '.github/workflows/ci.yml'
               - '.github/actions/setup-toolchains/**'
-            # The plugin tests read Go sources and fixtures verbatim, and attn-pi
-            # speaks the daemon's plugin-driver and conversation-host wire.
-            plugins:
-              - 'plugins/**'
-              - 'internal/prompts/**'
-              - 'cmd/promptgen/**'
-              - 'scripts/build-bundled-plugins.sh'
-              - '.tool-versions'
-              - '.github/workflows/ci.yml'
-              - '.github/actions/setup-toolchains/**'
-              - 'internal/automode/environment.go'
-              - 'internal/hooks/testdata/pull-request-extraction.json'
-              - 'internal/hostsession/**'
-              - 'internal/daemon/host_*'
-              - 'internal/daemon/plugin_*'
             app_acceptance:
               - 'app/**'
               - 'cmd/**'
               - 'internal/**'
-              - 'plugins/**'
               - 'pty-host/**'
               - 'sdk/**'
               - 'test/**'
@@ -250,11 +243,78 @@ jobs:
       - name: Regenerate and diff
         run: make check-types check-schema
 
-  backend:
-    name: Daemon
+  go-lint:
+    name: Go vet and lint
     needs: changes
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
     runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          go-cache: 'false'
+
+      - name: Resolve Go cache paths
+        id: go-cache-paths
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
+      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
+      # prebuilt native archive (download-first, no zig) so vet and lint link.
+      - name: Ensure native VT library
+        run: ./scripts/build-libghostty-vt.sh
+
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted. Run 'gofmt -w .'"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Lint
+        run: make lint-go
+
+      - name: Check prompt catalog and scenarios
+        run: |
+          make check-prompts
+          go run ./cmd/prompt-editor check
+
+  backend:
+    name: Daemon (${{ matrix.group }})
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: 1
+            jobs: packages race attn-1
+          - group: 2
+            jobs: daemon-1 attn-2 attn-3
+          - group: 3
+            jobs: daemon-2 attn-4 attn-5
+          - group: 4
+            jobs: daemon-3 daemon-4 attn-6
     steps:
       - uses: actions/checkout@v4
 
@@ -282,11 +342,20 @@ jobs:
             ${{ steps.go-cache-paths.outputs.modules }}
           key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+
+      - name: Cache pty-host test builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pty-host -> target/test-formats
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
 
-      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
-      # prebuilt native archive (download-first, no zig) so vet/build/test link.
       - name: Ensure native VT library
         run: ./scripts/build-libghostty-vt.sh
 
@@ -294,46 +363,31 @@ jobs:
         id: bun
         run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
 
-      # Bundled Pi and plugin runtime checks need the pinned Bun toolchain.
+      # Plugin runtime checks need the pinned Bun toolchain.
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
-      - name: Check formatting
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Go files are not formatted. Run 'gofmt -w .'"
-            gofmt -d .
-            exit 1
-          fi
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Lint
-        run: make lint-go
-
-      - name: Start ClickHouse for the attn-ingest tests
+      - name: Start ClickHouse for the analytics tests
         run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
 
       - name: Test
-        run: ./scripts/test-go.sh
+        run: |
+          job_args=()
+          for job in ${{ matrix.jobs }}; do job_args+=(--job "$job"); done
+          ./scripts/test-go.sh "${job_args[@]}"
 
       - name: Upload test receipts
         if: always()
         uses: ./.github/actions/upload-test-receipts
         with:
-          name: daemon
-
-      - name: Check prompt catalog and scenarios
-        run: |
-          make check-prompts
-          go run ./cmd/prompt-editor check
+          name: daemon-${{ matrix.group }}
 
       - name: Save Go build cache
         if: >-
-          always() && steps.go-cache.outcome == 'success' &&
+          always() && contains(matrix.jobs, 'packages') &&
+          steps.go-cache.outcome == 'success' &&
           steps.go-cache.outputs.cache-hit != 'true' &&
           github.event_name == 'push' &&
           github.ref == 'refs/heads/main'
@@ -438,7 +492,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check the committed browser runtime
+        working-directory: .
+        run: make check-browser-runtime
+
       - name: Type check
+        run: pnpm run typecheck
+
+      - name: Build
         run: pnpm run build
 
       - name: Lint
@@ -458,6 +519,33 @@ jobs:
         run: |
           node --test cmd/prompt-editor/test/compare.test.mjs
           app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+
+  mobile:
+    name: Mobile
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-toolchains
+        with:
+          node: 'true'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format, lint, type check and test
+        run: pnpm run check
 
   # E2E runs apart from the unit job so the two overlap instead of stacking.
   # Each shard is its own runner with its own throwaway daemon + Vite server,
@@ -651,49 +739,6 @@ jobs:
       - name: Cargo test
         run: cargo test
 
-  # The bundled plugins are compiled by the packaged-app build, which no CI job
-  # runs — so a plugin that only builds on a machine with warm node_modules got
-  # all the way to a contributor's fresh clone. This stages them the way the app
-  # build does, from a checkout that has nothing installed.
-  plugins:
-    name: Plugins
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Linux sandbox
-        uses: ./.github/actions/setup-linux-sandbox
-
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-
-      - name: Read bun pin
-        id: bun
-        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
-
-      - name: Check prompt catalog freshness
-        run: go run ./cmd/promptgen --check
-
-      - name: Stage bundled plugins
-        run: ./scripts/build-bundled-plugins.sh "${RUNNER_TEMP}/bundled-plugins"
-
-      - name: Test plugins
-        run: |
-          for plugin in plugins/*/; do
-            [ -f "${plugin}package.json" ] || continue
-            echo ">>> ${plugin}"
-            (cd "$plugin" && bun test)
-          done
-
   app-acceptance-build:
     name: App acceptance build
     needs: changes
@@ -729,7 +774,7 @@ jobs:
           overwrite: true
 
   app-acceptance-shard:
-    name: App acceptance shard ${{ matrix.shard }}/4
+    name: App acceptance shard ${{ matrix.shard }}/${{ strategy.job-total }}
     needs: [changes, app-acceptance-build]
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
@@ -739,10 +784,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
-    # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
+    # Planned heaviest shard 258s of a 2030s matrix in 8 shards (scenario-durations.json, 2026-11-03); 40m is slack.
     timeout-minutes: 40
     env:
       ATTN_INSTANCE: app-acceptance
@@ -774,7 +819,7 @@ jobs:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: >-
           xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
+          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload test receipts
         if: always()
@@ -839,7 +884,7 @@ jobs:
           if [ "$MATRIX_OUTCOME" = success ]; then
             exit 0
           fi
-          echo "shard ${{ matrix.shard }}/4: the serial matrix is $MATRIX_OUTCOME;" \
+          echo "shard ${{ matrix.shard }}/${{ strategy.job-total }}: the serial matrix is $MATRIX_OUTCOME;" \
             "the App acceptance job aggregates every shard's digest" >&2
           exit 1
 
@@ -879,7 +924,7 @@ jobs:
         continue-on-error: true
         run: >-
           node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 4
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 8
           --out "$RUNNER_TEMP/matrix-digest.txt"
 
       - name: Upload the aggregated digest
@@ -1033,12 +1078,13 @@ jobs:
       - release-candidate
       - generated-types
       - script-tests
+      - go-lint
       - backend
       - pty-compatibility
       - frontend
+      - mobile
       - frontend-e2e
       - rust
-      - plugins
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
@@ -1066,12 +1112,13 @@ jobs:
       - changes
       - generated-types
       - script-tests
+      - go-lint
       - backend
       - pty-compatibility
       - frontend
+      - mobile
       - frontend-e2e
       - rust
-      - plugins
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos

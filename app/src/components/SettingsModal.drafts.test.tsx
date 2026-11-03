@@ -33,7 +33,6 @@ describe('SettingsModal drafts', () => {
     await openSettings(daemon);
 
     expect(daemon.sent.slice(before).map(({ cmd }) => cmd).sort()).toEqual([
-      'automode_get',
       'delegation_preferences_get',
       'list_plugins',
     ]);

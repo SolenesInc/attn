@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -75,6 +76,7 @@ func (r *Router) Send(msg protocol.Placed, answered func(error)) {
 	}
 	if conn != nil {
 		conn.Send(msg, func(err error) { answer(terminalBridgeError(err)) })
+		pausepoint.At(pausepoint.BridgeSendQueued)
 		return
 	}
 	part, ok := r.here[msg.CommandName()]

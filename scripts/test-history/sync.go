@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/testhistory"
@@ -62,6 +63,12 @@ func syncHistory(args []string) int {
 		warn("%v", err)
 		return 1
 	}
+	turn, err := waitForSyncTurn(spool)
+	if err != nil {
+		warn("%v", err)
+		return 1
+	}
+	defer turn.Close()
 	state, err := readSyncState(spool)
 	if err != nil {
 		warn("%v", err)
@@ -96,6 +103,23 @@ func syncHistory(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func waitForSyncTurn(spool testhistory.Spool) (*os.File, error) {
+	turn, err := os.OpenFile(spool.SyncLockPath(), os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	err = syscall.Flock(int(turn.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		warn("waiting for another sync of %s to finish", spool.Dir)
+		err = syscall.Flock(int(turn.Fd()), syscall.LOCK_EX)
+	}
+	if err != nil {
+		_ = turn.Close()
+		return nil, err
+	}
+	return turn, nil
 }
 
 func lastSyncSummary(state syncState) string {
@@ -250,13 +274,13 @@ func (s historyService) put(repo, id string, body []byte) (stored bool, refusal 
 }
 
 func (s historyService) download(spool testhistory.Spool, repo string, state *syncState, report *syncReport) error {
-	if mirror := s.base + " " + strings.ToLower(repo) + " " + testhistory.SharedSuffix; state.CursorOf != mirror {
-		if err := os.RemoveAll(spool.SharedDir()); err != nil {
+	if mirror := s.base + " " + strings.ToLower(repo); state.CursorOf != mirror {
+		if err := os.RemoveAll(spool.MirrorDir()); err != nil {
 			return err
 		}
 		state.Cursor, state.CursorOf, state.LastSuccess = 0, mirror, nil
 	}
-	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
+	if err := os.MkdirAll(spool.MirrorDir(), 0o755); err != nil {
 		return err
 	}
 	for {
@@ -280,7 +304,7 @@ func (s historyService) download(spool testhistory.Spool, repo string, state *sy
 			return fmt.Errorf("GET receipts after %d: %w", state.Cursor, err)
 		}
 		for _, r := range page.Receipts {
-			if err := writeAtomically(spool.SharedPath(r.ID), testhistory.Compress(r.Receipt)); err != nil {
+			if err := writeAtomically(spool.MirrorPath(r.ID), testhistory.Compress(r.Receipt)); err != nil {
 				return err
 			}
 			report.downloaded++

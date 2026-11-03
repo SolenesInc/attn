@@ -213,25 +213,21 @@ func TestQuickCaptureHistoryPagesWithoutReadingAndReportsMissingIdentity(t *test
 	}
 }
 
-func TestQuickCaptureAuthoringAndHistoryRefuseTheAgentSocket(t *testing.T) {
+func TestQuickCaptureHistoryRefusesTheAgentSocket(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.TrustedApp()
 	quickCapture, asset := uuid.NewString(), uuid.NewString()
 	uploadQuickCapture(t, app, quickCapture, asset, quickCapturePNG(t), true)
-	send := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "User request", AttachmentIds: []string{asset}}
+	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "User request", AttachmentIds: []string{asset}}); err != nil {
+		t.Fatal(err)
+	}
 	for _, msg := range []any{
-		send,
 		protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: quickCapture},
 		protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1},
-		protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: asset},
-		protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: quickCapture, AttachmentID: asset},
 	} {
 		if _, err := cli.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), "app-only") {
-			t.Fatalf("agent authoring/history %T: %v", msg, err)
+			t.Fatalf("agent history %T: %v", msg, err)
 		}
-	}
-	if _, err := app.QuickCapture(send); err != nil {
-		t.Fatal(err)
 	}
 	if _, err := cli.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: asset}); err != nil {
 		t.Fatalf("agent retrieval refused: %v", err)

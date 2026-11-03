@@ -1,0 +1,92 @@
+.sender-pairing-overlay {
+  align-items: center;
+  background: var(--color-bg-overlay);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 10040;
+}
+
+.sender-pairing-content {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.42);
+  max-width: min(92vw, 460px);
+  min-width: 380px;
+  padding: 20px 22px;
+  text-align: center;
+}
+
+.sender-pairing-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.sender-pairing-message {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.sender-pairing-code {
+  color: var(--color-text-primary);
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  margin: 0 0 6px;
+  padding-left: 0.3em;
+}
+
+.sender-pairing-hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0 0 18px;
+}
+
+.sender-pairing-error {
+  color: #ff9f7a;
+  font-size: var(--font-size-sm);
+  margin: 0 0 14px;
+}
+
+.sender-pairing-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.sender-pairing-actions button {
+  border: 1px solid var(--color-border-hover);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: 8px 16px;
+}
+
+.sender-pairing-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.sender-pairing-actions .deny {
+  background: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.sender-pairing-actions .allow {
+  background: rgba(88, 166, 255, 0.14);
+  border-color: rgba(88, 166, 255, 0.35);
+  color: #79b8ff;
+}
+
+.sender-pairing-actions button:focus-visible {
+  outline: 2px solid rgba(88, 166, 255, 0.6);
+  outline-offset: 2px;
+}

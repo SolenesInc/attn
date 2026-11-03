@@ -38,48 +38,56 @@ func runSession() {
 	}
 	switch os.Args[2] {
 	case "instructions":
+		setCommandPath("session instructions")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionInstructions(os.Args[3:])
 	case "transcript":
+		setCommandPath("session transcript")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionTranscript(os.Args[3:])
 	case "list":
+		setCommandPath("session list")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionList(os.Args[3:])
 	case "show":
+		setCommandPath("session show")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionShow(os.Args[3:])
 	case "reopen":
+		setCommandPath("session reopen")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionReopen(os.Args[3:])
 	case "priority":
+		setCommandPath("session priority")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionPriority(os.Args[3:])
 	case "rename":
+		setCommandPath("session rename")
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
 		}
 		runSessionRename(os.Args[3:])
 	case "snooze", "unsnooze":
+		setCommandPath("session " + os.Args[2])
 		if hasHelpFlag(os.Args[3:]) {
 			writeSessionHelp(os.Stdout)
 			return
@@ -89,7 +97,7 @@ func runSession() {
 		recordUsageError("session", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -118,7 +126,7 @@ func runSessionTranscript(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session transcript: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -132,7 +140,7 @@ func runSessionTranscript(args []string) {
 	}
 	code := sessionTranscriptErrorCode(err)
 	fmt.Fprintln(os.Stderr, daemon.SessionTranscriptErrorMessage(code))
-	os.Exit(1)
+	exit(1)
 }
 
 type sessionTranscriptFetcher func(string, string) (*protocol.SessionTranscriptResult, error)
@@ -248,7 +256,7 @@ func runSessionInstructions(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session instructions: %v\n", err)
 		writeSessionHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").SessionInstructions(parsed.target, parsed.question)
 	if err != nil {
@@ -259,7 +267,7 @@ func runSessionInstructions(args []string) {
 		} else {
 			fmt.Fprintln(os.Stderr, message)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

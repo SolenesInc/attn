@@ -67,34 +67,44 @@ type sessionCron struct {
 }
 
 func main() {
+	run()
+	exit(0)
+}
+
+func run() {
 	if len(os.Args) == 3 && os.Args[1] == "--check-schema" {
+		leaveInvocationUnrecorded()
 		if err := store.CheckSchema(os.Args[2]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			exit(1)
 		}
 		return
 	}
 	if isProtocolVersionCommand(os.Args) {
+		leaveInvocationUnrecorded()
 		runProtocolVersion()
 		return
 	}
 
 	if isBuildInfoJSONCommand(os.Args) {
+		leaveInvocationUnrecorded()
 		runBuildInfoJSON()
 		return
 	}
 
 	if isVersionCommand(os.Args) {
+		setCommandPath("version")
 		runVersion(os.Args[1:])
 		return
 	}
 
 	if len(os.Args) >= 2 && (os.Args[1] == "profile" || os.Args[1] == "profile-env") {
 		fmt.Fprintln(os.Stderr, renamedProfileCommandMessage(os.Args[1:]))
-		os.Exit(2)
+		exit(2)
 	}
 
 	if len(os.Args) >= 2 && os.Args[1] == "instance-env" {
+		setCommandPath("instance-env")
 		runInstanceEnv()
 		return
 	}
@@ -103,12 +113,12 @@ func main() {
 	if !daemonStart {
 		if err := config.ValidateInstance(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			exit(1)
 		}
 		if !isInstanceGroupCommand(os.Args) {
 			if err := config.ValidateInstanceRouting(); err != nil {
 				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+				exit(1)
 			}
 		}
 	}
@@ -119,11 +129,16 @@ func main() {
 		return
 	}
 
+	setCommandPath(os.Args[1])
 	switch os.Args[1] {
 	case "daemon":
+		if daemonStart {
+			leaveInvocationUnrecorded()
+		}
 		maybePrintInstanceBanner()
 		runDaemonCommand()
 	case "pty-worker":
+		leaveInvocationUnrecorded()
 		runPTYWorker()
 	case "automation":
 		maybePrintInstanceBanner()
@@ -166,6 +181,9 @@ func main() {
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
+	case "send":
+		maybePrintInstanceBanner()
+		runSend()
 	case "settings":
 		runSettings()
 	case "state":
@@ -198,9 +216,6 @@ func main() {
 	case "doc":
 		maybePrintInstanceBanner()
 		runDoc()
-	case "automode":
-		maybePrintInstanceBanner()
-		runAutoMode()
 	case "journal":
 		maybePrintInstanceBanner()
 		runJournal()
@@ -238,6 +253,7 @@ func main() {
 	case "_outpost-install":
 		runOutpostInstall()
 	case "_bridge":
+		leaveInvocationUnrecorded()
 		runBridge()
 	case "_hook-stop":
 		runHookStop()
@@ -260,13 +276,14 @@ func main() {
 		runProbeTUI()
 	default:
 		if len(os.Args[1]) > 0 && os.Args[1][0] == '-' {
+			setCommandPath("attn")
 			maybePrintInstanceBanner()
 			runWrapper()
 		} else {
 			recordUsageError("attn", usageErrorUnknownCommand)
 			fmt.Fprintf(os.Stderr, "attn %s: unknown command %q\n\n", buildinfo.Version, os.Args[1])
 			writeHelp(os.Stderr)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 }
@@ -385,6 +402,8 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
 	fs.IntVar(&cfg.AdoptPtmxFD, "adopt-ptmx-fd", 0, "inherited pty master descriptor")
 	fs.IntVar(&cfg.AdoptListenerFD, "adopt-listener-fd", 0, "inherited unix listener descriptor")
+	var readyFD int
+	fs.IntVar(&readyFD, "ready-fd", 0, "inherited descriptor the worker writes to once it accepts connections")
 	fs.StringVar(&cfg.RegistryPath, "registry-path", "", "registry path")
 	fs.StringVar(&cfg.SocketPath, "socket-path", "", "socket path")
 	fs.StringVar(&cfg.ControlToken, "control-token", "", "control token")
@@ -397,45 +416,50 @@ func runPTYWorker() {
 		cfg.ApprovalRoute = launchcontract.ApprovalRoute(approvalRoute)
 		if !cfg.ApprovalRoute.Valid() {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --approval-route %q\n", approvalRoute)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 	if themeANSIPaletteJSON != "" {
 		if err := json.Unmarshal([]byte(themeANSIPaletteJSON), &cfg.ThemeANSIPalette); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --theme-ansi-palette-json: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 
 	if unattendedLaunchJSON != "" {
 		if err := json.Unmarshal([]byte(unattendedLaunchJSON), &cfg.UnattendedLaunch); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		if err := cfg.UnattendedLaunch.Validate(); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
+	}
+
+	if readyFD > 0 {
+		syscall.CloseOnExec(readyFD)
+		cfg.Ready = os.NewFile(uintptr(readyFD), "pty-worker-ready")
 	}
 
 	cfg.HostName = os.Getenv("ATTN_PTY_HOST_NAME")
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 	if cols > 0 {
 		if cols > 65535 {
 			fmt.Fprintf(os.Stderr, "pty-worker error: --cols must be <= 65535 (got %d)\n", cols)
-			os.Exit(1)
+			exit(1)
 		}
 		cfg.Cols = uint16(cols)
 	}
 	if rows > 0 {
 		if rows > 65535 {
 			fmt.Fprintf(os.Stderr, "pty-worker error: --rows must be <= 65535 (got %d)\n", rows)
-			os.Exit(1)
+			exit(1)
 		}
 		cfg.Rows = uint16(rows)
 	}
@@ -450,7 +474,7 @@ func runPTYWorker() {
 
 	if err := ptyworker.Run(context.Background(), cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "pty-worker error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -461,9 +485,11 @@ func runDaemonCommand() {
 	}
 	switch os.Args[2] {
 	case "ensure":
+		setCommandPath("daemon ensure")
 		refuseDaemonCommandArgs("ensure", os.Args[3:])
 		runDaemonEnsure()
 	case "stop":
+		setCommandPath("daemon stop")
 		refuseDaemonCommandArgs("stop", os.Args[3:])
 		runDaemonStop()
 	case "help", "-h", "--help":
@@ -472,7 +498,7 @@ func runDaemonCommand() {
 		recordUsageError("daemon", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n\n", os.Args[2])
 		writeDaemonHelp(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -482,12 +508,12 @@ func refuseDaemonCommandArgs(command string, args []string) {
 	}
 	if hasHelpFlag(args) {
 		writeDaemonHelp(os.Stdout)
-		os.Exit(0)
+		exit(0)
 	}
 	recordUsageError("daemon "+command, usageErrorUnknownFlag)
 	fmt.Fprintf(os.Stderr, "daemon %s: unknown argument %q; it takes no arguments\n\n", command, args[0])
 	writeDaemonHelp(os.Stderr)
-	os.Exit(2)
+	exit(2)
 }
 
 func writeDaemonHelp(w io.Writer) {
@@ -509,18 +535,18 @@ func runDaemon() {
 	startupSignal, err := daemonctl.TakeStartupSignal()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 	if err := daemonctl.ExitWhenHarnessGoes(); err != nil {
 		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 	socketPath, err := daemonPreflight()
 	if err != nil {
 		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 	d := daemon.New(socketPath)
 	d.RecoverGUIPath()
@@ -542,11 +568,11 @@ func runDaemon() {
 			startupSignal.Failed(err)
 		}
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if err := <-startResult; err != nil {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -568,21 +594,24 @@ func runDaemonEnsure() {
 	binaryPath, err := os.Executable()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon ensure error: resolve executable: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	result, err := daemonctl.Ensure(context.Background(), binaryPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon ensure error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	printJSON(result)
 }
 
 func runDaemonStop() {
-	result, err := daemonctl.Stop(config.PIDPath())
+	result, err := daemonctl.Stop(config.PIDPath(), "stop")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon stop error: %v\n", err)
-		os.Exit(1)
+		exit(1)
+	}
+	if result.StopNoteErr != nil {
+		fmt.Fprintf(os.Stderr, "daemon stop: %v; the next daemon start will record this stop as an unexpected exit\n", result.StopNoteErr)
 	}
 	if result.Stopped {
 		if result.Forced {
@@ -601,13 +630,13 @@ func runList() {
 	result, err := c.List("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(result); err != nil {
 		fmt.Fprintf(os.Stderr, "error encoding list: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -625,7 +654,7 @@ func runPresence() {
 	bareSeedIDs := fs.Bool("seed-ids", false, "print only the ids of the seeds the session works on")
 	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 || (*bareSessionID && *bareSeedIDs) {
 		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id | --seed-ids]")
-		os.Exit(2)
+		exit(2)
 	}
 	warnIfDaemonVersionMismatch()
 	sessionID, present := detectPresence()
@@ -639,7 +668,7 @@ func runPresence() {
 	}
 	if !present {
 		fmt.Println("not running inside attn")
-		os.Exit(1)
+		exit(1)
 	}
 	if sessionID == "" {
 		fmt.Println("running inside attn")
@@ -651,7 +680,7 @@ func runPresence() {
 func printLinesOrExit(ids []string) {
 	ids = slices.DeleteFunc(ids, func(id string) bool { return id == "" })
 	if len(ids) == 0 {
-		os.Exit(1)
+		exit(1)
 	}
 	for _, id := range ids {
 		fmt.Println(id)
@@ -665,7 +694,7 @@ func seedsOfSessionOrExit(sessionID protocol.SessionID) []string {
 	seedIDs, err := seedsOfSession(client.New(""), sessionID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn: resolve the session's seeds: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	return seedIDs
 }
@@ -709,6 +738,7 @@ commands:
   agent msg-status <message-id>         inspect a sent peer message
   agent close <session-or-seed> | --self -m "reason"   close a session and keep the reason
   agent reload <session-or-member>... | --all   restart agents in place
+  send <command>                    send files and a message to a session as the user; pair, senders, unpair
   terminal <command>                open, read, type into, wait on, move and close terminals
   session <command>                 read the ledger and conversations; reopen, rename, snooze and prioritize sessions
   state explain <id>                replay why a session's state is what it is
@@ -764,6 +794,7 @@ func runDelegate() {
 		return
 	}
 	if len(os.Args) >= 3 && os.Args[2] == "status" {
+		setCommandPath("delegate status")
 		fs := flag.NewFlagSet("delegate status", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)
 		profile := fs.String("profile", "", "")
@@ -775,11 +806,11 @@ func runDelegate() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
-			os.Exit(2)
+			exit(2)
 		}
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id> [--profile <name|id>]")
-			os.Exit(2)
+			exit(2)
 		}
 		sessionID := protocol.SessionID(strings.TrimSpace(*session))
 		if sessionID == "" {
@@ -788,7 +819,7 @@ func runDelegate() {
 		result, err := client.New("").WithGardenProfile(strings.TrimSpace(*profile), sessionID).DelegationStatus(positionals[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		printJSON(result)
 		return
@@ -797,7 +828,7 @@ func runDelegate() {
 	args, err := parseDelegateArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	warnIfDaemonVersionMismatch()
 	c := client.New("").WithGardenProfile(protocol.Deref(args.request.ProfileID), protocol.Deref(args.request.SourceSessionID))
@@ -805,14 +836,14 @@ func runDelegate() {
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "delegation accepted: request_id=%s operation_id=%s session_id=%s\n",
 		operation.RequestID, operation.OperationID, operation.SessionID)
 	operation, err = waitDelegationCLI(c, operation, args.request.RequestID, os.Stderr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if operation.Result != nil && operation.Result.FirstTurnUnconfirmed != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.FirstTurnUnconfirmed)
@@ -827,17 +858,14 @@ func waitDelegationCLI(
 	progress io.Writer,
 ) (*protocol.DelegationOperation, error) {
 	lastProgress := ""
-	for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-		if operation.Progress != "" && operation.Progress != lastProgress {
-			fmt.Fprintf(progress, "delegation progress: %s\n", operation.Progress)
-			lastProgress = operation.Progress
+	operation, err := c.AwaitDelegation(operation, func(seen *protocol.DelegationOperation) {
+		if seen.Progress != "" && seen.Progress != lastProgress {
+			fmt.Fprintf(progress, "delegation progress: %s\n", seen.Progress)
+			lastProgress = seen.Progress
 		}
-		time.Sleep(250 * time.Millisecond)
-		next, err := c.DelegationStatus(operation.OperationID)
-		if err != nil {
-			return nil, fmt.Errorf("outcome unknown; inspect or retry with --request-id %s: %w", requestID, err)
-		}
-		operation = next
+	})
+	if err != nil {
+		return nil, fmt.Errorf("outcome unknown; inspect or retry with --request-id %s: %w", requestID, err)
 	}
 	if operation.State == protocol.DelegationOperationStateFailed {
 		message := "unknown failure"
@@ -864,7 +892,12 @@ assignment:
   --seed ID                          use an existing seed
   --priority                         put the delegate's owed turns first
   --handover                         transfer that seed to a new agent
-  -m TEXT                            optional handover note
+  -m TEXT                            optional handover note: the next step
+  --authorization TEXT               the user's words for this task: what the
+                                     agent may do without asking and where it
+                                     stops. Saved on the seed; the opening
+                                     delivers it. Without it, a delegation or
+                                     handover keeps the seed's current words
 
 folder and Git:
   --host NAME                        target outpost name/id; home selects the home
@@ -933,6 +966,7 @@ func runJournal() {
 	warnIfDaemonVersionMismatch()
 	switch os.Args[2] {
 	case "append":
+		setCommandPath("journal append")
 		if hasHelpFlag(os.Args[3:]) {
 			writeJournalHelp(os.Stdout)
 			return
@@ -942,7 +976,7 @@ func runJournal() {
 		recordUsageError("journal", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "journal: unknown command %q\n", os.Args[2])
 		writeJournalHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -998,12 +1032,12 @@ func runJournalAppend(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "journal append: %v\n", err)
 		writeJournalHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").AppendJournal(parsed.sessionID, parsed.date, parsed.entry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "journal append: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.jsonOut {
 		printJSON(result)
@@ -1041,6 +1075,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	priority := fs.Bool("priority", false, "mark the delegate as priority")
 	handover := fs.Bool("handover", false, "transfer an existing seed to the new agent")
 	handoffNote := fs.String("m", "", "optional handover note")
+	authorization := fs.String("authorization", "", "the user's words for this task, saved on the seed")
 	ticketID := fs.String("ticket", "", "retired: delegations bind a seed, not a ticket")
 	confirm := fs.Bool("confirm", false, "retired: went with --ticket")
 	agentName := fs.String("agent", "", "target agent (defaults to the source session agent)")
@@ -1241,6 +1276,9 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if *priority {
 		request.Priority = protocol.Ptr(true)
 	}
+	if text := strings.TrimSpace(*authorization); text != "" {
+		request.Authorization = protocol.Ptr(text)
+	}
 	if source != "" {
 		request.SourceSessionID = protocol.Ptr(protocol.SessionID(source))
 	}
@@ -1316,7 +1354,7 @@ func runOpen() {
 	rawPath, sessionFlag, profileFlag, err := parseOpenArgs(os.Args[2:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn open: %v\nusage: attn open <file.md|seed-id> [--session <id>]\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	resolvedSession := protocol.SessionID(sessionFlag)
@@ -1328,7 +1366,7 @@ func runOpen() {
 	if isSeedOpenTarget(rawPath) {
 		if err := c.WithGardenProfile(profileFlag, "").OpenSeed(rawPath, resolvedSession); err != nil {
 			fmt.Fprintf(os.Stderr, "open: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Printf("opened %s\n", rawPath)
 		return
@@ -1336,11 +1374,11 @@ func runOpen() {
 	absPath, err := filepath.Abs(rawPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open: resolve path: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if err := c.OpenMarkdown(absPath, resolvedSession); err != nil {
 		fmt.Fprintf(os.Stderr, "open: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("opened %s\n", absPath)
 }
@@ -1418,7 +1456,7 @@ func runBrowser() {
 	warnIfDaemonVersionMismatch()
 	if len(os.Args) < 3 {
 		printBrowserUsage(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 
 	subcommand := os.Args[2]
@@ -1441,7 +1479,7 @@ func runBrowser() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn browser %s: %v\n", subcommand, err)
 		printBrowserUsage(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 
 	sessionID := protocol.SessionID(browserSessionID(*sessionFlag))
@@ -1454,30 +1492,33 @@ func runBrowser() {
 	})
 	switch subcommand {
 	case "open":
+		setCommandPath("browser open")
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "attn browser open: expected exactly one <url>")
-			os.Exit(1)
+			exit(1)
 		}
 		if err := c.OpenBrowser(positionals[0], sessionID); err != nil {
 			fmt.Fprintf(os.Stderr, "browser open: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Printf("opened %s\n", positionals[0])
 	case "snapshot":
+		setCommandPath("browser snapshot")
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser snapshot: unexpected arguments")
-			os.Exit(1)
+			exit(1)
 		}
 		data, err := c.BrowserControl("snapshot", "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser snapshot: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "find":
+		setCommandPath("browser find")
 		if len(positionals) != 0 || strings.TrimSpace(*using) == "" || strings.TrimSpace(*value) == "" {
 			fmt.Fprintln(os.Stderr, "attn browser find: --using and --value are required")
-			os.Exit(1)
+			exit(1)
 		}
 		params := map[string]interface{}{"using": *using, "value": *value}
 		if *name != "" {
@@ -1490,13 +1531,14 @@ func runBrowser() {
 		data, err := c.BrowserCommand(action, encodeBrowserParams(params), "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser find: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "wait":
+		setCommandPath("browser wait")
 		if len(positionals) != 0 || strings.TrimSpace(*using) == "" || strings.TrimSpace(*value) == "" {
 			fmt.Fprintln(os.Stderr, "attn browser wait: --using and --value are required")
-			os.Exit(1)
+			exit(1)
 		}
 		params := map[string]interface{}{"using": *using, "value": *value, "state": *state, "timeout": *timeout}
 		if *name != "" {
@@ -1505,13 +1547,14 @@ func runBrowser() {
 		data, err := c.BrowserCommand("wait_for", encodeBrowserParams(params), "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser wait: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "click":
+		setCommandPath("browser click")
 		if len(positionals) != 0 || (strings.TrimSpace(*selector) == "" && strings.TrimSpace(*element) == "") {
 			fmt.Fprintln(os.Stderr, "attn browser click: --selector <css> or --element <id> is required")
-			os.Exit(1)
+			exit(1)
 		}
 		var data string
 		if strings.TrimSpace(*element) != "" {
@@ -1521,13 +1564,14 @@ func runBrowser() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser click: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "type":
+		setCommandPath("browser type")
 		if len(positionals) != 0 || (strings.TrimSpace(*selector) == "" && strings.TrimSpace(*element) == "") || !textSet {
 			fmt.Fprintln(os.Stderr, "attn browser type: --selector <css> or --element <id>, plus --text, are required")
-			os.Exit(1)
+			exit(1)
 		}
 		var data string
 		if strings.TrimSpace(*element) != "" {
@@ -1540,71 +1584,77 @@ func runBrowser() {
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser type: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "reload", "back", "forward":
+		setCommandPath("browser " + subcommand)
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser reload: unexpected arguments")
-			os.Exit(1)
+			exit(1)
 		}
 		data, err := c.BrowserControl(subcommand, "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser reload: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "press":
+		setCommandPath("browser press")
 		if len(positionals) != 0 || !textSet || *text == "" {
 			fmt.Fprintln(os.Stderr, "attn browser press: --text <key> is required")
-			os.Exit(1)
+			exit(1)
 		}
 		actions := []map[string]interface{}{{"type": "key", "id": "keyboard", "actions": []map[string]interface{}{{"type": "keyDown", "value": *text}, {"type": "keyUp", "value": *text}}}}
 		data, err := c.BrowserCommand("perform_actions", encodeBrowserParams(map[string]interface{}{"actions": actions}), "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser press: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "scroll":
+		setCommandPath("browser scroll")
 		if len(positionals) != 0 {
 			fmt.Fprintln(os.Stderr, "attn browser scroll: unexpected arguments")
-			os.Exit(1)
+			exit(1)
 		}
 		actions := []map[string]interface{}{{"type": "wheel", "id": "wheel", "actions": []map[string]interface{}{{"type": "scroll", "deltaX": *deltaX, "deltaY": *deltaY}}}}
 		data, err := c.BrowserCommand("perform_actions", encodeBrowserParams(map[string]interface{}{"actions": actions}), "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser scroll: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "cookies":
+		setCommandPath("browser cookies")
 		data, err := c.BrowserCommand("get_all_cookies", "{}", "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser cookies: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "command":
+		setCommandPath("browser command")
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "attn browser command: expected exactly one <action>")
-			os.Exit(1)
+			exit(1)
 		}
 		var params map[string]interface{}
 		if err := json.Unmarshal([]byte(*paramsJSON), &params); err != nil || params == nil {
 			fmt.Fprintln(os.Stderr, "attn browser command: --params must be a JSON object")
-			os.Exit(1)
+			exit(1)
 		}
 		data, err := c.BrowserCommand(positionals[0], *paramsJSON, "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser command: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(data)
 	case "screenshot":
+		setCommandPath("browser screenshot")
 		if len(positionals) > 1 {
 			fmt.Fprintln(os.Stderr, "attn browser screenshot: expected at most one [path]")
-			os.Exit(1)
+			exit(1)
 		}
 		path := "attn-browser.png"
 		if len(positionals) == 1 {
@@ -1613,27 +1663,28 @@ func runBrowser() {
 		data, err := c.BrowserControl("screenshot", "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser screenshot: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		png, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser screenshot: decode PNG: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		absPath, err := filepath.Abs(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser screenshot: resolve path: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		if err := writePrivateFile(absPath, png); err != nil {
 			fmt.Fprintf(os.Stderr, "browser screenshot: write %s: %v\n", absPath, err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(absPath)
 	case "pdf":
+		setCommandPath("browser pdf")
 		if len(positionals) > 1 {
 			fmt.Fprintln(os.Stderr, "attn browser pdf: expected at most one [path]")
-			os.Exit(1)
+			exit(1)
 		}
 		path := "attn-browser.pdf"
 		if len(positionals) == 1 {
@@ -1642,40 +1693,40 @@ func runBrowser() {
 		var params map[string]interface{}
 		if err := json.Unmarshal([]byte(*paramsJSON), &params); err != nil || params == nil {
 			fmt.Fprintln(os.Stderr, "attn browser pdf: --params must be a JSON object")
-			os.Exit(1)
+			exit(1)
 		}
 		data, err := c.BrowserCommand("print_page", *paramsJSON, "", "", sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser pdf: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		pdf, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser pdf: decode PDF: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		absPath, err := filepath.Abs(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "browser pdf: resolve path: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		if err := writePrivateFile(absPath, pdf); err != nil {
 			fmt.Fprintf(os.Stderr, "browser pdf: write %s: %v\n", absPath, err)
-			os.Exit(1)
+			exit(1)
 		}
 		fmt.Println(absPath)
 	default:
 		recordUsageError("browser", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown browser command: %s\n", subcommand)
 		printBrowserUsage(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
 func printJSON(v interface{}) {
 	if err := fprintJSON(os.Stdout, v); err != nil {
 		fmt.Fprintf(os.Stderr, "error encoding json: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1702,7 +1753,7 @@ func openAppWithDeepLink() {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error getting cwd: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	label := ""
@@ -1724,7 +1775,7 @@ func openAppWithDeepLink() {
 
 	if err := launchDeepLink(deepLink); err != nil {
 		fmt.Fprintf(os.Stderr, "error opening app: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1737,13 +1788,13 @@ func runHookStop() {
 	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop [session_id]\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	c := hookClient(sessionID)
 	if err := c.SendStop(sessionID, transcriptPath, stopFacts(input)); err != nil {
 		fmt.Fprintf(os.Stderr, "error sending stop: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1765,7 +1816,7 @@ func runHookSessionStart() {
 	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-session-start [session_id]\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	c := hookClient(sessionID)
@@ -1779,14 +1830,14 @@ func runHookState() {
 	sessionID = hookCaller(sessionID, input)
 	if sessionID == "" || state == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-state [session_id] <state>\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	c := hookClient(sessionID)
 	observePromptConversation(c, sessionID, hookEvent, input)
 	if err := c.UpdateStateFromHookEvidence(sessionID, state, input.PermissionMode, hookEvent, input.Prompt); err != nil {
 		fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1794,7 +1845,7 @@ func runHookNotification() {
 	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-notification [session_id]\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	var input hookInput
@@ -1806,7 +1857,7 @@ func runHookNotification() {
 	c := hookClient(sessionID)
 	if err := c.RecordNotification(sessionID, input.NotificationType, input.Message); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording notification: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1814,7 +1865,7 @@ func runHookStopFailure() {
 	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-stop-failure [session_id]\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	var input hookInput
@@ -1827,7 +1878,7 @@ func runHookStopFailure() {
 	c := hookClient(sessionID)
 	if err := c.RecordStopFailure(sessionID, errorType, input.ErrorMessage); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording stop failure: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1835,7 +1886,7 @@ func runHookCompact() {
 	sessionID := hookTerminalIDFromArgOrEnv(2)
 	if sessionID == "" || len(os.Args) < 4 {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-compact <session_id> <start|end>\n")
-		os.Exit(1)
+		exit(1)
 	}
 	active := strings.TrimSpace(os.Args[3]) == "start"
 
@@ -1845,7 +1896,7 @@ func runHookCompact() {
 	c := hookClient(sessionID)
 	if err := c.RecordCompaction(sessionID, active, input.Trigger); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording compaction: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -1855,14 +1906,14 @@ func runHookToolUse() {
 	sessionID := hookCaller(hookTerminalIDFromArgOrEnv(2), input)
 	if sessionID == "" {
 		fmt.Fprintf(os.Stderr, "usage: attn _hook-tool-use [session_id]\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	c := hookClient(sessionID)
 	if strings.TrimSpace(input.AgentID) == "" {
 		if err := c.UpdateState(sessionID, protocol.StateWorking); err != nil {
 			fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 
@@ -1890,13 +1941,13 @@ func runProbeTUI() {
 	styleFlag := fs.String("style", "", "agent vocabulary to mirror: codex or claude")
 	interval := fs.Duration("interval", 500*time.Millisecond, "frame repaint interval")
 	if err := parseFlags(fs, os.Args[2:]); err != nil {
-		os.Exit(2)
+		exit(2)
 	}
 
 	style, err := probetui.ParseStyle(*styleFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn _probe-tui: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 
 	size := func() (int, int, error) {
@@ -1922,11 +1973,12 @@ func runProbeTUI() {
 
 	if err := probetui.Run(ctx, os.Stdout, style, size, winch, *interval); err != nil {
 		fmt.Fprintf(os.Stderr, "attn _probe-tui: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
 func hookClient(caller protocol.TerminalID) *client.Client {
+	actAsCaller(caller)
 	return client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH"))).WithCaller(caller)
 }
 

@@ -20,15 +20,19 @@ type SeedWatch struct {
 	SeedID  string
 }
 
-func (w SeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
+func subscribe(watches []SeedWatch, now time.Time) func(*sql.Tx) (bool, error) {
 	return func(tx *sql.Tx) (bool, error) {
-		if w.Watcher.IsZero() || w.SeedID == "" {
-			return false, nil
+		subscribed := false
+		for _, w := range watches {
+			if w.Watcher.IsZero() || w.SeedID == "" {
+				continue
+			}
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at) VALUES (?, ?, ?)`, w.Watcher, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+				return false, fmt.Errorf("subscribe %s to %s: %w", w.Watcher, w.SeedID, err)
+			}
+			subscribed = true
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at) VALUES (?, ?, ?)`, w.Watcher, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
-			return false, fmt.Errorf("subscribe delegation dispatcher: %w", err)
-		}
-		return true, nil
+		return subscribed, nil
 	}
 }
 

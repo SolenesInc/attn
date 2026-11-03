@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"cmp"
 	"context"
 	"strings"
 
@@ -31,12 +30,21 @@ func (d *Daemon) startAnalyticsMirror(secret []byte) error {
 			Stream:  analytics.StreamBus,
 			Seq:     ev.Seq,
 			Name:    ev.Name,
-			Subject: analytics.HashSubject(secret, ev.Subject),
+			Subject: mirroredSubject(secret, ev),
 			At:      ev.CreatedAt,
 			Bytes:   len(ev.Payload),
-			Props:   analytics.Props(ev.Payload, analytics.SafeValues[ev.Name], d.derivedFactTraits(ev)),
-		})
+			Props:   analytics.Props(ev.Payload, analytics.BusFields[ev.Name], secret, d.derivedFactTraits(ev)),
+		}, d.analyticsBuild())
 	})
+}
+
+func mirroredSubject(secret []byte, ev bus.Event) string {
+	if ev.Name == FactSettingChanged {
+		if spec, ok := lookupSetting(ev.Subject); ok {
+			return spec.key
+		}
+	}
+	return analytics.HashSubject(secret, ev.Subject)
 }
 
 func (d *Daemon) stopAnalyticsMirror() error {
@@ -50,20 +58,31 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 		if session == nil {
 			return analytics.Derived{}
 		}
-		intent, _ := d.store.LaunchIntent(session.ID)
-		return analytics.Derived{
-			Session: &analytics.SessionTraits{
-				Harness: session.Agent,
-				Model:   cmp.Or(d.leadingAgentModel(session), intent.Model),
-				Launch:  d.sessionLaunch(session.ID, intent),
-				State:   string(session.State),
-			},
-			Repo: repoTraits(session.Directory),
-		}
+		return analytics.Derived{Session: d.sessionTraitsOf(session), Repo: repoTraits(session.Directory)}
 	case strings.HasPrefix(ev.Name, worktreeFactPrefix):
 		return analytics.Derived{Repo: repoTraits(ev.Subject)}
 	default:
 		return analytics.Derived{}
+	}
+}
+
+func (d *Daemon) sessionTraits(id protocol.SessionID) *analytics.SessionTraits {
+	session := d.store.Get(id)
+	if session == nil {
+		return nil
+	}
+	return d.sessionTraitsOf(session)
+}
+
+func (d *Daemon) sessionTraitsOf(session *protocol.Session) *analytics.SessionTraits {
+	intent, _ := d.store.LaunchIntent(session.ID)
+	models := d.sessionModels(session, intent)
+	return &analytics.SessionTraits{
+		Harness:        session.Agent,
+		Model:          models.reported,
+		ModelRequested: models.requested,
+		Launch:         d.sessionLaunch(session.ID, intent),
+		State:          string(session.State),
 	}
 }
 

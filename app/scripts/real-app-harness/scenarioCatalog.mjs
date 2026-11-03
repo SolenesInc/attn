@@ -186,14 +186,6 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-claude-shared-conversation'],
   },
   {
-    id: 'pi-shared-conversation',
-    runnerId: 'PI-SHARED-CONVERSATION',
-    label: 'Two Pi tiles on one conversation both warn until one of them closes',
-    command: ['pnpm', 'run', 'real-app:scenario-pi-shared-conversation'],
-    timeoutMs: 300_000,
-    allowRealAgents: ['pi'],
-  },
-  {
     id: 'session-reopen',
     runnerId: 'SESSION-REOPEN',
     label: 'A closed worktree session reopens under its own id, recreating a deleted worktree only when asked',
@@ -274,6 +266,13 @@ export const scenarioCatalog = [
     runnerId: 'GardenSeedHeader',
     label: 'Garden header: five lifecycle states, latest note, outcome, and seed navigation',
     command: ['node', 'scripts/real-app-harness/scenario-garden-seed-header.mjs'],
+    timeoutMs: 180_000,
+  },
+  {
+    id: 'garden-seed-authorization',
+    runnerId: 'GardenSeedAuthorization',
+    label: 'Seed authorization: the user sets and clears it from the keyboard on a tended seed, and the delegate is typed each change',
+    command: ['node', 'scripts/real-app-harness/scenario-garden-seed-authorization.mjs'],
     timeoutMs: 180_000,
   },
   {
@@ -484,14 +483,6 @@ export const scenarioCatalog = [
     runnerId: 'GHOSTTY-SCROLLBACK-ANCHOR',
     label: 'Ghostty scrollback anchoring while output streams',
     command: ['pnpm', 'run', 'real-app:scenario-ghostty-scroll'],
-  },
-  {
-    id: 'automode-environment',
-    runnerId: 'AutoModeEnvironment',
-    label: 'Auto mode: independent rule controls, environment writes, and unset slots',
-    command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
-    timeoutMs: 300_000,
-    allowRealAgents: ['pi'],
   },
   {
     id: 'focus-probe',

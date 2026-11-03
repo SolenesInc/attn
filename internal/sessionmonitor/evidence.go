@@ -271,6 +271,9 @@ func (m *Monitor) RecordBracket(state string) {
 		case protocol.StateWorking:
 			e.TurnOpen = true
 			e.TurnEverOpened = true
+			if e.InitialPromptOwed {
+				m.input.launchPromptTakenLocked()
+			}
 			e.InitialPromptOwed = false
 			e.LastClassifier = nil
 			if e.LastHarnessEvent != nil {

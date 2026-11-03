@@ -313,8 +313,8 @@ func (m *Monitor) AnswerCountdown() (answered, hadPending, rearmed bool) {
 	working := m.state.State == protocol.SessionStateWorking
 	key := m.keyLocked()
 	m.mu.Unlock()
-	view, applied := m.Do(Command{Key: key, Kind: CancelCountdown}, time.Now())
-	if !applied || !m.publish(view) {
+	view, err := m.Do(Command{Key: key, Kind: CancelCountdown}, time.Now())
+	if err != nil || !m.publish(view) {
 		return false, hadPending, false
 	}
 	if disarm && working {

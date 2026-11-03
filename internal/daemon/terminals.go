@@ -110,11 +110,10 @@ func (d *Daemon) sessionLive(ctx context.Context, sessionID protocol.SessionID) 
 		if d.store.Get(sessionID) == nil {
 			return false
 		}
-		view, ok := d.monitorViewFor(sessionID)
-		if !ok {
-			view = d.storedMonitorView(sessionID)
+		if view, ok := d.monitorViewFor(sessionID); ok {
+			return view.Live.V
 		}
-		return view.Live.V
+		return d.store.SessionRuntimeRecords(sessionID).Live
 	}
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {

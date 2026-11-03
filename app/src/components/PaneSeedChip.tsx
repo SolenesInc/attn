@@ -14,6 +14,7 @@ export function PaneSeedChip({
   unread,
   sessionId,
   pinned,
+  repeatsTitle = false,
   onOpenSeed,
   onPopoverClosed,
 }: {
@@ -22,6 +23,7 @@ export function PaneSeedChip({
   unread: boolean;
   sessionId: string;
   pinned: boolean;
+  repeatsTitle?: boolean;
   onOpenSeed: (seedId: string) => void;
   onPopoverClosed: () => void;
 }) {
@@ -76,7 +78,7 @@ export function PaneSeedChip({
         }}
       >
         {aggregate ? <SeedPlotIcon /> : <SeedStateIcon status={status} replay={replay} />}
-        <span className="pane-seed-chip-title">{label}</span>
+        {repeatsTitle ? null : <span className="pane-seed-chip-title">{label}</span>}
         {display.kind === 'plot' ? (
           <span className="pane-seed-counts">
             {plotStateCounts(display.plot).map(([state, count]) => (

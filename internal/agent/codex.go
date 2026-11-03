@@ -139,7 +139,7 @@ func (c *Codex) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest
 		args = codexToolFreeHeadlessArgs(request, window)
 	}
 	args = addCodexOutputSchema(args, schemaPath)
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex")
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "codex", codexReportedFailure)
 	if err != nil {
 		return result, err
 	}
@@ -230,6 +230,29 @@ func parseCodexFinalText(stdout []byte) string {
 	return last
 }
 
+func codexReportedFailure(stdout []byte) string {
+	var messages []string
+	for _, raw := range bytes.Split(stdout, []byte("\n")) {
+		var event struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+			Error   struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(bytes.TrimSpace(raw), &event) != nil {
+			continue
+		}
+		switch event.Type {
+		case "error":
+			messages = append(messages, event.Message)
+		case "turn.failed":
+			messages = append(messages, event.Error.Message)
+		}
+	}
+	return strings.Join(messages, "\n")
+}
+
 func codexHeadlessArgs(request HeadlessTaskRequest, window int) []string {
 	args := []string{
 		"exec",
@@ -299,9 +322,6 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	}
 	if opts.CodexRemote == "" {
 		overrides = append(overrides, hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())...)
-	}
-	if opts.TrustWorkingDirectory {
-		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))
 	}
 	return overrides
 }

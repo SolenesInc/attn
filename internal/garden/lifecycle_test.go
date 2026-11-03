@@ -59,13 +59,13 @@ func TestTransitionMatrix(t *testing.T) {
 		force  bool
 	}{
 		{name: "planted/tend", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbTend, want: StatusGrowing},
-		{name: "planted/park", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbPark, want: StatusDormant},
+		{name: "planted/park", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbPark, want: StatusParked},
 		{name: "planted/harvest", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbHarvest, want: StatusHarvested},
 		{name: "planted/wither", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbWither, want: StatusWithered},
 		{name: "planted/replant", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbReplant, want: StatusPlanted},
 
 		{name: "growing by me/tend", seed: seedIn(StatusGrowing, mine), verb: VerbTend, want: StatusGrowing},
-		{name: "growing by me/park", seed: seedIn(StatusGrowing, mine), verb: VerbPark, want: StatusDormant},
+		{name: "growing by me/park", seed: seedIn(StatusGrowing, mine), verb: VerbPark, want: StatusParked},
 		{name: "growing by me/harvest", seed: seedIn(StatusGrowing, mine), verb: VerbHarvest, want: StatusHarvested},
 		{name: "growing by me/wither", seed: seedIn(StatusGrowing, mine), verb: VerbWither, want: StatusWithered},
 		{name: "growing by me/replant", seed: seedIn(StatusGrowing, mine), verb: VerbReplant, want: StatusPlanted},
@@ -79,18 +79,18 @@ func TestTransitionMatrix(t *testing.T) {
 		{name: "growing by another/tend names them", seed: seedIn(StatusGrowing, held), verb: VerbTend, refuse: "tended by session:" + other},
 
 		{name: "forced/tend", seed: seedIn(StatusGrowing, held), verb: VerbTend, force: true, want: StatusGrowing},
-		{name: "forced/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, force: true, want: StatusDormant},
+		{name: "forced/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, force: true, want: StatusParked},
 		{name: "forced/harvest", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, force: true, want: StatusHarvested},
 		{name: "forced/wither", seed: seedIn(StatusGrowing, held), verb: VerbWither, force: true, want: StatusWithered},
 		{name: "forced/replant", seed: seedIn(StatusGrowing, held), verb: VerbReplant, force: true, want: StatusPlanted},
 
-		{name: "force with nobody to take from", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbPark, force: true, want: StatusDormant},
+		{name: "force with nobody to take from", seed: seedIn(StatusPlanted, who.Party{}), verb: VerbPark, force: true, want: StatusParked},
 
-		{name: "dormant/tend", seed: seedIn(StatusDormant, who.Party{}), verb: VerbTend, want: StatusGrowing},
-		{name: "dormant/park", seed: seedIn(StatusDormant, who.Party{}), verb: VerbPark, want: StatusDormant},
-		{name: "dormant/harvest", seed: seedIn(StatusDormant, who.Party{}), verb: VerbHarvest, want: StatusHarvested},
-		{name: "dormant/wither", seed: seedIn(StatusDormant, who.Party{}), verb: VerbWither, want: StatusWithered},
-		{name: "dormant/replant", seed: seedIn(StatusDormant, who.Party{}), verb: VerbReplant, want: StatusPlanted},
+		{name: "parked/tend", seed: seedIn(StatusParked, who.Party{}), verb: VerbTend, want: StatusGrowing},
+		{name: "parked/park", seed: seedIn(StatusParked, who.Party{}), verb: VerbPark, want: StatusParked},
+		{name: "parked/harvest", seed: seedIn(StatusParked, who.Party{}), verb: VerbHarvest, want: StatusHarvested},
+		{name: "parked/wither", seed: seedIn(StatusParked, who.Party{}), verb: VerbWither, want: StatusWithered},
+		{name: "parked/replant", seed: seedIn(StatusParked, who.Party{}), verb: VerbReplant, want: StatusPlanted},
 
 		{name: "harvested/tend", seed: seedIn(StatusHarvested, who.Party{}), verb: VerbTend, refuse: "reopens before it moves"},
 		{name: "harvested/park", seed: seedIn(StatusHarvested, who.Party{}), verb: VerbPark, refuse: "reopens before it moves"},

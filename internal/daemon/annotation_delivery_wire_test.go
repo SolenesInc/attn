@@ -25,7 +25,7 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 		Anchor: &protocol.MarkdownAnnotationAnchor{BlockID: "b", StartLine: 3, EndLine: 3, Start: 0, End: 5, Exact: "hello"}}}
 	planPayload := func(label string) string {
 		return "# Markdown Annotations\n\nFile: /notes/plan.md\n\nI've reviewed this document and have 1 piece of feedback:\n\n" +
-			"## 1. (" + label + ") Feedback on: \"hello\"\n> hi\n\n---\nPlease address the annotation feedback above."
+			"## 1. (" + label + ") Feedback on: \"hello\"\n> hi\n\n---\nAddress the annotation feedback above."
 	}
 
 	for _, tc := range []struct {
@@ -90,7 +90,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 			QuickLabelID: protocol.Ptr("looks-good"), QuickLabelText: protocol.Ptr("👍 Looks good"), QuickLabelTip: protocol.Ptr("nice"), CreatedAt: line}
 	}
 	const header = "# Markdown Annotations\n\nFile: /doc.md\n\n"
-	const closing = "---\nPlease address the annotation feedback above."
+	const closing = "---\nAddress the annotation feedback above."
 
 	for i, tc := range []struct {
 		name  string
@@ -111,7 +111,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 				"## 2. (lines 12–18) Feedback on: \"the selected text\"\n> the reviewer's comment\n\n" +
 				"## 3. (line 30) Remove this\n```\nold paragraph\n```\n> I don't want this in the document.\n\n" +
 				"## 4. General feedback about the document\n> a global comment\n\n" +
-				"---\n## Label Summary\n\n- **👍 Looks good**: 1\n\nPlease address the annotation feedback above.",
+				"---\n## Label Summary\n\n- **👍 Looks good**: 1\n\nAddress the annotation feedback above.",
 		},
 		{
 			name: "general feedback in the order it was written",
@@ -130,7 +130,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 				"## 1. (line 1) [👍 Looks good] Feedback on: \"one\"\n> nice\n\n" +
 				"## 2. (line 2) [confusing] Feedback on: \"two\"\n\n" +
 				"## 3. (line 3) [👍 Looks good] Feedback on: \"three\"\n> nice\n\n" +
-				"---\n## Label Summary\n\n- **👍 Looks good**: 2\n- **confusing**: 1\n\nPlease address the annotation feedback above.",
+				"---\n## Label Summary\n\n- **👍 Looks good**: 2\n- **confusing**: 1\n\nAddress the annotation feedback above.",
 		},
 		{
 			name: "two comments on one line, in the order of where they start",

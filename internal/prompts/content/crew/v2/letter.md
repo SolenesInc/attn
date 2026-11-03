@@ -1,3 +1,3 @@
 ## Your latest letter ({{handoff_name}})
 
-It says how things stood when it was written; check it against the work before you repeat it or act on it.
+The letter records how things stood when its author wrote it. Check the letter against the work before you repeat it or act on its claims.

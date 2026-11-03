@@ -13,8 +13,7 @@ function servePlugins(daemon: ScriptedDaemon, plugins: Plugin[]) {
   daemon.on('list_plugins', () => ({ event: 'plugins_updated', plugins, issues: [] }));
   const succeed = (action: string) => ({ name }: { name?: string }) => ({ event: 'plugin_action_result' as const, action, name, success: true });
   daemon.on('install_plugin', () => ({ event: 'plugin_action_result', action: 'install', success: true }));
-  daemon.on('install_bundled_plugin', succeed('install_bundled'));
-  daemon.on('uninstall_plugin', succeed('uninstall'));
+  daemon.on('remove_plugin', succeed('remove'));
   daemon.on('set_plugin_priority', succeed('set_priority'));
 }
 
@@ -26,10 +25,7 @@ const installedPlugin = (overrides: Partial<Plugin> = {}): Plugin => ({
   priority: 10,
   connected: true,
   running: true,
-  availability: 'user',
-  installation_state: 'installed',
   runtime_state: 'connected',
-  can_install: false,
   can_uninstall: true,
   ...overrides,
 });
@@ -46,7 +42,7 @@ describe('SettingsModal', () => {
 
   it('closes on escape', async () => {
     const { daemon } = await renderSettings();
-    expect(screen.getByText('Mobile Web Client')).toBeInTheDocument();
+    expect(screen.getByText('GitHub Hosts')).toBeInTheDocument();
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
@@ -104,39 +100,24 @@ describe('SettingsModal', () => {
     expect(daemon.sentOf('list_plugins').length).toBeGreaterThan(listsBeforeInstall);
   });
 
-  it('installs an available bundled plugin', async () => {
-    const bundled = installedPlugin({
-      name: 'attn-example', dir: '/Applications/attn.app/Contents/Resources/plugins/attn-example', priority: 0,
-      connected: false, running: false, availability: 'bundled', installation_state: 'available',
-      runtime_state: 'stopped', can_install: true, can_uninstall: false,
-    });
-    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [bundled]));
-
-    expect(screen.getByText('Bundled')).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Install', { selector: 'button' })));
-
-    expect(daemon.sentOf('install_bundled_plugin')).toEqual([expect.objectContaining({ name: 'attn-example' })]);
-  });
-
   it('shows a linked plugin with its checkout', async () => {
     const linked = installedPlugin({
-      name: 'attn-pi', version: '0.2.0', dir: '/Users/me/.attn/plugins/attn-pi', link_target: '/Users/me/src/attn/plugins/attn-pi', priority: 0,
+      name: 'attn-plug', version: '0.2.0', dir: '/Users/me/.attn/plugins/attn-plug', link_target: '/Users/me/src/attn/plugins/attn-plug', priority: 0,
     });
     await openSection('plugins', {}, (scripted) => servePlugins(scripted, [linked]));
 
     expect(screen.getByText('Linked')).toBeInTheDocument();
-    expect(screen.getByText('/Users/me/src/attn/plugins/attn-pi')).toBeInTheDocument();
+    expect(screen.getByText('/Users/me/src/attn/plugins/attn-plug')).toBeInTheDocument();
   });
 
-  it('uninstalls an installed bundled plugin', async () => {
-    const bundled = installedPlugin({
-      name: 'attn-example', dir: '/Applications/attn.app/Contents/Resources/plugins/attn-example', priority: 0, availability: 'bundled',
-    });
-    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [bundled]));
+  it('removes an installed plugin and refreshes the list', async () => {
+    const daemon = await openSection('plugins', {}, (scripted) => servePlugins(scripted, [installedPlugin()]));
+    const listsBeforeRemove = daemon.sentOf('list_plugins').length;
 
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Uninstall', { selector: 'button' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByText('Remove', { selector: 'button' })));
 
-    expect(daemon.sentOf('uninstall_plugin')).toEqual([expect.objectContaining({ name: 'attn-example' })]);
+    expect(daemon.sentOf('remove_plugin')).toEqual([expect.objectContaining({ name: 'services-pilot-worktrees' })]);
+    expect(daemon.sentOf('list_plugins').length).toBeGreaterThan(listsBeforeRemove);
   });
 
   it('updates provider priority for an installed plugin', async () => {
@@ -187,19 +168,6 @@ describe('SettingsModal', () => {
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
   });
 
-  it('toggles tailscale serve on the existing device', async () => {
-    const { daemon } = await renderSettings({ settings: {
-      tailscale_enabled: 'false',
-      tailscale_status: 'disabled',
-      tailscale_domain: 'macbook-epidemic.tail1bfe77.ts.net',
-    } });
-
-    await gesture(daemon, () => fireEvent.click(screen.getByText('Enable')));
-
-    expect(savedSettings(daemon)).toEqual([['tailscale_enabled', 'true']]);
-    expect(screen.getByText(/does not register a second tailnet device/i)).toBeInTheDocument();
-  });
-
   it('does not carry an agent-queue toggle', async () => {
     const daemon = await openSection('desktop', { settings: { queue_mode_enabled: 'false' } });
 
@@ -218,45 +186,37 @@ describe('SettingsModal', () => {
 });
 
 describe('SettingsModal notebook folder', () => {
-  it('shows the profile folder, the shared folder and the folder this profile resolves to', async () => {
+  it('shows one folder field for the profile and the folder it resolves to', async () => {
     await openSection('desktop', {
-      settings: {
-        'notebook.root': '~/my-notes',
-        'notebook.profile_root': '~/work-notes',
-        'notebook.root.effective': '/Users/me/work-notes',
-      },
+      settings: { 'notebook.root': '~/work-notes', 'notebook.root.effective': '/Users/me/work-notes' },
     });
 
-    expect(screen.getByTestId('settings-notebook-profile-root-input')).toHaveValue('~/work-notes');
-    expect(screen.getByTestId('settings-notebook-root-input')).toHaveValue('~/my-notes');
+    expect(screen.getAllByRole('textbox', { name: /notebook folder/i })).toHaveLength(1);
+    expect(screen.getByTestId('settings-notebook-root-input')).toHaveValue('~/work-notes');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('This profile uses: /Users/me/work-notes');
   });
 
-  it('leaves the profile folder empty when the profile uses the shared folder', async () => {
+  it('leaves the field empty when the profile uses the default folder', async () => {
     await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
 
-    const input = screen.getByTestId('settings-notebook-profile-root-input');
+    const input = screen.getByTestId('settings-notebook-root-input');
     expect(input).toHaveValue('');
-    expect(input).toHaveAttribute('placeholder', 'Shared folder');
+    expect(input).toHaveAttribute('placeholder', '~/attn-notebook');
     expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('This profile uses: /Users/me/attn-notebook');
   });
 
-  it('persists each folder on blur and an empty value to fall back', async () => {
-    const daemon = await openSection('desktop', { settings: { 'notebook.root': '~/my-notes', 'notebook.root.effective': '/Users/me/my-notes' } });
-    const profileInput = screen.getByTestId('settings-notebook-profile-root-input');
-    const sharedInput = screen.getByTestId('settings-notebook-root-input');
+  it('persists the folder on blur and an empty value to use the default', async () => {
+    const daemon = await openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } });
+    const input = screen.getByTestId('settings-notebook-root-input');
 
-    fireEvent.change(profileInput, { target: { value: '/Users/me/work' } });
-    await gesture(daemon, () => fireEvent.blur(profileInput));
-    fireEvent.change(profileInput, { target: { value: '' } });
-    await gesture(daemon, () => fireEvent.blur(profileInput));
-    fireEvent.change(sharedInput, { target: { value: '/Users/me/elsewhere' } });
-    await gesture(daemon, () => fireEvent.blur(sharedInput));
+    fireEvent.change(input, { target: { value: '/Users/me/work' } });
+    await gesture(daemon, () => fireEvent.blur(input));
+    fireEvent.change(input, { target: { value: '' } });
+    await gesture(daemon, () => fireEvent.blur(input));
 
     expect(savedSettings(daemon)).toEqual([
-      ['notebook.profile_root', '/Users/me/work'],
-      ['notebook.profile_root', ''],
-      ['notebook.root', '/Users/me/elsewhere'],
+      ['notebook.root', '/Users/me/work'],
+      ['notebook.root', ''],
     ]);
   });
 });
@@ -539,6 +499,19 @@ describe('SettingsModal sent files', () => {
     expect(screen.getByTestId('settings-open-sent-files-toggle')).toHaveTextContent('Enable');
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-open-sent-files-toggle')));
     expect(savedSettings(daemon)).toEqual([['open_sent_files_enabled', 'true']]);
+  });
+});
+
+describe('SettingsModal phone access', () => {
+  it('finds phone access on the Experimental page, off by default, and turns it on', async () => {
+    const { daemon } = await renderSettings();
+    fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'phone' } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    const toggle = screen.getByRole('switch', { name: 'Phone access' });
+
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle));
+    expect(savedSettings(daemon)).toEqual([['phone_access_enabled', 'true']]);
   });
 });
 

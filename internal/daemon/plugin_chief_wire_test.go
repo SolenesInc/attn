@@ -9,11 +9,11 @@ import (
 )
 
 func TestAPluginAgentThatCannotResumeIsRefusedAsChief(t *testing.T) {
-	t.Setenv(fakeagent.PiCapabilitiesEnv, "launch_instructions,resume=false")
-	w := newWorld(t, fakeagent.Pi)
+	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions,resume=false")
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	pluginDriverSettings(app, "pi")
-	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Pi, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
+	pluginDriverSettings(app, "plug")
+	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Plug, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
 		m.ChiefOfStaff = protocol.Ptr(true)
 	})
 	if !strings.Contains(protocol.Deref(refused.Error), "resume capability") {
@@ -28,17 +28,17 @@ func TestMarkingAPluginAgentChiefNeedsLaunchInstructionsAndResume(t *testing.T) 
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			if row.capabilities != "" {
-				t.Setenv(fakeagent.PiCapabilitiesEnv, row.capabilities)
+				t.Setenv(fakeagent.PlugCapabilitiesEnv, row.capabilities)
 			}
-			w := newWorld(t, fakeagent.Pi)
+			w := newWorld(t, fakeagent.Plug)
 			app := w.App()
-			pluginDriverSettings(app, "pi")
-			pi := w.Spawn(app, fakeagent.Pi, w.Path("pi"))
-			w.Launched(pi)
+			pluginDriverSettings(app, "plug")
+			plug := w.Spawn(app, fakeagent.Plug, w.Path("plug"))
+			w.Launched(plug)
 
-			refused := setChiefOfStaff(app, pi, true)
+			refused := setChiefOfStaff(app, plug, true)
 			if refused.Success || !strings.Contains(protocol.Deref(refused.Error), row.missing) {
-				t.Errorf("marking pi the chief = %+v, want a refusal naming %s", refused, row.missing)
+				t.Errorf("marking plug the chief = %+v, want a refusal naming %s", refused, row.missing)
 			}
 			if chiefs := chiefsOf(w); len(chiefs) != 0 {
 				t.Errorf("the chiefs are %v after the refusal, want none", chiefs)

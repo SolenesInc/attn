@@ -24,28 +24,37 @@ func runDoc() {
 	args := os.Args[3:]
 	switch os.Args[2] {
 	case "define":
+		setCommandPath("doc define")
 		runDocDefine(args)
 	case "undefine":
+		setCommandPath("doc undefine")
 		runDocUndefine(args)
 	case "collections":
+		setCommandPath("doc collections")
 		runDocCollections(args)
 	case "put":
+		setCommandPath("doc put")
 		runDocPut(args)
 	case "get":
+		setCommandPath("doc get")
 		runDocGet(args)
 	case "delete":
+		setCommandPath("doc delete")
 		runDocDelete(args)
 	case "query":
+		setCommandPath("doc query")
 		runDocQuery(args)
 	case "count":
+		setCommandPath("doc count")
 		runDocCount(args)
 	case "watch":
+		setCommandPath("doc watch")
 		runDocWatch(args)
 	default:
 		recordUsageError("doc", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "doc: unknown command %q\n", os.Args[2])
 		writeDocHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -141,13 +150,13 @@ func docClient() *client.Client {
 
 func docFail(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "doc %s: %v\n", verb, err)
-	os.Exit(1)
+	exit(1)
 }
 
 func docTarget(verb string, args []string) (string, string, []string) {
 	if len(args) < 2 {
 		fmt.Fprintf(os.Stderr, "doc %s: needs <namespace> <collection>\n", verb)
-		os.Exit(2)
+		exit(2)
 	}
 	return args[0], args[1], args[2:]
 }
@@ -279,7 +288,7 @@ func runDocGet(args []string) {
 	}
 	if !result.Found {
 		fmt.Fprintf(os.Stderr, "doc get: %s/%s/%s does not exist\n", namespace, collection, rest[0])
-		os.Exit(1)
+		exit(1)
 	}
 	if hasFlag(rest, "--json") {
 		writeJSON(docsForJSON([]protocol.StoredDocument{*result.Document})[0])
@@ -536,6 +545,6 @@ func writeJSON(v any) {
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(v); err != nil {
 		fmt.Fprintf(os.Stderr, "doc: encoding output: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }

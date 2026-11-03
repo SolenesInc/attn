@@ -195,10 +195,10 @@ func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
 	if result := restartSharedCodex(t, app, false); !result.Success {
 		t.Fatalf("restart: %s", protocol.Deref(result.Error))
 	}
-	w.AwaitHeldBoot()
+	preflight.Await()
 	app.TypeLine(session, "add a discount field")
 	codex.Prompted()
-	preflight()
+	preflight.Release()
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
 			slices.Equal(s.Blockers, blockedBy(session, protocol.SharedCodexBlockerReasonTurn))
@@ -216,12 +216,12 @@ func TestATerminalStillLaunchingHoldsTheRestartItsLaunchDiscovered(t *testing.T)
 	w.SetCodexVersion("0.163.0")
 	boot := w.HoldNextBoot()
 	cart := w.Spawn(app, fakeagent.Codex, w.Path("cart"))
-	w.AwaitHeldBoot()
+	boot.Await()
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
 			slices.Equal(s.Blockers, blockedBy(cart, protocol.SharedCodexBlockerReasonStarting))
 	})
-	boot()
+	boot.Release()
 	codex := w.Launched(cart)
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)

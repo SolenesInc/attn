@@ -12,6 +12,8 @@ import { useSharedCodexStore } from '../store/sharedCodex';
 import { useTerminalRefusals } from '../store/terminalRefusals';
 import { useToastStore } from '../store/toasts';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
+import { handlePhoneDaemonEvent } from './daemonPhoneEvents';
+import { handleSenderDaemonEvent } from './daemonSenderEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
@@ -27,13 +29,15 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences, OutpostInfo } from '../types/generated';
+import type { AgentCatalogResult, DelegationPreferences, OutpostInfo } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
+  PhonePairingOffer,
   AskAnswer,
+  AskImageResultMessage,
   CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
@@ -56,6 +60,7 @@ import type {
   SeedArtifactReference as GeneratedSeedArtifactReference,
   DelegateResult as GeneratedDelegateResult,
   SeedArtifactTargetResult,
+  SeedAuthorizationResult,
   SeedArtifactTransferResult,
   SeedDocument as GeneratedSeedDocument,
   CrewApplyResult as GeneratedCrewApplyResult,
@@ -115,13 +120,6 @@ import { useSessionStore } from '../store/sessions';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import type { Desktop, VentKind } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
-import {
-  handleAutoModeDaemonEvent,
-  type AutoModeConfigEdit,
-  type AutoModePolicyEdit,
-  type AutoModePromotion,
-  type AutoModeState,
-} from './daemonAutoModeEvents';
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
@@ -158,7 +156,6 @@ import {
 } from './daemonPendingRequests';
 import { BUILD_INSTANCE, daemonInstanceMatches, fetchDaemonHealthInstance, instanceMismatchMessage } from '../utils/buildInstance';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
-import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
@@ -570,6 +567,8 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+// The home answers once its relay applied the pairing window, which it waits up to 15 s for (cloudlink connectWithin).
+const PHONE_PAIR_BEGIN_TIMEOUT_MS = 20_000;
 const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
@@ -1200,6 +1199,7 @@ export function useDaemonSocket({
             setHasReceivedInitialState(true);
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ cmd: 'senders_get' }));
             if (lastTerminalThemeRef.current && ws.readyState === WebSocket.OPEN) {
               const theme = lastTerminalThemeRef.current;
               ws.send(JSON.stringify({
@@ -1486,6 +1486,10 @@ export function useDaemonSocket({
             else pending.reject(new Error(data.error || 'The move was refused'));
             break;
           }
+
+          case 'seed_authorization_result':
+            settlePendingRequest(pendingActionsRef.current, 'seed_authorization', data, (event) => event.result, 'The authorization change was refused');
+            break;
 
           case 'seed_check_result':
             settlePendingRequest(pendingActionsRef.current, 'seed_check', data, (event) => event.seed, 'The check move was refused');
@@ -2039,7 +2043,7 @@ export function useDaemonSocket({
           case 'plugins_updated': {
             const plugins = data.plugins || [];
             const issues = data.issues || [];
-            const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.installation_state, plugin.connected, plugin.availability, plugin.runtime_state, plugin.health_status]));
+            const signature = JSON.stringify(plugins.map(plugin => [plugin.name, plugin.dir, plugin.link_target, plugin.version, plugin.connected, plugin.runtime_state, plugin.health_status]));
             if (signature !== harnessPluginSignatureRef.current) {
               harnessPluginSignatureRef.current = signature;
               refreshHarnesses();
@@ -2353,8 +2357,9 @@ export function useDaemonSocket({
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
             if (handleSharedCodexDaemonEvent(data, pending)) break;
+            if (handlePhoneDaemonEvent(data, pending)) break;
+            if (handleSenderDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
-            if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -2381,7 +2386,6 @@ export function useDaemonSocket({
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
-      useAutoModePushStore.getState().clear();
       useWorktreeStore.getState().clear();
       useDelegationPreferencesPush.getState().push();
       useSessionStore.getState().cancelIntent();
@@ -2463,7 +2467,6 @@ export function useDaemonSocket({
       ...(args.resume_session_id && { resume_session_id: args.resume_session_id }),
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
-      ...(args.auto_mode !== undefined && { auto_mode: args.auto_mode }),
       ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
       ...(args.spawned_from && { spawned_from: args.spawned_from }),
       ...(args.executable && { executable: args.executable }),
@@ -2602,6 +2605,14 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'terminal_pointer_activity', id }));
   }, []);
 
+  const sendTerminalFocus = useCallback((id: string) => {
+    const ws = wsRef.current;
+    if (!hasReceivedInitialStateRef.current || !ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    ws.send(JSON.stringify({ cmd: 'terminal_focus', id }));
+  }, []);
+
   const sendSetClientPresence = useCallback((presence: {
     visible: boolean;
     dashboardVisible: boolean;
@@ -2670,129 +2681,10 @@ export function useDaemonSocket({
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
+  const sendAgentCatalog = useCallback((host: string): Promise<AgentCatalogResult> =>
+    sendRequest('agent_catalog', { host }, 'Reading the harness catalog timed out'), [sendRequest]);
   const sendHarnessModels = useCallback((harness: string, refresh = false): Promise<HarnessModelCatalog> =>
     sendRequest('harness_models', { harness, ...(refresh ? { refresh: true } : {}) }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
-
-  const sendAutoModeGet = useCallback((): Promise<AutoModeState> => {
-    return sendRequest<AutoModeState>(
-      'automode_get',
-      {},
-      'Reading auto mode timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModePromote = useCallback((id: number): Promise<AutoModePromotion> => {
-    return sendRequest<AutoModePromotion>(
-      'automode_promote',
-      { id },
-      'Promoting the proposal timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModeDiscard = useCallback((id: number): Promise<AutoModePromotion> => {
-    return sendRequest<AutoModePromotion>(
-      'automode_discard',
-      { id },
-      'Discarding the proposal timed out',
-    );
-  }, [sendRequest]);
-
-  const sendAutoModeRuleAdd = useCallback(
-    (pattern: string[], decision: string, sandbox: string, justification: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_rule_add',
-        { pattern, decision, sandbox, justification },
-        'Adding the rule timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  // The whole pattern, alternatives and all: "git {push|pull}" and "git push"
-  // are two rules and the daemon takes away the one named here.
-  const sendAutoModeRuleRemove = useCallback(
-    (pattern: string[][]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_rule_remove',
-        { pattern },
-        'Removing the rule timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeLegacyDismiss = useCallback(
-    (pattern: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_legacy_dismiss',
-        { pattern },
-        'Dismissing the pattern timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeHostAdd = useCallback(
-    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_host_add',
-        { host, decision },
-        'Adding the host timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeHostRemove = useCallback(
-    (host: string, decision: string): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_host_remove',
-        { host, decision },
-        'Removing the host timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModePolicySet = useCallback(
-    (edit: AutoModePolicyEdit): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_policy_set',
-        {
-          ...(edit.approvalPolicy === undefined ? {} : { approval_policy: edit.approvalPolicy }),
-          ...(edit.guardian === undefined ? {} : { guardian: edit.guardian }),
-          ...(edit.sandboxMode === undefined ? {} : { sandbox_mode: edit.sandboxMode }),
-          ...(edit.allowLocalBinding === undefined
-            ? {}
-            : { allow_local_binding: edit.allowLocalBinding }),
-        },
-        'Saving the approval policy timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeEnvSlot = useCallback(
-    (slot: string, values: string[]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_env_slot',
-        { slot, values },
-        'Saving what the reviewer knows about this machine timed out',
-      );
-    },
-    [sendRequest],
-  );
-
-  const sendAutoModeEnvNotes = useCallback(
-    (notes: string[]): Promise<AutoModeConfigEdit> => {
-      return sendRequest<AutoModeConfigEdit>(
-        'automode_env_notes',
-        { notes },
-        'Saving your notes about this machine timed out',
-      );
-    },
-    [sendRequest],
-  );
 
   const sendSetTerminalTheme = useCallback((theme: {
     foreground: string;
@@ -2938,6 +2830,16 @@ export function useDaemonSocket({
         verb,
         ...(summary ? { summary } : {}),
       }, 'The check move timed out');
+    },
+    [sendRequest],
+  );
+
+  const sendSeedAuthorization = useCallback(
+    (seedId: string, text: string | null): Promise<SeedAuthorizationResult> => {
+      return sendRequest('seed_authorization', {
+        seed_id: seedId,
+        ...(text === null ? { clear: true } : { text }),
+      }, 'The authorization change timed out');
     },
     [sendRequest],
   );
@@ -3253,16 +3155,17 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'list_worktrees', main_repo: mainRepo }));
   }, []);
 
-  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string): Promise<WorktreeActionResult> => (
+  const sendCreateWorktree = useCallback((mainRepo: string, branch: string, path?: string, startingFrom?: string, host?: string): Promise<WorktreeActionResult> => (
     sendRequest('create_worktree', {
       main_repo: mainRepo, branch,
       ...(path && { path }),
       ...(startingFrom && { starting_from: startingFrom }),
+      ...(host && { host }),
     }, 'Create worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
   ), [sendRequest]);
 
-  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}): Promise<WorktreeActionResult> => (
-    sendRequest('delete_worktree', { path, ...(options.force && { force: true }) },
+  const sendDeleteWorktree = useCallback((path: string, options: DeleteWorktreeOptions = {}, host?: string): Promise<WorktreeActionResult> => (
+    sendRequest('delete_worktree', { path, ...(options.force && { force: true }), ...(host && { host }) },
       'Delete worktree timed out', GIT_WORKTREE_TIMEOUT_MS)
   ), [sendRequest]);
 
@@ -3316,16 +3219,6 @@ export function useDaemonSocket({
   const sendInstallPlugin = useCallback((source: string): Promise<PluginActionResult> => {
     const key = 'plugin_action:install:pending';
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'install_plugin', source }, 'Install plugin timed out', 60000);
-  }, [sendKeyedRequest]);
-
-  const sendInstallBundledPlugin = useCallback((name: string): Promise<PluginActionResult> => {
-    const key = `plugin_action:install_bundled:${name}`;
-    return sendKeyedRequest<PluginActionResult>(key, { cmd: 'install_bundled_plugin', name }, 'Install bundled plugin timed out', 30000);
-  }, [sendKeyedRequest]);
-
-  const sendUninstallPlugin = useCallback((name: string): Promise<PluginActionResult> => {
-    const key = `plugin_action:uninstall:${name}`;
-    return sendKeyedRequest<PluginActionResult>(key, { cmd: 'uninstall_plugin', name }, 'Uninstall plugin timed out', 30000);
   }, [sendKeyedRequest]);
 
   const sendRemovePlugin = useCallback((name: string): Promise<PluginActionResult> => {
@@ -3702,8 +3595,27 @@ export function useDaemonSocket({
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
+  const sendAskImage = useCallback((askId: string, path: string): Promise<AskImageResultMessage> =>
+    sendRequest('ask_image', { ask_id: askId, path }, 'Loading the image timed out'), [sendRequest]);
+
   const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
     sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
+
+  const sendPhonesGet = useCallback(() => sendOrQueueCommand({ cmd: 'phones_get' }), [sendOrQueueCommand]);
+
+  const sendPhonePairBegin = useCallback((profileId: string): Promise<PhonePairingOffer> =>
+    sendRequest('phone_pair_begin', { profile_id: profileId }, 'Showing a pairing code timed out', PHONE_PAIR_BEGIN_TIMEOUT_MS), [sendRequest]);
+
+  const sendPhonePairingRevoke = useCallback((deviceId: string, profileId: string): Promise<true> =>
+    sendRequest('phone_pairing_revoke', { device_id: deviceId, profile_id: profileId }, 'Revoking the phone timed out'), [sendRequest]);
+
+  const sendSendersGet = useCallback(() => sendOrQueueCommand({ cmd: 'senders_get' }), [sendOrQueueCommand]);
+
+  const sendSenderPairDecide = useCallback((pairingId: string, allow: boolean): Promise<true> =>
+    sendRequest('sender_pair_decide', { pairing_id: pairingId, allow }, 'Deciding the pairing timed out'), [sendRequest]);
+
+  const sendSenderUnpair = useCallback((senderId: string): Promise<true> =>
+    sendRequest('sender_unpair', { sender: senderId }, 'Removing the sender timed out'), [sendRequest]);
 
   const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
     sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
@@ -3719,33 +3631,36 @@ export function useDaemonSocket({
     }, 'Recent files timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendGetRecentLocations = useCallback((limit?: number): Promise<RecentLocationsResult> => {
+  const sendGetRecentLocations = useCallback((limit?: number, machines: 'home' | 'every' = 'home'): Promise<RecentLocationsResult> => {
     const requestId = nextRequestID('recent_locations');
     const key = `get_recent_locations_${requestId}`;
     return sendKeyedRequest(key, {
       cmd: 'get_recent_locations',
       ...(limit && { limit }),
+      ...(machines === 'home' && { home_only: true }),
       request_id: requestId,
     }, 'Get recent locations timed out');
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[]): Promise<BrowseDirectoryResult> => {
+  const sendBrowseDirectory = useCallback((inputPath: string, extensions?: string[], host?: string): Promise<BrowseDirectoryResult> => {
     const requestId = nextRequestID('browse_directory');
     const key = `browse_directory_${requestId}`;
     return sendKeyedRequest<BrowseDirectoryResult>(key, {
       cmd: 'browse_directory',
       input_path: inputPath,
       ...(extensions && extensions.length > 0 ? { extensions } : {}),
+      ...(host && { host }),
       request_id: requestId,
     }, 'Browse directory timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
 
-  const sendInspectPath = useCallback((path: string): Promise<InspectPathResult> => {
+  const sendInspectPath = useCallback((path: string, host?: string): Promise<InspectPathResult> => {
     const requestId = nextRequestID('inspect_path');
     const key = `inspect_path_${requestId}`;
     return sendKeyedRequest<InspectPathResult>(key, {
       cmd: 'inspect_path',
       path,
+      ...(host && { host }),
       request_id: requestId,
     }, 'Inspect path timed out', GIT_METADATA_TIMEOUT_MS);
   }, [nextRequestID, sendKeyedRequest]);
@@ -3799,8 +3714,8 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'cancel_countdown', session_id: sessionId }));
   }, []);
 
-  const getRepoInfo = useCallback((repo: string): Promise<RepoInfoResult> => (
-    sendRequest('get_repo_info', { repo }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
+  const getRepoInfo = useCallback((repo: string, host?: string): Promise<RepoInfoResult> => (
+    sendRequest('get_repo_info', { repo, ...(host && { host }) }, 'get_repo_info timeout', GIT_METADATA_TIMEOUT_MS)
   ), [sendRequest]);
 
   const listKeptConversations = useCallback((includeDeleted: boolean): Promise<KeptConversationListResult> => (
@@ -4372,8 +4287,6 @@ export function useDaemonSocket({
     sendRemoveOutpost,
     sendListPlugins,
     sendInstallPlugin,
-    sendInstallBundledPlugin,
-    sendUninstallPlugin,
     sendRemovePlugin,
     sendSetPluginPriority,
     sendSessionMessagesGet,
@@ -4426,7 +4339,14 @@ export function useDaemonSocket({
     sendSetVentSend,
     sendSetVentKind,
     sendAskAnswer,
+    sendAskImage,
     sendRestartSharedCodex,
+    sendPhonesGet,
+    sendPhonePairBegin,
+    sendPhonePairingRevoke,
+    sendSendersGet,
+    sendSenderPairDecide,
+    sendSenderUnpair,
     sendInstallCodexUpdate,
     sendRecentFiles,
     sendGetRecentLocations,
@@ -4444,17 +4364,7 @@ export function useDaemonSocket({
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
     sendHarnessModels,
-    sendAutoModeGet,
-    sendAutoModePromote,
-    sendAutoModeDiscard,
-    sendAutoModeRuleAdd,
-    sendAutoModeRuleRemove,
-    sendAutoModeLegacyDismiss,
-    sendAutoModeHostAdd,
-    sendAutoModeHostRemove,
-    sendAutoModePolicySet,
-    sendAutoModeEnvSlot,
-    sendAutoModeEnvNotes,
+    sendAgentCatalog,
     sendBusSetConsumerEnabled,
     sendSettleTurn,
     sendSetSessionPriority,
@@ -4470,9 +4380,11 @@ export function useDaemonSocket({
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
     sendSeedCheck,
+    sendSeedAuthorization,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,
+    sendTerminalFocus,
     sendSetClientPresence,
     sendSetTerminalTheme,
     subscribeDocuments,

@@ -60,7 +60,7 @@ func TestListAnalyticsRecordsNamesTheLimitItRefuses(t *testing.T) {
 	}{
 		{protocol.ListAnalyticsRecordsMessage{Limit: 0}, "limit must be between 1 and 1000, got 0"},
 		{protocol.ListAnalyticsRecordsMessage{Limit: 1001}, "limit must be between 1 and 1000, got 1001"},
-		{protocol.ListAnalyticsRecordsMessage{Limit: 10, Stream: protocol.Ptr("busses")}, `unknown analytics stream "busses": use bus, app, cli, sample or vent`},
+		{protocol.ListAnalyticsRecordsMessage{Limit: 10, Stream: protocol.Ptr("busses")}, `unknown analytics stream "busses": use bus, app, cli, sample, vent or run`},
 	} {
 		got := requestAnalyticsRecords(app, refused.msg)
 		if got.Success || protocol.Deref(got.Error) != refused.want {

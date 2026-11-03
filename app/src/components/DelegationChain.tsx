@@ -57,6 +57,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
       data-testid={`delegation-chain-trigger-${session.id}`}
       data-delegation-session={session.id}
       data-role={role?.builtin}
+      title=""
       aria-label={label}
       aria-haspopup="dialog"
       aria-expanded={trigger.expanded}
@@ -65,7 +66,7 @@ export function DelegationChainTrigger({ session, hasDelegates = false, variant 
       onClick={(event) => { event.stopPropagation(); trigger.pin(event.currentTarget); }}
     >
       <SessionRoleIcon role={role} />
-      {variant === 'header' && <span>{role?.name ?? 'Delegation chain'}</span>}
+      {variant === 'header' && <span className="delegation-chain-trigger-label">{role?.name ?? 'Delegation chain'}</span>}
     </button>
   );
 }
@@ -127,8 +128,6 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
         aria-describedby={titleId}
         data-testid="delegation-chain-popover"
         tabIndex={-1}
-        onPointerEnter={controller.cancelClose}
-        onPointerLeave={() => controller.leave(open.sessionId, open.anchor)}
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {

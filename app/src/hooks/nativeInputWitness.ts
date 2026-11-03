@@ -1,6 +1,12 @@
 export type InputExpectation =
-  | { gesture: 'pointer'; selector: string | null }
+  | { gesture: 'pointer' | 'move'; selector: string | null }
   | { gesture: 'keys'; strokes: number };
+
+const COMPLETING_EVENT: Record<InputExpectation['gesture'], 'mouseup' | 'mousemove' | 'keyup'> = {
+  pointer: 'mouseup',
+  move: 'mousemove',
+  keys: 'keyup',
+};
 
 interface DeliveredEvent {
   type: string;
@@ -40,12 +46,12 @@ function describeTarget(target: EventTarget | null): string {
 }
 
 function expectedEvents({ expectation }: InputWitness): number {
-  return expectation.gesture === 'pointer' ? 1 : expectation.strokes;
+  return expectation.gesture === 'keys' ? expectation.strokes : 1;
 }
 
 function describeExpectation(expectation: InputExpectation): string {
-  if (expectation.gesture === 'pointer') {
-    return `a trusted mouseup${expectation.selector ? ` (aimed at ${expectation.selector})` : ''}`;
+  if (expectation.gesture !== 'keys') {
+    return `a trusted ${COMPLETING_EVENT[expectation.gesture]}${expectation.selector ? ` (aimed at ${expectation.selector})` : ''}`;
   }
   return `${expectation.strokes} trusted non-modifier keyup${expectation.strokes === 1 ? '' : 's'}`;
 }
@@ -59,7 +65,7 @@ function receiptOf(armed: InputWitness): InputReceipt {
   if (armed.expectation.gesture === 'keys') return { gesture: 'keys', events: armed.events, elapsedMs };
   const [release] = armed.events;
   return {
-    gesture: 'pointer', events: armed.events, elapsedMs,
+    gesture: armed.expectation.gesture, events: armed.events, elapsedMs,
     clientX: release.clientX, clientY: release.clientY, target: release.target, matches: release.matches,
   };
 }
@@ -70,7 +76,7 @@ function observedEvent(expectation: InputExpectation, event: Event): DeliveredEv
   if (event instanceof KeyboardEvent) {
     return MODIFIER_KEYS.has(event.key) ? null : { type: event.type, key: event.key, target };
   }
-  if (!(event instanceof MouseEvent) || expectation.gesture !== 'pointer') return null;
+  if (!(event instanceof MouseEvent) || expectation.gesture === 'keys') return null;
   const element = event.target instanceof Element ? event.target : null;
   return {
     type: event.type, target, clientX: event.clientX, clientY: event.clientY,
@@ -79,13 +85,13 @@ function observedEvent(expectation: InputExpectation, event: Event): DeliveredEv
 }
 
 export function parseInputExpectation(payload: Record<string, unknown>): InputExpectation {
-  if (payload.gesture === 'pointer') {
-    return { gesture: 'pointer', selector: typeof payload.selector === 'string' && payload.selector ? payload.selector : null };
+  if (payload.gesture === 'pointer' || payload.gesture === 'move') {
+    return { gesture: payload.gesture, selector: typeof payload.selector === 'string' && payload.selector ? payload.selector : null };
   }
   if (payload.gesture === 'keys' && Number.isInteger(payload.strokes) && (payload.strokes as number) >= 0) {
     return { gesture: 'keys', strokes: payload.strokes as number };
   }
-  throw new Error(`arm_native_input_witness needs { gesture: 'pointer', selector? } or { gesture: 'keys', strokes }, got ${JSON.stringify(payload)}`);
+  throw new Error(`arm_native_input_witness needs { gesture: 'pointer' | 'move', selector? } or { gesture: 'keys', strokes }, got ${JSON.stringify(payload)}`);
 }
 
 export function disarmNativeInputWitness(): void {
@@ -96,11 +102,11 @@ export function disarmNativeInputWitness(): void {
 }
 
 export function armNativeInputWitness(expectation: InputExpectation): void {
-  if (expectation.gesture === 'pointer' && expectation.selector && !document.querySelector(expectation.selector)) {
+  if (expectation.gesture !== 'keys' && expectation.selector && !document.querySelector(expectation.selector)) {
     throw new Error(`Native pointer target not found: ${expectation.selector}`);
   }
   disarmNativeInputWitness();
-  const type = expectation.gesture === 'pointer' ? 'mouseup' : 'keyup';
+  const type = COMPLETING_EVENT[expectation.gesture];
   const observe = (event: Event) => {
     const seen = observedEvent(expectation, event);
     if (!seen) return;

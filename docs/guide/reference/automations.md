@@ -31,10 +31,10 @@ Ctrl+Alt+K on Linux). Click **New automation** and fill in:
   launch desktop where its agents start. By default that is a new desktop
   named after the automation.
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
-  such as the pull request, arrive separately as data and never rewrite it.
+  such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
 
 The form ends with a sentence that says what the automation will do, in
-plain words. **Save** creates it, enabled.
+plain words. **Save** creates the automation, enabled.
 
 For a **Manual** or **Scheduled** trigger, **Directory** is the folder the
 agent works in. A scheduled trigger also takes:
@@ -42,61 +42,63 @@ agent works in. A scheduled trigger also takes:
 - **Schedule (cron)**. A standard five-field cron expression. The form reads
   it back in words.
 - **Worker**. **Fresh** starts a new agent for every run. **Singleton** sends
-  every run to the same agent, resuming it if it was closed. When you change
-  the harness, model or effort, the next run starts a new agent on the same
-  seed, so the new agent picks up where the old one left off. When you change
-  the prompt or the directory, the next run starts a new agent on a new seed.
-  Either way, attn leaves the old agent running, and you can still open it.
-- **Missed runs**. What happens to a time that passed while Attn was off or
-  the automation was disabled. **Skip** runs it only if Attn notices within
-  5 minutes. **Latest** runs once for the most recent missed time.
+  every run to the same agent and resumes that agent if it was closed. When you
+  change the prompt, harness, model, effort or directory, the next run starts a
+  new agent on the same seed. The new agent continues from the seed's state.
+  Attn leaves the old agent running, and you can still open it. After a run on
+  the new agent succeeds, the new agent is the seed's tender. If the old agent
+  tends the seed again, later runs fail and name the old agent as the tender
+  instead of taking the seed back.
+- **Missed runs**. What Attn does with a scheduled time that passed while Attn
+  was off or the automation was disabled. **Skip** starts a run for a missed
+  time only if Attn notices the miss within 5 minutes. **Latest** starts one run
+  for the most recent missed time.
 - **Guard (optional)**. A shell command, such as `git rev-parse HEAD`, that
   runs in the folder when the schedule is due. The agent starts only when the
-  command succeeds and prints something different from what the last run
-  saw, and it receives that output.
+  command succeeds and prints something different from the output of the last
+  run. The agent receives that output.
 
 For **PR review requested**, list repositories to include or exclude as
-`host/owner/repository` (for example `github.com/acme/api`); with no includes,
+`host/owner/repository` (for example `github.com/acme/api`). With no includes,
 every repository you can reach counts. Each review runs in a fresh worktree
 checked out at the pull request's head commit, so your own clone is never
-touched. Each pull request has one agent: when you are asked to review it
-again, the same agent picks it up. When you change the harness, model or
-effort, the next review starts a new agent on the pull request's seed; when you
-change the prompt, it starts a new agent on a new seed. Requests that already
-exist when you enable the automation are left alone.
+touched. Each pull request has one agent: when you are asked to review the pull
+request again, the same agent picks it up. When you change the prompt, harness, model
+or effort, the next review starts a new agent on the pull request's seed.
+Attn ignores requests that already exist when you enable the automation.
 
 ## Runs
 
-A run's agent starts on the automation's launch desktop. It works on a seed
-in the garden that Attn plants for the run, so its progress and outcome are
-recorded there. A review run is told the review is local only: it reports
-on the seed and the session and does not post, approve, comment or push on
-GitHub.
+A run's agent starts on the automation's launch desktop. The agent works on a seed
+in the garden that Attn plants for the run, so the run's progress and outcome
+appear there. For a review run, Attn tells the agent that the review is local
+only. The agent reports on the seed and the session and does not post, approve,
+comment, or push on GitHub.
 
 In [queue flow](queue.md), runs never join the queue. The sidebar has an
 Automations group under the queue that lists each automation with its runs.
-A run that stopped and owes you a turn shows a count beside its automation,
+A run that stopped and is owed a turn shows a count beside its automation,
 and the group's header offers "N runs need you". Click it, or press
-Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you; press
-again for the one after. Settle a run with ✓ on its row or Cmd+Shift+E
+Cmd+Shift+J (Ctrl+Alt+J on Linux), to open the next run that needs you. Press
+the same keys again to open the run after that. Settle a run with ✓ on its row or Cmd+Shift+E
 (Ctrl+Alt+E on Linux), as you would any agent. In desktop flow, runs are
 tiles on their launch desktop like any other agent.
 
 In the drawer, click an automation to see its runs: state (pending,
 delivered, failed or cancelled), when it started, and a click through to its
-agent. A failed run, or a guard that failed, puts **Failed** on the
-automation's row with the error underneath.
+agent. If a run fails or a guard fails, the drawer shows **Failed** on the
+automation's row, with the error underneath.
 
 ## Managing automations
 
 In the drawer, the checkbox on each row enables or disables the automation,
-and **Edit** opens the form again. Disabling cancels runs that have not
-started yet. **Delete** in the form removes the
-automation; its seeds and run history stay.
+and **Edit** opens the form again. When you disable an automation, Attn cancels
+runs that have not started yet. **Delete** in the form removes the
+automation, and its seeds and run history stay.
 
-The same lives in the CLI. Definitions are YAML; `attn automation show <id>`
-prints one, and `--profile <name|id>` picks a profile other than the current
-one.
+The CLI manages automations too. Definitions are YAML. `attn automation show <id>`
+prints a definition, and `--profile <name|id>` picks a profile other than the
+current profile.
 
 | Command | What it does |
 |---|---|
@@ -107,8 +109,8 @@ one.
 | `attn automation run <id>` | Runs a manual automation now. |
 | `attn automation runs <id>` | Lists its runs as JSON. |
 | `attn automation enable <id>`, `disable <id>` | Turns it on or off. |
-| `attn automation set <id> --launch-desktop <own\|digit\|name\|id>` | Moves where its runs start. |
-| `attn automation delete <id>` | Deletes it; seeds and run history stay. |
+| `attn automation set <id> --launch-desktop <own\|digit\|name\|id>` | Sets where its runs start. |
+| `attn automation delete <id>` | Deletes the automation. Seeds and run history stay. |
 | `attn automation cleanup <id>` | Removes the worktrees of its finished runs, keeping any with uncommitted changes or a live agent. |
 
 A scheduled definition looks like this:
@@ -142,13 +144,28 @@ No. Only manual automations run on demand. For a review on demand, write a manua
 <details>
 <summary>Do runs stop to ask me for permissions?</summary>
 
-Runs start unattended, with an approval reviewer in the loop in place of you, so a routine permission prompt does not wait for you. A run still stops and owes you a turn when it finishes or asks you something.
+Runs start unattended, with an approval reviewer in your place, so a routine permission prompt does not wait for you. A run still stops and is owed a turn when it finishes or asks you something.
+</details>
+
+<details>
+<summary>Does a Codex run trust its folder?</summary>
+
+Only when you already do. A Codex run starts when either of these is true:
+
+- An agent session in the automation's profile has worked in the folder, anywhere in its repository, or in another checkout of the same repository (the same `origin`).
+- Codex already trusts the folder or its repository.
+
+A review run in Attn's own copy of a repository passes once you have worked in your own checkout of it.
+
+With [shared Codex](using-shared-codex.md#folder-trust), Attn answers Codex's trust question for the run. With a plain Codex, Attn adds the repository as trusted to Codex's `config.toml` before the run starts, as choosing "Trust and continue" would, and notes it in the daemon log. Remove that entry from `config.toml` to take the trust back.
+
+In any other folder, or in a folder you marked untrusted in Codex, the run fails, says why, and Codex does not start. Open Codex there once and trust the folder, or work there with any agent. The next run then starts.
 </details>
 
 <details>
 <summary>What does the agent receive?</summary>
 
-Your prompt, the seed it works on, and the path to a JSON file with the occurrence's data: the scheduled time and the guard's output, or the pull request's title, body, author, branches and head commit. The agent is told to treat that data as untrusted and never follow instructions in it.
+Your prompt, the seed it works on, and the path to a JSON file with the occurrence's data: the scheduled time and the guard's output, or the pull request's title, body, author, branches and head commit. Attn tells the agent to treat that data as untrusted and never to follow instructions in it.
 </details>
 
 <details>
@@ -160,7 +177,7 @@ If the agent has not started yet, Attn cancels the run and notes why on its seed
 <details>
 <summary>Are old runs and worktrees cleaned up?</summary>
 
-Yes. Each hour Attn removes runs older than 14 days beyond the newest 200 of each automation, with their worktrees. It keeps any run whose worktree has uncommitted changes or whose agent is still live. `attn automation cleanup <id>` removes finished worktrees right away.
+Yes. Each hour, Attn keeps the newest 200 runs of each automation and removes any run outside the newest 200 that is more than 14 days old, with its worktree. It keeps any run whose worktree has uncommitted changes or whose agent is still live. `attn automation cleanup <id>` removes finished worktrees right away.
 </details>
 
 <details>

@@ -80,3 +80,62 @@ func TestPerSourceCostsPreserveAccountingAndCursorsAcrossUpgradeAndRestart(t *te
 		}
 	}
 }
+
+func TestUpgradeDropsCodexCostObservationsAndKeepsTotalsAndClaudeDeduplication(t *testing.T) {
+	const old = `{"initialized":true,"sources":{` +
+		`"/rollout.jsonl":{"initialized":true,"cursor":"root-cursor","ledger":{"agent|gpt-5.5":{"input_tokens":10,"output_tokens":2}},"observations":{"codex:v1:aa:10:0":{"observation_id":"codex:v1:aa:10:0","model":"gpt-5.5","usage":{"input_tokens":10,"output_tokens":2}}}},` +
+		`"thread-1":{"initialized":true,"cursor":"child-cursor","ledger":{"guardian|codex-auto-review":{"input_tokens":5,"output_tokens":1}},"observations":{"native:thread-1:codex:v1:bb:20:0":{"observation_id":"native:thread-1:codex:v1:bb:20:0","model":"codex-auto-review","purpose":"guardian","usage":{"input_tokens":5,"output_tokens":1}}},"finalized":["native:thread-1:codex:v1:bb:10:0"]},` +
+		`"/claude.jsonl":{"initialized":true,"cursor":"claude-cursor","ledger":{"agent|claude-opus-4-8":{"input_tokens":7,"output_tokens":3}},"observations":{"claude:msg":{"observation_id":"claude:msg","model":"claude-opus-4-8","usage":{"input_tokens":7,"output_tokens":3}},"native:/claude/subagents/a.jsonl:claude:sub":{"observation_id":"native:/claude/subagents/a.jsonl:claude:sub","model":"claude-opus-4-8","usage":{"input_tokens":0,"output_tokens":1}}},"finalized":["claude:closed","codex:v1:aa:5:0"]}}}`
+	const want = `{"initialized":true,"sources":{` +
+		`"/rollout.jsonl":{"initialized":true,"cursor":"root-cursor","ledger":{"agent|gpt-5.5":{"input_tokens":10,"output_tokens":2}}},` +
+		`"thread-1":{"initialized":true,"cursor":"child-cursor","ledger":{"guardian|codex-auto-review":{"input_tokens":5,"output_tokens":1}}},` +
+		`"/claude.jsonl":{"initialized":true,"cursor":"claude-cursor","ledger":{"agent|claude-opus-4-8":{"input_tokens":7,"output_tokens":3}},"observations":{"claude:msg":{"observation_id":"claude:msg","model":"claude-opus-4-8","usage":{"input_tokens":7,"output_tokens":3}},"native:/claude/subagents/a.jsonl:claude:sub":{"observation_id":"native:/claude/subagents/a.jsonl:claude:sub","model":"claude-opus-4-8","usage":{"input_tokens":0,"output_tokens":1}}},"finalized":["claude:closed"]}}}`
+	path := filepath.Join(t.TempDir(), "costs.db")
+	db, err := OpenDBAtSchemaVersion(path, 1793543191592952)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"live", "closed"} {
+		closedAt := ""
+		if id == "closed" {
+			closedAt = "2026-11-01T00:00:00Z"
+		}
+		if _, err := db.Exec(`INSERT INTO sessions(id,user_label,directory,closed_at) VALUES(?,?,'/tmp/shop',?)`, id, id, closedAt); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO session_runtime(session_id,session_cost_json) VALUES(?,?)`, id, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var before, expected sessioncost.Checkpoint
+	if err := json.Unmarshal([]byte(old), &before); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(want), &expected); err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewWithDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, id := range []protocol.SessionID{"live", "closed"} {
+		got, err := s.SessionCostCheckpoint(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Errorf("%s checkpoint=%+v, want %+v", id, got, expected)
+		}
+		usage, err := s.SessionCost(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(usage, before.Usage()) {
+			t.Errorf("%s usage=%+v, want the pre-upgrade %+v", id, usage, before.Usage())
+		}
+	}
+}

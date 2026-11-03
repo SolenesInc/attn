@@ -21,8 +21,6 @@ coverage.out
 # Build artifacts
 app/src-tauri/binaries/
 /pty-host/target/
-app/src-tauri/bundled-plugins/*
-!app/src-tauri/bundled-plugins/.gitkeep
 app/src-tauri/app-runtime/*
 !app/src-tauri/app-runtime/.gitkeep
 dist/app-runtime/
@@ -58,3 +56,4 @@ app/src-tauri/*.gen.conf.json
 /cmd/attn-ingest/attn-ingest
 
 /internal/ghosttyvt/native_paths_generated_*.go
+__pycache__/

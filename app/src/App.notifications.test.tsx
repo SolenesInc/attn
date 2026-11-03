@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { soloDesktop, daemonSession } from './test/daemonFixtures';
+import { openActionMenu } from './test/appFixtures';
+import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -136,5 +137,41 @@ describe('App notifications', () => {
     await gesture(daemon, () => fireEvent.click(row('Something happened')));
 
     expect(panel().queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('shows none of the previous profile’s notifications after a switch, while the new list loads or when it fails', async () => {
+    const side = defaultProfile('side-desktop', { id: 'profile-side', name: 'Side' });
+    const { daemon } = await renderApp({
+      initialState: {
+        profiles: [defaultProfile('desktop-1'), side],
+        desktops: [emptyDesktop('desktop-1'), emptyDesktop('side-desktop', { profile_id: side.id })],
+      },
+    });
+    const defaultConflict = notification({ id: 'default-conflict', title: 'Default’s conflict', body: '/default/notes.md' });
+    daemon.on('notification_list', () =>
+      daemon.arrangement.selectedProfileId === DEFAULT_PROFILE_ID
+        ? { event: 'notification_list_result', success: true, notifications: [defaultConflict], unread_count: 1, unread_critical_count: 0 }
+        : undefined,
+    );
+    await click(daemon, 'Show Notifications');
+    expect(row('Default’s conflict')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(panel().getByRole('button', { name: 'Close' })));
+
+    await openActionMenu(daemon);
+    await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>Switch to Side' } }));
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' }));
+    expect(daemon.sentOf('profile_select').pop()?.profile_id).toBe(side.id);
+
+    await click(daemon, 'Show Notifications');
+    const sideList = daemon.sentOf('notification_list').pop()!;
+    expect(panel().getByText('Loading…')).toBeInTheDocument();
+    expect(panel().queryByText('Default’s conflict')).toBeNull();
+
+    await gesture(daemon, () => daemon.replyTo(sideList, {
+      event: 'notification_list_result', success: false, error: 'temporary list failure', unread_count: 0, unread_critical_count: 0,
+    }));
+    expect(panel().getByText('temporary list failure')).toBeInTheDocument();
+    expect(panel().queryByText('Default’s conflict')).toBeNull();
+    expect(daemon.sentOf('notification_mark_read')).toEqual([]);
   });
 });

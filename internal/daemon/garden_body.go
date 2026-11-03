@@ -67,7 +67,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 		return nil, err
 	}
 	if latest.Version == 0 {
-		return nil, fmt.Errorf("%s has no body edits to roll back", seed.ID)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no body edits to roll back", seed.ID)
 	}
 	version := latest.Version - 1
 	if msg.Version != nil {
@@ -83,7 +83,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 		return nil, err
 	}
 	if !found {
-		return nil, fmt.Errorf("%s has no body v%d; available versions: v1 through v%d", seed.ID, version, latest.Version)
+		return nil, protocol.Refuse(protocol.RefusalNotFound, "%s has no body v%d; available versions: v1 through v%d", seed.ID, version, latest.Version)
 	}
 	target, err = garden.DecodeBodyVersion(doc.Body)
 	if err != nil {

@@ -11,11 +11,11 @@ type Model = EventMessage<'harness_models_result'>['models'][number];
 const harnesses = [
   { id: 'claude', name: 'Claude', available: true, model_pin: true, effort_pin: true, discovery: true },
   { id: 'house', name: 'House', available: true, model_pin: false, effort_pin: false, discovery: false },
-  { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false },
+  { id: 'plug', name: 'Plug', available: true, model_pin: true, effort_pin: true, discovery: false },
 ];
 const model = (id: string, name: string, tier: Model['tier'], efforts: string[] = ['medium', 'high']): Model => ({ harness: 'claude', provider: '', id, name, tier, shipped_tier: tier, tier_source: id === 'default' ? 'alias' : tier ? 'shipped' : 'none', description: '', detail: '', effort_support: efforts.length ? 'supported' : 'unsupported', effort_levels: efforts, access: 'unknown' });
 const catalog: Reply = { event: 'harness_models_result', success: true, tier_defaults: { deep: 'opus', standard: 'sonnet', light: 'haiku' }, models: [model('default', 'Default (recommended)', undefined), model('opus', 'Opus', 'deep'), model('deep-two', 'Second deep', 'deep'), model('haiku', 'Haiku', 'light', []), model('sonnet', 'Sonnet', 'standard', []), model('new-id', 'New release', undefined)], detail: 'Reported by Claude' };
-const role = (selection: Partial<Selection>): Role => ({ id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { ...emptySelection(), ...selection } }] });
+const role = (selection: Partial<Selection>): Role => ({ id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { ...emptySelection(), ...selection } }] });
 async function picker(selection: Partial<Selection> = {}, held = false) {
   const settings = await openDelegationSettings({ roles: [role(selection)], harnesses });
   const requests: CommandMessage<'harness_models'>[] = [];
@@ -41,11 +41,11 @@ describe('App delegation settings', () => {
     const { daemon, server, saves } = await picker({ harness: 'claude', model: 'opus', effort: 'high' });
     server.failLoads('Harness refresh unavailable');
     await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { claude_cap_model_discovery: 'false' } }));
-    expect(within(routeDialog().getByRole('listbox', { name: 'Harness' })).getByRole('option', { name: /^Pi/ })).toBeInTheDocument();
-    await previewHarness(daemon, 'Pi');
+    expect(within(routeDialog().getByRole('listbox', { name: 'Harness' })).getByRole('option', { name: /^Plug/ })).toBeInTheDocument();
+    await previewHarness(daemon, 'Plug');
     expect(saves()).toEqual([]);
     await enterModel(daemon, 'openai/gpt-next');
-    expect(server.preferences.roles[0].choices[0].selection).toEqual({ harness: 'pi', provider: 'openai', model: 'gpt-next', effort: '' });
+    expect(server.preferences.roles[0].choices[0].selection).toEqual({ harness: 'plug', provider: 'openai', model: 'gpt-next', effort: '' });
   });
   it('uses one discovery across reopen, and Refresh sends an explicit rediscovery request', async () => {
     const { daemon } = await picker({ harness: 'claude' });
@@ -80,7 +80,7 @@ describe('App delegation settings', () => {
   });
   it('does not save or wipe the model while browsing another harness', async () => {
     const { daemon, saves } = await picker({ harness: 'claude', model: 'opus', effort: 'high' });
-    await previewHarness(daemon, 'Pi');
+    await previewHarness(daemon, 'Plug');
     expect(saves()).toEqual([]);
     await close(daemon);
     expect(opener()).toHaveTextContent('Opus');
@@ -94,9 +94,9 @@ describe('App delegation settings', () => {
   });
   it('uses the substring filter and can save an exact provider-qualified manual model', async () => {
     const { daemon, selection } = await picker({ harness: 'claude' });
-    await previewHarness(daemon, 'Pi');
+    await previewHarness(daemon, 'Plug');
     await enterModel(daemon, 'openai/gpt-next');
-    expect(selection()).toEqual({ harness: 'pi', provider: 'openai', model: 'gpt-next', effort: '' });
+    expect(selection()).toEqual({ harness: 'plug', provider: 'openai', model: 'gpt-next', effort: '' });
     expect(daemon.sentOf('harness_models').map(request => request.harness)).toEqual(['claude']);
   });
   it.each([

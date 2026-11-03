@@ -137,7 +137,9 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
         </button>
       </div>
 
-      {sharing && status.status?.lastRefusal && <p className="settings-warning analytics-refusal">{status.status.lastRefusal}</p>}
+      {sharing && (status.status?.ingestOffReason ?? status.status?.lastRefusal) && (
+        <p className="settings-warning analytics-refusal">{status.status.ingestOffReason ?? status.status.lastRefusal}</p>
+      )}
 
       {machineOpen && (
         <AnalyticsMachine

@@ -21,16 +21,17 @@ func runActivity() {
 	case "--json":
 		activityStatus(true)
 	case "clear":
+		setCommandPath("activity clear")
 		if len(args) < 2 || strings.TrimSpace(args[1]) == "" {
 			fmt.Fprintln(os.Stderr, "usage: attn activity clear <session-id>")
-			os.Exit(1)
+			exit(1)
 		}
 		activityClear(protocol.SessionID(strings.TrimSpace(args[1])))
 	default:
 		recordUsageError("activity", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown activity command: %s\n\n", args[0])
 		fmt.Fprint(os.Stderr, activityUsage)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -46,7 +47,7 @@ func activityStatus(asJSON bool) {
 	status, err := client.New("").ActivityStatus()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	if asJSON {
@@ -54,7 +55,7 @@ func activityStatus(asJSON bool) {
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(status); err != nil {
 			fmt.Fprintf(os.Stderr, "error encoding activity status: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		return
 	}
@@ -113,7 +114,7 @@ func activityClear(sessionID protocol.SessionID) {
 	warnIfDaemonVersionMismatch()
 	if err := client.New("").ClearSessionActivity(sessionID); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("cleared the activity line for %s\n", sessionID)
 }

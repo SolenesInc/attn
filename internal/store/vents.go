@@ -233,7 +233,7 @@ func scanVents(rows *sql.Rows) ([]Vent, error) {
 	return vents, rows.Err()
 }
 
-func (s *Store) QueueVentRecord(id string, record analytics.Record) (bool, error) {
+func (s *Store) QueueVentRecord(id string, record analytics.Record, build analytics.Build) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -254,7 +254,7 @@ func (s *Store) QueueVentRecord(id string, record analytics.Record) (bool, error
 	case sent.Valid:
 		return false, ErrVentSent
 	}
-	seq, err := appendStreamRecord(tx, record)
+	seq, err := appendStreamRecord(tx, record, build)
 	if err != nil {
 		return false, err
 	}

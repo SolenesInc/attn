@@ -45,6 +45,20 @@ export class DaemonObserver {
     return this.settings.get(key) ?? '';
   }
 
+  receive(predicate, description) {
+    return new Promise((resolve, reject) => {
+      const signal = AbortSignal.timeout(this.connectTimeoutMs);
+      const cleanup = () => { this.ws?.off('message', handler); signal.removeEventListener('abort', abort); };
+      const abort = () => { cleanup(); reject(new Error(`${description} did not arrive within the observer connection budget (${this.connectTimeoutMs}ms)`)); };
+      const handler = raw => {
+        const event = JSON.parse(String(raw));
+        if (predicate(event)) { cleanup(); resolve(event); }
+      };
+      this.ws.on('message', handler);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+
   async connect() {
     if (this.connected && this.ws) {
       return;
@@ -191,13 +205,14 @@ export class DaemonObserver {
   }
 
   async closeLeftoverNumberedDesktops() {
-    if (isProductionHarnessTarget({ wsUrl: this.wsUrl })) return;
+    if (isProductionHarnessTarget({ wsUrl: this.wsUrl })) return [];
     const leftovers = this.desktops.filter((desktop) => desktop.shortcut_slot
       && desktop.panes.length === 0 && desktop.id !== this.currentDesktopId());
     for (const desktop of leftovers) {
       await this.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: desktop.revision });
       await this.waitFor(() => !this.desktop(desktop.id), `arrangement without numbered desktop ${desktop.shortcut_slot}`);
     }
+    return leftovers;
   }
 
   setCurrentDesktop(desktopId) {

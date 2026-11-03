@@ -158,7 +158,7 @@ func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
 		switch strings.TrimSpace(harness) {
 		case "claude":
 			wanted[filepath.Join(homeDir, ".claude", "skills", "attn-workflow")] = true
-		case "codex", "pi":
+		case "codex":
 			wanted[filepath.Join(homeDir, ".agents", "skills", "attn-workflow")] = true
 		}
 	}

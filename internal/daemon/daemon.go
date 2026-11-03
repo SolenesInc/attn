@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/classifier"
@@ -103,15 +104,20 @@ type Daemon struct {
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
 	outpost             outpostRuntime
+	gateway             gatewayConns
+	phones              phonesRuntime
+	senders             senderPairings
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	socketPath          string
 	pidPath             string
+	run                 daemonRun
 	pidFile             *os.File
 	dataRoot            string
 	daemonInstanceID    string
 	clientToken         string
 	store               *store.Store
+	gardenSeeds         store.DocumentsMemo[gardenSeeds]
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                sync.Mutex
 	prDetailFetches            prDetailFetches
@@ -136,6 +142,7 @@ type Daemon struct {
 	wsHub                      *wsHub
 	startedAt                  time.Time
 	analyticsUpload            analyticsUpload
+	analyticsOnSince           atomic.Pointer[time.Time]
 	appIdentity                atomic.Pointer[appIdentity]
 	lastPresentAt              time.Time
 	presenceMu                 sync.RWMutex
@@ -147,9 +154,6 @@ type Daemon struct {
 	logger                     *logging.Logger
 	debugLogging               bool
 	ghRegistry                 *github.ClientRegistry
-	repoVisibilityKnown        map[string]string
-	repoVisibilityPending      map[string]bool
-	repoVisibilityMu           sync.Mutex
 	reopenGitMu                sync.Mutex
 	reopenBranches             *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect              func(context.Context, *git.Client, string, string) (branchInspection, error)
@@ -163,7 +167,7 @@ type Daemon struct {
 	sharedPTYHost              *ptybackend.WorkerBackend
 	upgradingMu                sync.Mutex
 	upgradingWorkers           map[harness.TerminalID]chan struct{}
-	ptyRecovered               atomic.Bool
+	ptyRecovered               chan struct{}
 	monitorTerminalsDirty      atomic.Bool
 
 	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
@@ -176,6 +180,7 @@ type Daemon struct {
 	delegationCheckoutMu        sync.Mutex
 	delegationWaitsForFirstTurn bool
 	launchWatchMu               sync.Mutex
+	codexTrustMu                sync.Mutex
 	launchWatches               map[protocol.SessionID]*launchWatch
 	recoveredLaunches           map[protocol.SessionID]*launchWatch
 	terminalExitIntentMu        sync.Mutex
@@ -190,6 +195,7 @@ type Daemon struct {
 	spawnLocks            map[protocol.SessionID]*spawnLock
 
 	terminalsOnce            sync.Once
+	ptySizes                 terminalSizes
 	routerOnce               sync.Once
 	routes                   *Router
 	terminalState            *terminalRegistry
@@ -210,6 +216,8 @@ type Daemon struct {
 
 	emptyDesktops emptyDesktopRemoval
 
+	dictationRefinements dictationRefinements
+
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}
@@ -228,22 +236,17 @@ type Daemon struct {
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
-	tailscale           *tailscaleRuntime
 	plugins             *pluginRegistry
 	pluginSupervisorMu  sync.Mutex
 	pluginSupervisor    *pluginSupervisor
 	pluginHealthEnabled bool
 
-	pluginDir           string
-	bundledPluginDir    string
-	busPinMu            sync.Mutex
-	busPinEpisodes      map[string]*busPinEpisode
-	busPinAge           time.Duration
-	removePlugin        func(pluginDir, name string) error
-	pluginActionMu      sync.Mutex
-	bundledPluginMu     sync.Mutex
-	bundledPluginSet    map[string]struct{}
-	bundledPluginLoaded bool
+	pluginDir      string
+	busPinMu       sync.Mutex
+	busPinEpisodes map[string]*busPinEpisode
+	busPinAge      time.Duration
+	removePlugin   func(pluginDir, name string) error
+	pluginActionMu sync.Mutex
 
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
@@ -511,6 +514,7 @@ func New(socketPath string) *Daemon {
 		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
+		ptyRecovered:        make(chan struct{}),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
@@ -525,12 +529,10 @@ func New(socketPath string) *Daemon {
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
 
-		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
 		jobQueueRoleChanged: make(chan struct{}, 1),
 		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
@@ -549,6 +551,7 @@ func NewForTesting(socketPath string) *Daemon {
 		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
+		ptyRecovered:        make(chan struct{}),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
@@ -563,10 +566,8 @@ func NewForTesting(socketPath string) *Daemon {
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
 
-		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 		jobQueueRoleChanged: make(chan struct{}, 1),
@@ -598,9 +599,6 @@ func (d *Daemon) Start() error {
 	}
 	if d.ptyBackend == nil {
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
-	}
-	if d.tailscale == nil {
-		d.tailscale = newTailscaleRuntime()
 	}
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
@@ -647,6 +645,7 @@ func (d *Daemon) Start() error {
 	d.applyHeadlessTasksMode()
 	d.ensureAvailableAgentSkills()
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
+	d.copyImagesOfAsksOpenedBeforeImagesTravelled()
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
@@ -656,7 +655,14 @@ func (d *Daemon) Start() error {
 	if d.outpostsEnabled() {
 		d.configureOutposts()
 	}
+	run, previous, err := d.beginRun(time.Now())
+	if err != nil {
+		d.logf("daemon run: %v", err)
+	}
+	d.run = run
 	d.configureAnalytics()
+	d.configurePhoneAccess()
+	d.recordAnalytics(analytics.StreamSample, "daemon_start", d.run.ID, previous)
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
@@ -810,8 +816,6 @@ func (d *Daemon) Start() error {
 	httpListener := d.httpListener
 	d.life.Go("runHTTPServer", func() { d.runHTTPServer(httpListener) })
 	d.maybeStartDiagServer()
-	d.removeLegacyEmbeddedTailscaleState()
-	d.life.Go("ensureTailscaleServeFromSettingsAndBroadcast", d.ensureTailscaleServeFromSettingsAndBroadcast)
 
 	githubHostsReady := make(chan struct{})
 	d.life.Go("refreshGitHubHosts", func() {
@@ -1684,6 +1688,17 @@ func (d *Daemon) stop() {
 
 var errDaemonStopping = errors.New("the daemon is stopping; retry once it is back")
 
+var errCallerGone = errors.New("the caller disconnected")
+
+func peerClosed(conn net.Conn) <-chan struct{} {
+	closed := make(chan struct{})
+	goTransport(func() {
+		_, _ = io.Copy(io.Discard, conn)
+		close(closed)
+	})
+	return closed
+}
+
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	release, held := d.life.Hold("handlePTYExit")
 	if !held {
@@ -2179,14 +2194,13 @@ func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.S
 			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
-	return d.recordSessionClose(sessionID, func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
+	return d.recordSessionClose(sessionID, d.store.Get(sessionID), func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) error {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *protocol.Session, commit func() (store.SessionClosure, error)) error {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
-	session := d.store.Get(sessionID)
-	if session != nil {
+	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
@@ -2198,6 +2212,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 		return err
 	}
+	unregistered := d.sessionForBroadcast(closing)
 	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
 		d.forgetMonitor(sessionID)
 	}
@@ -2208,13 +2223,13 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		}
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
-		entry := d.store.SessionLedgerEntry(sessionID)
-		if entry == nil {
-			d.publishSessionUnregistered(session)
-		} else {
+		if entry := d.store.SessionLedgerEntry(sessionID); entry != nil {
 			d.decorateLedgerEntryWithUsage(entry)
 			d.publishFact(FactSessionClosed, string(sessionID), entry)
 		}
+	}
+	if unregistered != nil {
+		d.publishFact(FactSessionUnregistered, string(sessionID), unregistered)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -2373,7 +2388,7 @@ func (d *Daemon) maybeStartDiagServer() {
 }
 
 func (d *Daemon) diagStats() diag.Stats {
-	stats := diag.Stats{PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
+	stats := diag.Stats{WSAddr: d.httpListener.Addr().String(), PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
 	if d.ptyBackend == nil {
 		stats.PtyBackend = "embedded"
 		return stats
@@ -2408,21 +2423,15 @@ func shouldRunWorkerStartupProbe() bool {
 	}
 }
 
-func (d *Daemon) refreshGitHubHostsLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+const gitHubHostsTimer stepclock.Name = "daemon-github-hosts"
 
-	for {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-			if err := d.refreshGitHubHosts(); err != nil {
-				d.logf("GitHub host refresh failed: %v", err)
-			}
-			d.recoverAutomations()
+func (d *Daemon) refreshGitHubHostsLoop() {
+	d.every(gitHubHostsTimer, 5*time.Minute, func() {
+		if err := d.refreshGitHubHosts(); err != nil {
+			d.logf("GitHub host refresh failed: %v", err)
 		}
-	}
+		d.recoverAutomations()
+	})
 }
 
 func ghVersionWarning(err error) (string, string) {
@@ -2734,11 +2743,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 	}
 	caller := d.callerSession(ctx, data)
-	if cmd != protocol.CmdRecordAnalytics && d.analyticsEnabled() {
-		reply, unanswered := d.recordingCLICommand(conn, data, err, caller)
-		conn = reply
-		defer unanswered()
-	}
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2757,7 +2761,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 	}
 	if err := d.scopeGardenRequest(cmd, msg, ""); err != nil {
-		d.sendError(conn, err.Error())
+		d.sendRefusal(conn, err.Error(), err)
 		return
 	}
 
@@ -2810,16 +2814,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleDocCount(conn, msg.(*protocol.DocCountMessage))
 	case protocol.CmdDocSubscribe:
 		d.handleDocSubscribe(conn, msg.(*protocol.DocSubscribeMessage))
-	case protocol.CmdAutoModeShow:
-		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
-	case protocol.CmdAutoModeEnvSlot:
-		d.handleAutoModeEnvSlot(conn, msg.(*protocol.AutoModeEnvSlotMessage))
-	case protocol.CmdAutoModeEnvNotes:
-		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
-	case protocol.CmdAutoModePropose:
-		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
-	case protocol.CmdAutoModeDenials:
-		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
 
 	case protocol.CmdAskOpen:
 		d.handleAskOpen(conn, msg.(*protocol.AskOpenMessage))
@@ -2908,10 +2902,18 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
 	case protocol.CmdAgentReload:
 		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
-	case protocol.CmdQuickCaptureAttachmentGet:
+	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		d.handleQuickCapture(conn, msg)
-	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentDiscard:
-		d.sendError(conn, "quick capture authoring and history are app-only; use the authenticated app WebSocket channel")
+	case protocol.CmdSenderPair:
+		d.handleSenderPair(conn, msg.(*protocol.SenderPairMessage), caller)
+	case protocol.CmdSenderList:
+		d.handleSenderList(conn, msg.(*protocol.SenderListMessage), caller)
+	case protocol.CmdSenderUnpair:
+		d.handleSenderUnpair(conn, msg.(*protocol.SenderUnpairMessage), caller)
+	case protocol.CmdSenderSessions:
+		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
+	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
+		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:
@@ -2932,6 +2934,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedRollback:
 		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage))
+	case protocol.CmdSeedAuthorization:
+		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage))
 	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:
@@ -3005,7 +3009,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdQuery:
-		d.handleQuery(conn, msg.(*protocol.QueryMessage), caller)
+		d.handleQuery(conn, msg.(*protocol.QueryMessage))
+	case protocol.CmdCallerSession:
+		d.handleCallerSession(conn, caller)
 	case protocol.CmdQueryPRs:
 		d.handleQueryPRs(conn, msg.(*protocol.QueryPRsMessage))
 	case protocol.CmdMutePR:
@@ -3092,14 +3098,6 @@ func (d *Daemon) projectSessionUnregistered(ev bus.Event) {
 	})
 }
 
-func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
-	if session == nil {
-		return
-	}
-	d.invalidateGardenSeedParties("session unregister")
-	d.publishFact(FactSessionUnregistered, string(session.ID), d.sessionForBroadcast(session))
-}
-
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
 	teardown, err := d.prepareSessionTeardown(msg.ID)
 	if err != nil {
@@ -3113,9 +3111,6 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 	}
 	d.sendOK(conn)
 
-	if teardown != nil && teardown.session != nil {
-		d.publishSessionUnregistered(teardown.session)
-	}
 	if teardown != nil {
 		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
 	}
@@ -3284,13 +3279,21 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
+	dispatchers := d.gardenDispatchersBySession()
+	var parties parties
+	if session != nil {
+		if _, dispatched := dispatchers[session.ID]; dispatched {
+			parties = d.partiesNow()
+		}
+	}
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
 		d.profileChiefs(),
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
-		d.gardenDispatchersBySession(),
+		dispatchers,
+		parties,
 	)
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
@@ -3308,6 +3311,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	crewBySession map[protocol.SessionID]crew.Member,
 	seedBySession map[protocol.SessionID]string,
 	dispatcherBySession map[protocol.SessionID]who.Actor,
+	parties parties,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3324,7 +3328,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
-	d.decorateSessionDispatcher(clone, dispatcherBySession)
+	d.decorateSessionDispatcher(clone, dispatcherBySession, parties)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
 		clone.Dispatcher, clone.DispatcherSessionID = nil, nil
 		clone.DelegatedFromChief = nil
@@ -3346,14 +3350,22 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	var parties parties
+	if len(dispatcherBySession) > 0 {
+		parties = d.partiesNow()
+	}
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
-	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
+	ids := make([]protocol.SessionID, 0, len(sessions))
+	for _, session := range sessions {
+		ids = append(ids, session.ID)
+	}
+	pullRequestsBySession := d.store.SessionPullRequestsOf(withWatchHolders(ids, pullRequestWatchesByPR))
 	sharedConversations := d.conversationsSharedByLiveSessions()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession, parties); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.ConversationSharedWith = sharedConversations[decorated.ID]
@@ -3434,7 +3446,15 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage, caller protocol.SessionID) {
+func (d *Daemon) handleCallerSession(conn net.Conn, caller protocol.SessionID) {
+	resp := protocol.Response{Ok: true}
+	if caller != "" {
+		resp.CallerSessionID = protocol.Ptr(caller)
+	}
+	json.NewEncoder(conn).Encode(resp)
+}
+
+func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 	sessions := d.store.List(protocol.Deref(msg.Filter))
 	profiles, err := d.liveProtocolProfiles()
 	if err != nil {
@@ -3445,9 +3465,6 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage, caller p
 		Ok:       true,
 		Sessions: d.sessionsForBroadcast(sessions),
 		Profiles: profiles,
-	}
-	if msg.CallerID != nil {
-		resp.CallerSessionID = protocol.Ptr(caller)
 	}
 	json.NewEncoder(conn).Encode(resp)
 }
@@ -3544,6 +3561,10 @@ func (d *Daemon) sendError(conn net.Conn, errMsg string) {
 	json.NewEncoder(conn).Encode(resp)
 }
 
+func (d *Daemon) sendRefusal(conn net.Conn, message string, err error) {
+	json.NewEncoder(conn).Encode(protocol.Response{Ok: false, Error: protocol.Ptr(message), Refusal: protocol.RefusalOf(err)})
+}
+
 type successfulPRObservation struct {
 	prs        []*protocol.PR
 	observedAt time.Time
@@ -3553,19 +3574,10 @@ func (d *Daemon) pollPRs() {
 	d.log("PR polling loop started (90s interval)")
 
 	d.doPRPoll()
-
-	ticker := time.NewTicker(90 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-			d.doPRPoll()
-		}
-	}
+	d.every(prPollTimer, 90*time.Second, d.doPRPoll)
 }
+
+const prPollTimer stepclock.Name = "daemon-pr-poll"
 
 func (d *Daemon) doPRPoll() {
 	if !d.githubAvailable() {
@@ -4076,17 +4088,12 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 func (d *Daemon) monitorBranches() {
 	d.logf("Branch monitoring started (%s interval)", branchMonitorInterval)
 
-	ticker := time.NewTicker(branchMonitorInterval)
-	defer ticker.Stop()
-
-	for d.life.Do("monitorBranches", d.checkAllBranches) {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+	check := func() { d.life.Do("monitorBranches", d.checkAllBranches) }
+	check()
+	d.every(branchMonitorTimer, branchMonitorInterval, check)
 }
+
+const branchMonitorTimer stepclock.Name = "daemon-branch-monitor"
 
 func (d *Daemon) checkAllBranches() {
 	d.coalesceSnapshots(func() {

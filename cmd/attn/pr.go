@@ -174,7 +174,7 @@ type prWaitResult struct {
 func runPRCommand() {
 	code := executePRCommand(os.Args[2:], os.Stdout, os.Stderr)
 	if code != 0 {
-		os.Exit(code)
+		exit(code)
 	}
 }
 
@@ -186,6 +186,7 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "record", "forget", "ls", "watch", "unwatch", "status":
+			setCommandPath("pr " + args[0])
 			return executeSessionPRCommand(args[0], args[1:], stdout, stderr)
 		}
 	}
@@ -193,6 +194,7 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 		writePRHelp(stderr)
 		return prWaitExitUsage
 	}
+	setCommandPath("pr wait-ready")
 	opts, err := parsePRWaitArgs(args[1:])
 	if err != nil {
 		fmt.Fprintf(stderr, "pr wait-ready: %v\n", err)

@@ -16,7 +16,7 @@ describe('App model tier settings', () => {
     expect(codex().getByText('Deep default → gpt-6.1-sol')).toBeInTheDocument();
     expect(codex().getByText('New model').parentElement).toHaveTextContent('no tier');
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
-    expect(daemon.sentOf('harness_models').map(request => request.harness)).toEqual(['claude', 'codex', 'pi']);
+    expect(daemon.sentOf('harness_models').map(request => request.harness)).toEqual(['claude', 'codex', 'plug']);
   });
   it('updates the mapping and live default, then Reset returns to attn’s shipped tier', async () => {
     const daemon = await openSection('models');
@@ -42,7 +42,7 @@ describe('App model tier settings', () => {
     expect(radio('gpt-6-luna', 'Light')).toBeChecked();
   });
   it('removes overrides for a known harness without discovery', async () => {
-    const daemon = await openSection('models', { settings: { model_tier_overrides: '[{"harness":"pi","provider":"","model":"old-model","tier":"deep"}]' } });
+    const daemon = await openSection('models', { settings: { model_tier_overrides: '[{"harness":"plug","provider":"","model":"old-model","tier":"deep"}]' } });
     const row = screen.getByText('old-model').closest('.model-tier-row')!;
     await gesture(daemon, () => fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Remove' })));
     expect(savedSettings(daemon).slice(-1)[0]).toEqual(['model_tier_overrides', '[]']);
@@ -70,7 +70,7 @@ describe('App model tier settings', () => {
   });
   it('refreshes harnesses when plugins change, while health timestamps do not trigger more reads', async () => {
     const daemon = await openSection('models');
-    const plugin = { name: 'demo', dir: '/tmp/demo', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', can_install: false, can_uninstall: true, priority: 0 };
+    const plugin = { name: 'demo', dir: '/tmp/demo', version: '1', connected: true, running: true, runtime_state: 'running', can_uninstall: true, priority: 0 };
     serveHarnessCatalogs(daemon, [...harnesses, { id: 'demo', name: 'Demo', available: true, model_pin: true, effort_pin: true, discovery: false }]);
     await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
     expect(screen.getByRole('region', { name: 'Demo models' })).toBeInTheDocument();
@@ -90,11 +90,11 @@ describe('App model tier settings', () => {
   });
 
   it('refreshes harness membership when an existing driver loses initial-prompt support', async () => {
-    const daemon = await openSection('models', { settings: { pi_available: 'true', pi_cap_initial_prompt: 'true' } });
-    expect(screen.getByRole('region', { name: 'Pi models' })).toBeInTheDocument();
-    serveHarnessCatalogs(daemon, harnesses.filter(harness => harness.id !== 'pi'));
-    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { pi_cap_initial_prompt: 'false' } }));
-    expect(screen.queryByRole('region', { name: 'Pi models' })).toBeNull();
+    const daemon = await openSection('models', { settings: { plug_available: 'true', plug_cap_initial_prompt: 'true' } });
+    expect(screen.getByRole('region', { name: 'Plug models' })).toBeInTheDocument();
+    serveHarnessCatalogs(daemon, harnesses.filter(harness => harness.id !== 'plug'));
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { plug_cap_initial_prompt: 'false' } }));
+    expect(screen.queryByRole('region', { name: 'Plug models' })).toBeNull();
   });
 
 });

@@ -30,6 +30,8 @@ export interface AnalyticsStatus {
   waiting: number;
   lastSentAt?: string;
   lastRefusal?: string;
+  ingestUrl: string;
+  ingestOffReason?: string;
 }
 
 export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: PendingRequests): boolean {
@@ -55,7 +57,9 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
         pending,
         'get_analytics_status',
         event as GetAnalyticsStatusResultMessage,
-        ({ records, bytes, waiting, last_sent_at, last_refusal }): AnalyticsStatus => ({ records, bytes, waiting, lastSentAt: last_sent_at, lastRefusal: last_refusal }),
+        ({ records, bytes, waiting, last_sent_at, last_refusal, ingest_url, ingest_off_reason }): AnalyticsStatus => ({
+          records, bytes, waiting, lastSentAt: last_sent_at, lastRefusal: last_refusal, ingestUrl: ingest_url, ingestOffReason: ingest_off_reason,
+        }),
         'Could not read the analytics status',
       );
       return true;

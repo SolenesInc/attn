@@ -57,22 +57,22 @@ describe('App new session', () => {
       [
         'the built-in agents when the daemon says nothing',
         {},
-        { offered: ['Terminal', 'Claude', 'Codex'], unavailable: ['Pi'], chosen: ['Claude'] },
+        { offered: ['Terminal', 'Claude', 'Codex'], unavailable: ['Plug'], chosen: ['Claude'] },
       ],
       [
         'the agents the daemon advertises, plugins included',
-        { claude_available: 'false', pi_available: 'true', 'gemini-cli_available': 'true' },
-        { offered: ['Terminal', 'Codex', 'Gemini Cli', 'Pi'], unavailable: ['Claude'], chosen: ['Codex'] },
+        { claude_available: 'false', plug_available: 'true', 'gemini-cli_available': 'true' },
+        { offered: ['Terminal', 'Codex', 'Gemini Cli', 'Plug'], unavailable: ['Claude'], chosen: ['Codex'] },
       ],
       [
         'the first available agent when the preferred one is missing',
-        { new_session_agent: 'claude', claude_available: 'false', codex_available: 'false', pi_available: 'true' },
-        { offered: ['Terminal', 'Pi'], unavailable: ['Claude', 'Codex'], chosen: ['Pi'] },
+        { new_session_agent: 'claude', claude_available: 'false', codex_available: 'false', plug_available: 'true' },
+        { offered: ['Terminal', 'Plug'], unavailable: ['Claude', 'Codex'], chosen: ['Plug'] },
       ],
       [
         'a terminal when no agent CLI is available',
         { codex_available: 'false', claude_available: 'false' },
-        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Pi'], chosen: ['Terminal'] },
+        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Plug'], chosen: ['Terminal'] },
       ],
     ])('offers %s', async (_, settings, expected) => {
       expect(await openNewSession(settings)).toEqual(expected);
@@ -96,17 +96,17 @@ describe('App new session', () => {
     it('lists the preferred agent first in Settings, with what each agent supports', async () => {
       await openSection('agents', {
         settings: {
-          new_session_agent: 'pi',
-          pi_available: 'true',
+          new_session_agent: 'plug',
+          plug_available: 'true',
           mistral_available: 'true',
           codex_cap_transcript_watcher: 'true',
           codex_cap_classifier: 'false',
-          pi_cap_custom_cap: 'true',
+          plug_cap_custom_cap: 'true',
         },
       });
 
       expect(settingsAgents()).toEqual([
-        { name: 'Pi', capabilities: ['custom cap: Supported'] },
+        { name: 'Plug', capabilities: ['custom cap: Supported'] },
         { name: 'Codex', capabilities: ['Transcript watch: Supported', 'Classifier: Unavailable'] },
         { name: 'Claude', capabilities: [] },
         { name: 'Mistral', capabilities: [] },

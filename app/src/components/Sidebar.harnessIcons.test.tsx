@@ -32,7 +32,6 @@ const sessions: Array<{
 }> = [
   { id: 'claude', agent: 'claude', label: 'Investigate logs' },
   { id: 'codex', agent: 'codex', label: 'Implement sidebar logos' },
-  { id: 'pi', agent: 'pi', label: 'Check rendering' },
   { id: 'shell', agent: 'shell', label: 'Run tests' },
   { id: 'plugin', agent: 'custom-driver', label: 'Plugin session' },
   { id: 'missing', agent: undefined, label: 'Older session' },
@@ -44,7 +43,7 @@ function sidebarData(members = false) {
     sessions.map((session) => ({
       ...session,
       chiefOfStaff: members && session.id === 'claude',
-      crewMember: members && session.id === 'pi' ? 'fern' : undefined,
+      crewMember: members && session.id === 'plugin' ? 'fern' : undefined,
     })),
   );
   return { desktops, visualIndexByDesktopId: new Map([['desktop', 0]]) };
@@ -56,7 +55,7 @@ describe('sidebar harness identity', () => {
     const onSelectSession = vi.fn();
     render(<Sidebar {...baseProps} {...data} onSelectSession={onSelectSession} />);
     for (const [id, name] of [
-      ['claude', 'Claude'], ['codex', 'Codex'], ['pi', 'Pi'],
+      ['claude', 'Claude'], ['codex', 'Codex'],
       ['shell', 'Shell'], ['plugin', 'Custom Driver'], ['missing', 'Unknown harness'],
     ]) {
       const row = screen.getByTestId(`sidebar-session-${id}`);

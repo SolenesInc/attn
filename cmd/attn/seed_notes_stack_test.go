@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 	plot := plant(t, s, "A plot above it")
 	seedAs(t, s, "", "link", seed.ID, "part-of", plot.ID)
 
+	var asker string
 	writers := map[string]func(){
 		garden.NoteKindNote:    func() { seedAs(t, s, "", "note", seed.ID, "-m", "a plain note") },
 		garden.NoteKindHandoff: func() { seedAs(t, s, "", "note", seed.ID, "-m", "for whoever is next", "--handoff") },
@@ -35,7 +37,7 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 			app := s.App()
 			testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks-on")},
 				protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks-on" })
-			asker := s.Spawn(app, fakeagent.Claude, s.Path("asker"))
+			asker = s.Spawn(app, fakeagent.Claude, s.Path("asker"))
 			s.Launched(asker)
 			seedAs(t, s, asker, "tend", seed.ID)
 			asked, err := s.Client().AskOpen(protocol.SessionID(asker), seed.ID, ":::question\nWhich store?\n- [ ] Postgres\n- [ ] Redis\n:::\n", "", s.Path("asker"))
@@ -47,6 +49,17 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 			}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
 			if !answered.Success {
 				t.Fatalf("answering: %s", protocol.Deref(answered.Error))
+			}
+		},
+		garden.NoteKindAuthorization: func() {
+			successor := s.Path("successor")
+			if err := os.MkdirAll(successor, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			handover := s.Run(testworld.Invocation{Session: asker, Args: []string{"delegate", "--seed", seed.ID, "--handover",
+				"--cwd", successor, "--model", "default", "--authorization", "Ask me before pushing."}})
+			if handover.Code != 0 {
+				t.Fatalf("a handover with --authorization exited %d: %s", handover.Code, handover.Stderr)
 			}
 		},
 	}

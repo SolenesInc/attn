@@ -41,14 +41,14 @@
     "emoji": "🧾",
     "text": "Show the receipt",
     "color": "teal",
-    "tip": "You asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption."
+    "tip": "You asserted this as fact. Name what backs it, such as the file and line, the measurement, or the command output. If nothing backs it, say plainly that it is an assumption."
   },
   {
     "id": "give-me-an-example",
     "emoji": "🔬",
     "text": "Give me an example",
     "color": "cyan",
-    "tip": "This is too abstract. Show a before/after, a sample input/output, or a specific scenario."
+    "tip": "This is too abstract. Show a before and after, a sample input and output, or a specific scenario."
   },
   {
     "id": "consider-alternatives",

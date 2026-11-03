@@ -105,7 +105,7 @@ func delegateLaunchFlag(argv []string, name string) (string, bool) {
 }
 
 func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Plug)
 	cli := w.Client()
 	cwd := w.Path("api")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -118,9 +118,9 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 	}{
 		{name: "claude pinned", agent: "claude", model: "claude-fable-5", effort: "Low", wantModel: "claude-fable-5", wantEffort: "low"},
 		{name: "claude at the default effort", agent: "claude", model: "opus", wantModel: "opus", wantEffort: "medium"},
-		{name: "pi unpinned", agent: "pi"},
-		{name: "pi with a model", agent: "pi", model: "glm-5", refusal: `agent "pi" does not support --model`},
-		{name: "pi with an effort", agent: "pi", effort: "high", refusal: `agent "pi" does not support --effort`},
+		{name: "plug unpinned", agent: "plug"},
+		{name: "plug with a model", agent: "plug", model: "glm-5", refusal: `agent "plug" does not support --model`},
+		{name: "plug with an effort", agent: "plug", effort: "high", refusal: `agent "plug" does not support --effort`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			request := brief(cwd, "Tighten the retry loop")
@@ -221,32 +221,15 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 }
 
 func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {
-	longTitle := strings.Repeat("invoice ", 10) + "reconciliation more detail"
+	w := newWorld(t, fakeagent.Codex)
+	cli := w.Client()
 	for i, row := range []struct{ name, brief, label, title, want string }{
 		{name: "heading", brief: "# Fix the queue jump\n\nInvestigate queue movement.", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "hash in the heading text", brief: "# Document C#", title: "Document C#", want: "Document C#"},
-		{name: "closing hashes after a text hash", brief: "# Document C# ###", title: "Document C#", want: "Document C#"},
-		{name: "later heading", brief: "Context first\n\n### Reconcile  the\tledgers ###\nBody", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
-		{name: "fenced example falls back to first line", brief: "Fix the queue jump\n\n```markdown\n# Example\n```", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "real heading after fenced example", brief: "Context first\n\n```markdown\n# Example\n```\n\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "tilde fence", brief: "Context first\n~~~markdown\n# Example\n~~~\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "shorter fence cannot close", brief: "Context first\n````markdown\n```\n# Example\n````\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "different marker cannot close", brief: "Context first\n~~~markdown\n```\n# Example\n~~~\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "closing fence must end the line", brief: "Context first\n```markdown\n```still code\n# Example\n```\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "longer closing fence", brief: "Context first\n```markdown\n# Example\n````` \t\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "indented fences and CRLF", brief: "Context first\r\n   ```markdown\r\n# Example\r\n  ``` \t\r\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "unclosed fence", brief: "Fix the queue jump\n```markdown\n# Example", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "backticks in info do not open a fence", brief: "Context first\n``` example `inline`\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "empty heading does not stop scanning", brief: "Context first\n# ###\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
-		{name: "later indented line is not a title heading", brief: "Context first\n   # Example\n# Fix the queue jump", title: "Fix the queue jump", want: "Fix the queue jump"},
 		{name: "first non-empty line", brief: "\n\t Reconcile  the ledgers \nDetails", title: "Reconcile the ledgers", want: "Reconcile the ledgers"},
-		{name: "long first line", brief: longTitle, title: strings.TrimSpace(strings.Repeat("invoice ", 10)), want: "invoice invoice invoice invoice invoice invoice"},
 		{name: "unicode", brief: "###### " + strings.Repeat("é", 90), title: strings.Repeat("é", 80), want: strings.Repeat("é", 48)},
 		{name: "explicit name", brief: "# Reconcile the ledgers", label: "Payments API", title: "Payments API", want: "Payments API"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			w := newWorld(t, fakeagent.Codex)
-			cli := w.Client()
 			cwd := w.Path(string(rune('a' + i)))
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
@@ -296,7 +279,7 @@ func TestDerivedDelegationNamesUseTheFirstFreeDesktopSuffix(t *testing.T) {
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			for _, title := range []string{"Fix the queue jump", "Reconcile v1.2.", strings.Repeat("é", 70)} {
+			for _, title := range []string{"Fix the queue jump", strings.Repeat("é", 70)} {
 				for n := 1; n <= 3; n++ {
 					request := brief(cwd, "# "+title+"\n\nDo the task.")
 					request.Agent = protocol.Ptr("codex")

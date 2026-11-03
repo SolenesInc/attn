@@ -6,8 +6,9 @@ over long ones, and a sketch wherever it says more than the sentences it
 replaces. Pick the smallest view that makes the key point clear, and
 skip the preamble.
 
-Every surface this text lands on renders markdown and mermaid, so all of
-these forms work everywhere.
+A seed and a markdown file render markdown and Mermaid. A reply in the terminal
+conversation shows plain text, so draw pictures there as text and use Mermaid
+only in a seed or a markdown file.
 
 - Show logic or an algorithm as pseudocode:
 
@@ -48,7 +49,7 @@ src/
 └── transport/      # sends API requests
 ```
 
-- Show component interaction, control flow, or data flow with Mermaid:
+- In a seed or a markdown file, show component interaction, control flow, or data flow with Mermaid. In a reply in the terminal, draw the same as labeled arrows or a text sequence:
 
 ```mermaid
 sequenceDiagram
@@ -61,8 +62,8 @@ sequenceDiagram
 ```
 
 - Use `diff` when the point is what changes and the surrounding shape
-  already exists. Match the diff shape to the topic — a component
-  change, a file-layout change, a call-tree change, a state or
+  already exists. Match the diff shape to the topic: a component
+  change, a file-layout change, a call-tree change, or a state or
   control-flow change:
 
 ```diff
@@ -78,12 +79,11 @@ sequenceDiagram
   would hide ownership or order, or when the reader needs a copyable
   target shape.
 
-- For something too dense for these forms — a layout, a visual
-  comparison — write a markdown document instead of forcing it into a
-  comment: see [markdown.md](markdown.md).
+- When the content is too dense for these forms, such as a layout or a
+  visual comparison, write a markdown document instead of forcing it into
+  a comment. See [markdown.md](markdown.md).
 
 Place each visual next to the short text it supports. Keep only the
 calls, files, states, and boundaries needed to answer the reader's
-actual question. You may use one of these forms, you may use several;
-it is unlikely you will use all of them. Use your judgement and don't
-overwhelm the reader.
+actual question. Use one of these forms or several. You are unlikely
+to need all of them. Use your judgement and do not overwhelm the reader.

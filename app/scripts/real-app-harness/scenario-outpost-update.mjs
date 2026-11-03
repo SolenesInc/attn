@@ -179,12 +179,12 @@ try {
     fs.copyFileSync(binary, asset);
     await press('[aria-label="Close settings"]');
     await wait('[data-testid="settings-modal"]', { absent: true });
-    await wait(banner, { textIncludes: "need your home's build" });
+    await wait(banner, { textIncludes: 'Couldn’t update Update studio.' });
     await shot('00-offer');
     await update(`${banner} .banner-button`, '01-banner-updated');
   });
   await runner.step('missing_build_offers_row_update', async () => {
-    await press('[aria-label="Dismiss outpost updates"]');
+    await wait(banner, { textIncludes: 'Closing in' });
     await wait(banner, { absent: true });
     await client.request('set_setting', {
       key: 'outposts_enabled',
@@ -209,7 +209,9 @@ try {
     await wait(`${row} .settings-outpost-actions button:first-child`, {
       textIncludes: 'Update to home build',
     });
-    await wait(banner, { absent: true });
+    await wait(banner, {
+      textIncludes: 'Update studio runs a different build than home.',
+    });
     await shot('02-missing-build');
     await update(
       `${row} .settings-outpost-actions button:first-child`,

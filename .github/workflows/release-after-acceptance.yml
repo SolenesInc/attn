@@ -5,6 +5,8 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  push:
+    branches: [reviewed]
 
 concurrency:
   group: release-accepted-main
@@ -23,19 +25,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Tag and dispatch exact accepted main
+      - name: Tag and dispatch the newest reviewed release commit
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: >-
-          ./scripts/release-after-acceptance.sh
-          "${{ github.event.workflow_run.head_sha }}"
-          "${{ github.event.workflow_run.id }}"
-          "${{ github.event.workflow_run.html_url }}"
+        run: ./scripts/release-after-acceptance.sh

@@ -13,6 +13,7 @@ import (
 )
 
 type Stats struct {
+	WSAddr           string         `json:"ws_addr"`
 	Sessions         int            `json:"sessions"`
 	PtyBackend       string         `json:"pty_backend"`
 	WorkerPIDs       map[string]int `json:"worker_pids,omitempty"`
@@ -73,6 +74,7 @@ func (s *Server) handleVars(w http.ResponseWriter, _ *http.Request) {
 
 	out := map[string]any{
 		"pid":               os.Getpid(),
+		"ws_addr":           stats.WSAddr,
 		"goroutines":        process.Goroutines,
 		"resident_bytes":    process.ResidentBytes,
 		"cpu_time_ms":       process.CPUTimeMS,

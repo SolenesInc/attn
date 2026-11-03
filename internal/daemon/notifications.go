@@ -55,12 +55,13 @@ func (d *Daemon) sendNotificationListWSResult(client *wsClient, requestID string
 		})
 		return
 	}
-	list, err := d.store.ListNotifications()
-	unread, unreadErr := d.store.UnreadNotificationCount()
+	profileID := client.selectedProfile()
+	list, err := d.store.ListNotifications(profileID)
+	unread, unreadErr := d.store.UnreadNotificationCount(profileID)
 	if err == nil {
 		err = unreadErr
 	}
-	criticalCount, criticalTitle, criticalErr := d.store.UnreadCriticalNotifications()
+	criticalCount, criticalTitle, criticalErr := d.store.UnreadCriticalNotifications(profileID)
 	if err == nil {
 		err = criticalErr
 	}
@@ -94,26 +95,30 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 		fail("notification store unavailable")
 		return
 	}
+	profileID := client.selectedProfile()
 	var markedIDs []string
 	var markErr error
 	if notificationID != nil && *notificationID != "" {
-		markedIDs = []string{*notificationID}
-		markErr = d.store.MarkNotificationRead(*notificationID, time.Now())
+		var marked bool
+		marked, markErr = d.store.MarkNotificationRead(profileID, *notificationID, time.Now())
+		if marked {
+			markedIDs = []string{*notificationID}
+		}
 	} else {
-		if all, err := d.store.ListNotifications(); err == nil {
+		if all, err := d.store.ListNotifications(profileID); err == nil {
 			for _, rec := range all {
 				if rec.ReadAt.IsZero() {
 					markedIDs = append(markedIDs, rec.ID)
 				}
 			}
 		}
-		_, markErr = d.store.MarkAllNotificationsRead(time.Now())
+		_, markErr = d.store.MarkAllNotificationsRead(profileID, time.Now())
 	}
 	if markErr != nil {
 		fail(markErr.Error())
 		return
 	}
-	unread, err := d.store.UnreadNotificationCount()
+	unread, err := d.store.UnreadNotificationCount(profileID)
 	if err != nil {
 		fail(err.Error())
 		return
@@ -215,69 +220,101 @@ func openSessionAction(sessionID protocol.SessionID) store.NotificationAction {
 	return store.NotificationAction{Kind: notificationActionOpenSession, Label: "Open session", TargetID: sessionID}
 }
 
-func (d *Daemon) sessionFailureName(sessionID protocol.SessionID) string {
-	if d.store != nil {
-		if session := d.store.Get(sessionID); session != nil && strings.TrimSpace(session.Label) != "" {
-			return fmt.Sprintf("%q", session.Label)
+type failedSession struct {
+	name      string
+	profileID string
+}
+
+func (d *Daemon) failedSession(sessionID protocol.SessionID) failedSession {
+	failed := failedSession{name: string("session " + sessionID)}
+	if d.store == nil {
+		return failed
+	}
+	if session := d.store.Get(sessionID); session != nil {
+		failed.profileID = session.ProfileID
+		if strings.TrimSpace(session.Label) != "" {
+			failed.name = fmt.Sprintf("%q", session.Label)
 		}
 	}
-	return string("session " + sessionID)
+	return failed
 }
 
 func (d *Daemon) renderSessionActivityFailure(t *jobs.Job) store.NotificationRecord {
 	sessionID := protocol.SessionID(jobSubject(t))
-	name := d.sessionFailureName(sessionID)
-	return taskFailureNotification(t,
-		"Couldn’t update activity for "+name,
-		"New output in "+name+" triggered a Home activity summary.",
+	session := d.failedSession(sessionID)
+	record := taskFailureNotification(t,
+		"Couldn’t update activity for "+session.name,
+		"New output in "+session.name+" triggered a Home activity summary.",
 		"Its Home activity summary may be stale. The session itself is still running.",
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
+	record.ProfileID = session.profileID
+	return record
 }
 
 func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord {
 	sessionID := protocol.SessionID(jobSubject(t))
-	name := d.sessionFailureName(sessionID)
-	return taskFailureNotification(t,
-		"Couldn’t name "+name,
+	session := d.failedSession(sessionID)
+	record := taskFailureNotification(t,
+		"Couldn’t name "+session.name,
 		"New conversation content triggered automatic session naming.",
 		"The session keeps its current fallback name.",
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
+	record.ProfileID = session.profileID
+	return record
 }
 
 func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord {
 	name := "a Garden review item"
+	profileID := ""
 	var payload gardenReviewJobPayload
 	if err := t.DecodePayload(&payload); err == nil && d.store != nil {
 		if item, _, found, readErr := d.readGardenReviewItem(payload.ItemID); readErr == nil && found && strings.TrimSpace(item.Title) != "" {
 			name = fmt.Sprintf("%q", item.Title)
 		}
+		if run, _, found, readErr := d.readGardenReviewRun(payload.RunID); readErr == nil && found {
+			profileID = run.ProfileID
+		}
 	}
-	return taskFailureNotification(t,
+	record := taskFailureNotification(t,
 		"Couldn’t classify "+name,
 		"A Garden review asked an agent to classify this item.",
 		"The item remains unresolved in the Garden review.",
 		[]store.NotificationAction{retryTaskAction(t)})
+	record.ProfileID = profileID
+	return record
 }
 
 func (d *Daemon) projectNotificationsUpdated() {
+	if d.wsHub == nil {
+		return
+	}
 	d.projectSnapshot(snapshotNotifs, func() {
-		unread, criticalCount, criticalTitle := 0, 0, ""
-		if d.store != nil {
-			if n, err := d.store.UnreadNotificationCount(); err == nil {
-				unread = n
+		messages := map[string]protocol.NotificationsUpdatedMessage{}
+		d.wsHub.ForEachClient(func(client *wsClient) {
+			profileID := client.selectedProfile()
+			msg, ok := messages[profileID]
+			if !ok {
+				msg = d.notificationsUpdated(profileID)
+				messages[profileID] = msg
 			}
-			if n, title, err := d.store.UnreadCriticalNotifications(); err == nil {
-				criticalCount, criticalTitle = n, title
-			}
-		}
-		msg := protocol.NotificationsUpdatedMessage{
-			Event:               protocol.EventNotificationsUpdated,
-			UnreadCount:         unread,
-			UnreadCriticalCount: criticalCount,
-		}
-		if criticalTitle != "" {
-			msg.CriticalTitle = protocol.Ptr(criticalTitle)
-		}
-		d.broadcastMessage(msg)
+			d.sendToClient(client, msg)
+		})
 	})
+}
+
+func (d *Daemon) notificationsUpdated(profileID string) protocol.NotificationsUpdatedMessage {
+	msg := protocol.NotificationsUpdatedMessage{Event: protocol.EventNotificationsUpdated}
+	if d.store == nil {
+		return msg
+	}
+	if n, err := d.store.UnreadNotificationCount(profileID); err == nil {
+		msg.UnreadCount = n
+	}
+	if n, title, err := d.store.UnreadCriticalNotifications(profileID); err == nil {
+		msg.UnreadCriticalCount = n
+		if title != "" {
+			msg.CriticalTitle = protocol.Ptr(title)
+		}
+	}
+	return msg
 }

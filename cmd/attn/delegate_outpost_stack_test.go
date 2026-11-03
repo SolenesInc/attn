@@ -141,8 +141,9 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 			announcements = append(announcements, pair.App)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 		}
 		exchangePrompt("after " + restart.name + " restart")
 		checkReceipts("after " + restart.name + " restart")
@@ -215,8 +216,9 @@ func TestADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts(t 
 			pair.App = home.App()
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 		}
 		checkNote("after " + restarted.name + " restart")
 	}
@@ -388,7 +390,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			outpost.AwaitHeldBoot()
+			boot.Await()
 			terminal := pair.App.Terminal(string(accepted.SessionID))
 			prepared, err := home.Client().DelegationStatus(request.RequestID)
 			if err != nil || prepared.SeedID == nil {
@@ -417,7 +419,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 				pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 				testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 				requireStdout(t, outpost.Attn("enrollment", "leave"), "no longer enrolled")
-				boot()
+				boot.Release()
 				failed := retry.Wait()
 				if failed.Code == 0 || !strings.Contains(failed.Stderr, `delegation outpost "outpost" was removed`) {
 					t.Fatalf("removed target must end the pending delegation: %+v", failed)
@@ -429,7 +431,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 			pair.Reconnect()
 			home.Advance(bridge.ReconnectInterval)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
-			boot()
+			boot.Release()
 			completed := retry.Wait()
 			if completed.Code != 0 {
 				t.Fatal(completed)

@@ -28,7 +28,7 @@ func TestALinkedPluginIsListedAndUninstallingKeepsTheCheckout(t *testing.T) {
 	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout, Link: protocol.Ptr(true)}, "link", "worktree-provider")
 	pluginsListed(app, "worktree-provider linked to its checkout", func(plugins []protocol.PluginInfo) bool {
 		p, ok := pluginsNamed(plugins, "worktree-provider")
-		return ok && protocol.Deref(p.LinkTarget) == checkout && p.Availability == "user" && p.InstallationState == "installed" && p.Running
+		return ok && protocol.Deref(p.LinkTarget) == checkout && p.Running
 	})
 
 	pluginsAct(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "worktree-provider"}, "uninstall", "worktree-provider")
@@ -122,7 +122,7 @@ func TestInstallingAndRemovingAPluginFromGit(t *testing.T) {
 	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: "https://plugins.example/" + filepath.Base(repo)}, "install", "attn-snipe")
 	pluginsListed(app, "attn-snipe installed and running", func(plugins []protocol.PluginInfo) bool {
 		p, ok := pluginsNamed(plugins, "attn-snipe")
-		return ok && p.InstallationState == "installed" && p.Running && p.LinkTarget == nil
+		return ok && p.Running && p.LinkTarget == nil
 	})
 	installed := filepath.Join(w.Dir, "plugins", "attn-snipe")
 	if _, err := os.Stat(filepath.Join(installed, "attn-plugin.toml")); err != nil {
@@ -142,66 +142,16 @@ func TestInstallingAndRemovingAPluginFromGit(t *testing.T) {
 	}
 }
 
-func TestBundledPluginsInstallPerInstance(t *testing.T) {
-	bundled := t.TempDir()
-	pluginsCheckout(t, filepath.Join(bundled, "attn-example"), "attn-example", "0.1.0", pluginsIdle)
-	t.Setenv("ATTN_BUNDLED_PLUGIN_DIR", bundled)
-	w := newWorld(t)
-	app := w.App()
-	available := func(plugins []protocol.PluginInfo) bool {
-		p, ok := pluginsNamed(plugins, "attn-example")
-		return ok && p.Availability == "bundled" && p.InstallationState == "available" && p.RuntimeState == "stopped" && !p.Running && p.CanInstall && !p.CanUninstall
-	}
-	pluginsListed(app, "attn-example available and inert", available)
-
-	override := pluginsCheckout(t, w.Path("checkouts", "attn-example"), "attn-example", "9.0.0", pluginsIdle)
-	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: override, Link: protocol.Ptr(true)}, "link", "attn-example")
-	pluginsRefused(t, app, protocol.InstallBundledPluginMessage{Cmd: protocol.CmdInstallBundledPlugin, Name: "attn-example"}, "install_bundled", "user plugin")
-	pluginsListed(app, "only the user's attn-example", func(plugins []protocol.PluginInfo) bool {
-		p, ok := pluginsNamed(plugins, "attn-example")
-		return ok && len(plugins) == 1 && p.Availability == "user"
-	})
-	pluginsAct(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-example"}, "uninstall", "attn-example")
-
-	pluginsAct(t, app, protocol.InstallBundledPluginMessage{Cmd: protocol.CmdInstallBundledPlugin, Name: "attn-example"}, "install_bundled", "attn-example")
-	pluginsListed(app, "attn-example installed and starting", func(plugins []protocol.PluginInfo) bool {
-		p, ok := pluginsNamed(plugins, "attn-example")
-		return ok && p.InstallationState == "installed" && p.RuntimeState == "starting" && p.Running && !p.CanInstall && p.CanUninstall
-	})
-	shadow := pluginsCheckout(t, w.Path("checkouts", "shadow", "attn-example"), "attn-example", "9.0.0", pluginsIdle)
-	pluginsRefused(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: shadow, Link: protocol.Ptr(true)}, "link", "uninstall bundled plugin")
-	if _, err := os.Lstat(filepath.Join(w.Dir, "plugins", "attn-example")); !os.IsNotExist(err) {
-		t.Errorf("the refused link left an entry in the plugins directory: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(shadow, "node_modules")); !os.IsNotExist(err) {
-		t.Errorf("the refused link installed the checkout's dependencies: %v", err)
-	}
-
-	pluginsCheckout(t, filepath.Join(bundled, "attn-example"), "attn-example", "0.2.0", pluginsIdle)
-	w.restart()
-	app = w.App()
-	pluginsListed(app, "attn-example still installed at the updated 0.2.0", func(plugins []protocol.PluginInfo) bool {
-		p, ok := pluginsNamed(plugins, "attn-example")
-		return ok && p.Version == "0.2.0" && p.InstallationState == "installed" && p.Running
-	})
-
-	pluginsAct(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-example"}, "uninstall", "attn-example")
-	pluginsListed(app, "attn-example available again", available)
-	if _, err := os.Stat(filepath.Join(bundled, "attn-example", "attn-plugin.toml")); err != nil {
-		t.Errorf("uninstalling deleted the bundled plugin: %v", err)
-	}
-}
-
 func TestAPluginDrivingASessionCannotBeUninstalled(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
-	awaitAgentAvailable(app, string(fakeagent.Pi))
-	session := w.Spawn(app, fakeagent.Pi, w.Path("shop"))
+	awaitAgentAvailable(app, string(fakeagent.Plug))
+	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 	w.Launched(session)
 
-	pluginsRefused(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-pi"}, "uninstall", "active delegated run")
-	pluginsListed(app, "attn-pi that cannot be uninstalled", func(plugins []protocol.PluginInfo) bool {
-		p, ok := pluginsNamed(plugins, "attn-pi")
+	pluginsRefused(t, app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-plug"}, "uninstall", "active delegated run")
+	pluginsListed(app, "attn-plug that cannot be uninstalled", func(plugins []protocol.PluginInfo) bool {
+		p, ok := pluginsNamed(plugins, "attn-plug")
 		return ok && !p.CanUninstall
 	})
 }

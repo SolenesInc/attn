@@ -54,7 +54,6 @@ type driverActiveRun struct {
 type driverRegistered struct {
 	OK         bool              `json:"ok"`
 	ActiveRuns []driverActiveRun `json:"active_runs"`
-	AutoMode   json.RawMessage   `json:"auto_mode"`
 }
 
 type driverPeer struct {

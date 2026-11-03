@@ -1,1 +1,0 @@
-Pi removes sensitive environment variables from bash and filters credentials from tool results. Nothing you can request restores credentials or overrides protected paths. Explain such requirements to the user.

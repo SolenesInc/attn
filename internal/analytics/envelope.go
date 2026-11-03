@@ -15,6 +15,7 @@ const (
 	StreamCLI    Stream = "cli"
 	StreamSample Stream = "sample"
 	StreamVent   Stream = "vent"
+	StreamRun    Stream = "run"
 )
 
 type Record struct {

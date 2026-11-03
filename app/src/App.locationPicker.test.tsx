@@ -245,6 +245,11 @@ describe('App location picker', () => {
       });
       expect(highlighted()).toEqual([row(0)]);
     });
+    it('asks the daemon for this machine\'s recents only', async () => {
+      const { daemon } = await openPicker({ recent: [RECENT] });
+
+      expect(daemon.sentOf('get_recent_locations').map(({ home_only }) => home_only)).toEqual([true]);
+    });
   });
 
   describe('agents and YOLO', () => {
@@ -253,7 +258,7 @@ describe('App location picker', () => {
     it('launches an interactive plugin absent from the initial-prompt harness catalog', async () => {
       const { daemon } = await openPicker({}, { settings: { interactive_available: 'true', interactive_cap_initial_prompt: 'false' } });
       const choices = within(screen.getByRole('radiogroup', { name: 'Session agent' })).getAllByRole('radio');
-      expect(choices.map(choice => within(choice).getByText(/Terminal|Claude|Codex|Pi|Interactive/).textContent)).toEqual(['Terminal', 'Claude', 'Codex', 'Pi', 'Interactive']);
+      expect(choices.map(choice => within(choice).getByText(/Terminal|Claude|Codex|Plug|Interactive/).textContent)).toEqual(['Terminal', 'Claude', 'Codex', 'Plug', 'Interactive']);
       await gesture(daemon, () => fireEvent.click(radio(/interactive/i)));
       await submitPath(daemon, '/tmp/interactive-plugin');
       expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/interactive-plugin', agent: 'interactive' }]);
@@ -303,13 +308,13 @@ describe('App location picker', () => {
     });
 
     it('switches agents with ⌥ and a digit, and neither advertises nor applies one for an unavailable agent', async () => {
-      const { daemon } = await openPicker({}, { settings: { codex_available: 'false', pi_available: 'true' } });
+      const { daemon } = await openPicker({}, { settings: { codex_available: 'false', plug_available: 'true' } });
       expect(within(screen.getByRole('radiogroup', { name: 'Session agent' })).queryByText('⌥2')).toBeNull();
 
       await press(daemon, '™', { code: 'Digit2', altKey: true });
 
       expect(agentChosen(/claude/i)).toBe(true);
-      expect(agentChosen(/pi/i)).toBe(false);
+      expect(agentChosen(/plug/i)).toBe(false);
     });
 
     it('offers Terminal on ⌥T and launches a shell without remembering it as the preferred agent', async () => {
@@ -409,59 +414,6 @@ describe('App location picker', () => {
         { cwd: '/tmp/plain', agent: 'claude' },
         { cwd: '/tmp/chief', agent: 'claude', chief_of_staff: true },
       ]);
-    });
-  });
-
-  describe('auto mode', () => {
-    const AUTO_MODE_AGENT = { snipe_available: 'true', snipe_cap_auto_mode: 'true', claude_cap_auto_mode: 'false' };
-    const autoModeHarnesses = [...harnesses, { id: 'snipe', name: 'Snipe', available: true, model_pin: true, effort_pin: true, discovery: false }];
-    const autoMode = () => screen.queryByTestId('location-picker-automode-toggle');
-
-    async function openWithSnipe(settings: Record<string, string> = AUTO_MODE_AGENT) {
-      const view = await openPicker({}, { settings }, autoModeHarnesses);
-      await gesture(view.daemon, () => fireEvent.click(radio(/snipe/i)));
-      return view;
-    }
-
-    async function defaultBecomes(daemon: ScriptedDaemon, value: string) {
-      daemon.emit({ event: 'settings_updated', settings: { ...AUTO_MODE_AGENT, automode_enabled_default: value } });
-      await daemon.idle();
-    }
-
-    it('offers the toggle only for an agent whose driver advertises auto mode, and a launch without it says nothing about auto mode', async () => {
-      const { daemon } = await openPicker({}, { settings: AUTO_MODE_AGENT }, autoModeHarnesses);
-      expect(autoMode()).toBeNull();
-
-      await submitPath(daemon, '/tmp/claude-here');
-
-      expect(launchedAt(daemon)[0]).not.toHaveProperty('auto_mode');
-      await gesture(daemon, () => pressShortcut('session.new'));
-      await gesture(daemon, () => fireEvent.click(radio(/snipe/i)));
-      expect(autoMode()).not.toBeNull();
-    });
-
-    it('starts from the default setting and launches with it when left alone', async () => {
-      const { daemon } = await openWithSnipe({ ...AUTO_MODE_AGENT, automode_enabled_default: 'false' });
-      expect(autoMode()).toHaveAttribute('aria-checked', 'false');
-
-      await defaultBecomes(daemon, 'true');
-      expect(autoMode()).toHaveAttribute('aria-checked', 'true');
-
-      await submitPath(daemon, '/tmp/snipe-here');
-      expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/snipe-here', agent: 'snipe', auto_mode: true }]);
-    });
-
-    it('sends an explicit off once the user turns it off, whatever the default does after', async () => {
-      const { daemon } = await openWithSnipe();
-      expect(autoMode()).toHaveAttribute('aria-checked', 'true');
-
-      await gesture(daemon, () => fireEvent.click(autoMode()!));
-      await defaultBecomes(daemon, 'false');
-      await defaultBecomes(daemon, 'true');
-      expect(autoMode()).toHaveAttribute('aria-checked', 'false');
-
-      await submitPath(daemon, '/tmp/snipe-here');
-      expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/snipe-here', agent: 'snipe', auto_mode: false }]);
     });
   });
 

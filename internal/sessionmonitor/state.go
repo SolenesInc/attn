@@ -103,9 +103,11 @@ func (m *Monitor) ApplyState(change Change) bool {
 		return false
 	}
 	m.mu.Lock()
+	previous := m.state.State
 	accepted := m.changeStateLocked(change.State, change.Cause, change.RequestStartedAt, time.Now())
 	var view View
 	var endedSnooze time.Time
+	var ended []Run
 	if accepted {
 		m.state.Origin = change.Origin
 		m.state.Cause = CauseName(change.Cause)
@@ -116,14 +118,16 @@ func (m *Monitor) ApplyState(change Change) bool {
 			m.firstReportAt = time.Now()
 		}
 		deadline := m.turn.SnoozedUntil
-		m.openTurnLocked(time.Now(), m.policy.QuietNotifications && m.input.stopFollowsNotificationLocked())
+		opened := m.openTurnLocked(time.Now(), m.policy.QuietNotifications && m.input.stopFollowsNotificationLocked())
 		if !deadline.IsZero() && m.turn.SnoozedUntil.IsZero() {
 			endedSnooze = deadline
 		}
 		m.syncAutoSettleLocked()
+		ended = m.observeRunLocked(previous, change.Cause, opened, time.Now())
 		view = m.viewLocked()
 	}
 	m.mu.Unlock()
+	m.reportRuns(ended)
 	if !accepted || !m.publish(view) {
 		m.logf("state update discarded: session=%s state=%s cause=%s", m.Label(), change.State, CauseName(change.Cause))
 		m.TraceChange(change, statetrace.OutcomeDiscarded, "store_rejected")

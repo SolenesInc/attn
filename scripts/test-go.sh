@@ -5,11 +5,13 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
-shard_count="${ATTN_GO_TEST_SHARDS:-5}"
+cli_package="github.com/victorarias/attn/cmd/attn"
+shard_count="${ATTN_GO_TEST_SHARDS:-4}"
+cli_shard_count=6
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
 # -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
-# the starvation. 1200s is a tripwire past a 143.3s healthy pass (2026-09-01).
+# the starvation. 1200s is a tripwire, also for --packages runs, past a 143.3s healthy pass (2026-09-01).
 test_timeout="${ATTN_GO_TEST_TIMEOUT:-1200s}"
 # -race costs an order of magnitude and contends with the job above; measured
 # 218.3s for internal/store alone, 2026-09-01. Same 1200s tripwire.
@@ -83,9 +85,46 @@ if [ "${1:-}" = "--packages" ]; then
     shift 2
   done
   status=0
-  "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- "$@" || status=$?
+  "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- -timeout "$test_timeout" "$@" || status=$?
   exit "$status"
 fi
+
+selected_jobs=()
+while [ "${1:-}" = "--job" ]; do
+  if [ "$#" -lt 2 ]; then
+    echo "--job needs a job name" >&2
+    exit 2
+  fi
+  selected_jobs+=("$2")
+  shift 2
+done
+
+job_names=(packages race)
+for ((shard = 1; shard <= shard_count; shard++)); do job_names+=("daemon-$shard"); done
+for ((shard = 1; shard <= cli_shard_count; shard++)); do job_names+=("attn-$shard"); done
+for job in ${selected_jobs[@]+"${selected_jobs[@]}"}; do
+  if ! printf '%s\n' "${job_names[@]}" | grep -qxF -- "$job"; then
+    echo "unknown --job $job; the jobs are: ${job_names[*]}" >&2
+    exit 2
+  fi
+done
+
+job_selected() {
+  local job
+  [ "${#selected_jobs[@]}" -eq 0 ] && return 0
+  for job in "${selected_jobs[@]}"; do
+    [ "$job" = "$1" ] && return 0
+  done
+  return 1
+}
+
+any_job_selected() {
+  local prefix="$1" count="$2" shard
+  for ((shard = 1; shard <= count; shard++)); do
+    job_selected "$prefix-$shard" && return 0
+  done
+  return 1
+}
 
 short_mode=false
 for arg in "$@"; do
@@ -123,15 +162,14 @@ if [ "$short_mode" = false ]; then
   export ATTN_E2E_BIN="$e2e_cache_dir/attn"
 fi
 
-packages_file="$test_root/packages"
-"$go_bin" list ./... | awk -v daemon="$daemon_package" '$0 != daemon' >"$packages_file"
-
-tests_file="$test_root/daemon-tests"
-"$go_bin" test -list '^Test' ./internal/daemon | awk '/^Test/ { print }' >"$tests_file"
-if [ ! -s "$tests_file" ]; then
-  echo "no daemon tests discovered" >&2
-  exit 1
-fi
+list_tests() {
+  local package_dir="$1" tests_file="$2"
+  "$go_bin" test -list '^Test' "$package_dir" | awk '/^Test/ { print }' >"$tests_file"
+  if [ ! -s "$tests_file" ]; then
+    echo "no tests discovered in $package_dir" >&2
+    exit 1
+  fi
+}
 
 pids=()
 names=()
@@ -140,6 +178,7 @@ logs=()
 run_job() {
   local name="$1"
   shift
+  job_selected "$name" || return 0
   local log="$test_root/$name.log"
   (cd "$root" && "$go_bin" tool test-history capture go --shard "$name" -- "$@") >"$log" 2>&1 &
   pids+=("$!")
@@ -147,27 +186,40 @@ run_job() {
   logs+=("$log")
 }
 
-packages=()
-while IFS= read -r package; do
-  packages+=("$package")
-done <"$packages_file"
-run_job packages -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
+if job_selected packages; then
+  packages_file="$test_root/packages"
+  "$go_bin" list ./... | awk -v daemon="$daemon_package" -v cli="$cli_package" '$0 != daemon && $0 != cli' >"$packages_file"
+  packages=()
+  while IFS= read -r package; do
+    packages+=("$package")
+  done <"$packages_file"
+  run_job packages -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
+fi
 
 # Race-check document queries for lost wakes/torn reads.
 run_job race -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
 
-shard=0
-while [ "$shard" -lt "$shard_count" ]; do
-  regex="$(awk -v count="$shard_count" -v target="$shard" '
-    (NR - 1) % count == target {
-      if (tests != "") tests = tests "|"
-      tests = tests $0
-    }
-    END { print "^(" tests ")$" }
-  ' "$tests_file")"
-  run_job "daemon-$((shard + 1))" -timeout "$test_timeout" "$@" -run "$regex" ./internal/daemon
-  shard=$((shard + 1))
-done
+run_shards() {
+  local name_prefix="$1" count="$2" package_dir="$3"
+  shift 3
+  any_job_selected "$name_prefix" "$count" || return 0
+  local tests_file="$test_root/$name_prefix-tests" shard=0 regex
+  list_tests "$package_dir" "$tests_file"
+  while [ "$shard" -lt "$count" ]; do
+    regex="$(awk -v count="$count" -v target="$shard" '
+      (NR - 1) % count == target {
+        if (tests != "") tests = tests "|"
+        tests = tests $0
+      }
+      END { print "^(" tests ")$" }
+    ' "$tests_file")"
+    run_job "$name_prefix-$((shard + 1))" -timeout "$test_timeout" "$@" -run "$regex" "$package_dir"
+    shard=$((shard + 1))
+  done
+}
+
+run_shards daemon "$shard_count" ./internal/daemon "$@"
+run_shards attn "$cli_shard_count" ./cmd/attn "$@"
 
 failed=0
 index=0

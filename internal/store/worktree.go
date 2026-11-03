@@ -1,6 +1,7 @@
 package store
 
 import (
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,13 +94,15 @@ func (s *Store) AddWorktree(wt *Worktree) {
 	}
 
 	s.execLog(`
-		INSERT INTO worktrees (path, branch, main_repo, created_at, origin)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO worktrees (path, branch, main_repo, created_at, origin, pinned_at)
+		VALUES (?, ?, ?, ?, ?, CASE WHEN ? = ? THEN COALESCE((SELECT pinned_at FROM forgotten_worktree_pins WHERE path = ?), '') ELSE '' END)
 		ON CONFLICT(path) DO UPDATE SET
 			branch = excluded.branch,
 			main_repo = excluded.main_repo`,
 		wt.Path, wt.Branch, wt.MainRepo, wt.CreatedAt.Format(time.RFC3339), string(wt.Origin),
+		string(wt.Origin), string(WorktreeOriginGit), wt.Path,
 	)
+	s.execLog(`DELETE FROM forgotten_worktree_pins WHERE path = ?`, wt.Path)
 }
 
 func (s *Store) GetWorktree(path string) *Worktree {
@@ -146,6 +149,48 @@ func (s *Store) MonitorWorktreeRepository(mainRepo string) {
 	}
 
 	s.execLog(`INSERT INTO monitored_worktree_repositories (main_repo) VALUES (?) ON CONFLICT DO NOTHING`, mainRepo)
+}
+
+func (s *Store) ForgetWorktreeRepository(mainRepo string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		log.Printf("[store] forget worktree repository %s: %v", mainRepo, err)
+		return
+	}
+	defer tx.Rollback()
+	for _, statement := range []string{
+		`INSERT INTO forgotten_worktree_pins (path, main_repo, pinned_at)
+			SELECT path, main_repo, pinned_at FROM worktrees WHERE main_repo = ? AND pinned_at != ''
+			ON CONFLICT(path) DO UPDATE SET main_repo = excluded.main_repo, pinned_at = excluded.pinned_at`,
+		`DELETE FROM worktrees WHERE main_repo = ?`,
+		`DELETE FROM monitored_worktree_repositories WHERE main_repo = ?`,
+	} {
+		if _, err := tx.Exec(statement, mainRepo); err != nil {
+			log.Printf("[store] forget worktree repository %s: %v", mainRepo, err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		log.Printf("[store] forget worktree repository %s: %v", mainRepo, err)
+	}
+}
+
+func (s *Store) DiscardForgottenWorktreePins(mainRepo string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	s.execLog(`DELETE FROM forgotten_worktree_pins WHERE main_repo = ?`, mainRepo)
 }
 
 func (s *Store) MonitoredWorktreeRepositories() []string {

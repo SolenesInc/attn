@@ -15,6 +15,7 @@ import (
 
 var (
 	ErrAskNotOpen    = errors.New("the ask is not open")
+	ErrAskGone       = errors.New("the ask is gone")
 	ErrAskerGone     = errors.New("the asking session is not live")
 	ErrAskSeedClosed = errors.New("the seed the ask is about is no longer open")
 )
@@ -54,7 +55,7 @@ func (s *Store) AddAsk(a Ask) error {
 			return ErrAskSeedClosed
 		}
 		query += " AND EXISTS (SELECT 1 FROM " + seeds + " WHERE id = ? AND json_extract(body, '$.status') IN (?, ?, ?))"
-		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant)
+		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusParked)
 	}
 	result, err := s.db.Exec(query, args...)
 	if err != nil {
@@ -100,14 +101,26 @@ func (s *Store) Asks() ([]Ask, error) {
 }
 
 func (s *Store) GetOpenAsk(id string) (Ask, error) {
+	a, err := s.getAsk(id, " AND "+openAsk)
+	if errors.Is(err, ErrAskGone) {
+		return Ask{}, ErrAskNotOpen
+	}
+	return a, err
+}
+
+func (s *Store) GetAsk(id string) (Ask, error) {
+	return s.getAsk(id, "")
+}
+
+func (s *Store) getAsk(id, condition string) (Ask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return Ask{}, ErrAskNotOpen
+		return Ask{}, ErrAskGone
 	}
-	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ? AND "+openAsk, id))
+	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ?"+condition, id))
 	if errors.Is(err, sql.ErrNoRows) {
-		return Ask{}, ErrAskNotOpen
+		return Ask{}, ErrAskGone
 	}
 	return a, err
 }

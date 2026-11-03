@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -131,18 +130,14 @@ func TestOnlyIfUnknownRestatesOnlyASessionAttnCouldNotTell(t *testing.T) {
 	}
 }
 
-func TestAReconnectingDriverIsHandedItsOwnRunsAndTheAutoModeConfigItRuns(t *testing.T) {
+func TestAReconnectingDriverIsHandedItsOwnRuns(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	editAutoModeConfig(app, "host", protocol.AutoModeHostAddMessage{Cmd: protocol.CmdAutoModeHostAdd, Host: "crates.io", Decision: automode.HostAllow, RequestID: "host"})
-	policy := uuid.NewString()
-	editAutoModeConfig(app, policy, protocol.AutoModePolicySetMessage{Cmd: protocol.CmdAutoModePolicySet, RequestID: protocol.Ptr(policy), ApprovalPolicy: protocol.Ptr(automode.PolicyNever)})
-
 	snipe := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
 	rival := connectDriver(t, w, "rival-plugin", "rival", map[string]bool{"state_reporting": true})
 	awaitDriverAvailable(app, "rival")
-	if len(snipe.registered.ActiveRuns) != 0 || len(snipe.registered.AutoMode) != 0 {
-		t.Errorf("a first registration without auto_mode was answered %+v, want no runs and no auto mode config", snipe.registered)
+	if len(snipe.registered.ActiveRuns) != 0 {
+		t.Errorf("a first registration was answered %+v, want no runs", snipe.registered)
 	}
 	_, run := spawnDriven(w, app, snipe, w.Path("shop"))
 	rivalSession := w.Spawn(app, "rival", w.Path("rival"))
@@ -152,17 +147,10 @@ func TestAReconnectingDriverIsHandedItsOwnRunsAndTheAutoModeConfigItRuns(t *test
 	})
 
 	snipe.leave(w)
-	back := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "auto_mode": true})
+	back := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
 	runs := back.registered.ActiveRuns
 	if len(runs) != 1 || runs[0].SessionID != run.SessionID || runs[0].RunID != run.RunID || string(runs[0].Metadata) != `{"native_id":"abc"}` || runs[0].Seq != 1 {
 		t.Errorf("the reconnected driver was handed %+v, want only its run in terminal %s with its metadata at cursor 1 (not %s's)", runs, run.SessionID, rivalSession)
-	}
-	var config automode.Config
-	if err := json.Unmarshal(back.registered.AutoMode, &config); err != nil {
-		t.Fatalf("the auto_mode driver was handed config %s: %v", back.registered.AutoMode, err)
-	}
-	if config.ApprovalPolicy != automode.PolicyNever || !slices.Contains(config.Network.AllowedDomains, "crates.io") {
-		t.Errorf("the auto_mode driver was handed policy %q and hosts %v, want the stored never and crates.io", config.ApprovalPolicy, config.Network.AllowedDomains)
 	}
 }
 
@@ -312,12 +300,4 @@ func TestAStopIsClassifiedOnlyForItsOwnRunAndAFailedVerdictIsUnknown(t *testing.
 	if got := <-verdict; got != protocol.StateUnknown {
 		t.Errorf("a stop whose classifier failed was answered %q, want unknown", got)
 	}
-}
-
-func TestADriverFromBeforeCustodyOnlyInputCanStillReportItsInputTaken(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	driver := connectDriver(t, w, "old-pi-plugin", "oldpi", map[string]bool{"state_reporting": true, "message_delivery": true})
-	_, run := spawnDriven(w, app, driver, w.Path("shop"))
-	driver.mustReport("session.report_input_taken", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "input_id": "inbox-ring/1"})
 }

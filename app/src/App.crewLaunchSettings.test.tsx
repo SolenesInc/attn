@@ -81,7 +81,7 @@ describe('App crew launch settings', () => {
       preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
       templates: [], harnesses: [...harnesses, { id: 'demo', name: 'Demo', available, model_pin: true, effort_pin: true, discovery: false }],
     }));
-    const plugin = { name: 'demo', dir: '/tmp/demo', version: '1', availability: 'available', connected: true, running: true, installation_state: 'installed', runtime_state: 'running', health_status: 'healthy', can_install: false, can_uninstall: true, priority: 0 };
+    const plugin = { name: 'demo', dir: '/tmp/demo', version: '1', connected: true, running: true, runtime_state: 'running', health_status: 'healthy', can_uninstall: true, priority: 0 };
     await gesture(daemon, () => daemon.emit({ event: 'plugins_updated', plugins: [plugin], issues: [] }));
     await openRoute(daemon, 'Crew launch model');
     expect(routeDialog().getByRole('option', { name: /^Demo/ })).toBeEnabled();

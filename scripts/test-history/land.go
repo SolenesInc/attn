@@ -21,6 +21,9 @@ func landCommand(args []string) int {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
 	}
+	if syncHistory(nil) != 0 {
+		warn("choosing landing tests from the history already synced")
+	}
 	context, err := loadContext(*mainRef)
 	if err != nil {
 		return fail(err)

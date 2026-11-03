@@ -46,6 +46,7 @@ type Host interface {
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error
 	ConversationApplied(*Monitor, ConversationOutcome)
+	RunEnded(*Monitor, Run)
 }
 
 type ClassifyRequest struct {
@@ -114,11 +115,11 @@ type Monitor struct {
 	forcedStop           time.Time
 	silence              *time.Timer
 	input                *lane
+	runs                 runRecorder
 	autoSettle           *autoSettleTimer
 	dismissal            autoSettleDismissal
 	activityAt           time.Time
 	transcriptWatch      *transcriptWatcher
-	pluginUsageWatch     *pluginUsageWatcher
 	finalUsage           []func()
 	usageRuns            int
 	usageIdle            chan struct{}

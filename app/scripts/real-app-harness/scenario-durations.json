@@ -1,500 +1,91 @@
 {
   "receipt": {
-    "run": "https://github.com/SolenesInc/attn/actions/runs/34544978355",
-    "job": "App acceptance",
-    "recordedAt": "2026-09-11",
-    "matrixSeconds": 826.7,
-    "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
-    "updates": {
-      "session-reopen": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/40781364730",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-10-28",
-        "seconds": 6.562,
-        "runnerClass": "github-hosted Ubuntu 24.04 amd64",
-        "note": "Green last-matrix.json durationMs=6562 at 9252d331301aac90c0b3c0bcb42b74b736963fe5. Includes the directory inspection-error refusal, plain resume and worktree recreation."
-      },
-      "codex-update": {
-        "run": "scenario-codex-update-2026-10-25T01-05-28-467Z",
-        "job": "Local packaged scenario, cxu isolated instance",
-        "recordedAt": "2026-10-25",
-        "seconds": 23.919,
-        "runnerClass": "local macOS",
-        "note": "Green serial-matrix ATTN_VERDICT durationMs=23919 with a cold app launch (18.1 s), including cleanup. Covers the Codex update banner: the offer, Install in a shell tile, the restart onto the new Codex, and Reload tiles. Remeasure on Linux CI."
-      },
-      "terminal-input": {
-        "run": "terminal-input-2026-10-08T22-27-28-485Z",
-        "job": "Local packaged scenario, ctrlreturn isolated instance",
-        "recordedAt": "2026-10-09",
-        "seconds": 23.534,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=23534, including cleanup. Covers AppKit context-menu Ctrl+Return dispatch in normal and Kitty modes, Kitty key release, and search-field input and focus. Remeasure on Linux CI."
-      },
-      "owned-window": {
-        "run": "owned-window-2026-10-31T16-55-48-175Z",
-        "job": "Local packaged scenario, linux-3a0211daab instance on the attn-linux SSH runner",
-        "recordedAt": "2026-10-31",
-        "seconds": 33.559,
-        "runnerClass": "local Ubuntu 24.04 x86_64 under Xvfb",
-        "note": "Slowest of three green ATTN_VERDICT runs (33534, 33559, 33533 ms), including cleanup. Two app launches dominate: fresh launch and relaunch. Remeasure on Linux CI."
-      },
-      "home-dock": {
-        "run": "home-dock-2026-10-04T10-13-29-942Z",
-        "job": "Local packaged scenario, dock-home isolated instance",
-        "recordedAt": "2026-10-04",
-        "seconds": 15.337,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=15337, including cleanup and recording. Covers home dock input, Crew layering and Garden fullscreen restore dismissal. Remeasure on Linux CI."
-      },
-      "conversations-surface": {
-        "run": "conversations-surface-2026-10-27T23-59-25-049Z",
-        "job": "Local packaged scenario, forget-crew isolated instance",
-        "recordedAt": "2026-10-28",
-        "seconds": 16.687,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=16687, including cleanup. Covers four copies, crew member/date confirmation, Cancel preserving the session record, and Forget removing that record while keeping the letter unchanged. Remeasure on Linux CI."
-      },
-      "snooze-keyboard": {
-        "run": "snooze-keyboard-2026-09-30T21-06-25-232Z",
-        "job": "Local native Linux serial matrix, Orb attn-linux isolated instance",
-        "recordedAt": "2026-09-30",
-        "seconds": 103.8,
-        "runnerClass": "Ubuntu24.04arm64",
-        "note": "Green final fifteen-step scenario on39ca6273d with grid layout popover Escape ordering and corrected setup focus. ATTN_VERDICT durationMs=103844, including cleanup. Native macOS also passed all15 steps with recording (53828ms)."
-      },
-      "desktop-switching": {
-        "run": "desktop-switching-2026-10-11T17-36-35-110Z",
-        "job": "Local packaged scenario, switch-input isolated instance",
-        "recordedAt": "2026-10-11",
-        "seconds": 20.164,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=20164 including cleanup. Covers native desktop shortcut followed immediately by typing, outgoing-shell exclusion, bounce, overview, another client, and tile moves. Remeasure on Linux CI."
-      },
-      "refresh-focus": {
-        "run": "refresh-focus-2026-10-31T02-16-06-517Z",
-        "job": "Local packaged scenario, busyfocus named instance",
-        "recordedAt": "2026-10-31",
-        "seconds": 48.357,
-        "runnerClass": "local macOS",
-        "note": "Run 20 of a 20/20 green local soak (28-74s, most of it app launch). Holds Claude model discovery at a file gate while checking focus on the crew launch route through a reconnect and on keyboard-pressed model Refresh buttons. Remeasure on Linux CI."
-      },
-      "crew-management": {
-        "run": "crew-management-2026-10-10T21-35-13-264Z",
-        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
-        "recordedAt": "2026-10-10",
-        "seconds": 55.269,
-        "runnerClass": "Linux amd64 VM",
-        "note": "Green ATTN_VERDICT durationMs=55269 in a 57/57 green full matrix, including cleanup. Deletes its members before unregistering their sessions, then waits until they are gone."
-      },
-      "desktop-splits": {
-        "run": "workspace-switching-2026-09-15T21-17-34-309Z",
-        "job": "Local serial matrix, rugged-doctor instance",
-        "recordedAt": "2026-09-15",
-        "seconds": 45.7,
-        "runnerClass": "local macOS",
-        "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
-      },
-      "delegation-chain": {
-        "run": "delegation-chain-2026-10-10T21-36-08-915Z",
-        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
-        "recordedAt": "2026-10-10",
-        "seconds": 33.361,
-        "runnerClass": "Linux amd64 VM",
-        "note": "Green ATTN_VERDICT durationMs=33361 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before delegating to a missing one."
-      },
-      "agent-close": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 8.2,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "automation-form": {
-        "run": "automation-form-2026-10-30T05-01-56-313Z",
-        "job": "Local packaged scenario, guardapp isolated instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 184.939,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=184939 with a 1s scheduler tick and five-field minute cron. guard-check-timing.json measured save to first check at 55084.865ms and script change to failed check at 58885.410ms. The 120s check wait is over twice the larger measurement; the 600s scenario guard leaves room for both scheduled checks. The locked display delayed launch and the pre-existing optional screenshot timed out. Guard proof uses native input, rendered text and CLI receipts. Remeasure on Linux CI."
-      },
-      "automation-scheduled-cleanup": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
-        "job": "App acceptance shard 3/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 40.6,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "automation-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37889705796",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-09",
-        "seconds": 32.99,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green Automation surface scenario at 8c88b5b92, including save preservation of an unreported model and effort. Matrix elapsed 32.990s; ATTN_VERDICT durationMs=32173, including cleanup."
-      },
-      "chief-slot": {
-        "run": "local: 20 serial runs on instance chiefslot",
-        "job": "scenario-chief-slot.mjs",
-        "recordedAt": "2026-10-31",
-        "seconds": 6.1,
-        "runnerClass": "local macOS arm64",
-        "note": "Twenty green runs took 5.89-6.14s by ATTN_VERDICT durationMs, launch and cleanup included. Remeasure from the first green Linux matrix."
-      },
-      "crew-seed-header": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
-        "job": "App acceptance shard 4/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 53.2,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "sessions-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 23.6,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "terminal-annotations": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 21.0,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "worktree-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/38078604481",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-10-10",
-        "seconds": 25.748,
-        "runnerClass": "github-hosted 4vcpu/16GB",
-        "note": "Green worktree-surface code=0 and durationMs=25748 from the shard result artifact. The delegation creates its checkout through attn; the sweep discovers the other external worktrees."
-      },
-      "delegation-preferences": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37878771307",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-09",
-        "seconds": 40.156,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green shared harness/model/effort picker scenario at 67889c737. Matrix elapsed 40.156s; ATTN_VERDICT delegation-preferences-2026-10-09T03-27-34-532Z durationMs=39357, including cleanup."
-      },
-      "garden-seed-reopen": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 8.1,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "garden-plot-dispatch": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 24.0,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "clear-opens-session": {
-        "run": "not yet measured",
-        "job": "estimate",
-        "recordedAt": "2026-10-03",
-        "seconds": 15.0,
-        "note": "Estimated from session-close-ledger (9.9s) plus two mock turns and a /clear. Remeasure from the first green matrix-digest.txt."
-      },
-      "claude-shared-conversation": {
-        "run": "not yet measured",
-        "job": "estimate",
-        "recordedAt": "2026-10-24",
-        "seconds": 47.2,
-        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
-      },
-      "pi-shared-conversation": {
-        "run": "not yet measured",
-        "job": "estimate",
-        "recordedAt": "2026-10-24",
-        "seconds": 20.6,
-        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
-      },
-      "desktop-migration": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
-        "job": "App acceptance shard 4/4",
-        "recordedAt": "2026-09-26",
-        "seconds": 20.7,
-        "runnerClass": "github-hosted 4vcpu/16GB"
-      },
-      "profile-lifecycle": {
-        "run": "profile-lifecycle-2026-09-26T17-04-27-548Z",
-        "job": "Local scenario run, plife instance",
-        "recordedAt": "2026-09-26",
-        "seconds": 18.5,
-        "runnerClass": "local macOS",
-        "note": "First green runs, twice in a row: create, move, rename, delete and reopen into a chosen profile. Remeasure on Linux CI."
-      },
-      "garden-profile-scope": {
-        "run": "garden-profile-scope-2026-10-01T13-00-17-169Z",
-        "job": "Local scenario run, garden-scope with copied schema-163 data",
-        "recordedAt": "2026-10-01",
-        "seconds": 29.9,
-        "runnerClass": "local macOS",
-        "note": "Green recorded run: original Default agent/panel/CLI boundaries, new-profile seed, empty Garden/search reset and selected-profile deletion fallback. Remeasure on Linux CI."
-      },
-      "launch-desktops": {
-        "run": "launch-desktops-2026-10-05T15-56-39-943Z",
-        "job": "Local packaged scenario, toast-pr-587 isolated instance",
-        "recordedAt": "2026-10-05",
-        "seconds": 26.739,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=26739, including migration, sharing, settings, protected-close error, quiet background wake and cleanup. Remeasure on Linux CI."
-      },
-      "desktop-close-one-session-keeps-selection": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37238531607",
-        "job": "App acceptance shard 1/4",
-        "recordedAt": "2026-10-04",
-        "seconds": 68.7,
-        "runnerClass": "github-hosted ubuntu-24.04",
-        "note": "Green matrix-digest.txt reports 68.7s (last-matrix.json durationMs=68706) on 1183db93b. Covers native close shortcuts, both focus-history sequences, background close and repeated closes with keyboard focus."
-      },
-      "palette-order": {
-        "run": "palette-order-2026-10-12T21-16-50-434Z",
-        "job": "Local packaged scenario, palette-rename isolated instance",
-        "recordedAt": "2026-10-12",
-        "seconds": 28.204,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=28204, including cleanup. Native command selection, learned ordering, pins, both palette entry paths, priority mark/clear with sidebar flags, session rename, Escape cancellation, 48-character limit and terminal focus restoration. Screenshot and summary attached to seed s-0qgww8. Remeasure on Linux CI."
-      },
-      "autoclose-on-exit": {
-        "run": "autoclose-on-exit-2026-10-07T10-41-39-541Z",
-        "job": "Local packaged scenario, stopped-check isolated instance",
-        "recordedAt": "2026-10-07",
-        "seconds": 72.591,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=72591. Covers clean quits, retained final text across app relaunch, and native Resume/Close. Remeasure on Linux CI."
-      },
-      "automation-lifecycle": {
-        "run": "automation-lifecycle-2026-10-09T06-03-03-004Z",
-        "job": "Local packaged serial matrix, model-picker isolated instance",
-        "recordedAt": "2026-10-09",
-        "seconds": 71.804,
-        "runnerClass": "local macOS",
-        "note": "Green scenario at cc51c08ae after the discovered picker migration. Matrix elapsed 71.804s; ATTN_VERDICT durationMs=70990, including cleanup. Remeasure on Linux CI; this local display was locked and optional native evidence captures reported errors."
-      },
-      "move-with-delegates": {
-        "run": "move-with-delegates-2026-10-08T21-54-22-793Z",
-        "job": "Local packaged scenario, move-delegates isolated instance",
-        "recordedAt": "2026-10-08",
-        "seconds": 27.874,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=27874, including cleanup and recording. Native palette moves a dispatcher, two delegates and a nested delegate against a production DB copy. No overview changes. Final recording and screenshots attached to seed s-4z9ah9. Remeasure on Linux CI."
-      },
-      "agent-settings": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/38650741637",
-        "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-10-14",
-        "seconds": 33.006,
-        "runnerClass": "github-hosted Linux",
-        "note": "Green settings scenario at 0d5f106fe0391f8d51b9fa9e28c6ec61931f7adb, including Experimental direct-launch default, toggles and cleanup. Matrix elapsed 33.006s; run agent-settings-2026-10-14T23-04-06-641Z."
-      },
-      "desktop-order": {
-        "run": "desktop-order-2026-10-08T21-40-27-696Z",
-        "job": "Local packaged scenario, desktop-order named instance",
-        "recordedAt": "2026-10-08",
-        "seconds": 23.413,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=23413 on ceaf9fd42, including shared-scenario lock wait and cleanup. Native palette Sort, visible Undo, exact sidebar restoration and desktop.select7 after 6. Remeasure on Linux CI."
-      },
-      "close-desktop": {
-        "run": "close-desktop-2026-10-09T19-42-22-118Z",
-        "job": "Local packaged scenario, close-desk instance with copied production data",
-        "recordedAt": "2026-10-09",
-        "seconds": 33.297,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=33297 on f2be9c0cd, including scenario-lock wait, native window setup, cleanup and recording. Native close shortcut on the empty launcher and centered nonempty close confirmation. First run before the dialog style adjustment was 4.342s. Remeasure on Linux CI."
-      },
-      "agent-queue": {
-        "run": "agent-queue-2026-10-10T21-37-29-864Z",
-        "job": "Linux serial matrix, attn-linux runner VM (Ubuntu 24.04 amd64, 12 vCPU), clean instance",
-        "recordedAt": "2026-10-10",
-        "seconds": 132.293,
-        "runnerClass": "Linux amd64 VM",
-        "note": "Green ATTN_VERDICT durationMs=132293 in a 57/57 green full matrix, including cleanup. Closes empty numbered desktops left by earlier scenarios before its agents launch."
-      },
-      "new-session-launcher": {
-        "run": "new-session-launcher-2026-10-15T21-44-27-103Z",
-        "job": "Local packaged scenario, launcher isolated instance",
-        "recordedAt": "2026-10-15",
-        "seconds": 22.491,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=22491 including cleanup and recording. Covers automation open/close/reopen, AppKit CmdT/CmdEnter, Terminal Tab, back, both starting branches, destination memory, existing worktrees and delete cancel/clean/force. Remeasure on Linux CI."
-      },
-      "agent-terminals": {
-        "run": "agent-terminals-2026-10-15T23-45-47-426Z",
-        "job": "Local packaged scenario, terminal-cli isolated instance",
-        "recordedAt": "2026-10-16",
-        "seconds": 6.524,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=6524, including cleanup and recording. Covers native caller input focus, both arrival pulses, and right-column stacking. Remeasure on Linux CI."
-      },
-      "shell-titles": {
-        "run": "shell-titles-2026-10-15T23-45-55-759Z",
-        "job": "Local packaged scenario, shell-titles isolated instance",
-        "recordedAt": "2026-10-16",
-        "seconds": 14.058,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=14058, including cleanup. Native input drives zsh and fish through cd, nvim title, and return to prompt; sidebar and tile header are asserted and four native screenshots captured. Remeasure on Linux CI."
-      },
-      "callouts": {
-        "run": "callouts-2026-10-18T18-19-47-234Z",
-        "job": "Local packaged serial matrix, linux-45bc7f4bca isolated instance",
-        "recordedAt": "2026-10-18",
-        "seconds": 39.5,
-        "runnerClass": "local Linux x86_64 SSH runner",
-        "note": "Green matrix PASS callouts 39.500s (ATTN_VERDICT durationMs=38935, including cleanup). Covers native Enter/ArrowRight/Escape after browser hiding, terminal CLI input after browser restore, palette Escape after native browser focus, all sidebar shapes, reveal/navigation, and desktop-scoped browser cleanup. Idle sampling awaits finite entrance animations."
-      },
-      "prompt-composition": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/37237377153",
-        "job": "App acceptance shard 3/4",
-        "recordedAt": "2026-10-04",
-        "seconds": 29.596,
-        "runnerClass": "hosted Linux",
-        "note": "Green native scenario durationMs=29596, including uploads, agent inbox delivery, byte-exact image/PDF retrieval and cleanup. Receipt: app-acceptance-evidence-1-shard-3/last-matrix.json and matrix-digest.txt."
-      },
-      "quick-capture": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/39176091798",
-        "job": "App acceptance macOS",
-        "recordedAt": "2026-10-19",
-        "seconds": 206.599,
-        "runnerClass": "hosted macOS",
-        "note": "Green quick-capture durationMs=206599 in last-matrix.json, revision221afcbcb, including the enable-first recording, native shortcut, focus, file delivery, history, disable/re-enable draft retention and cleanup. Artifact12154318251."
-      },
-      "agent-reload": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/39231395121",
-        "job": "Soak agent-reload",
-        "recordedAt": "2026-10-19",
-        "seconds": 13.867,
-        "runnerClass": "github-hosted Ubuntu24.04 amd64, 4vcpu/16GB",
-        "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
-      },
-      "outposts-settings": {
-        "run": "outposts-settings-2026-10-30T21-14-21-051Z",
-        "job": "Local parked packaged scenario, silent60ui named instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 123.965,
-        "runnerClass": "local macOS arm64",
-        "note": "Green ATTN_VERDICT durationMs=123965 including cleanup. Covers static stalled and connecting notices on shell and agent tiles, native input refusal without replay, recovery clearing both notices, and online/stalled/connecting/offline CPU samples. Stall, loss, handshake expiry and retry use stepped time. Source tree:5a1ae2480a7aedb7fd0a28b5c1d8a91e5433d333bb5f8707e7aa068e0eb4bad2; screenshots and logs on seed s-wgqjzt. Remeasure on Linux CI."
-      },
-      "analytics-settings": {
-        "run": "analytics-settings-2026-10-24T18-33-09-799Z",
-        "job": "Local packaged scenario, analytics-page named instance",
-        "recordedAt": "2026-10-24",
-        "seconds": 28.012,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=28012, including cleanup. Covers vents new/done, dismiss and undo, plant and undo, records by stream, clear, and a 5 s idle check. Remeasure on Linux CI."
-      },
-      "outpost-update": {
-        "run": "outpost-update-2026-10-30T16-35-01-256Z",
-        "job": "Local packaged scenario, outpost-ci named instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 9.022,
-        "runnerClass": "local macOS arm64",
-        "note": "Green ATTN_VERDICT including cleanup on runtime 20a0ed676. Failed Add offers banner Update; pinned reconnect after deleting the binary offers row Update. Both install the home build through real supervised daemons. Receipts on seed s-jss5ey. Remeasure on Linux CI."
-      },
-      "notebook-sync": {
-        "run": "notebook-sync-2026-10-30T16-51-00-020Z",
-        "job": "Local packaged scenario, outpost-ci named instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 23.742,
-        "runnerClass": "local macOS arm64",
-        "note": "Green ATTN_VERDICT including cleanup on runtime e8abbcdc7. First sync, saved previous folder, conflicting offline edits, conflict removal and missing-marker error. CLI setting writes avoid optimistic navigation; native Enter selects Outposts after each toggle. Receipts on seed s-jss5ey. Remeasure on Linux CI."
-      },
-      "focusless-native": {
-        "run": "focusless-native-2026-10-29T23-47-01-816Z",
-        "job": "Local packaged scenario, focusless isolated instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 9.93,
-        "runnerClass": "local macOS arm64",
-        "note": "Green direct-scenario ATTN_VERDICT durationMs=9930, including launch and cleanup, on clean runtime commit 724b3bccb86b380294607bf72defcf22a3125d67. Covers parked native hover/actions, Settings selection, AppKit menu keys, terminal Alt-drag, rejected geometry and browser password input with real focus and secure input off. macOS only. Earlier concurrent cold verification took49714ms; its receipt remains on seed s-fvpn0q."
-      },
-      "browser-wait-navigation": {
-        "run": "browser-wait-navigation-2026-10-30T03-08-02-059Z",
-        "job": "Local packaged scenario, bgap599z isolated SSH Linux instance",
-        "recordedAt": "2026-10-30",
-        "seconds": 7.818,
-        "runnerClass": "dedicated SSH Linux x86_64 runner",
-        "note": "Green ATTN_VERDICT durationMs=7818, including launch and cleanup. Immediate initial/reopened open-wait and command wait_for after navigation; old-page false probe gates later navigation; zero-timeout results; asynchronous action executes once and retains its element reference. Atomic conditional runtime installation and action execution. Remeasure on hosted CI."
-      }
-    }
+    "runs": [
+      "https://github.com/SolenesInc/attn/actions/runs/41540674878",
+      "https://github.com/SolenesInc/attn/actions/runs/41538554652",
+      "https://github.com/SolenesInc/attn/actions/runs/41535671423",
+      "https://github.com/SolenesInc/attn/actions/runs/41553803860",
+      "https://github.com/SolenesInc/attn/actions/runs/41556483882",
+      "https://github.com/SolenesInc/attn/actions/runs/41558332562"
+    ],
+    "job": "App acceptance shard N/M",
+    "recordedAt": "2026-11-03",
+    "matrixSeconds": 2029.9,
+    "note": "Median seconds each scenario took over the green last-matrix.json results of these Linux serial matrix runs. Remeasure from a green run's shard results when a scenario changes shape; the shard planner balances on these."
   },
   "seconds": {
-    "conversations-surface": 16.687,
-    "snooze-keyboard": 103.8,
-    "agent-close": 8.2,
-    "agent-queue": 132.293,
-    "agent-settings": 33.006,
-    "autoclose-on-exit": 72.591,
-    "automation-form": 184.939,
-    "automation-lifecycle": 71.804,
-    "automation-scheduled-cleanup": 40.6,
-    "automation-surface": 32.99,
-    "automode-environment": 4.8,
-    "close-pane-nonblocking": 10,
-    "countdown-cancel": 46.3,
-    "crash-recovery": 9,
-    "chief-slot": 6.1,
-    "crew-seed-header": 53.2,
-    "delegation-chain": 33.361,
-    "delegation-preferences": 40.156,
-    "garden-plot-dispatch": 24.0,
-    "garden-seed-header": 17.4,
-    "garden-seed-read-receipts": 13.4,
-    "garden-seed-reopen": 8.1,
-    "garden-seed-tile-navigation": 7.8,
-    "ghostty-scroll": 6.2,
-    "home-dock": 15.337,
-    "owned-window": 33.559,
-    "markdown-opener": 20.3,
-    "notebook-editor-undo": 32.8,
-    "prompt-composition": 29.596,
-    "codex-shared": 25,
-    "codex-update": 23.919,
-    "pty-host-setting": 8.3,
-    "session-close-ledger": 9.9,
-    "session-reopen": 6.562,
-    "session-usage": 10,
-    "sessions-surface": 23.6,
-    "terminal-annotations": 21.0,
-    "terminal-block-resize": 10.6,
-    "terminal-context-menu": 9.7,
-    "terminal-input": 23.534,
-    "terminal-md-link": 15.9,
-    "tr201-local-claude": 8.7,
-    "tr301-local-claude": 6.9,
-    "tr401-local-claude": 14.2,
-    "desktop-close-one-session-keeps-selection": 68.7,
-    "session-creation-shortcuts": 22.6,
-    "desktop-switching": 20.164,
-    "desktop-splits": 45.7,
-    "worktree-surface": 25.748,
-    "crew-management": 55.269,
-    "refresh-focus": 48.357,
-    "clear-opens-session": 15.0,
-    "claude-shared-conversation": 47.2,
-    "pi-shared-conversation": 20.6,
-    "desktop-migration": 20.7,
-    "profile-lifecycle": 18.5,
-    "garden-profile-scope": 29.9,
-    "launch-desktops": 26.739,
-    "palette-order": 28.204,
-    "move-with-delegates": 27.874,
-    "desktop-order": 23.413,
-    "close-desktop": 33.297,
-    "new-session-launcher": 22.491,
-    "agent-terminals": 6.524,
-    "shell-titles": 14.058,
-    "callouts": 39.5,
-    "quick-capture": 206.599,
-    "agent-reload": 13.867,
-    "outposts-settings": 123.965,
-    "analytics-settings": 28.012,
-    "outpost-update": 9.022,
-    "notebook-sync": 23.742,
+    "agent-close": 16.3,
+    "agent-queue": 130.2,
+    "agent-reload": 11.2,
+    "agent-settings": 35.2,
+    "agent-terminals": 21.4,
+    "analytics-settings": 29.6,
+    "autoclose-on-exit": 45.0,
+    "automation-form": 26.3,
+    "automation-lifecycle": 30.9,
+    "automation-scheduled-cleanup": 24.0,
+    "automation-surface": 33.6,
+    "browser-wait-navigation": 9.0,
+    "callouts": 25.5,
+    "chief-slot": 23.7,
+    "claude-shared-conversation": 18.0,
+    "clear-opens-session": 17.0,
+    "close-desktop": 19.9,
+    "close-pane-nonblocking": 9.9,
+    "codex-shared": 19.4,
+    "codex-update": 21.0,
+    "conversations-surface": 15.8,
+    "countdown-cancel": 41.4,
+    "crash-recovery": 31.6,
+    "crew-management": 43.9,
+    "crew-seed-header": 18.9,
+    "delegation-chain": 30.3,
+    "delegation-preferences": 45.7,
+    "desktop-close-one-session-keeps-selection": 64.0,
+    "desktop-migration": 65.9,
+    "desktop-order": 13.9,
+    "desktop-splits": 53.2,
+    "desktop-switching": 17.9,
     "focusless-native": 9.93,
-    "browser-wait-navigation": 7.818
+    "garden-plot-dispatch": 50.4,
+    "garden-profile-scope": 19.2,
+    "garden-seed-authorization": 25.6,
+    "garden-seed-header": 24.8,
+    "garden-seed-read-receipts": 28.4,
+    "garden-seed-reopen": 11.5,
+    "garden-seed-tile-navigation": 21.8,
+    "ghostty-scroll": 6.6,
+    "home-dock": 15.7,
+    "launch-desktops": 29.7,
+    "markdown-opener": 26.4,
+    "move-with-delegates": 14.5,
+    "new-session-launcher": 33.9,
+    "notebook-editor-undo": 32.4,
+    "notebook-sync": 18.3,
+    "outpost-update": 18.4,
+    "outposts-settings": 86.6,
+    "owned-window": 20.2,
+    "palette-order": 26.5,
+    "profile-lifecycle": 8.9,
+    "prompt-composition": 13.6,
+    "pty-host-setting": 26.2,
+    "quick-capture": 206.599,
+    "refresh-focus": 6.8,
+    "session-close-ledger": 5.7,
+    "session-creation-shortcuts": 28.3,
+    "session-reopen": 6.7,
+    "session-usage": 11.3,
+    "sessions-surface": 26.9,
+    "shell-titles": 44.5,
+    "snooze-keyboard": 48.6,
+    "terminal-annotations": 48.2,
+    "terminal-block-resize": 28.0,
+    "terminal-context-menu": 22.0,
+    "terminal-input": 21.1,
+    "terminal-md-link": 31.9,
+    "tr201-local-claude": 42.8,
+    "tr301-local-claude": 23.5,
+    "tr401-local-claude": 26.8,
+    "worktree-surface": 37.9
   }
 }

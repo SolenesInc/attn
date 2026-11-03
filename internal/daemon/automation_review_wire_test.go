@@ -211,8 +211,8 @@ func TestAStoppedReviewerResumesItsConversationOnlyWhileItsTranscriptAndContract
 	applyAutomation(t, r.cli, automationEditSpec(1, strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(r.clone)), "Review this pull request.", "Review this pull request for security.", 1)))
 	r.rerequest(42)
 	fresh := r.awaitNewRun(1, "delivered", first, second, blind)
-	if protocol.Deref(fresh.SessionID) == session || protocol.Deref(fresh.SeedID) == protocol.Deref(first.SeedID) {
-		t.Errorf("after the prompt changed the review ran on %s/%s, want a reviewer of its own", protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID))
+	if protocol.Deref(fresh.SessionID) == session || protocol.Deref(fresh.SeedID) != protocol.Deref(first.SeedID) {
+		t.Errorf("after the prompt changed the review ran on %s/%s, want a new reviewer continuing seed %s", protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID), protocol.Deref(first.SeedID))
 	}
 	if again := r.w.Launched(string(protocol.Deref(fresh.SessionID))); again.Resumed || !strings.Contains(again.Prompted(), "for security") {
 		t.Errorf("the reviewer for the new prompt started as %+v, want a fresh conversation on the new prompt", again)
@@ -491,6 +491,7 @@ type automationGitHub struct {
 	mu        sync.Mutex
 	requested map[int]automationPull
 	approved  map[int]automationPull
+	url       string
 }
 
 func newAutomationGitHub(t *testing.T) *automationGitHub {
@@ -498,6 +499,7 @@ func newAutomationGitHub(t *testing.T) *automationGitHub {
 	g := &automationGitHub{requested: map[int]automationPull{}, approved: map[int]automationPull{}}
 	server := httptest.NewServer(http.HandlerFunc(g.serve))
 	t.Cleanup(server.Close)
+	g.url = server.URL
 	t.Setenv("ATTN_MOCK_GH_URL", server.URL)
 	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
 	t.Setenv("ATTN_MOCK_GH_HOST", "github.test")

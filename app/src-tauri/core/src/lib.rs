@@ -1,5 +1,7 @@
 mod browser_alerts;
 mod browser_host;
+#[cfg(target_os = "macos")]
+mod hotkeys;
 mod instance;
 mod migration_failure;
 mod native_input;
@@ -1174,6 +1176,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 native_keyboard::install(&window)?;
             }
             #[cfg(target_os = "macos")]
+            hotkeys::install(app)?;
+            #[cfg(target_os = "macos")]
             quick_capture::install(app)?;
             #[cfg(target_os = "macos")]
             wake::install(&app.handle().clone());
@@ -1238,7 +1242,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 #[cfg(target_os = "macos")]
-                quick_capture::shutdown(_handle);
+                hotkeys::shutdown(_handle);
                 instance::remove_app_pid_file();
             }
         });

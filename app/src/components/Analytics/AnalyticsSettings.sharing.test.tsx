@@ -22,10 +22,10 @@ const VENT: Vent = {
   },
 };
 
-function serveSharing(daemon: ScriptedDaemon, status: { last_refusal?: string }, initial: Vent[]) {
+function serveSharing(daemon: ScriptedDaemon, status: { last_refusal?: string; ingest_url?: string; ingest_off_reason?: string }, initial: Vent[]) {
   let vents = initial;
   daemon.on('get_analytics_status', () => ({
-    event: 'get_analytics_status_result', success: true, records: 40, bytes: 4096, waiting: 12, last_sent_at: '2026-10-24T14:00:12Z', ...status,
+    event: 'get_analytics_status_result', success: true, records: 40, bytes: 4096, waiting: 12, last_sent_at: '2026-10-24T14:00:12Z', ingest_url: 'https://attn-telemetry.caketroll.cloud', ...status,
   }));
   daemon.on('set_vent_send', ({ vent_id, send }) => {
     vents = vents.map((v) => (v.id === vent_id ? { ...v, send: send ? VentSend.Queued : undefined } : v));
@@ -44,7 +44,7 @@ function serveSharing(daemon: ScriptedDaemon, status: { last_refusal?: string },
   daemon.on('forget_analytics_install', () => ({ event: 'forget_analytics_install_result', success: true }));
 }
 
-async function openAnalytics(settings: Record<string, string>, status: { last_refusal?: string } = {}, vents: Vent[] = [VENT]) {
+async function openAnalytics(settings: Record<string, string>, status: { last_refusal?: string; ingest_url?: string; ingest_off_reason?: string } = {}, vents: Vent[] = [VENT]) {
   return openSection('analytics', {
     settings: { 'analytics.enabled': 'true', ...settings },
     sessions: [daemonSession('s1')],
@@ -125,6 +125,25 @@ describe('Settings › Analytics sharing', () => {
     expect(page()).toHaveTextContent(REFUSAL);
     await press(daemon, 'm');
     expect(screen.getByTestId('analytics-machine')).toHaveTextContent(`Share with attn's maintainers${REFUSAL}`);
+  });
+
+  it('says where uploads go in the Share row', async () => {
+    const daemon = await openAnalytics({ 'analytics.sharing_enabled': 'true' });
+    await press(daemon, 'm');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('12 waiting · uploads go to https://attn-telemetry.caketroll.cloud');
+  });
+
+  it('says why an instance that is not production uploads nowhere, before and after sharing is on', async () => {
+    const reason = 'Uploads go to http://127.0.0.1:1, where nothing listens, because this is instance dev, not production. Start its daemon with ATTN_ANALYTICS_INGEST_URL=<url> to upload to an attn-ingest.';
+    const off = { ingest_url: 'http://127.0.0.1:1', ingest_off_reason: reason };
+    const before = await openAnalytics({}, off);
+    await press(before, 'm');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent(`Share with attn's maintainers${reason}`);
+    const after = await openAnalytics({ 'analytics.sharing_enabled': 'true' }, { ...off, last_refusal: 'dial tcp 127.0.0.1:1: connect: connection refused' });
+    expect(page()).toHaveTextContent(reason);
+    expect(page()).not.toHaveTextContent('connection refused');
+    await press(after, 'm');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent(`Share with attn's maintainers${reason}`);
   });
 
   it('offers deleting the server copy when sharing is turned off', async () => {

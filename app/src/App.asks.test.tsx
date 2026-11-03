@@ -169,6 +169,30 @@ describe('App asks', () => {
     expect(openAsk()).toBe('Release day');
   });
 
+  it('shows the ask\'s images from the copy the home keeps', async () => {
+    const screenshot: Ask = {
+      ...cacheStore,
+      parts: [
+        { markdown: 'The banner overlaps: ![before](shots/before.png) ![odd](shots/a\\(b\\)&amp;c.png)' },
+        { question: { key: 'q1', kind: 'text', prompt: 'Ship it?', context: '![after](/elsewhere/after.png)', choices: [] } },
+      ],
+    };
+    const daemon = await renderAsks([screenshot], [apiWorking]);
+    daemon.on('ask_image', (command) => (command.path === '/tmp/api/shots/before.png'
+      ? { event: 'ask_image_result', request_id: command.request_id, success: true, mime_type: 'image/png', data_base64: 'YmVmb3Jl' }
+      : { event: 'ask_image_result', request_id: command.request_id, success: false, error: `ask a-cache1 holds no copy of ${command.path}` }));
+    await openDrawer(daemon);
+    await daemon.idle();
+
+    expect(daemon.sentOf('ask_image').map(({ ask_id, path }) => ({ ask_id, path }))).toEqual([
+      { ask_id: 'a-cache1', path: '/tmp/api/shots/before.png' },
+      { ask_id: 'a-cache1', path: '/tmp/api/shots/a(b)&c.png' },
+      { ask_id: 'a-cache1', path: '/elsewhere/after.png' },
+    ]);
+    expect(screen.getByRole('img', { name: 'before' }).getAttribute('src')).toBe('data:image/png;base64,YmVmb3Jl');
+    expect(screen.getByText('[missing image: after]')).toBeTruthy();
+  });
+
   it('keeps the draft and shows why when the daemon refuses the answer', async () => {
     const daemon = await renderAsks([releaseDay]);
     daemon.on('ask_answer', (command) => ({

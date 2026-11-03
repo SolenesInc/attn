@@ -1,11 +1,11 @@
 const STORAGE_KEY = 'attn.outpost_updates.dismissed_home_build';
 
-export function readDismissedOutpostBuild(): string | null {
+export function readClosedOutpostBanner(): string | null {
   try { return window.localStorage.getItem(STORAGE_KEY); } catch { return null; }
 }
 
-export function persistDismissedOutpostBuild(build: string): void {
-  try { window.localStorage.setItem(STORAGE_KEY, build); } catch (error) {
-    console.warn('[App] Failed to persist dismissed outpost updates:', error);
+export function persistClosedOutpostBanner(key: string | null): void {
+  try { if (key === null) window.localStorage.removeItem(STORAGE_KEY); else window.localStorage.setItem(STORAGE_KEY, key); } catch (error) {
+    console.warn('[App] Failed to persist closed outpost updates banner:', error);
   }
 }

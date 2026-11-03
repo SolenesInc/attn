@@ -30,7 +30,6 @@ type outpostDial struct {
 	lastErrorAt    string
 	connectable    bool
 	notebook       *protocol.OutpostNotebook
-	notebookRoot   string
 }
 
 const maxOutpostRetryDelay = 128 * time.Second
@@ -303,14 +302,28 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			})
 			delay = max(delay, retryDelay)
 			retryDelay = min(delay*2, maxOutpostRetryDelay)
+			d.logf("outpost %s %s: %v; retrying in %s", row.ID, state, err, delay)
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}
 			continue
 		}
 		retryDelay = bridge.ReconnectInterval
+		d.learnOutpostHome(&row, conn.Peer().Home)
 		d.bridgeOutpost(ctx, row.ID, run, conn, push)
 	}
+}
+
+func (d *Daemon) learnOutpostHome(row *store.Outpost, home string) {
+	if home == "" || home == row.Home {
+		return
+	}
+	if err := d.store.SetOutpostHome(row.ID, home); err != nil {
+		d.logf("outpost %s home: %v", row.ID, err)
+		return
+	}
+	row.Home = home
+	d.publishFact(FactOutpostChanged, row.ID, nil)
 }
 
 func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn, push *outpostPush) {
@@ -329,7 +342,9 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 		return
 	}
 	defer d.setOutpostConn(id, run, nil)
-	d.life.Go("notebookStream:"+id, func() { d.openNotebookSync(conn) })
+	d.life.Go("notebookFolders:"+id, func() {
+		d.pushNotebookFolders(conn, func() { d.life.Go("notebookStream:"+id, func() { d.keepNotebookStream(conn) }) })
+	})
 	sending := make(chan struct{})
 	if !d.life.Go("outpostCopy:"+id, func() {
 		defer close(sending)

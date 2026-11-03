@@ -9,8 +9,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/config"
@@ -41,6 +43,8 @@ func main() {
 		err = screen(args)
 	case "input":
 		err = input(args)
+	case "attach":
+		err = attach(args)
 	case "outposts":
 		err = outposts(args)
 	case "list":
@@ -51,6 +55,8 @@ func main() {
 		err = seedContinuation(args)
 	case "seed-resume":
 		err = seedResume(args)
+	case "request":
+		err = request(args)
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -76,10 +82,12 @@ Commands:
   kill-session --id I [--reload]
   screen --id I
   input --id I --text T [--enter]
+  attach --id I --cols C --rows R [--text T] [--enter]   (a second client, such as a phone: asks for that size, types, and stays attached until interrupted)
   list
   refresh-prs
   seed-continuation --seed S   (what a seed's page offers: Resume, Handover)
   seed-resume --seed S         (the seed page's Resume)
+  request --json PAYLOAD --event EVENT [--timeout 30s]   (prints the EVENT reply carrying PAYLOAD's request_id)
   outposts [--add NAME --destination SSH_DESTINATION | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
@@ -264,6 +272,59 @@ func input(args []string) error {
 	})
 }
 
+func attach(args []string) error {
+	fs := flag.NewFlagSet("attach", flag.ExitOnError)
+	id := fs.String("id", "", "terminal id (required)")
+	cols := fs.Int("cols", 0, "requested columns (required)")
+	rows := fs.Int("rows", 0, "requested rows (required)")
+	text := fs.String("text", "", "text to type once attached")
+	enter := fs.Bool("enter", false, "append carriage return")
+	fs.Parse(args)
+	if *id == "" || *cols <= 0 || *rows <= 0 {
+		return errors.New("--id, --cols and --rows are required")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	conn, _, err := websocket.Dial(ctx, wsURL(), nil)
+	if err != nil {
+		return fmt.Errorf("dial %s: %w", wsURL(), err)
+	}
+	conn.SetReadLimit(16 << 20)
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	if _, err := hello(ctx, conn); err != nil {
+		return err
+	}
+	commands := []map[string]any{
+		{"cmd": protocol.CmdAttachSession, "id": *id},
+		{"cmd": protocol.CmdPtyResize, "id": *id, "cols": *cols, "rows": *rows},
+	}
+	data := *text
+	if *enter {
+		data += "\r"
+	}
+	if data != "" {
+		commands = append(commands, map[string]any{"cmd": protocol.CmdPtyInput, "id": *id, "data": data, "source": "wsctl"})
+	}
+	for _, command := range commands {
+		body, err := json.Marshal(command)
+		if err != nil {
+			return err
+		}
+		if err := conn.Write(ctx, websocket.MessageText, body); err != nil {
+			return fmt.Errorf("write %s: %w", command["cmd"], err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "attached to %s at %dx%d; interrupt to detach\n", *id, *cols, *rows)
+	for {
+		if _, _, err := conn.Read(ctx); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("read: %w", err)
+		}
+	}
+}
+
 func list(_ []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -357,6 +418,32 @@ func refreshPRs(args []string) error {
 		return fmt.Errorf("refresh PRs failed: %s", message)
 	}
 	fmt.Println("PR refresh completed")
+	return nil
+}
+
+func request(args []string) error {
+	fs := flag.NewFlagSet("request", flag.ExitOnError)
+	raw := fs.String("json", "", "the command as JSON, with a request_id (required)")
+	event := fs.String("event", "", "the reply event to wait for (required)")
+	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for the reply")
+	fs.Parse(args)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return fmt.Errorf("--json: %w", err)
+	}
+	id, _ := payload["request_id"].(string)
+	if id == "" || *event == "" {
+		return errors.New("--json needs a request_id, and --event is required")
+	}
+	response, err := sendAndWaitMatch(payload, *event, func(ev map[string]any) bool { return ev["request_id"] == id }, *timeout)
+	if err != nil {
+		return err
+	}
+	pretty, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(pretty))
 	return nil
 }
 

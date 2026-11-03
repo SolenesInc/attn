@@ -128,6 +128,8 @@ type Config struct {
 	AdoptPtmxFD     int
 	AdoptListenerFD int
 
+	Ready *os.File `json:"-"`
+
 	Debug bool
 }
 
@@ -150,6 +152,8 @@ type Runtime struct {
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
+
+	releasePathsOnce sync.Once
 
 	lifecycleMu sync.Mutex
 	authedConns int
@@ -279,6 +283,7 @@ func (r *Runtime) run(ctx context.Context) error {
 		if listener, err = net.Listen("unix", r.cfg.SocketPath); err != nil {
 			return fmt.Errorf("listen unix socket: %w", err)
 		}
+		listener.(*net.UnixListener).SetUnlinkOnClose(false)
 		_ = os.Chmod(r.cfg.SocketPath, 0600)
 	}
 	r.listener = listener
@@ -302,6 +307,7 @@ func (r *Runtime) run(ctx context.Context) error {
 			r.manager.Shutdown()
 		}
 		r.cleanup()
+		pausepoint.At(pausepoint.PtyWorkerStopped)
 	}()
 
 	if r.adopted {
@@ -392,6 +398,7 @@ func (r *Runtime) run(ctx context.Context) error {
 		return err
 	}
 	r.logf("worker startup: registry ready session=%s pid=%d child_pid=%d", r.cfg.SessionID, os.Getpid(), info.PID)
+	r.announceReady()
 
 	r.noteOutputActivity()
 	if _, err := r.manager.Subscribe(
@@ -436,6 +443,17 @@ func (r *Runtime) run(ctx context.Context) error {
 		}
 		go r.handleConn(conn)
 	}
+}
+
+func (r *Runtime) announceReady() {
+	if r.cfg.Ready == nil {
+		return
+	}
+	if _, err := r.cfg.Ready.Write([]byte(ReadyLine)); err != nil {
+		r.logf("worker startup: ready signal failed session=%s err=%v", r.cfg.SessionID, err)
+	}
+	_ = r.cfg.Ready.Close()
+	r.cfg.Ready = nil
 }
 
 func (r *Runtime) validate() error {
@@ -495,8 +513,14 @@ func (r *Runtime) cleanup() {
 	r.stopOrphanTimerLocked()
 	r.lifecycleMu.Unlock()
 
-	_ = os.Remove(r.cfg.RegistryPath)
-	_ = os.Remove(r.cfg.SocketPath)
+	r.releasePaths()
+}
+
+func (r *Runtime) releasePaths() {
+	r.releasePathsOnce.Do(func() {
+		_ = os.Remove(r.cfg.RegistryPath)
+		_ = os.Remove(r.cfg.SocketPath)
+	})
 }
 
 func (r *Runtime) requestStop() {
@@ -1238,6 +1262,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	case MethodRemove:
 		c.shutdown = true
 		c.stopsRuntime = true
+		c.runtime.releasePaths()
 		err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
 		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
 		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {

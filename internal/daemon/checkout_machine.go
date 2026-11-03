@@ -2,14 +2,17 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 func (d *Daemon) resolveCallerHost(source protocol.SessionID, requested *string) (string, error) {
@@ -97,6 +100,24 @@ func (d *Daemon) inspectCheckout(ctx context.Context, msg protocol.CheckoutInspe
 		result.WorktreePath, err = canonicalCheckoutPath(path)
 	}
 	return result, err
+}
+
+// Outpost checkout_inspect round trips took 35-89ms in the bridge receipts.
+const remoteCheckoutInspectTripwire = 10 * time.Second
+
+const remoteCheckoutInspectTimer stepclock.Name = "remote-checkout-inspect"
+
+func (d *Daemon) inspectRemoteCheckout(host, cwd string) (protocol.CheckoutInspection, error) {
+	expired := fmt.Errorf("%s did not answer checkout_inspect for %s within %s", host, cwd, remoteCheckoutInspectTripwire)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	deadline := d.clock.AfterFunc(remoteCheckoutInspectTimer, remoteCheckoutInspectTripwire, func() { cancel(expired) })
+	defer deadline.Stop()
+	inspection, err := Call[protocol.CheckoutInspection](ctx, d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: cwd})
+	if err != nil && errors.Is(context.Cause(ctx), expired) {
+		return inspection, expired
+	}
+	return inspection, err
 }
 
 func (d *Daemon) delegationCheckout(host, cwd string, checkout *protocol.DelegateCheckout) (protocol.CheckoutInspection, error) {

@@ -35,22 +35,31 @@ func runInstance() {
 	}
 	switch os.Args[2] {
 	case "status":
+		setCommandPath("instance status")
 		runInstanceStatus()
 	case "resolve":
+		setCommandPath("instance resolve")
 		runInstanceResolve(os.Args[3:])
 	case "tauri-config":
+		setCommandPath("instance tauri-config")
 		runInstanceTauriConfig(os.Args[3:])
 	case "clean":
+		setCommandPath("instance clean")
 		runInstanceClean(os.Args[3:])
 	case "stop-app":
+		setCommandPath("instance stop-app")
 		runInstanceStopApp(os.Args[3:])
 	case "register-scheme":
+		setCommandPath("instance register-scheme")
 		runInstanceRegisterScheme(os.Args[3:])
 	case "set-origin":
+		setCommandPath("instance set-origin")
 		runInstanceSetOrigin(os.Args[3:])
 	case "list":
+		setCommandPath("instance list")
 		runInstanceList(os.Args[3:])
 	case "env":
+		setCommandPath("instance env")
 		runInstanceEnvArgs(os.Args[3:])
 	case "help", "-h", "--help":
 		printInstanceHelp(os.Stdout)
@@ -58,7 +67,7 @@ func runInstance() {
 		recordUsageError("instance", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown instance subcommand %q\n\n", os.Args[2])
 		printInstanceHelp(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -580,7 +589,7 @@ func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 
 func stopInstanceDaemon(r instanceResolved) string {
 	pidPath := filepath.Join(r.DataDir, "attn.pid")
-	result, err := daemonctl.Stop(pidPath)
+	result, err := daemonctl.Stop(pidPath, "instance_stop")
 	if err != nil {
 		if strings.Contains(err.Error(), "own process tree") {
 			return fmt.Sprintf("skipped (%v)", err)
@@ -982,5 +991,5 @@ func ynLabel(ok bool, yes, no string) string {
 
 func instanceFatal(msg string) {
 	fmt.Fprintln(os.Stderr, "attn instance: "+msg)
-	os.Exit(1)
+	exit(1)
 }

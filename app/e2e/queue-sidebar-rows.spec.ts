@@ -1,11 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test('queue rows share the tree geometry and reveal actions on hover', async ({ page }) => {
-  await page.goto('/test-harness/?component=QueueSidebarFit');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await openFlow(page, 'queue', 'awake');
 
   const sidebar = page.getByTestId('queue-sidebar');
-  const chief = page.getByTestId('queue-chief-chief');
+  const chief = page.getByTestId('queue-crew-chief-member');
   const awakeCrew = page.getByTestId('queue-crew-alder');
   const turn = page.getByTestId('queue-turn-owed-1');
   const sun = page.getByTestId('queue-crew-wake-birch');
@@ -33,4 +32,53 @@ test('queue rows share the tree geometry and reveal actions on hover', async ({ 
   await expect(page.getByTestId('queue-crew-birch')).toHaveAttribute('data-crew-wake', 'armed');
   await expect(page.getByTestId('queue-crew-birch').locator('.session-actions'))
     .toHaveCSS('background-image', /linear-gradient/);
+});
+
+const rowKinds = {
+  desktop: ['sidebar-home', 'chief-slot', 'queue-crew-birch', 'queue-crew-cedar', 'sidebar-desktop-overview', 'sidebar-session-owed-1'],
+  queue: ['sidebar-home', 'chief-slot', 'queue-crew-birch', 'queue-crew-alder', 'queue-turn-owed-1'],
+};
+
+async function openFlow(page: Page, flow: 'desktop' | 'queue', chief: string) {
+  const ready = page.waitForEvent('console', (message) => message.text() === '[Harness] QueueSidebarFit ready');
+  await page.goto(`/test-harness/?component=QueueSidebarFit&chief=${chief}${flow === 'desktop' ? '&desktop' : ''}`);
+  await ready;
+}
+
+async function crewRuleGapBelowHome(page: Page) {
+  const home = await page.getByTestId('sidebar-home').boundingBox();
+  const rule = await page.locator('.queue-crew-rule').boundingBox();
+  return rule!.y - (home!.y + home!.height);
+}
+
+for (const flow of ['desktop', 'queue'] as const) {
+  for (const chief of ['awake', 'asleep', 'unconfigured']) {
+    test(`${flow} flow rows share one inset and icon column with the chief ${chief}`, async ({ page }) => {
+      await openFlow(page, flow, chief);
+      const geometry = async (testId: string) => {
+        const slot = page.getByTestId(testId);
+        const row = testId === 'chief-slot' ? slot.locator('> .session-item') : slot;
+        const box = await row.boundingBox();
+        const icon = await row.locator('> :not(button)').first().boundingBox();
+        return { testId, x: box?.x, width: box?.width, iconX: icon?.x };
+      };
+      const [first, ...rest] = await Promise.all(rowKinds[flow].map(geometry));
+      for (const row of rest) {
+        expect({ ...row, testId: first.testId }).toEqual(first);
+      }
+      if (flow === 'desktop') {
+        for (const rule of ['.queue-crew-rule', '.desktop-rule']) {
+          const header = await page.locator(rule).first().boundingBox();
+          expect({ rule, x: header?.x, width: header?.width }).toEqual({ rule, x: first.x, width: first.width });
+        }
+      }
+    });
+  }
+}
+
+test('the crew section starts the same distance below Home in both flows', async ({ page }) => {
+  await openFlow(page, 'queue', 'awake');
+  const queueGap = await crewRuleGapBelowHome(page);
+  await openFlow(page, 'desktop', 'awake');
+  expect(await crewRuleGapBelowHome(page)).toBe(queueGap);
 });

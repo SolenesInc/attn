@@ -37,9 +37,9 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 	pair.App.AwaitScreen(id, "__garden_done")
 	requireStdout(t, home.Attn("seed", "ls"), "A seed from the outpost shell")
 	terminal := protocol.TerminalID(pair.App.Terminal(id))
-	_, caller, err := outpost.Client().QueryAs(terminal)
+	caller, err := outpost.Client().CallerSession(terminal)
 	if err != nil || caller != protocol.SessionID(id) {
-		t.Fatalf("forwarded caller: %+v, %v", caller, err)
+		t.Fatalf("outpost caller: %+v, %v", caller, err)
 	}
 	if err := outpost.Client().UpdateState(terminal, protocol.StateWorking); err != nil {
 		t.Fatal(err)
@@ -53,23 +53,17 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
 		return len(s.PullRequests) == 1 && s.PullRequests[0].Number == 1
 	})
-	hasCommand := func(app *testworld.Peer, name string) bool {
-		for _, record := range cliRecords(t, app) {
-			if record.Name == name {
-				return true
-			}
-		}
-		return false
+	pair.Disconnect()
+	if offline := outpost.Attn("seed", "ls"); offline.Code == 0 {
+		t.Fatalf("seed ls from the outpost succeeded with the home unreachable: %+v", offline)
 	}
-	for _, name := range []string{"state", "open_sent_files", "pull_request_created"} {
-		if hasCommand(pair.App, name) {
-			t.Fatalf("%s hook was dispatched at the home", name)
-		}
-		if !hasCommand(outpost.App(), name) {
-			t.Fatalf("%s hook was not dispatched at the outpost", name)
-		}
+	if err := outpost.Client().UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatalf("state hook with the home unreachable: %v; hooks run on the outpost", err)
 	}
-	t.Log("plain shell and outpost shell use the home garden; query preserves caller; hooks stay on the outpost and the monitor's PR report reaches the home through Call")
+	if err := outpost.Client().OpenSentFilesFromTerminal(terminal, nil); err != nil {
+		t.Fatalf("open_sent_files hook with the home unreachable: %v; hooks run on the outpost", err)
+	}
+	t.Log("plain shell and outpost shell use the home garden; the outpost names its own caller; hooks run on the outpost with the home unreachable; the monitor's PR report reaches the home through Call")
 }
 
 func TestOutpostForwardsDocumentSubscriptions(t *testing.T) {

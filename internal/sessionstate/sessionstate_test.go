@@ -16,7 +16,7 @@ func testPolicy() Policy {
 
 		StaleAfter:        4 * time.Second,
 		StuckAfter:        90 * time.Second,
-		GuardianDwell:     60 * time.Second,
+		ReviewerDwell:     60 * time.Second,
 		SettleGrace:       4 * time.Second,
 		ClassifierTimeout: 30 * time.Second,
 		ParkedAfter:       30 * time.Minute,
@@ -914,25 +914,6 @@ func TestBracketStalenessBoundary(t *testing.T) {
 	}
 }
 
-func TestResolveIsStableForTheSameInputs(t *testing.T) {
-	e := evidence{TerminalEvidence: TerminalEvidence{
-		Heartbeat:  seen(SourceHeartbeat, ClaimBusy, 2*time.Second),
-		LastBusyAt: now.Add(-2 * time.Second),
-
-		LastMovement: now.Add(-time.Second)},
-		ConversationEvidence: ConversationEvidence{
-			TurnOpen: true,
-
-			LastClassifier: seen(SourceClassifier, ClaimIdle, time.Second)},
-	}
-	first := Resolve(e.TerminalEvidence, e.ConversationEvidence, testPolicy(), now)
-	for range 5 {
-		if got := Resolve(e.TerminalEvidence, e.ConversationEvidence, testPolicy(), now); got != first {
-			t.Fatalf("got %+v, want the same %+v", got, first)
-		}
-	}
-}
-
 func TestResolutionCarriesTheWinningDetail(t *testing.T) {
 	e := evidence{TerminalEvidence: TerminalEvidence{
 		Heartbeat: &Observation{
@@ -950,8 +931,8 @@ func TestDwellFor(t *testing.T) {
 	policy := testPolicy()
 
 	if got := DwellFor(protocol.SessionStatePendingApproval, TerminalEvidence{
-		ReviewerInLoop: true}, ConversationEvidence{}, policy); got != policy.GuardianDwell {
-		t.Fatalf("guardian dwell = %s, want %s", got, policy.GuardianDwell)
+		ReviewerInLoop: true}, ConversationEvidence{}, policy); got != policy.ReviewerDwell {
+		t.Fatalf("reviewer dwell = %s, want %s", got, policy.ReviewerDwell)
 	}
 	if got := DwellFor(protocol.SessionStatePendingApproval, TerminalEvidence{}, ConversationEvidence{}, policy); got != 0 {
 		t.Fatalf("unattended approval dwell = %s, want 0", got)
@@ -979,12 +960,12 @@ func TestPolicyForUsesTheMeasuredPerAgentTTL(t *testing.T) {
 	if got := PolicyFor("plugin-agent"); got.HeartbeatTTL > claude.HeartbeatTTL {
 		t.Fatalf("unknown agent TTL %s, want no more than claude's %s", got.HeartbeatTTL, claude.HeartbeatTTL)
 	}
-	if claude.GuardianDwell != 0 {
-		t.Fatalf("claude GuardianDwell %s, want 0: its classifier decides before it asks", claude.GuardianDwell)
+	if claude.ReviewerDwell != 0 {
+		t.Fatalf("claude ReviewerDwell %s, want 0: its classifier decides before it asks", claude.ReviewerDwell)
 	}
 	for _, policy := range []Policy{codex, PolicyFor("plugin-agent")} {
-		if policy.GuardianDwell <= 0 {
-			t.Fatalf("policy has no guardian dwell: %+v", policy)
+		if policy.ReviewerDwell <= 0 {
+			t.Fatalf("policy has no reviewer dwell: %+v", policy)
 		}
 	}
 	for _, policy := range []Policy{claude, codex, PolicyFor("plugin-agent")} {

@@ -6,9 +6,11 @@ import { TRIPWIRE_BINARIES } from './agentTripwire.mjs';
 import {
   allowRealAgentsForRunner,
   resolveScenario,
+  resolveScenarios,
   scenarioCatalog,
   scenariosAllowingRealAgents,
 } from './scenarioCatalog.mjs';
+import { planShards, readRecordedDurations } from './shardPlan.mjs';
 
 describe('scenarioCatalog agent tripwire flags', () => {
   it('names the runner id every entry arms the tripwire under', () => {
@@ -34,6 +36,12 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
   });
 
+});
+
+describe('the Linux serial matrix', () => {
+  it('plans into the eight App acceptance shards from recorded durations', () => {
+    expect(() => planShards(resolveScenarios([]), readRecordedDurations(), 8, 'linux', {})).not.toThrow();
+  });
 });
 
 describe('scenarioCatalog direct selection', () => {

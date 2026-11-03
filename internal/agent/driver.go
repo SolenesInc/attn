@@ -177,8 +177,6 @@ type SpawnOpts struct {
 
 	ConfigOverrides []string
 
-	TrustWorkingDirectory bool
-
 	Garden bool
 
 	Asks bool

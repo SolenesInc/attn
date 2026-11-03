@@ -4,4 +4,4 @@
 
 ---
 
-They have likely moved on and will not read what you write back here. If their answer asks you something, reply with a new ask. If you still need them, ask again.
+They have likely moved on and will not read what you write back here. If the user asks you something in their answer, reply with a new ask. If you still need them, ask again.

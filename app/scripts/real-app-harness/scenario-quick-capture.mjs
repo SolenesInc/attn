@@ -216,13 +216,16 @@ try {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await client.request('settings_select_section', { sectionId: 'experimental' });
     await driver.activateApp();
+    let enabledAt;
     await recordHostedStep('enable-quick-capture', async () => {
       await client.request('dom_click', { selector: '[role="switch"][aria-label="Quick Capture"]' });
       await observer.waitFor(() => observer.getSetting('quick_capture_enabled') === 'true', 'Quick Capture enabled in Settings');
+      enabledAt = performance.now();
       await driver.screenshot(path.join(runner.runDir, 'enabled-quick-capture.png'), { windowId: await driver.mainWindowId({ windowTitle: mainTitle }) });
     }, mainTitle);
     await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
     const initialBinding = (await state()).binding;
+    runner.log('capture bridge answered after Quick Capture was enabled', { ms: Math.round(performance.now() - enabledAt) });
     assert.ok(initialBinding === '' || initialBinding === testBinding, 'This named instance must be Off or retain its own test binding');
     runner.writeJson('initial-binding.json', { binding: initialBinding, testBinding });
     runner.registerCleanup('capture-binding', () => client.request('capture_binding', { binding: initialBinding }));
@@ -265,20 +268,6 @@ try {
     const actual = await state({ frame: true });
     runner.writeJson('fresh-first-open.json', actual);
     await screenshot('fresh-first-open.png');
-    const appPid = client.readManifest().pid;
-    const domain = execFileSync('launchctl', ['print', `pid/${appPid}`], { encoding: 'utf8' });
-    const originator = domain.match(/originator = (.+)/)?.[1];
-    assert.equal(originator, options.appPath, 'Idle measurements must belong to this named app');
-    const services = [...domain.matchAll(/^\s+(\d+)\s+-\s+(com\.apple\.WebKit\.\S+)/gm)]
-      .map(([, pid, name]) => ({ pid: Number(pid), name })).filter(service => service.pid > 0);
-    assert.ok(services.length, 'The app bootstrap domain must identify its WebKit processes');
-    runner.writeJson('fresh-first-open-ownership.json', { appPid, originator, services });
-    const idleSeconds = 40;
-    const idle = execFileSync('top', ['-l', '2', '-s', String(idleSeconds), '-stats', 'pid,command,cpu,mem',
-      ...[appPid, ...services.map(service => service.pid)].flatMap(pid => ['-pid', String(pid)])], { encoding: 'utf8' });
-    fs.writeFileSync(path.join(runner.runDir, 'fresh-first-open-idle.txt'), idle);
-    runner.writeJson('fresh-first-open-after-idle.json', { idleSeconds, ...await state({ frame: true }) });
-    await screenshot('fresh-first-open-after-idle.png');
     const capture = await captureStack();
     const displayPath = path.join(runner.runDir, 'fresh-first-open-display.png');
     execFileSync('/usr/sbin/screencapture', ['-x', '-R', [capture.x, capture.y, capture.width, capture.height].join(','), displayPath]);
@@ -287,7 +276,7 @@ try {
       const center = (Math.floor(png.height / 2) * png.width + Math.floor(png.width / 2)) * 4;
       return [...png.data.subarray(center, center + 4)];
     };
-    const nativePixel = pixel(path.join(runner.runDir, 'fresh-first-open-after-idle.png'));
+    const nativePixel = pixel(path.join(runner.runDir, 'fresh-first-open.png'));
     const displayPixel = pixel(displayPath);
     runner.writeJson('fresh-first-open-pixels.json', { nativePixel, displayPixel });
     assert.equal(nativePixel[3], 255, 'The first opening must paint the opaque composer surface');
@@ -372,7 +361,7 @@ try {
     await driver.parkWindow(Math.ceil(main.width * 0.2), { windowTitle: mainTitle });
     runner.registerCleanup('main-position', () => execFileSync('osascript', ['-e',
       `tell application "System Events" to tell (first application process whose bundle identifier is "${client.bundleId}") to set position of first window to {${main.x}, ${main.y}}`]));
-    await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle });
+    await driver.click({ selector: 'body', at: { x: 0.1, y: 0.1 } }, { windowTitle: mainTitle, withoutReceipt: 'the first click on a window that is not key only makes it key; macOS does not deliver it to the page' });
     assert.equal((await state()).nativeFocused, false, 'The deliberate main-window click must transfer native key focus');
     await client.request('capture_dismiss');
     assert.equal(await driver.frontmostBundleId(), driver.bundleId);
@@ -411,6 +400,18 @@ try {
     await openCapture();
     await key('a', ['command']);
     await driver.runInputDriver(['global_text', '--text', before.text]);
+  });
+  await runner.step('native_undo_and_redo_restore_typing', async () => {
+    const before = (await state()).text;
+    await key('arrowleft'); await key('arrowright');
+    await driver.runInputDriver(['global_text', '--text', ' undo me']);
+    assert.equal((await state()).text, before + ' undo me');
+    await key('z', ['command']);
+    assert.equal((await state()).text, before, 'Command-Z undoes the typing');
+    await key('z', ['command', 'shift']);
+    assert.equal((await state()).text, before + ' undo me', 'Shift-Command-Z redoes it');
+    await key('z', ['command']);
+    assert.equal((await state()).text, before, 'The step leaves the draft as it found it');
   });
   await runner.step('panel_surface_drags_the_panel', async () => {
     await driver.click(captureEditor, { windowTitle: 'Quick Capture' });

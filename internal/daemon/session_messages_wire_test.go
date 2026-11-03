@@ -93,7 +93,8 @@ func TestTheMessageWindowSaysWhenItIsStillLookingAndWhenThereIsNoTranscript(t *t
 	boot := w.HoldNextBoot()
 	booting := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	discovering := requestMessageWindow(app, booting, "booting")
-	boot()
+	boot.Await()
+	boot.Release()
 	w.Launched(booting)
 	if !discovering.Success || discovering.Status != protocol.SessionMessageWindowStatusDiscovering || len(discovering.Messages) != 0 || discovering.Truncated {
 		t.Errorf("a booting agent's window = %+v, want a successful, empty discovering window", discovering)

@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 )
 
-var bellSince = regexp.MustCompile("read what changed with `attn seed show (s-[a-z0-9]+) --since ([0-9]+)`")
+var bellSince = regexp.MustCompile("Read what changed with `attn seed show (s-[a-z0-9]+) --since ([0-9]+)`")
 
 func TestABellHandsOverTheSinceReadOfEverythingItCovers(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
@@ -65,7 +65,7 @@ func TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed(t *testing.T) {
 		w.advance(0)
 
 		items := readInbox(t, w.Client(), watcher, 0).Items
-		want := seed + " moved: note.added — read it with `attn seed show " + seed + "`."
+		want := seed + " moved: note.added. Read it with `attn seed show " + seed + "`."
 		if len(items) != 1 || items[0].Content != want {
 			t.Fatalf("watcher's inbox holds %q, want %q", inboxContents(items), want)
 		}

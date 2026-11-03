@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -44,6 +45,8 @@ type HeadlessTask struct {
 	Env     []string
 	Dir     string
 	answer  chan headlessAnswer
+	exited  <-chan struct{}
+	t       testing.TB
 }
 
 func (task *HeadlessTask) Answer(text string) {
@@ -52,6 +55,16 @@ func (task *HeadlessTask) Answer(text string) {
 
 func (task *HeadlessTask) Fail(message string) {
 	task.answer <- headlessAnswer{Failure: message}
+}
+
+// AwaitExited waits until the process running this task has exited.
+func (task *HeadlessTask) AwaitExited() {
+	task.t.Helper()
+	select {
+	case <-task.exited:
+	case <-time.After(HangGuard):
+		task.t.Fatalf("the headless %s task still runs %s after it should have exited", task.Harness, HangGuard)
+	}
 }
 
 func (k *Kit) HeadlessTask() *HeadlessTask {
@@ -75,7 +88,7 @@ func (k *Kit) receiveHeadlessTask(f *fake, params json.RawMessage) (headlessAnsw
 		return headlessAnswer{Failure: asked.Refusal}, nil
 	}
 	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, Model: asked.Model, Effort: asked.Effort,
-		Argv: asked.Argv, Env: asked.Env, Dir: asked.Dir, answer: make(chan headlessAnswer, 1)}
+		Argv: asked.Argv, Env: asked.Env, Dir: asked.Dir, answer: make(chan headlessAnswer, 1), exited: f.peer.done, t: k.t}
 	if answerer := k.headlessAnswerer(); answerer != nil {
 		answerer(task)
 		return <-task.answer, nil

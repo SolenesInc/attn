@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 	"strconv"
+	"sync"
 )
 
 //go:embed content
@@ -64,7 +65,7 @@ var session = Recipient{
 	},
 }
 
-var builtin = mustCatalog()
+var builtin = sync.OnceValue(mustCatalog)
 
 func mustCatalog() *Catalog {
 	catalog, err := Load(content)
@@ -74,7 +75,7 @@ func mustCatalog() *Catalog {
 	return catalog
 }
 
-func Builtin() *Catalog { return builtin }
+func Builtin() *Catalog { return builtin() }
 
 func Load(files fs.FS) (*Catalog, error) { return New(files, Definitions()...) }
 func Files() fs.FS                       { return content }
@@ -105,7 +106,7 @@ func (l Launch) Values() Values {
 }
 
 func (l Launch) Instructions() string {
-	result, err := builtin.Render("session", "launch", l.Values())
+	result, err := Builtin().Render("session", "launch", l.Values())
 	if err != nil {
 		panic(err)
 	}

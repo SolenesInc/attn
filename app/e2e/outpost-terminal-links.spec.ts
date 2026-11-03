@@ -24,7 +24,7 @@ async function openTerminal(page: Page, query: string, output: string) {
     };
   });
   await page.goto(`/test-harness/?component=OutpostTerminalLinks${query}`);
-  await page.waitForFunction(() => window.__HARNESS__?.ready);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const terminal = page.locator('.terminal-container').first();
   await expect(terminal.locator('canvas').first()).toBeVisible();
   await expect(terminal).toHaveAttribute('data-terminal-input-ready', '1');

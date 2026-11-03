@@ -31,50 +31,72 @@ func runSeed() {
 	args := os.Args[3:]
 	switch os.Args[2] {
 	case "plant":
+		setCommandPath("seed plant")
 		runSeedPlant(args)
 	case "plot":
+		setCommandPath("seed plot")
 		runSeedPlot(args)
 	case "ls":
+		setCommandPath("seed ls")
 		runSeedList(args)
 	case "search":
+		setCommandPath("seed search")
 		runSeedSearch(args)
 	case "show":
+		setCommandPath("seed show")
 		runSeedShow(args)
 	case "review":
+		setCommandPath("seed review")
 		runSeedReview(args)
 	case "edit":
+		setCommandPath("seed edit")
 		runSeedEdit(args)
 	case "rollback":
+		setCommandPath("seed rollback")
 		runSeedRollback(args)
+	case "authorization":
+		runSeedAuthorization(args)
 	case "send-to-chief":
+		setCommandPath("seed send-to-chief")
 		runSeedSendToChief(args)
 	case "export":
+		setCommandPath("seed export")
 		runSeedExport(args)
 	case "tend", "park", "harvest", "wither", "replant":
+		setCommandPath("seed " + os.Args[2])
 		runSeedTransition(os.Args[2], args)
 	case "note":
+		setCommandPath("seed note")
 		runSeedNote(args)
 	case "check":
+		setCommandPath("seed check")
 		runSeedCheck(args)
 	case "watch", "unwatch":
+		setCommandPath("seed " + os.Args[2])
 		runSeedWatch(os.Args[2], args)
 	case "attach", "detach":
+		setCommandPath("seed " + os.Args[2])
 		runSeedArtifact(os.Args[2], args)
 	case "notes":
+		setCommandPath("seed notes")
 		runSeedNotes(args)
 	case "link", "unlink":
+		setCommandPath("seed " + os.Args[2])
 		runSeedLink(os.Args[2] == "unlink", args)
 	case "ready":
+		setCommandPath("seed ready")
 		runSeedReady(args)
 	case "prime":
+		setCommandPath("seed prime")
 		runSeedPrime(args)
 	case "guide":
+		setCommandPath("seed guide")
 		runSeedGuide(args)
 	default:
 		recordUsageError("seed", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "seed: unknown command %q\n", os.Args[2])
 		fmt.Fprintln(os.Stderr, "usage: attn seed <command> (attn seed --help)")
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -118,7 +140,8 @@ suggestion is the same work.
 --flat prints one list. --plot lists every child of one plot, oldest
 first, harvested and withered included. --stale narrows to open seeds
 whose log has not moved for the window (default %s) — a query for
-your judgment, never a reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
+your judgment, never a reaper. --json prints the table's rows,
+without bodies or checks; attn seed show <id> reads one seed whole.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
 	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by words across your profile's garden, harvested and withered
 included: titles, bodies and log entries. Words match as stemmed prefixes;
 identifier parts match too. Seeds carrying some words also appear.
@@ -130,7 +153,7 @@ Search before you plant, so a duplicate is found instead of created.`, []string{
 nobody is holding it, and it is not a plot — a plot's work is its
 children. With no flags the scope is your profile's garden — unless this
 session was dispatched at a plot, and then that plot; --all steps back
-out to the garden.`, []string{"plot", "all", "json"}, true},
+out to the garden. --json prints rows, without bodies or checks.`, []string{"plot", "all", "json"}, true},
 	{`link`, `link <a> <blocks|part-of|discovered-from> <b> [--json]`, `relate two seeds. "a blocks b" keeps b out of ready until a closes;
 "a part-of b" puts a under b; b is then a plot. "a discovered-from b"
 records where work came from without ordering it. A structural cycle
@@ -169,6 +192,15 @@ Empty bodies are refused. Each edit saves a numbered version and a log entry;
 	{`rollback`, `rollback <id> [<version>] [--json]`, `restore the body before the newest version, or the numbered version.
 The restored body becomes a new version, so rollback can itself be rolled back.
 Edit entries in notes show the versions and size changes.`, []string{"json"}, false},
+	{`authorization`, `authorization <id> ["<words>" | --clear] [--json]`, `set, clear or print the user's words for this task: what agents may do
+without asking and where they stop. Set only words the user gave you.
+Delegation openings deliver them. When someone other than the seed's
+tender changes them, attn types the change into the tender's conversation
+as the user's message, waiting while the tender needs approval. With
+neither words nor --clear, prints them and the state of the last typed update.
+Who may change them follows seed moves: the tender, sessions above it in
+the delegation chain, and the profile's chief; anyone in the profile while
+nobody holds the seed.`, []string{"clear", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -177,7 +209,7 @@ the claim, so picking a seed up primes you. Tending your own claim again
 changes nothing and rings nobody. --for <name> assigns the seed to a crew
 member instead; the user never claims a seed, so a tend from outside an attn
 session needs it.` + seedMoveAuthority, []string{"m", "for", "force", "json"}, false},
-	{`park`, `park <id> [-m "<where you left it>"] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
+	{`park`, `park <id> [-m "<where you left it>"] [--force] [--json]`, `pause the seed deliberately — it is parked and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
 it again picks it back up. Parking it again keeps the state and adds
 only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
@@ -199,7 +231,7 @@ child is open, even with --force; replant hands it back if your part is done.
 Closing its last child leaves a ringing note on the plot and names it here.
 Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
-is free. Reopens a closed seed, un-parks a dormant one, and hands back
+is free. Reopens a closed seed, takes a parked one off hold, and hands back
 one being grown. Replanting an already planted seed changes nothing
 and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
@@ -267,7 +299,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`note`, `<text>`, `what changed, saved on the edit entry`, func(f *seedFlags) { f.fs.StringVar(&f.editNote, "note", "", "") }},
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
-	{`clear`, ``, `remove the harvest condition (with --when-merged)`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`clear`, ``, `remove the harvest condition (with --when-merged), or the authorization`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
 	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
 	{`plot`, `<plot>`, `a plot: ready keeps to it, ls lists all its children`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
 	{`all`, ``, `the whole garden, overriding a dispatched session's plot`, func(f *seedFlags) { f.fs.BoolVar(&f.all, "all", false, "") }},
@@ -375,15 +407,13 @@ commands:
 func seedUsageError(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
 	fmt.Fprintf(os.Stderr, "usage: attn seed %s (attn seed %s --help)\n", seedVerbNamed(verb).synopsis, verb)
-	os.Exit(2)
+	exit(2)
 }
 
 func (f *seedFlags) client() *client.Client {
 	profile, session := f.scope()
 	return client.New(config.SocketPath()).WithGardenProfile(profile, session)
 }
-
-var seedPrimeText = hooks.GardenGuidance
 
 func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 	values := prompts.Values{
@@ -413,7 +443,7 @@ func seedPrimeTailFromReady(ready *protocol.SeedReadyResult) string {
 }
 
 func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
-	return seedPrimeText + "\n\n" + seedPrimeTailFromReady(ready)
+	return hooks.GardenGuidance() + "\n\n" + seedPrimeTailFromReady(ready)
 }
 
 func runSeedPrime(args []string) {
@@ -430,12 +460,18 @@ func runSeedPrime(args []string) {
 
 func seedFail(verb string, err error) {
 	fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
-	os.Exit(1)
+	exit(1)
+}
+
+type seedCaller struct {
+	profile string
+	session protocol.SessionID
 }
 
 type seedFlags struct {
 	verb           seedVerb
 	fs             *flag.FlagSet
+	caller         *seedCaller
 	profile        string
 	session        string
 	assignee       string
@@ -522,7 +558,7 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 	positionals, err := parseInterspersedFlagArgs(f.fs, args)
 	if errors.Is(err, flag.ErrHelp) {
 		writeSeedVerbHelp(os.Stdout, verb)
-		os.Exit(0)
+		exit(0)
 	}
 	if err != nil {
 		seedUsageError(verb, err)
@@ -531,6 +567,14 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 }
 
 func (f *seedFlags) scope() (string, protocol.SessionID) {
+	if f.caller == nil {
+		profile, session := f.resolveCaller()
+		f.caller = &seedCaller{profile: profile, session: session}
+	}
+	return f.caller.profile, f.caller.session
+}
+
+func (f *seedFlags) resolveCaller() (string, protocol.SessionID) {
 	profile := strings.TrimSpace(f.profile)
 	if id := strings.TrimSpace(f.session); id != "" {
 		return profile, protocol.SessionID(id)
@@ -621,7 +665,7 @@ func runSeedPlant(args []string) {
 		writeJSON(result.Seed)
 		return
 	}
-	fmt.Println(seedLine(result.Seed))
+	fmt.Println(seedLine(result.Seed.ID, result.Seed.StepSlug, result.Seed.Title))
 	for _, check := range result.Seed.Checks {
 		if protocol.Deref(check.From) == "" {
 			fmt.Printf("  %s  %s\n", check.ID, check.Text)
@@ -630,8 +674,8 @@ func runSeedPlant(args []string) {
 	fprintSeedSimilar(os.Stdout, result.Similar, false)
 }
 
-func seedLine(seed protocol.Seed) string {
-	return fmt.Sprintf("%s  %s  %s", seed.ID, seed.StepSlug, seed.Title)
+func seedLine(id, slug, title string) string {
+	return fmt.Sprintf("%s  %s  %s", id, slug, title)
 }
 
 func seedHandle(seed protocol.Seed) string {
@@ -667,7 +711,7 @@ func fprintSeedSearch(out io.Writer, query string, result *protocol.SeedSearchRe
 	fmt.Fprintf(out, "%s %s every word, %d carry some — best first\n\n",
 		plural(result.Matched, "seed"), carriesVerb(result.Matched), result.Partial)
 	for _, hit := range result.Hits {
-		fmt.Fprintf(out, "%s\n  %s · %s  %s  %s\n", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive), hit.Where, hit.Snippet)
+		fmt.Fprintf(out, "%s\n  %s · %s  %s  %s\n", seedLine(hit.Seed.ID, hit.Seed.StepSlug, hit.Seed.Title), hit.Seed.Status, seedLastActive(hit.LastActive), hit.Where, hit.Snippet)
 	}
 	if total > len(result.Hits) {
 		fmt.Fprintf(out, "\nshowing %d of %d — `--limit <n>` for more, up to %d\n", len(result.Hits), total, garden.MaxSearchResults)
@@ -743,7 +787,7 @@ func runSeedList(args []string) {
 	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(partyLabel(row.seed.Tender)),
-			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
+			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, seedRowSuffix(row.seed))
 	}
 	w.Flush()
 	if result.Total > len(result.Seeds) {
@@ -760,6 +804,7 @@ func runSeedReview(args []string) {
 	verb := args[0]
 	switch verb {
 	case "start", "show", "cancel", "retry", "keep":
+		setCommandPath("seed review " + verb)
 	default:
 		recordUsageError("seed review", usageErrorUnknownCommand)
 		seedUsageError("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
@@ -772,11 +817,13 @@ func runSeedReview(args []string) {
 	var result *protocol.SeedReviewResult
 	switch verb {
 	case "start":
+		setCommandPath("seed review start")
 		if len(positionals) != 0 {
 			seedUsageError("review start", fmt.Errorf("takes no arguments"))
 		}
 		result, err = f.client().SeedReviewStart()
 	case "show":
+		setCommandPath("seed review show")
 		if len(positionals) > 1 {
 			seedUsageError("review show", fmt.Errorf("takes at most one review id"))
 		}
@@ -786,16 +833,19 @@ func runSeedReview(args []string) {
 		}
 		result, err = f.client().SeedReviewShow(reviewID)
 	case "cancel":
+		setCommandPath("seed review cancel")
 		if len(positionals) != 1 {
 			seedUsageError("review cancel", fmt.Errorf("needs exactly one review id"))
 		}
 		result, err = f.client().SeedReviewCancel(positionals[0])
 	case "retry":
+		setCommandPath("seed review retry")
 		if len(positionals) != 2 {
 			seedUsageError("review retry", fmt.Errorf("needs a review id and seed id"))
 		}
 		result, err = f.client().SeedReviewRetry(positionals[0], positionals[1])
 	case "keep":
+		setCommandPath("seed review keep")
 		if len(positionals) != 2 {
 			seedUsageError("review keep", fmt.Errorf("needs a review id and seed id"))
 		}
@@ -887,17 +937,21 @@ func staleWindowLabel(seconds *int) string {
 	return formatWindow(time.Duration(*seconds) * time.Second)
 }
 
-func plotProgressSuffix(seed protocol.Seed) string {
-	if seed.PlotProgress == nil {
+func seedRowSuffix(row protocol.SeedRow) string {
+	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen)
+}
+
+func plotProgressSuffix(progress *protocol.SeedPlotProgress) string {
+	if progress == nil {
 		return ""
 	}
-	p := *seed.PlotProgress
+	p := *progress
 	return fmt.Sprintf("  [%d/%d done · %d growing · %d ready · %d blocked]",
 		p.Done, p.Total, p.Growing, p.Ready, p.Blocked)
 }
 
-func harvestWhenSuffix(seed protocol.Seed) string {
-	if line := harvestWhenLine(seed.HarvestWhen); line != "" {
+func harvestWhenSuffix(condition *protocol.SeedHarvestCondition) string {
+	if line := harvestWhenLine(condition); line != "" {
 		return "  [" + line + "]"
 	}
 	return ""
@@ -955,7 +1009,7 @@ func runSeedPlot(args []string) {
 		writeJSON(result)
 		return
 	}
-	fmt.Println(seedLine(result.Crown))
+	fmt.Println(seedLine(result.Crown.ID, result.Crown.StepSlug, result.Crown.Title))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, child := range result.Children {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
@@ -970,7 +1024,7 @@ func fprintSeedSimilar(out io.Writer, similar []protocol.SeedSimilar, plot bool)
 	}
 	fmt.Fprintln(out, "\nsimilar open seeds")
 	for _, hit := range similar {
-		fmt.Fprintf(out, "  %s  %s · %s", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive))
+		fmt.Fprintf(out, "  %s  %s · %s", seedLine(hit.Seed.ID, hit.Seed.StepSlug, hit.Seed.Title), hit.Seed.Status, seedLastActive(hit.LastActive))
 		if plot {
 			fmt.Fprintf(out, "  like %s", hit.Like)
 		}
@@ -1001,11 +1055,11 @@ func readPlotPayload(path string) []byte {
 }
 
 type seedRow struct {
-	seed  protocol.Seed
+	seed  protocol.SeedRow
 	depth int
 }
 
-func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
+func seedRows(seeds []protocol.SeedRow, flat bool) []seedRow {
 	rows := make([]seedRow, 0, len(seeds))
 	if flat {
 		for _, seed := range seeds {
@@ -1013,11 +1067,11 @@ func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
 		}
 		return rows
 	}
-	byID := make(map[string]protocol.Seed, len(seeds))
+	byID := make(map[string]protocol.SeedRow, len(seeds))
 	domain := make([]garden.Seed, 0, len(seeds))
 	for _, seed := range seeds {
 		byID[seed.ID] = seed
-		domain = append(domain, gardenSeedFromWire(seed))
+		domain = append(domain, gardenSeedFromRow(seed))
 	}
 	for _, row := range garden.Tree(domain) {
 		rows = append(rows, seedRow{seed: byID[row.Seed.ID], depth: row.Depth})
@@ -1182,6 +1236,116 @@ func runSeedRollback(args []string) {
 		return
 	}
 	fmt.Printf("rolled %s back to v%d as v%d: %d → %d bytes\n", result.Seed.ID, result.RestoredVersion, result.BodyVersion, result.PreviousBytes, result.NewBytes)
+}
+
+func runSeedAuthorization(args []string) {
+	f := newSeedFlags("authorization")
+	positionals := f.parse("authorization", args)
+	if len(positionals) < 1 || len(positionals) > 2 {
+		seedUsageError("authorization", fmt.Errorf("needs a seed id and optional words: attn seed authorization s-7k3f9m \"Ask me before pushing.\""))
+	}
+	text := ""
+	if len(positionals) == 2 {
+		text = strings.TrimSpace(positionals[1])
+		if text == "" {
+			seedUsageError("authorization", fmt.Errorf("the words are empty; --clear removes the authorization"))
+		}
+	}
+	if text != "" && f.clear {
+		seedUsageError("authorization", fmt.Errorf("pass the new words or --clear, not both"))
+	}
+	id := f.seedID("authorization", positionals[0])
+	result, err := f.client().SeedAuthorization(id, text, f.clear)
+	if err != nil {
+		seedFail("authorization", err)
+	}
+	if f.json {
+		writeJSON(result)
+		return
+	}
+	fmt.Println(seedAuthorizationReply(result, text != "" || f.clear, f.clear))
+}
+
+func seedAuthorizationReply(result *protocol.SeedAuthorizationResult, changing, clear bool) string {
+	seed := result.Seed
+	if !changing {
+		switch a := seed.Authorization; {
+		case a == nil:
+			return seed.ID + " has no authorization."
+		case a.Text == "":
+			return fmt.Sprintf("%s has no authorization: %s", seed.ID, authorizationSummary(*a))
+		}
+		return fmt.Sprintf("%s authorization %s", seed.ID, authorizationSummary(*seed.Authorization))
+	}
+	if !result.Changed {
+		if clear {
+			return seed.ID + " has no authorization."
+		}
+		reply := seed.ID + " already has this authorization."
+		if u := result.Update; u != nil {
+			reply += " " + capitalized(authorizationUpdateState(*u)) + "."
+		}
+		return reply
+	}
+	reply := seed.ID + " authorization set."
+	if clear {
+		reply = seed.ID + " authorization cleared."
+	}
+	switch u := result.Update; {
+	case u != nil && u.TypedAt != nil:
+		return fmt.Sprintf("%s Typed into %s.", reply, updateRecipientLabel(u.Recipient))
+	case u != nil && protocol.Deref(u.NeedsApproval):
+		return fmt.Sprintf("%s Waiting for %s, which needs approval. attn types it in when it can take input.", reply, updateRecipientLabel(u.Recipient))
+	case u != nil:
+		return fmt.Sprintf("%s Waiting for %s. attn types it in when it can take input.", reply, updateRecipientLabel(u.Recipient))
+	case protocol.Deref(result.CallerTends):
+		return fmt.Sprintf("%s You tend %s, so nothing is typed.", reply, seed.ID)
+	case clear:
+		return fmt.Sprintf("%s Nobody tends %s.", reply, seed.ID)
+	default:
+		return fmt.Sprintf("%s Nobody tends %s; the next delegation's opening includes it.", reply, seed.ID)
+	}
+}
+
+func authorizationSummary(a protocol.SeedAuthorization) string {
+	summary := fmt.Sprintf("%q  set by %s at %s", a.Text, actorLabel(a.SetBy), shortStamp(a.SetAt))
+	if a.Text == "" {
+		summary = fmt.Sprintf("cleared by %s at %s", actorLabel(a.SetBy), shortStamp(a.SetAt))
+	}
+	if a.Update != nil {
+		summary += " · " + authorizationUpdateState(*a.Update)
+	}
+	return summary
+}
+
+func authorizationUpdateState(u protocol.SeedAuthorizationUpdate) string {
+	recipient := updateRecipientLabel(u.Recipient)
+	switch {
+	case u.TypedAt != nil:
+		return fmt.Sprintf("typed into %s at %s", recipient, shortStamp(*u.TypedAt))
+	case protocol.Deref(u.NeedsApproval):
+		return fmt.Sprintf("waiting for %s, which needs approval", recipient)
+	default:
+		return "waiting for " + recipient
+	}
+}
+
+func updateRecipientLabel(p protocol.PartyView) string {
+	id := string(protocol.Deref(p.SessionID))
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	if id == "" || strings.HasPrefix(p.Name, id) {
+		return p.Name
+	}
+	return fmt.Sprintf("%s (%s)", p.Name, id)
+}
+
+func capitalized(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func runSeedSendToChief(args []string) {
@@ -1472,7 +1636,8 @@ func runSeedReady(args []string) {
 
 func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Fprintf(out, "%s%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown), checkTallySuffix(*result.Crown))
+		crown := *result.Crown
+		fmt.Fprintf(out, "%s%s%s\n\n", seedLine(crown.ID, crown.StepSlug, crown.Title), plotProgressSuffix(crown.PlotProgress), checkTallyShort(seedRowCheckTally(crown)))
 	}
 	if len(result.Seeds) == 0 {
 		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
@@ -1499,7 +1664,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			status = "plot"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
-			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+checkTallySuffix(seed)+harvestWhenSuffix(seed))
+			strings.Repeat("  ", row.depth), seed.Title, seedRowSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(actorLabel(handoff.Author)), firstLine(handoff.Body))
@@ -1539,8 +1704,8 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	fmt.Fprintf(w, "planted\t%s by %s\n", shortStamp(seed.CreatedAt), orDash(actorLabel(seed.Planter)))
 	fmt.Fprintf(w, "tender\t%s\n", orDash(partyLabel(seed.Tender)))
 	if p := seed.PlotProgress; p != nil {
-		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d dormant, %d withered\n",
-			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Dormant, p.Withered)
+		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d parked, %d withered\n",
+			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Parked, p.Withered)
 		if tally := checkTallyLong(plotCheckTally(p)); tally != "" {
 			fmt.Fprintf(w, "plot checks\t%s\n", tally)
 		}
@@ -1566,6 +1731,9 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 			checkedAt = shortStamp(checkedAt)
 		}
 		fmt.Fprintf(w, "PR last checked\t%s\n", checkedAt)
+	}
+	if a := seed.Authorization; a != nil {
+		fmt.Fprintf(w, "authorization\t%s\n", authorizationSummary(*a))
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
@@ -2047,9 +2215,9 @@ func runSeedExport(args []string) {
 	fmt.Printf("wrote %s; edit it with any tool, keep its first line, then: attn seed edit %s -m - < %s\n", absolute, result.Seed.ID, absolute)
 }
 
-func gardenSeedFromWire(seed protocol.Seed) garden.Seed {
+func gardenSeedFromRow(seed protocol.SeedRow) garden.Seed {
 	out := garden.Seed{
-		ID: seed.ID, Title: seed.Title, Body: seed.Body, Status: seed.Status,
+		ID: seed.ID, Title: seed.Title, Status: seed.Status,
 		Edges: make([]garden.Edge, 0, len(seed.Edges)),
 	}
 	for _, edge := range seed.Edges {

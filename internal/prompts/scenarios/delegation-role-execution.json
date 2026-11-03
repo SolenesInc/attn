@@ -6,7 +6,6 @@
   "event": "execution",
   "values": {
     "name": "Builder",
-    "instructions": "Implement the agreed change. Preserve {{literal}} in the fixture.",
-    "stopping_point": "Return the verified change for review."
+    "instructions": "Implement the agreed change. Preserve {{literal}} in the fixture.\n\nStopping point: Return the verified change for review."
   }
 }

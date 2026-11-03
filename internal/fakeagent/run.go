@@ -2,7 +2,6 @@ package fakeagent
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 )
@@ -16,7 +15,6 @@ type Run struct {
 	ResumePicker   bool
 	Argv           []string
 	Env            []string
-	AutoMode       json.RawMessage
 	Yolo           bool
 	t              testing.TB
 	fake           *fake
@@ -75,19 +73,6 @@ func (r *Run) DeleteSubagentTranscripts() {
 func (r *Run) Halt() {
 	r.t.Helper()
 	r.call(methodHalt, struct{}{}, nil)
-}
-
-type Denial struct {
-	Tool   string `json:"tool"`
-	Action string `json:"action"`
-	Reason string `json:"reason"`
-	Rule   string `json:"rule"`
-	At     string `json:"at,omitempty"`
-}
-
-func (r *Run) Deny(denial Denial) {
-	r.t.Helper()
-	r.call(methodDeny, denial, nil)
 }
 
 func (r *Run) Exit(code int) {

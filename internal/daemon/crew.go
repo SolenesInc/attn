@@ -216,16 +216,20 @@ func (d *Daemon) crewAskedMember(asker crewAsker, ref string) (crew.Member, erro
 }
 
 func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document, error) {
+	identities, err := d.store.CrewIdentities()
+	if err != nil {
+		return nil, nil, err
+	}
+	return d.readCrewMembersNamed(identities)
+}
+
+func (d *Daemon) readCrewMembersNamed(identities map[string]store.CrewIdentity) ([]crew.Member, map[string]docstore.Document, error) {
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  crew.Namespace,
 		Collection: crew.CollectionMembers,
 		Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: false},
 		Limit:      docstore.MaxLimit,
 	})
-	if err != nil {
-		return nil, nil, err
-	}
-	identities, err := d.store.CrewIdentities()
 	if err != nil {
 		return nil, nil, err
 	}

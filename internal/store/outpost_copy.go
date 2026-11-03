@@ -157,8 +157,8 @@ func (s *Store) AckOutbox(ids []int64) error {
 	return err
 }
 
-// ApplyCopy writes a batch of home's copy in one transaction. It is the only writer of rows with a host on
-// an outpost, and marks the sessions it writes as copied from home.
+// ApplyCopy writes a batch of home's copy in one transaction. Apart from migrations, it is the only writer of
+// rows with a host on an outpost, and marks the sessions it writes as copied from home.
 func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -166,7 +166,7 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 		return err
 	}
 	settingsChanged := false
-	err := s.copyTransaction(ctx, func(tx *sql.Tx) error {
+	err := transactWritingCopies(ctx, s.db, func(tx *sql.Tx) error {
 		var err error
 		var sessions, bindings, settings []protocol.CopyRow
 		var deleted []string
@@ -255,7 +255,7 @@ func (s *Store) DropCopyNotFrom(home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var removed []protocol.SessionID
-	err := s.copyTransaction(context.Background(), func(tx *sql.Tx) error {
+	err := transactWritingCopies(context.Background(), s.db, func(tx *sql.Tx) error {
 		rows, err := tx.Query(`SELECT session_id FROM session_runtime WHERE home_daemon_id != '' AND home_daemon_id != ?
 			UNION SELECT id FROM sessions WHERE copied_from != '' AND (copied_from != ? OR closed_at != '')`, home, home)
 		if err != nil {
@@ -426,16 +426,16 @@ func (s *Store) SessionHost(id protocol.SessionID) (host string, copied bool) {
 	return host, origin != ""
 }
 
-func (s *Store) copyTransaction(ctx context.Context, apply func(*sql.Tx) error) error {
-	conn, err := s.db.Conn(ctx)
+func transactWritingCopies(ctx context.Context, db *sql.DB, apply func(*sql.Tx) error) error {
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	if err := conn.Raw(func(raw any) error { raw.(*sqliteConnection).copyApplying = true; return nil }); err != nil {
+	if err := conn.Raw(func(raw any) error { raw.(*sqliteConnection).writesCopies = true; return nil }); err != nil {
 		return err
 	}
-	defer conn.Raw(func(raw any) error { raw.(*sqliteConnection).copyApplying = false; return nil })
+	defer conn.Raw(func(raw any) error { raw.(*sqliteConnection).writesCopies = false; return nil })
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err

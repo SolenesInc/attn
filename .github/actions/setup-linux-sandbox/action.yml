@@ -1,8 +1,0 @@
-name: Set up Linux sandbox
-description: Install sandbox and search dependencies, and permit bubblewrap user namespaces on Ubuntu runners.
-runs:
-  using: composite
-  steps:
-    - name: Install and verify Linux sandbox
-      shell: bash
-      run: bash scripts/setup-linux-sandbox.sh

@@ -94,7 +94,7 @@ func TestAddingAttnRolesInstallsTheWorkflowSkillBeforeSavingThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, role := range roles.Roles {
-		if role.Builtin == nil || role.Name == "" || role.Description == "" || role.Instructions == "" || role.StoppingPoint == "" {
+		if role.Builtin == nil || role.Name == "" || role.Description == "" || role.Instructions == "" {
 			t.Errorf("agents are offered attn role %+v without its maintained guidance", role)
 		}
 	}
@@ -108,9 +108,9 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	preferences := protocol.DelegationPreferences{
 		Enabled: true, WorkflowSkillEnabled: true,
 		Roles: []protocol.DelegationRole{
-			{ID: "build", Name: "Builder", Enabled: true, Instructions: "Check {{literal}} carefully", StoppingPoint: "Stop once the tests pass",
+			{ID: "build", Name: "Builder", Enabled: true, Instructions: "Check {{literal}} carefully\n\nStopping point: Stop once the tests pass",
 				DefaultChoiceID: "default", Choices: everyday},
-			{ID: "inspect", Name: "Inspector", Enabled: true, Instructions: "Inspect every corner", StoppingPoint: "Stop at the report",
+			{ID: "inspect", Name: "Inspector", Enabled: true, Instructions: "Inspect every corner",
 				DefaultChoiceID: "default", Choices: everyday},
 		},
 		Fallback: protocol.DelegationFallback{Selection: protocol.DelegationSelection{Harness: "codex"}},
@@ -119,7 +119,7 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if !saved.Success {
 		t.Fatalf("saving the roles: %s", protocol.Deref(saved.Error))
 	}
-	if offered, err := cli.DelegationRoles(); err != nil || len(offered.Roles) != 2 || offered.Roles[0].Instructions != "Check {{literal}} carefully" {
+	if offered, err := cli.DelegationRoles(); err != nil || len(offered.Roles) != 2 || offered.Roles[0].Instructions != "Check {{literal}} carefully\n\nStopping point: Stop once the tests pass" {
 		t.Fatalf("agents are offered %+v, %v; want the roles with their instructions verbatim", offered, err)
 	}
 	skills := delegationWorkflowSkillIn(toolHome, ".agents")

@@ -51,9 +51,9 @@ func TestAnApprovalAskedWhileTheRestartedDaemonStartsWatchingIsNeverLost(t *test
 	setSetting(t, app, "auto_approve_enabled", "false")
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	terminal := app.Terminal(session)
-	s.AwaitHeldBoot()
+	boot.Await()
 	s.Stop()
-	boot()
+	boot.Release()
 	codex := s.LaunchedCarrying(terminal)
 
 	s.Start()

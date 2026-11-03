@@ -43,6 +43,7 @@ type NotificationRecord struct {
 	Actions    []NotificationAction
 	SourceKind string
 	SourceID   string
+	ProfileID  string
 	CreatedAt  time.Time
 	ReadAt     time.Time
 }
@@ -78,11 +79,11 @@ func (s *Store) insertNotification(insert string, rec NotificationRecord, now ti
 		return NotificationRecord{}, false, fmt.Errorf("store: encode notification actions: %w", err)
 	}
 	result, err := s.db.Exec(
-		insert+` INTO notifications (id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+		insert+` INTO notifications (id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, profile_id, created_at, read_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
 		rec.ID, rec.Kind, string(rec.Severity), rec.Title, rec.Body, rec.Detail,
 		rec.Trigger, rec.Impact, rec.Cause, rec.Diagnostic, string(actionsJSON), rec.SourceKind, rec.SourceID,
-		rec.CreatedAt.Format(sortableTimeFormat),
+		rec.ProfileID, rec.CreatedAt.Format(sortableTimeFormat),
 	)
 	if err != nil {
 		return NotificationRecord{}, false, fmt.Errorf("store: add notification: %w", err)
@@ -94,13 +95,15 @@ func (s *Store) insertNotification(insert string, rec NotificationRecord, now ti
 	return rec, inserted == 1, nil
 }
 
-func (s *Store) ListNotifications() ([]NotificationRecord, error) {
+const notificationsSeenBy = `profile_id IN ('', ?)`
+
+func (s *Store) ListNotifications(profileID string) ([]NotificationRecord, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("store: no database")
 	}
 	rows, err := s.db.Query(
-		`SELECT id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at
-		 FROM notifications ORDER BY created_at DESC, id DESC`)
+		`SELECT id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, profile_id, created_at, read_at
+		 FROM notifications WHERE `+notificationsSeenBy+` ORDER BY created_at DESC, id DESC`, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("store: list notifications: %w", err)
 	}
@@ -116,18 +119,18 @@ func (s *Store) ListNotifications() ([]NotificationRecord, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) UnreadNotificationCount() (int, error) {
+func (s *Store) UnreadNotificationCount(profileID string) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
 	}
 	var n int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE read_at = ''`).Scan(&n); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE read_at = '' AND `+notificationsSeenBy, profileID).Scan(&n); err != nil {
 		return 0, fmt.Errorf("store: unread notification count: %w", err)
 	}
 	return n, nil
 }
 
-func (s *Store) UnreadCriticalNotifications() (int, string, error) {
+func (s *Store) UnreadCriticalNotifications(profileID string) (int, string, error) {
 	if s.db == nil {
 		return 0, "", fmt.Errorf("store: no database")
 	}
@@ -139,10 +142,10 @@ func (s *Store) UnreadCriticalNotifications() (int, string, error) {
 	if err := s.db.QueryRow(
 		`SELECT COUNT(*),
 		        COALESCE((SELECT title FROM notifications
-		                  WHERE read_at = '' AND severity = ?
+		                  WHERE read_at = '' AND severity = ? AND `+notificationsSeenBy+`
 		                  ORDER BY created_at DESC, id DESC LIMIT 1), '')
-		 FROM notifications WHERE read_at = '' AND severity = ?`,
-		critical, critical).Scan(&n, &title); err != nil {
+		 FROM notifications WHERE read_at = '' AND severity = ? AND `+notificationsSeenBy,
+		critical, profileID, critical, profileID).Scan(&n, &title); err != nil {
 		return 0, "", fmt.Errorf("store: unread critical notifications: %w", err)
 	}
 	return n, title, nil
@@ -163,25 +166,27 @@ func (s *Store) ResolveNotification(id string, now time.Time) (bool, error) {
 	return resolved > 0, err
 }
 
-func (s *Store) MarkNotificationRead(id string, now time.Time) error {
+func (s *Store) MarkNotificationRead(profileID, id string, now time.Time) (bool, error) {
 	if s.db == nil {
-		return fmt.Errorf("store: no database")
+		return false, fmt.Errorf("store: no database")
 	}
-	if _, err := s.db.Exec(
-		`UPDATE notifications SET read_at = ? WHERE id = ? AND read_at = ''`,
-		now.UTC().Format(sortableTimeFormat), id); err != nil {
-		return fmt.Errorf("store: mark notification read %s: %w", id, err)
+	res, err := s.db.Exec(
+		`UPDATE notifications SET read_at = ? WHERE id = ? AND read_at = '' AND `+notificationsSeenBy,
+		now.UTC().Format(sortableTimeFormat), id, profileID)
+	if err != nil {
+		return false, fmt.Errorf("store: mark notification read %s: %w", id, err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
-func (s *Store) MarkAllNotificationsRead(now time.Time) (int, error) {
+func (s *Store) MarkAllNotificationsRead(profileID string, now time.Time) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
 	}
 	res, err := s.db.Exec(
-		`UPDATE notifications SET read_at = ? WHERE read_at = ''`,
-		now.UTC().Format(sortableTimeFormat))
+		`UPDATE notifications SET read_at = ? WHERE read_at = '' AND `+notificationsSeenBy,
+		now.UTC().Format(sortableTimeFormat), profileID)
 	if err != nil {
 		return 0, fmt.Errorf("store: mark all notifications read: %w", err)
 	}
@@ -199,7 +204,7 @@ func scanNotificationRow(sc rowScanner) (*NotificationRecord, error) {
 	)
 	if err := sc.Scan(&rec.ID, &rec.Kind, &severityStr, &rec.Title, &rec.Body, &rec.Detail,
 		&rec.Trigger, &rec.Impact, &rec.Cause, &rec.Diagnostic, &actionsJSON,
-		&rec.SourceKind, &rec.SourceID, &createdStr, &readStr); err != nil {
+		&rec.SourceKind, &rec.SourceID, &rec.ProfileID, &createdStr, &readStr); err != nil {
 		return nil, err
 	}
 	if actionsJSON != "" {

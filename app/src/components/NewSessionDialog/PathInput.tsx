@@ -14,6 +14,7 @@ interface PathInputProps {
   hasSelectedSinceTab?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
+  accent?: number;
 }
 
 export function PathInput({
@@ -29,10 +30,12 @@ export function PathInput({
   hasSelectedSinceTab = true,
   placeholder = 'Type path (e.g., ~/projects)...',
   autoFocus = true,
+  accent = 0,
 }: PathInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [ghostOffset, setGhostOffset] = useState(0);
+  const [scrolled, setScrolled] = useState(0);
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -45,6 +48,7 @@ export function PathInput({
     if (measureRef.current) {
       setGhostOffset(measureRef.current.offsetWidth);
     }
+    setScrolled(inputRef.current?.scrollLeft ?? 0);
   }, [value]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -75,10 +79,21 @@ export function PathInput({
       <span ref={measureRef} className="path-input-measure" aria-hidden="true">
         {value}
       </span>
+      {accent > 0 && (
+        <span
+          className="path-input-mirror"
+          aria-hidden="true"
+          style={{ transform: `translate(${-scrolled}px, -50%)` }}
+        >
+          <span className="path-input-accent">{value.slice(0, accent)}</span>
+          {value.slice(accent)}
+        </span>
+      )}
       <input
         ref={inputRef}
         type="text"
-        className="path-input"
+        className={`path-input${accent > 0 ? ' path-input--mirrored' : ''}`}
+        onScroll={(e) => setScrolled(e.currentTarget.scrollLeft)}
         data-testid="location-picker-path-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}

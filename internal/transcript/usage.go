@@ -9,6 +9,7 @@ import (
 
 type TokenUsage struct {
 	Key                          string
+	Final                        bool
 	Model                        string
 	Purpose                      string
 	FastMode                     bool
@@ -46,7 +47,7 @@ func NewUsageExtractor(agent string) *UsageExtractor {
 
 func SupportsUsage(agent string) bool {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
-	case "claude", "codex", "pi":
+	case "claude", "codex":
 		return true
 	default:
 		return false
@@ -61,8 +62,6 @@ func (e *UsageExtractor) Observe(line []byte, sourceKey string) (TokenUsage, boo
 		usage, ok = extractClaudeUsage(line)
 	case "codex":
 		usage, ok = e.extractCodexUsage(line, sourceKey)
-	case "pi":
-		usage, ok = extractPiUsage(line)
 	default:
 		return TokenUsage{}, false
 	}
@@ -276,6 +275,7 @@ func (e *UsageExtractor) extractCodexUsage(line []byte, sourceKey string) (Token
 	e.codexUsageStarted = true
 	return TokenUsage{
 		Key:                "codex:" + strings.TrimSpace(sourceKey),
+		Final:              true,
 		Model:              e.codexModel,
 		FastMode:           e.codexTurnFastMode,
 		InputTokens:        last.InputTokens - last.CachedInputTokens - last.CacheWriteInputTokens,

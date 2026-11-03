@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function openEditor(page: Page) {
   await page.goto('/test-harness/?component=TerminalAnnotations');
-  await page.waitForFunction(() => window.__HARNESS__?.ready);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await expect(page.getByTestId('desktop-first').locator('canvas').first()).toBeVisible();
   await page.getByTitle('Edit this annotation').click();
   const editor = page.getByRole('textbox', { name: 'Annotation comment', exact: true });
@@ -143,6 +143,17 @@ test('native pointer receipt reports delivery to the wrong target', async ({ pag
   const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitInput());
   await page.getByTestId('desktop-first').getByRole('textbox', { name: 'Terminal input' }).click({ position: { x: 20, y: 20 } });
   expect(await receipt).toMatchObject({ matches: false, target: 'canvas.' });
+});
+
+test('native move receipt ignores synthetic moves and identifies the hovered target', async ({ page }) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    window.__ANNOTATIONS__.armInput({ gesture: 'move', selector: '.anno-popup-quote' });
+    document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+  });
+  const receipt = page.evaluate(() => window.__ANNOTATIONS__.waitInput());
+  await page.locator('.anno-popup-quote').hover();
+  expect(await receipt).toMatchObject({ gesture: 'move', matches: true, target: expect.stringContaining('anno-popup-quote') });
 });
 
 test('native key receipt waits for every stroke and ignores modifiers and synthetic keys', async ({ page }) => {

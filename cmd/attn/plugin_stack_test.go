@@ -22,9 +22,8 @@ type pluginResult struct {
 
 type pluginListing struct {
 	Plugins []struct {
-		Name              string  `json:"name"`
-		InstallationState string  `json:"installation_state"`
-		LinkTarget        *string `json:"link_target"`
+		Name       string  `json:"name"`
+		LinkTarget *string `json:"link_target"`
 	} `json:"plugins"`
 }
 
@@ -51,9 +50,7 @@ func installedPlugins(t *testing.T, s *testworld.Stack) map[string]*string {
 	s.Attn("plugin", "list").JSON(t, &listing)
 	installed := map[string]*string{}
 	for _, p := range listing.Plugins {
-		if p.InstallationState == "installed" {
-			installed[p.Name] = p.LinkTarget
-		}
+		installed[p.Name] = p.LinkTarget
 	}
 	return installed
 }

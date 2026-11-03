@@ -21,7 +21,6 @@ import (
 
 func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 	d.logf("Getting settings")
-	d.refreshTailscaleServeState()
 	d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 		Event:    protocol.EventSettingsUpdated,
 		Settings: d.settingsSnapshot(d.profileForClient(client)),
@@ -57,6 +56,9 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if err := spec.validate(d, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
+	if err := d.refuseNestedNotebookSetting(msg); err != nil {
+		return nil, err
+	}
 	if spec.scope == profileScope {
 		return d.applyProfileSetting(spec, msg)
 	}
@@ -82,10 +84,10 @@ func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMe
 	if err := d.store.SetProfileSetting(profile.ID, msg.Key, strings.TrimSpace(msg.Value)); err != nil {
 		return nil, err
 	}
-	if msg.Key == string(SettingNotebookProfileRoot) {
-		d.pruneRootWatchers()
+	if msg.Key == string(SettingNotebookRoot) {
+		d.notebookFoldersChanged()
 	}
-	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	d.publishFact(FactSettingChanged, msg.Key, nil)
 	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, profile.ID))
 	return &entry, nil
 }
@@ -94,10 +96,6 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(settingOutpostsEnabled) {
 		d.configureOutposts()
 	}
-	if key == string(SettingNotebookRoot) {
-		d.pruneRootWatchers()
-	}
-
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 		d.ensureAvailableAgentSkills()
@@ -108,14 +106,14 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(SettingAnalyticsEnabled) {
 		d.configureAnalytics()
 	}
+	if key == string(SettingPhoneAccessEnabled) {
+		d.configurePhoneAccess()
+	}
 	if key == string(SettingAnalyticsEnabled) || key == string(SettingAnalyticsSharingEnabled) {
 		if !d.analyticsSharing() {
 			d.analyticsUpload.withdraw()
 		}
 		d.queueAnalyticsShip()
-	}
-	if key == string(SettingTailscaleEnabled) {
-		d.ensureTailscaleServeFromSettings()
 	}
 	if key == string(SettingHeadlessContextWindowCap) {
 		d.applyHeadlessContextWindowCap()
@@ -139,7 +137,7 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(SettingActivityEnabled) && !parseBooleanSetting(value) {
 		d.clearAllSessionActivity()
 	}
-	d.publishSettingsFact(FactSettingChanged, key)
+	d.publishFact(FactSettingChanged, key, nil)
 	d.codexShared().settingChanged(key)
 }
 
@@ -155,11 +153,6 @@ func (d *Daemon) refreshChangedSettings(before map[string]string) {
 			d.settingChanged(key, value)
 		}
 	}
-}
-
-func (d *Daemon) publishSettingsFact(name, subject string) {
-	d.refreshTailscaleServeState()
-	d.publishFact(name, subject, nil)
 }
 
 func (d *Daemon) projectSettingsUpdated(changedKey string) {
@@ -192,7 +185,7 @@ func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID stri
 		settings[k] = v
 	}
 	if own := d.profileNotebookRoot(profileID); own != "" {
-		settings[string(SettingNotebookProfileRoot)] = own
+		settings[string(SettingNotebookRoot)] = own
 	}
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[string(SettingNotebookRootEffective)] = root
@@ -271,9 +264,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
 	settings[string(SettingSharedPTYHostEnabled)] = strconv.FormatBool(sharedEnabled)
 	settings[string(SettingSharedPTYHostActive)] = strconv.FormatBool(sharedActive)
-	if cfg, err := d.store.GetAutoModeConfig(); err == nil {
-		settings[string(SettingAutoModeEnabledDefault)] = strconv.FormatBool(cfg.EnabledDefault)
-	}
 	settings[string(settingNotebookSyncState)], settings[string(settingNotebookSyncLastError)] = d.notebookSyncSettings()
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt
@@ -281,7 +271,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if !lastBackupAt.IsZero() {
 		settings[string(SettingDBLastBackupAt)] = lastBackupAt.Format(time.RFC3339)
 	}
-	settings[string(SettingTailscaleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingTailscaleEnabled)]))
 	settings[string(SettingQueueModeEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueModeEnabled)]))
 	settings[string(SettingDirectAgentLaunchEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingDirectAgentLaunchEnabled)]))
 	settings[string(SettingQueueCrewEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueCrewEnabled)]))
@@ -294,6 +283,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(SettingAutoApproveEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingAutoApproveEnabled)]))
 	settings[string(SettingAutoSettleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAutoSettleEnabled)]))
 	settings[string(SettingCalloutsEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCalloutsEnabled)]))
+	settings[string(SettingPhoneAccessEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingPhoneAccessEnabled)]))
 	settings[string(SettingAsksEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAsksEnabled)]))
 	settings[string(SettingAnalyticsEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsEnabled)]))
 	settings[string(SettingAnalyticsSharingEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsSharingEnabled)]))
@@ -335,20 +325,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(settingOutpostState)] = state
 	settings[string(settingOutpostHome)] = home
 	settings[string(settingOutpostLastError)] = lastError
-	tailscale := d.tailscaleStateSnapshot()
-	if tailscale.status != "" {
-		settings["tailscale_status"] = tailscale.status
-	}
-	if tailscale.domain != "" {
-		settings["tailscale_domain"] = tailscale.domain
-		settings["tailscale_url"] = "https://" + tailscale.domain + "/"
-	}
-	if tailscale.authURL != "" {
-		settings["tailscale_auth_url"] = tailscale.authURL
-	}
-	if tailscale.lastError != "" {
-		settings["tailscale_error"] = tailscale.lastError
-	}
 	return settings
 }
 

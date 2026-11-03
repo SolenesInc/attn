@@ -18,7 +18,7 @@ import (
 func runBridge() {
 	if err := relayBridge(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 func relayBridge(ctx context.Context) error {

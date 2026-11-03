@@ -1,0 +1,4 @@
+kind: fixed
+area: queue
+change: A snooze that reaches an agent after a new turn opened is refused with the reason and the new turn's start time, instead of "could not save snooze". A settle of an outpost agent refused the same way now shows that reason too, where before it was dropped without a word.
+symptom: Snoozing an outpost agent the moment it stopped could fail with "could not save snooze" and nothing to say why.

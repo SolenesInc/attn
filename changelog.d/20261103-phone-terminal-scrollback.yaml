@@ -1,0 +1,3 @@
+kind: fixed
+area: phone app
+change: Swiping down on a session's terminal in the phone app reads back through earlier output. Claude Code's fullscreen interface scrolls its own history, as it does under the desktop's wheel; other programs scroll through the output the phone received since it opened the terminal.

@@ -1,7 +1,0 @@
-name = "attn-pi"
-version = "0.2.0"
-attn_api_version = 7
-description = "pi driver for attn"
-
-[plugin]
-entrypoint = "src/index.ts"

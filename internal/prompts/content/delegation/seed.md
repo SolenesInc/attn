@@ -1,3 +1,3 @@
-Your assignment is "{{seed_title}}" (seed `{{seed_id}}`). Read it with `attn seed show {{seed_id}}` before starting, along with the references needed for your task. Use the delegated-agent guidance in the `attn` skill for progress reporting and completion.
+Your assignment is "{{seed_title}}" (seed `{{seed_id}}`). Before you start, read the seed with `attn seed show {{seed_id}}`, along with the references your task needs. Use the delegated-agent guidance in the `attn` skill for progress reporting and completion.
 
-Make the result readable in this conversation and durable in the seed. Link any supporting artifacts. {{completion}}
+State the result in this conversation, and record it in the seed so that it lasts. Link any supporting artifacts. {{completion}}

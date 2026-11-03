@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/prompts"
@@ -26,44 +28,52 @@ func runAgent() {
 	}
 	switch os.Args[2] {
 	case "list":
+		setCommandPath("agent list")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentList(os.Args[3:])
 	case "peek":
+		setCommandPath("agent peek")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentPeek(os.Args[3:])
 	case "msg":
+		setCommandPath("agent msg")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentMsg(os.Args[3:])
 	case "close":
+		setCommandPath("agent close")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentClose(os.Args[3:])
 	case "reload":
+		setCommandPath("agent reload")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentReload(os.Args[3:])
 	case "attachment":
+		setCommandPath("agent attachment")
 		runAgentAttachment(os.Args[3:])
 	case "inbox":
+		setCommandPath("agent inbox")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
 		}
 		runAgentInbox(os.Args[3:])
 	case "msg-status":
+		setCommandPath("agent msg-status")
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
 			return
@@ -73,7 +83,7 @@ func runAgent() {
 		recordUsageError("agent", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "agent: unknown command %q\n", os.Args[2])
 		writeAgentHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -111,12 +121,12 @@ func runAgentList(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent list: %v\n", err)
 		writeAgentHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").List("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent list: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	rows := agentListRows(result)
 	if parsed.json {
@@ -228,12 +238,12 @@ func runAgentPeek(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent peek: %v\n", err)
 		writeAgentHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := crewClient(parsed.profile).AgentPeek(parsed.target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent peek: %s\n", agentPeekErrorMessage(parsed.target, err))
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -373,12 +383,12 @@ func runAgentMsg(args []string) {
 	parsed, err := parseAgentMsgArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").AgentMsg(parsed.target, parsed.source, parsed.content)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg: %s\n", agentMsgErrorMessage(parsed, err))
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -386,7 +396,7 @@ func runAgentMsg(args []string) {
 		fmt.Fprintln(os.Stdout, agentMsgOutcomeLine(result))
 	}
 	if result.Status == protocol.AgentMsgStatusRefused {
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -478,18 +488,26 @@ func runAgentClose(args []string) {
 	parsed, err := parseAgentCloseArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
+	outliveTheCloseOfOwnSession()
 	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %s\n", agentCloseErrorMessage(parsed, err))
-		os.Exit(1)
+		exit(1)
+	}
+	if result.Rule == protocol.AgentCloseRuleSelf {
+		recordAsClosedSession(result.TargetSessionID)
 	}
 	if parsed.json {
 		printJSON(result)
 		return
 	}
 	printAgentClose(os.Stdout, result)
+}
+
+func outliveTheCloseOfOwnSession() {
+	signal.Ignore(syscall.SIGTERM, syscall.SIGHUP)
 }
 
 func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
@@ -609,7 +627,7 @@ func runAgentInbox(args []string) {
 	parsed, err := parseAgentInboxArgs(args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent inbox: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	if parsed.messageID != "" {
 		result, item, err := client.New("").AgentInboxEntry(parsed.messageID, parsed.sessionID)
@@ -617,7 +635,7 @@ func runAgentInbox(args []string) {
 			fmt.Fprintf(os.Stderr, "agent inbox: %s\n", agentMailboxErrorMessage(agentMailboxArgs{
 				messageID: parsed.messageID, sessionID: parsed.sessionID,
 			}, err))
-			os.Exit(1)
+			exit(1)
 		}
 		if item != nil {
 			if parsed.json {
@@ -637,7 +655,7 @@ func runAgentInbox(args []string) {
 	result, err := client.New("").AgentInboxBatch(parsed.sessionID, parsed.limit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent inbox: %s\n", strings.TrimSpace(err.Error()))
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)
@@ -650,12 +668,12 @@ func runAgentMsgStatus(args []string) {
 	parsed, err := parseAgentMailboxArgs("msg-status", args, currentSessionOrExit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg-status: %v\n", err)
-		os.Exit(2)
+		exit(2)
 	}
 	result, err := client.New("").AgentMsgStatus(parsed.messageID, parsed.sessionID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent msg-status: %s\n", agentMailboxErrorMessage(parsed, err))
-		os.Exit(1)
+		exit(1)
 	}
 	if parsed.json {
 		printJSON(result)

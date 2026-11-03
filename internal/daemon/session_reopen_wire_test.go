@@ -45,9 +45,10 @@ func TestAClosedSessionWhoseConversationIsGoneRefusesResume(t *testing.T) {
 
 	boot := w.HoldNextBoot()
 	unbound := w.Spawn(app, fakeagent.Codex, w.Path("unbound"))
+	boot.Await()
 	closeSession(t, cli, unbound, "never started")
 	awaitClosed(app, unbound)
-	boot()
+	boot.Release()
 
 	vanished := w.Spawn(app, fakeagent.Codex, w.Path("vanished"))
 	vanishedRun := w.Launched(vanished)

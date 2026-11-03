@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
@@ -105,13 +106,7 @@ func (d *Daemon) sessionExists(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) sessionActive(sessionID protocol.SessionID) bool {
-	if !d.sessionExists(sessionID) {
-		return false
-	}
-	if _, hasLaunchIntent := d.store.LaunchIntent(sessionID); hasLaunchIntent {
-		return d.sessionHasLiveWorker(sessionID) || d.store.DelegationSessionReserved(sessionID)
-	}
-	return true
+	return d.partyHolds(who.Session(sessionID))
 }
 
 func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {

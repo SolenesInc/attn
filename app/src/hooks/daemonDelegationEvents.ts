@@ -1,4 +1,4 @@
-import type { DelegationPreferences, DelegationRole, Harness, HarnessModel, TierDefaults } from '../types/generated';
+import type { AgentCatalogResult, DelegationPreferences, DelegationRole, Harness, HarnessModel, TierDefaults } from '../types/generated';
 import { type PendingRequests, settlePendingRequest } from './daemonPendingRequests';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
@@ -20,6 +20,7 @@ interface DelegationEvent {
   expanded_roles?: DelegationRole[];
   workflow_skill_paths?: string[];
   harnesses?: Harness[];
+  catalog?: AgentCatalogResult;
   models?: HarnessModel[];
   detail?: string;
   tier_defaults?: TierDefaults;
@@ -39,6 +40,10 @@ export function handleDelegationDaemonEvent(event: DelegationEvent, pending: Pen
     settlePendingRequest(pending, 'harness_models', event,
       value => value.models ? { models: value.models, detail: value.detail ?? '', tier_defaults: value.tier_defaults ?? {} } : undefined,
       'Discovering models failed');
+    return true;
+  }
+  if (event.event === 'agent_catalog_result') {
+    settlePendingRequest(pending, 'agent_catalog', event, value => value.catalog, 'Reading the harness catalog failed');
     return true;
   }
   if (event.event === 'delegation_preferences_changed') {

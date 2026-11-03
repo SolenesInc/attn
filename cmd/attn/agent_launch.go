@@ -85,11 +85,12 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 }
 
 func runAgentDirectly(requestedAgent string) {
+	leaveInvocationUnrecorded()
 	parsed, err := parseDirectLaunchArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn: %v\n\n", err)
 		writeHelp(os.Stderr)
-		os.Exit(1)
+		exit(1)
 	}
 
 	pathutil.EnsureGUIPath()
@@ -109,14 +110,14 @@ func runAgentDirectly(requestedAgent string) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error getting cwd: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	initialPrompt := parsed.initialPrompt
 	if parsed.initialPromptFile != "" {
 		content, readErr := readInitialPromptFile(parsed.initialPromptFile)
 		if readErr != nil {
 			fmt.Fprintf(os.Stderr, "error reading initial prompt: %v\n", readErr)
-			os.Exit(1)
+			exit(1)
 		}
 		initialPrompt = content
 	}
@@ -126,7 +127,7 @@ func runAgentDirectly(requestedAgent string) {
 	sessionID := currentSessionOrExit()
 	if terminalID == "" {
 		fmt.Fprintf(os.Stderr, "attn: a daemon-managed launch needs ATTN_TERMINAL_ID; the daemon sets it for every agent it starts\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	opts := agentdriver.SpawnOpts{
@@ -175,10 +176,9 @@ func runAgentDirectly(requestedAgent string) {
 		opts.AwarenessDirs = prime.AwarenessDirs
 	} else if opts.CrewV2Enabled {
 		fmt.Fprintf(os.Stderr, "attn: crew priming: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
-	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")
 	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
 	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
@@ -206,7 +206,7 @@ func runAgentDirectly(requestedAgent string) {
 
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -231,9 +231,9 @@ func runAgentDirectly(requestedAgent string) {
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode())
+			exit(exitErr.ExitCode())
 		}
-		os.Exit(1)
+		exit(1)
 	}
 }
 

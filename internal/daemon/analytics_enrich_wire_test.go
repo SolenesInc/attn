@@ -3,14 +3,18 @@ package daemon_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -122,10 +126,11 @@ func assertDerivedTraitsAreClosed(t *testing.T, record analytics.Record) {
 		t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
 	}
 	closed := map[string]map[string]bool{
-		"harness": {protocol.SessionAgentClaude: true},
-		"model":   {"fable": true},
-		"launch":  {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},
-		"state":   {},
+		"harness":         {protocol.SessionAgentClaude: true},
+		"model":           {"fable": true},
+		"model_requested": {"fable": true},
+		"launch":          {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},
+		"state":           {},
 	}
 	for _, state := range []protocol.SessionState{protocol.SessionStateIdle, protocol.SessionStateLaunching, protocol.SessionStatePendingApproval, protocol.SessionStateRecoverable, protocol.SessionStateScheduled, protocol.SessionStateUnknown, protocol.SessionStateWaitingInput, protocol.SessionStateWorking} {
 		closed["state"][string(state)] = true
@@ -157,4 +162,271 @@ func mirroredRecords(t *testing.T, app *testworld.Peer, name string) []analytics
 		}
 	}
 	return records
+}
+
+func TestAMirroredIDFieldMatchesTheSubjectOfTheSameEntity(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "planter")
+		seedID := plantDelegationSeed(t, cli, agent.id, "Keyed ids")
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		records := mirroredRecords(t, app, "")
+		session := slices.IndexFunc(records, func(r analytics.Record) bool { return strings.HasPrefix(r.Name, "session.") && r.Subject != "" })
+		planted := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Name == "garden.seed.planted" })
+		if session < 0 || planted < 0 {
+			t.Fatalf("the outbox holds no session.* record (%d) or no garden.seed.planted record (%d)", session, planted)
+		}
+		if records[session].Subject != analytics.HashSubject(secret, agent.id) || records[planted].Subject != analytics.HashSubject(secret, seedID) {
+			t.Fatalf("subjects %q and %q, want the hashed session and seed", records[session].Subject, records[planted].Subject)
+		}
+		var props struct {
+			CausedBy string `json:"caused_by_session_id"`
+		}
+		if err := json.Unmarshal(records[planted].Props, &props); err != nil {
+			t.Fatal(err)
+		}
+		if props.CausedBy != records[session].Subject {
+			t.Errorf("garden.seed.planted carries caused_by_session_id %q in %s, want the planting session's subject %q", props.CausedBy, records[planted].Props, records[session].Subject)
+		}
+	})
+}
+
+func TestAMirroredSettingChangeNamesTheSettingAndNotItsConcreteKey(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		setSetting(t, app, "new_session_destination_local_/Users/someone/shop", "main_repo")
+		synctest.Wait()
+
+		var subjects []string
+		for _, record := range mirroredRecords(t, app, "setting.changed") {
+			subjects = append(subjects, record.Subject)
+		}
+		if !slices.Contains(subjects, "analytics.enabled") || !slices.Contains(subjects, "new_session_destination_<repository>") {
+			t.Errorf("setting.changed subjects %v, want analytics.enabled and the pattern new_session_destination_<repository>", subjects)
+		}
+		for _, subject := range subjects {
+			if strings.Contains(subject, "someone") {
+				t.Errorf("setting.changed subject %q carries the concrete key's path", subject)
+			}
+		}
+	})
+}
+
+func TestSessionFactsAndVentsTellTheReportedModelFromTheRequestedOne(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		id := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Model = protocol.Ptr("opus") })
+		agent := w.bootBubbleClaude(t, id)
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := analytics.HashSubject(secret, id)
+		sessionFacts := func(after int64) []analytics.SessionTraits {
+			var traits []analytics.SessionTraits
+			for _, record := range mirroredRecords(t, app, "") {
+				if record.Subject != subject || !strings.HasPrefix(record.Name, "session.") || record.Seq <= after {
+					continue
+				}
+				var derived analytics.Derived
+				if err := json.Unmarshal(record.Props, &derived); err != nil {
+					t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
+				}
+				if derived.Session != nil {
+					traits = append(traits, *derived.Session)
+				}
+			}
+			return traits
+		}
+		ventModels := func() (string, string) {
+			vent, err := cli.RecordVent(protocol.SessionID(id), protocol.VentKindAttn, "attn ask lost my answer.")
+			if err != nil {
+				t.Fatalf("vent: %v", err)
+			}
+			if err := cli.WithdrawVent(protocol.SessionID(id), vent.ID); err != nil {
+				t.Fatalf("withdraw: %v", err)
+			}
+			return protocol.Deref(vent.Context.Model), protocol.Deref(vent.Context.ModelRequested)
+		}
+
+		before := sessionFacts(0)
+		if len(before) == 0 {
+			t.Fatal("the outbox holds no session fact before usage")
+		}
+		for _, traits := range before {
+			if traits.Model != "" || traits.ModelRequested != "opus" {
+				t.Errorf("before usage a session fact carries model %q and model_requested %q, want no model and model_requested opus", traits.Model, traits.ModelRequested)
+			}
+		}
+		if model, requested := ventModels(); model != "" || requested != "opus" {
+			t.Errorf("before usage a vent carries model %q and model_requested %q, want no model and model_requested opus", model, requested)
+		}
+
+		var last int64
+		for _, record := range mirroredRecords(t, app, "") {
+			last = max(last, record.Seq)
+		}
+		appendLegacyCostUsage(t, agent.transcript.Path, "reply-1", "claude-opus-5-5", 10, 4)
+		w.advance(time.Second)
+		awaitUsageTokens(app, id, 14)
+		app.TypeLine(id, "ship the refund flow")
+		agent.reply("shipped <!-- attn:state=idle -->")
+
+		after := sessionFacts(last)
+		if len(after) == 0 {
+			t.Fatal("the outbox holds no session fact after usage")
+		}
+		if latest := after[len(after)-1]; latest.Model != "claude-opus-5-5" || latest.ModelRequested != "opus" {
+			t.Errorf("after usage the latest session fact carries model %q and model_requested %q, want claude-opus-5-5 and opus", latest.Model, latest.ModelRequested)
+		}
+		if model, requested := ventModels(); model != "claude-opus-5-5" || requested != "opus" {
+			t.Errorf("after usage a vent carries model %q and model_requested %q, want claude-opus-5-5 and opus", model, requested)
+		}
+	})
+}
+
+func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		chief := w.bubbleClaude(t, app, "chief")
+		target := w.bubbleClaude(t, app, "target")
+		closedByUser := w.bubbleClaude(t, app, "closed-by-user")
+		if made := setChiefOfStaff(app, chief.id, true); !made.Success {
+			t.Fatalf("making the chief: %+v", made)
+		}
+		first := plantDelegationSeed(t, cli, chief.id, "First")
+		second := plantDelegationSeed(t, cli, chief.id, "Second")
+		scoped := cli.WithGardenProfile("", protocol.SessionID(chief.id))
+		if _, err := scoped.SeedLink(first, "blocks", second, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := scoped.SeedLink(first, "blocks", second, true); err != nil {
+			t.Fatal(err)
+		}
+		if result, err := cli.AgentReload([]string{target.id}, protocol.SessionID(chief.id), false); err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success {
+			t.Fatalf("reload = %+v, %v", result, err)
+		}
+		synctest.Wait()
+		if _, err := cli.AgentClose(target.id, protocol.SessionID(chief.id), "finished"); err != nil {
+			t.Fatalf("the chief closes the target: %v", err)
+		}
+		if closed := closeFromApp(app, closedByUser.id); !closed.Accepted {
+			t.Fatalf("the user closes a session: %+v", closed)
+		}
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		chiefSubject, terminal := analytics.HashSubject(secret, chief.id), analytics.HashSubject(secret, target.self)
+		for _, want := range []struct {
+			name, subject, field, value string
+		}{
+			{"garden.seed.edge.unlinked", analytics.HashSubject(secret, first), "caused_by_session_id", chiefSubject},
+			{"session.respawned", analytics.HashSubject(secret, target.id), "terminal", terminal},
+			{"session.pty.exited", analytics.HashSubject(secret, target.id), "terminal", terminal},
+			{"session.closed", analytics.HashSubject(secret, target.id), "closed_by", chiefSubject},
+			{"session.closed", analytics.HashSubject(secret, closedByUser.id), "closed_by", "user"},
+		} {
+			var values []string
+			for _, record := range mirroredRecords(t, app, want.name) {
+				if record.Subject != want.subject {
+					continue
+				}
+				var props map[string]any
+				if err := json.Unmarshal(record.Props, &props); err != nil {
+					t.Fatal(err)
+				}
+				values = append(values, fmt.Sprint(props[want.field]))
+			}
+			if !slices.Contains(values, want.value) {
+				t.Errorf("%s about %s carries %s %v, want %q", want.name, want.subject, want.field, values, want.value)
+			}
+		}
+	})
+}
+
+func TestAMirroredSessionUnregisteredCarriesWhyItsStateAndTerminalEnded(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		w.terminal(agent.id).ExitBySignal(syscall.SIGKILL)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == agent.id })
+		desktop, tile := tileOf(t, w, app, w.Terminal(agent.id))
+		if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+			t.Fatalf("close the killed agent's tile: %s", protocol.Deref(closed.Error))
+		}
+		synctest.Wait()
+
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := analytics.HashSubject(secret, agent.id)
+		records := mirroredRecords(t, app, "session.unregistered")
+		at := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Subject == subject })
+		if at < 0 {
+			t.Fatalf("no session.unregistered record for the killed agent among %d", len(records))
+		}
+		props := records[at].Props
+		var got struct {
+			StateReason  string `json:"state_reason"`
+			TerminalExit struct {
+				Code   int    `json:"code"`
+				Signal string `json:"signal"`
+			} `json:"terminal_exit"`
+		}
+		if err := json.Unmarshal(props, &got); err != nil {
+			t.Fatalf("props %s: %v", props, err)
+		}
+		if got.StateReason != "process_exited" || got.TerminalExit.Signal != "killed" || got.TerminalExit.Code != -1 {
+			t.Errorf("session.unregistered carries %s, want state_reason process_exited and terminal_exit signal killed", props)
+		}
+		var shape map[string]any
+		if err := json.Unmarshal(props, &shape); err != nil {
+			t.Fatal(err)
+		}
+		delete(shape, "session")
+		delete(shape, "repo")
+		texts := map[string]bool{}
+		collectTextPaths("", shape, texts)
+		for path := range texts {
+			if _, classified := analytics.BusFields["session.unregistered"][path]; !classified {
+				t.Errorf("session.unregistered ships %s as text, want its length: %s", path, props)
+			}
+		}
+		if strings.Contains(string(props), w.Dir) {
+			t.Errorf("session.unregistered carries the session's directory: %s", props)
+		}
+	})
+}
+
+func collectTextPaths(prefix string, value any, into map[string]bool) {
+	switch v := value.(type) {
+	case string:
+		into[prefix] = true
+	case []any:
+		for _, item := range v {
+			collectTextPaths(prefix, item, into)
+		}
+	case map[string]any:
+		for key, item := range v {
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			collectTextPaths(path, item, into)
+		}
+	}
 }

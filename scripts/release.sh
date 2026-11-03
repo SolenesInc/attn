@@ -8,8 +8,9 @@ usage() {
 usage: $0 <version-tag> [--dry-run]
 example: $0 v0.12.0
 
-Cut release/vX.Y.Z from the accepted ${remote}/main head, compile its
-changelog, bump versions, write the release manifest, and open a PR to main.
+Cut release/vX.Y.Z from the accepted and reviewed ${remote}/main head,
+compile its changelog, bump versions, write the release manifest, and open a
+PR to main.
 Once merged, Acceptance on the release commit tags and publishes it. This
 command never merges, tags, or starts a release.
 EOF
@@ -69,9 +70,10 @@ if [[ -z "$repo_name" || -z "$repo_url" ]]; then
   exit 1
 fi
 
-echo "Fetching ${remote}/main..."
-git fetch --no-tags "$remote" main
+echo "Fetching ${remote}/main and ${remote}/reviewed..."
+git fetch --no-tags "$remote" main reviewed
 main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
+reviewed_sha="$(git rev-parse --verify "${remote}/reviewed^{commit}")"
 local_sha="$(git rev-parse --verify HEAD)"
 release_branch="release/${version_tag}"
 
@@ -80,6 +82,13 @@ if [[ "$local_sha" != "$main_sha" ]]; then
   echo "local:  ${local_sha}" >&2
   echo "remote: ${main_sha}" >&2
   echo "fast-forward main and wait for Acceptance on the new head" >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor "$main_sha" "$reviewed_sha"; then
+  echo "prepare release: ${remote}/reviewed does not contain ${remote}/main" >&2
+  echo "main:     ${main_sha}" >&2
+  echo "reviewed: ${reviewed_sha}" >&2
+  echo "run the review-main skill, or wait until reviewed reaches ${main_sha}" >&2
   exit 1
 fi
 require_remote_tag_absent "$remote" "$version_tag" "prepare release" \

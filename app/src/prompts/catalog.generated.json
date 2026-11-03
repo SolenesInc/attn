@@ -250,8 +250,8 @@
   ],
   "sources": {
     "content/annotations/labels/consider-alternatives.md": "Propose 2-3 alternative approaches with trade-offs based on the actual codebase.\n",
-    "content/annotations/labels/give-me-an-example.md": "This is too abstract. Show a before/after, a sample input/output, or a specific scenario.\n",
-    "content/annotations/labels/show-the-receipt.md": "You asserted this as fact. Name what backs it — the file and line, the measurement, the command output — or say plainly that it is an assumption.\n",
+    "content/annotations/labels/give-me-an-example.md": "This is too abstract. Show a before and after, a sample input and output, or a specific scenario.\n",
+    "content/annotations/labels/show-the-receipt.md": "You asserted this as fact. Name what backs it, such as the file and line, the measurement, or the command output. If nothing backs it, say plainly that it is an assumption.\n",
     "content/annotations/labels/verify-this.md": "This seems like an assumption. Verify by reading the actual code before proceeding.\n",
     "content/annotations/terminal-comment-heading.md": "💬 Comment",
     "content/annotations/terminal-comment.md": "{{comment}}\n",
@@ -271,13 +271,13 @@
       "recipient": "annotation-label",
       "event": "show-the-receipt",
       "values": {},
-      "sha256": "cde260818554dd34f73015c2567b7bc54897e0557b02229b6cae231a3090de0a"
+      "sha256": "8915bf7039da7486ece1500fb2c4dee1ecb402c0ddef67f4f597bd5a17e353a4"
     },
     {
       "recipient": "annotation-label",
       "event": "give-me-an-example",
       "values": {},
-      "sha256": "00d8821f214da8fa38fcb5e9a752f10b278287d1d1335ee94c263cd3b3db057d"
+      "sha256": "78a2ad65910c10a199e6ce1ba5d75a38afd6b69d283162e2ea5d4642362e6edb"
     },
     {
       "recipient": "annotation-label",

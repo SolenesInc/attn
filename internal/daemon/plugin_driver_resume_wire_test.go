@@ -361,15 +361,15 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"resume": true, "resume_availability": true})
 			awaitDriverAvailable(app, "snipe")
 			repo := reopenRepoWithOrigin(t)
-			settings := filepath.Join(repo, ".pi", "settings.json")
+			settings := filepath.Join(repo, ".snipe", "settings.json")
 			if err := os.MkdirAll(filepath.Dir(settings), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(settings, []byte(`{"sessionDir":"/external/pi-sessions"}`), 0o644); err != nil {
+			if err := os.WriteFile(settings, []byte(`{"sessionDir":"/external/snipe-sessions"}`), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			runGit(t, repo, "add", ".pi/settings.json")
-			runGit(t, repo, "commit", "-m", "Configure external Pi storage")
+			runGit(t, repo, "add", ".snipe/settings.json")
+			runGit(t, repo, "commit", "-m", "Configure external plugin storage")
 			worktree := reopenWorktree(t, repo, "feat/project-storage")
 			session, run := spawnDriven(w, app, driver, worktree)
 			driver.mustReport("session.report_metadata", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "seq": 1, "metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation"})
@@ -393,7 +393,7 @@ func TestRecreatingAWorktreeChecksPluginStorageAfterProjectSettingsReturn(t *tes
 			if len(inspection.Conversations) != 1 || inspection.Conversations[0].CWD != worktree {
 				t.Fatalf("inspection = %+v", inspection)
 			}
-			if _, err := os.Stat(filepath.Join(inspection.Conversations[0].CWD, ".pi", "settings.json")); err != nil {
+			if _, err := os.Stat(filepath.Join(inspection.Conversations[0].CWD, ".snipe", "settings.json")); err != nil {
 				t.Fatalf("storage checked before project settings returned: %v", err)
 			}
 			answerResumeInspection(driver, request, inspection, func(string, string) bool { return available }, "saved conversation missing from configured storage")

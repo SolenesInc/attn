@@ -11,7 +11,6 @@ import type { HarnessAPI } from './types';
 const initHarnessAPI = (componentName: string): HarnessAPI => ({
   componentName,
   calls: {},
-  ready: false,
 
   recordCall(fnName: string, args: unknown[]) {
     if (!this.calls[fnName]) {
@@ -32,6 +31,9 @@ const initHarnessAPI = (componentName: string): HarnessAPI => ({
     console.warn('triggerRerender not yet initialized');
   },
 });
+
+let markHarnessReady: () => void = () => {};
+window.__HARNESS_READY__ = new Promise<void>((resolve) => { markHarnessReady = resolve; });
 
 function HarnessApp() {
   const params = new URLSearchParams(window.location.search);
@@ -72,7 +74,7 @@ function HarnessApp() {
   window.__HARNESS__ = initHarnessAPI(componentName);
 
   const handleReady = () => {
-    window.__HARNESS__.ready = true;
+    markHarnessReady();
     console.log(`[Harness] ${componentName} ready`);
   };
 

@@ -1,1 +1,1 @@
-The user sent seed `{{seed_id}}` to you to decide how it should continue. You are now its tender. Read the seed and its latest log note with `attn seed show {{seed_id}}`, then choose the working context and hand it over as appropriate.
+The user sent you seed `{{seed_id}}` to decide how the seed should continue. You are now the seed's tender. Read the seed and its latest log note with `attn seed show {{seed_id}}`. Then choose the working context and hand the seed over as appropriate.

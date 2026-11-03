@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('keeps the compact rail controls usable with eight desktops and unread notifications', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto('/test-harness/?component=SidebarRail');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const rail = page.locator('.sidebar.collapsed');
   expect((await rail.boundingBox())!.width).toBe(44);
   const buttons = rail.locator('button');
@@ -28,7 +28,7 @@ test('keeps the compact rail controls usable with eight desktops and unread noti
 test('reveals the same current desktop after an arrangement update moves it to the end', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto('/test-harness/?component=SidebarRail&update=reorder');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const current = page.getByRole('button', { name: 'Sidebar refinement (⌘1)' });
   await expect(current).toHaveAttribute('aria-current', 'true');
   await expect(current).toBeInViewport();
@@ -42,7 +42,7 @@ test('reveals the same current desktop after an arrangement update moves it to t
 test('keeps the current desktop visible when the window shrinks', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto('/test-harness/?component=SidebarRail');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await page.evaluate(() => window.__HARNESS__.triggerRerender());
   const current = page.getByRole('button', { name: 'Sketches (⌘8)' });
   await expect(current).toHaveAttribute('aria-current', 'true');
@@ -56,7 +56,7 @@ test('keeps the current desktop visible when the window shrinks', async ({ page 
 test('pins the tools and bottom actions at 600px while scrolling desktops and revealing the current one', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto('/test-harness/?component=SidebarRail');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   const expand = page.getByRole('button', { name: 'Expand sidebar' });
   const add = page.getByTitle('New Session (⌘N)');
   await expect(expand).toBeInViewport();
@@ -74,7 +74,7 @@ test('pins the tools and bottom actions at 600px while scrolling desktops and re
   expect(await page.getByTitle('Garden', { exact: true }).boundingBox()).toEqual(tool);
 
   await page.reload();
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
   await page.evaluate(() => window.__HARNESS__.triggerRerender());
   await expect(last).toHaveAttribute('aria-current', 'true');
   await expect(last).toBeInViewport({ ratio: 1 });

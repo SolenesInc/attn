@@ -69,7 +69,8 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 		m.ResumeSessionID = protocol.Ptr(talked)
 	})
 	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateLaunching })
-	boot()
+	boot.Await()
+	boot.Release()
 	resumed := w.Launched(talked)
 	if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("respawn ran claude %q, want -r %s", resumed.Argv, first.ConversationID)

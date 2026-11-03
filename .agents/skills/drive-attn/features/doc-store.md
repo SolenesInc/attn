@@ -1,19 +1,20 @@
 # Document store
 
 Collections of documents with live queries, for agents and plugins. A
-document is a JSON object addressed by namespace, collection and id; a
-collection declares which fields can be filtered and sorted. Agents keep
-shared state there, change it only if nobody changed it first, and watch a
-query whose window updates as writes land. The garden is stored the same way,
-but `attn doc` cannot read or change it: only `attn seed` reaches it.
+document is a JSON object addressed by namespace, collection and id. Whoever
+defines a collection declares which fields can be filtered and sorted. Agents
+keep shared state in documents, change a document only if nobody changed that
+document first, and watch a query whose window updates as writes land. The
+garden is stored the same way, but `attn doc` cannot read or change the garden.
+Only `attn seed` reaches the garden.
 
 ## Sub-features
 
 - `doc-collections`: declare a collection with its queryable fields, redeclare it to add or drop one, remove it with every document, and list them.
-- `doc-crud`: put, get and delete a document; every read and write reports its revision and log position.
-- `doc-conditional`: `--expect <rev>` or `--expect absent` makes a write or delete conditional, refused when the document moved.
-- `doc-query`: filter, sort, page with `--after` and count; one answer, true at the position it reports.
-- `doc-watch`: a live query that prints its window again on every write that changes it, and resumes after a daemon restart with `--resume`.
+- `doc-crud`: put, get and delete a document. Every read and write reports its revision and log position.
+- `doc-conditional`: `--expect <rev>` or `--expect absent` makes a write or delete conditional. attn refuses the write or delete when the document is not at the expected revision.
+- `doc-query`: filter, sort, page with `--after` and count. Each answer is true at the position it reports.
+- `doc-watch`: a live query. `attn doc watch` prints the query's window again after every write that changes the window, and resumes after a daemon restart with `--resume`.
 
 ## How to get to it
 
@@ -25,15 +26,15 @@ but `attn doc` cannot read or change it: only `attn seed` reaches it.
 
 - `attn doc` (`cmd/attn/doc.go`): `define <namespace> <collection> [field:type ...]`, `undefine`, `collections [--json]`, `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]`, `delete [--expect <rev>]`, `query`, `count` and `watch [--resume]`, with the query flags `--where`, `--sort`, `--desc`, `--limit` and `--after`.
 - Prompts: none. Agents find the verb in `attn --help`, which the attn skill names as the authority for syntax.
-- Plugins: none. No bundled plugin uses the store, and the plugin API has no document methods.
+- Plugins: none. The plugin API has no document methods.
 
 ## Driving it
 
 Preconditions:
 
-- The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
+- Use the baseline instance with the daemon only.
+- Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Make an agent folder with `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, and save this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -42,7 +43,7 @@ Preconditions:
 ]}
 ```
 
-`<terminal>` below is the agent's terminal id from `wsctl list`; `<n>` is a log position the command prints.
+`<terminal>` below is the agent's terminal id from `wsctl list`. `<n>` is a log position the command prints.
 
 - **Declare.** Run `./attn doc define drive/demo tasks status:string attempts:number`. It prints `declared drive/demo/tasks with 2 queryable field(s)`. `./attn doc collections` lists `drive/demo`, `tasks` and `status:string attempts:number` under `NAMESPACE  COLLECTION  INDEXED FIELDS`, and `./attn doc collections --json` lists the same collection as JSON.
 - **Write and read.** Run `./attn doc put drive/demo tasks t1 '{"status":"pending","attempts":1}'`. It prints `wrote drive/demo/tasks/t1 (rev 1, seq <n>)`. `./attn doc get drive/demo tasks t1` prints the body exactly as written, and `as of seq <n>` on stderr. `./attn doc get drive/demo tasks t1 --json` prints the document with its `id`, `rev` and timestamps.
@@ -50,19 +51,19 @@ Preconditions:
 - **Page and read as JSON.** Run `./attn doc put drive/demo tasks t3 '{"status":"pending","attempts":3}'`. `./attn doc query drive/demo tasks --sort attempts --limit 1` prints only `t1`, and the same with `--after t1` prints only `t3`. `./attn doc query drive/demo tasks --where status=pending --json` prints a JSON array whose `id` values are `t1` and `t3`. `./attn doc query drive/demo tasks --limit 1001` exits 1, naming the maximum, `1000`, and the `after` cursor to page with.
 - **Conditional writes.** `./attn doc put drive/demo tasks t1 '{"status":"done","attempts":1}' --expect 1` prints `rev 2`. The same command again exits 1 naming `expected rev 1 but is at rev 2`, and `--expect absent` on `t1` exits 1 naming `already exists at rev 2`. `./attn doc get drive/demo tasks t1` still shows `"done"`.
 - **Delete.** Run `./attn doc put drive/demo tasks t2 '{"status":"done","attempts":0}'`, then `./attn doc delete drive/demo tasks t2 --expect 1`: it prints `deleted drive/demo/tasks/t2 (seq <n>)`. The same delete without `--expect` prints `drive/demo/tasks/t2 did not exist`.
-- **A watch resumes after a daemon restart.** Run `(./attn doc watch drive/demo tasks --where status=pending --json --resume & echo "export R=$!" >> $DRIVE_ENV; wait $!; echo $? > $P/resume.exit) > $P/resume.jsonl 2> $P/resume.err &`: `R` is the watch's PID, and `$P/resume.exit` gets its exit code. Re-run `jq -s length $P/resume.jsonl` until it prints `1`, with a deadline that fails the run: the first delivery holds `t3`. Run `./attn daemon stop`, which prints `stopped daemon (pid <n>)`, then `./attn daemon ensure`, which prints `"status": "started"`. Run `./attn doc put drive/demo tasks t5 '{"status":"pending","attempts":6}'`. Re-run `jq -c '{delivery, ids: [.documents[].id], changed}' $P/resume.jsonl | tail -1` until its `ids` hold `t3` and `t5` and its `changed` holds only `t5`: the resumed watch was sent only the body it did not hold.
+- **A watch resumes after a daemon restart.** Run `(./attn doc watch drive/demo tasks --where status=pending --json --resume & echo "export R=$!" >> $DRIVE_ENV; wait $!; echo $? > $P/resume.exit) > $P/resume.jsonl 2> $P/resume.err &`: `R` is the watch's PID, and `$P/resume.exit` gets its exit code. Re-run `jq -s length $P/resume.jsonl` until it prints `1`, with a deadline that fails the run: the first delivery holds `t3`. Run `./attn daemon stop`, which prints `stopped daemon (pid <n>)`, then `./attn daemon ensure`, which prints `"status": "started"`. Run `./attn doc put drive/demo tasks t5 '{"status":"pending","attempts":6}'`. Re-run `jq -c '{delivery, ids: [.documents[].id], changed}' $P/resume.jsonl | tail -1` until the `ids` hold `t3` and `t5` and `changed` holds only `t5`: the daemon sent the resumed watch only the body the watch did not hold.
 - **Watch while an agent writes.** Run `(./attn doc watch drive/demo tasks --where status=pending & echo "export W=$!" >> $DRIVE_ENV; wait $!; echo $? > $P/watch.exit) > $P/watch.txt 2> $P/watch.err &`. `$P/watch.txt` starts with `--- delivery 1 (2 document(s)` and lists `t3` and `t5`. Run `wsctl add-session --cwd $A --agent claude --label doc-agent --id doc-agent` and `wsctl input --id <terminal> --text "record" --enter`. `./attn agent peek doc-agent` shows `wrote drive/demo/tasks/t9 (rev 1, seq <n>)`, and `$P/watch.txt` gains a second `--- delivery` block that also lists `t9`.
 - **Removing the collection ends both watches.** Run `./attn doc undefine drive/demo tasks`. It prints `removed drive/demo/tasks and 4 document(s)`. Re-read `cat $P/watch.exit $P/resume.exit` until it prints `1` twice, with a deadline that fails the run, and `$P/watch.err` and `$P/resume.err` each end with a `doc watch:` line.
 - **Refusals.** `./attn doc get drive/demo tasks t1` now exits 1, naming `attn doc define`. `./attn doc put core/garden seeds s-x '{}'` exits 1 with `use attn seed commands`, and so does `./attn doc query core/garden seeds`. `./attn doc query drive/demo tasks --resume` exits 1 with `--resume is only for watch`.
-- **Proof.** In `$P`, keep each `./attn doc` command with its stdout, stderr and exit code, `watch.txt`, `watch.err`, `resume.jsonl`, `resume.err`, `watch.exit` and `resume.exit`, and `./attn agent peek doc-agent` after the prompt. Put the way in in each file's name, such as `doc-agent-put-peek.txt`.
+- **Proof.** In `$P`, keep each `./attn doc` command with its stdout, stderr and exit code, `watch.txt`, `watch.err`, `resume.jsonl`, `resume.err`, `watch.exit` and `resume.exit`, and `./attn agent peek doc-agent` after the prompt. Name each file for its way in, such as `doc-agent-put-peek.txt`.
 
 ## Contexts
 
-- **Durability across restarts**: documents and their declarations survive daemon restarts. `attn doc watch --resume` waits for the daemon to come back and receives only what changed while it was away; without `--resume` a watch exits non-zero when the daemon goes.
+- **Durability across restarts**: documents and their declarations survive daemon restarts. `attn doc watch --resume` waits for the daemon to come back and receives only what changed while the daemon was away. Without `--resume`, a watch exits non-zero when the daemon goes.
 - **Linux**: `attn doc` works the same where the daemon and CLI run on Linux.
-- **Outposts**: every `attn doc` call on an outpost is answered by the home, so an agent there reads and writes the home's documents.
-- **Profiles**: documents belong to no profile. Every profile and agent on the daemon reads the same namespaces. The garden's namespace, `core/garden`, is refused to `attn doc` for every verb, and its seeds are reached only through `attn seed`, which keeps them in their profile.
-- **Performance and idle cost**: a declared field is indexed, so filters and sorts on it read the index. `--limit` defaults to 100, and a limit above 1,000 is refused, naming the maximum and telling the caller to page with `--after`. A burst of writes reaches a slow watcher in at most two deliveries, and a writer never waits on a watcher that stopped reading.
+- **Outposts**: the home answers every `attn doc` call on an outpost, so an agent there reads and writes the home's documents.
+- **Profiles**: documents belong to no profile. Every profile and agent on the daemon reads the same namespaces. `attn doc` refuses the garden's namespace, `core/garden`, for every verb. Seeds are reachable only through `attn seed`, which keeps them in their profile.
+- **Performance and idle cost**: a declared field is indexed, so filters and sorts on it read the index. `--limit` defaults to 100. attn refuses a limit above 1,000, naming the maximum and telling the caller to page with `--after`. A burst of writes reaches a slow watcher in at most two deliveries, and a writer never waits on a watcher that stopped reading.
 - **Compatibility across versions**: the store's migrations carry documents written by earlier versions forward, including their revisions and timestamps.
 
 ## Tests
@@ -75,7 +76,7 @@ Preconditions:
 
 - Quote `--where` expressions with `<` or `>`: unquoted, `--where attempts>=1` makes the shell write to a file named `=1`.
 - A `--where` value is read as JSON when it parses as JSON: `--where status=5` sends the number 5, and `--where 'status="5"'` sends the string.
-- Reading or writing an undeclared collection is refused; declare it first. Redeclaring without a field that a live query uses ends that watch.
-- `watch` runs until interrupted. Run it in the background with its PID kept from `$!`, and end it by removing the collection or by that PID, never by name.
-- A watch prints the whole window on every delivery; `--json` adds `changed`, the bodies that delivery actually sent.
-- `get` and `query` print the position on stderr; a script that reads stdout gets only the body. Every `attn doc` call also prints the `[attn instance=...]` banner on stderr, so keep a watch's stderr out of the file that holds its deliveries.
+- attn refuses to read or write an undeclared collection. Declare the collection first. Redeclaring a collection without a field that a live query uses ends that watch.
+- `watch` runs until interrupted. Run it in the background and keep its PID from `$!`. End it by removing the collection or by killing that PID, never by name.
+- A watch prints the whole window on every delivery. `--json` adds `changed`, the bodies that delivery actually sent.
+- `get` and `query` print the position on stderr. A script that reads stdout gets only the body. Every `attn doc` call also prints the `[attn instance=...]` banner on stderr, so keep a watch's stderr out of the file that holds its deliveries.

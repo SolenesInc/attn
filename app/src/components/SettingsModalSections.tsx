@@ -23,12 +23,9 @@ import type { SettingsModalState } from './useSettingsModalState';
 export function SectionStatusPills({
   selectedSection,
   delegationPolicy,
-  tailscaleEnabled,
-  tailscaleStatus,
   pluginProblemCount,
   activePluginCount,
   plugins,
-  autoModePolicy,
   autoSettleEnabled,
   mutedRepos,
   mutedAuthors,
@@ -38,12 +35,9 @@ export function SectionStatusPills({
   SettingsModalState,
   | 'selectedSection'
   | 'delegationPolicy'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
-  | 'autoModePolicy'
   | 'autoSettleEnabled'
   | 'mutedRepos'
   | 'mutedAuthors'
@@ -53,13 +47,6 @@ export function SectionStatusPills({
   switch (selectedSection) {
     case 'delegation':
       return <DelegationSwitch policy={delegationPolicy} />;
-    case 'connectivity':
-      return (
-        <ConnectivityStatusPills
-          tailscaleEnabled={tailscaleEnabled}
-          tailscaleStatus={tailscaleStatus}
-        />
-      );
     case 'plugins':
       return (
         <PluginsStatusPills
@@ -68,8 +55,6 @@ export function SectionStatusPills({
           plugins={plugins}
         />
       );
-    case 'autoMode':
-      return <AutoModeStatusPills autoModePolicy={autoModePolicy} />;
     case 'hygiene':
       return (
         <HygieneStatusPills autoSettleEnabled={autoSettleEnabled} mutedRepos={mutedRepos} mutedAuthors={mutedAuthors} />
@@ -245,7 +230,6 @@ export function DesktopSettings({
   handleToggleWorktreeSweep,
   worktreeSweepEnabled,
   notebookRootDraft,
-  notebookProfileRootDraft,
   effectiveNotebookRoot,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
@@ -259,7 +243,6 @@ export function DesktopSettings({
   | 'handleToggleWorktreeSweep'
   | 'worktreeSweepEnabled'
   | 'notebookRootDraft'
-  | 'notebookProfileRootDraft'
   | 'effectiveNotebookRoot'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
@@ -364,48 +347,18 @@ export function DesktopSettings({
           <h3>Notebook Folder</h3>
           <p className="settings-description">
             Where attn keeps your durable Notebook — dated journals, the knowledge base and seed files — as plain
-            markdown you own. A profile uses the shared folder unless you give it its own. Changing a folder points attn
-            at the new one; your existing notes are not moved, so move or sync the folder yourself if you want the
-            current contents to come along.
+            markdown you own. Each profile has its own folder, synced with outposts. Changing it points attn at the new
+            folder; your existing notes are not moved, so move or sync the folder yourself if you want the current
+            contents to come along.
           </p>
         </div>
         <div className="settings-block-body">
           <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-notebook-profile-root">
-              This profile
-            </label>
-            <span className="settings-status">Leave blank to use the shared folder</span>
-            <div className="settings-inline-form projects-dir-input">
-              <input
-                id="settings-notebook-profile-root"
-                data-testid="settings-notebook-profile-root-input"
-                type="text"
-                value={notebookProfileRootDraft.value}
-                onChange={notebookProfileRootDraft.onChange}
-                onBlur={notebookProfileRootDraft.commit}
-                onKeyDown={notebookProfileRootDraft.onKeyDown}
-                placeholder="Shared folder"
-                className="settings-input"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <SavedMark
-                shown={savedFlash.saved('notebook.profile_root')}
-                testID="settings-notebook-profile-root-saved"
-              />
-              <button className="settings-action" onClick={() => handleBrowseNotebookRoot('notebook.profile_root')}>
-                Browse
-              </button>
-            </div>
-          </div>
-          <div className="settings-field">
             <label className="settings-label" htmlFor="settings-notebook-root">
-              Shared
+              Notebook folder
             </label>
             <span className="settings-status">
-              Used by profiles without their own folder and synced with outposts. Leave blank for{' '}
-              <code>~/attn-notebook</code>, separate per instance.
+              Leave blank for <code>~/attn-notebook</code>, separate per instance.
             </span>
             <div className="settings-inline-form projects-dir-input">
               <input
@@ -423,7 +376,7 @@ export function DesktopSettings({
                 spellCheck={false}
               />
               <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-              <button className="settings-action" onClick={() => handleBrowseNotebookRoot('notebook.root')}>
+              <button className="settings-action" onClick={handleBrowseNotebookRoot}>
                 Browse
               </button>
             </div>
@@ -468,45 +421,6 @@ export function DesktopSettings({
   );
 }
 
-export function ConnectivitySettings({
-  tailscaleURL,
-  tailscaleDomain,
-  handleToggleTailscale,
-  tailscaleEnabled,
-  tailscaleStatus,
-  tailscaleAuthURL,
-  tailscaleError,
-  githubPollingOffReason,
-  githubHosts,
-}: Pick<
-  SettingsModalState,
-  | 'tailscaleURL'
-  | 'tailscaleDomain'
-  | 'handleToggleTailscale'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
-  | 'tailscaleAuthURL'
-  | 'tailscaleError'
-  | 'githubPollingOffReason'
-  | 'githubHosts'
->) {
-  return (
-    <>
-      <MobileWebSettings
-        tailscaleURL={tailscaleURL}
-        tailscaleDomain={tailscaleDomain}
-        handleToggleTailscale={handleToggleTailscale}
-        tailscaleEnabled={tailscaleEnabled}
-        tailscaleStatus={tailscaleStatus}
-        tailscaleAuthURL={tailscaleAuthURL}
-        tailscaleError={tailscaleError}
-      />
-
-      <GitHubHostsSettings githubPollingOffReason={githubPollingOffReason} githubHosts={githubHosts} />
-    </>
-  );
-}
-
 export function PluginSettings({
   pluginPanel,
   setPluginSourcePath,
@@ -514,8 +428,6 @@ export function PluginSettings({
   handleInstallPlugin,
   pluginIssues,
   plugins,
-  handleInstallBundledPlugin,
-  handleUninstallPlugin,
   handleRemovePlugin,
   commitPluginPriority,
   savedFlash,
@@ -527,8 +439,6 @@ export function PluginSettings({
   | 'handleInstallPlugin'
   | 'pluginIssues'
   | 'plugins'
-  | 'handleInstallBundledPlugin'
-  | 'handleUninstallPlugin'
   | 'handleRemovePlugin'
   | 'commitPluginPriority'
   | 'savedFlash'
@@ -565,14 +475,13 @@ export function PluginSettings({
         {pluginPanel.loading ? (
           <p className="settings-empty">Loading plugins...</p>
         ) : plugins.length === 0 ? (
-          <p className="settings-empty">No plugins available or installed.</p>
+          <p className="settings-empty">No plugins installed.</p>
         ) : (
           <div className="plugin-list">
             {plugins.map((plugin) => {
               const busy = pluginPanel.busyKey === plugin.name;
               const draftPriority = pluginPanel.priorityDraft(plugin.name, String(plugin.priority));
               const healthStatus = plugin.health_status || 'unknown';
-              const installed = plugin.installation_state === 'installed';
               const runtimePhase =
                 plugin.runtime_state ||
                 plugin.runtime_phase ||
@@ -583,45 +492,25 @@ export function PluginSettings({
                     <div className="plugin-card-title">
                       <span className="plugin-name">{plugin.name}</span>
                       <span className="settings-pill">v{plugin.version}</span>
-                      {plugin.availability === 'bundled' && <span className="settings-pill">Bundled</span>}
                       {plugin.link_target && <span className="settings-pill">Linked</span>}
-                      <span className="settings-pill">{installed ? 'Installed' : 'Available'}</span>
                       <span className={`plugin-status-badge ${runtimePhase}`}>{runtimePhase}</span>
-                      {installed && <span className={`plugin-health-badge ${healthStatus}`}>{healthStatus}</span>}
+                      <span className={`plugin-health-badge ${healthStatus}`}>{healthStatus}</span>
                     </div>
-                    {plugin.availability === 'bundled' && !installed ? (
-                      <button
-                        className="settings-action"
-                        onClick={() => void handleInstallBundledPlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_install}
-                      >
-                        Install
-                      </button>
-                    ) : plugin.availability === 'bundled' ? (
-                      <button
-                        className="settings-action danger"
-                        onClick={() => void handleUninstallPlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_uninstall}
-                      >
-                        Uninstall
-                      </button>
-                    ) : (
-                      <button
-                        className="settings-action danger"
-                        onClick={() => void handleRemovePlugin(plugin.name)}
-                        disabled={pluginPanel.busy || !plugin.can_uninstall}
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <button
+                      className="settings-action danger"
+                      onClick={() => void handleRemovePlugin(plugin.name)}
+                      disabled={pluginPanel.busy || !plugin.can_uninstall}
+                    >
+                      Remove
+                    </button>
                   </div>
                   {plugin.description && (
                     <p className="settings-description plugin-description">{plugin.description}</p>
                   )}
-                  {installed && plugin.health_message && (
+                  {plugin.health_message && (
                     <div className="settings-warning">Healthcheck: {plugin.health_message}</div>
                   )}
-                  {installed && plugin.last_exit && (
+                  {plugin.last_exit && (
                     <div className="settings-warning">Last exit: {plugin.last_exit}</div>
                   )}
                   <div className="plugin-meta-grid">
@@ -647,29 +536,27 @@ export function PluginSettings({
                         <code>{plugin.next_restart_at}</code>
                       </div>
                     )}
-                    {installed && (
-                      <label className="plugin-priority-control">
-                        <span className="settings-meta-label">Priority</span>
-                        <input
-                          type="number"
-                          value={draftPriority}
-                          onChange={(e) => pluginPanel.setPriorityDraft(plugin.name, e.target.value)}
-                          onBlur={() => void commitPluginPriority(plugin.name, plugin.priority)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              void commitPluginPriority(plugin.name, plugin.priority);
-                            }
-                          }}
-                          className="settings-input plugin-priority-input"
-                          aria-label={`${plugin.name} priority`}
-                          disabled={pluginPanel.busy}
-                        />
-                        <SavedMark
-                          shown={savedFlash.saved(`plugin_priority_${plugin.name}`)}
-                          testID={`settings-plugin-priority-saved-${plugin.name}`}
-                        />
-                      </label>
-                    )}
+                    <label className="plugin-priority-control">
+                      <span className="settings-meta-label">Priority</span>
+                      <input
+                        type="number"
+                        value={draftPriority}
+                        onChange={(e) => pluginPanel.setPriorityDraft(plugin.name, e.target.value)}
+                        onBlur={() => void commitPluginPriority(plugin.name, plugin.priority)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void commitPluginPriority(plugin.name, plugin.priority);
+                          }
+                        }}
+                        className="settings-input plugin-priority-input"
+                        aria-label={`${plugin.name} priority`}
+                        disabled={pluginPanel.busy}
+                      />
+                      <SavedMark
+                        shown={savedFlash.saved(`plugin_priority_${plugin.name}`)}
+                        testID={`settings-plugin-priority-saved-${plugin.name}`}
+                      />
+                    </label>
                   </div>
                   {busy && <div className="settings-hint">Updating {plugin.name}...</div>}
                 </div>
@@ -693,6 +580,7 @@ export function ExperimentalSettings({
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  phoneAccessEnabled,
   crewV2Enabled,
   analyticsEnabled,
   ptyBackendMode,
@@ -710,6 +598,7 @@ export function ExperimentalSettings({
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'phoneAccessEnabled'
   | 'crewV2Enabled'
   | 'analyticsEnabled'
   | 'ptyBackendMode'
@@ -912,6 +801,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Phone access</p>
+            <p className="settings-row-copy" id="settings-phone-access-description">
+              Let phones you pair see this home's agents. Turning it off disconnects every phone.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Phone access"
+            aria-checked={phoneAccessEnabled} aria-describedby="settings-phone-access-description"
+            className="settings-action" data-testid="settings-phone-access-toggle"
+            onClick={() => onSetSetting('phone_access_enabled', phoneAccessEnabled ? 'false' : 'true')}>
+            {phoneAccessEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
@@ -1457,86 +1360,6 @@ export function EventBusSection({
   return <EventBusSettings getBusStatus={sendBusStatusGet} setConsumerEnabled={sendBusSetConsumerEnabled} />;
 }
 
-export function MobileWebSettings({
-  tailscaleURL,
-  tailscaleDomain,
-  handleToggleTailscale,
-  tailscaleEnabled,
-  tailscaleStatus,
-  tailscaleAuthURL,
-  tailscaleError,
-}: Pick<
-  SettingsModalState,
-  | 'tailscaleURL'
-  | 'tailscaleDomain'
-  | 'handleToggleTailscale'
-  | 'tailscaleEnabled'
-  | 'tailscaleStatus'
-  | 'tailscaleAuthURL'
-  | 'tailscaleError'
->) {
-  return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <h3>Mobile Web Client</h3>
-        <p className="settings-description">
-          Expose this daemon through the existing Tailscale device identity for mobile browser access.
-        </p>
-      </div>
-      <div className="settings-block-body">
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Tailscale Serve</p>
-            <p className="settings-row-copy">
-              {tailscaleURL ||
-                tailscaleDomain ||
-                'Uses the host Tailscale client and does not register a second tailnet device for attn.'}
-            </p>
-          </div>
-          <button className="settings-action" onClick={handleToggleTailscale}>
-            {tailscaleEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card compact">
-          <div>
-            <p className="settings-row-title">Sign-in status</p>
-            <p className="settings-row-copy">Status: {tailscaleStatus}</p>
-          </div>
-          <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
-            {tailscaleEnabled ? tailscaleStatus : 'disabled'}
-          </span>
-        </div>
-        <div className="settings-hint">
-          This uses the host Tailscale client and does not register a second tailnet device for attn.
-        </div>
-        {tailscaleDomain && (
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Device DNS</span>
-            <code>{tailscaleDomain}</code>
-          </div>
-        )}
-        {tailscaleURL && (
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Web URL</span>
-            <a href={tailscaleURL} target="_blank" rel="noreferrer">
-              {tailscaleURL}
-            </a>
-          </div>
-        )}
-        {tailscaleAuthURL && (
-          <div className="settings-warning">
-            Sign this machine into Tailscale:{' '}
-            <a href={tailscaleAuthURL} target="_blank" rel="noreferrer">
-              {tailscaleAuthURL}
-            </a>
-          </div>
-        )}
-        {tailscaleError && <div className="settings-warning">{tailscaleError}</div>}
-      </div>
-    </section>
-  );
-}
-
 export function GitHubHostsSettings({
   githubPollingOffReason,
   githubHosts,
@@ -1573,17 +1396,6 @@ export function GitHubHostsSettings({
   );
 }
 
-export function ConnectivityStatusPills({
-  tailscaleEnabled,
-  tailscaleStatus,
-}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus'>) {
-  return (
-    <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
-      {tailscaleEnabled ? tailscaleStatus : 'mobile off'}
-    </span>
-  );
-}
-
 export function PluginsStatusPills({
   pluginProblemCount,
   activePluginCount,
@@ -1597,26 +1409,6 @@ export function PluginsStatusPills({
       <span className="settings-pill">
         {activePluginCount}/{plugins.length} running
       </span>
-    </>
-  );
-}
-
-export function AutoModeStatusPills({ autoModePolicy }: Pick<SettingsModalState, 'autoModePolicy'>) {
-  return (
-    <>
-      <span className={`settings-pill ${autoModePolicy.pendingCount === 0 ? 'good' : 'warn'}`}>
-        {autoModePolicy.pendingCount === 0
-          ? 'nothing waiting'
-          : `${autoModePolicy.pendingCount} proposal${autoModePolicy.pendingCount === 1 ? '' : 's'} waiting`}
-      </span>
-      {autoModePolicy.state && (
-        <>
-          <span className="settings-pill">
-            {autoModePolicy.state.config.enabled_default ? 'on by default' : 'off by default'}
-          </span>
-          <span className="settings-pill">{autoModePolicy.state.config.approval_policy}</span>
-        </>
-      )}
     </>
   );
 }

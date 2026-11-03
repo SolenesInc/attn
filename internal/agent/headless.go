@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/launchenv"
@@ -52,17 +54,24 @@ func (b *boundedHeadlessOutput) Write(p []byte) (int, error) {
 
 const headlessFailureOutputLimit = 4 << 10
 
+// A cancelled real Claude run returned 50 ms after its kill. Receipt: seed s-jvn7nq, production-launcher-receipts.txt (2026-11-01).
+const headlessPipeDrainLimit = 5 * time.Second
+
 func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
 	args []string,
 	workDir string,
 	provider string,
+	reportedFailure func(stdout []byte) string,
 ) (HeadlessTaskResult, []byte, error) {
 	if !headless.Enabled() {
 		return HeadlessTaskResult{}, nil, headless.Refusal(provider + " headless task")
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = headlessPipeDrainLimit
 	if dir := strings.TrimSpace(workDir); dir != "" {
 		cmd.Dir = dir
 	}
@@ -72,7 +81,7 @@ func runHeadlessCommand(
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		diagnostics := classifyHeadlessFailure(stdout.String() + "\n" + stderr.String())
+		diagnostics := classifyHeadlessFailure(reportedFailure(stdout.Bytes()) + "\n" + stderr.String())
 		return HeadlessTaskResult{
 			Diagnostics:   diagnostics,
 			FailureOutput: headlessFailureOutput(stdout.String(), stderr.String()),
@@ -177,6 +186,9 @@ func headlessEnvironment(provider string) []string {
 func classifyHeadlessFailure(output string) string {
 	lower := strings.ToLower(output)
 	switch {
+	case strings.Contains(lower, "connection refused"),
+		strings.Contains(lower, "connection_failed"):
+		return "headless agent could not reach its model provider"
 	case strings.Contains(lower, "authentication_failed"),
 		strings.Contains(lower, "not logged in"),
 		strings.Contains(lower, "unauthorized"),
@@ -186,7 +198,9 @@ func classifyHeadlessFailure(output string) string {
 		(strings.Contains(lower, "not found") ||
 			strings.Contains(lower, "invalid") ||
 			strings.Contains(lower, "unavailable") ||
-			strings.Contains(lower, "unsupported")):
+			strings.Contains(lower, "unsupported") ||
+			strings.Contains(lower, "not supported") ||
+			strings.Contains(lower, "not exist")):
 		return "headless agent model is invalid or unavailable"
 	case strings.Contains(lower, "mcp"),
 		strings.Contains(lower, "tool server"),

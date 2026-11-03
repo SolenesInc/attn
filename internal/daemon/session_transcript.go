@@ -94,11 +94,6 @@ func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent s
 	if _, keeper := driver.(agentdriver.ConversationKeeper); keeper && !d.conversationReady(driver, binding.NativeID) {
 		return ""
 	}
-	if binding.TranscriptPath != "" {
-		if _, err := os.Stat(binding.TranscriptPath); err == nil {
-			return binding.TranscriptPath
-		}
-	}
 	path := sessionmonitor.FindTranscriptForResume(agent, binding.NativeID)
 	if path == "" {
 		return ""

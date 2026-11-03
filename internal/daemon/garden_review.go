@@ -99,7 +99,7 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 			LifecycleExact:    exact,
 			DocumentUpdatedAt: doc.UpdatedAt,
 			NewestNoteAt:      newestNotes[seed.ID],
-			TenderHolds:       seed.ClaimHolds(d.partyHolds),
+			TenderHolds:       seed.ClaimHolds(read.parties.holds),
 			DirectoryState:    directoryState,
 			ResumeAvailable:   resumeAvailable,
 			HandoverAvailable: handoverAvailable,
@@ -571,7 +571,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 	if err != nil {
 		return nil, err
 	}
-	if !found || item.Resolution != garden.ReviewResolutionUnresolved ||
+	if !found || item.Resolution != garden.ReviewResolutionUnresolved || item.Status == garden.ReviewItemStatusReady ||
 		item.EvidenceVersion != payload.EvidenceVersion {
 		return nil, nil
 	}

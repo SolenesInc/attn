@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// pluginLink delivers through a plugin driver's message_delivery capability, as pi does.
+// pluginLink delivers through a plugin driver's message_delivery capability.
 type pluginLink struct {
 	daemon      *Daemon
 	terminal    harness.TerminalID

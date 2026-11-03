@@ -398,3 +398,32 @@ func assertServerHoldsWhatWasSent(t *testing.T, clickHouse testworld.ClickHouse,
 		t.Fatalf("ClickHouse holds %s events, want the %d rows this machine marked sent", stored, sent)
 	}
 }
+
+func TestInstancesOtherThanProductionUploadNowhereUnlessToldWhere(t *testing.T) {
+	for _, row := range []struct{ name, instance, wantNamed string }{
+		{"a named instance", "dev", "this is instance dev, not production"},
+		{"the unnamed instance on another data folder", "", "this is data folder "},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			t.Setenv("ATTN_INSTANCE", row.instance)
+			t.Setenv(config.AnalyticsIngestURLEnv, "")
+			inBubble(t, func(t *testing.T, w *world) {
+				app := w.App()
+				setSetting(t, app, "analytics.enabled", "true")
+				setSetting(t, app, "analytics.sharing_enabled", "true")
+				recordAndAdvance(w, app, uploadInterval)
+				status := analyticsStatus(app)
+				if status.IngestURL != "http://127.0.0.1:1" {
+					t.Errorf("uploads go to %q, want the unreachable address", status.IngestURL)
+				}
+				reason := protocol.Deref(status.IngestOffReason)
+				if !strings.Contains(reason, row.wantNamed) || !strings.Contains(reason, config.AnalyticsIngestURLEnv+"=<url>") {
+					t.Errorf("the app is told %q; want it to name %q and how to upload", reason, row.wantNamed)
+				}
+				if refusal := protocol.Deref(status.LastRefusal); !strings.Contains(refusal, "127.0.0.1:1") {
+					t.Errorf("the upload failed with %q; want it to have gone to the unreachable address", refusal)
+				}
+			})
+		})
+	}
+}

@@ -242,12 +242,11 @@ export class LinuxDriver extends TargetedWindowDriver {
     await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(name, modifiers)]);
   }
 
-  async #pointer({ action, point, to, deltaY, opts }) {
+  async #pointer({ action, point, to, opts }) {
     if (action === 'move') return this.#move(point.x, point.y, opts);
     if (action === 'click') return this.#click(1, point.x, point.y, opts);
     if (action === 'right_click') return this.#click(3, point.x, point.y, opts);
     if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
-    if (action === 'scroll') return this.#scroll(point.x, point.y, deltaY, opts);
     throw new Error(`LinuxDriver has no pointer action ${action}`);
   }
 
@@ -275,17 +274,6 @@ export class LinuxDriver extends TargetedWindowDriver {
     await this.runXdotool(args);
   }
 
-  async #scroll(relativeX, relativeY, deltaY, opts) {
-    const deltaX = Number(opts.deltaX || 0);
-    const vertical = Math.abs(Number(deltaY)) >= Math.abs(deltaX);
-    const delta = vertical ? Number(deltaY) : deltaX;
-    if (!Number.isFinite(delta) || delta === 0) return;
-    const button = vertical ? (delta > 0 ? 4 : 5) : (delta > 0 ? 6 : 7);
-    const repeat = Number.isInteger(opts.steps) && opts.steps > 0 ? opts.steps : 1;
-    await this.#move(relativeX, relativeY, opts);
-    await this.runXdotool(['click', '--repeat', String(repeat), String(button)]);
-  }
-
   async parkWindow() {}
 
   async setWindowBounds(bounds, opts = {}) {
@@ -295,6 +283,10 @@ export class LinuxDriver extends TargetedWindowDriver {
       'windowsize', String(windowId), String(bounds.width), String(bounds.height),
     ]);
     return this.windowGeometry(windowId);
+  }
+
+  async parkPointerBeside({ x, y, width, height }) {
+    await this.runXdotool(['mousemove', String(x + width + 1), String(y + height + 1)]);
   }
 
   async screenshot(outputPath, opts = {}) {
@@ -386,8 +378,8 @@ export class LinuxDriver extends TargetedWindowDriver {
     };
   }
 
-  // `mousemove --sync` waits for a motion event, and none comes when the
-  // pointer already sits at the point (a repeated click), so it hangs.
+  // `mousemove --sync` waits for the pointer's location to change, which it
+  // never does when the pointer already sits at the point (a repeated click).
   async #click(button, relativeX, relativeY, opts) {
     const point = await this.relativePoint(relativeX, relativeY, opts);
     const modifiers = linuxModifierNames(opts.modifiers);

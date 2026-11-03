@@ -1,10 +1,12 @@
 package sessionmonitor
 
 import (
+	"errors"
 	"fmt"
+	"time"
+
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/statetrace"
-	"time"
 )
 
 type CommandKind uint8
@@ -24,14 +26,25 @@ type Command struct {
 	Until time.Time
 }
 
-func (m *Monitor) Do(command Command, now time.Time) (View, bool) {
+func (k CommandKind) action() string {
+	switch k {
+	case Snooze:
+		return "snooze"
+	case Wake:
+		return "unsnooze"
+	default:
+		return "settle"
+	}
+}
+
+func (m *Monitor) Do(command Command, now time.Time) (View, error) {
 	if m == nil {
-		return View{}, false
+		return View{}, errors.New("no monitor runs the session")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.keyLocked() != command.Key {
-		return View{}, false
+		return View{}, errors.New("the session moved to another terminal or conversation")
 	}
 	var applied bool
 	switch command.Kind {
@@ -47,7 +60,7 @@ func (m *Monitor) Do(command Command, now time.Time) (View, bool) {
 		if command.Until.IsZero() {
 			command.Until = m.turn.SnoozedUntil
 			if command.Until.IsZero() {
-				return m.snapshotLocked(), true
+				return m.snapshotLocked(), nil
 			}
 		}
 		applied = m.wakeLocked(command.Until, now)
@@ -56,9 +69,16 @@ func (m *Monitor) Do(command Command, now time.Time) (View, bool) {
 		applied = true
 	}
 	if !applied {
-		return View{}, false
+		return View{}, m.refusalLocked(command)
 	}
-	return m.viewLocked(), true
+	return m.viewLocked(), nil
+}
+
+func (m *Monitor) refusalLocked(command Command) error {
+	if command.Kind == Wake {
+		return fmt.Errorf("the snooze until %s already ended", command.Until.Format(time.RFC3339Nano))
+	}
+	return fmt.Errorf("the turn changed: the current turn opened at %s; %s again to apply it to that turn", m.turn.OpenedAt.Format(time.RFC3339Nano), command.Kind.action())
 }
 
 func (m *Monitor) cancelCountdownLocked() {
@@ -93,22 +113,18 @@ func (m *Monitor) Revision() uint64 {
 }
 
 func (m *Monitor) Execute(kind CommandKind, turn, until, now time.Time) (bool, error) {
-	view, applied := m.Do(Command{Key: m.Key(), Kind: kind, Turn: turn, Until: until}, now)
+	if kind == Snooze {
+		pausepoint.At(pausepoint.SessionSnoozeArrived)
+	}
+	view, err := m.Do(Command{Key: m.Key(), Kind: kind, Turn: turn, Until: until}, now)
 	if kind == Snooze {
 		pausepoint.At(pausepoint.SessionSnoozeDecided)
 	}
-	if !applied {
-		return false, nil
+	if err != nil {
+		return false, fmt.Errorf("%s was not saved because %w", kind.action(), err)
 	}
 	if !m.publish(view) {
-		action := "settle"
-		if kind == Snooze {
-			action = "snooze"
-		}
-		if kind == Wake {
-			action = "unsnooze"
-		}
-		return false, fmt.Errorf("%s is pending; attn will keep retrying until it is saved", action)
+		return false, fmt.Errorf("%s is pending; attn will keep retrying until it is saved", kind.action())
 	}
 	if kind == Wake {
 		m.traceWake("user")

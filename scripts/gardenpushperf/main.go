@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/scripts/perfdaemon"
 	"nhooyr.io/websocket"
 )
 
@@ -20,11 +21,16 @@ func main() {
 	runs := flag.Int("n", 20, "runs per move")
 	moves := flag.String("moves", "note,move", "comma-separated moves: note (a log note), move (wither and replant in turn)")
 	out := flag.String("out", "", "write the last garden push of each move to <out>-<move>.json")
+	profile := flag.String("profile", "", "select this profile on the connection, so the daemon pushes its garden")
+	vars := flag.String("vars", "", "measure daemon CPU per garden mutation from this /debug/vars URL instead of push sizes")
 	flag.Parse()
 	if *seed == "" {
 		fail(fmt.Errorf("-seed is required"))
 	}
-	url := "ws://localhost:" + config.WSPortForInstance(os.Getenv("ATTN_INSTANCE")) + "/ws"
+	url, err := perfdaemon.WebSocketURL("writes notes and moves to seed "+*seed, *vars)
+	if err != nil {
+		fail(err)
+	}
 	ctx := context.Background()
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
@@ -46,6 +52,15 @@ func main() {
 	_ = json.Unmarshal(initial.data, &state)
 	fmt.Printf("initial_state: %d bytes, seeds part %d bytes, total seeds %d, %s\n",
 		len(initial.data), len(state.Seeds), state.SeedsTotal, time.Since(first).Round(time.Millisecond))
+
+	if *profile != "" {
+		write(ctx, conn, map[string]any{"cmd": "profile_select", "request_id": "perf-profile", "profile_id": *profile})
+		readUntil(ctx, conn, protocol.EventProfileActionResult)
+	}
+	if *vars != "" {
+		measureCPU(ctx, conn, *vars, *seed, *runs)
+		return
+	}
 
 	for _, move := range strings.Split(*moves, ",") {
 		var bytes []int

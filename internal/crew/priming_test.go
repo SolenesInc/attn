@@ -45,7 +45,7 @@ func TestPrimingBudgets(t *testing.T) {
 		{
 			name:    "an oversize held seed's note is cut on a rune and points at the whole note",
 			priming: primingHolding(1, strings.Repeat("日", MaxHeldHandoffBytes)),
-			want:    []string{fmt.Sprintf("[Trimmed at %d bytes of %d; `attn seed notes s-held00` has the whole note.]", MaxHeldHandoffBytes, MaxHeldHandoffBytes*3)},
+			want:    []string{fmt.Sprintf("[Trimmed at %d bytes of %d. `attn seed notes s-held00` has the whole note.]", MaxHeldHandoffBytes, MaxHeldHandoffBytes*3)},
 		},
 		{
 			name:     "a held list that fits says nothing about the tripwire",

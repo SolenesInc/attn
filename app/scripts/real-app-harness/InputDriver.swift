@@ -43,8 +43,6 @@ struct Options {
     var menuPath = [String]()
     var visiblePx: Int?
     var windowTitle: String?
-    var deltaX: Double = 0
-    var deltaY: Double?
     var steps: Int = 1
 }
 
@@ -56,7 +54,7 @@ func parseOptions() throws -> Options {
     while index < args.count {
         let arg = args[index]
         switch arg {
-        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "scroll", "global_key", "global_text", "global_capture", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
+        case "activate", "activate_background", "quit_wait", "frontmost", "display_state", "windowid", "windowlist", "windowstack", "text", "key", "keycode", "move", "click", "right_click", "drag", "menu", "window_park", "global_key", "global_text", "global_capture", "drag_between", "permissions", "wait_frontmost", "wait_hidden":
             options.command = arg
         case "--window-title":
             index += 1
@@ -64,18 +62,6 @@ func parseOptions() throws -> Options {
                 throw DriverError.invalidArgument("Missing value for --window-title")
             }
             options.windowTitle = args[index]
-        case "--delta-x":
-            index += 1
-            guard index < args.count, let value = Double(args[index]) else {
-                throw DriverError.invalidArgument("Missing or invalid value for --delta-x")
-            }
-            options.deltaX = value
-        case "--delta-y":
-            index += 1
-            guard index < args.count, let value = Double(args[index]) else {
-                throw DriverError.invalidArgument("Missing or invalid value for --delta-y")
-            }
-            options.deltaY = value
         case "--steps":
             index += 1
             guard index < args.count, let value = Int(args[index]), value > 0 else {
@@ -172,19 +158,10 @@ func parseOptions() throws -> Options {
               InputDriver.swift click --relative-x 0.75 --relative-y 0.5 [--modifiers command] [--window-title <substring>]
               InputDriver.swift menu --path "File>New Session" [--bundle-id ...]
               InputDriver.swift window_park --visible-px 200 [--bundle-id ...] [--window-title <substring>]
-              InputDriver.swift scroll --relative-x 0.5 --relative-y 0.5 --delta-y -240 \\
-                  [--delta-x 0] [--steps 4] [--window-title <substring>]
 
             --window-title matches windows owned by --bundle-id whose title CONTAINS the given
             substring (case-insensitive). It targets secondary Tauri windows that Accessibility
             never enumerates; without it, the largest layer-0 onscreen window is used, as before.
-
-            scroll positions the cursor at (--relative-x, --relative-y) inside the resolved window
-            (same 0..1 window-relative semantics as click), then posts a pixel-unit scroll wheel
-            event split into --steps events (~16ms apart). Positive --delta-y scrolls content UP
-            (wheel up); negative --delta-y scrolls content DOWN, matching CGEvent conventions.
-            Example — scroll content down by 240px in 4 steps:
-              InputDriver.swift scroll --relative-x 0.5 --relative-y 0.5 --delta-y -240 --steps 4
             """)
         default:
             throw DriverError.invalidArgument("Unknown argument: \(arg)")
@@ -905,70 +882,6 @@ func dragWindow(
     up.post(tap: .cghidEventTap)
 }
 
-// Warps the cursor into the resolved window at (relativeX, relativeY) — same
-// 0..1 window-relative semantics as clickWindow — then posts a pixel-unit
-// scroll wheel event, split into `steps` events ~16ms apart so content that
-// only reacts to a stream of small deltas (e.g. virtualized diff views)
-// scrolls the same way a real trackpad gesture would. Following CGEvent
-// convention, positive deltaY scrolls content UP (wheel up); negative deltaY
-// scrolls content DOWN.
-func scrollWindow(
-    bundleId: String,
-    relativeX: Double,
-    relativeY: Double,
-    deltaX: Double,
-    deltaY: Double,
-    steps: Int,
-    titleSubstring: String? = nil
-) throws {
-    let bounds = try mainWindowBounds(bundleId: bundleId, titleSubstring: titleSubstring)
-    let clampedX = min(max(relativeX, 0), 1)
-    let clampedY = min(max(relativeY, 0), 1)
-    let point = CGPoint(
-        x: bounds.origin.x + bounds.width * clampedX,
-        y: bounds.origin.y + bounds.height * clampedY
-    )
-
-    guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else {
-        throw DriverError.eventCreationFailed("Failed to create mouse move event.")
-    }
-    move.post(tap: .cghidEventTap)
-    Thread.sleep(forTimeInterval: 0.02)
-
-    let stepCount = max(1, steps)
-    let totalDeltaY = Int32(deltaY.rounded())
-    let totalDeltaX = Int32(deltaX.rounded())
-    var appliedY: Int32 = 0
-    var appliedX: Int32 = 0
-
-    for step in 0..<stepCount {
-        let isLastStep = step == stepCount - 1
-        // Fold the rounding remainder into the last step so the cumulative
-        // scroll matches the requested total exactly even when the delta
-        // does not divide evenly by the step count.
-        let stepDeltaY = isLastStep ? totalDeltaY - appliedY : Int32((Double(totalDeltaY) / Double(stepCount)).rounded())
-        let stepDeltaX = isLastStep ? totalDeltaX - appliedX : Int32((Double(totalDeltaX) / Double(stepCount)).rounded())
-        appliedY += stepDeltaY
-        appliedX += stepDeltaX
-
-        guard let scroll = CGEvent(
-            scrollWheelEvent2Source: nil,
-            units: .pixel,
-            wheelCount: 2,
-            wheel1: stepDeltaY,
-            wheel2: stepDeltaX,
-            wheel3: 0
-        ) else {
-            throw DriverError.eventCreationFailed("Failed to create scroll wheel event.")
-        }
-        scroll.location = point
-        scroll.post(tap: .cghidEventTap)
-        if !isLastStep {
-            Thread.sleep(forTimeInterval: 0.016)
-        }
-    }
-}
-
 do {
     let options = try parseOptions()
 
@@ -978,7 +891,7 @@ do {
     // and observation-only commands work fine against a sleeping display and
     // are deliberately left alone.
     switch options.command {
-    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "drag_between", "move", "click", "right_click", "scroll", "drag":
+    case "activate", "text", "key", "keycode", "global_key", "global_text", "global_capture", "drag_between", "move", "click", "right_click", "drag":
         try requireLiveDisplay()
     default:
         break
@@ -987,7 +900,7 @@ do {
     // HID-based commands must run against a frontmost app; AX-based and
     // observation-only commands must NOT activate (that is the whole point).
     switch options.command {
-    case "activate", "text", "key", "keycode", "move", "click", "right_click", "scroll":
+    case "activate", "text", "key", "keycode", "move", "click", "right_click":
         try activateApp(bundleId: options.bundleId)
     default:
         break
@@ -1100,23 +1013,6 @@ do {
             throw DriverError.invalidArgument("Missing --visible-px for window_park")
         }
         try windowPark(bundleId: options.bundleId, visiblePx: visiblePx, titleSubstring: options.windowTitle)
-    case "scroll":
-        try ensureAccessibility(prompt: options.promptAccessibility)
-        guard let relativeX = options.relativeX, let relativeY = options.relativeY else {
-            throw DriverError.invalidArgument("Missing --relative-x/--relative-y for scroll")
-        }
-        guard let deltaY = options.deltaY else {
-            throw DriverError.invalidArgument("Missing --delta-y for scroll")
-        }
-        try scrollWindow(
-            bundleId: options.bundleId,
-            relativeX: relativeX,
-            relativeY: relativeY,
-            deltaX: options.deltaX,
-            deltaY: deltaY,
-            steps: options.steps,
-            titleSubstring: options.windowTitle
-        )
     default:
         throw DriverError.invalidArgument("Unsupported command")
     }

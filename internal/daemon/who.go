@@ -13,19 +13,15 @@ func (d *Daemon) actorOfSession(id protocol.SessionID) who.Actor {
 }
 
 func (d *Daemon) partyHolds(p who.Party) bool {
-	if id, ok := p.Session(); ok {
-		return d.sessionActive(id)
-	}
-	_, ok := p.Member()
-	return ok
+	return d.partiesNow().holds(p)
+}
+
+func (d *Daemon) partyView(p who.Party) protocol.PartyView {
+	return d.partiesNow().view(p)
 }
 
 func (d *Daemon) actorView(a who.Actor) protocol.ActorView {
-	if p, ok := a.Party(); ok {
-		view := d.partyView(p)
-		return protocol.ActorView{Ref: protocol.ActorRef(view.Ref), Name: view.Name}
-	}
-	return protocol.ActorView{Ref: protocol.ActorRef(a.String()), Name: actorName(a)}
+	return d.partiesNow().actor(a)
 }
 
 func (d *Daemon) partyName(p who.Party) string {

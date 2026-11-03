@@ -166,10 +166,10 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
-		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (?, ?)
+		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (SELECT value FROM json_each(?))
 		ORDER BY i.created_at, i.id
 		LIMIT ?
-	`, inbox.PeerMessage, addressJSON, inbox.AskAnswer, inbox.QuickCapture, normalizeAgentInboxLimit(limit))
+	`, inbox.PeerMessage, addressJSON, typedKindsJSON(), normalizeAgentInboxLimit(limit))
 	if err != nil {
 		return nil, 0, fmt.Errorf("list unread inbox items: %w", err)
 	}
@@ -223,8 +223,8 @@ func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, li
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items
-		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (?, ?)
-	`, addressJSON, inbox.AskAnswer, inbox.QuickCapture).Scan(&remaining); err != nil {
+		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (SELECT value FROM json_each(?))
+	`, addressJSON, typedKindsJSON()).Scan(&remaining); err != nil {
 		return nil, 0, fmt.Errorf("count unread inbox items: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -258,6 +258,11 @@ func (s *Store) ReadGardenSeedInboxItems(to who.Address, readBy protocol.Session
 	return changed > 0, tx.Commit()
 }
 
+func typedKindsJSON() string {
+	data, _ := json.Marshal(inbox.TypedKinds())
+	return string(data)
+}
+
 func inboxAddressJSON(addresses []who.Address) string {
 	values := make([]string, len(addresses))
 	for i, a := range addresses {
@@ -265,6 +270,28 @@ func inboxAddressJSON(addresses []who.Address) string {
 	}
 	data, _ := json.Marshal(values)
 	return string(data)
+}
+
+func (s *Store) CommitDocumentWritesWithEventsAndInbox(
+	commits []DocumentCommit, events []BusEvent, item inbox.Item, now time.Time,
+) ([]DocumentWriteResult, []int64, error) {
+	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
+		return true, putInbox(tx, item, now)
+	})
+}
+
+type InboxKey struct {
+	To   who.Address
+	Kind inbox.Kind
+	Key  string
+}
+
+func (s *Store) CommitDocumentWritesWithEventsWithdrawingInbox(
+	commits []DocumentCommit, events []BusEvent, key InboxKey, now time.Time,
+) ([]DocumentWriteResult, []int64, error) {
+	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
+		return true, withdrawInbox(tx, key)
+	})
 }
 
 func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
@@ -292,7 +319,7 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 		return nil
 	}
 	if item.Key != "" {
-		if _, err := tx.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", item.To.String(), item.Kind, item.Key); err != nil {
+		if err := withdrawInbox(tx, InboxKey{To: item.To, Kind: item.Kind, Key: item.Key}); err != nil {
 			return err
 		}
 	}
@@ -302,7 +329,19 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 func (s *Store) WithdrawInbox(to who.Address, kind inbox.Kind, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", to.String(), kind, key)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := withdrawInbox(tx, InboxKey{To: to, Kind: kind, Key: key}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func withdrawInbox(tx *sql.Tx, key InboxKey) error {
+	_, err := tx.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", key.To.String(), key.Kind, key.Key)
 	return err
 }
 
@@ -322,7 +361,7 @@ func (s *Store) InboxAttempt(to who.Address) (InboxAttempt, error) {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (?, ?)),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, inbox.AskAnswer, inbox.QuickCapture, to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
+	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (SELECT value FROM json_each(?))),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, typedKindsJSON(), to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
 	return result, err
 }
 

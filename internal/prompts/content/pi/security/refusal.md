@@ -1,1 +1,0 @@
-After a rejected command, follow the rejection's stated instructions. Use a materially safer alternative, or explain the exact command, the rejection and the decision the user needs to make. Do not disguise the action or repeat an unchanged command without new information. Continue independent work.

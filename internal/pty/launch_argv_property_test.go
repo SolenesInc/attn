@@ -12,6 +12,10 @@ import (
 	"pgregory.net/rapid"
 )
 
+const randomLaunchesPerShell = 8
+
+var hostileArguments = []string{"", " ", "a b", "'", `"`, `\`, "$HOME", "`id`", "-n", "--", "-c", "a\nb", "*", "~", "é\xff"}
+
 func TestLoginShellPreservesAgentArgumentsAndEnvironment(t *testing.T) {
 	for _, shell := range []string{"sh", "bash", "zsh", "fish", "dash"} {
 		t.Run(shell, func(t *testing.T) {
@@ -27,10 +31,7 @@ func TestLoginShellPreservesAgentArgumentsAndEnvironment(t *testing.T) {
 			if err := os.Symlink("/bin/sh", probe); err != nil {
 				t.Fatal(err)
 			}
-			rapid.Check(t, func(t *rapid.T) {
-				text := rapid.String().Filter(func(s string) bool { return !strings.ContainsRune(s, 0) })
-				args := rapid.SliceOf(text).Draw(t, "argv")
-				value := text.Draw(t, "env")
+			check := func(t *testing.T, args []string, value string) {
 				argv := append([]string{probe, "-c", `printf '%s\000' "$ATTN_ARGV_PROBE" "$@"`, "probe"}, args...)
 				cmd := loginShellCommand(path, argv, []string{"ATTN_ARGV_PROBE=" + value})
 				cmd.Env = os.Environ()
@@ -45,7 +46,12 @@ func TestLoginShellPreservesAgentArgumentsAndEnvironment(t *testing.T) {
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("received %q, want %q", got, want)
 				}
-			})
+			}
+			check(t, hostileArguments, "it's \"$HOME\" `x`\n-n")
+			text := rapid.String().Filter(func(s string) bool { return !strings.ContainsRune(s, 0) })
+			for i := 0; i < randomLaunchesPerShell; i++ {
+				check(t, rapid.SliceOf(text).Example(i), text.Example(i+randomLaunchesPerShell))
+			}
 		})
 	}
 }

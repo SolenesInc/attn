@@ -10,21 +10,38 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (s *Store) GardenSessionProfileID(sessionID protocol.SessionID) (string, error) {
+func (s *Store) GardenSessionProfileIDs(sessionIDs []protocol.SessionID) (map[protocol.SessionID]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return "", fmt.Errorf("garden recipient profiles need the SQLite store")
+		return nil, fmt.Errorf("garden recipient profiles need the SQLite store")
 	}
-	var profileID string
-	err := s.db.QueryRow(`SELECT profile_id FROM sessions_with_runtime WHERE id = ?
-		UNION ALL SELECT coalesce(json_extract(request_json, '$.profile_id'), '') FROM delegation_operations
-		WHERE session_id = ? AND state IN (?, ?) LIMIT 1`, sessionID, sessionID,
-		string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&profileID)
-	if err == sql.ErrNoRows {
-		return "", nil
+	ids, err := json.Marshal(sessionIDs)
+	if err != nil {
+		return nil, err
 	}
-	return profileID, err
+	rows, err := s.db.Query(`SELECT id, profile_id, 0 AS delegated FROM sessions_with_runtime WHERE id IN (SELECT value FROM json_each(?1))
+		UNION ALL SELECT session_id, coalesce(json_extract(request_json, '$.profile_id'), ''), 1 FROM delegation_operations
+		WHERE session_id IN (SELECT value FROM json_each(?1)) AND state IN (?2, ?3)
+		ORDER BY delegated`, string(ids),
+		string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	profiles := make(map[protocol.SessionID]string, len(sessionIDs))
+	for rows.Next() {
+		var id protocol.SessionID
+		var profileID string
+		var delegated bool
+		if err := rows.Scan(&id, &profileID, &delegated); err != nil {
+			return nil, err
+		}
+		if _, known := profiles[id]; !known {
+			profiles[id] = profileID
+		}
+	}
+	return profiles, rows.Err()
 }
 
 func migrateGardenProfiles(tx *sql.Tx) error {
@@ -76,7 +93,7 @@ func countOpenProfileSeeds(tx *sql.Tx, profileID string) (int, error) {
 		return 0, err
 	}
 	var count int
-	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') IN ('planted', 'growing', 'dormant')`, table), profileID).Scan(&count)
+	err = tx.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s WHERE json_extract(body, '$.profile_id') = ? AND json_extract(body, '$.status') IN ('planted', 'growing', 'parked')`, table), profileID).Scan(&count)
 	return count, err
 }
 

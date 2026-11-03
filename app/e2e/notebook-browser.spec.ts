@@ -14,7 +14,7 @@ declare global {
 test.describe('NotebookBrowser (fs surface)', () => {
   test('opens the preferred note into a live editor with no view/edit toggle and autosaves edits', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
 
     await expect(page.getByRole('treeitem', { name: 'knowledge' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'index' })).toBeVisible();
@@ -44,7 +44,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('opens a text file from the tree in a plain editor (no markdown affordances)', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'notes.txt' }).click();
@@ -56,7 +56,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('lists the note outline in the context rail and scrolls the editor to a heading on click', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
@@ -74,7 +74,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('keeps the reader scrolled in place when the open note changes on disk (and ignores unrelated changes)', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
@@ -116,7 +116,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('shows a read-only placeholder for a binary file', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'cover.png' }).click();
@@ -127,7 +127,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('Cmd+P summons the fuzzy finder over the modal; typing filters; Enter opens the note', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await expect(page.locator('.notebook-finder')).toHaveCount(0);
@@ -149,7 +149,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('Esc closes the finder before the modal, and Cmd+P re-summons it', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await page.locator('.cm-content').click();
@@ -172,7 +172,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('Cmd+F opens the in-editor search panel; Esc closes it before the modal', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await page.locator('.cm-content').click();
@@ -195,7 +195,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('renders stage-5 chrome and folds the tree to zero width via the edge handle', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     await expect(page.locator('.notebook-browser-chief-pulse')).toContainText('chief: active');
@@ -215,7 +215,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('highlights a code fence, and renders a blockquote and a horizontal rule', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'fences.md' }).click();
@@ -228,7 +228,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('renders a GFM table as a widget, revealing raw source when clicked', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'fences.md' }).click();
@@ -247,7 +247,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('renders an inline image as a widget wired to readAsset, shows a broken placeholder for a missing asset, and reveals raw source on click', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'images.md' }).click();
@@ -302,7 +302,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('Cmd+B/I/E toggle bold, italic, and inline code on a double-clicked word', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.getByRole('treeitem', { name: 'fences.md' }).click();
@@ -337,7 +337,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
   for (const component of ['NotebookBrowser', 'NotebookTile']) {
     test(`${component} keeps text selection in the editor without a Chief action`, async ({ page }) => {
       await page.goto(`/test-harness/?component=${component}`);
-      await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+      await page.evaluate(() => window.__HARNESS_READY__);
       const editor = page.locator('.cm-content');
       await expect(editor).toContainText('distilled');
 
@@ -350,7 +350,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('restores editor focus after resolving a save conflict via "Reload from disk"', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
     await page.waitForSelector('.cm-content');
 
@@ -380,7 +380,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
       }) as typeof window.open;
     });
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.locator('.cm-content').click();
@@ -401,7 +401,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('mod-click on a #heading link scrolls that heading into view', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
 
     await page.locator('.cm-content').click();

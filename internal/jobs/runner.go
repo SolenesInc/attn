@@ -115,7 +115,7 @@ type Runner struct {
 type activeRun struct {
 	id     string
 	kind   string
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 	guard  *CommitGuard
 	done   chan struct{}
 }
@@ -405,7 +405,7 @@ func (r *Runner) Cancel(id string) {
 
 func (r *Runner) fenceAndWait(run *activeRun) {
 	if run.guard.tryFence() {
-		run.cancel()
+		run.cancel(nil)
 	}
 	done := run.done
 	r.mu.Unlock()
@@ -575,7 +575,7 @@ func (r *Runner) dispatch() (progressed bool, err error) {
 			r.mu.Unlock()
 			continue
 		}
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancelCause(context.Background())
 		run := &activeRun{
 			id:     j.ID,
 			kind:   j.Kind,
@@ -597,7 +597,7 @@ func (r *Runner) dispatch() (progressed bool, err error) {
 			delete(r.runs, j.ID)
 			r.inflight[j.Kind]--
 			r.mu.Unlock()
-			cancel()
+			cancel(nil)
 			continue
 		}
 		launch = append(launch, launchSpec{job: j, exec: exec, ctx: ctx, run: run})
@@ -646,7 +646,7 @@ func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeR
 		select {
 		case <-timer.C:
 			if guard.tryFence() {
-				cancel()
+				cancel(fmt.Errorf("jobs: %s handler ran past its %s timeout: %w", run.kind, exec.timeout, context.DeadlineExceeded))
 			}
 		case <-timeoutStop:
 		}
@@ -674,7 +674,7 @@ func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeR
 	}
 
 	close(timeoutStop)
-	cancel()
+	cancel(nil)
 
 	r.finish(j.ID, encoded, runErr)
 

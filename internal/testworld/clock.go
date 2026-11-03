@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +31,17 @@ func (s *Stack) Advance(d time.Duration) {
 	advanceHub(s.T, s.clock, d)
 }
 
+// AwaitJobsSettled waits until the job runners of the daemon and every process it started have no work in hand, such as
+// a cron run that the last Advance made due.
+func (s *Stack) AwaitJobsSettled() {
+	s.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if busy, ok := s.clock.AwaitIdle(ctx); !ok {
+		s.T.Fatalf("AwaitJobsSettled: processes %v still had jobs in hand after %s", busy, fakeagent.HangGuard)
+	}
+}
+
 // readTranscripts fires every pending transcript poll of the daemon without moving the clock and returns when their
 // callbacks return. A poll another fire already took reads later, so tests assert what the read shows, not that it
 // finished.
@@ -45,6 +57,28 @@ func (s *Stack) readTranscripts() {
 func (s *Stack) AwaitTimer(name stepclock.Name) {
 	s.T.Helper()
 	awaitHubTimer(s.T, s.clock, name)
+}
+
+func (s *Stack) FireTimers(name stepclock.Name) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := s.clock.AwaitTimer(ctx, name); !ok {
+				return
+			}
+			if err := s.clock.Fire(ctx, name); err != nil {
+				return
+			}
+		}
+	}()
+	stop = sync.OnceFunc(func() {
+		cancel()
+		<-done
+	})
+	s.T.Cleanup(stop)
+	return stop
 }
 
 // CloseWatchWindows closes each of the daemon's folder-watch windows as soon as it opens, until stop is called.

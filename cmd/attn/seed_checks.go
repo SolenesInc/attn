@@ -33,6 +33,7 @@ func runSeedCheck(args []string) {
 		seedUsageError("check", err)
 	}
 	name := "check " + string(verb)
+	setCommandPath("seed " + name)
 	f := newSeedFlags(name)
 	positionals := f.parse(name, args[1:])
 	msg, err := seedCheckMessage(verb, f, positionals)
@@ -262,6 +263,13 @@ func seedOrPlotCheckTally(seed protocol.Seed) protocol.SeedCheckTally {
 		return plotCheckTally(seed.PlotProgress)
 	}
 	return seedCheckTally(seed.Checks)
+}
+
+func seedRowCheckTally(row protocol.SeedRow) protocol.SeedCheckTally {
+	if row.PlotProgress != nil {
+		return plotCheckTally(row.PlotProgress)
+	}
+	return protocol.Deref(row.CheckTally)
 }
 
 func checkTallySuffix(seed protocol.Seed) string {

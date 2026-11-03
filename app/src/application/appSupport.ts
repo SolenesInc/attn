@@ -48,7 +48,6 @@ export interface SplitSessionOptions {
   cwd?: string;
   label?: string;
   yoloMode?: boolean;
-  autoMode?: boolean;
   desktopId?: string;
 }
 

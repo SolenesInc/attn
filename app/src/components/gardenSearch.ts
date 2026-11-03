@@ -1,7 +1,7 @@
 import type { Seed } from '../hooks/useDaemonSocket';
 
 /** Values `is:` accepts. Anything else is named back at the reader. */
-export const IS_VALUES = ['open', 'closed', 'any', 'ready', 'blocked', 'dormant'] as const;
+export const IS_VALUES = ['open', 'closed', 'any', 'ready', 'blocked', 'parked'] as const;
 export type IsValue = (typeof IS_VALUES)[number];
 
 export interface ParsedQuery {
@@ -150,8 +150,8 @@ function satisfies(value: IsValue, entry: SearchEntry): boolean {
       return Boolean(entry.seed.ready) && !entry.closed;
     case 'blocked':
       return entry.blockers > 0 && !entry.closed;
-    case 'dormant':
-      return entry.seed.status === 'dormant';
+    case 'parked':
+      return entry.seed.status === 'parked';
   }
 }
 

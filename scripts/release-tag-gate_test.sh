@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gate="$root/scripts/release-tag-gate.sh"
+source "$root/scripts/lib/release-fixture.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-tag-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -50,20 +51,12 @@ chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
 export GITHUB_REPOSITORY=example/attn
-export GOCACHE="$work/go-cache"
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success
 
 repo="$work/repo"
-git clone -q "$root" "$repo"
-git -C "$repo" config user.name 'Release Tag Gate Test'
-git -C "$repo" config user.email 'release-tag-gate@example.com'
-git -C "$repo" switch -q -C main
-rm -rf "$repo/cmd/release-train"
-cp -R "$root/cmd/release-train" "$repo/cmd/release-train"
-git -C "$repo" add -A cmd/release-train
-git -C "$repo" commit -q --allow-empty -m 'release fixture baseline'
+init_release_fixture "$root" "$repo"
 baseline_sha="$(git -C "$repo" rev-parse HEAD)"
 marker="$(cd "$repo" && go run ./cmd/release-train notes range)"
 printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$repo/CHANGELOG.md"
@@ -77,6 +70,7 @@ git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
 accepted_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" tag v99.98.97
 git -C "$repo" update-ref refs/remotes/origin/main "$accepted_sha"
+git -C "$repo" update-ref refs/remotes/origin/reviewed "$baseline_sha"
 export FAKE_ACCEPTANCE_SHA="$accepted_sha"
 export GITHUB_SHA="$accepted_sha"
 
@@ -100,6 +94,13 @@ run_gate() (
 )
 
 export GITHUB_OUTPUT="$work/github-output"
+expect_failure "reviewed $baseline_sha does not contain v99.98.97 at $accepted_sha" run_gate v99.98.97
+grep -Fq "wait until reviewed reaches $accepted_sha" "$work/failure.out"
+if [[ -s "$GITHUB_OUTPUT" ]]; then
+  echo "an unreviewed tag produced a release SHA" >&2
+  exit 1
+fi
+git -C "$repo" update-ref refs/remotes/origin/reviewed "$accepted_sha"
 run_gate v99.98.97 >"$work/success.out"
 grep -Fq 'v99.98.97 is accepted' "$work/success.out"
 grep -Fq "release_sha=$accepted_sha" "$GITHUB_OUTPUT"
@@ -122,6 +123,7 @@ git -C "$repo" add later.txt
 git -C "$repo" commit -q -m 'feat: land work after the release commit'
 later_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" update-ref refs/remotes/origin/main "$later_sha"
+git -C "$repo" update-ref refs/remotes/origin/reviewed "$later_sha"
 export GITHUB_SHA="$later_sha"
 run_gate v99.98.97 >"$work/main-moved.out"
 grep -Fq "v99.98.97 is accepted at $accepted_sha" "$work/main-moved.out"
@@ -149,6 +151,7 @@ git -C "$repo" commit -q -m 'forge release versions'
 forged_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" tag -f v99.98.97 "$forged_sha" >/dev/null
 git -C "$repo" update-ref refs/remotes/origin/main "$forged_sha"
+git -C "$repo" update-ref refs/remotes/origin/reviewed "$forged_sha"
 export FAKE_ACCEPTANCE_SHA="$forged_sha"
 export GITHUB_SHA="$forged_sha"
 expect_failure 'expected 99.98.97' run_gate v99.98.97

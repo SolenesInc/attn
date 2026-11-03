@@ -78,8 +78,8 @@ describe('App garden seed detail', () => {
   describe('harvest condition', () => {
     it('says what an armed row waits on where a parked row says parked', async () => {
       await openGarden([
-        planted('s-armed1', 'waiting on the merge', { status: 'dormant', harvest_when: PR_42 }),
-        planted('s-park11', 'put down for now', { status: 'dormant' }),
+        planted('s-armed1', 'waiting on the merge', { status: 'parked', harvest_when: PR_42 }),
+        planted('s-park11', 'put down for now', { status: 'parked' }),
         planted('s-blank1', 'armed with nothing', { harvest_when: { ...PR_42, pull_request: '  ' } }),
       ]);
 
@@ -93,7 +93,7 @@ describe('App garden seed detail', () => {
     });
 
     it('says the whole condition on the seed it opens, and opens the pull request', async () => {
-      const { daemon } = await openGarden([planted('s-armed1', 'waiting on the merge', { status: 'dormant', harvest_when: PR_42 })]);
+      const { daemon } = await openGarden([planted('s-armed1', 'waiting on the merge', { status: 'parked', harvest_when: PR_42 })]);
       await openRow(daemon, 'waiting on the merge');
 
       const link = within(gardenRegion()).getByRole('link', { name: /harvests when victorarias\/attn#42 merges/ });

@@ -81,6 +81,9 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 	if execution.Cwd == "" {
 		return execution
 	}
+	if host := d.sessionHost(session.ID); host != "" {
+		return d.observedRemoteGardenExecution(host, execution)
+	}
 	var checkoutRoot, mainRepo, branch string
 	err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred}, func(ctx context.Context, client *attngit.Client) error {
 		root, rootErr := client.GetRepoRoot(ctx, execution.Cwd)
@@ -109,6 +112,22 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Tim
 	}
 	if execution.Branch == "" {
 		execution.Branch = strings.TrimSpace(protocol.Deref(session.Branch))
+	}
+	return execution
+}
+
+func (d *Daemon) observedRemoteGardenExecution(host string, execution garden.Execution) garden.Execution {
+	inspection, err := d.inspectRemoteCheckout(host, execution.Cwd)
+	if err != nil {
+		d.logf("garden: kept the monitor view of %s: %v", execution.SessionID, err)
+		return execution
+	}
+	if inspection.RepoRoot == "" {
+		return execution
+	}
+	execution.RepositoryRoot, execution.RepositorySubdir = inspection.MainRepo, inspection.RepositorySubdir
+	if inspection.Branch != "" {
+		execution.Branch = inspection.Branch
 	}
 	return execution
 }
@@ -219,12 +238,38 @@ func activeDispatchCrown(dispatch garden.Execution) string {
 	return strings.TrimSpace(dispatch.Crown)
 }
 
+type gardenObservation struct {
+	session   *protocol.Session
+	execution garden.Execution
+	startedAt time.Time
+}
+
+func (d *Daemon) observeGardenSession(sessionID protocol.SessionID) gardenObservation {
+	session := d.store.Get(protocol.TrimID(sessionID))
+	if session == nil {
+		return gardenObservation{}
+	}
+	startedAt := d.gardenTime()
+	return gardenObservation{session: session, execution: d.observedGardenExecution(session, startedAt), startedAt: startedAt}
+}
+
+func (d *Daemon) ensureObservedGardenExecution(sessionID protocol.SessionID, observed gardenObservation) (garden.Execution, error) {
+	if observed.session == nil || observed.session.ID != protocol.TrimID(sessionID) {
+		return d.ensureGardenExecution(sessionID)
+	}
+	return d.recordGardenExecution(observed)
+}
+
 func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garden.Execution, error) {
 	if session == nil || protocol.TrimID(session.ID) == "" {
 		return garden.Execution{}, errors.New("garden execution needs a tracked session")
 	}
 	startedAt := d.gardenTime()
-	observed := d.observedGardenExecution(session, startedAt)
+	return d.recordGardenExecution(gardenObservation{session: session, execution: d.observedGardenExecution(session, startedAt), startedAt: startedAt})
+}
+
+func (d *Daemon) recordGardenExecution(observed gardenObservation) (garden.Execution, error) {
+	session, startedAt := observed.session, observed.startedAt
 	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
 			seed, _, err := d.readSeed(crown)
@@ -242,7 +287,7 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
 			return current, false, nil
 		}
-		return mergeGardenExecution(current, observed), true, nil
+		return mergeGardenExecution(current, observed.execution), true, nil
 	})
 }
 
@@ -277,10 +322,10 @@ func (d *Daemon) ensureGardenExecution(sessionID protocol.SessionID) (garden.Exe
 	return d.captureGardenSessionExecution(session)
 }
 
-func (d *Daemon) captureGardenExecutionsInDirectory(path string) {
+func (d *Daemon) captureGardenExecutionsInDirectory(machine, path string) {
 	wanted := attngit.CanonicalizePath(path)
 	for _, session := range d.store.List("") {
-		if !pathAtOrBelow(session.Directory, wanted) {
+		if d.sessionHost(session.ID) != machine || !pathAtOrBelow(session.Directory, wanted) {
 			continue
 		}
 		if _, err := d.captureGardenSessionExecution(session); err != nil {

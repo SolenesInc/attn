@@ -1,3 +1,5 @@
+import type { GhosttyCell, GhosttyTerminal } from '../ghostty';
+
 const WHEEL_DELTA_PIXEL = 0;
 const WHEEL_DELTA_LINE = 1;
 const WHEEL_DELTA_PAGE = 2;
@@ -194,6 +196,24 @@ export function offsetAfterWrite(
   }
   const anchoredOffset = viewportOffset + scrollbackAfter - scrollbackBefore;
   return Math.max(0, Math.min(scrollbackAfter, anchoredOffset));
+}
+
+export function scrolledViewportCells(
+  terminal: Pick<GhosttyTerminal, 'cols' | 'rows' | 'getViewport' | 'getScrollbackLength' | 'getScrollbackLine'>,
+  viewportOffset: number,
+): GhosttyCell[] | undefined {
+  if (viewportOffset === 0) return undefined;
+  const active = terminal.getViewport();
+  const history = terminal.getScrollbackLength();
+  const start = viewportBufferStart(history, viewportOffset);
+  const cells: GhosttyCell[] = [];
+  for (let row = start; row < start + terminal.rows; row += 1) {
+    const line = row < history
+      ? terminal.getScrollbackLine(row)
+      : active.slice((row - history) * terminal.cols, (row - history + 1) * terminal.cols);
+    if (line) cells.push(...line);
+  }
+  return cells;
 }
 
 export function cursorRowInViewport(

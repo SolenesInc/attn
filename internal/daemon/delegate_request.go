@@ -37,6 +37,7 @@ type resolvedDelegationLaunch struct {
 	Provider             *string
 	Review               *protocol.SeedReviewActionContext
 	Desktop              *string
+	Authorization        string
 
 	Brief                 *string
 	Worktree              *protocol.DelegateWorktreeRequest
@@ -56,7 +57,7 @@ func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch 
 		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode, Priority: msg.Priority,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback, Provider: msg.Provider,
-		Review: msg.Review, Desktop: msg.Desktop,
+		Review: msg.Review, Desktop: msg.Desktop, Authorization: strings.TrimSpace(protocol.Deref(msg.Authorization)),
 	}
 }
 

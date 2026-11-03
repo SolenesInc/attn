@@ -76,6 +76,11 @@ const BridgeCallRecovery = bridgeCallRecovery
 
 const AutomationScheduleTick = defaultAutomationScheduleInterval
 
+const (
+	BackupInterval = backupInterval
+	BackupTimer    = backupTimer
+)
+
 func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
 	w.d.outposts.remote = func(row store.Outpost) outpostRemote {
 		return &wireOutpostSSH{Client: outpostssh.For(row.Destination, "", "default"), dial: dial, build: w.d.bridgeIdentity().Build}
@@ -104,4 +109,8 @@ func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
+}
+
+func (w *WireDaemon) ServeGateway(device GatewayDevice, stream GatewayStream) error {
+	return w.d.ServeGateway(device, stream)
 }

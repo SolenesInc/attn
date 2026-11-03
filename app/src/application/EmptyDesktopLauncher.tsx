@@ -70,10 +70,9 @@ export function EmptyDesktopLauncher({
       agent: SessionAgent,
       yoloMode?: boolean,
       chiefOfStaff?: boolean,
-      autoMode?: boolean,
     ) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, yoloMode, chiefOfStaff, autoMode, desktopId).finally(() =>
+      void launchLocation(path, agent, yoloMode, chiefOfStaff, desktopId).finally(() =>
         setLaunching(null),
       );
     },
@@ -81,14 +80,13 @@ export function EmptyDesktopLauncher({
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
-      const [mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff] = pick;
+      const [mainRepo, branch, startingFrom, agent, yoloMode, chiefOfStaff] = pick;
       handleCreateWorktreeSession(
         mainRepo,
         branch,
         startingFrom,
         agent,
         yoloMode,
-        autoMode,
         chiefOfStaff,
         desktopId,
       );
@@ -106,17 +104,15 @@ export function EmptyDesktopLauncher({
           active={active}
           title={`New agent on ${label}`}
           onClose={() => setPickerGeneration((generation) => generation + 1)}
-          onSelect={(path, agent, yolo, chief, auto) =>
-            startLocation(path, agent, yolo, chief, auto, desktopId)
-          }
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, desktopId, onCreated)
-          }
+          desktopId={desktopId}
+          onSelect={startLocation}
+          onCreateWorktreeSession={startWorktreeSession}
           onGetRecentLocations={sendGetRecentLocations}
           onBrowseDirectory={sendBrowseDirectory}
           onInspectPath={sendInspectPath}
           onGetRepoInfo={getRepoInfo}
           onDeleteWorktree={sendDeleteWorktree}
+          onError={showError}
           agentAvailability={agentAvailability}
           chiefExists={hasChiefOfStaff}
         />

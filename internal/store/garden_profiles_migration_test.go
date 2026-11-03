@@ -11,7 +11,7 @@ import (
 )
 
 func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
-	for _, state := range []string{garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant, garden.StatusHarvested, garden.StatusWithered} {
+	for _, state := range []string{garden.StatusPlanted, garden.StatusGrowing, garden.StatusParked, garden.StatusHarvested, garden.StatusWithered} {
 		t.Run(state, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
 			s, err := newStoreAtVersion(path, 1793408289794144-1)

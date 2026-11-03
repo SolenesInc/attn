@@ -186,10 +186,11 @@ function automationLineParts(
 ): ReactElement[] {
   const pr = automation.pull_request;
   const target = pr ? `${sessionPullRequestRepositoryName(pr.repository)}#${pr.number}` : null;
+  const triggered = interactive && target !== null;
   const parts = [
-    <span key="automation-kind" className="session-provenance__kind">
+    <span key="automation-kind" className="session-provenance__kind" data-icon-part={triggered ? undefined : ''}>
       <span aria-hidden="true">⚡</span>
-      Automation
+      <span className="session-provenance__kind-label">Automation</span>
     </span>,
     <span key="automation-definition" className="session-provenance__definition">
       {shortDefinitionName(automation.definition_name)}
@@ -204,6 +205,8 @@ function automationLineParts(
         key="automation-target"
         type="button"
         className="session-provenance__target"
+        aria-label={`Open pull request ${target}`}
+        data-icon-part=""
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
@@ -212,7 +215,8 @@ function automationLineParts(
           });
         }}
       >
-        {target} ↗
+        <span className="session-provenance__target-icon" aria-hidden="true">⚡</span>
+        <span className="session-provenance__target-label">{target} ↗</span>
       </button>
     ) : (
       <span key="automation-target" className="session-provenance__target">{target}</span>
@@ -235,19 +239,21 @@ function pullRequestLineParts(
   const parts = [
     <span key="pr-kind" className="session-provenance__kind session-provenance__kind--pr">
       <span aria-hidden="true">⎇</span>
-      PR
+      <span className="session-provenance__kind-label">PR</span>
     </span>,
     <button
       key="pr-target"
       type="button"
       className="session-provenance__target"
       aria-label={`Pull request ${target} details`}
+      data-icon-part=""
       onPointerDown={(event) => event.stopPropagation()}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       onClick={onClick}
     >
-      {target} ↗
+      <span className="session-provenance__target-icon" aria-hidden="true">⎇</span>
+      <span className="session-provenance__target-label">{target} ↗</span>
     </button>,
     <span key="pr-status" className="session-provenance__status" data-tone={tone}>{label}</span>,
   ];

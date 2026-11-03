@@ -237,18 +237,6 @@ func InstallPathWithOptions(sourceDir, pluginDir string, opts InstallOptions) (M
 	return installed, nil
 }
 
-func SourceName(sourceDir string) (string, error) {
-	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
-	if err != nil {
-		return "", fmt.Errorf("resolve source directory: %w", err)
-	}
-	manifest, err := LoadManifest(filepath.Join(sourceDir, ManifestName))
-	if err != nil {
-		return "", fmt.Errorf("load source manifest: %w", err)
-	}
-	return manifest.Name, nil
-}
-
 func LinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, error) {
 	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
 	if err != nil {

@@ -18,7 +18,8 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
+func inboxRingText() string { return prompts.RenderText("session", "inbox-notification", nil) }
+
 var errInboxNoUnread = errors.New("agent inbox has no unread items to wake for")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
 var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstanding")
@@ -290,7 +291,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if paste.notified {
 			when = sessionmonitor.WhenPromptReady
 		}
-		input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, when)
+		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
 		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil}
 		state.pending = pending
@@ -306,6 +307,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.pending = nil
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
+		}
+		for _, seedID := range paste.authorizedSeeds {
+			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
 		}
 		if !bellWaitsForPrompt {
 			state.wakeSession = ""
@@ -338,10 +342,11 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 }
 
 type inboxPaste struct {
-	text     string
-	typed    []string
-	captures []string
-	notified bool
+	text            string
+	typed           []string
+	captures        []string
+	authorizedSeeds []string
+	notified        bool
 }
 
 func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPaste, error) {
@@ -353,24 +358,27 @@ func (d *Daemon) inboxPaste(a who.Address, profileID string, bell bool) (inboxPa
 	var texts []string
 	for _, delivery := range deliveries {
 		item := delivery.Item
-		switch item.Kind {
-		case inbox.AskAnswer:
-			texts = append(texts, item.Text)
-		case inbox.QuickCapture:
+		if !item.Kind.Typed() {
+			paste.notified = bell
+			continue
+		}
+		if item.Kind == inbox.QuickCapture {
 			record, err := d.store.QuickCapture(profileID, item.Source)
 			if err != nil {
 				return inboxPaste{}, fmt.Errorf("quick capture %s: %w", item.Source, err)
 			}
 			texts = append(texts, inbox.QuickCaptureText(item.Text, item.Source, record.Attachments))
 			paste.captures = append(paste.captures, item.Source)
-		default:
-			paste.notified = bell
-			continue
+		} else {
+			texts = append(texts, item.Text)
+		}
+		if item.Kind == inbox.Authorization {
+			paste.authorizedSeeds = append(paste.authorizedSeeds, item.Source)
 		}
 		paste.typed = append(paste.typed, item.ID)
 	}
 	if paste.notified {
-		texts = append(texts, inboxRingText)
+		texts = append(texts, inboxRingText())
 	}
 	paste.text = strings.Join(texts, "\n\n")
 	return paste, nil

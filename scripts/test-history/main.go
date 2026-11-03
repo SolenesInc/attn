@@ -25,25 +25,27 @@ const usage = `usage: go tool test-history <command>
   sync
       Upload sealed receipts the history service has not acknowledged, then
       download the receipts it holds for this repository into the spool's
-      shared directory. Prints how many receipts it uploaded and downloaded
+      mirror directory. Prints how many receipts it uploaded and downloaded
       and how many wait to upload, and each warning the service sends, such
       as storage past its daily tripwire. When the sync fails, it also prints
       when a sync last succeeded. Exits 1 when the sync fails or a receipt is
-      refused.
+      refused. A sync waits, and says so, while another sync of the same
+      spool runs.
       The service is $ATTN_TEST_HISTORY_URL, or the default history service;
       its token is in ${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token.
   spool
       Print the spool directory.
 
   land --units-out <file> --group <group>... [--main <ref>]
-      Choose the landing tests for HEAD's change against <ref> (default
-      origin/main), as scripts/land.sh does, for the groups it matched: their
-      baseline units, the tests the change touches, and every test that failed
-      on main and has since passed there, until it passes on 30 later main
-      revisions; one still red on main is listed, not run. Writes the units to
-      run, one per line, to <file>, and prints each added, red, missing or
-      unavailable test with its reason. With no successful sync in the spool,
-      it chooses the baseline.
+      Run sync, then choose the landing tests for HEAD's change against <ref>
+      (default origin/main), as scripts/land.sh does, for the groups it
+      matched: their baseline units, the tests the change touches, and every
+      test that failed on main and has since passed there, until it passes on
+      30 later main revisions; one still red on main is listed, not run.
+      Writes the units to run, one per line, to <file>, and prints each added,
+      red, missing or unavailable test with its reason. When the sync fails,
+      it chooses from the history already synced; with no successful sync in
+      the spool, it chooses the baseline.
   select [--group <group>]... [--main <ref>] [--json]
       What land would choose for this checkout's change, including the
       failures that have cleared; groups default to those the change matches.

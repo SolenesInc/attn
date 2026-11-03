@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -26,9 +27,9 @@ func runDelegateRoles(args []string) {
 	fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
 	var usage usageError
 	if errors.As(err, &usage) {
-		os.Exit(2)
+		exit(2)
 	}
-	os.Exit(1)
+	exit(1)
 }
 
 type usageError struct{ error }
@@ -36,6 +37,7 @@ type usageError struct{ error }
 func usagef(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
 
 func delegateRoles(w io.Writer, args []string) error {
+	setCommandPath("delegate roles")
 	if len(args) == 0 || args[0] == "--json" {
 		return delegateRolesCatalog(w, args)
 	}
@@ -45,16 +47,22 @@ func delegateRoles(w io.Writer, args []string) error {
 		writeDelegateRolesHelp(w)
 		return nil
 	case "show":
+		setCommandPath("delegate roles show")
 		return delegateRolesShow(w, rest)
 	case "history":
+		setCommandPath("delegate roles history")
 		return delegateRolesHistory(w, rest)
 	case "rollback":
+		setCommandPath("delegate roles rollback")
 		return delegateRolesRollback(w, rest)
 	case "apply":
+		setCommandPath("delegate roles apply")
 		return delegateRolesApply(w, rest)
 	case "install":
+		setCommandPath("delegate roles install")
 		return delegateRolesInstall(w, rest)
 	case "add", "set", "copy", "rm", "enable", "disable":
+		setCommandPath("delegate roles " + command)
 		return delegateRolesEdit(w, command, rest)
 	}
 	recordUsageError("delegate roles", usageErrorUnknownCommand)
@@ -130,7 +138,7 @@ changing (each accepts -m TEXT, the reason recorded in history):
         older or newer: rolling forward is restoring a later revision.
 
 guidance flags (custom roles only):
-  --description TEXT  --instructions TEXT  --stopping-point TEXT  --icon TEXT
+  --description TEXT  --instructions TEXT  --icon TEXT
 
 model flags:
   --agent NAME     harness; changing it starts a fresh selection
@@ -208,7 +216,7 @@ func writeDelegationRole(w io.Writer, role protocol.DelegationRole) {
 		fmt.Fprint(w, " · off")
 	}
 	fmt.Fprintln(w)
-	for _, section := range [][2]string{{"description", role.Description}, {"instructions", role.Instructions}, {"stopping point", role.StoppingPoint}} {
+	for _, section := range [][2]string{{"description", role.Description}, {"instructions", role.Instructions}} {
 		if strings.TrimSpace(section[1]) != "" {
 			fmt.Fprintf(w, "\n%s:\n%s\n", section[0], strings.TrimSpace(section[1]))
 		}
@@ -319,8 +327,13 @@ func delegateRolesApply(w io.Writer, args []string) error {
 		return err
 	}
 	var preferences protocol.DelegationPreferences
-	if err := json.Unmarshal(raw, &preferences); err != nil {
-		return fmt.Errorf("read %s: %w", positionals[0], err)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&preferences); err != nil {
+		return fmt.Errorf("read %s: %w; the table takes the fields attn delegate roles show --json prints", positionals[0], err)
+	}
+	if decoder.Decode(&json.RawMessage{}) != io.EOF {
+		return fmt.Errorf("read %s: content follows the table; apply takes the one table attn delegate roles show --json prints", positionals[0])
 	}
 	saved, err := client.New("").DelegationPreferencesCommit(preferences, *message)
 	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
@@ -444,7 +457,7 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	}
 	message := fs.String("m", "", "reason recorded in history")
 	name, icon, when := text("name"), text("icon"), text("when")
-	description, instructions, stoppingPoint := text("description"), text("instructions"), text("stopping-point")
+	description, instructions := text("description"), text("instructions")
 	builtin := text("builtin")
 	makeDefault := fs.Bool("default", false, "make the alternative the role's default")
 	fallback := fs.Bool("fallback", false, "change the unmatched-work fallback")
@@ -456,7 +469,7 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	if err != nil {
 		return nil, "", usageError{err}
 	}
-	guidance := guidanceEdits{name: name, icon: icon, description: description, instructions: instructions, stoppingPoint: stoppingPoint}
+	guidance := guidanceEdits{name: name, icon: icon, description: description, instructions: instructions}
 	target := func(usage string) (string, string, error) {
 		if len(positionals) != 1 {
 			return "", "", usagef("usage: attn delegate roles %s", usage)
@@ -512,13 +525,13 @@ func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdi
 	return edit, *message, nil
 }
 
-type guidanceEdits struct{ name, icon, description, instructions, stoppingPoint *optionalText }
+type guidanceEdits struct{ name, icon, description, instructions *optionalText }
 
 func (g guidanceEdits) apply(role *protocol.DelegationRole) {
 	for _, field := range []struct {
 		edit   *optionalText
 		target *string
-	}{{g.name, &role.Name}, {g.icon, &role.Icon}, {g.description, &role.Description}, {g.instructions, &role.Instructions}, {g.stoppingPoint, &role.StoppingPoint}} {
+	}{{g.name, &role.Name}, {g.icon, &role.Icon}, {g.description, &role.Description}, {g.instructions, &role.Instructions}} {
 		if field.edit.value != nil {
 			*field.target = strings.TrimSpace(*field.edit.value)
 		}

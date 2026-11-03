@@ -108,7 +108,7 @@ func (r *codexShared) offerUpdate() {
 	if codexOlder(installed, latest) {
 		offered = latest
 	}
-	existing, err := r.d.store.ListNotifications()
+	existing, err := r.d.store.ListNotifications("")
 	if err != nil {
 		r.d.logf("shared Codex: list notifications: %v", err)
 		return

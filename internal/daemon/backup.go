@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -13,18 +14,23 @@ func (d *Daemon) backupDir() string {
 	return filepath.Join(d.dataRoot, "backups")
 }
 
+const backupTimer stepclock.Name = "daemon-backup"
+
 func (d *Daemon) runDatabaseBackupLoop() {
 	d.performDatabaseBackup()
+	d.every(backupTimer, backupInterval, d.performDatabaseBackup)
+}
 
-	ticker := time.NewTicker(backupInterval)
-	defer ticker.Stop()
-
+func (d *Daemon) every(name stepclock.Name, interval time.Duration, tick func()) {
+	timer := d.clock.NewTimer(name, interval)
+	defer timer.Stop()
 	for {
 		select {
 		case <-d.life.Done():
 			return
-		case <-ticker.C:
-			d.performDatabaseBackup()
+		case <-timer.C():
+			tick()
+			timer.Reset(interval)
 		}
 	}
 }
@@ -55,10 +61,10 @@ func (d *Daemon) performDatabaseBackup() {
 	d.logf("database backup written to %s", path)
 
 	d.lastBackupMu.Lock()
-	d.lastBackupAt = time.Now().UTC()
+	d.lastBackupAt = d.clock.Now().UTC()
 	d.lastBackupMu.Unlock()
 
-	d.publishSettingsFact(FactBackupWritten, path)
+	d.publishFact(FactBackupWritten, path, nil)
 	d.pruneEligibleDatabaseBackups()
 }
 

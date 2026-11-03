@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gate="$root/scripts/candidate-gate.sh"
+source "$root/scripts/lib/release-fixture.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-candidate-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -53,7 +54,6 @@ EOF
 chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
-export GOCACHE="$work/go-cache"
 export GITHUB_REPOSITORY=example/attn
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_CANDIDATES_PAGE_1=
@@ -64,14 +64,9 @@ export FAKE_CI_APP_MODE=success
 export FAKE_CI_APP_CONCLUSION=success
 
 repo="$work/repo"
-git clone -q "$root" "$repo"
-git -C "$repo" config user.name 'Candidate Gate Test'
-git -C "$repo" config user.email 'candidate-gate@example.com'
-git -C "$repo" switch -q -C main
-rm -rf "$repo/cmd/release-train"
-cp -R "$root/cmd/release-train" "$repo/cmd/release-train"
-git -C "$repo" add cmd/release-train
-git -C "$repo" commit -q --allow-empty -m 'release baseline'
+init_release_fixture "$root" "$repo"
+git init -q --bare "$work/origin.git"
+git -C "$repo" remote add origin "$work/origin.git"
 main_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" update-ref refs/remotes/origin/main "$main_sha"
 

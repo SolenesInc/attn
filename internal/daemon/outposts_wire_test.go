@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -367,13 +368,21 @@ func describeOutposts(rows []protocol.OutpostInfo) string {
 type refusingInstallSSH struct {
 	*outpostssh.Client
 	probes, installs int
+	probing          chan struct{}
 }
 
 func (r *refusingInstallSSH) EnsureMaster(context.Context) error   { return nil }
 func (r *refusingInstallSSH) ExitMaster(context.Context) error     { return nil }
 func (r *refusingInstallSSH) Remove(context.Context, string) error { return nil }
-func (r *refusingInstallSSH) Probe(context.Context) (outpostssh.Probe, error) {
+func (r *refusingInstallSSH) Probe(ctx context.Context) (outpostssh.Probe, error) {
 	r.probes++
+	if r.probing != nil {
+		select {
+		case <-r.probing:
+		case <-ctx.Done():
+			return outpostssh.Probe{}, ctx.Err()
+		}
+	}
 	return outpostssh.Probe{Platform: "linux/amd64", Build: &bridge.Build{Version: "earlier", SourceFingerprint: "git:earlier", ProtocolVersion: protocol.ProtocolVersion}}, nil
 }
 func (r *refusingInstallSSH) Install(_ context.Context, _ string, _ bridge.Build, phase func(string)) error {
@@ -423,5 +432,48 @@ func TestAnUnpairedOutpostDoesNotRepeatARefusedInstall(t *testing.T) {
 			t.Fatalf("explicit Update and later retries: installs=%d probes=%d, want two installs and continued probes", ssh.installs, ssh.probes)
 		}
 		t.Logf("Add refused once, probes continued across retries, and explicit Update attempted once more: installs=%d probes=%d", ssh.installs, ssh.probes)
+	})
+}
+
+func TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		t.Setenv("ATTN_HARNESS_DATA_DIR", w.Dir)
+		t.Setenv("ATTN_HARNESS_OUTPOST_BINARY", "fixture-build")
+		ssh := &refusingInstallSSH{Client: outpostssh.For("fixture", "unused", "default"), probing: make(chan struct{})}
+		w.daemon.UseOutpostSSH(ssh)
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "fixture"})
+		row := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 1 }).Outposts[0]
+		updateThriceWhileProbing := func(moment string, installs int) {
+			t.Helper()
+			synctest.Wait()
+			mark := app.EventCount()
+			for range 3 {
+				app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: row.ID})
+			}
+			testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+				return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseConnecting
+			})
+			synctest.Wait()
+			close(ssh.probing)
+			testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+				return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed
+			})
+			synctest.Wait()
+			var phases []string
+			for _, update := range outpostUpdates(app, mark) {
+				if update.Update != nil && (len(phases) == 0 || phases[len(phases)-1] != string(update.Update.Phase)) {
+					phases = append(phases, string(update.Update.Phase))
+				}
+			}
+			if got := strings.Join(phases, " "); got != "connecting verifying failed" || ssh.installs != installs {
+				t.Fatalf("three Update requests %s: phases %q, installs %d; want \"connecting verifying failed\" and %d installs", moment, got, ssh.installs, installs)
+			}
+			t.Logf("three Update requests %s showed connecting before the probe answered and ran one install: phases %q", moment, phases)
+		}
+		updateThriceWhileProbing("during the Add's first probe", 1)
+		ssh.probing = make(chan struct{})
+		updateThriceWhileProbing("after the Add's install failed", 2)
 	})
 }

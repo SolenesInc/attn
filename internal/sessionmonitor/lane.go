@@ -36,9 +36,16 @@ const (
 	originMaintenance
 )
 
+type Maintenance string
+
+const (
+	InboxRing     Maintenance = "inbox-ring"
+	CrewHeartbeat Maintenance = "crew-heartbeat"
+)
+
 type inputOrigin struct {
 	kind   originKind
-	source string
+	source Maintenance
 }
 
 func (o inputOrigin) voice() harness.Voice {
@@ -73,11 +80,11 @@ type Delivery struct {
 	BypassInitialGate bool
 }
 
-func MaintenanceInput(domain string, key string, text string, placement Placement) Delivery {
+func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
 	return Delivery{
-		ID:        NewAttemptID(domain, key),
+		ID:        NewAttemptID(string(domain), key),
 		Text:      text,
-		origin:    inputOrigin{kind: originMaintenance, source: strings.TrimSpace(domain)},
+		origin:    inputOrigin{kind: originMaintenance, source: domain},
 		Placement: placement,
 	}
 }
@@ -91,7 +98,7 @@ func UserConversationInput(key string, text string, placement Placement) Deliver
 	}
 }
 
-func AnnotationInput(key string, text string) Delivery {
+func ComposedInput(key string, text string) Delivery {
 	delivery := UserConversationInput(key, text, AtTurnBoundary)
 	delivery.AllowUserComposer = true
 	return delivery
@@ -113,11 +120,13 @@ type Attempt struct {
 type runState struct {
 	ref          runRef
 	credited     bool
-	notification bool
+	notification Maintenance
+	launch       bool
+	prompted     bool
 }
 
 func (r *runState) startedByNotification() bool {
-	return r.notification && !r.credited
+	return r.notification != "" && !r.credited
 }
 
 type lane struct {
@@ -128,7 +137,8 @@ type lane struct {
 	placing                  bool
 	placed                   map[string]Attempt
 	creditNextRun            bool
-	notifyNextRun            bool
+	notifyNextRun            Maintenance
+	launchNextRun            bool
 	stoppedAfterNotification bool
 	epoch                    uint64
 	userSubmit               bool
@@ -246,6 +256,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
+	steering := l.run != nil
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery)
@@ -259,6 +270,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		l.placed = make(map[string]Attempt)
 	}
 	l.placed[delivery.ID.String()] = attempt
+	if steering {
+		m.runSteeredLocked()
+	}
 	return attempt, l.tookLocked(delivery)
 }
 
@@ -286,7 +300,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Atte
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.
 func (l *lane) tookLocked(delivery Delivery) runRef {
 	if delivery.origin.kind == originMaintenance && l.run == nil {
-		l.notifyNextRun = true
+		l.notifyNextRun = delivery.origin.source
 	}
 	if delivery.origin.kind != originUserConversation {
 		return runRef{}
@@ -342,6 +356,8 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	if l.claimNextLocked() || typed {
 		current.credited = true
 	}
+	current.prompted = true
+	m.runPromptedLocked()
 	run, credited := current.ref, current.credited
 	m.mu.Unlock()
 	m.MarkModelRequestStarted(at)
@@ -356,10 +372,18 @@ func (l *lane) ensureRunLocked() *runState {
 		return l.run
 	}
 	l.epoch++
-	l.run = &runState{ref: runRef{epoch: l.epoch}, credited: l.claimNextLocked(), notification: l.notifyNextRun}
-	l.notifyNextRun = false
+	l.run = &runState{ref: runRef{epoch: l.epoch}, credited: l.claimNextLocked(), notification: l.notifyNextRun, launch: l.launchNextRun}
+	l.notifyNextRun, l.launchNextRun = "", false
 	l.stoppedAfterNotification = false
 	return l.run
+}
+
+func (l *lane) launchPromptTakenLocked() {
+	if l.run != nil {
+		l.run.launch = true
+		return
+	}
+	l.launchNextRun = true
 }
 
 func (l *lane) observePhaseLocked(phase protocol.SessionState) {

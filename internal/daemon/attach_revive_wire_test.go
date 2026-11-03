@@ -89,18 +89,18 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 			},
 		},
 		{
-			name:  "pi resumes through its driver",
-			agent: fakeagent.Pi,
+			name:  "plug resumes through its driver",
+			agent: fakeagent.Plug,
 			start: func(t *testing.T, w *world, app *testworld.Peer) string {
-				return w.Spawn(app, fakeagent.Pi, w.Path("shop"))
+				return w.Spawn(app, fakeagent.Plug, w.Path("shop"))
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t, tc.agent)
 			app := w.App()
-			if tc.agent == fakeagent.Pi {
-				awaitAgentAvailable(app, string(fakeagent.Pi))
+			if tc.agent == fakeagent.Plug {
+				awaitAgentAvailable(app, string(fakeagent.Plug))
 			}
 			session := tc.start(t, w, app)
 			first := w.Launched(session)
@@ -108,8 +108,8 @@ func TestAttachingWithReviveRelaunchesARecoverableSession(t *testing.T) {
 				tc.want(t, w, first.Argv)
 			}
 			app = attachReviveMakeRecoverable(t, w, app, session, first, tc.withTask)
-			if tc.agent == fakeagent.Pi {
-				pluginDriverSettings(app, "pi")
+			if tc.agent == fakeagent.Plug {
+				pluginDriverSettings(app, "plug")
 			}
 
 			revived := attachRevive(app, session, 101, 37)

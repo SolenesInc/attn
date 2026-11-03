@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/who"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -129,6 +128,9 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 		current, err := d.store.GetAutomationRun(run.ID)
 		return current, errors.Join(persistErr, err)
 	}
+	if req, err := d.automationRunRequest(run); err == nil && d.automationRunAgentStarted(run, req) {
+		return d.store.GetAutomationRun(run.ID)
+	}
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
 		failed, err := d.handleAutomationDeliveryError(run, cause.(error))
 		if _, pending := d.automationLaunchFailures.Load(run.ID); pending {
@@ -238,36 +240,17 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if _, confirming := d.automationLaunchWaits.Load(run.ID); confirming {
 		return nil
 	}
+	req, err := d.automationRunRequest(run)
+	if err != nil {
+		return err
+	}
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
 	if err != nil {
 		return err
 	}
-	if definition == nil || !definition.Enabled {
+	if (definition == nil || !definition.Enabled) && !d.automationRunAgentStarted(run, req) {
 		return errors.New("automation definition is disabled; refusing pending delivery")
 	}
-	var snapshot automation.Snapshot
-	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
-		return err
-	}
-	snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
-	if err := snapshot.Launch.Validate(); err != nil {
-		return fmt.Errorf("invalid unattended launch contract: %w", err)
-	}
-	occurrence, err := d.store.GetAutomationOccurrence(run.OccurrenceID)
-	if err != nil {
-		return err
-	}
-	if occurrence == nil {
-		return errors.New("automation occurrence missing")
-	}
-	continuityKey := ""
-	switch snapshot.Continuity {
-	case "per_subject":
-		continuityKey = occurrence.SubjectKey
-	case "singleton":
-		continuityKey = "singleton"
-	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
@@ -280,6 +263,51 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	}
 	d.automationLaunchResults.Store(run.ID, result)
 	return d.finalizeAutomationRun(run, result)
+}
+
+func (d *Daemon) automationRunRequest(run *store.AutomationRun) (automation.WorkRequest, error) {
+	var snapshot automation.Snapshot
+	if err := json.Unmarshal([]byte(run.SnapshotJSON), &snapshot); err != nil {
+		return automation.WorkRequest{}, err
+	}
+	snapshot.Launch = snapshot.Launch.WithLegacyDefaults()
+	if err := snapshot.Launch.Validate(); err != nil {
+		return automation.WorkRequest{}, fmt.Errorf("invalid unattended launch contract: %w", err)
+	}
+	occurrence, err := d.store.GetAutomationOccurrence(run.OccurrenceID)
+	if err != nil {
+		return automation.WorkRequest{}, err
+	}
+	if occurrence == nil {
+		return automation.WorkRequest{}, errors.New("automation occurrence missing")
+	}
+	continuityKey := ""
+	switch snapshot.Continuity {
+	case "per_subject":
+		continuityKey = occurrence.SubjectKey
+	case "singleton":
+		continuityKey = "singleton"
+	}
+	return automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}, nil
+}
+
+func (d *Daemon) automationRunAgentStarted(run *store.AutomationRun, req automation.WorkRequest) bool {
+	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
+		return false
+	}
+	origin, err := d.automationContinuationOrigin(req)
+	if err != nil || !d.automationSessionOpens(origin, req.IDs.SessionID) {
+		return false
+	}
+	return d.automationSessionIsLive(req.IDs.SessionID) || d.automationSessionExitSince(req.IDs.SessionID, run) != nil
+}
+
+func (d *Daemon) automationSessionExitSince(sessionID protocol.SessionID, run *store.AutomationRun) *store.SessionExitScreen {
+	exit := d.store.GetSessionExitScreen(sessionID)
+	if exit == nil || protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt) {
+		return nil
+	}
+	return exit
 }
 
 func (d *Daemon) confirmAutomationLaunch(run *store.AutomationRun, agent string, result automation.DeliveryResult, launch *launchWatch) error {
@@ -436,7 +464,7 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 			return errors.New("automation reviewer pull-request identity changed; refusing to reuse its session")
 		}
 	}
-	if canStartWithdrawnUndeliveredReviewer(origin) {
+	if d.automationSessionOpens(origin, req.IDs.SessionID) {
 		return nil
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
@@ -565,11 +593,11 @@ func (d *Daemon) activateAutomationContinuationSeed(definitionID int, seedID str
 	}
 	tend := quietAsk("")
 	if previous, ok := seed.Tender.Session(); ok && previous != sessionID && d.sessionActive(previous) {
-		replaced, err := d.store.AutomationSessionHeldSeed(definitionID, seedID, previous)
+		handover, err := d.store.AutomationSessionAwaitsRotatedSeed(definitionID, seedID, sessionID, previous)
 		if err != nil {
 			return nil, err
 		}
-		if replaced {
+		if handover {
 			tend = garden.Ask{Actor: actor.Actor(), Claimant: actor, Force: true}
 		}
 	}
@@ -658,29 +686,13 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	mainRepo := ""
 	if override, ok := req.Location.RepositorySources.Overrides[identity]; ok {
 		source = override
-		type overrideInfo struct {
-			mainRepo  string
-			remoteURL string
-		}
-		override, gitErr := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (overrideInfo, error) {
-			mainRepo, runErr := client.ValidateLocalClone(runCtx, source.Path, identity)
-			if runErr != nil {
-				return overrideInfo{}, runErr
-			}
-			remoteURL, runErr := client.Output(runCtx, attngit.OpMetadata, mainRepo, "remote", "get-url", "origin")
-			return overrideInfo{mainRepo: mainRepo, remoteURL: string(remoteURL)}, runErr
+		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+			return client.ValidateLocalClone(runCtx, source.Path, identity)
 		})
-		mainRepo, err = override.mainRepo, gitErr
 		if err != nil {
 			return automation.PreparedLocation{}, fmt.Errorf("local repository override: %w", err)
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(override.remoteURL)), "https://") && authorization == "" {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("GitHub host %s is not authenticated", pr.Host)}
-		}
 	} else {
-		if authorization == "" {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("GitHub host %s is not authenticated", pr.Host)}
-		}
 		root := strings.TrimSpace(d.dataRoot)
 		if root == "" {
 			root = filepath.Dir(d.socketPath)
@@ -692,14 +704,14 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return mainRepo, runErr
 		})
 		if err != nil {
-			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("managed repository cache: %w", err)}
+			return automation.PreparedLocation{}, automationRepositoryError(pr.Host, fmt.Errorf("managed repository cache: %w", err))
 		}
 	}
 	d.store.MonitorWorktreeRepository(mainRepo)
 	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
 	}); err != nil {
-		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
+		return automation.PreparedLocation{}, automationRepositoryError(pr.Host, err)
 	}
 	repoName := pr.Repository
 	root := strings.TrimSpace(d.dataRoot)
@@ -742,6 +754,13 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 	})
 	return automation.PreparedLocation{Directory: worktree, Revision: pr.HeadSHA, Resolved: resolved}, nil
 }
+func automationRepositoryError(host string, err error) error {
+	if errors.Is(err, attngit.ErrAuthorizationMissing) {
+		err = fmt.Errorf("GitHub host %s is not authenticated", host)
+	}
+	return &retryableAutomationDeliveryError{cause: err}
+}
+
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
 	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
@@ -762,17 +781,17 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 	if err != nil {
 		return nil, err
 	}
-	opening := continuationRun == nil || canStartWithdrawnUndeliveredReviewer(continuationRun)
+	opening := d.automationSessionOpens(continuationRun, req.IDs.SessionID)
 	if opening && req.Launch.Agent == string(protocol.SessionAgentCodex) {
 		return d.ensureConfirmedAutomationSession(req, directory, inputPath)
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
-		return nil, d.verifyUnattendedLaunch(req)
+		return nil, nil
 	}
 	if !opening {
 		return nil, d.continueAutomationSession(ctx, req, directory)
 	}
-	return nil, d.startAutomationSession(req, directory, inputPath, nil)
+	return nil, d.startAutomationSession(req, directory, inputPath)
 }
 
 func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, directory, inputPath string) (*launchWatch, error) {
@@ -782,22 +801,20 @@ func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, di
 		return nil, errors.Join(errors.New("automation run missing"), err)
 	}
 	launch := d.watchLaunch(sessionID)
-	exit := d.store.GetSessionExitScreen(sessionID)
+	exit := d.automationSessionExitSince(sessionID, run)
 	switch {
 	case d.automationSessionIsLive(sessionID):
 		if d.launchReported(sessionID) {
 			d.noteLaunchStarted(sessionID)
-		} else {
-			d.passGateBeforeFirstTurn(req, launch)
 		}
-	case exit != nil && !protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt):
+	case exit != nil:
 		if d.launchReported(sessionID) {
 			d.noteLaunchStarted(sessionID)
 		} else {
 			d.resolveLaunchWatch(sessionID, launchOutcome{exit: exit})
 		}
 	default:
-		if err := d.startAutomationSession(req, directory, inputPath, launch); err != nil {
+		if err := d.startAutomationSession(req, directory, inputPath); err != nil {
 			d.forgetLaunchWatch(sessionID, launch)
 			return nil, err
 		}
@@ -830,9 +847,6 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 		ProfileID: req.IDs.ProfileID,
 	})
 	if err != nil {
-		return err
-	}
-	if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err
 	}
 	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
@@ -869,7 +883,7 @@ func automationSessionLabel(req automation.WorkRequest, directory string) string
 	return label
 }
 
-func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string, launch *launchWatch) error {
+func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
 	label, prompt, err := d.automationSessionLaunch(req, directory, inputPath)
 	if err != nil {
 		return err
@@ -879,14 +893,13 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if rejection != nil {
 		return rejection.reason()
 	}
-	if launch != nil {
-		d.passGateBeforeFirstTurn(req, launch)
-	} else if err := d.verifyUnattendedLaunch(req); err != nil {
-		return err
-	}
 	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
 	return nil
 }
+func (d *Daemon) automationSessionOpens(origin *store.AutomationRun, sessionID protocol.SessionID) bool {
+	return origin == nil || canStartWithdrawnUndeliveredReviewer(origin) || d.store.SessionLedgerEntry(sessionID) == nil
+}
+
 func canStartWithdrawnUndeliveredReviewer(origin *store.AutomationRun) bool {
 	return origin != nil && origin.State == store.AutomationRunStateCancelled && origin.CancelReason == store.AutomationCancelReasonReviewWithdrawn
 }
@@ -906,18 +919,6 @@ func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*stor
 		return nil, errors.New("continuity origin run missing")
 	}
 	return origin, nil
-}
-func (d *Daemon) verifyUnattendedLaunch(req automation.WorkRequest) error {
-	if err := d.passUnattendedLaunchGate(req, nil); err != nil {
-		return &retryableAutomationDeliveryError{cause: err}
-	}
-	return nil
-}
-
-func (d *Daemon) passGateBeforeFirstTurn(req automation.WorkRequest, launch *launchWatch) {
-	if err := d.passUnattendedLaunchGate(req, launch); err != nil {
-		d.logf("automation launch of session %s: %v; its first turn or exit decides the run", req.IDs.SessionID, err)
-	}
 }
 func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (string, error) {
 	if filepath.Base(req.RunID) != req.RunID || strings.TrimSpace(req.RunID) == "" {
@@ -982,90 +983,6 @@ func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, che
 	return prompts.RenderText("automation", "opening", values)
 }
 
-const codexDirectoryTrustPrompt = "Do you trust the contents of this directory?"
-
-func stripANSIForPromptMatch(data []byte) string {
-	out := make([]byte, 0, len(data))
-	for i := 0; i < len(data); {
-		if data[i] != 0x1b {
-			out = append(out, data[i])
-			i++
-			continue
-		}
-		if i+1 >= len(data) {
-			break
-		}
-		switch data[i+1] {
-		case '[':
-			i += 2
-			for i < len(data) {
-				if data[i] >= 0x40 && data[i] <= 0x7e {
-					i++
-					break
-				}
-				i++
-			}
-		case ']':
-			i += 2
-			for i < len(data) {
-				if data[i] == 0x07 {
-					i++
-					break
-				}
-				if data[i] == 0x1b && i+1 < len(data) && data[i+1] == '\\' {
-					i += 2
-					break
-				}
-				i++
-			}
-		default:
-			i += 2
-		}
-	}
-	return string(out)
-}
-
-func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest, launch *launchWatch) error {
-	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
-		return nil
-	}
-	snapshots, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
-	if !ok {
-		return errors.New("automation launch cannot verify Codex directory trust gate")
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	acknowledged := false
-	for time.Now().Before(deadline) && !d.stopping() {
-		if launch != nil && launch.settled() {
-			return nil
-		}
-		info, err := snapshots.ScreenSnapshot(context.Background(), d.primaryTerminal(req.IDs.SessionID))
-		if err == nil {
-			var payload []byte
-			if info.Screen != nil {
-				payload = info.Screen.Payload
-			}
-			screen := stripANSIForPromptMatch(payload)
-			if strings.Contains(screen, codexDirectoryTrustPrompt) {
-				if !acknowledged {
-					if err := d.writeSessionPTY(req.IDs.SessionID, []byte("\r"), "automation"); err != nil {
-						return fmt.Errorf("accept Codex directory trust: %w", err)
-					}
-					acknowledged = true
-				}
-			} else if acknowledged {
-				return nil
-			} else if time.Until(deadline) < 5*time.Second && len(payload) > 0 {
-				return nil
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if acknowledged {
-		return errors.New("automation launch: Codex directory trust prompt did not clear")
-	}
-	return errors.New("automation launch did not produce a verifiable Codex screen")
-}
 func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.WorkRequest, directory string) error {
 	seed, _, err := d.readSeed(req.IDs.SeedID)
 	if err != nil {

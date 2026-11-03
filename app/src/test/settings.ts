@@ -18,10 +18,13 @@ export function serveSettings(daemon: ScriptedDaemon, initial: Record<string, st
 }
 
 async function renderScriptedSettings(initial: Partial<InitialState>, script: Script): Promise<AppRender> {
-  const view = await renderApp({ initialState: initial });
-  serveSettings(view.daemon, initial.settings);
-  script(view.daemon);
-  return view;
+  return renderApp({
+    initialState: initial,
+    script: (daemon) => {
+      serveSettings(daemon, initial.settings);
+      script(daemon);
+    },
+  });
 }
 
 const pressSettingsShortcut = () => pressShortcut('ui.openSettings');

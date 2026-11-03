@@ -10,7 +10,7 @@ import (
 )
 
 func runTurn() {
-	os.Exit(executeTurn(os.Args[2:], os.Stdout, os.Stderr))
+	exit(executeTurn(os.Args[2:], os.Stdout, os.Stderr))
 }
 
 func executeTurn(args []string, stdout, stderr io.Writer) int {

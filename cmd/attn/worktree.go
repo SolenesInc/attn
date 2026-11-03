@@ -35,20 +35,26 @@ func runWorktree() {
 	args := os.Args[2:]
 	if len(args) == 0 {
 		fmt.Fprint(os.Stderr, worktreeUsage)
-		os.Exit(1)
+		exit(1)
 	}
 	switch args[0] {
 	case "list":
+		setCommandPath("worktree list")
 		worktreeList(args[1:])
 	case "keep":
+		setCommandPath("worktree keep")
 		worktreeKeep(args[1:], true)
 	case "unkeep":
+		setCommandPath("worktree unkeep")
 		worktreeKeep(args[1:], false)
 	case "delete":
+		setCommandPath("worktree delete")
 		worktreeDelete(args[1:])
 	case "log":
+		setCommandPath("worktree log")
 		worktreeLog(args[1:])
 	case "refresh":
+		setCommandPath("worktree refresh")
 		worktreeRefresh()
 	case "-h", "--help", "help":
 		fmt.Print(worktreeUsage)
@@ -56,7 +62,7 @@ func runWorktree() {
 		recordUsageError("worktree", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown worktree command: %s\n\n", args[0])
 		fmt.Fprint(os.Stderr, worktreeUsage)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -76,7 +82,7 @@ func worktreeList(args []string) {
 	result, err := client.New("").WorktreeList(expandWorktreeRepo(*repo), *limit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if *asJSON {
 		printWorktreeJSON(result)
@@ -194,14 +200,14 @@ func worktreeKeep(args []string, keep bool) {
 			verb = "unkeep"
 		}
 		fmt.Fprintf(os.Stderr, "usage: attn worktree %s <path>\n", verb)
-		os.Exit(1)
+		exit(1)
 	}
 	warnIfDaemonVersionMismatch()
 
 	result, err := client.New("").WorktreeKeep(worktreePathArg(args[0]), keep)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if keep {
 		fmt.Printf("pinned %s; the sweep will never reclaim it\n", result.Worktree.Path)
@@ -216,14 +222,14 @@ func worktreeDelete(args []string) {
 	_ = parseFlags(fs, args)
 	if fs.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "usage: attn worktree delete <path> [--force]")
-		os.Exit(1)
+		exit(1)
 	}
 	warnIfDaemonVersionMismatch()
 
 	path := worktreePathArg(fs.Arg(0))
 	if err := client.New("").DeleteWorktree(path, *force); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Printf("deleted %s\n", path)
 }
@@ -235,7 +241,7 @@ func worktreeLog(args []string) {
 	result, err := client.New("").WorktreeSweepLog(expandWorktreeRepo(*repo), *limit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if *asJSON {
 		printWorktreeJSON(result)
@@ -267,11 +273,11 @@ func worktreeRefresh() {
 	result, err := client.New("").WorktreeRefresh()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if !result.Queued {
 		fmt.Fprintln(os.Stderr, "the daemon has no job queue running, so no refresh was queued")
-		os.Exit(1)
+		exit(1)
 	}
 	fmt.Println("refreshing worktree state in the background; `attn worktree list` shows the result")
 }
@@ -296,7 +302,7 @@ func printWorktreeJSON(value any) {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(value); err != nil {
 		fmt.Fprintf(os.Stderr, "error encoding result: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -31,8 +32,14 @@ func (d *Daemon) analyticsEnabled() bool {
 	return parseBooleanSetting(d.machineSetting(SettingAnalyticsEnabled))
 }
 
+func (d *Daemon) analyticsCapturedSince(at time.Time) bool {
+	since := d.analyticsOnSince.Load()
+	return since != nil && !at.Before(*since) && d.analyticsEnabled()
+}
+
 func (d *Daemon) configureAnalytics() {
 	if !d.analyticsEnabled() {
+		d.analyticsOnSince.Store(nil)
 		if err := d.stopAnalyticsMirror(); err != nil {
 			d.logf("analytics: %v", err)
 		}
@@ -46,6 +53,8 @@ func (d *Daemon) configureAnalytics() {
 	if err := d.startAnalyticsMirror(secret); err != nil {
 		d.logf("analytics: %v", err)
 	}
+	now := time.Now()
+	d.analyticsOnSince.CompareAndSwap(nil, &now)
 }
 
 func ensureAnalyticsSecret(dataRoot string) ([]byte, error) {
@@ -134,6 +143,10 @@ func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.Get
 		if refusal := d.analyticsUpload.lastRefusal(); refusal != "" {
 			result.LastRefusal = &refusal
 		}
+		result.IngestURL = config.AnalyticsIngestURL()
+		if reason := config.AnalyticsIngestOffReason(); reason != "" {
+			result.IngestOffReason = &reason
+		}
 	}
 	d.sendToClient(client, result)
 }
@@ -165,9 +178,9 @@ func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage, pro
 	}
 	stream := analytics.Stream(protocol.Deref(msg.Stream))
 	switch stream {
-	case "", analytics.StreamBus, analytics.StreamApp, analytics.StreamCLI, analytics.StreamSample, analytics.StreamVent:
+	case "", analytics.StreamBus, analytics.StreamApp, analytics.StreamCLI, analytics.StreamSample, analytics.StreamVent, analytics.StreamRun:
 	default:
-		return store.AnalyticsPage{}, fmt.Errorf("unknown analytics stream %q: use bus, app, cli, sample or vent", stream)
+		return store.AnalyticsPage{}, fmt.Errorf("unknown analytics stream %q: use bus, app, cli, sample, vent or run", stream)
 	}
 	return d.store.AnalyticsRecords(profileID, stream, int64(protocol.Deref(msg.BeforeID)), msg.Limit)
 }

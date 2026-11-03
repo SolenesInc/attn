@@ -362,10 +362,10 @@ func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {
 
 func (d *Daemon) placeChiefNotebook(member crew.Member, revision int64, root string) (crew.Member, int64, error) {
 	if !member.Chief {
-		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", SettingNotebookProfileRoot)
+		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", SettingNotebookRoot)
 	}
 	if member.Agent != "" {
-		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, SettingNotebookProfileRoot)
+		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, SettingNotebookRoot)
 	}
 	previous, changed, err := d.pointProfileNotebook(member.ProfileID, root)
 	if err != nil {
@@ -400,7 +400,7 @@ func (d *Daemon) pointProfileNotebook(profileID, root string) (previous string, 
 }
 
 func (d *Daemon) setProfileNotebookRoot(profileID, root string) error {
-	_, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookProfileRoot), Value: root, ProfileID: &profileID})
+	_, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookRoot), Value: root, ProfileID: &profileID})
 	return err
 }
 

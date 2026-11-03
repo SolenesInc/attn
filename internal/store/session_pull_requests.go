@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
@@ -98,30 +99,42 @@ func (s *Store) ListSessionPullRequests(sessionID protocol.SessionID) []SessionP
 	return records
 }
 
-func (s *Store) ListSessionPullRequestsBySession() map[protocol.SessionID][]SessionPullRequestRecord {
+func (s *Store) SessionPullRequestsOf(ids []protocol.SessionID) map[protocol.SessionID][]SessionPullRequestRecord {
+	bySession := make(map[protocol.SessionID][]SessionPullRequestRecord)
+	if len(ids) == 0 {
+		return bySession
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return nil
+		return bySession
 	}
 
-	rows, err := s.db.Query(`
-		SELECT ` + sessionPullRequestColumns + `
-		FROM session_pull_requests
-		ORDER BY created_at DESC, rowid DESC`)
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.Query(sessionPullRequestsOfQuery(len(ids)), args...)
 	if err != nil {
-		return nil
+		return bySession
 	}
 	defer rows.Close()
 	records, err := scanSessionPullRequests(rows)
 	if err != nil {
-		return nil
+		return bySession
 	}
-	bySession := make(map[protocol.SessionID][]SessionPullRequestRecord)
 	for _, rec := range records {
 		bySession[rec.SessionID] = append(bySession[rec.SessionID], rec)
 	}
 	return bySession
+}
+
+func sessionPullRequestsOfQuery(ids int) string {
+	return `
+		SELECT ` + sessionPullRequestColumns + `
+		FROM session_pull_requests
+		WHERE session_id IN (` + strings.TrimSuffix(strings.Repeat("?, ", ids), ", ") + `)
+		ORDER BY created_at DESC, rowid DESC`
 }
 
 func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {

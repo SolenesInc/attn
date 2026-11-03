@@ -18,7 +18,8 @@ function vent(id: string, overrides: Partial<Vent> = {}): Vent {
       session_label: 'fix garden bell staleness',
       harness: 'claude',
       harness_version: '2.4.1',
-      model: 'opus-5.5',
+      model: 'claude-opus-5-5',
+      model_requested: 'opus',
       seed_id: 's-stake1',
       build: { version: '0.42.1', commit: 'a3f9e1c22', channel: 'source', dirty: true, build_time: '', fingerprint: '', protocol: '', os: 'darwin', arch: 'arm64', app_version: '', app_channel: '' },
       experimental: ['asks_enabled'],
@@ -57,7 +58,7 @@ function serveVents(daemon: ScriptedDaemon) {
       { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
     ];
   });
-  daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0 }));
+  daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0, ingest_url: 'https://attn-telemetry.caketroll.cloud' }));
 }
 
 async function openVents() {
@@ -82,7 +83,7 @@ describe('Settings › Analytics vents', () => {
     expect(inspector().getByText('garden-show-stale-bell')).toBeInTheDocument();
     expect(inspector().getByText('Source a3f9e1c, uncommitted changes')).toBeInTheDocument();
     expect(inspector().getByText('Asks')).toBeInTheDocument();
-    expect(inspector().getByText(/Claude 2\.4\.1/)).toBeInTheDocument();
+    expect(inspector().getByText(/Claude 2\.4\.1/)).toHaveTextContent('Claude 2.4.1 · claude-opus-5-5 (requested opus)');
     expect(inspector().getByText('Kept on this machine')).toBeInTheDocument();
   });
 

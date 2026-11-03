@@ -1,11 +1,10 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { assertDaemonStopKeepsTerminals } from './freshWorld.mjs';
 import {
   daemonPidFilePathForInstance,
   dataDirForInstance,
-  socketPathForInstance,
 } from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -297,37 +296,6 @@ export function readLiveDaemonPid(instance) {
   return readLivePidFile(daemonPidFilePathForInstance(instance));
 }
 
-function canonicalPath(filePath) {
-  try {
-    return fs.realpathSync(filePath);
-  } catch {
-    return path.resolve(filePath);
-  }
-}
-
-export function assertDaemonRestartDoesNotHostSession(instance, {
-  env = process.env,
-  resolveSocket = socketPathForInstance,
-  readDaemonPid = readLiveDaemonPid,
-  readPidFile = readLivePidFile,
-} = {}) {
-  const terminalId = String(env.ATTN_TERMINAL_ID || env.ATTN_SESSION_ID || '').trim();
-  const hostingSocket = String(env.ATTN_SOCKET_PATH || '').trim();
-  if (!terminalId || !hostingSocket) return;
-
-  const targetSocket = resolveSocket(instance);
-  const targetPid = readDaemonPid(instance);
-  const hostingPid = readPidFile(path.join(path.dirname(hostingSocket), 'attn.pid'));
-  const sameDaemon = canonicalPath(targetSocket) === canonicalPath(hostingSocket)
-    || (Number.isInteger(targetPid) && targetPid > 0 && targetPid === hostingPid);
-  if (sameDaemon) {
-    throw new Error(
-      `refusing to restart instance ${JSON.stringify(instance || 'production')} daemon pid ${targetPid ?? 'unknown'} `
-      + `at ${targetSocket}: it hosts invoking terminal ${terminalId}; run from another instance or pass --no-restart-daemon`,
-    );
-  }
-}
-
 export async function stopDaemon(instance) {
   const pid = readLiveDaemonPid(instance);
   if (pid == null) return null;
@@ -338,6 +306,12 @@ export async function stopDaemon(instance) {
   }
   try { process.kill(pid, 'SIGKILL'); } catch {}
   return pid;
+}
+
+export async function stopDaemonKeepingTerminals(instance, { appPath }) {
+  if (readLiveDaemonPid(instance) == null) return null;
+  assertDaemonStopKeepsTerminals({ instance, appPath });
+  return stopDaemon(instance);
 }
 
 export async function teardownInstanceState({ client, instance, wipe = true }) {

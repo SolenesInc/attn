@@ -48,20 +48,25 @@ func (d *Daemon) prepareSeedHandover(
 		plan.alreadyBound = true
 		return plan, nil
 	}
+	if msg.Authorization != "" {
+		if err := d.checkAuthorizationStanding(seed, d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID)))); err != nil {
+			return nil, err
+		}
+	}
 	if request.Review != nil {
 		item, reviewErr := d.validateGardenReviewAction(request.Review, seedID, "handover")
 		if reviewErr != nil {
 			return nil, reviewErr
 		}
 		if item.SeedRev != doc.Rev {
-			return nil, fmt.Errorf("%s changed since you reviewed it; refresh the garden", seedID)
+			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
 		}
 	}
 	if garden.Closed(seed.Status) {
-		return nil, fmt.Errorf("%s is %s; replant it before handing it over", seed.ID, seed.Status)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before handing it over", seed.ID, seed.Status)
 	}
 	if int(doc.Rev) != request.ExpectedRev {
-		return nil, fmt.Errorf("%s changed since you opened it; refresh it before handing it over", seed.ID)
+		return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you opened it; refresh it before handing it over", seed.ID)
 	}
 	return plan, nil
 }
@@ -104,10 +109,10 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 	if int(doc.Rev) != request.ExpectedRev {
-		return nil, fmt.Errorf("%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
+		return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
 	}
 	if garden.Closed(seed.Status) {
-		return nil, fmt.Errorf("%s became %s while the new worker was starting", seed.ID, seed.Status)
+		return nil, protocol.Refuse(protocol.RefusalConflict, "%s became %s while the new worker was starting", seed.ID, seed.Status)
 	}
 
 	unclaimed := seed
@@ -167,7 +172,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 	now := d.gardenTime()
 	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.SeedWatch{Watcher: who.Session(sessionID), SeedID: seed.ID}, log.events, now,
+		commits, delegationWatches(seed.ID, who.Session(sessionID), dispatches.newDispatch.Dispatcher), log.events, now,
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()

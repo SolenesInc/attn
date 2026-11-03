@@ -34,6 +34,7 @@ type World struct {
 	peers    []*Peer
 
 	unansweredTrust map[string]bool
+	outside         *outsideHolds
 }
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -101,8 +102,12 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 		"ATTN_CLIENT_TOKEN=",
 		"SSH_AUTH_SOCK=",
 		"ATTN_HEADLESS_TASKS=off",
-		config.AnalyticsIngestURLEnv + "=http://127.0.0.1:1",
+		config.AnalyticsIngestURLEnv + "=",
+		config.CloudURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
+		// Some hosts' /etc/profile runs /etc/bashrc, which sets a window-title PROMPT_COMMAND when none is set
+		// (Fedora). A world's shells keep the titles their tests write.
+		"PROMPT_COMMAND=:",
 	}
 	if w.kit != nil {
 		w.Vars = append(w.Vars, w.kit.Env()...)
@@ -370,8 +375,14 @@ func (w *World) CodexServerOf(profile string) *fakeagent.CodexServer {
 	return w.kit.CodexServerOf(profile)
 }
 
-func (w *World) HoldNextBoot() (boot func()) {
-	return w.kit.HoldNextBoot()
+func (w *World) HoldNextBoot() *Pause {
+	w.T.Helper()
+	if w.outside == nil {
+		w.outside = newOutsideHolds(w.T)
+	}
+	name, pause := w.outside.arm("agent boot")
+	w.kit.HoldNextBoot(func() { w.outside.hold(name) })
+	return pause
 }
 
 func (w *World) LogDaemonTail() {

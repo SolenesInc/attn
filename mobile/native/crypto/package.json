@@ -1,0 +1,11 @@
+{
+  "name": "attn-apple-crypto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "X25519 and ChaCha20-Poly1305 from Apple's CryptoKit, for the phone's Noise link.",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}

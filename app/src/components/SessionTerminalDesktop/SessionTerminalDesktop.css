@@ -6,7 +6,8 @@
   background: var(--color-bg-editor);
 }
 
-.session-terminal-desktop.zoom-mode .desktop-pane:not(.active) {
+.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.session-terminal-desktop.zoom-mode .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
   opacity: 0.72;
 }
 
@@ -126,12 +127,24 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  opacity: 0.58;
   transition: opacity 120ms ease;
+}
+
+.desktop-pane:where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
+  opacity: 0.58;
 }
 
 .desktop-pane.active {
   opacity: 1;
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) .desktop-pane-title {
+  color: var(--color-text-secondary);
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) .desktop-pane-subline {
+  opacity: 0.7;
 }
 
 .desktop-pane--suspended {
@@ -239,6 +252,11 @@
     var(--color-bg-elevated, var(--color-bg-editor)) 92%,
     var(--color-text-primary)
   );
+  --pane-header-fade: color-mix(
+    in srgb,
+    var(--color-bg-elevated, var(--color-bg-editor)) 92%,
+    var(--color-text-primary)
+  );
 }
 
 .session-terminal-desktop.desktop-selection--spotlight.multi-leaf .desktop-pane.active .desktop-pane-title,
@@ -303,6 +321,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .desktop-pane,
+  .desktop-pane-body,
   .session-terminal-panes[data-suspension-animating] > .desktop-pane {
     transition: none;
   }
@@ -423,13 +442,13 @@
 }
 
 .desktop-pane-header {
+  --pane-header-fade: color-mix(in srgb, var(--color-bg-editor) 93%, rgb(255, 107, 53));
   position: relative;
+  flex: none;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 30px;
-  padding: 4px 8px;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 41px;
   border-bottom: 1px solid var(--color-border);
   /* Lit from the top like a title bar rather than flooded with a flat tint: the
      header is permanent now and names the session, so it reads as the pane's
@@ -440,16 +459,135 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* The header's dot is a label for the name beside it, not a control — keep it
-   from stretching in the header's flex row. */
-.desktop-pane-header .state-indicator {
-  flex-shrink: 0;
-  margin-top: 0;
+.desktop-pane-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  overflow: hidden;
 }
 
-.desktop-pane-header .pane-seed-chip {
-  flex: 0 1 auto;
-  min-width: 76px;
+.desktop-pane-subline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 16px;
+  min-width: 0;
+  margin-top: -6px;
+  padding: 0 10px 0 24px;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.desktop-pane-dot {
+  display: flex;
+  flex: none;
+}
+
+.desktop-pane-piece {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.desktop-pane-piece:empty,
+.desktop-pane-piece[data-level='hidden'] {
+  display: none;
+}
+
+.desktop-pane-signals {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.desktop-pane-harness {
+  display: none;
+}
+
+.desktop-pane-subline:not(:has(.desktop-pane-piece:not(:empty))) .desktop-pane-harness {
+  display: inline;
+  color: var(--color-text-muted, var(--color-text-tertiary));
+}
+
+.desktop-pane-harness::before {
+  content: attr(data-label);
+}
+
+.desktop-pane-piece[data-fit-piece='settling'][data-level='icon'] :is(.settling-header-label, .settle-cancel-hint) {
+  display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='ask'][data-level='short'] .pane-ask-chip-subject {
+  max-width: 116px;
+  white-space: nowrap;
+}
+
+.desktop-pane-piece[data-fit-piece='ask'][data-level='icon'] :is(.pane-ask-chip-subject, .pane-ask-chip-more) {
+  display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='ask'][data-level='icon'] .pane-ask-chip {
+  padding-right: 3px;
+}
+
+.desktop-pane-subline .pane-seed-chip {
+  height: 16px;
+  max-width: none;
+  padding: 0 2px;
+  font-size: inherit;
+}
+
+.desktop-pane-subline .pane-seed-chip .seed-state-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.desktop-pane-subline .pane-seed-counts svg {
+  width: 13px;
+  height: 13px;
+}
+
+.desktop-pane-piece[data-fit-piece='seed'][data-level='short'] .pane-seed-chip-title {
+  max-width: 84px;
+}
+
+.desktop-pane-piece[data-fit-piece='seed'][data-level='icon'] :is(.pane-seed-chip-title, .pane-seed-counts, .pane-seed-chip-fraction, .seed-state-label) {
+  display: none;
+}
+
+.desktop-pane-subline .delegation-chain-trigger--header {
+  height: 16px;
+  padding: 0 4px;
+}
+
+.desktop-pane-piece[data-fit-piece='role'][data-level='icon'] .delegation-chain-trigger-label {
+  display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='host'][data-level='full'] .desktop-pane-host-mark,
+.desktop-pane-piece[data-fit-piece='host'][data-level='short'] .desktop-pane-host:not(.desktop-pane-host-mark) {
+  display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > :not([data-icon-part]),
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] :is(.session-provenance__kind-label, .session-provenance__target-label) {
+  display: none;
+}
+
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance__target-icon {
+  display: inline;
+  color: var(--accent);
+}
+
+.desktop-pane-piece[data-fit-piece='provenance'][data-level='icon'] .session-provenance > ::after {
+  content: none;
 }
 
 /* A lone tile's header: a status bar naming the session and hosting its chips,
@@ -477,30 +615,16 @@
 /* Set in sentence case, not the small-caps heading this used to be: the title is
    now a generated sentence of up to 48 characters describing what the agent is
    working on, and caps would both shout it and cost roughly a word of width
-   before the ellipsis.
-
-   Set at the primary text colour and one step up in size: this is the pane's
-   headline, and inactive panes are already dimmed wholesale by
-   `.desktop-pane`'s opacity, so the title does not need to whisper to show
-   which leaf is unfocused. */
-.desktop-pane-identity {
-  flex: 1;
-  min-width: 40%;
+   before the ellipsis. */
+.desktop-pane-title-slot {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-}
-
-.desktop-pane-identity-main {
-  min-width: 0;
-  display: flex;
+  flex: 0 1 auto;
   align-items: center;
-  gap: 6px;
+  min-width: 48px;
 }
 
 .desktop-pane-title {
-  flex: 0 1 auto;
   min-width: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
@@ -513,7 +637,7 @@
 .desktop-pane-usage {
   flex: none;
   margin: 0;
-  padding: 2px 3px;
+  padding: 0 3px;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -643,6 +767,27 @@
   }
 }
 
+.desktop-pane-title-actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 18px;
+  background: linear-gradient(90deg, transparent, var(--pane-header-fade) 16px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.1s;
+}
+
+.desktop-pane-header:hover .desktop-pane-title-actions,
+.desktop-pane-header:focus-within .desktop-pane-title-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .desktop-pane-rename-btn {
   flex-shrink: 0;
   display: flex;
@@ -657,8 +802,7 @@
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  opacity: 0;
-  transition: opacity 0.1s, color 0.1s;
+  transition: color 0.1s;
 }
 
 .desktop-pane-focus-btn {
@@ -674,8 +818,7 @@
   background: none;
   color: var(--color-text-dimmed);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.1s, color 0.1s, background 0.1s;
+  transition: color 0.1s, background 0.1s;
 }
 
 .desktop-pane-focus-btn svg {
@@ -686,13 +829,6 @@
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.desktop-pane-header:hover .desktop-pane-rename-btn,
-.desktop-pane-header:focus-within .desktop-pane-rename-btn,
-.desktop-pane-header:hover .desktop-pane-focus-btn,
-.desktop-pane-header:focus-within .desktop-pane-focus-btn {
-  opacity: 1;
 }
 
 .desktop-pane-rename-btn:hover {
@@ -712,6 +848,7 @@
   min-width: 0;
   position: relative;
   overflow: hidden;
+  transition: opacity 120ms ease;
 }
 
 .desktop-agent-stopped {
@@ -799,12 +936,12 @@
 }
 
 .desktop-pane-host {
-  flex-shrink: 0;
   padding: 0 4px;
   border: 1px solid var(--color-border);
   border-radius: 3px;
   color: var(--color-text-secondary);
   font-size: 10px;
+  line-height: 12px;
   white-space: nowrap;
 }
 

@@ -3,6 +3,7 @@ import { Sidebar } from '../../src/components/Sidebar';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
 import { buildQueueBands } from '../../src/utils/queueBands';
+import type { ChiefPhase } from '../../src/application/useChief';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
 
@@ -45,7 +46,9 @@ const desktops = buildDesktopViewModels([desktop], sessions);
 export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const params = new URLSearchParams(window.location.search);
   const desktopFlow = params.has('desktop');
+  const chiefPhase = (params.get('chief') ?? 'awake') as ChiefPhase;
   const crew = [
+    { id: 'chief-member', name: 'Chief', agent: 'claude', binding_session: chiefPhase === 'awake' ? 'chief' : undefined },
     { id: 'alder', name: 'Alder', binding_session: 'crew-awake' },
     { id: 'birch', name: 'Birch' },
     { id: 'cedar', name: 'Cedar' },
@@ -69,6 +72,8 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
           queue={desktopFlow ? null : buildQueueBands(desktops)}
+          chief={{ key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: chiefPhase, requestPending: false, sessionId: chiefPhase === 'awake' ? 'chief' : undefined }}
+          chiefActions={{ setUp: async () => true, wake: noop, sleep: noop, edit: noop, dismiss: noop }}
           crew={crew}
           profileName="Harness"
           onSelectSession={noop}

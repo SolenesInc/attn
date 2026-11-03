@@ -696,7 +696,8 @@ func TestConversationRetirementWaitsForADelegationLaunchInsteadOfPolling(t *test
 		t.Errorf("retired copy while a delegation launched: %+v", kept)
 	}
 
-	boot()
+	boot.Await()
+	boot.Release()
 	if _, err := cli.Delegate(request); err != nil {
 		t.Fatal(err)
 	}

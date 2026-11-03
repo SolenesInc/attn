@@ -165,78 +165,56 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 		return
 	}
 	d.life.Go("handleBrowseDirectoryWS", func() {
-		dirToQuery, prefix, homePath, err := parseBrowseInput(msg.InputPath)
+		result, err := Call[protocol.BrowseDirectoryResultMessage](context.Background(), d.router(), *msg)
 		if err != nil {
-			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:     protocol.EventBrowseDirectoryResult,
-				InputPath: msg.InputPath,
-				RequestID: msg.RequestID,
-				Success:   false,
-				Error:     protocol.Ptr(err.Error()),
-			})
-			return
+			result = protocol.BrowseDirectoryResultMessage{Event: protocol.EventBrowseDirectoryResult, InputPath: msg.InputPath, Error: protocol.Ptr(err.Error())}
 		}
-
-		if dirToQuery == "" {
-			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:     protocol.EventBrowseDirectoryResult,
-				InputPath: msg.InputPath,
-				Directory: "",
-				Entries:   []protocol.DirectoryEntry{},
-				RequestID: msg.RequestID,
-				HomePath:  protocol.Ptr(homePath),
-				Success:   true,
-			})
-			return
-		}
-
-		entries, err := listDirectoryEntries(dirToQuery, prefix, msg.Extensions)
-		if err != nil {
-			d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-				Event:     protocol.EventBrowseDirectoryResult,
-				InputPath: msg.InputPath,
-				Directory: dirToQuery,
-				RequestID: msg.RequestID,
-				HomePath:  protocol.Ptr(homePath),
-				Success:   false,
-				Error:     protocol.Ptr(err.Error()),
-			})
-			return
-		}
-
-		d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
-			Event:     protocol.EventBrowseDirectoryResult,
-			InputPath: msg.InputPath,
-			Directory: dirToQuery,
-			Entries:   entries,
-			RequestID: msg.RequestID,
-			HomePath:  protocol.Ptr(homePath),
-			Success:   true,
-		})
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
 	})
+}
+
+func (d *Daemon) browseDirectoryHere(_ context.Context, msg protocol.BrowseDirectoryMessage) (protocol.BrowseDirectoryResultMessage, error) {
+	result := protocol.BrowseDirectoryResultMessage{Event: protocol.EventBrowseDirectoryResult, InputPath: msg.InputPath, Entries: []protocol.DirectoryEntry{}}
+	dirToQuery, prefix, homePath, err := parseBrowseInput(msg.InputPath)
+	if err != nil {
+		result.Entries = nil
+		result.Error = protocol.Ptr(err.Error())
+		return result, nil
+	}
+	result.HomePath = protocol.Ptr(homePath)
+	if dirToQuery == "" {
+		result.Success = true
+		return result, nil
+	}
+	result.Directory = dirToQuery
+	entries, err := listDirectoryEntries(dirToQuery, prefix, msg.Extensions)
+	if err != nil {
+		result.Entries = nil
+		result.Error = protocol.Ptr(err.Error())
+		return result, nil
+	}
+	result.Entries, result.Success = entries, true
+	return result, nil
 }
 
 func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPathMessage) {
 	d.life.Go("handleInspectPathWS", func() {
-		inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
-			return inspectPickerPath(ctx, gitClient, msg.Path)
-		})
+		result, err := Call[protocol.InspectPathResultMessage](context.Background(), d.router(), *msg)
 		if err != nil {
-			d.sendToClient(client, &protocol.InspectPathResultMessage{
-				Event:      protocol.EventInspectPathResult,
-				Inspection: &protocol.PathInspection{InputPath: msg.Path},
-				RequestID:  msg.RequestID,
-				Success:    false,
-				Error:      protocol.Ptr(err.Error()),
-			})
-			return
+			result = protocol.InspectPathResultMessage{Event: protocol.EventInspectPathResult, Inspection: &protocol.PathInspection{InputPath: msg.Path}, Error: protocol.Ptr(err.Error())}
 		}
-
-		d.sendToClient(client, &protocol.InspectPathResultMessage{
-			Event:      protocol.EventInspectPathResult,
-			Inspection: inspection,
-			RequestID:  msg.RequestID,
-			Success:    true,
-		})
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
 	})
+}
+
+func (d *Daemon) inspectPathHere(ctx context.Context, msg protocol.InspectPathMessage) (protocol.InspectPathResultMessage, error) {
+	inspection, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
+		return inspectPickerPath(ctx, gitClient, msg.Path)
+	})
+	if err != nil {
+		return protocol.InspectPathResultMessage{}, err
+	}
+	return protocol.InspectPathResultMessage{Event: protocol.EventInspectPathResult, Inspection: inspection, Success: true}, nil
 }

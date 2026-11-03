@@ -191,13 +191,13 @@ describe('App session conversation pins', () => {
   });
 
   it('offers keep only for Claude and refreshes all rows sharing a changed pin', async () => {
-    const sessions = [entry({ id: 'claude' }), closedEntry('closed'), entry({ id: 'codex', agent: 'codex' }), entry({ id: 'pi', agent: 'pi' })];
+    const sessions = [entry({ id: 'claude' }), closedEntry('closed'), entry({ id: 'codex', agent: 'codex' }), entry({ id: 'plug', agent: 'plug' })];
     const { daemon } = await openSessionsLedger(pages([page({ entries: sessions })]));
     daemon.on('kept_conversation_keep', () => ({ event: 'kept_conversation_keep_result', success: true }));
     expect(row('run claude')).toHaveAttribute('data-verbs', expect.stringContaining('Keep conversation'));
     expect(row('run closed')).toHaveAttribute('data-verbs', expect.stringContaining('Keep conversation'));
     expect(row('run codex')).not.toHaveAttribute('data-verbs', expect.stringContaining('Keep conversation'));
-    expect(row('run pi')).not.toHaveAttribute('data-verbs', expect.stringContaining('Keep conversation'));
+    expect(row('run plug')).not.toHaveAttribute('data-verbs', expect.stringContaining('Keep conversation'));
     await gesture(daemon, () => fireEvent.click(row('run claude')));
     await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Keep conversation' })));
     daemon.on('session_list', () => ({ event: 'session_list_result', success: true, result: page({ entries: sessions.map((session) => session.agent === 'claude' ? { ...session, conversation_pinned_at: AT } : session) }) }));

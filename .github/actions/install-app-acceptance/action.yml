@@ -12,10 +12,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set up Linux sandbox
-      if: runner.os == 'Linux'
-      uses: ./.github/actions/setup-linux-sandbox
-
     - name: Install Linux desktop dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/setup-linux-app-deps
@@ -43,13 +39,11 @@ runs:
       shell: bash
       run: pnpm --dir app install --frozen-lockfile
 
-    - name: Install the packaged app and bundled plugin
+    - name: Install the packaged app
       shell: bash
       run: |
         tar -xzf "${{ inputs.archive }}"
         make install-staged INSTANCE="${{ inputs.instance }}"
-        ./attn plugin install-bundled attn-pi
-        echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
 
     - name: Install Linux URL opener
       if: runner.os == 'Linux'

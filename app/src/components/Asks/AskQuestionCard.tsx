@@ -1,5 +1,5 @@
 import type { AskAnswer, AskQuestion } from '../../types/generated';
-import { MarkdownReader } from '../MarkdownReader';
+import { MarkdownReader, type LocalImageLoader } from '../MarkdownReader';
 import type { MarkdownDocumentSource } from '../MarkdownReader/documentSource';
 
 interface AskQuestionCardProps {
@@ -8,6 +8,7 @@ interface AskQuestionCardProps {
   question: AskQuestion;
   answer: AskAnswer | undefined;
   source: MarkdownDocumentSource;
+  loadImage: LocalImageLoader;
   onChange?: (answer: AskAnswer) => void;
 }
 
@@ -17,7 +18,7 @@ interface AnswerProps {
   onChange?: (answer: AskAnswer) => void;
 }
 
-export function AskQuestionCard({ askId, index, question, answer, source, onChange }: AskQuestionCardProps) {
+export function AskQuestionCard({ askId, index, question, answer, source, loadImage, onChange }: AskQuestionCardProps) {
   return (
     <fieldset className="ask-question" data-testid={`ask-question-${question.key}`}>
       <legend className="ask-question-prompt">
@@ -26,7 +27,7 @@ export function AskQuestionCard({ askId, index, question, answer, source, onChan
       </legend>
       {question.context && (
         <div className="asks-markdown ask-question-context">
-          <MarkdownReader content={question.context} source={source} />
+          <MarkdownReader content={question.context} source={source} loadLocalImage={loadImage} />
         </div>
       )}
       {question.kind === 'text'

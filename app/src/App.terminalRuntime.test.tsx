@@ -564,6 +564,24 @@ describe('App terminal runtime', () => {
     ]);
   });
 
+  it('claims the terminal size when the user focuses its pane', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('s1', { state: 'idle' })],
+        desktops: [terminalDesktop('s1', 'terminal-1')],
+        profiles: [defaultProfile('desktop-s1')],
+      },
+    });
+    open('s1');
+    await daemon.idle();
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    act(() => terminal.blur());
+    act(() => terminal.focus());
+    await daemon.idle();
+
+    expect(daemon.sentOf('terminal_focus')).toContainEqual({ cmd: 'terminal_focus', id: 'terminal-1' });
+  });
+
   it('drives the in-app browser for the daemon and returns what it did', async () => {
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockImplementation(async (command: string) => {

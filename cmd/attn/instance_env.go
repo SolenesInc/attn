@@ -32,7 +32,7 @@ func runInstanceEnvArgs(args []string) {
 
 	if len(filtered) == 0 {
 		printInstanceEnvHelp()
-		os.Exit(1)
+		exit(1)
 	}
 
 	arg := strings.TrimSpace(filtered[0])
@@ -43,7 +43,7 @@ func runInstanceEnvArgs(args []string) {
 
 	if err := config.ValidateInstanceName(arg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	writeInstanceEnv(os.Stdout, arg, fishMode)

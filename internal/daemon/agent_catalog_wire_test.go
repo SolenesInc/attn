@@ -13,7 +13,7 @@ import (
 )
 
 func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
 	t.Setenv("ATTN_CODEX_EXECUTABLE", "")
 	nightly := w.Path("tools", "codex-nightly")
@@ -26,7 +26,7 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	setSetting(t, app, "codex_executable", nightly)
 	healthy := testworld.Request(app, protocol.ListPluginsMessage{Cmd: protocol.CmdListPlugins}, protocol.EventPluginsUpdated, func(m protocol.PluginsUpdatedMessage) bool {
 		for _, plugin := range m.Plugins {
-			if plugin.Name == "attn-pi" && protocol.Deref(plugin.HealthStatus) == agentdriver.HealthHealthy {
+			if plugin.Name == "attn-plug" && protocol.Deref(plugin.HealthStatus) == agentdriver.HealthHealthy {
 				return true
 			}
 		}
@@ -41,24 +41,24 @@ func TestTheAgentCatalogListsBuiltInAgentsAndThoseAConnectedPluginOffers(t *test
 	if _, ok := catalog["claude"]; !ok {
 		t.Errorf("the catalog is missing the built-in claude: %+v", catalog)
 	}
-	pi, ok := catalog["pi"]
-	var piHealth string
+	plug, ok := catalog["plug"]
+	var plugHealth string
 	for _, plugin := range healthy.Plugins {
-		if plugin.Name == "attn-pi" {
-			piHealth = protocol.Deref(plugin.HealthMessage)
+		if plugin.Name == "attn-plug" {
+			plugHealth = protocol.Deref(plugin.HealthMessage)
 		}
 	}
-	if !ok || pi.Plugin != "attn-pi" || pi.Health != agentdriver.HealthHealthy || pi.Detail != piHealth || pi.ModelPin || pi.EffortPin {
-		t.Errorf("pi = %+v, want offered by attn-pi, healthy with %q, without the pins the plugin did not declare", pi, piHealth)
+	if !ok || plug.Plugin != "attn-plug" || plug.Health != agentdriver.HealthHealthy || plug.Detail != plugHealth || plug.ModelPin || plug.EffortPin {
+		t.Errorf("plug = %+v, want offered by attn-plug, healthy with %q, without the pins the plugin did not declare", plug, plugHealth)
 	}
 
-	uninstalled := testworld.Request(app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-pi"},
-		protocol.EventPluginActionResult, func(m protocol.PluginActionResultMessage) bool { return protocol.Deref(m.Name) == "attn-pi" })
+	uninstalled := testworld.Request(app, protocol.UninstallPluginMessage{Cmd: protocol.CmdUninstallPlugin, Name: "attn-plug"},
+		protocol.EventPluginActionResult, func(m protocol.PluginActionResultMessage) bool { return protocol.Deref(m.Name) == "attn-plug" })
 	if !uninstalled.Success {
-		t.Fatalf("uninstall attn-pi: %s", protocol.Deref(uninstalled.Error))
+		t.Fatalf("uninstall attn-plug: %s", protocol.Deref(uninstalled.Error))
 	}
-	if pi, ok := agentCatalog(t, w)["pi"]; ok {
-		t.Errorf("the catalog still offers pi after its plugin went away: %+v", pi)
+	if plug, ok := agentCatalog(t, w)["plug"]; ok {
+		t.Errorf("the catalog still offers plug after its plugin went away: %+v", plug)
 	}
 }
 

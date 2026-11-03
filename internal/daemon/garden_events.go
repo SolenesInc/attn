@@ -285,6 +285,7 @@ func (d *Daemon) gardenSeedEventText(event bus.Event) (string, error) {
 
 type gardenEventRoles struct {
 	daemon        *Daemon
+	parties       parties
 	subscriptions gardenSubscriptions
 }
 
@@ -293,7 +294,11 @@ func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
 	if err != nil {
 		return gardenEventRoles{}, err
 	}
-	return gardenEventRoles{daemon: d, subscriptions: subscriptions}, nil
+	parties, err := d.readParties()
+	if err != nil {
+		return gardenEventRoles{}, err
+	}
+	return gardenEventRoles{daemon: d, parties: parties, subscriptions: subscriptions}, nil
 }
 
 func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]string, error) {
@@ -323,7 +328,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 				return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
 			}
 			seen[at] = true
-			if !r.subscriptions.seeds[at].ClaimHolds(r.daemon.partyHolds) {
+			if !r.subscriptions.seeds[at].ClaimHolds(r.parties.holds) {
 				continue
 			}
 			tenders, err := r.ResolveSeedRole(at, events.CurrentTender)

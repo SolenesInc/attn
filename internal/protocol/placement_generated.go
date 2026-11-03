@@ -50,12 +50,9 @@ var Placements = map[string][]Placement{
 	"automation_runs_get":              {Placement{LocatorHome, ""}},
 	"automation_set_enabled":           {Placement{LocatorHome, ""}},
 	"automation_validate":              {Placement{LocatorHome, ""}},
-	"automode_denials":                 {Placement{LocatorHome, ""}},
-	"automode_env_notes":               {Placement{LocatorHome, ""}},
-	"automode_env_slot":                {Placement{LocatorHome, ""}},
-	"automode_propose":                 {Placement{LocatorHome, ""}},
-	"automode_show":                    {Placement{LocatorHome, ""}},
+	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"browser_control":                  {Placement{LocatorHome, ""}},
+	"caller_session":                   {Placement{LocatorHere, ""}},
 	"callout_anchors":                  {Placement{LocatorHome, ""}},
 	"callout_show":                     {Placement{LocatorHome, ""}},
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
@@ -89,7 +86,7 @@ var Placements = map[string][]Placement{
 	"delegation_preferences_rollback":  {Placement{LocatorHome, ""}},
 	"delegation_preferences_show":      {Placement{LocatorHome, ""}},
 	"delegation_roles":                 {Placement{LocatorHome, ""}},
-	"delete_worktree":                  {Placement{LocatorHere, ""}},
+	"delete_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"doc_collections":                  {Placement{LocatorHome, ""}},
 	"doc_count":                        {Placement{LocatorHome, ""}},
 	"doc_define":                       {Placement{LocatorHome, ""}},
@@ -103,6 +100,7 @@ var Placements = map[string][]Placement{
 	"fetch_pr_details":                 {Placement{LocatorHome, ""}},
 	"files_edited":                     {Placement{LocatorHere, ""}},
 	"get_kitty_image":                  {Placement{LocatorTerminal, "id"}},
+	"get_repo_info":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
 	"get_settings":                     {Placement{LocatorHere, ""}},
 	"hook_compaction":                  {Placement{LocatorHere, ""}},
@@ -110,6 +108,7 @@ var Placements = map[string][]Placement{
 	"hook_stop_failure":                {Placement{LocatorHere, ""}},
 	"inject_test_pr":                   {Placement{LocatorHere, ""}},
 	"inject_test_session":              {Placement{LocatorHere, ""}},
+	"inspect_path":                     {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"journal_append":                   {Placement{LocatorHome, ""}},
 	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
 	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
@@ -126,6 +125,7 @@ var Placements = map[string][]Placement{
 	"monitor_transcript_page":          {Placement{LocatorSession, "session_id"}},
 	"mute_pr":                          {Placement{LocatorHome, ""}},
 	"mute_repo":                        {Placement{LocatorHome, ""}},
+	"notebook_folders":                 {Placement{LocatorHere, ""}},
 	"notebook_guide":                   {Placement{LocatorHome, ""}},
 	"notebook_sync_report":             {Placement{LocatorHome, ""}},
 	"onboarding":                       {Placement{LocatorHome, ""}},
@@ -157,6 +157,7 @@ var Placements = map[string][]Placement{
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
+	"seed_authorization":               {Placement{LocatorHome, ""}},
 	"seed_check":                       {Placement{LocatorHome, ""}},
 	"seed_edit":                        {Placement{LocatorHome, ""}},
 	"seed_link":                        {Placement{LocatorHome, ""}},
@@ -177,6 +178,10 @@ var Placements = map[string][]Placement{
 	"seed_show":                        {Placement{LocatorHome, ""}},
 	"seed_transition":                  {Placement{LocatorHome, ""}},
 	"seed_watch":                       {Placement{LocatorHome, ""}},
+	"sender_list":                      {Placement{LocatorHome, ""}},
+	"sender_pair":                      {Placement{LocatorHome, ""}},
+	"sender_sessions":                  {Placement{LocatorHome, ""}},
+	"sender_unpair":                    {Placement{LocatorHome, ""}},
 	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
 	"session_place":                    {Placement{LocatorSession, "session_id"}},
@@ -218,6 +223,9 @@ var Placements = map[string][]Placement{
 	"worktree_keep":                    {Placement{LocatorHere, ""}},
 	"worktree_list":                    {Placement{LocatorHere, ""}},
 	"worktree_refresh":                 {Placement{LocatorHere, ""}},
+	"worktree_removal_prepare":         {Placement{LocatorHome, ""}},
+	"worktree_removed":                 {Placement{LocatorHome, ""}},
+	"worktree_seed_owners":             {Placement{LocatorHome, ""}},
 	"worktree_sweep_log":               {Placement{LocatorHere, ""}},
 }
 
@@ -517,63 +525,21 @@ func (m AutomationValidateMessage) Locate() string {
 	return ""
 }
 
-func (AutoModeDenialsMessage) CommandName() string {
-	return "automode_denials"
+func (BrowseDirectoryMessage) CommandName() string {
+	return "browse_directory"
 }
 
-func (m AutoModeDenialsMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
+func (m BrowseDirectoryMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
 }
 
-func (m AutoModeDenialsMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeEnvNotesMessage) CommandName() string {
-	return "automode_env_notes"
-}
-
-func (m AutoModeEnvNotesMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeEnvNotesMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeEnvSlotMessage) CommandName() string {
-	return "automode_env_slot"
-}
-
-func (m AutoModeEnvSlotMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeEnvSlotMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeProposeMessage) CommandName() string {
-	return "automode_propose"
-}
-
-func (m AutoModeProposeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeProposeMessage) Locate() string {
-	return ""
-}
-
-func (AutoModeShowMessage) CommandName() string {
-	return "automode_show"
-}
-
-func (m AutoModeShowMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m AutoModeShowMessage) Locate() string {
+func (m BrowseDirectoryMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 
@@ -586,6 +552,18 @@ func (m BrowserControlMessage) Placement() Placement {
 }
 
 func (m BrowserControlMessage) Locate() string {
+	return ""
+}
+
+func (CallerSessionMessage) CommandName() string {
+	return "caller_session"
+}
+
+func (m CallerSessionMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m CallerSessionMessage) Locate() string {
 	return ""
 }
 
@@ -1002,10 +980,16 @@ func (DeleteWorktreeMessage) CommandName() string {
 }
 
 func (m DeleteWorktreeMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
 	return Placement{LocatorHere, ""}
 }
 
 func (m DeleteWorktreeMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 
@@ -1165,6 +1149,24 @@ func (m GetKittyImageMessage) Locate() string {
 	return string(m.ID)
 }
 
+func (GetRepoInfoMessage) CommandName() string {
+	return "get_repo_info"
+}
+
+func (m GetRepoInfoMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m GetRepoInfoMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
 func (GetScreenSnapshotMessage) CommandName() string {
 	return "get_screen_snapshot"
 }
@@ -1246,6 +1248,24 @@ func (m InjectTestSessionMessage) Placement() Placement {
 }
 
 func (m InjectTestSessionMessage) Locate() string {
+	return ""
+}
+
+func (InspectPathMessage) CommandName() string {
+	return "inspect_path"
+}
+
+func (m InspectPathMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m InspectPathMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 
@@ -1438,6 +1458,18 @@ func (m MuteRepoMessage) Placement() Placement {
 }
 
 func (m MuteRepoMessage) Locate() string {
+	return ""
+}
+
+func (NotebookFoldersMessage) CommandName() string {
+	return "notebook_folders"
+}
+
+func (m NotebookFoldersMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m NotebookFoldersMessage) Locate() string {
 	return ""
 }
 
@@ -1825,6 +1857,18 @@ func (m SeedArtifactTransferHereMessage) Locate() string {
 	return string(m.Host)
 }
 
+func (SeedAuthorizationMessage) CommandName() string {
+	return "seed_authorization"
+}
+
+func (m SeedAuthorizationMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedAuthorizationMessage) Locate() string {
+	return ""
+}
+
 func (SeedCheckMessage) CommandName() string {
 	return "seed_check"
 }
@@ -2062,6 +2106,54 @@ func (m SeedWatchMessage) Placement() Placement {
 }
 
 func (m SeedWatchMessage) Locate() string {
+	return ""
+}
+
+func (SenderListMessage) CommandName() string {
+	return "sender_list"
+}
+
+func (m SenderListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderListMessage) Locate() string {
+	return ""
+}
+
+func (SenderPairMessage) CommandName() string {
+	return "sender_pair"
+}
+
+func (m SenderPairMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderPairMessage) Locate() string {
+	return ""
+}
+
+func (SenderSessionsMessage) CommandName() string {
+	return "sender_sessions"
+}
+
+func (m SenderSessionsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderSessionsMessage) Locate() string {
+	return ""
+}
+
+func (SenderUnpairMessage) CommandName() string {
+	return "sender_unpair"
+}
+
+func (m SenderUnpairMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SenderUnpairMessage) Locate() string {
 	return ""
 }
 
@@ -2554,6 +2646,42 @@ func (m WorktreeRefreshMessage) Placement() Placement {
 }
 
 func (m WorktreeRefreshMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeRemovalPrepareMessage) CommandName() string {
+	return "worktree_removal_prepare"
+}
+
+func (m WorktreeRemovalPrepareMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeRemovalPrepareMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeRemovedMessage) CommandName() string {
+	return "worktree_removed"
+}
+
+func (m WorktreeRemovedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeRemovedMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeSeedOwnersMessage) CommandName() string {
+	return "worktree_seed_owners"
+}
+
+func (m WorktreeSeedOwnersMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WorktreeSeedOwnersMessage) Locate() string {
 	return ""
 }
 

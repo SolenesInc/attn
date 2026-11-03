@@ -33,7 +33,8 @@ type outpostRuntime struct {
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
 	name, _ := os.Hostname()
-	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	home, _ := os.UserHomeDir()
+	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Home: home, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 }
 
 func (d *Daemon) startBridgeSocket() error {
@@ -123,10 +124,10 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingOutpostState))
+			d.publishFact(FactSettingChanged, string(settingOutpostState), nil)
 		}
 		if errorChanged {
-			d.publishSettingsFact(FactSettingChanged, string(settingOutpostLastError))
+			d.publishFact(FactSettingChanged, string(settingOutpostLastError), nil)
 		}
 	})
 }

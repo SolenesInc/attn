@@ -4,7 +4,7 @@ test.use({ viewport: { width: 1200, height: 600 }, reducedMotion: 'reduce' });
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/test-harness/?component=SidebarTree');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  await page.evaluate(() => window.__HARNESS_READY__);
 });
 
 async function geometry(page: Page) {
@@ -132,7 +132,7 @@ for (const rail of [false, true]) {
   test(`a desktop click from Home keeps the ${rail ? 'rail' : 'tree'} still through the intermediate selection`, async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 400 });
     await page.goto(`/test-harness/?component=SidebarTree${rail ? '&rail' : ''}`);
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     const list = page.locator(rail ? '.rail-desktops' : '.session-list');
     await page.getByRole('button', { name: 'Jump to last', exact: true }).click();
     await (rail ? page.getByRole('button', { name: 'Home', exact: true }) : page.getByTestId('sidebar-home')).click();

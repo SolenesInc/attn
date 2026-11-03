@@ -40,6 +40,8 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	}
 	ts := now.UTC().Format(docstore.TimeFormat)
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, fmt.Errorf("store: defining %s/%s: %w", schema.Namespace, schema.Collection, err)
@@ -50,6 +52,7 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	if err != nil {
 		return false, err
 	}
+	defer func() { s.writes.documents.reset(table) }()
 
 	if !found {
 		res, err := tx.Exec(
@@ -148,6 +151,8 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("store: deleting %s/%s: %w", namespace, collection, err)
@@ -161,6 +166,7 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	if !found {
 		return 0, nil
 	}
+	s.writes.documents.reset(table)
 
 	var n int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
@@ -189,19 +195,22 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 	if err != nil {
 		return 0, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rev, err := putDocumentWith(tx, schema, table, id, body, now, expected)
+	rev, err := putDocumentWith(tx, &s.writes.documents, schema, table, id, body, now, expected)
 	if err != nil {
 		return 0, err
 	}
 	return rev, tx.Commit()
 }
 
-func putDocumentWith(q execQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+func putDocumentWith(q execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+	written.count(table, id)
 	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
 		return 0, err
 	}
@@ -276,19 +285,22 @@ func (s *Store) DeleteDocument(schema docstore.CollectionSchema, id string, expe
 	if err != nil {
 		return false, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	found, err := deleteDocumentWith(tx, schema, table, id, expected)
+	found, err := deleteDocumentWith(tx, &s.writes.documents, schema, table, id, expected)
 	if err != nil {
 		return false, err
 	}
 	return found, tx.Commit()
 }
 
-func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
+func deleteDocumentWith(x execQuerier, written *documentWrites, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
+	written.count(table, id)
 	if expected != nil && *expected == docstore.ExpectAbsent {
 		return false, fmt.Errorf("store: deleting %s/%s/%s: rev %d means the document must not exist, which a delete cannot expect; pass the revision you read, or none to delete unconditionally",
 			schema.Namespace, schema.Collection, id, docstore.ExpectAbsent)
@@ -386,14 +398,14 @@ func (s *Store) CommitDocumentWritesWithEvents(
 }
 
 func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch SeedWatch, now time.Time) ([]DocumentWriteResult, error) {
-	results, _, err := s.commitDocumentWrites(commits, nil, now, false, watch.subscribe(now))
+	results, _, err := s.commitDocumentWrites(commits, nil, now, false, subscribe([]SeedWatch{watch}, now))
 	return results, err
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watch SeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, watches []SeedWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, watch.subscribe(now))
+	return s.commitDocumentWrites(commits, events, now, false, subscribe(watches, now))
 }
 
 func (s *Store) commitDocumentWrites(
@@ -422,7 +434,7 @@ func (s *Store) commitDocumentWrites(
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	results, changed, err := commitDocumentWritesWith(tx, commits, tables, now)
+	results, changed, err := commitDocumentWritesWith(tx, &s.writes.documents, commits, tables, now)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -456,20 +468,20 @@ func (s *Store) commitDocumentWrites(
 	return results, eventSeqs, nil
 }
 
-func commitDocumentWritesWith(tx *sql.Tx, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {
+func commitDocumentWritesWith(tx *sql.Tx, written *documentWrites, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {
 	results := make([]DocumentWriteResult, len(commits))
 	changed := false
 	for i, commit := range commits {
 		w := commit.Write
 		out := &results[i]
 		if w.Delete {
-			existed, err := deleteDocumentWith(tx, w.Schema, tables[i], w.ID, w.Expected)
+			existed, err := deleteDocumentWith(tx, written, w.Schema, tables[i], w.ID, w.Expected)
 			if err != nil {
 				return nil, false, err
 			}
 			out.Changed = existed
 		} else {
-			rev, err := putDocumentWith(tx, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
+			rev, err := putDocumentWith(tx, written, w.Schema, tables[i], w.ID, w.Body, now, w.Expected)
 			if err != nil {
 				return nil, false, err
 			}
@@ -718,22 +730,25 @@ func createCollectionTable(tx *sql.Tx, table string, fields []docstore.FieldSpec
 	if err := docstore.ValidateTableName(table); err != nil {
 		return err
 	}
+	var generatedColumns strings.Builder
+	for _, f := range fields {
+		generatedColumns.WriteString(", " + generatedColumnDefinition(f))
+	}
 	if _, err := tx.Exec(fmt.Sprintf(`CREATE TABLE %s (
     id         TEXT NOT NULL PRIMARY KEY,
     body       TEXT NOT NULL,
     rev        INTEGER NOT NULL DEFAULT %d,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-) WITHOUT ROWID`, table, docstore.FirstRev)); err != nil {
+%s) WITHOUT ROWID`, table, docstore.FirstRev, generatedColumns.String())); err != nil {
 		return err
 	}
-	for _, col := range []string{docstore.FieldCreatedAt, docstore.FieldUpdatedAt} {
-		if err := createFieldIndex(tx, table, col); err != nil {
-			return err
-		}
-	}
+	columns := []string{docstore.FieldCreatedAt, docstore.FieldUpdatedAt}
 	for _, f := range fields {
-		if err := addFieldColumn(tx, table, f); err != nil {
+		columns = append(columns, docstore.FieldColumn(f.Name))
+	}
+	for _, col := range columns {
+		if err := createFieldIndex(tx, table, col); err != nil {
 			return err
 		}
 	}
@@ -775,13 +790,16 @@ func alterCollectionTable(tx *sql.Tx, table string, before, after []docstore.Fie
 }
 
 func addFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
-	col := quoteIdent(docstore.FieldColumn(f.Name))
-	_, err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s GENERATED ALWAYS AS (%s) VIRTUAL`,
-		table, col, docstore.ColumnAffinity(f.Type), docstore.FieldExpression(f.Name)))
+	_, err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, table, generatedColumnDefinition(f)))
 	if err != nil {
 		return err
 	}
 	return createFieldIndex(tx, table, docstore.FieldColumn(f.Name))
+}
+
+func generatedColumnDefinition(f docstore.FieldSpec) string {
+	return fmt.Sprintf(`%s %s GENERATED ALWAYS AS (%s) VIRTUAL`,
+		quoteIdent(docstore.FieldColumn(f.Name)), docstore.ColumnAffinity(f.Type), docstore.FieldExpression(f.Name))
 }
 
 func dropFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {

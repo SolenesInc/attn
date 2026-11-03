@@ -149,7 +149,7 @@ var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
 	args := claudeHeadlessArgs(request)
 
-	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "claude")
+	result, stdout, err := runHeadlessCommand(ctx, request.Executable, args, request.WorkDir, "claude", claudeReportedFailure)
 	if err != nil {
 		if text := parseClaudeFinalText(stdout); text != "" {
 			result.FailureOutput = strings.TrimSpace("result: " + text + "\n" + result.FailureOutput)
@@ -162,6 +162,25 @@ func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskReques
 	result.TotalCostUSD = meta.TotalCostUSD
 	result.NumTurns = meta.NumTurns
 	return result, nil
+}
+
+func claudeReportedFailure(stdout []byte) string {
+	var events []json.RawMessage
+	trimmed := bytes.TrimSpace(stdout)
+	if err := json.Unmarshal(trimmed, &events); err != nil {
+		events = []json.RawMessage{trimmed}
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		var result struct {
+			Type     string `json:"type"`
+			Result   string `json:"result"`
+			APIError string `json:"api_error"`
+		}
+		if json.Unmarshal(events[i], &result) == nil && result.Type == "result" {
+			return strings.TrimSpace(result.Result + "\n" + result.APIError)
+		}
+	}
+	return ""
 }
 
 type claudeResultMeta struct {

@@ -10,7 +10,7 @@ import (
 )
 
 func runSkill() {
-	os.Exit(writeSkill(os.Stdout, os.Stderr, os.Args[2:]))
+	exit(writeSkill(os.Stdout, os.Stderr, os.Args[2:]))
 }
 
 func writeSkill(stdout, stderr io.Writer, args []string) int {

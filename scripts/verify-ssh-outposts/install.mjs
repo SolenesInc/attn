@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { parseArgs } from 'node:util';
-import { world, quote } from './common.mjs';
+import { world, quote, DaemonObserver } from './common.mjs';
 
 const { values: o } = parseArgs({
   options: {
@@ -160,8 +160,6 @@ try {
   fs.closeSync(log);
   const [ready] = await once(W.home.stdio[3], 'data');
   require(ready.toString().includes('ready'), 'second home not ready');
-  const { DaemonObserver } =
-    await import('../../app/scripts/real-app-harness/daemonObserver.mjs');
   W.observer = new DaemonObserver({ connectTimeoutMs: 120_000 });
   await W.observer.connect();
   const refused = await W.waitOutpost(

@@ -176,7 +176,7 @@ describe('command palette history', () => {
     daemon.emit({ event: 'session_state_changed', session: { ...session, label: 'renamed' } });
     await daemon.idle();
     expect(selectedTitle()).toHaveTextContent("Cap renamed's context window");
-    daemon.emit({ event: 'session_state_changed', session: { ...session, label: 'renamed', agent: 'pi' } });
+    daemon.emit({ event: 'session_state_changed', session: { ...session, label: 'renamed', agent: 'plug' } });
     await daemon.idle();
     expect(titles()).not.toContain("Cap renamed's context window");
     expect(daemon.sentOf('get_command_usage')).toHaveLength(1);

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "authorization-cleared",
+  "description": "A dispatcher removes the words of a seed its delegate tends.",
+  "recipient": "delegation",
+  "event": "authorization-cleared",
+  "values": {
+    "seed_id": "s-example",
+    "seed_title": "Search endpoint",
+    "set_by": "orchestrator-o",
+    "previous": "Ask me before pushing."
+  }
+}

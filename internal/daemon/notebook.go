@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -66,10 +67,28 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 }
 
 func (d *Daemon) notebookRoot(profileID string) (string, error) {
-	if own := d.profileNotebookRoot(profileID); own != "" {
-		return expandProfileNotebookRoot(own)
+	if status := d.enrollmentStatus(); status.IsOutpost() {
+		return d.outpostNotebookRoot(status, profileID)
 	}
-	return d.sharedNotebookRoot()
+	return homeNotebookRoot(d.profileNotebookRoot(profileID))
+}
+
+func homeNotebookRoot(configured string) (string, error) {
+	if configured = strings.TrimSpace(configured); configured != "" {
+		return expandProfileNotebookRoot(configured)
+	}
+	return defaultNotebookRoot()
+}
+
+func defaultNotebookRoot() (string, error) {
+	if root := config.HarnessNotebookRoot(); root != "" {
+		return root, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return notebook.DefaultRoot(home, config.Instance()), nil
 }
 
 func expandProfileNotebookRoot(configured string) (string, error) {
@@ -77,7 +96,7 @@ func expandProfileNotebookRoot(configured string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := config.RequireWithinHarness(string(SettingNotebookProfileRoot), root); err != nil {
+	if err := config.RequireWithinHarness(string(SettingNotebookRoot), root); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -87,24 +106,13 @@ func (d *Daemon) profileNotebookRoot(profileID string) string {
 	if profileID == "" || !d.enrollmentStatus().IsHome() {
 		return ""
 	}
-	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookProfileRoot)))
-}
-
-func (d *Daemon) sharedNotebookRoot() (string, error) {
-	if root := config.HarnessNotebookRoot(); root != "" {
-		return root, nil
-	}
-	if configured := strings.TrimSpace(d.machineSetting(SettingNotebookRoot)); configured != "" {
-		return expandNotebookRoot(configured)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return notebook.DefaultRoot(home, config.Instance()), nil
+	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookRoot)))
 }
 
 func expandNotebookRoot(configured string) (string, error) {
+	if strings.Contains(configured, "\n") {
+		return "", fmt.Errorf("%q has a line break, which a Notebook folder path cannot hold", configured)
+	}
 	if strings.HasPrefix(configured, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -117,21 +125,20 @@ func expandNotebookRoot(configured string) (string, error) {
 
 func (d *Daemon) notebookRoots() map[string]struct{} {
 	roots := map[string]struct{}{}
-	if shared, err := d.sharedNotebookRoot(); err == nil {
-		roots[shared] = struct{}{}
-	}
-	if !d.enrollmentStatus().IsHome() {
+	if d.enrollmentStatus().IsOutpost() {
+		d.notebookSync.mu.Lock()
+		for _, entry := range d.notebookSync.disk.Folders {
+			roots[entry.Root] = struct{}{}
+		}
+		d.notebookSync.mu.Unlock()
 		return roots
 	}
-	own, err := d.store.LiveProfileSettingValues(string(SettingNotebookProfileRoot))
+	notebooks, err := d.profileNotebooks(d.notebookRoot)
 	if err != nil {
 		d.logf("notebook roots: %v", err)
-		return roots
 	}
-	for _, configured := range own {
-		if root, err := expandProfileNotebookRoot(strings.TrimSpace(configured)); err == nil {
-			roots[root] = struct{}{}
-		}
+	for _, nb := range notebooks {
+		roots[nb.path] = struct{}{}
 	}
 	return roots
 }
@@ -162,8 +169,11 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 }
 
 func (d *Daemon) sessionNotebookProfile(sessionID protocol.SessionID) (string, error) {
-	if !d.enrollmentStatus().IsHome() {
-		return "", nil
+	if d.enrollmentStatus().IsOutpost() {
+		if protocol.TrimID(sessionID) == "" {
+			return "", errors.New("on an outpost the Notebook belongs to the calling session's profile; run this inside an attn session")
+		}
+		return d.store.SessionProfileID(protocol.TrimID(sessionID))
 	}
 	profile, err := d.callerProfile(sessionID)
 	if err != nil {

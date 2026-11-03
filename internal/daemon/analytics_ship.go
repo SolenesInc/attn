@@ -132,12 +132,12 @@ func (d *Daemon) analyticsShipHandler(ctx context.Context, _ *jobs.Job) (any, er
 }
 
 func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
-	rows, err := d.store.UnsentAnalyticsRecords(analyticsShipBatchRecords)
-	if err != nil || len(rows) == 0 {
+	unsent, err := d.store.UnsentAnalyticsRecords(analyticsShipBatchRecords, d.analyticsBuild())
+	if err != nil || len(unsent.Rows) == 0 {
 		return 0, err
 	}
-	records := make([]analytics.Record, len(rows))
-	for i, row := range rows {
+	records := make([]analytics.Record, len(unsent.Rows))
+	for i, row := range unsent.Rows {
 		if err := json.Unmarshal([]byte(row.Record), &records[i]); err != nil {
 			return 0, fmt.Errorf("outbox row %d: %w", row.ID, err)
 		}
@@ -147,7 +147,7 @@ func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if _, err := ingest.Send(ctx, registration.Token, analytics.Batch{Build: d.analyticsBuild(), Records: records}); err != nil {
+	if _, err := ingest.Send(ctx, registration.Token, analytics.Batch{Build: unsent.Build, Records: records}); err != nil {
 		if errors.Is(err, analytics.ErrUnknownInstall) {
 			return 0, fmt.Errorf("%w; Forget this install on Settings › Analytics to start a new one", err)
 		}
@@ -155,10 +155,10 @@ func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
 	}
 	vents, err := d.store.MarkAnalyticsSent(records, time.Now())
 	if err != nil {
-		return 0, fmt.Errorf("attn-ingest accepted %d records, but marking them sent failed, so they will be sent again and counted as duplicates: %w", len(rows), err)
+		return 0, fmt.Errorf("attn-ingest accepted %d records, but marking them sent failed, so they will be sent again and counted as duplicates: %w", len(records), err)
 	}
 	d.announceVentSends(vents)
-	return len(rows), nil
+	return len(records), nil
 }
 
 func (d *Daemon) analyticsRegistration(ctx context.Context, ingest analytics.Ingest) (analytics.Registration, error) {

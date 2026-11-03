@@ -1,1 +1,1 @@
-This is too abstract. Show a before/after, a sample input/output, or a specific scenario.
+This is too abstract. Show a before and after, a sample input and output, or a specific scenario.

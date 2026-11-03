@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -21,6 +20,7 @@ func codexAutomationWorld(t *testing.T, shared bool) (*world, *testworld.Peer) {
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(w.Path("check"), "trusted")
 	if shared {
 		setSetting(t, app, "codex_shared_enabled", "true")
 		w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
@@ -89,27 +89,30 @@ func TestACodexAutomationRefusedAtBootstrapFailsWithoutEverBeingDelivered(t *tes
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "refused"})
 	arrived()
 	release("disk I/O error")
-	answered := awaitAutomationRunResult(app, "refused")
-	if answered.Success || !strings.Contains(protocol.Deref(answered.Error), "thread/start failed during TUI bootstrap") {
-		t.Fatalf("a run whose conversation was refused answered %s, want a failure with the startup screen", describeRunAnswer(answered))
-	}
-	runs := automationRuns(t, w.Client(), 1)
-	if len(runs) != 1 || runs[0].State != "failed" || !strings.Contains(protocol.Deref(runs[0].LastError), "disk I/O") {
-		t.Fatalf("runs = %+v, want the one run failed naming the refusal and never delivered", runs)
+	awaitAutomationRunResult(app, "refused")
+	failed := awaitOnlyRunSettled(t, w, app)
+	if failure := protocol.Deref(failed.LastError); failed.State != "failed" || !strings.Contains(failure, "thread/start failed during TUI bootstrap") || !strings.Contains(failure, "disk I/O") {
+		t.Fatalf("a run whose conversation was refused is %s with %q, want it failed with the startup screen and never delivered", failed.State, failure)
 	}
 }
 
 func TestAPlainCodexAutomationThatExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {
 	w, app := codexAutomationWorld(t, false)
 	w.ExitAtNextBoot(1, "Error: the model provider refused the login")
-	answered := runAutomationFromApp(app, "exits")
-	if answered.Success || !strings.Contains(protocol.Deref(answered.Error), "exited with code 1 before its first turn") {
-		t.Fatalf("a run whose Codex exited at boot answered %s, want a failure naming the exit", describeRunAnswer(answered))
+	runAutomationFromApp(app, "exits")
+	failed := awaitOnlyRunSettled(t, w, app)
+	if failure := protocol.Deref(failed.LastError); failed.State != "failed" || !strings.Contains(failure, "exited with code 1 before its first turn") || !strings.Contains(failure, "the model provider refused the login") {
+		t.Fatalf("a run whose Codex exited at boot is %s with %q, want it failed naming the exit and the screen Codex left", failed.State, failure)
 	}
+}
+
+func awaitOnlyRunSettled(t *testing.T, w *world, app *testworld.Peer) protocol.AutomationRunSummary {
+	t.Helper()
 	runs := automationRuns(t, w.Client(), 1)
-	if len(runs) != 1 || runs[0].State != "failed" || !strings.Contains(protocol.Deref(runs[0].LastError), "the model provider refused the login") {
-		t.Fatalf("runs = %+v, want the one run failed with the screen Codex left", runs)
+	if len(runs) != 1 {
+		t.Fatalf("runs = %+v, want one", runs)
 	}
+	return awaitRunState(t, w, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
 }
 
 func TestACodexAutomationIsDeliveredOnceItsOpeningPromptStartsATurn(t *testing.T) {
@@ -127,7 +130,8 @@ func TestACodexAutomationIsDeliveredOnceItsOpeningPromptStartsATurn(t *testing.T
 			if runs[0].State != "pending" {
 				t.Fatalf("before Codex boots the run is %+v, want pending", runs[0])
 			}
-			boot()
+			boot.Await()
+			boot.Release()
 			answered := awaitAutomationRunResult(app, "ok")
 			if !answered.Success {
 				t.Fatalf("run answered %s, want success", describeRunAnswer(answered))
@@ -151,19 +155,13 @@ func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAf
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
 	setSetting(t, app, "codex_shared_enabled", "true")
 	spec := strings.NewReplacer("*/2 * * * *", "@every 1s", "launch: {driver: claude}", "launch: {driver: codex}").Replace(automationSingletonSpec(w, "Sweep", "latest", ""))
 	id := applyAutomation(t, cli, spec).ID
-	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
-		w.tickSchedulesUntil("a new delivered run", func() bool {
-			runs := automationRuns(t, cli, id)
-			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
-				return false
-			}
-			run = runs[0]
-			return true
-		})
+		run := awaitNextDeliveredRun(t, w, app, id, earlier...)
 		setAutomationEnabled(t, cli, id, false)
 		return run
 	}
@@ -206,9 +204,9 @@ func TestACodexAutomationWhoseAgentExitsRightAfterItsFirstTurnStartsIsDelivered(
 	w, app := codexAutomationWorld(t, false)
 	boot := w.HoldNextBoot()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "brief"})
-	w.AwaitHeldBoot()
+	boot.Await()
 	runs := automationRuns(t, w.Client(), 1)
-	boot()
+	boot.Release()
 	agent := w.Launched(string(protocol.Deref(runs[0].SessionID)))
 	agent.Prompted()
 	agent.Exit(1)
@@ -227,6 +225,7 @@ func TestACodexSingletonWhoseFirstLaunchExitsBeforeItsFirstTurnStartsFreshAtTheN
 		if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
 			t.Fatal(err)
 		}
+		w.SetCodexFolderTrust(w.Path(""), "trusted")
 		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
 			term.PaintScreen("Error: the model provider refused the login")
 			term.Exit(1)

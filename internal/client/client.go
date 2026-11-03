@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -70,6 +71,7 @@ func (c *Client) sendAutomation(msg any, out any) error {
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return err
 	}
+	noteReply(probe.Success, nil)
 	if !probe.Success {
 		return fmt.Errorf("daemon error: %s", protocol.Deref(probe.Error))
 	}
@@ -206,13 +208,20 @@ func (c *Client) marshalFrame(msg any) ([]byte, error) {
 	return append(frame, '\n'), nil
 }
 
-func (c *Client) RecordAnalytics(stream, name string, props map[string]any) error {
+func (c *Client) RecordAnalytics(stream, name string, session protocol.SessionID, props map[string]any) error {
 	conn, err := c.connect()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	if err := c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(recordAnalyticsDeadline)); err != nil {
+		return err
+	}
+	message := protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}
+	if session != "" {
+		message.SessionID = &session
+	}
+	if err := c.writeFrame(conn, message); err != nil {
 		return err
 	}
 	_, err = io.Copy(io.Discard, conn)
@@ -281,6 +290,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 		return nil, fmt.Errorf("receive response: %w", err)
 	}
 
+	noteReply(resp.Ok, resp.Refusal)
 	if !resp.Ok {
 		return nil, &DaemonError{
 			Code:     protocol.Deref(resp.ErrorCode),
@@ -290,6 +300,29 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 
 	return &resp, nil
+}
+
+const recordAnalyticsDeadline = 2 * time.Second
+
+var lastRefusal atomic.Pointer[protocol.Refusal]
+
+func noteReply(ok bool, refusal *protocol.Refusal) {
+	if ok {
+		lastRefusal.Store(nil)
+		return
+	}
+	if refusal == nil {
+		refusal = protocol.Ptr(protocol.RefusalUnclassified)
+	}
+	lastRefusal.Store(refusal)
+}
+
+func LastRefusal() (protocol.Refusal, bool) {
+	refusal := lastRefusal.Load()
+	if refusal == nil {
+		return "", false
+	}
+	return *refusal, true
 }
 
 type DaemonError struct {
@@ -733,7 +766,28 @@ func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.Delega
 }
 
 func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, error) {
-	resp, err := c.send(protocol.DelegateStatusMessage{Cmd: protocol.CmdDelegateStatus, ID: strings.TrimSpace(id)})
+	return c.delegationStatus(protocol.DelegateStatusMessage{Cmd: protocol.CmdDelegateStatus, ID: strings.TrimSpace(id)})
+}
+
+func (c *Client) AwaitDelegation(op *protocol.DelegationOperation, changed func(*protocol.DelegationOperation)) (*protocol.DelegationOperation, error) {
+	for op.State == protocol.DelegationOperationStateAccepted || op.State == protocol.DelegationOperationStatePreparing {
+		changed(op)
+		next, err := c.delegationStatus(protocol.DelegateStatusMessage{
+			Cmd: protocol.CmdDelegateStatus, ID: op.OperationID, WaitPast: protocol.Ptr(op.UpdatedAt),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if next.UpdatedAt == op.UpdatedAt && next.State == op.State {
+			return nil, errors.New("the running daemon answered delegate_status without waiting, so it predates this attn; restart it with `attn daemon ensure`")
+		}
+		op = next
+	}
+	return op, nil
+}
+
+func (c *Client) delegationStatus(msg protocol.DelegateStatusMessage) (*protocol.DelegationOperation, error) {
+	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -756,12 +810,9 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	if err != nil {
 		return nil, err
 	}
-	for op.State == protocol.DelegationOperationStateAccepted || op.State == protocol.DelegationOperationStatePreparing {
-		time.Sleep(100 * time.Millisecond)
-		op, err = c.DelegationStatus(op.OperationID)
-		if err != nil {
-			return nil, err
-		}
+	op, err = c.AwaitDelegation(op, func(*protocol.DelegationOperation) {})
+	if err != nil {
+		return nil, err
 	}
 	if op.State == protocol.DelegationOperationStateFailed {
 		message := "unknown failure"
@@ -776,8 +827,8 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	return op.Result, nil
 }
 
-func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject, baseDir string) (*protocol.Ask, error) {
-	msg := protocol.AskOpenMessage{Cmd: protocol.CmdAskOpen, SessionID: sessionID, Markdown: markdown, BaseDir: baseDir}
+func (c *Client) AskOpen(sessionID protocol.SessionID, seedID, markdown, subject, baseDir string, images ...protocol.AskImage) (*protocol.Ask, error) {
+	msg := protocol.AskOpenMessage{Cmd: protocol.CmdAskOpen, SessionID: sessionID, Markdown: markdown, BaseDir: baseDir, Images: images}
 	if seedID = strings.TrimSpace(seedID); seedID != "" {
 		msg.SeedID = protocol.Ptr(seedID)
 	}
@@ -928,13 +979,13 @@ func (c *Client) queryResponse(filter string) (*protocol.Response, error) {
 	return resp, nil
 }
 
-// QueryAs lists sessions and names the one the caller's terminal shows.
-func (c *Client) QueryAs(callerID protocol.TerminalID) ([]protocol.Session, protocol.SessionID, error) {
-	resp, err := c.send(protocol.QueryMessage{Cmd: protocol.CmdQuery, CallerID: &callerID})
+// CallerSession names the session the terminal shows, or "" when it shows none.
+func (c *Client) CallerSession(terminal protocol.TerminalID) (protocol.SessionID, error) {
+	resp, err := c.send(protocol.CallerSessionMessage{Cmd: protocol.CmdCallerSession, CallerID: &terminal})
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-	return resp.Sessions, protocol.Deref(resp.CallerSessionID), nil
+	return protocol.Deref(resp.CallerSessionID), nil
 }
 
 func (c *Client) Query(filter string) ([]protocol.Session, error) {

@@ -9,7 +9,7 @@ as a maintainer:
 
 - Durability. App, daemon, and machine restarts bring every session and terminal
   back.
-- Bring your own harness. attn wraps Claude Code, Codex, and Pi as they are;
+- Bring your own harness. attn wraps Claude Code and Codex as they are;
   the user gets each harness's native experience and can use the bare CLI
   at any time. Users can add new harnesses with plugins.
 - The queue mode sorts agents into "waiting for you" or "busy" and moves the
@@ -158,6 +158,7 @@ system.
 
 - `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
 - `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
+- `make check-mobile`: The phone app's format, lint, type check and tests
 - `scripts/land.sh`: Fast compile, typecheck, lint, generated-file and script
   checks, and the landing tests, then push to `main`. The landing tests are the
   `scripts/landing-tests` groups the changed paths match, the tests the change
@@ -266,8 +267,6 @@ Follow [Testing](docs/internal/testing.md). In short:
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller
   text.
-- Auto-mode pattern/model writes go only through `PromoteAutoModeProposal` in
-  `internal/store/automode.go`. Agents propose; only the user promotes.
 
 ## Protocol
 
@@ -347,13 +346,13 @@ entry names:
   docs/internal/trunk-based-development.md
 - Pull requests, or waiting on their reviews => docs/internal/pull-requests.md
 - Release notes, releases, or hotfixes => docs/internal/making-a-release.md
+- Phone app TestFlight builds or testers => docs/internal/phone-app-releases.md
 - Installing, launching, or verifying instances => docs/internal/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
-- Pi driver or auto-mode permissions => plugins/attn-pi/AGENTS.md
 - CPU, memory, or benchmarks => docs/internal/perf-testing.md
 - Terminal input that stops working =>
   docs/internal/diagnosing-terminal-input.md

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
@@ -10,13 +11,14 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { stepClock } from './stepClock.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const PANEL_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
-const SCHEDULE_TICK_INTERVAL = '1s';
-const SCHEDULE_CHECK_TIMEOUT_MS = 120_000;
+const SCHEDULE_TICK = '1m';
+const SCHEDULE_TICK_LIMIT = 10;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -68,6 +70,16 @@ async function poll(fn, description, timeoutMs = 30_000) {
     await delay(150);
   }
   throw new Error(`timed out waiting for ${description}; last=${JSON.stringify(last)}`);
+}
+
+async function tickSchedulesUntil(clock, what, done) {
+  for (let ticks = 1; ticks <= SCHEDULE_TICK_LIMIT; ticks++) {
+    await clock.awaitIdle();
+    await clock.advance(SCHEDULE_TICK);
+    await clock.awaitIdle();
+    if (done()) return ticks;
+  }
+  throw new Error(`${what}: not after ${SCHEDULE_TICK_LIMIT} schedule ticks of ${SCHEDULE_TICK} (SCHEDULE_TICK_LIMIT)`);
 }
 
 async function waitForDaemonReady(binary, daemonEnv) {
@@ -203,6 +215,8 @@ async function main() {
   const createdDefinitions = new Set();
 
   let daemonEnv = null;
+  let clock = null;
+  let clockDir = null;
   let fixturePath = null;
   let appBuild = null;
   let protocolVersion = null;
@@ -214,7 +228,9 @@ async function main() {
     });
 
     await runner.step('restart_isolated_daemon', async () => {
-      daemonEnv = instanceEnv(instance, { ATTN_AUTOMATION_SCHEDULE_INTERVAL: SCHEDULE_TICK_INTERVAL });
+      clockDir = fs.mkdtempSync(path.join(os.platform() === 'darwin' ? '/private/tmp' : os.tmpdir(), 'attn-clock-'));
+      clock = await stepClock(path.join(clockDir, 'daemon.sock'), FORM_TIMEOUT_MS);
+      daemonEnv = instanceEnv(instance, clock.env);
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
@@ -583,22 +599,21 @@ async function main() {
       await driver.click('[data-testid="automation-form-cancel"]');
 
       const selector = `[data-testid="automation-guard-check-${guardID}"]`;
+      const guardOutcome = () => findListRow(binary, guardID, daemonEnv)?.guard_check?.outcome;
       const emptyWaitStartedAt = performance.now();
-      await client.request('dom_wait', {
-        selector, textIncludes: 'Guard: empty', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
-      }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const emptyTicks = await tickSchedulesUntil(clock, 'an empty guard check', () => guardOutcome() === 'empty');
+      await client.request('dom_wait', { selector, textIncludes: 'Guard: empty', timeoutMs: FORM_TIMEOUT_MS });
       const emptyWaitMs = performance.now() - emptyWaitStartedAt;
       const firstCheckAfterSaveMs = performance.now() - savedAt;
       const empty = await client.request('dom_text', { selector });
       runner.writeJson('guard-empty-line.json', empty);
       runner.writeJson('guard-empty-definition.json', findListRow(binary, guardID, daemonEnv));
-      runner.log('guard_empty_line', { ...empty, emptyWaitMs, firstCheckAfterSaveMs });
+      runner.log('guard_empty_line', { ...empty, emptyTicks, emptyWaitMs, firstCheckAfterSaveMs });
 
       const failedWaitStartedAt = performance.now();
       fs.writeFileSync(guardFile, 'echo broken >&2; exit 17\n');
-      await client.request('dom_wait', {
-        selector, textIncludes: 'Guard: failed', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
-      }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const failedTicks = await tickSchedulesUntil(clock, 'a failed guard check', () => guardOutcome() === 'failed');
+      await client.request('dom_wait', { selector, textIncludes: 'Guard: failed', timeoutMs: FORM_TIMEOUT_MS });
       const failedWaitMs = performance.now() - failedWaitStartedAt;
       const failed = await client.request('dom_text', { selector });
       await client.request('dom_wait', { selector: `[data-testid="automation-failure-badge-${guardID}"]`, textIncludes: 'Failed', timeoutMs: PANEL_TIMEOUT_MS });
@@ -606,11 +621,13 @@ async function main() {
       runner.assert(detail.text.includes('exit 17: broken'), 'a failed guard shows its exit code and stderr in the drawer', detail);
       runner.writeJson('guard-failed-line.json', failed);
       runner.writeJson('guard-failed-definition.json', findListRow(binary, guardID, daemonEnv));
-      runner.log('guard_failed_line', { ...failed, detail, failedWaitMs });
+      runner.log('guard_failed_line', { ...failed, detail, failedTicks, failedWaitMs });
       runner.writeJson('guard-check-timing.json', {
-        tickInterval: SCHEDULE_TICK_INTERVAL,
+        tick: SCHEDULE_TICK,
         cron: '* * * * *',
-        waitLimitMs: SCHEDULE_CHECK_TIMEOUT_MS,
+        tickLimit: SCHEDULE_TICK_LIMIT,
+        emptyTicks,
+        failedTicks,
         emptyWaitMs,
         firstCheckAfterSaveMs,
         failedWaitMs,
@@ -640,6 +657,8 @@ async function main() {
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
     if (daemonEnv) { try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {} }
+    if (clock) { await clock.close().catch(() => {}); }
+    if (clockDir) { try { fs.rmSync(clockDir, { recursive: true, force: true }); } catch {} }
     if (fixturePath) { try { fs.rmSync(fixturePath, { recursive: true, force: true }); } catch {} }
     try { run(binary, ['daemon', 'ensure'], instanceEnv(instance)); } catch {}
     await runner.close();

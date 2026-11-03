@@ -168,7 +168,8 @@ const linuxPlatform = {
   // Without a window manager (Xvfb) GTK opens the window at its 800x600
   // minimum; two split panes need the configured 1200x800 to both stay live.
   async placeWindow(driver, { pid }) {
-    await driver.setWindowBounds({ x: 0, y: 0, width: 1200, height: 800 }, { pid });
+    const bounds = await driver.setWindowBounds({ x: 0, y: 0, width: 1200, height: 800 }, { pid });
+    await driver.parkPointerBeside(bounds);
   },
 
   // xclip exits non-zero on an empty selection, so only a missing binary is

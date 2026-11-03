@@ -4,8 +4,6 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type Fo
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { recordAppAction } from '../analytics/appActions';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
-import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
-import { DaemonSettings } from '../hooks/useDaemonSocket';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
@@ -56,8 +54,6 @@ export function useSettingsModalState({
   pluginIssues,
   onListPlugins,
   onInstallPlugin,
-  onInstallBundledPlugin,
-  onUninstallPlugin,
   onRemovePlugin,
   onSetPluginPriority,
   themePreference,
@@ -83,31 +79,8 @@ export function useSettingsModalState({
     sendHarnessModels,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
-    sendAutoModeGet,
-    sendAutoModePromote,
-    sendAutoModeDiscard,
-    sendAutoModeRuleAdd,
-    sendAutoModeRuleRemove,
-    sendAutoModeLegacyDismiss,
-    sendAutoModeHostAdd,
-    sendAutoModeHostRemove,
-    sendAutoModePolicySet,
-    sendAutoModeEnvSlot,
   } = useDaemonApi();
   const githubPollingOffReason = useGitHubPollingOffReason();
-  const autoModePolicy = useAutoModePolicy({
-    enabled: isOpen,
-    getState: sendAutoModeGet,
-    promoteProposal: sendAutoModePromote,
-    discardProposal: sendAutoModeDiscard,
-    addRule: sendAutoModeRuleAdd,
-    removeRule: sendAutoModeRuleRemove,
-    addHost: sendAutoModeHostAdd,
-    removeHost: sendAutoModeHostRemove,
-    setPolicy: sendAutoModePolicySet,
-    setEnvironmentSlot: sendAutoModeEnvSlot,
-    dismissLegacy: sendAutoModeLegacyDismiss,
-  });
   const savedFlash = useSavedFlash();
   const autosave = useSettingsAutosave()!;
   const onSetSetting = useCallback(
@@ -143,6 +116,10 @@ export function useSettingsModalState({
   useEffect(() => {
     if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
   }, [selectedSection, outpostsEnabled]);
+  const phonesEnabled = settings.phone_access_enabled === 'true';
+  useEffect(() => {
+    if (selectedSection === 'phones' && !phonesEnabled) setSelectedSection('connectivity');
+  }, [selectedSection, phonesEnabled]);
   useEffect(() => {
     if (isOpen) recordAppAction('settings_section', { section: selectedSection });
   }, [isOpen, selectedSection]);
@@ -158,16 +135,7 @@ export function useSettingsModalState({
 
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
-  const actualNotebookProfileRoot = settings['notebook.profile_root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
-  const {
-    tailscaleEnabled,
-    tailscaleStatus,
-    tailscaleURL,
-    tailscaleDomain,
-    tailscaleAuthURL,
-    tailscaleError,
-  } = settingsConnection(settings);
   const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
@@ -178,6 +146,7 @@ export function useSettingsModalState({
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const calloutsEnabled = settings.callouts_enabled === 'true';
+  const phoneAccessEnabled = settings.phone_access_enabled === 'true';
   const crewV2Enabled = settings.crew_v2_enabled === 'true';
   const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const asksEnabled = isAsksEnabled(settings);
@@ -304,11 +273,6 @@ export function useSettingsModalState({
     actual: actualNotebookRoot,
     settingKey: 'notebook.root',
   });
-  const notebookProfileRootDraft = useSettingDraft({
-    ...draftDeps,
-    actual: actualNotebookProfileRoot,
-    settingKey: 'notebook.profile_root',
-  });
   const editorDraft = useSettingDraft({
     ...draftDeps,
     actual: actualEditorExecutable,
@@ -416,10 +380,6 @@ export function useSettingsModalState({
     }
   }, [onSetSetting, setProjectsDir]);
 
-  const handleToggleTailscale = useCallback(() => {
-    onSetSetting('tailscale_enabled', tailscaleEnabled ? 'false' : 'true');
-  }, [onSetSetting, tailscaleEnabled]);
-
   const handleToggleAutoSettle = useCallback(() => {
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
@@ -430,21 +390,17 @@ export function useSettingsModalState({
   }, [onSetSetting, openSentFilesEnabled]);
 
   const { set: setNotebookRoot } = notebookRootDraft;
-  const { set: setNotebookProfileRoot } = notebookProfileRootDraft;
-  const handleBrowseNotebookRoot = useCallback(
-    async (settingKey: 'notebook.root' | 'notebook.profile_root') => {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: 'Select Notebook Folder',
-      });
-      if (selected && typeof selected === 'string') {
-        (settingKey === 'notebook.root' ? setNotebookRoot : setNotebookProfileRoot)(selected);
-        onSetSetting(settingKey, selected);
-      }
-    },
-    [onSetSetting, setNotebookRoot, setNotebookProfileRoot],
-  );
+  const handleBrowseNotebookRoot = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: 'Select Notebook Folder',
+    });
+    if (selected && typeof selected === 'string') {
+      setNotebookRoot(selected);
+      onSetSetting('notebook.root', selected);
+    }
+  }, [onSetSetting, setNotebookRoot]);
 
   const handleToggleAutoApprove = useCallback(() => {
     onSetSetting('auto_approve_enabled', autoApproveEnabled ? 'false' : 'true');
@@ -498,28 +454,6 @@ export function useSettingsModalState({
       });
     },
     [onRemovePlugin, pluginPanel, refreshPlugins],
-  );
-
-  const handleInstallBundledPlugin = useCallback(
-    async (name: string) => {
-      await pluginPanel.run(name, 'Failed to install bundled plugin', async () => {
-        if (!onInstallBundledPlugin) throw new Error('Bundled plugin installation is unavailable');
-        await onInstallBundledPlugin(name);
-        await refreshPlugins();
-      });
-    },
-    [onInstallBundledPlugin, pluginPanel, refreshPlugins],
-  );
-
-  const handleUninstallPlugin = useCallback(
-    async (name: string) => {
-      await pluginPanel.run(name, 'Failed to uninstall plugin', async () => {
-        if (!onUninstallPlugin) throw new Error('Plugin uninstall is unavailable');
-        await onUninstallPlugin(name);
-        await refreshPlugins();
-      });
-    },
-    [onUninstallPlugin, pluginPanel, refreshPlugins],
   );
 
   const commitPluginPriority = useCallback(
@@ -581,7 +515,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
+              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -599,13 +533,6 @@ export function useSettingsModalState({
             keywords:
               'delegate roles pathfinder builder reviewer orchestrator prototyper fallback harness models effort preferences alternatives',
           },
-          {
-            id: 'autoMode',
-            label: 'Auto mode',
-            description: "Manage attn's pi automode plugin",
-            keywords:
-              'auto mode automode pi safety envelope proposals promote discard allow deny forbidden rules hosts network approval policy sandbox permissions denials',
-          },
         ],
       },
       {
@@ -613,9 +540,9 @@ export function useSettingsModalState({
         items: [
           {
             id: 'connectivity',
-            label: 'Mobile and hosts',
-            description: 'Controls for mobile browser access and GitHub host detection.',
-            keywords: 'tailscale mobile web github hosts',
+            label: 'GitHub hosts',
+            description: 'The GitHub hosts attn detected.',
+            keywords: 'github hosts',
           },
           ...(outpostsEnabled ? [{
             id: 'outposts' as const,
@@ -625,6 +552,18 @@ export function useSettingsModalState({
             count: 1,
             keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
           }] : []),
+          ...(phonesEnabled ? [{
+            id: 'phones' as const,
+            label: 'Phones',
+            description: 'Pair phones with this home and revoke them.',
+            keywords: 'phones phone mobile iphone pair pairing qr code revoke attn cloud relay',
+          }] : []),
+          {
+            id: 'senders',
+            label: 'Paired senders',
+            description: 'Programs outside attn that send files and messages as you.',
+            keywords: 'senders paired sender pair pairing send program script remove unpair attn send',
+          },
         ],
       },
       {
@@ -633,7 +572,7 @@ export function useSettingsModalState({
           {
             id: 'plugins',
             label: 'Plugins',
-            description: 'Install bundled plugins or add your own from a local directory or Git repository, and set provider dispatch priority.',
+            description: 'Add plugins from a local directory or Git repository, and set provider dispatch priority.',
             keywords: 'plugins extensions providers priority install healthcheck',
           },
         ],
@@ -645,7 +584,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps usage analytics telemetry',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',
@@ -665,12 +604,12 @@ export function useSettingsModalState({
             id: 'analytics' as const,
             label: 'Analytics',
             description: '',
-            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample retention',
+            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample run runs retention',
           }] : []),
         ],
       },
     ],
-    [outpostsEnabled, analyticsEnabled],
+    [outpostsEnabled, phonesEnabled, analyticsEnabled],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -693,15 +632,13 @@ export function useSettingsModalState({
     selectedSection,
     outpostsEnabled,
     delegationPolicy,
-    tailscaleEnabled,
-    tailscaleStatus,
     pluginProblemCount,
     activePluginCount,
     plugins,
-    autoModePolicy,
     autoSettleEnabled,
     asksEnabled,
     calloutsEnabled,
+    phoneAccessEnabled,
     crewV2Enabled,
     analyticsEnabled,
     mutedRepos,
@@ -726,15 +663,9 @@ export function useSettingsModalState({
     handleToggleWorktreeSweep,
     worktreeSweepEnabled,
     notebookRootDraft,
-    notebookProfileRootDraft,
     effectiveNotebookRoot,
     handleBrowseNotebookRoot,
     handleToggleOpenSentFiles,
-    tailscaleURL,
-    tailscaleDomain,
-    handleToggleTailscale,
-    tailscaleAuthURL,
-    tailscaleError,
     githubPollingOffReason,
     githubHosts,
     pluginPanel,
@@ -742,8 +673,6 @@ export function useSettingsModalState({
     handleBrowsePluginPath,
     handleInstallPlugin,
     pluginIssues,
-    handleInstallBundledPlugin,
-    handleUninstallPlugin,
     handleRemovePlugin,
     commitPluginPriority,
     ptyBackendMode,
@@ -804,20 +733,3 @@ export function useSettingsModalState({
 }
 
 export type SettingsModalState = ReturnType<typeof useSettingsModalState>;
-
-export function settingsConnection(settings: DaemonSettings) {
-  const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
-  const tailscaleStatus = settings.tailscale_status || 'disabled';
-  const tailscaleURL = settings.tailscale_url || '';
-  const tailscaleDomain = settings.tailscale_domain || '';
-  const tailscaleAuthURL = settings.tailscale_auth_url || '';
-  const tailscaleError = settings.tailscale_error || '';
-  return {
-    tailscaleEnabled,
-    tailscaleStatus,
-    tailscaleURL,
-    tailscaleDomain,
-    tailscaleAuthURL,
-    tailscaleError,
-  };
-}

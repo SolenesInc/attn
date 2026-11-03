@@ -248,24 +248,26 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 	w := newWorld(t)
 	app := w.App()
 	root := fsNotebookRoot(t, w)
-	custom := fsDir(t, "custom")
+	inside := filepath.Join(root, "custom")
 
 	for _, c := range []struct {
-		key, value string
-		ok         bool
+		key, value, effective string
+		ok                    bool
 	}{
-		{"notebook.root", "relative/path", false},
-		{"notebook.root", filepath.Join(w.Dir, "notebook"), false},
-		{"notebook.root", custom, true},
-		{"notebook.root", "", true},
-		{"notebook.root.effective", "/tmp/whatever", false},
+		{"notebook.root", "relative/path", "", false},
+		{"notebook.root", fsDir(t, "outside"), "", false},
+		{"notebook.root", filepath.Join(root, "line\nbreak"), "", false},
+		{"notebook.root", inside, inside, true},
+		{"notebook.root", "", root, true},
+		{"notebook.root.effective", "/tmp/whatever", "", false},
 	} {
 		if updated := notebookSetting(app, c.key, c.value); protocol.Deref(updated.Success) != c.ok {
 			t.Errorf("setting %s to %q succeeded=%v (%s), want %v", c.key, c.value, protocol.Deref(updated.Success), protocol.Deref(updated.Error), c.ok)
 		}
 		if c.ok {
 			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings[c.key] == c.value && m.Settings["notebook.root.effective"] == root
+				value, _ := m.Settings[c.key].(string)
+				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && value == c.value && m.Settings["notebook.root.effective"] == c.effective
 			})
 		}
 	}

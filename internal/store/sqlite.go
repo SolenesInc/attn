@@ -1510,18 +1510,20 @@ func sqliteDSN(dbPath string) string {
 
 // tableWrites counts row writes to the tables the store caches reads of, and signals copy changes
 // waiting for an outpost. SQLite's update hook feeds it on every connection, so no write path can skip it.
+// The hook never fires for WITHOUT ROWID tables, so the document row writers count documents themselves.
 type tableWrites struct {
 	sessions    atomic.Uint64
+	documents   documentWrites
 	commitFault atomic.Bool
-	outbox      outboxSignal
+	outbox      changeSignal
 }
 
-type outboxSignal struct {
+type changeSignal struct {
 	mu      sync.Mutex
 	changed chan struct{}
 }
 
-func (o *outboxSignal) wait() <-chan struct{} {
+func (o *changeSignal) wait() <-chan struct{} {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.changed == nil {
@@ -1530,7 +1532,7 @@ func (o *outboxSignal) wait() <-chan struct{} {
 	return o.changed
 }
 
-func (o *outboxSignal) notify() {
+func (o *changeSignal) notify() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.changed != nil {
@@ -1565,7 +1567,7 @@ func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
 	}
 	connection := &sqliteConnection{SQLiteConn: conn.(*sqlite3.SQLiteConn), owner: c}
 	if err := connection.RegisterFunc("attn_require_copy_applier", func(table, key string) (bool, error) {
-		if !connection.copyApplying {
+		if !connection.writesCopies {
 			return false, fmt.Errorf("cannot write copied %s row %s", table, key)
 		}
 		return true, nil
@@ -1630,7 +1632,7 @@ func (c *sqliteConnector) release(err error) {
 type sqliteConnection struct {
 	*sqlite3.SQLiteConn
 	owner        *sqliteConnector
-	copyApplying bool
+	writesCopies bool
 }
 
 func (c *sqliteConnection) Close() error {
@@ -1716,7 +1718,12 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 		return nil, nil, upgrade, err
 	}
 
-	if dbPath == ":memory:" {
+	empty, err := isEmptyDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, nil, upgrade, err
+	}
+	if empty {
 		if err := copyMigratedSchema(db); err != nil {
 			db.Close()
 			return nil, nil, upgrade, err
@@ -1731,79 +1738,10 @@ func openUpgradedDB(dbPath string) (*sql.DB, *tableWrites, SchemaUpgrade, error)
 	return db, writes, upgrade, nil
 }
 
-var migratedSchema struct {
-	once  sync.Once
-	image []byte
-	err   error
-}
-
-func migratedSchemaImage() ([]byte, error) {
-	migratedSchema.once.Do(func() {
-		migratedSchema.image, migratedSchema.err = buildMigratedSchemaImage()
-	})
-	return migratedSchema.image, migratedSchema.err
-}
-
-func buildMigratedSchemaImage() ([]byte, error) {
-	db, _ := connectSQLite(":memory:")
-	defer db.Close()
-	db.SetMaxOpenConns(1)
-	if _, err := upgradeSchema(db, ":memory:"); err != nil {
-		return nil, err
-	}
-	conn, err := db.Conn(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	var image []byte
-	err = conn.Raw(func(driverConn any) error {
-		var err error
-		image, err = driverConn.(*sqliteConnection).Serialize("main")
-		return err
-	})
-	return image, err
-}
-
-func copyMigratedSchema(dst *sql.DB) error {
-	image, err := migratedSchemaImage()
-	if err != nil {
-		return fmt.Errorf("building migrated schema: %w", err)
-	}
-	src, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-	src.SetMaxOpenConns(1)
-	ctx := context.Background()
-	srcConn, err := src.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer srcConn.Close()
-	dstConn, err := dst.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer dstConn.Close()
-	return srcConn.Raw(func(srcDriver any) error {
-		source := srcDriver.(*sqlite3.SQLiteConn)
-		if err := source.Deserialize(image, "main"); err != nil {
-			return err
-		}
-		return dstConn.Raw(func(dstDriver any) error {
-			backup, err := dstDriver.(*sqliteConnection).Backup("main", source, "main")
-			if err != nil {
-				return err
-			}
-			if _, err := backup.Step(-1); err != nil {
-				backup.Finish()
-				return err
-			}
-			return backup.Finish()
-		})
-	})
+func isEmptyDatabase(db *sql.DB) (bool, error) {
+	var objects int
+	err := db.QueryRow(`SELECT count(*) FROM sqlite_master`).Scan(&objects)
+	return objects == 0, err
 }
 
 func migrateDB(db *sql.DB, dbPath string) error {
@@ -3570,6 +3508,20 @@ func applyMigration125(tx *sql.Tx) error {
 	}
 	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
 	return err
+}
+
+func decodeStringList(raw, field string) ([]string, error) {
+	if raw == "" {
+		return []string{}, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("automode config %s is not a JSON list: %w", field, err)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, nil
 }
 
 func applyMigration140(tx *sql.Tx) error {

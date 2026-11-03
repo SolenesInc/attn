@@ -1,5 +1,5 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, createEvent, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { agentPane, soloDesktop, daemonSession, daemonDesktop, memberActor, type DaemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -122,6 +122,26 @@ describe('App delegation chain', () => {
     fireEvent.pointerMove(window, { clientX: 81, clientY: 40 });
     fireEvent.pointerEnter(builder);
     expect(chain()).not.toBeNull();
+  });
+
+  it('stays open when the pointer moves straight from the role chip into the card, and closes once it leaves the card', async () => {
+    await renderTeam();
+    const builder = trigger('Build navigator');
+    fireEvent.pointerMove(window, { clientX: 80, clientY: 40 });
+    fireEvent.pointerEnter(builder);
+    const card = chain()!;
+
+    fireEvent(builder, createEvent.pointerOut(builder, { relatedTarget: card }));
+    fireEvent(builder, createEvent.pointerLeave(builder, { relatedTarget: card }));
+    fireEvent(card, createEvent.pointerOver(card, { relatedTarget: builder }));
+    fireEvent(card, createEvent.pointerEnter(card, { relatedTarget: builder }));
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(chain()).not.toBeNull();
+
+    fireEvent(card, createEvent.pointerOut(card, { relatedTarget: document.body }));
+    fireEvent(card, createEvent.pointerLeave(card, { relatedTarget: document.body }));
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(chain()).toBeNull();
   });
 
   describe('beside a terminal pane', () => {

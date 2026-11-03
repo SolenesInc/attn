@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -11,36 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
-
-func TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	applyAutomation(t, cli, manualAutomation(w, "Check the code."))
-	awaitAutomationChanged(app, 1)
-	w.RequireEnterAtNextBoot("Do you trust the contents of this directory?")
-	boot := w.HoldNextBoot()
-	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "trust"})
-	w.AwaitHeldBoot()
-	runs := automationRuns(t, cli, 1)
-	boot()
-	if len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("automation runs while the agent boots = %+v, want one pending run", runs)
-	}
-	run := awaitRunState(t, w, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-	if run.State != "delivered" {
-		t.Fatalf("automation run = %+v, want delivered", run)
-	}
-	if result := awaitAutomationRunResult(app, "trust"); !result.Success {
-		t.Fatalf("automation launch = %+v", result)
-	}
-	agent := w.Launched(string(protocol.Deref(run.SessionID)))
-	if prompt := agent.Prompted(); !strings.Contains(prompt, "Check the code.") {
-		t.Fatalf("automation prompt = %q", prompt)
-	}
-}
 
 func TestRepeatingAnAnnotationDeliveryIDPastesOnceAndANewIDPastesAgain(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {

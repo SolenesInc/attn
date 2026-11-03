@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -15,12 +16,17 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/who"
 )
 
 const (
 	worktreeSweepKind    = "worktree_sweep"
 	worktreeSweepTimeout = 30 * time.Minute
+)
+
+const (
+	gardenUnreadableReason = "the home's Garden could not be read, so nothing here is decided"
+	openSeedReason         = "an open seed points at it"
+	repositoryGoneReason   = "its repository folder is gone; attn tracks the repository again when you create a worktree there"
 )
 
 const defaultWorktreeSweepIdleDays = 14
@@ -96,6 +102,10 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 		if cause := context.Cause(ctx); cause != nil {
 			return refreshed, removed, kept, cause
 		}
+		if _, statErr := os.Stat(repo); errors.Is(statErr, fs.ErrNotExist) {
+			d.forgetMissingRepository(repo, now)
+			continue
+		}
 		states, listErr := d.reconcileWorktreeRegistryContext(ctx, repo, now)
 		if listErr != nil {
 			if context.Cause(ctx) != nil {
@@ -109,7 +119,18 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			continue
 		}
 		refreshed++
-		facts := d.sweepContext(repo)
+		facts, factsErr := d.sweepContext(ctx, repo)
+		if factsErr != nil {
+			if context.Cause(ctx) != nil {
+				return refreshed, removed, kept, context.Cause(ctx)
+			}
+			d.logf("worktree sweep: %s: %v", repo, factsErr)
+			for _, wt := range d.store.ListWorktreesByRepo(repo) {
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown, gardenUnreadableReason, time.Time{}}, now)
+				kept++
+			}
+			continue
+		}
 		for _, state := range states {
 			if state.Path == repo {
 				continue
@@ -165,7 +186,17 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			}
 			d.store.RecordWorktreeObservation(candidate.state.Path, observation, now)
 			wt := d.store.GetWorktree(candidate.state.Path)
-			verdict := worktreeSweepVerdict(wt, d.sweepContext(repo), now, worktreeSweepIdle())
+			current, currentErr := d.sweepContext(ctx, repo)
+			if currentErr != nil {
+				if context.Cause(ctx) != nil {
+					return refreshed, removed, kept, context.Cause(ctx)
+				}
+				d.logf("worktree sweep: %s: %v", repo, currentErr)
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown, gardenUnreadableReason, time.Time{}}, now)
+				kept++
+				continue
+			}
+			verdict := worktreeSweepVerdict(wt, current, now, worktreeSweepIdle())
 			d.recordSweepVerdict(wt, verdict, now)
 			if verdict.Status != store.WorktreeSweepRemoved {
 				kept++
@@ -177,17 +208,15 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			var seeds []string
+			removal := deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}
 			deleteErr := lease.TryAutomaticRemoval(func(protection automaticWorktreeCleanupProtection) error {
 				if err := d.finalWorktreeSweepGitCheck(protection.Context(), candidate); err != nil {
 					return err
 				}
-				if err := d.finalWorktreeSweepProtectionCheck(candidate); err != nil {
+				if err := d.finalWorktreeSweepProtectionCheck(protection.Context(), candidate); err != nil {
 					return err
 				}
-				var failure *removalFailure
-				seeds, failure = d.removeWorktreeCheckout(protection, wt, false)
-				if failure != nil {
+				if failure := d.removeWorktreeCheckout(protection, wt, removal); failure != nil {
 					return failure.err
 				}
 				return nil
@@ -200,7 +229,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
+			d.recordWorktreeRemoval(wt, removal, now)
 			d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
 			removed++
 		}
@@ -224,8 +253,8 @@ func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, 
 	if sessions := facts.liveSessions[wt.Path]; len(sessions) > 0 {
 		return sweepVerdict{store.WorktreeSweepKeptLiveSession, fmt.Sprintf("%s is running in it", strings.Join(sessions, ", ")), time.Time{}}, true
 	}
-	if seeds := facts.openSeeds[wt.Path]; len(seeds) > 0 {
-		return sweepVerdict{store.WorktreeSweepKeptOpenSeed, fmt.Sprintf("open seed %s points at it", strings.Join(seeds, ", ")), time.Time{}}, true
+	if facts.seedOwned[wt.Path] {
+		return sweepVerdict{store.WorktreeSweepKeptOpenSeed, openSeedReason, time.Time{}}, true
 	}
 	floor := wt.CreatedAt
 	if activity, parseErr := time.Parse(time.RFC3339, wt.LastActivityAt); parseErr == nil && activity.After(floor) {
@@ -259,9 +288,13 @@ func (d *Daemon) finalWorktreeSweepGitCheck(ctx context.Context, candidate workt
 	return nil
 }
 
-func (d *Daemon) finalWorktreeSweepProtectionCheck(candidate worktreeSweepCandidate) error {
+func (d *Daemon) finalWorktreeSweepProtectionCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
+	seedOwned, err := d.seedOwnedWorktrees(ctx, candidate.repo)
+	if err != nil {
+		return err
+	}
 	wt := d.store.GetWorktree(candidate.state.Path)
-	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || len(d.openSeedsByWorktree(candidate.repo)[wt.Path]) > 0 {
+	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || seedOwned[wt.Path] {
 		return errors.New("worktree gained protection before deletion")
 	}
 	return nil
@@ -269,16 +302,20 @@ func (d *Daemon) finalWorktreeSweepProtectionCheck(candidate worktreeSweepCandid
 
 type sweepContext struct {
 	liveSessions map[string][]string
-	openSeeds    map[string][]string
+	seedOwned    map[string]bool
 	integration  string
 }
 
-func (d *Daemon) sweepContext(repo string) sweepContext {
+func (d *Daemon) sweepContext(ctx context.Context, repo string) (sweepContext, error) {
+	seedOwned, err := d.seedOwnedWorktrees(ctx, repo)
+	if err != nil {
+		return sweepContext{}, err
+	}
 	return sweepContext{
 		liveSessions: d.liveSessionsByWorktree(repo),
-		openSeeds:    d.openSeedsByWorktree(repo),
+		seedOwned:    seedOwned,
 		integration:  d.storedIntegrationBranch(repo),
-	}
+	}, nil
 }
 
 func (d *Daemon) storedIntegrationBranch(repo string) string {
@@ -306,9 +343,8 @@ func worktreeSweepVerdict(wt *store.Worktree, facts sweepContext, now time.Time,
 		return sweepVerdict{store.WorktreeSweepKeptLiveSession,
 			fmt.Sprintf("%s is running in it", strings.Join(sessions, ", ")), time.Time{}}
 	}
-	if seeds := facts.openSeeds[wt.Path]; len(seeds) > 0 {
-		return sweepVerdict{store.WorktreeSweepKeptOpenSeed,
-			fmt.Sprintf("open seed %s points at it", strings.Join(seeds, ", ")), time.Time{}}
+	if facts.seedOwned[wt.Path] {
+		return sweepVerdict{store.WorktreeSweepKeptOpenSeed, openSeedReason, time.Time{}}
 	}
 	if wt.ObservedAt == "" {
 		return sweepVerdict{store.WorktreeSweepUnknown, "not refreshed yet", time.Time{}}
@@ -396,59 +432,100 @@ func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now t
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
-func (d *Daemon) recordWorktreeRemoval(
-	wt *store.Worktree, seeds []string, opts deleteWorktreeOptions, now time.Time,
-) {
-	action, reason := opts.RemovalAction, opts.RemovalReason
-	if action == "" {
-		action, reason = "deleted", "at your request"
+func (d *Daemon) forgetMissingRepository(repo string, now time.Time) {
+	d.logf("worktree sweep: %s is gone; no longer tracking it", repo)
+	rows := d.store.ListWorktreesByRepo(repo)
+	d.store.ForgetWorktreeRepository(repo)
+	for _, wt := range rows {
+		d.publishFact(FactWorktreeDeleted, wt.Path, nil)
+		d.recordForgotten(store.WorktreeSweepLogEntry{Path: wt.Path, MainRepo: repo, Branch: wt.Branch}, now)
 	}
+	d.recordForgotten(store.WorktreeSweepLogEntry{Path: repo, MainRepo: repo}, now)
+}
+
+func (d *Daemon) recordForgotten(entry store.WorktreeSweepLogEntry, now time.Time) {
+	entry.Action, entry.Reason = "forgotten", repositoryGoneReason
+	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
+	d.publishFact(FactWorktreeSwept, entry.Path, protocolSweepEntry(entry))
+}
+
+func removalActionAndReason(opts deleteWorktreeOptions) (string, string) {
+	if opts.RemovalAction == "" {
+		return "deleted", "at your request"
+	}
+	return opts.RemovalAction, opts.RemovalReason
+}
+
+func worktreeRemovalNote(wt *store.Worktree, opts deleteWorktreeOptions) string {
+	action, reason := removalActionAndReason(opts)
+	return fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
+		action, wt.Path, wt.Branch, wt.MainRepo, reason)
+}
+
+func (d *Daemon) recordWorktreeRemoval(wt *store.Worktree, opts deleteWorktreeOptions, now time.Time) {
+	action, reason := removalActionAndReason(opts)
 	entry := store.WorktreeSweepLogEntry{
 		Path: wt.Path, MainRepo: wt.MainRepo, Branch: wt.Branch,
 		Action: action, Reason: reason,
 	}
 	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
-
-	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
-		action, wt.Path, wt.Branch, wt.MainRepo, reason)
-	for _, seedID := range seeds {
-		if _, err := d.appendSeedNote(seedID, body, who.Attn(), "", nil, false, ""); err != nil {
-			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
-		}
-	}
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
 }
 
-func (d *Daemon) seedsForWorktree(wt *store.Worktree) []string {
+func (d *Daemon) seedsForWorktree(wt *store.Worktree) ([]string, error) {
 	var seeds []string
-	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
+	err := d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
 		if worktreeOwnsExecution(wt, dispatch) {
 			seeds = append(seeds, seed.ID)
 		}
 	})
-	return seeds
+	return seeds, err
 }
 
-func (d *Daemon) openSeedsByWorktree(repo string) map[string][]string {
-	byPath := make(map[string][]string)
-	if d.store == nil {
-		return byPath
-	}
+func (d *Daemon) seedOwnedWorktrees(ctx context.Context, repo string) (map[string]bool, error) {
+	owned := make(map[string]bool)
 	rows := d.store.ListWorktreesByRepo(repo)
 	if len(rows) == 0 {
-		return byPath
+		return owned, nil
 	}
-	d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
+	checkouts := make([]protocol.WorktreeCheckout, 0, len(rows))
+	for _, row := range rows {
+		checkouts = append(checkouts, protocol.WorktreeCheckout{Path: row.Path, Branch: row.Branch})
+	}
+	owners, err := Call[protocol.WorktreeSeedOwners](ctx, d.router(), protocol.WorktreeSeedOwnersMessage{
+		Cmd: protocol.CmdWorktreeSeedOwners, MainRepo: repo, Worktrees: checkouts,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading the home's Garden: %w", err)
+	}
+	for _, path := range owners.OwnedPaths {
+		owned[path] = true
+	}
+	return owned, nil
+}
+
+func (d *Daemon) worktreeSeedOwnersHere(_ context.Context, msg protocol.WorktreeSeedOwnersMessage) (protocol.WorktreeSeedOwners, error) {
+	owned := make(map[string]bool)
+	err := d.eachSeedExecution(func(seed garden.Seed, dispatch garden.Execution) {
 		if garden.Closed(seed.Status) {
 			return
 		}
-		for _, row := range rows {
-			if worktreeOwnsExecution(row, dispatch) {
-				byPath[row.Path] = append(byPath[row.Path], seed.ID)
+		for _, checkout := range msg.Worktrees {
+			if worktreeOwnsExecution(&store.Worktree{Path: checkout.Path, MainRepo: msg.MainRepo, Branch: checkout.Branch}, dispatch) {
+				owned[checkout.Path] = true
 			}
 		}
 	})
-	return byPath
+	if err != nil {
+		return protocol.WorktreeSeedOwners{}, err
+	}
+	owners := protocol.WorktreeSeedOwners{OwnedPaths: []string{}}
+	for _, checkout := range msg.Worktrees {
+		if owned[checkout.Path] {
+			owners.OwnedPaths = append(owners.OwnedPaths, checkout.Path)
+		}
+	}
+	return owners, nil
 }
 
 func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
@@ -459,7 +536,11 @@ func worktreeOwnsExecution(wt *store.Worktree, dispatch garden.Execution) bool {
 		attngit.CanonicalizePath(dispatch.RepositoryRoot) == attngit.CanonicalizePath(wt.MainRepo)
 }
 
-func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) {
+func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) error {
+	dispatches, err := d.dispatchesCollection()
+	if err != nil {
+		return fmt.Errorf("reading seed executions: %w", err)
+	}
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{
@@ -467,22 +548,29 @@ func (d *Daemon) eachSeedExecution(visit func(garden.Seed, garden.Execution)) {
 			Limit: docstore.MaxLimit, After: after,
 		})
 		if err != nil {
-			d.logf("worktree sweep: reading seeds: %v", err)
-			return
+			return fmt.Errorf("reading seeds: %w", err)
 		}
 		for _, doc := range read.Documents {
 			seed, err := garden.Decode(doc.Body)
 			if err != nil || protocol.TrimID(seed.LastExecutionID) == "" {
 				continue
 			}
-			dispatch, ok := d.gardenDispatch(seed.LastExecutionID)
-			if !ok {
+			execution, found, err := d.store.GetDocument(*dispatches, string(seed.LastExecutionID))
+			if err != nil {
+				return fmt.Errorf("reading seed executions: %w", err)
+			}
+			if !found {
+				continue
+			}
+			dispatch, err := garden.DecodeExecution(execution.Body)
+			if err != nil {
+				d.logf("worktree sweep: seed %s has an unreadable execution: %v", seed.ID, err)
 				continue
 			}
 			visit(seed, dispatch)
 		}
 		if len(read.Documents) < docstore.MaxLimit {
-			return
+			return nil
 		}
 		after = read.Documents[len(read.Documents)-1].ID
 	}

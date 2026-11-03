@@ -41,7 +41,7 @@ Inside an attn session the profile is the session's; elsewhere pass
 }
 
 func runCodex() {
-	os.Exit(executeCodex(os.Args[2:], os.Stdout, os.Stderr))
+	exit(executeCodex(os.Args[2:], os.Stdout, os.Stderr))
 }
 
 func executeCodex(args []string, stdout, stderr io.Writer) int {
@@ -50,6 +50,7 @@ func executeCodex(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	action := args[0]
+	setCommandPathIn("codex", action, "status", "update", "restart")
 	fs := flag.NewFlagSet("codex "+action, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	profile := fs.String("profile", "", "profile name or id")

@@ -19,8 +19,8 @@ const garden = [
   planted('s-wait11', 'waiting on work'),
   plot('s-plot11', 'a plot in motion', '', { total: 3, done: 1, growing: 1, ready: 1 }, { ready: true }),
   planted('s-work11', 'owned work', { status: 'growing', ...memberClaim('trellis') }),
-  planted('s-park11', 'paused on purpose', { status: 'dormant' }),
-  planted('s-armed1', 'waiting on the merge', { status: 'dormant', harvest_when: armedOn(42) }),
+  planted('s-park11', 'paused on purpose', { status: 'parked' }),
+  planted('s-armed1', 'waiting on the merge', { status: 'parked', harvest_when: armedOn(42) }),
   planted('s-armrdy', 'armed but still pickable', { ready: true, harvest_when: armedOn(43) }),
   planted('s-done11', 'finished work', { status: 'harvested' }),
 ];
@@ -59,7 +59,7 @@ describe('App garden board', () => {
     expect(screen.getByText('1 in progress · 1 ready · 1/3 done')).toBeInTheDocument();
   });
 
-  it('puts dormant work under Parked', async () => {
+  it('puts parked work under Parked', async () => {
     await openBoard(garden);
 
     expect(column('Parked').getByRole('button', { name: /^paused on purpose/ })).toHaveTextContent('parked');

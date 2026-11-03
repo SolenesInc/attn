@@ -28,6 +28,34 @@ export function geometryOverflowsContainer(
   return rows * cellHeight > clientHeight + 1;
 }
 
+// A PTY another client sized smaller than this pane is drawn whole, scaled up
+// to fill the pane and centered, instead of reflowed into it.
+export function scaledToFitTransform(
+  cols: number,
+  rows: number,
+  cellWidth: number,
+  cellHeight: number,
+  clientWidth: number,
+  clientHeight: number,
+): string {
+  const room = {
+    cols: Math.floor(clientWidth / cellWidth),
+    rows: Math.floor(clientHeight / cellHeight),
+  };
+  const fitsWithRoomToSpare = cols <= room.cols && rows <= room.rows && (cols < room.cols || rows < room.rows);
+  if (!fitsWithRoomToSpare) return '';
+  const width = cols * cellWidth;
+  const height = rows * cellHeight;
+  const scale = Math.min(clientWidth / width, clientHeight / height);
+  const x = (clientWidth - width * scale) / 2;
+  const y = (clientHeight - height * scale) / 2;
+  return `translate(${x}px, ${y}px) scale(${scale})`;
+}
+
+export function drawnScale(canvas: HTMLElement, drawn: DOMRect): number {
+  return canvas.offsetWidth > 0 ? drawn.width / canvas.offsetWidth : 1;
+}
+
 // The bail protects a healthy grid only: refused when the live model already
 // overflows, or is itself suspicious and `dims` would not shrink it.
 export function fitShouldBailAsSuspicious(

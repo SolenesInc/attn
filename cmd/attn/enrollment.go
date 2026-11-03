@@ -21,8 +21,10 @@ func runEnrollment() {
 	case "-h", "--help", "help":
 		writeEnrollmentHelp(os.Stdout)
 	case "status":
+		setCommandPath("enrollment status")
 		runEnrollmentStatus(os.Args[3:])
 	case "leave":
+		setCommandPath("enrollment leave")
 		runEnrollmentLeave(os.Args[3:])
 	case "--json":
 		runEnrollmentStatus(os.Args[2:])
@@ -30,7 +32,7 @@ func runEnrollment() {
 		recordUsageError("enrollment", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "enrollment: unknown command %q\n", os.Args[2])
 		writeEnrollmentHelp(os.Stderr)
-		os.Exit(2)
+		exit(2)
 	}
 }
 
@@ -72,14 +74,14 @@ func runEnrollmentStatus(args []string) {
 			"daemon_id": status.DaemonID,
 			"error":     err.Error(),
 		})
-		os.Exit(1)
+		exit(1)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "enrollment: %v\n", err)
 		if errors.Is(err, enrollment.ErrNoRecord) {
 			fmt.Fprintf(os.Stderr, "No daemon has started in %s yet; the record is written at startup.\n", root)
 		}
-		os.Exit(1)
+		exit(1)
 	}
 
 	if *asJSON {
@@ -109,7 +111,7 @@ func runEnrollmentLeave(args []string) {
 	_ = parseFlags(fs, args)
 	if *home != "" && !enrollment.ValidDaemonID(*home) {
 		fmt.Fprintf(os.Stderr, "enrollment leave: --home %q is not a daemon id; attn enrollment status on the home prints its id\n", *home)
-		os.Exit(2)
+		exit(2)
 	}
 
 	result, err := enrollment.Leave(enrollmentDataRoot(), *home)
@@ -118,12 +120,12 @@ func runEnrollmentLeave(args []string) {
 		if errors.Is(err, enrollment.ErrNoDaemonID) {
 			fmt.Fprintf(os.Stderr, "No daemon has started in %s yet, so there is nothing to release.\n", enrollmentDataRoot())
 		}
-		os.Exit(1)
+		exit(1)
 	}
 	if c := client.New(""); result.Status != "kept" && c.IsRunning() {
 		if err := c.DropOutpostCopy(); err != nil {
 			fmt.Fprintf(os.Stderr, "enrollment leave: released the enrollment, but the daemon could not stop the terminals it ran for its home: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 	}
 	if *asJSON {

@@ -12,6 +12,7 @@ import {
   resolvePreferredAgent,
 } from '../../utils/agentAvailability';
 import { keyCombo } from '../../shortcuts/formatShortcut';
+import { modifierGlyphs } from '../../shortcuts/platform';
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: true,
@@ -21,8 +22,6 @@ const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
 
 const SESSION_AGENT_KEY = 'new_session_agent';
 const SESSION_YOLO_KEYS = ['new_session_yolo_local', 'new_session_yolo'];
-const AUTOMODE_DEFAULT_KEY = 'automode_enabled_default';
-const AUTOMODE_CAPABILITY = 'auto_mode';
 const TERMINAL_AGENT: SessionAgent = 'shell';
 
 const normalizeAgent = (value?: string): SessionAgent | null => {
@@ -88,8 +87,6 @@ export function useSessionControls({
   const [agent, setAgent] = useState<SessionAgent>('claude');
   const [yoloMode, setYoloMode] = useState(false);
   const [chiefOfStaff, setChiefOfStaff] = useState(false);
-  const [autoMode, setAutoMode] = useState(true);
-  const autoModeTouchedRef = useRef(false);
   const previousInitialAgent = useRef<SessionAgent | undefined>(undefined);
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
   const effectiveAgentAvailability = useMemo<AgentAvailability>(
@@ -140,8 +137,6 @@ export function useSessionControls({
 
   const savedAgent = normalizeAgent(settings[SESSION_AGENT_KEY]);
   const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
-  const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
-  const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   const chiefToggleEligible = !chiefExists && (agent === 'claude' || agent === 'codex');
 
   useEffect(() => {
@@ -177,11 +172,6 @@ export function useSessionControls({
     }
   }, [chiefToggleEligible]);
 
-  useEffect(() => {
-    if (autoModeTouchedRef.current) return;
-    setAutoMode((prev) => (prev === autoModeDefault ? prev : autoModeDefault));
-  }, [autoModeDefault]);
-
   const handleAgentChange = useCallback(
     (nextAgent: SessionAgent) => {
       if (!isAgentAvailable(effectiveAgentAvailability, nextAgent)) {
@@ -215,17 +205,11 @@ export function useSessionControls({
     previousInitialAgent.current = initialAgent;
   }, [isOpen, initialAgent, resetAgentOnOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleAutoMode = () => {
-    if (!autoModeSupported) return;
-    autoModeTouchedRef.current = true;
-    setAutoMode((value) => !value);
-  };
   const handleControlKey = (e: React.KeyboardEvent) => {
     if (!e.altKey || e.metaKey || e.ctrlKey) return false;
     const digit = /^Digit([1-9])$/.exec(e.code);
     if (e.code === 'KeyT') handleAgentChange(TERMINAL_AGENT);
     else if (e.code === 'KeyQ') toggleYoloMode();
-    else if (e.code === 'KeyA') toggleAutoMode();
     else if (digit) {
       const nextAgent = [...agentShortcutByName].find(
         ([, number]) => number === Number(digit[1]),
@@ -239,9 +223,7 @@ export function useSessionControls({
     agent,
     yoloMode,
     chiefOfStaff,
-    autoMode,
     yoloSupported,
-    autoModeSupported,
     chiefToggleEligible,
     effectiveAgentAvailability,
     hasAvailableAgents,
@@ -252,26 +234,27 @@ export function useSessionControls({
     agentShortcutByName,
     handleAgentChange,
     toggleYoloMode,
-    toggleAutoMode,
     setChiefOfStaff,
     handleControlKey,
   };
 }
 
+export type MissingHarnesses = { machine: string; harnesses: ReadonlySet<SessionAgent> };
+
 export function SessionControls({
   controls,
   compact = false,
+  missing,
 }: {
   controls: ReturnType<typeof useSessionControls>;
   compact?: boolean;
+  missing?: MissingHarnesses;
 }) {
   const {
     agent,
     yoloMode,
     chiefOfStaff,
-    autoMode,
     yoloSupported,
-    autoModeSupported,
     chiefToggleEligible,
     effectiveAgentAvailability,
     hasAvailableAgents,
@@ -282,36 +265,11 @@ export function SessionControls({
     agentShortcutByName,
     handleAgentChange,
     toggleYoloMode,
-    toggleAutoMode,
     setChiefOfStaff,
   } = controls;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
   const toggles = (
     <>
-      {autoModeSupported && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">AUTO MODE</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${autoMode ? 'active' : ''}`}
-                data-testid="location-picker-automode-toggle"
-                role="switch"
-                aria-checked={autoMode}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={toggleAutoMode}
-                title="Judge calls that reach outside this session's directory against what the conversation asked for, instead of running everything"
-              >
-                <span className="agent-option-name">
-                  {compact ? 'auto mode' : autoMode ? 'On' : 'Off'}
-                </span>
-                {compact && <kbd className="agent-shortcut">{keyCombo('alt', 'A')}</kbd>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {chiefToggleEligible && (
         <div className="picker-chief-bar">
           <div className="picker-agent-label">CHIEF OF STAFF</div>
@@ -381,28 +339,41 @@ export function SessionControls({
               </button>
             </span>
           )}
+          {compact && (
+            <span className="launcher-key-legend" aria-hidden="true">
+              {modifierGlyphs().alt}
+            </span>
+          )}
           <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
             {orderedAgentList.map((candidate) => {
               const available = isAgentAvailable(effectiveAgentAvailability, candidate);
               const shortcutNumber = agentShortcutByName.get(candidate);
-              const shortcut =
+              const key =
                 candidate === TERMINAL_AGENT
-                  ? keyCombo('alt', 'T')
+                  ? 'T'
                   : shortcutNumber && shortcutNumber <= 9
-                    ? keyCombo('alt', String(shortcutNumber))
+                    ? String(shortcutNumber)
                     : null;
+              const shortcut = key && (compact ? key : keyCombo('alt', key));
               const label = pickerAgentLabel(candidate);
+              const absent = missing?.harnesses.has(candidate) && missing.machine;
               return (
                 <button
                   key={candidate}
                   type="button"
-                  className={`agent-option ${agent === candidate ? 'active' : ''}`}
+                  className={`agent-option ${agent === candidate ? 'active' : ''}${absent ? ' agent-option--missing' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleAgentChange(candidate)}
                   role="radio"
                   aria-checked={agent === candidate}
                   disabled={!available}
-                  title={!available ? `${label} is not available on this machine` : undefined}
+                  title={
+                    !available
+                      ? `${label} is not available on this machine`
+                      : absent
+                        ? `${label} is not installed on ${absent}`
+                        : undefined
+                  }
                 >
                   <span className="agent-option-name">{label}</span>
                   {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -16,14 +17,7 @@ func outpostReachSince(p *testworld.Peer, mark int, name string, reach protocol.
 	p.T.Helper()
 	var previous string
 	if reach == protocol.OutpostReachReachable && mark > 0 {
-		rows := p.Initial.Outposts
-		for _, raw := range p.Log()[:mark] {
-			var update protocol.OutpostsUpdatedMessage
-			if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
-				rows = update.Outposts
-			}
-		}
-		for _, row := range rows {
+		for _, row := range outpostsShownAt(p, mark) {
 			if row.Name == name {
 				previous = row.StateSince
 			}
@@ -65,6 +59,14 @@ func awaitInputRefusals(t *testing.T, p *testworld.Peer, terminal protocol.Termi
 func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.T) {
 	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	queued := home.PauseEvery(pausepoint.BridgeSendQueued)
+	awaitQueued := func(sends int) {
+		t.Helper()
+		for range sends {
+			queued.Await()
+			queued.Release()
+		}
+	}
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -85,6 +87,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 		}
 	}
 	app.TypeLine(id, "echo ready-$((1+1))")
+	awaitQueued(1)
 	app.AwaitScreen(id, "ready-2")
 
 	stalledLine := "echo stalled-$((3+4))\r"
@@ -99,7 +102,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 		probe := fmt.Sprintf("stalled-%d", i)
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key), ProbeID: &probe, TraceID: &probe})
 	}
-	testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: "before-loss", RuntimeIds: []protocol.TerminalID{terminal}}, protocol.EventSupportSnapshotResult, func(m protocol.SupportSnapshotResultMessage) bool { return m.RequestID == "before-loss" })
+	awaitQueued(1 + len(stalledLine))
 	home.Advance(bridge.LostAfter - bridge.StallAfter)
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	for i := range stalledLine {
@@ -129,10 +132,12 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())
 	resume()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+	stopRetries()
 	reattach(app)
 	app.TypeLine(id, "\x15echo after-stall-$((4+4))")
+	awaitQueued(1)
 	app.AwaitScreen(id, "after-stall-8")
 
 	mark = len(app.Log())
@@ -173,6 +178,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 	app.TypeLine(id, "echo back-$((5+5))")
+	awaitQueued(1)
 	app.AwaitScreen(id, "back-10")
 	for _, refused := range []string{"echo off", "echo connecting", "echo lost"} {
 		if strings.Contains(string(app.Screen(id)), refused) {

@@ -25,20 +25,20 @@ func (d *Daemon) applyHarvestWhenRequest(
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	if verb != garden.VerbHarvest {
-		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
 			"harvest is the move that waits on a pull request: attn seed harvest %s --when-merged", seedID)
 	}
 	if strings.TrimSpace(protocol.Deref(msg.Comment)) != "" {
-		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
 			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", seedID, verb)
 	}
 	if protocol.Deref(msg.ClearHarvestWhen) {
 		if strings.TrimSpace(ask.Reason) != "" {
-			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
 				"--clear takes no reason; put it on the log with `attn seed note %s -m \"…\"`", seedID)
 		}
 		if msg.WhenMerged != nil && strings.TrimSpace(protocol.Deref(msg.WhenMerged.PullRequestURL)) != "" {
-			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalInvalidInput,
 				"--clear drops the condition %s carries and takes no pull request url", seedID)
 		}
 		seed, doc, err := d.clearHarvestWhenRequested(seedID, ask, sessionID)
@@ -62,7 +62,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		return d.applySeedTransitionDetailed(seed.ID, garden.VerbHarvest, ask, "")
 	}
 	if garden.Closed(seed.Status) {
-		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalWrongState,
 			"%s is %s and waits on nothing; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
 	}
 	if err := garden.ValidateReason(ask.Reason, seed.ID); err != nil {
@@ -89,7 +89,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}, "")
 	}
 	if rec.State == sessionPullRequestClosed {
-		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalWrongState,
 			"%s closed without merging, so it never will; %s has nothing to wait for", harvestWhenLabel(rec), seed.ID)
 	}
 	condition := garden.HarvestCondition{
@@ -118,7 +118,7 @@ func (d *Daemon) armHarvestWhenMerged(
 			return d.applySeedTransitionDetailed(seed.ID, garden.VerbHarvest, ask, "")
 		}
 		if garden.Closed(seed.Status) {
-			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalWrongState,
 				"%s is %s and waits on nothing; replant it first: attn seed replant %s", seed.ID, seed.Status, seed.ID)
 		}
 		next := seed
@@ -192,7 +192,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		return settled, doc, details, err
 	}
-	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to arm it; read it again with `attn seed show %s` and decide from what it says now",
 		seedID, attempts, seedID)
 }
@@ -229,10 +229,10 @@ func (d *Daemon) observedHarvestCondition(seedID string, observed *garden.Harves
 		return garden.Seed{}, docstore.Document{}, err
 	}
 	if seed.HarvestWhen == nil {
-		return garden.Seed{}, docstore.Document{}, fmt.Errorf("%s has no harvest condition", seed.ID)
+		return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalWrongState, "%s has no harvest condition", seed.ID)
 	}
 	if observed != nil && !sameHarvestCondition(seed.HarvestWhen, observed) {
-		return garden.Seed{}, docstore.Document{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalConflict,
 			"%s now waits on %s set at %s, not the condition that was read", seed.ID, seed.HarvestWhen.PullRequest, seed.HarvestWhen.SetAt)
 	}
 	return seed, doc, nil
@@ -325,7 +325,7 @@ func (d *Daemon) clearHarvestWhen(
 		}
 		return next, written, nil
 	}
-	return garden.Seed{}, docstore.Document{}, fmt.Errorf(
+	return garden.Seed{}, docstore.Document{}, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to clear its harvest condition; read it again with `attn seed show %s`",
 		seedID, attempts, seedID)
 }

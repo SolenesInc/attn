@@ -20,22 +20,33 @@ group go \.go$|^go\.(mod|sum)$
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
 go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
 go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
-go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
+go ./internal/daemon TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts
 go ./internal/daemon TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunching
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
 go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins
-go ./internal/daemon TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession
 go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
 go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne
+go ./internal/daemon TestASnoozeTheMonitorSavedIsStillSnoozedAfterARestart
 go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnected
 go ./internal/daemon TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover
 go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
+go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
+go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
+go ./internal/daemon TestProfileDeletionAccountsForDelegationsStillPreparingTheirCheckout
+go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript
+go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
+go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
+go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
+go ./cmd/attn TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCopies
+go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
+go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
+go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
@@ -47,6 +58,7 @@ go ./internal/classifier TestLegacyPromptCompatibility
 go ./internal/sessioninstructions TestLegacyPromptCompatibility
 go ./internal/agent TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
+go ./cmd/attn TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 
 group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
@@ -65,4 +77,7 @@ go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 
 group app ^app/
 vitest src/App.desktops.test.tsx
+vitest src/App.automationSelection.test.tsx
+vitest src/App.gardenSeeds.test.tsx
+vitest scripts/real-app-harness/scenarioCatalog.test.mjs
 playwright e2e/queue-sidebar-fit.spec.ts

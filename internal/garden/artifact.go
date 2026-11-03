@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -38,11 +40,11 @@ func (a ArtifactReference) trimmed() ArtifactReference {
 func ValidateArtifact(raw ArtifactReference) (ArtifactReference, error) {
 	a := raw.trimmed()
 	if a.Kind == "" {
-		return ArtifactReference{}, fmt.Errorf(
+		return ArtifactReference{}, protocol.Refuse(protocol.RefusalInvalidInput,
 			"an artifact needs a kind; the kinds are %s", strings.Join(ArtifactKinds, ", "))
 	}
 	if !slices.Contains(ArtifactKinds, a.Kind) {
-		return ArtifactReference{}, fmt.Errorf(
+		return ArtifactReference{}, protocol.Refuse(protocol.RefusalInvalidInput,
 			"%q is not a kind of artifact; the kinds are %s", raw.Kind, strings.Join(ArtifactKinds, ", "))
 	}
 	for name, value := range map[string]string{
@@ -52,7 +54,7 @@ func ValidateArtifact(raw ArtifactReference) (ArtifactReference, error) {
 		"url":                  a.URL,
 	} {
 		if n := len(value); n > MaxArtifactFieldChars {
-			return ArtifactReference{}, fmt.Errorf(
+			return ArtifactReference{}, protocol.Refuse(protocol.RefusalLimit,
 				"max_artifact_field_chars=%d, asked for %d on %s; a reference points at a document, it does not carry one",
 				MaxArtifactFieldChars, n, name)
 		}
@@ -60,13 +62,13 @@ func ValidateArtifact(raw ArtifactReference) (ArtifactReference, error) {
 	required, allowed := artifactFields(a.Kind)
 	for _, field := range required {
 		if a.field(field) == "" {
-			return ArtifactReference{}, fmt.Errorf(
+			return ArtifactReference{}, protocol.Refuse(protocol.RefusalInvalidInput,
 				"a %s artifact needs %s", a.Kind, strings.Join(required, " and "))
 		}
 	}
 	for _, field := range []string{"notebook_document_id", "repository", "path", "url"} {
 		if a.field(field) != "" && !slices.Contains(allowed, field) {
-			return ArtifactReference{}, fmt.Errorf(
+			return ArtifactReference{}, protocol.Refuse(protocol.RefusalInvalidInput,
 				"a %s artifact carries %s, not %s", a.Kind, strings.Join(allowed, " and "), field)
 		}
 	}

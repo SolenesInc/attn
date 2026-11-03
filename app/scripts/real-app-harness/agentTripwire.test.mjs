@@ -66,54 +66,6 @@ describe('the shim a real agent exec lands in', () => {
       'unattributed\tcodex --version',
     ]);
   });
-
-  it('runs Pi version but answers only its exact catalog request without the real binary', () => {
-    const env = freshEnv();
-    const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
-    const realDir = path.join(runDir, 'real-bin');
-    fs.mkdirSync(realDir, { recursive: true });
-    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\nprintf \'%s\\n%s\\n\' "$$" "$*"\nIFS= read -r request && printf \'%s\\n\' "$request"\nexit 0\n', { mode: 0o755 });
-    const probeEnv = { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` };
-
-    const probe = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
-      encoding: 'utf8', env: probeEnv,
-    });
-    expect(probe.status).toBe(0);
-    expect(probe.stdout.trim().split('\n')).toEqual([String(probe.pid), '--version']);
-
-    const catalogArgs = ['--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files'];
-    const catalogRequest = '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"get_available_models"}';
-    const catalog = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
-      encoding: 'utf8', env,
-      input: `${catalogRequest}\n{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n`,
-    });
-    expect(catalog.status).toBe(0);
-    expect(JSON.parse(catalog.stdout)).toEqual({
-      id: 'd2382ae5-48ef-4de0-b9c7-4fdf09af5608',
-      type: 'response',
-      command: 'get_available_models',
-      success: true,
-      data: { models: [] },
-    });
-
-    const modelRequest = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
-      encoding: 'utf8', env: probeEnv,
-      input: '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n',
-    });
-    expect(modelRequest.status).toBe(TRIPWIRE_EXIT_CODE);
-
-    const online = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs.filter((arg) => arg !== '--offline'), { encoding: 'utf8', env: probeEnv });
-    expect(online.status).toBe(TRIPWIRE_EXIT_CODE);
-    expect(tripwire.read()).toEqual([
-      `TR-201\tpi ${catalogArgs.join(' ')}`,
-      `TR-201\tpi ${catalogArgs.filter((arg) => arg !== '--offline').join(' ')}`,
-    ]);
-
-    const missing = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
-      encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:/usr/bin:/bin` },
-    });
-    expect(missing.status).toBe(127);
-  });
 });
 
 describe('what a scenario arms', () => {
@@ -122,7 +74,7 @@ describe('what a scenario arms', () => {
   });
 
   it('arms the binaries a scenario did not name', () => {
-    expect(armedBinaries(['pi'])).toEqual(['claude', 'codex']);
+    expect(armedBinaries(['codex'])).toEqual(['claude']);
   });
 
   it('refuses a binary name it does not shim', () => {
@@ -135,15 +87,14 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
     const env = freshEnv();
     const dir = tripwireDir();
 
-    applyTripwireEnv(env, { dir, binaries: ['claude', 'codex', 'pi'] });
+    applyTripwireEnv(env, { dir, binaries: ['claude', 'codex'] });
 
     expect(env.PATH.split(path.delimiter)[0]).toBe(dir);
     // claude and codex run the mock instead of the shim, so an armed scenario
     // gets a deterministic agent; the shim still catches a name-resolved exec.
     expect(env.ATTN_CLAUDE_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
     expect(env.ATTN_CODEX_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
-    expect(env.ATTN_PI_EXECUTABLE).toBe(path.join(dir, 'pi'));
-    expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex', 'pi'] }));
+    expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex'] }));
   });
 
   it('hands the app launch the PATH and pins the daemon must inherit', () => {
@@ -156,7 +107,6 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
       [HEADLESS_TASKS_VAR]: 'off',
       ATTN_CLAUDE_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
       ATTN_CODEX_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
-      ATTN_PI_EXECUTABLE: path.join(tripwire.dir, 'pi'),
     });
   });
 });
@@ -188,7 +138,7 @@ describe('the receipt that the switch was in force', () => {
     expect(readDaemonTripwireReceipt({
       marker: 'shims|claude',
       pidPath: pidPath(),
-      readEnvironment: () => `${TRIPWIRE_MARKER_VAR}=shims|pi ${HEADLESS_TASKS_VAR}=off`,
+      readEnvironment: () => `${TRIPWIRE_MARKER_VAR}=shims|codex ${HEADLESS_TASKS_VAR}=off`,
     })).toEqual({ headlessTasks: 'off', carriesMarker: false, mockGitHub: 'missing' });
   });
 
@@ -216,6 +166,16 @@ describe('the daemon a scenario inherits', () => {
 
   const target = { instance: 'dev', appPath: '/tmp/attn-dev.app' };
 
+  function daemonCli(backend = 'migrating') {
+    return vi.fn((_binary, args) => (
+      args[0] === 'settings' ? JSON.stringify({ key: 'pty_backend_mode', value: backend }) : ''
+    ));
+  }
+
+  function stopCalls(run) {
+    return run.mock.calls.filter(([, args]) => args[0] === 'daemon' && args[1] === 'stop');
+  }
+
   it('leaves a daemon that already carries this scenario marker alone', () => {
     const run = vi.fn();
     const result = ensureDaemonCarriesTripwire({
@@ -232,7 +192,7 @@ describe('the daemon a scenario inherits', () => {
   });
 
   it('stops a daemon carrying this marker but not the headless switch', () => {
-    const run = vi.fn();
+    const run = daemonCli();
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -244,11 +204,11 @@ describe('the daemon a scenario inherits', () => {
     });
 
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(run).toHaveBeenCalled();
+    expect(stopCalls(run)).toHaveLength(1);
   });
 
   it('stops a daemon that predates the tripwire so the app brings up an armed one', () => {
-    const run = vi.fn();
+    const run = daemonCli();
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -259,8 +219,38 @@ describe('the daemon a scenario inherits', () => {
     });
 
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][1]).toEqual(['daemon', 'stop']);
+    expect(stopCalls(run)).toHaveLength(1);
+  });
+
+  it('refuses an armed scenario rather than stopping a daemon whose terminals die with it', () => {
+    const run = daemonCli('embedded');
+
+    expect(() => ensureDaemonCarriesTripwire({
+      ...target,
+      scenarioId: 'PERF-PTY-STREAM',
+      marker: 'shims|claude',
+      armed: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: () => {},
+    })).toThrow(/PERF-PTY-STREAM[\s\S]*pty_backend_mode is "embedded"[\s\S]*ends every terminal it hosts/);
+    expect(stopCalls(run)).toHaveLength(0);
+  });
+
+  it('leaves an embedded daemon running for an unarmed scenario', () => {
+    const run = daemonCli('embedded');
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
+    expect(stopCalls(run)).toHaveLength(0);
   });
 
   it('never stops a production daemon', () => {
@@ -308,7 +298,7 @@ describe('the daemon a scenario inherits', () => {
       readEnvironment: () => 'PATH=/usr/bin',
       run,
       log: () => {},
-    })).toThrow(/a production daemon is never restarted/);
+    })).toThrow(/target refuses a restart[\s\S]*production/);
     expect(run).not.toHaveBeenCalled();
   });
 });

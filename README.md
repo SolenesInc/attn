@@ -16,10 +16,10 @@ agent brains, built as a harness augmenter. What it does today:
 
 - **Durability.** Restart the attn app, its daemon, even your computer. Open
   attn again and your agents and terminals are still there, waiting for you.
-- **Bring your own harness.** attn runs Claude Code, Codex, Pi, and other
-  CLI agents. You get their native experience, but better. A big lab ships
-  a fancy new feature? You get it immediately, as they designed it. Tired of
-  attn? Just use the harness in the terminal.
+- **Bring your own harness.** attn runs Claude Code and Codex as they are,
+  and other CLI agents through plugins. You get their native experience, but
+  better. A big lab ships a fancy new feature? You get it immediately, as they
+  designed it. Tired of attn? Just use the harness in the terminal.
 - **The queue mode.** A (currently non-default) mode for running many agents at
   once with lower cognitive overload. Agents are either "waiting for you" or
   "busy"; after every prompt attn moves you to the next one that needs you, so
@@ -29,8 +29,9 @@ agent brains, built as a harness augmenter. What it does today:
   agents tend them, and they get harvested. Like beads, but inside attn.
 - **Visible orchestration.** Agents delegate to other full-blown agents (not
   subagents) that you can inspect and steer, from any harness to any harness.
-  Plan with Fable in Claude Code, implement with GLM 5.3 in Pi, review in Codex
-  with Sol. Agents can even message each other and arrange a party.
+  Plan with Fable in Claude Code, implement in Codex with Sol, review back in
+  Claude Code with Opus. Agents can even message each other and arrange a
+  party.
 - **Crew members.** Custom permanent agents, each with its own charter. There's
   also the Chief that keeps track of your agents and helps you delegate, the
   executive assistant for your neurospicy brain.

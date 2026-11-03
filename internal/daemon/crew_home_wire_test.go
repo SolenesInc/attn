@@ -130,7 +130,7 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	w := newCrewWorld(t)
 	app, cli := w.App(), w.Client()
 	root := w.Path("own-notebook")
-	setSetting(t, app, "notebook.profile_root", root)
+	setSetting(t, app, "notebook.root", root)
 	if err := os.MkdirAll(filepath.Join(root, crew.HomesDirName, "keel"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 		t.Fatalf("move into a taken folder: %+v", moved)
 	}
 	next := w.Path("next-notebook")
-	setSetting(t, app, "notebook.profile_root", next)
+	setSetting(t, app, "notebook.root", next)
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != home {
 		t.Fatalf("changing the Notebook folder moved the home: %+v", got)
 	}
@@ -273,7 +273,7 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 	}
 	own := createProfile(app, "Own")
 	root := w.Path("own-notebook")
-	setSetting(t, w.AppOn(own.ID), "notebook.profile_root", root)
+	setSetting(t, w.AppOn(own.ID), "notebook.root", root)
 	ownKeel := createCrew(t, w.Client().WithGardenProfile(own.ID, ""), "Keel")
 	if ownKeel.HomeDir != filepath.Join(root, crew.HomesDirName, "keel") {
 		t.Fatalf("a Keel in a profile with its own Notebook: %+v", ownKeel)
@@ -452,7 +452,7 @@ func TestARepointOverlappingAnotherProfilesMemberDoesNotNameIt(t *testing.T) {
 	cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
 	other := createProfile(app, "Other")
 	root := w.Path("other-notebook")
-	setSetting(t, w.AppOn(other.ID), "notebook.profile_root", root)
+	setSetting(t, w.AppOn(other.ID), "notebook.root", root)
 	hidden := createCrew(t, w.Client().WithGardenProfile(other.ID, ""), "Hidden")
 	if err := os.WriteFile(filepath.Join(root, crew.CharterFileName), []byte("# Not Keel\n"), 0o644); err != nil {
 		t.Fatal(err)

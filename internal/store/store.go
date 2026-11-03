@@ -38,10 +38,11 @@ type Store struct {
 	teardownIntents        map[protocol.SessionID]SessionTeardownIntent
 	sessionCloses          map[protocol.SessionID]sessionCloseMark
 	agentMetadata          map[protocol.SessionID]string
-	recentLocations        map[string]*protocol.RecentLocation
+	recentLocations        map[recentLocationKey]*protocol.RecentLocation
 	settings               map[string]string
 	settingCopies          map[string]map[string]string
 	writes                 *tableWrites
+	delegationChanges      changeSignal
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
 	runtimeRecords         map[protocol.SessionID]SessionRuntimeRecords
@@ -65,12 +66,11 @@ type SessionTeardownIntent struct {
 }
 
 type ActiveAgentDriverRun struct {
-	TranscriptPath string
-	SessionID      protocol.SessionID
-	RunID          string
-	Metadata       string
-	Seq            uint64
-	PluginName     string
+	SessionID  protocol.SessionID
+	RunID      string
+	Metadata   string
+	Seq        uint64
+	PluginName string
 }
 
 type TerminalCommand struct {
@@ -81,9 +81,6 @@ type TerminalCommand struct {
 type LaunchIntent struct {
 	Command          *TerminalCommand                    `json:"command,omitempty"`
 	YoloMode         bool                                `json:"yolo_mode,omitempty"`
-	AutoMode         *bool                               `json:"auto_mode,omitempty"`
-	ApprovalPolicy   string                              `json:"approval_policy,omitempty"`
-	SandboxMode      string                              `json:"sandbox_mode,omitempty"`
 	ApprovalRoute    launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`
 	Executable       string                              `json:"executable,omitempty"`
 	Model            string                              `json:"model,omitempty"`
@@ -126,7 +123,7 @@ func newMapBackedStore() *Store {
 		sessionCosts:    make(map[protocol.SessionID]sessioncost.Checkpoint),
 		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
 		agentMetadata:   make(map[protocol.SessionID]string),
-		recentLocations: make(map[string]*protocol.RecentLocation),
+		recentLocations: make(map[recentLocationKey]*protocol.RecentLocation),
 	}
 }
 
@@ -380,11 +377,12 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host, copiedFrom string
 	var isWorktree, priority, commandTerminal int
+	var conversationStarted bool
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -414,7 +412,11 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		&host,
 		&copiedFrom,
 		&commandTerminal,
+		&conversationStarted,
 	)
+	if errors.Is(err, sql.ErrNoRows) && cached {
+		s.sessionRows.putSession(id, gen, nil, false)
+	}
 	if err != nil {
 		return nil, false
 	}
@@ -428,6 +430,9 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 
 	if commandTerminal != 0 {
 		session.CommandTerminal = protocol.Ptr(true)
+	}
+	if conversationStarted {
+		session.ConversationStarted = protocol.Ptr(true)
 	}
 	if priority != 0 {
 		session.Priority = protocol.Ptr(true)
@@ -476,6 +481,7 @@ var sessionOwnedTables = []string{
 	"session_runtime",
 	"session_annotation_drafts",
 	"session_exit_screens",
+	"session_focus",
 }
 
 func (s *Store) Remove(id protocol.SessionID) []string {
@@ -567,11 +573,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -586,6 +592,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
 		var isWorktree, priority, commandTerminal int
+		var conversationStarted bool
 		var contextWindowCap int
 		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
@@ -617,6 +624,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&priority,
 			&host,
 			&commandTerminal,
+			&conversationStarted,
 		)
 		if err != nil {
 			continue
@@ -631,6 +639,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 		if commandTerminal != 0 {
 			session.CommandTerminal = protocol.Ptr(true)
+		}
+		if conversationStarted {
+			session.ConversationStarted = protocol.Ptr(true)
 		}
 		if priority != 0 {
 			session.Priority = protocol.Ptr(true)
@@ -680,7 +691,30 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	return result
 }
 
-func (s *Store) HasStartedConversationIn(directories []string) bool {
+func (s *Store) StartedConversationDirectories(profileID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`
+		SELECT DISTINCT s.directory FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
+		WHERE s.profile_id = ? AND s.agent != ? AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, profileID, protocol.AgentShellValue)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var directories []string
+	for rows.Next() {
+		var directory string
+		if rows.Scan(&directory) == nil {
+			directories = append(directories, directory)
+		}
+	}
+	return directories
+}
+
+func (s *Store) HasStartedConversationIn(profileID string, directories []string) bool {
 	if len(directories) == 0 {
 		return false
 	}
@@ -692,7 +726,7 @@ func (s *Store) HasStartedConversationIn(directories []string) bool {
 		return false
 	}
 
-	args := []any{protocol.AgentShellValue}
+	args := []any{profileID, protocol.AgentShellValue}
 	for _, directory := range directories {
 		args = append(args, directory)
 	}
@@ -700,7 +734,7 @@ func (s *Store) HasStartedConversationIn(directories []string) bool {
 	err := s.db.QueryRow(`
 		SELECT EXISTS(
 			SELECT 1 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
-			WHERE s.agent != ?
+			WHERE s.profile_id = ? AND s.agent != ?
 				AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')
 				AND s.directory IN (?`+strings.Repeat(", ?", len(directories)-1)+`))`, args...).Scan(&started)
 	return err == nil && started
@@ -1136,12 +1170,11 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 				continue
 			}
 			runs = append(runs, ActiveAgentDriverRun{
-				SessionID:      sessionID,
-				RunID:          strings.TrimSpace(cursor.RunID),
-				Metadata:       strings.TrimSpace(s.agentMetadata[sessionID]),
-				Seq:            cursor.Seq,
-				PluginName:     strings.TrimSpace(cursor.PluginName),
-				TranscriptPath: strings.TrimSpace(s.agentDriverTranscripts[sessionID]),
+				SessionID:  sessionID,
+				RunID:      strings.TrimSpace(cursor.RunID),
+				Metadata:   strings.TrimSpace(s.agentMetadata[sessionID]),
+				Seq:        cursor.Seq,
+				PluginName: strings.TrimSpace(cursor.PluginName),
 			})
 		}
 		sort.Slice(runs, func(i, j int) bool { return runs[i].SessionID < runs[j].SessionID })
@@ -1149,8 +1182,7 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq, agent_driver_plugin_name,
-			agent_driver_transcript_path
+		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq, agent_driver_plugin_name
 		FROM sessions_with_runtime
 		WHERE agent_driver_run_id <> '' AND closed_at = ''
 		ORDER BY id`)
@@ -1161,15 +1193,12 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	var runs []ActiveAgentDriverRun
 	for rows.Next() {
 		var run ActiveAgentDriverRun
-		if err := rows.Scan(
-			&run.SessionID, &run.RunID, &run.Metadata, &run.Seq, &run.PluginName, &run.TranscriptPath,
-		); err != nil {
+		if err := rows.Scan(&run.SessionID, &run.RunID, &run.Metadata, &run.Seq, &run.PluginName); err != nil {
 			return nil
 		}
 		run.RunID = strings.TrimSpace(run.RunID)
 		run.Metadata = strings.TrimSpace(run.Metadata)
 		run.PluginName = strings.TrimSpace(run.PluginName)
-		run.TranscriptPath = strings.TrimSpace(run.TranscriptPath)
 		runs = append(runs, run)
 	}
 	return runs
@@ -2018,8 +2047,13 @@ func frecencyScore(useCount int, lastSeen string, now time.Time) float64 {
 	}
 }
 
-func (s *Store) UpsertRecentLocation(path string) {
-	path = resolveRecentLocationPath(path)
+type recentLocationKey struct{ host, path string }
+
+func (s *Store) UpsertRecentLocation(host, path, repoRoot string) {
+	if host == "" {
+		path, repoRoot = resolveRecentLocationPath(path), ""
+	}
+	key := recentLocationKey{host, path}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -2027,15 +2061,18 @@ func (s *Store) UpsertRecentLocation(path string) {
 	now := time.Now().Format(time.RFC3339)
 	if s.db == nil {
 		if s.recentLocations == nil {
-			s.recentLocations = make(map[string]*protocol.RecentLocation)
+			s.recentLocations = make(map[recentLocationKey]*protocol.RecentLocation)
 		}
-		if existing := s.recentLocations[path]; existing != nil {
+		if existing := s.recentLocations[key]; existing != nil {
 			existing.LastSeen = now
 			existing.UseCount++
+			existing.RepoRoot = nonEmptyPtr(repoRoot)
 			return
 		}
-		s.recentLocations[path] = &protocol.RecentLocation{
+		s.recentLocations[key] = &protocol.RecentLocation{
+			Host:     nonEmptyPtr(host),
 			Path:     path,
+			RepoRoot: nonEmptyPtr(repoRoot),
 			LastSeen: now,
 			UseCount: 1,
 		}
@@ -2043,15 +2080,23 @@ func (s *Store) UpsertRecentLocation(path string) {
 	}
 
 	s.execLog(`
-		INSERT INTO recent_locations (path, last_seen, use_count)
-		VALUES (?, ?, 1)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO recent_locations (host, path, repo_root, last_seen, use_count)
+		VALUES (?, ?, NULLIF(?, ''), ?, 1)
+		ON CONFLICT(host, path) DO UPDATE SET
+			repo_root = excluded.repo_root,
 			last_seen = excluded.last_seen,
 			use_count = use_count + 1`,
-		path, now)
+		host, path, repoRoot, now)
 }
 
-func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
+func nonEmptyPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return protocol.Ptr(value)
+}
+
+func (s *Store) GetRecentLocations(limit int, homeOnly bool) []*protocol.RecentLocation {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -2060,49 +2105,55 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	var raw []*protocol.RecentLocation
 	if s.db == nil {
 		raw = make([]*protocol.RecentLocation, 0, len(s.recentLocations))
-		for _, loc := range s.recentLocations {
+		for key, loc := range s.recentLocations {
+			if homeOnly && key.host != "" {
+				continue
+			}
 			cloned := *loc
 			raw = append(raw, &cloned)
 		}
 	} else {
 		rows, err := s.db.Query(`
-			SELECT path, last_seen, use_count
-			FROM recent_locations`)
+			SELECT host, path, COALESCE(repo_root, ''), last_seen, use_count
+			FROM recent_locations
+			WHERE host = '' OR NOT ?`, homeOnly)
 		if err != nil {
 			s.mu.RUnlock()
 			return nil
 		}
 		for rows.Next() {
 			var loc protocol.RecentLocation
-			if err := rows.Scan(&loc.Path, &loc.LastSeen, &loc.UseCount); err != nil {
+			var host, repoRoot string
+			if err := rows.Scan(&host, &loc.Path, &repoRoot, &loc.LastSeen, &loc.UseCount); err != nil {
 				continue
 			}
+			loc.Host, loc.RepoRoot = nonEmptyPtr(host), nonEmptyPtr(repoRoot)
 			raw = append(raw, &loc)
 		}
 		rows.Close()
 	}
 	s.mu.RUnlock()
 
-	var toDelete []string
-	merged := make(map[string]*protocol.RecentLocation, len(raw))
+	var missingHere []string
+	merged := make(map[recentLocationKey]*protocol.RecentLocation, len(raw))
 	for _, loc := range raw {
-		if _, err := os.Stat(loc.Path); os.IsNotExist(err) {
-			toDelete = append(toDelete, loc.Path)
-			continue
+		if loc.Host == nil {
+			if _, err := os.Stat(loc.Path); os.IsNotExist(err) {
+				missingHere = append(missingHere, loc.Path)
+				continue
+			}
+			resolved, repoRoot := recentLocationTarget(loc.Path)
+			loc.Path, loc.RepoRoot = resolved, nonEmptyPtr(repoRoot)
 		}
-		resolved, repoRoot := recentLocationTarget(loc.Path)
-		if repoRoot != "" {
-			loc.RepoRoot = protocol.Ptr(repoRoot)
-		}
-		if existing := merged[resolved]; existing != nil {
+		key := recentLocationKey{protocol.Deref(loc.Host), loc.Path}
+		if existing := merged[key]; existing != nil {
 			existing.UseCount += loc.UseCount
 			if loc.LastSeen > existing.LastSeen {
 				existing.LastSeen = loc.LastSeen
 			}
 			continue
 		}
-		loc.Path = resolved
-		merged[resolved] = loc
+		merged[key] = loc
 	}
 
 	result := make([]*protocol.RecentLocation, 0, len(merged))
@@ -2119,63 +2170,26 @@ func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 		if result[i].LastSeen != result[j].LastSeen {
 			return result[i].LastSeen > result[j].LastSeen
 		}
-		return result[i].Path < result[j].Path
+		if result[i].Path != result[j].Path {
+			return result[i].Path < result[j].Path
+		}
+		return protocol.Deref(result[i].Host) < protocol.Deref(result[j].Host)
 	})
 	if len(result) > limit {
 		result = result[:limit]
 	}
 
-	if len(toDelete) > 0 && s.db != nil {
+	if len(missingHere) > 0 && s.db != nil {
 		go func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			for _, path := range toDelete {
-				s.execLog("DELETE FROM recent_locations WHERE path = ?", path)
+			for _, path := range missingHere {
+				s.execLog("DELETE FROM recent_locations WHERE host = '' AND path = ?", path)
 			}
 		}()
 	}
 
 	return result
-}
-
-func (s *Store) CleanupStaleLocations(maxAge time.Duration) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		cutoff := time.Now().Add(-maxAge)
-		removed := 0
-		for path, loc := range s.recentLocations {
-			lastSeen, err := time.Parse(time.RFC3339, loc.LastSeen)
-			if err != nil || lastSeen.Before(cutoff) {
-				delete(s.recentLocations, path)
-				removed++
-			}
-		}
-		return removed
-	}
-
-	cutoff := time.Now().Add(-maxAge).Format(time.RFC3339)
-	result, err := s.db.Exec("DELETE FROM recent_locations WHERE last_seen < ?", cutoff)
-	if err != nil {
-		log.Printf("[store] CleanupStaleLocations: failed: %v", err)
-		return 0
-	}
-
-	affected, _ := result.RowsAffected()
-	return int(affected)
-}
-
-func (s *Store) RemoveRecentLocation(path string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		delete(s.recentLocations, path)
-		return
-	}
-
-	s.execLog("DELETE FROM recent_locations WHERE path = ?", path)
 }
 
 func boolToInt(b bool) int {

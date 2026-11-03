@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { LauncherIcon } from './LauncherIcon';
 
 export type WhereRow =
   | { kind: 'new'; from: 'default' | 'current'; branch: string }
@@ -63,15 +64,9 @@ export function WhereList({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onPick(index)}
           >
-            <span className="launcher-icon">
-              {row.kind === 'existing' && deletion?.path === row.path
-                ? '⌫'
-                : row.kind === 'new'
-                  ? '⎇'
-                  : row.kind === 'main'
-                    ? '●'
-                    : '◎'}
-            </span>
+            <LauncherIcon
+              kind={row.kind === 'existing' && deletion?.path === row.path ? 'delete' : row.kind}
+            />
             <div className="picker-info">
               <div className="picker-name">
                 {row.kind === 'existing' && deletion?.path === row.path

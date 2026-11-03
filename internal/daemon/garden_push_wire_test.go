@@ -95,7 +95,7 @@ func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
 
 	harvestArm(t, cli, shipper, seed, url)
 	changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
-		return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Status == "dormant"
+		return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Status == "parked"
 	})
 	if changed.Seeds[0].HarvestWhen == nil {
 		t.Fatalf("the change after arming carries %+v, want the armed seed waiting on its pull request", changed.Seeds[0])

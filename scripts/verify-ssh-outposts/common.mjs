@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
@@ -5,7 +6,15 @@ import { once } from 'node:events';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
+export const outpostNotebookCopy = (base, homeFolder) =>
+  `${base}-${path.basename(homeFolder).toLowerCase().replace(/[^a-z0-9._-]/g, '-')}-${crypto.createHash('sha256').update(homeFolder).digest('hex').slice(0, 8)}`;
 export const quote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
+
+export const { DaemonObserver } = await import('../../app/scripts/real-app-harness/daemonObserver.mjs').catch(error => {
+  if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  console.error(`The outpost checks drive the home daemon through the app's real-app harness, which needs the app's packages: ${error.message}\nRun: pnpm --dir app install`);
+  process.exit(1);
+});
 
 export async function world(o) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(o.instance) || o.instance === 'default') throw new Error('a named instance is required');
@@ -15,7 +24,6 @@ export async function world(o) {
     ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'worker' };
   for (const key of Object.keys(process.env)) if (key.startsWith('ATTN_')) delete process.env[key];
   Object.assign(process.env, env);
-  const { DaemonObserver } = await import('../../app/scripts/real-app-harness/daemonObserver.mjs');
   const started = performance.now();
   const receipts = [];
   const receipt = (what, data = {}) => {
@@ -37,9 +45,9 @@ export async function world(o) {
     W.R.binary = `${remoteHome}/.local/share/attn-outpost-instances/${o.instance}/attn`;
     W.rcli = (...args) => remote(`ATTN_INSTANCE=${quote(o.instance)} ${quote(W.R.binary)} ${args.map(quote).join(' ')}`);
     W.R.data = `${remoteHome}/.attn-${o.instance}`;
-    W.R.notebook = `${remoteHome}/attn-notebook-${o.instance}`;
+    W.R.notebookBase = `${remoteHome}/attn-notebook-${o.instance}`;
     W.R.root = o.scratch;
-    await remote(`test ! -e ${quote(W.R.binary)}; test ! -e ${quote(W.R.data)}; test ! -e ${quote(W.R.notebook)}; mkdir -p ${quote(path.dirname(W.R.root))}
+    await remote(`test ! -e ${quote(W.R.binary)}; test ! -e ${quote(W.R.data)}; test -z "$(ls -d ${quote(W.R.notebookBase)}-* 2>/dev/null)"; mkdir -p ${quote(path.dirname(W.R.root))}
       if test -e ${quote(W.R.root)}; then echo ${quote(`refusing existing remote scratch ${W.R.root}: the run removes the scratch it creates, so pass a --scratch or --instance whose scratch path does not exist`)} >&2; exit 1; fi
       mkdir ${quote(W.R.root)}`);
     W.remoteReady = true;
@@ -58,6 +66,7 @@ export async function world(o) {
     await W.observer.connect();
     fs.mkdirSync(notebookRoot, { recursive: true });
     await attn('settings', 'set', 'notebook.root', notebookRoot);
+    W.R.notebook = outpostNotebookCopy(W.R.notebookBase, path.resolve(notebookRoot));
     await attn('settings', 'set', 'outposts_enabled', 'true');
     receipt('home started', { pid: W.home.pid, data: W.macData });
   };

@@ -720,6 +720,8 @@ func (b *WorkerBackend) liveSharedHost(ctx context.Context, artifactID string) (
 	return ptyhost.HostRegistry{}, false
 }
 
+const sharedHostReadyPollInterval = 100 * time.Millisecond
+
 var (
 	errHostNotLaunched = errors.New("shared PTY host could not be launched")
 	errHostNotReady    = errors.New("shared PTY host did not become ready")
@@ -812,7 +814,7 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 		if !pidAlive(pid) {
 			return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host exited before ready: %v", lastErr)
 		}
-		timer := time.NewTimer(spawnReadyPollInterval)
+		timer := time.NewTimer(sharedHostReadyPollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

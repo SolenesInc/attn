@@ -86,19 +86,19 @@ func TestAgentReloadCLIUsesThePaletteLifecycleAndReportsBatchFailures(t *testing
 }
 
 func TestAgentReloadContinuesAfterARelaunchFailure(t *testing.T) {
-	w := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Pi))
+	w := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Plug))
 	w.Start()
 	app, cli := w.App(), w.Client()
-	if app.Initial.Settings["pi_available"] != "true" {
-		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["pi_available"] == "true" })
+	if app.Initial.Settings["plug_available"] != "true" {
+		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["plug_available"] == "true" })
 	}
 	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	w.Launched(chief)
-	plugin := w.Spawn(app, fakeagent.Pi, w.Path("plugin"))
+	plugin := w.Spawn(app, fakeagent.Plug, w.Path("plugin"))
 	first := w.Launched(plugin)
 	worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"))
 	w.Launched(worker)
-	allow := w.RefusePiLaunches("the pi session store is locked")
+	allow := w.RefusePlugLaunches("the plug session store is locked")
 	result, err := cli.AgentReload([]string{plugin, worker}, protocol.SessionID(chief), false)
 	allow()
 	if err != nil || len(result.Outcomes) != 2 || result.Outcomes[0].Success || !strings.Contains(protocol.Deref(result.Outcomes[0].Error), "store is locked") || !result.Outcomes[1].Success {

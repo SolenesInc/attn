@@ -27,7 +27,7 @@ terminal                one PTY process in a terminal tile
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
 └─ offline             its host is unreachable (bridge lost or refused, or
                        Outposts off); typing is not sent
-harness                 the agent CLI: Claude Code, Codex, pi, Nisse
+harness                 the agent CLI: Claude Code, Codex, Nisse
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
@@ -35,8 +35,8 @@ link                    a way attn reaches a harness besides its terminal,
                         such as the shared Codex app-server or the Nisse
                         server; a session runs over the link its
                         conversation runs on now
-agent                   a harness that runs in a terminal; the user talks to
-                        them; like a coding agent
+agent                   a harness that runs in a terminal, which the user talks
+                        to; like a coding agent
 ├─ session (1 at a time)
 └─ state (1)            what the agent is doing now; like a presence status
    ├─ launching         starting up
@@ -46,7 +46,7 @@ agent                   a harness that runs in a terminal; the user talks to
    ├─ scheduled         will continue by itself at a set time
    ├─ idle              nothing to do
    ├─ recoverable       stopped; attn can bring it back
-   └─ unknown           attn cannot tell; may be an error
+   └─ unknown           attn cannot tell; it may be an error
 session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
@@ -56,8 +56,9 @@ session                 attn's record of one conversation in one profile; like
 │                       the terminal shows that conversation's session
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
-├─ stake (at most 1)    the seed assigned to the session by its delegation;
-│                       it tends it and reports there; like an assignment
+├─ stake (at most 1)    the seed the delegation assigned to the session. The
+│                       session tends that seed and reports there; like an
+│                       assignment
 ├─ vent (0..n)          an agent's report of a problem they had; like a bug
 │  │                    report
 │  ├─ attn vent         about attn itself; only these can go to attn's
@@ -88,7 +89,7 @@ address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
 ├─ inbox (1)
-│  └─ item (0..n)       peer message, seed update, quick capture,
+│  └─ item (0..n)       peer message, seed update, user input,
 │                       PR watch update or notice
 └─ ask (0..n)           a question an agent sends the user, who answers in
                         their own time; like a decision request
@@ -102,12 +103,16 @@ ring                    one prompt for an agent with unread items: it types
                         answers and quick captures as the user's message and
                         tells of the rest; like a push notification
 quick capture           a quick message (with optional attachments) the user
-                        can send to chief or crew, from outside attn, using a
-                        global shortcut; like macOS Quick Note
+                        sends from outside attn: to chief or crew with a global
+                        shortcut, or to any session through a paired sender;
+                        like macOS Quick Note
+paired sender           a program the user allowed in the app to send quick
+                        captures as them with attn send, to the sessions of
+                        the profile it was allowed in; like an OAuth client
 ```
 
 ```text
-flow (1 per profile)      how the user works with attn and their agents:
+flow (1)                  how the user works with attn and their agents:
                           what asks for attention and how they move to it
 ├─ queue flow             attn brings the next turn to the user; like working
 │                         an inbox to zero
@@ -116,6 +121,9 @@ flow (1 per profile)      how the user works with attn and their agents:
 queue                     agents in order of the attention they are owed
 └─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
                                agent stops, or when it asks (attn turn open)
+run                       one stretch of agent work, from the moment the
+                          agent goes working to its stop; an approval wait
+                          does not end it
 notification run          a run that attn's own input started, such as a ring;
                           with quiet notifications its stop opens no turn
 snooze                    puts off a turn until a set time
@@ -128,10 +136,13 @@ garden                  a profile's issue tracker
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
    ├─ tender (at most 1)  the assignee: the session or crew member
+   ├─ authorization (at most 1)  the user's words for what agents may do on
+   │                    the seed without asking, and where they stop
    ├─ watcher (0..n)    a session or crew member that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ log entry (0..n)  a line in the ticket's log: a note, move, link, edit,
-   │  │                 check or answer; like an entry in a ticket's history
+   │  │                 check, answer or authorization; like an entry in a
+   │  │                 ticket's history
    │  └─ note           a log entry someone wrote; like a comment
    ├─ check (0..n)      something the seed must prove, numbered like C1; like
    │  │                 an acceptance criterion
@@ -155,6 +166,7 @@ crew member             an agent with a permanent identity
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
 chief                   the crew member that coordinates one profile
+crew v2                 experimental setting: the chief is a crew member
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
 wake                    starts a session for the member
@@ -269,7 +281,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - handoff (crew) → letter
 - day (crew) → session
 - continuity thread → continuity
-- dormant → parked
 - dock panel → drawer
 - active leaf, active pane → active tile
 - leaf history → tile history
@@ -280,10 +291,8 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 
 ### Changes to make
 
-- Flow is one daemon-wide setting (`queue_mode_enabled`). Make it 1 per profile.
 - Named claims let any name tend a seed. Remove them, or define who can use
   them.
-- The chief is not a crew member. Make it one.
 - A seed watch belongs to a session. Make it belong to an address, so a crew
   member's watch outlives their session.
 - Prompts say hold, held and holder for a claimed seed

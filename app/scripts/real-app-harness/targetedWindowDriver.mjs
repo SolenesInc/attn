@@ -44,40 +44,33 @@ export class TargetedWindowDriver {
       return await this.client.request(`${prefix}wait_native_input_witness`, {});
     } catch (error) {
       throw new Error(`${action} was sent but the app did not receive it: ${error?.message || error}. `
-        + 'Input that lands in a browser tile page, or that replaces the page receiving it, has no receipt; '
+        + 'Input that lands in a browser tile page, starts a native window drag, or replaces the page receiving it, '
+        + 'and a system-input click on a macOS window that is not key, have no receipt; '
         + 'pass { withoutReceipt: \'<why>\' } for it.', { cause: error });
     }
   }
 
-  async #press(target, action, opts) {
+  async #aimed(target, { action, gesture, name }, opts) {
     const point = await this.pointOf(target);
     const receipt = await this.#delivered({
       webview: webviewOf(target),
-      expectation: { gesture: 'pointer', selector: selectorOf(target) },
-      action: `${action}(${JSON.stringify(target)})`,
+      expectation: { gesture, selector: selectorOf(target) },
+      action: `${name}(${JSON.stringify(target)})`,
       opts,
     }, () => this.#pointer({ action, point, opts }));
     return { ...point, receipt };
   }
 
   async click(target, opts = {}) {
-    return this.#press(target, 'click', opts);
+    return this.#aimed(target, { action: 'click', gesture: 'pointer', name: 'click' }, opts);
   }
 
   async rightClick(target, opts = {}) {
-    return this.#press(target, 'right_click', opts);
+    return this.#aimed(target, { action: 'right_click', gesture: 'pointer', name: 'rightClick' }, opts);
   }
 
   async hover(target, opts = {}) {
-    const point = await this.pointOf(target);
-    await this.#pointer({ action: 'move', point, opts });
-    return point;
-  }
-
-  async scroll(target, deltaY, opts = {}) {
-    const point = await this.pointOf(target);
-    await this.#pointer({ action: 'scroll', point, deltaY, opts });
-    return point;
+    return this.#aimed(target, { action: 'move', gesture: 'move', name: 'hover' }, opts);
   }
 
   async drag(fromTarget, toTarget, opts = {}) {
@@ -100,7 +93,15 @@ export class TargetedWindowDriver {
     return { from, to, receipt };
   }
 
+  get keysReachWebview() {
+    return true;
+  }
+
   async #keys(stroke, strokes, action, opts) {
+    if (this.client && !this.keysReachWebview && !opts.withoutReceipt) {
+      throw new Error(`${action} goes through system input, which reaches whichever window is key, `
+        + 'so no webview can confirm it; pass { withoutReceipt: \'<why>\' } and wait for its effect.');
+    }
     return this.#delivered({
       webview: 'main',
       expectation: { gesture: 'keys', strokes },
@@ -117,8 +118,8 @@ export class TargetedWindowDriver {
     return this.#keys({ kind: 'keycode', keyCode, modifiers }, 1, `pressKeyCode(${keyCode}, ${JSON.stringify(modifiers)})`, opts);
   }
 
-  async pressEnter(opts = {}) {
-    return this.pressKeyCode(ENTER_KEY_CODE, {}, opts);
+  async pressEnter(modifiers = {}, opts = {}) {
+    return this.pressKeyCode(ENTER_KEY_CODE, modifiers, opts);
   }
 
   async typeText(text, opts = {}) {

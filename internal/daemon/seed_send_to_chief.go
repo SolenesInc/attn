@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"fmt"
 	"net"
 	"strings"
 
@@ -77,16 +76,16 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, s
 func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID string) (*protocol.SeedSendToChiefResult, error) {
 	chief, ok := d.chiefParty(profileID)
 	if !ok && d.crewV2Enabled() {
-		return nil, fmt.Errorf("this profile has no Chief yet; attn creates it at the next daemon start")
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief yet; attn creates it at the next daemon start")
 	}
 	if !ok {
-		return nil, fmt.Errorf("this profile has no Chief; make one of its agents the Chief first")
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief; make one of its agents the Chief first")
 	}
 	chiefSessionID, _ := d.liveSessionOf(chief)
 	seedID := strings.TrimSpace(msg.SeedID)
 	guidance := strings.TrimSpace(protocol.Deref(msg.Guidance))
 	if len(guidance) > garden.MaxNoteBytes/2 {
-		return nil, fmt.Errorf("chief guidance is %d bytes and the limit is %d", len(guidance), garden.MaxNoteBytes/2)
+		return nil, protocol.Refuse(protocol.RefusalLimit, "chief guidance is %d bytes and the limit is %d", len(guidance), garden.MaxNoteBytes/2)
 	}
 
 	var reviewItem garden.ReviewItem
@@ -97,7 +96,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 		}
 		reviewItem = item
 		if item.SeedRev != int64(msg.ExpectedRev) {
-			return nil, fmt.Errorf("%s changed since you reviewed it; refresh the garden", seedID)
+			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you reviewed it; refresh the garden", seedID)
 		}
 	}
 
@@ -106,10 +105,10 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 		return nil, err
 	}
 	if garden.Closed(seed.Status) {
-		return nil, fmt.Errorf("%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before sending it to Chief", seed.ID, seed.Status)
 	}
 	if msg.ExpectedRev <= 0 || int(doc.Rev) != msg.ExpectedRev {
-		return nil, fmt.Errorf("%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
+		return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed since you opened it; refresh it before sending it to Chief", seed.ID)
 	}
 	unclaimed := seed
 	unclaimed.Tender = who.Party{}
@@ -152,7 +151,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 	d.unlockGardenRoles()
 	if err != nil {
 		if docstore.IsConflict(err) {
-			return nil, fmt.Errorf("%s changed while it was being sent to Chief; refresh the garden", seed.ID)
+			return nil, protocol.Refuse(protocol.RefusalConflict, "%s changed while it was being sent to Chief; refresh the garden", seed.ID)
 		}
 		return nil, err
 	}

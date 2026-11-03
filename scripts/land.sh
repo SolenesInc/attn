@@ -17,11 +17,15 @@ protocol_outputs=(
   internal/protocol/protocol_version.go
   app/src/types/generated.ts
   app/src/types/protocolVersion.ts
+  internal/protocol/gateway/generated.go
+  internal/protocol/gateway/schema.json
+  internal/protocol/gateway/version.go
+  app/src/types/gatewayGenerated.ts
+  app/src/types/gatewayVersion.ts
 )
 prompt_outputs=(
   internal/prompts/catalog.generated.json
   app/src/prompts/catalog.generated.json
-  plugins/attn-pi/automode/prompts.generated.json
 )
 
 fail() {
@@ -92,8 +96,74 @@ Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
   git merge-base --is-ancestor origin/main HEAD || fail "could not rebase onto origin/main; run git rebase origin/main to see why"
 }
 
+script_test_words() {
+  local files=("$1") seen=$'\n' i=0 file word path
+  while [ "$i" -lt "${#files[@]}" ]; do
+    file="${files[$i]}"
+    i=$((i + 1))
+    grep -oE '(^|[^A-Za-z0-9_])root/[A-Za-z0-9_./-]+' "$file" | sed -E 's#^.?root/#root/#; s#/+$##' || true
+    for word in $(grep -oE '[A-Za-z0-9_.-]+' "$file" | sort -u); do
+      echo "$word"
+      for path in "scripts/$word" "scripts/lib/$word"; do
+        case "$path" in *_test.sh) continue ;; esac
+        [ -f "$path" ] || continue
+        case "$seen" in *$'\n'"$path"$'\n'*) continue ;; esac
+        seen+="$path"$'\n'
+        files+=("$path")
+      done
+    done
+  done
+}
+
+script_test_covers() {
+  local file="$1" words="$2" name path
+  case "$file" in
+    scripts/*)
+      name="${file#scripts/}"
+      name="${name#lib/}"
+      grep -qxF -- "${name%%/*}" <<<"$words"
+      ;;
+    *)
+      path="$file"
+      while :; do
+        grep -qxF -- "root/$path" <<<"$words" && return 0
+        case "$path" in */*) path="${path%/*}" ;; *) return 1 ;; esac
+      done
+      ;;
+  esac
+}
+
+script_tests_for() {
+  local script_test file words covered_by covered=$'\n' uncovered="" all=() selected=()
+  compgen -G 'scripts/*_test.sh' >/dev/null || return 0
+  for script_test in scripts/*_test.sh; do
+    all+=("$script_test")
+    words="$(script_test_words "$script_test")"
+    covered_by=""
+    while IFS= read -r file; do
+      if [ "$file" = "$script_test" ] || script_test_covers "$file" "$words"; then
+        covered_by+=" $file"
+        covered+="$file"$'\n'
+      fi
+    done <<<"$1"
+    if [ -n "$covered_by" ]; then
+      selected+=("$script_test")
+      echo "land: script test $script_test, for$covered_by" >&2
+    fi
+  done
+  while IFS= read -r file; do
+    case "$file" in scripts/*) ;; *) continue ;; esac
+    case "$covered" in *$'\n'"$file"$'\n'*) ;; *) uncovered+=" $file" ;; esac
+  done <<<"$1"
+  if [ -n "$uncovered" ]; then
+    echo "land: no script test names$uncovered; running every script test" >&2
+    selected=("${all[@]}")
+  fi
+  if [ "${#selected[@]}" -gt 0 ]; then echo "${selected[*]}"; fi
+}
+
 run_checks() {
-  local changed file dir packages group pattern targets=() landing_groups=()
+  local changed file dir packages group pattern script_tests targets=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
   if touches '\.go$|^go\.(mod|sum)$'; then
@@ -114,9 +184,16 @@ run_checks() {
     targets+=(check-go "GO_PACKAGES=$packages")
   fi
   touches '^internal/protocol/schema/' && targets+=(check-types)
+  touches '^internal/protocol/(schema/gateway\.tsp|gateway/)' && targets+=(check-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
-  touches '^scripts/' && targets+=(test-scripts)
+  touches '^mobile/|^app/src/gateway/|^app/src/types/gateway|^internal/cloudlink/testdata/' && targets+=(check-mobile)
+  script_tests="$(script_tests_for "$changed")"
+  if [ -n "$script_tests" ]; then
+    targets+=(test-scripts "SCRIPT_TESTS=$script_tests")
+  elif touches '^scripts/'; then
+    echo "land: the checkout has no script tests"
+  fi
   while read -r _ group pattern; do
     touches "$pattern" && landing_groups+=("$group")
   done < <(awk '$1 == "group"' scripts/landing-tests)
@@ -157,8 +234,6 @@ sync_history() {
   [ "$landing_tests" = selected ] || return 0
   go tool test-history sync || echo "land: $1" >&2
 }
-
-sync_history "choosing landing tests from the history already synced"
 
 for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main

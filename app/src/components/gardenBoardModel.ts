@@ -1,4 +1,4 @@
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed } from '../types/generated';
 
 export type ColumnKey = 'ready' | 'growing' | 'parked' | 'closed';
 
@@ -25,15 +25,15 @@ export function heldByOther(seed: Seed, sessionLabels?: SessionLabels): string {
 
 export function columnOf(seed: Seed): ColumnKey {
   if (CLOSED.has(seed.status)) return 'closed';
-  if (seed.status === 'dormant') return 'parked';
+  if (seed.status === 'parked') return 'parked';
   if (seed.status === 'growing') return 'growing';
   return 'ready';
 }
 
 // The garden's own lifecycle table (internal/garden/lifecycle.go) read from the board's side.
-export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
+export function legalVerbs(seed: Pick<Seed, 'status'>, target: ColumnKey): Verb[] {
   const status = seed.status;
-  const open = status === 'planted' || status === 'growing' || status === 'dormant';
+  const open = status === 'planted' || status === 'growing' || status === 'parked';
   switch (target) {
     case 'closed':
       return open ? ['harvest', 'wither'] : [];
@@ -48,7 +48,7 @@ export function legalVerbs(seed: Seed, target: ColumnKey): Verb[] {
 
 // The verbs a card offers on its own. The keyboard path and the drag path must never disagree,
 // so they read the same table.
-export function verbsFor(seed: Seed): Verb[] {
+export function verbsFor(seed: Pick<Seed, 'status'>): Verb[] {
   const columns: ColumnKey[] = ['growing', 'parked', 'closed', 'ready'];
   return columns.flatMap((column) => legalVerbs(seed, column));
 }

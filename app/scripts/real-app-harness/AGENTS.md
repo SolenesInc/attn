@@ -11,8 +11,11 @@ repository root.
   On a shared Mac, use `--no-fresh-world` or invoke a focus-free scenario
   directly: the default fresh-world cleanup selects worker PIDs by pattern.
 - The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
-  Production needs an empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and
-  explicit approval.
+  An `--app-path` that names another instance is refused. Production needs an
+  empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and explicit approval.
+- The runner's tripwire preflight and the perf scenarios' profiling restarts
+  stop a daemon that predates the run only when its terminals outlive it, so
+  never one on the embedded backend.
 - Install the current checkout first; a stale build fails its fingerprint check.
 - Hunt CI flakes with
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
@@ -32,13 +35,13 @@ repository root.
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
-  `menu` and scrolling; on Linux, `xdotool` focuses the window the app reports
-  through the client and moves the pointer. Shared-Mac runs keep the parked
-  launch and never use activation, `menu`, scrolling or physical input; see the
+  `menu`; on Linux, `xdotool` focuses the window the app reports through the
+  client and moves the pointer. Shared-Mac runs keep the parked
+  launch and never use activation, `menu` or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
 - Point every native pointer action at an element: `driver.click`,
-  `rightClick`, `hover`, `scroll`, `drag` and `typeInto` take a selector or
+  `rightClick`, `hover`, `drag` and `typeInto` take a selector or
   `{ selector, at, offset }` (`at` is a fraction of the box, default its
   center; `offset` adds CSS pixels). Before measuring, the app waits for the
   element to appear and for it and its ancestors to stop moving, and scrolls
@@ -49,40 +52,49 @@ repository root.
   `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
   Quick Capture targets add `webview: 'capture'`, and its driver takes
   `systemInput: true` to keep system-level input.
-- Native input waits for delivery. `click`, `rightClick`, `drag`, `typeInto`,
-  `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return only after
-  the webview that should receive the input sees the trusted mouseup, or one
-  keyup per stroke, and settles, so the next read sees the input's effect.
-  Pointer input arms its target's webview; keys arm the main webview. Pointer
-  actions return the `receipt`; `receipt.matches` says whether the release
-  landed on the aimed selector. Input that lands in a browser tile page, starts
-  a native window drag, or replaces the page receiving it has no receipt: pass
-  `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers` for
-  `pressKey` and `pressKeyCode`. `hover` and `scroll` have no receipt.
+- Native input waits for delivery. `click`, `rightClick`, `drag`, `hover`,
+  `typeInto`, `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return
+  only after the webview that should receive the input sees the trusted
+  mouseup, the trusted mousemove for `hover`, or one keyup per stroke, so the
+  next read sees the input's effect. Pointer input arms its target's webview;
+  keys arm the main webview. Pointer actions return the `receipt`;
+  `receipt.matches` says whether the event landed on the aimed selector. Input
+  that lands in a browser tile page, starts a native window drag, or replaces
+  the page receiving it has no receipt, and neither does a system-input click
+  on a macOS window that is not key: that click only makes the window key. Nor
+  do keys from a `systemInput: true` driver, which reach whichever window is
+  key and paste text as one keystroke; the driver refuses them unreceipted.
+  Pass `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers`
+  for `pressKey` and `pressKeyCode`.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need
   `allowRealAgents` and a reason.
 - In those scenarios the agent tripwire fails any real agent or headless model
-  task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
-  every agent and turns headless tasks back on.
+  task. `allowRealAgents: ['codex']` exempts only the named agents; `true`
+  exempts every agent and turns headless tasks back on.
 - Those scenarios talk to the mock GitHub (`scripts/mock-github.mjs`) on
   non-production instances; production keeps the real github.com. Seed custom
   PRs through `/__control/seed`.
 - Hand-run scripts outside `createScenarioRunner` have none of these guards and
   may launch real providers; read one before running it.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
-- Outpost scenarios that exercise silence use `stepClock` for each daemon and
-  advance it around observed bridge states instead of waiting for liveness
-  timers. Await a fresh timer registration by its name, such as
-  `bridge-retry`, before advancing an asynchronous retry or a dial whose
-  answer is deliberately held. A stepped daemon's transcript watchers poll
-  only when its clock advances. Supply each clock's
-  `env` through the daemon's child environment or the app's `launchEnv`; quit
-  the old app before stopping its daemon so relaunch picks up that environment.
-  Stop the daemons before closing their clocks. To measure a connecting notice,
-  hold new requests at the fake SSH boundary and release them after the explicit
-  wall-time CPU sample; a paused daemon's health check rejects new connections.
+- A scenario that waits on a daemon timer, such as an outpost's liveness
+  timers or an automation schedule, steps that daemon with `stepClock` instead
+  of waiting. Supply each clock's `env` through the daemon's child environment
+  or the app's `launchEnv`; quit the old app before stopping its daemon so
+  relaunch picks up that environment. Stop the daemons before closing their
+  clocks. A stepped daemon's transcript watchers poll only when its clock
+  advances.
+  - Outpost scenarios advance around observed bridge states. Await a fresh
+    timer registration by its name, such as `bridge-retry`, before advancing an
+    asynchronous retry or a dial whose answer is deliberately held. To measure
+    a connecting notice, hold new requests at the fake SSH boundary and release
+    them after the explicit wall-time CPU sample; a paused daemon's health
+    check rejects new connections.
+  - Schedule ticks follow the Go wire tests: `awaitIdle`, `advance('1m')`,
+    `awaitIdle`, then read the result. `awaitIdle` returns once the daemon's
+    job runner has finished what the tick started.
 - Take verdicts from the screen, the protocol, or the CLI, not the daemon DB;
   see [Testing](../../../docs/internal/testing.md#scenario). Read the DB, when a
   scenario must, through `queryDaemonDb`. Resolve pane ids from app state.
@@ -99,8 +111,8 @@ repository root.
   native focus and pointer, the UI diagnostics ring).
 - Check pane text and native screenshots before diagnosing. WebGL terminals need
   native window captures.
-- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`, `nvim`,
-  and `pi`, plus `attn plugin install-bundled attn-pi`.
+- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`
+  and `nvim`.
 
 ## Recordings
 

@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
+const snapshot = 'internal/protocol/gateway/schema.json';
+const usage = 'usage: scripts/check-gateway-compat [<base-schema.json> <head-schema.json>]';
+const args = process.argv.slice(2);
+
+function git(...gitArgs) {
+  return execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+function readBase() {
+  if (args.length === 2) return { label: args[0], text: readFileSync(args[0], 'utf8') };
+  const label = `origin/main:${snapshot}`;
+  try {
+    git('rev-parse', '--verify', '--quiet', 'origin/main^{commit}');
+  } catch {
+    console.error('check-gateway-compat: origin/main is missing; run git fetch origin main');
+    process.exit(2);
+  }
+  try {
+    return { label, text: git('show', label) };
+  } catch {
+    return { label, text: null };
+  }
+}
+
+if (args.length !== 0 && args.length !== 2) {
+  console.error(usage);
+  process.exit(2);
+}
+const base = readBase();
+const headPath = args.length === 2 ? args[1] : snapshot;
+if (base.text === null) {
+  console.log(`check-gateway-compat: ${base.label} does not exist yet; nothing to compare`);
+  process.exit(0);
+}
+const before = JSON.parse(base.text);
+const after = JSON.parse(readFileSync(headPath, 'utf8'));
+
+const refused = [];
+const added = [];
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const typeOf = schema => schema.enum ? 'enum' : schema.type;
+
+for (const [name, old] of Object.entries(before)) {
+  const now = after[name];
+  if (now === undefined) {
+    refused.push(`${name}: removed`);
+    continue;
+  }
+  if (typeOf(old) !== typeOf(now)) {
+    refused.push(`${name}: type changed from ${typeOf(old)} to ${typeOf(now)}`);
+    continue;
+  }
+  if (old.enum) {
+    for (const member of old.enum) {
+      if (!now.enum.includes(member)) refused.push(`${name}: member ${member} removed`);
+    }
+    for (const member of now.enum) {
+      if (!old.enum.includes(member)) added.push(`${name}: member ${member}`);
+    }
+    continue;
+  }
+  const oldFields = old.properties ?? {};
+  const newFields = now.properties ?? {};
+  const oldRequired = new Set(old.required ?? []);
+  const newRequired = new Set(now.required ?? []);
+  for (const [field, schema] of Object.entries(oldFields)) {
+    if (!(field in newFields)) {
+      refused.push(`${name}.${field}: removed or renamed`);
+    } else if (!same(schema, newFields[field])) {
+      refused.push(`${name}.${field}: type changed from ${JSON.stringify(schema)} to ${JSON.stringify(newFields[field])}`);
+    } else if (!oldRequired.has(field) && newRequired.has(field)) {
+      refused.push(`${name}.${field}: became required`);
+    } else if (oldRequired.has(field) && !newRequired.has(field)) {
+      refused.push(`${name}.${field}: became optional`);
+    }
+  }
+  for (const field of Object.keys(newFields)) {
+    if (field in oldFields) continue;
+    if (newRequired.has(field)) {
+      refused.push(`${name}.${field}: added as required; a field added to an existing message must be optional`);
+    } else {
+      added.push(`${name}.${field}`);
+    }
+  }
+}
+for (const name of Object.keys(after)) {
+  if (!(name in before)) added.push(name);
+}
+
+if (refused.length > 0) {
+  console.error(`check-gateway-compat: the gateway API only grows, and ${headPath} breaks ${base.label}:`);
+  for (const line of refused) console.error(`  ${line}`);
+  console.error('Phones already installed decode the old shape. Add a message, an optional field or an enum member instead, in internal/protocol/schema/gateway.tsp.');
+  process.exit(1);
+}
+console.log(added.length === 0
+  ? `check-gateway-compat: ${headPath} matches ${base.label}`
+  : `check-gateway-compat: ${headPath} only adds to ${base.label}: ${added.join(', ')}`);

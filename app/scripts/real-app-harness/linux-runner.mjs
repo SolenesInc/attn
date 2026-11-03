@@ -45,7 +45,7 @@ cd "$root/source"
 mkdir -p "$root/artifacts" "$root/bin"
 install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$root/bin/xdg-open"
 env -i HOME="$HOME" USER="$(id -un)" LANG=C.UTF-8 \
-  PATH="$root/bin:$PWD/plugins/attn-pi/node_modules/.bin:$HOME/.local/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
+  PATH="$root/bin:$HOME/.local/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
   ATTN_INSTANCE=${quote(instance)} ATTN_HARNESS_INSTANCE=${quote(instance)} CI=true \
   ATTN_REAL_APP_ARTIFACTS_DIR="$root/artifacts" \
   ${argv.map(quote).join(' ')} 9>&-
@@ -98,8 +98,7 @@ Options:
 
 Examples:
   pnpm --dir app real-app:linux provision
-  pnpm --dir app real-app:linux run -- bun test --cwd plugins/attn-pi
-  pnpm --dir app real-app:linux test -- --scenario automode-environment
+  pnpm --dir app real-app:linux test -- --scenario quick-capture
   pnpm --dir app real-app:linux provision --provider ssh --target tester@linux
 `);
     return;

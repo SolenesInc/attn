@@ -178,6 +178,10 @@ export class MacOSDriver extends TargetedWindowDriver {
     return null;
   }
 
+  get keysReachWebview() {
+    return !this.systemInput;
+  }
+
   async #keyboard({ kind, key, keyCode, modifiers, text }) {
     if (this.injectsInApp) {
       if (kind === 'text') {
@@ -198,11 +202,10 @@ export class MacOSDriver extends TargetedWindowDriver {
     await this.runInputDriver([command, flag, value, '--modifiers', serialized, '--prompt-accessibility']);
   }
 
-  async #pointer({ action, point, to, deltaY, opts }) {
+  async #pointer({ action, point, to, opts }) {
     if (action === 'move') return this.#move(point.x, point.y, opts);
     if (action === 'click' || action === 'right_click') return this.#click(action, point.x, point.y, opts);
     if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
-    if (action === 'scroll') return this.#scroll(point.x, point.y, deltaY, opts);
     throw new Error(`MacOSDriver has no pointer action ${action}`);
   }
 
@@ -275,27 +278,6 @@ export class MacOSDriver extends TargetedWindowDriver {
       }
       await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-  }
-
-  // Positive deltaY scrolls content up, negative down (CGEvent convention).
-  async #scroll(relativeX, relativeY, deltaY, opts) {
-    const args = [
-      'scroll',
-      '--relative-x',
-      String(relativeX),
-      '--relative-y',
-      String(relativeY),
-      '--delta-y',
-      String(deltaY),
-      '--prompt-accessibility',
-    ];
-    if (opts.deltaX !== undefined) {
-      args.push('--delta-x', String(opts.deltaX));
-    }
-    if (opts.steps !== undefined) {
-      args.push('--steps', String(opts.steps));
-    }
-    await this.runInputDriver(withWindowTitleArgs(args, opts));
   }
 
   async parkWindow(visiblePx, opts = {}) {

@@ -38,8 +38,9 @@ func TestSSHBridgeDetachesTheOutpostFromItsSessionAndReconnectsThroughTheHomeAge
 	mark := pair.App.EventCount()
 	pair.SSH.ExitMaster(home, pair.Host)
 	outpostStateSince(pair.App, "outpost", protocol.OutpostStateLost, mark)
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	stopRetries()
 	if attempts := pair.SSH.MasterAttempts(); attempts != 2 {
 		t.Fatalf("batch master attempts = %d, want one for Add and one for reconnect", attempts)
 	}

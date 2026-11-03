@@ -29,10 +29,11 @@ type SSH struct {
 }
 
 type sshMachine struct {
-	drain func()
-	stack *Stack
-	stop  func()
-	link  *sshLink
+	drain      func()
+	stack      *Stack
+	stop       func()
+	link       *sshLink
+	homeWrites *sshLink
 }
 type sshLink struct {
 	mu   sync.Mutex
@@ -57,6 +58,14 @@ func newSSHLink() *sshLink {
 	gate.finish(nil)
 	return &sshLink{gate: gate}
 }
+func (l *sshLink) hold() (resume func()) {
+	l.mu.Lock()
+	gate := newSSHGate()
+	l.gate = gate
+	l.mu.Unlock()
+	return func() { gate.finish(nil) }
+}
+
 func (l *sshLink) wait(ctx context.Context) error {
 	l.mu.Lock()
 	gate := l.gate
@@ -82,18 +91,27 @@ func (w sshLinkWriter) Write(p []byte) (int, error) {
 	}
 	return w.writer.Write(p)
 }
-func (s *SSH) Pause(destination string) func() {
+func (s *SSH) machine(destination string) *sshMachine {
+	s.t.Helper()
 	s.mu.Lock()
 	machine := s.machines[destination]
 	s.mu.Unlock()
 	if machine == nil {
 		s.t.Fatalf("no SSH machine for %s", destination)
 	}
-	machine.link.mu.Lock()
-	gate := newSSHGate()
-	machine.link.gate = gate
-	machine.link.mu.Unlock()
-	return func() { gate.finish(nil) }
+	return machine
+}
+
+func (s *SSH) Pause(destination string) func() {
+	s.t.Helper()
+	return s.machine(destination).link.hold()
+}
+
+// PauseInput holds what the home writes to the machine's commands, such as its half of an outpost bridge, while the
+// machine's own writes still reach the home.
+func (s *SSH) PauseInput(destination string) (resume func()) {
+	s.t.Helper()
+	return s.machine(destination).homeWrites.hold()
 }
 
 func NewSSH(t testing.TB) *SSH {
@@ -180,7 +198,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		}
 	}
 	machineEnv := []string{"PATH=" + bin + ":" + path, "ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
-	link := newSSHLink()
+	link, homeWrites := newSSHLink(), newSSHLink()
 	socket := filepath.Join(s.Dir, fmt.Sprintf("machine-%d.sock", s.nextMachine))
 	s.nextMachine++
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
@@ -245,7 +263,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 				copied := make(chan struct{})
 				go func() {
 					defer close(copied)
-					_, _ = io.Copy(sshLinkWriter{requestCtx, link, inputWriter}, conn)
+					_, _ = io.Copy(sshLinkWriter{requestCtx, link, sshLinkWriter{requestCtx, homeWrites, inputWriter}}, conn)
 					inputWriter.Close()
 				}()
 				cmd.Stdin = input
@@ -281,7 +299,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		lifeline.Close()
 	})
 	s.t.Cleanup(stopMachine)
-	s.machines[destination] = &sshMachine{stack: remote, stop: stopMachine, link: link, drain: workers.Wait}
+	s.machines[destination] = &sshMachine{stack: remote, stop: stopMachine, link: link, homeWrites: homeWrites, drain: workers.Wait}
 	s.routes[destination] = socket
 	s.reachable[destination] = socket
 	s.save()
@@ -412,12 +430,10 @@ func (s *SSH) StartMaster(home *Stack, host, destination string) {
 
 func (s *SSH) AwaitPausedRequest(destination string) {
 	s.t.Helper()
-	s.mu.Lock()
-	machine := s.machines[destination]
-	s.mu.Unlock()
-	machine.link.mu.Lock()
-	entered := machine.link.gate.entered
-	machine.link.mu.Unlock()
+	link := s.machine(destination).link
+	link.mu.Lock()
+	entered := link.gate.entered
+	link.mu.Unlock()
 	select {
 	case <-entered:
 	case <-time.After(fakeagent.HangGuard):

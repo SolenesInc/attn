@@ -1,7 +1,9 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
-import { soloDesktop, daemonSeed, daemonSession, dockTiles, memberClaim } from './test/daemonFixtures';
+import { soloDesktop, daemonSeed, daemonSession, dockTiles, memberClaim, sessionClaim } from './test/daemonFixtures';
+import type { DaemonSession, Seed as DaemonSeed } from './hooks/useDaemonSocket';
+import type { EventMessage } from './test/protocol';
 
 const SEED = daemonSeed('s-7k3f9m', {
   title: 'Make seed IDs navigable',
@@ -27,6 +29,39 @@ function seedMarks() {
     mark.style.top,
     mark.style.width,
   ]);
+}
+
+const OUTPOST: EventMessage<'outposts_updated'>['outposts'][number] = {
+  id: 'studio-id', name: 'studio', destination: 'studio:2200', state: 'connected', reach: 'reachable',
+  state_since: '2026-10-18T18:00:00Z',
+};
+
+async function hoverSeedBesideAgent(seed: Partial<DaemonSeed>, agent: Partial<DaemonSession> = {}, outposts = false) {
+  const view = await openAttachedTerminals({
+    sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { label: 'Seed reviewer', state: 'working', ...agent })],
+    desktops: [soloDesktop('s1'), soloDesktop('s2')],
+    initialState: {
+      seeds: [daemonSeed('s-7k3f9m', { title: 'Make seed IDs navigable', ...seed })],
+      ...(outposts ? { outposts: [OUTPOST], settings: { outposts_enabled: 'true' } } : {}),
+    },
+    output: { s1: 'known s-7k3f9m' },
+  });
+  await act(() => vi.advanceTimersToNextFrame());
+  fireEvent.mouseMove(document.querySelector('[data-pane-id="pane-s1"] canvas')!, { clientX: 70, clientY: 10 });
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  return { ...view, preview: screen.getByRole('dialog') };
+}
+
+async function goesToAgent(seed: Partial<DaemonSeed>, agent: Partial<DaemonSession> = {}, outposts = false) {
+  const { daemon, preview } = await hoverSeedBesideAgent(seed, agent, outposts);
+  const showsBefore = daemon.sentOf('desktop_show_session').length;
+
+  fireEvent.click(within(preview).getByRole('button', { name: 'Go to Seed reviewer' }));
+  await daemon.idle();
+
+  expect(daemon.sentOf('desktop_show_session').slice(showsBefore)).toEqual([expect.objectContaining({ session_id: 's2' })]);
+  expect(document.querySelector('[data-session-visible="1"] [data-pane-id="pane-s2"]')).not.toBeNull();
+  expect(screen.queryByRole('dialog')).toBeNull();
 }
 
 describe('App terminal seed ids', () => {
@@ -112,5 +147,27 @@ describe('App terminal seed ids', () => {
 
     expect(daemon.sentOf('desktop_show_leaf')).toEqual([expect.objectContaining({ leaf_id: 'tile-seed-s-7k3f9m' })]);
     expect(document.activeElement).toBe(home);
+  });
+
+  it('goes from the seed card to the session tending the seed', async () => {
+    await goesToAgent(sessionClaim('s2', { name: 'Seed reviewer' }));
+  });
+
+  it('goes from the card of a seed nobody tends to the last session that tended it while that session is open', async () => {
+    await goesToAgent({ status: 'parked', ...sessionClaim('s2', { live: false }), last_execution_id: 's2' });
+  });
+
+  it('goes from the seed card to a tender on an outpost', async () => {
+    await goesToAgent(sessionClaim('s2', { name: 'Seed reviewer' }), { host: OUTPOST.id }, true);
+  });
+
+  it.each([
+    ['its last tender closed', { status: 'harvested', last_execution_id: 'closed-session' }],
+    ['nobody tended it', { status: 'planted' }],
+    ['its tender is the terminal showing it', sessionClaim('s1')],
+  ])('offers no agent on the seed card when %s', async (_case, seed) => {
+    const { preview } = await hoverSeedBesideAgent(seed);
+
+    expect(within(preview).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Open as tile']);
   });
 });

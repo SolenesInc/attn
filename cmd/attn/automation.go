@@ -23,7 +23,7 @@ func runAutomationCommand() {
 		if args[i] == "--profile" {
 			if i+1 == len(args) {
 				fmt.Fprintln(os.Stderr, "automation: --profile needs a name or id")
-				os.Exit(2)
+				exit(2)
 			}
 			profile = strings.TrimSpace(args[i+1])
 			args = append(args[:i], args[i+2:]...)
@@ -36,25 +36,27 @@ func runAutomationCommand() {
 	}
 	if len(args) < 3 {
 		automationUsage()
-		os.Exit(2)
+		exit(2)
 	}
 	c := client.New(client.DefaultSocketPath()).WithGardenProfile(profile, currentSessionOrExit())
 	var err error
 	var definitionID int
 	switch args[2] {
 	case "set", "show", "run", "runs", "enable", "disable", "delete", "cleanup":
+		setCommandPath("automation " + args[2])
 		if len(args) < 4 {
 			automationUsage()
-			os.Exit(2)
+			exit(2)
 		}
 		definitionID, err = strconv.Atoi(args[3])
 		if err != nil || definitionID <= 0 {
 			fmt.Fprintln(os.Stderr, "automation: ID must be a positive number")
-			os.Exit(2)
+			exit(2)
 		}
 	}
 	switch args[2] {
 	case "set":
+		setCommandPath("automation set")
 		if len(args) < 4 {
 			err = fmt.Errorf("usage: attn automation set <definition-id> --launch-desktop <own|desktop>")
 			break
@@ -63,7 +65,7 @@ func runAutomationCommand() {
 		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id")
 		if e := parseFlags(fs, args[4:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *desktop == "" || len(fs.Args()) != 0 {
 			err = fmt.Errorf("--launch-desktop is required")
@@ -82,12 +84,13 @@ func runAutomationCommand() {
 		}
 
 	case "apply":
+		setCommandPath("automation apply")
 		fs := flag.NewFlagSet("automation apply", flag.ContinueOnError)
 		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
 		if e := parseFlags(fs, args[3:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *file == "" {
 			err = fmt.Errorf("--file is required")
@@ -117,10 +120,11 @@ func runAutomationCommand() {
 			printJSON(result.Definition)
 		}
 	case "validate":
+		setCommandPath("automation validate")
 		fs := flag.NewFlagSet("automation validate", flag.ContinueOnError)
 		file := fs.String("file", "", "definition YAML")
 		if e := parseFlags(fs, args[3:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if *file == "" {
 			err = fmt.Errorf("--file is required")
@@ -135,12 +139,14 @@ func runAutomationCommand() {
 			printJSON(map[string]bool{"valid": true})
 		}
 	case "list":
+		setCommandPath("automation list")
 		var result *protocol.AutomationDefinitionsResultMessage
 		result, err = c.AutomationDefinitions()
 		if err == nil {
 			printJSON(result.Definitions)
 		}
 	case "show":
+		setCommandPath("automation show")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation show <definition-id>")
 			break
@@ -171,6 +177,7 @@ func runAutomationCommand() {
 			fmt.Print(*result.SpecYaml)
 		}
 	case "run":
+		setCommandPath("automation run")
 		if len(args) < 4 {
 			err = fmt.Errorf("usage: attn automation run <definition-id> [--input-file <file> | --pr-url <url>] [--request-id <id>]")
 			break
@@ -180,7 +187,7 @@ func runAutomationCommand() {
 		prURL := fs.String("pr-url", "", "resolve one GitHub pull request into structured occurrence input")
 		requestID := fs.String("request-id", "", "stable idempotency key to reuse when retrying an uncertain request")
 		if e := parseFlags(fs, args[4:]); e != nil {
-			os.Exit(2)
+			exit(2)
 		}
 		if len(fs.Args()) != 0 {
 			err = fmt.Errorf("usage: attn automation run <definition-id> [--input-file <file> | --pr-url <url>] [--request-id <id>]")
@@ -212,6 +219,7 @@ func runAutomationCommand() {
 			printJSON(result.Run)
 		}
 	case "runs":
+		setCommandPath("automation runs")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation runs <definition-id>")
 			break
@@ -222,6 +230,7 @@ func runAutomationCommand() {
 			printJSON(result.Runs)
 		}
 	case "enable":
+		setCommandPath("automation enable")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation enable <definition-id>")
 			break
@@ -232,6 +241,7 @@ func runAutomationCommand() {
 			printJSON(result.Definition)
 		}
 	case "disable":
+		setCommandPath("automation disable")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation disable <definition-id>")
 			break
@@ -242,6 +252,7 @@ func runAutomationCommand() {
 			printJSON(result.Definition)
 		}
 	case "delete":
+		setCommandPath("automation delete")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation delete <definition-id>")
 			break
@@ -250,6 +261,7 @@ func runAutomationCommand() {
 			printJSON(map[string]int{"deleted": definitionID})
 		}
 	case "cleanup":
+		setCommandPath("automation cleanup")
 		if len(args) != 4 {
 			err = fmt.Errorf("usage: attn automation cleanup <definition-id>")
 			break
@@ -269,6 +281,6 @@ func runAutomationCommand() {
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "automation: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 }

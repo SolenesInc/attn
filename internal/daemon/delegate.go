@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -240,12 +241,9 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 }
 
 func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID protocol.SessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (placementOutcome, error) {
-	initialPrompt, err := d.delegatedSeedPrompt(profileID, seedID, seedTitle)
+	initialPrompt, err := d.delegatedSeedPrompt(profileID, seedID, seedTitle, guidance)
 	if err != nil {
 		return placementOutcome{}, err
-	}
-	if guidance != "" {
-		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
@@ -298,7 +296,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			joined := s.Provider + "/" + s.Model
 			msg.Model = &joined
 		}
-		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions, resolved.StoppingPoint)
+		guidance = prompts.DelegationExecutionGuidance(resolved.RoleName, resolved.Instructions)
 	}
 	sessionID := reservedSessionID
 	if sessionID == "" {
@@ -407,6 +405,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 			if err != nil {
 				return nil, err
 			}
+		}
+		if err := d.saveDelegationAuthorization(msg, seedID); err != nil {
+			return nil, err
 		}
 		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (recovered.settled() || d.sessionHasLiveWorker(sessionID)) {
 			watch = recovered
@@ -522,6 +523,9 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		}
 	}
 
+	if err := d.saveDelegationAuthorization(msg, seedID); err != nil {
+		return nil, err
+	}
 	if operationID != "" {
 		if err := d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 			"assembling the session", profile.ID, "", operationWorktreePath, nil, nil, time.Now()); err != nil {
@@ -656,12 +660,34 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, worktreeCr
 	return result
 }
 
-func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle string) (string, error) {
+func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle, guidance string) (string, error) {
 	checkIDs, err := d.seedCheckIDs(profileID, seedID)
 	if err != nil {
 		return "", err
 	}
-	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle, "check_ids": checkIDs}), nil
+	opening := prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle, "check_ids": checkIDs})
+	if guidance != "" {
+		opening = prompts.DelegationOpeningWithGuidance(opening, guidance)
+	}
+	if seedID == "" {
+		return opening, nil
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	if seed.Authorization.Words() == "" {
+		return opening, nil
+	}
+	line := prompts.RenderText("delegation", "authorization", prompts.Values{
+		"authorization": seed.Authorization.Text, "set_by": d.authorizationSetterName(*seed.Authorization),
+	})
+	return opening + "\n\n" + line, nil
+}
+
+func (d *Daemon) saveDelegationAuthorization(msg *resolvedDelegationLaunch, seedID string) error {
+	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	return d.saveSeedAuthorization(seedID, msg.Authorization, d.actorOfSession(source), source)
 }
 
 func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protocol.DelegateMessage) {
@@ -677,7 +703,10 @@ func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protoco
 }
 
 func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
+	operation, err := d.delegationStatus(msg, "", peerClosed(conn))
+	if errors.Is(err, errCallerGone) {
+		return
+	}
 	if err != nil {
 		d.sendError(conn, "delegate status: "+err.Error())
 		return
@@ -688,18 +717,13 @@ func (d *Daemon) handleDelegateStatus(conn net.Conn, msg *protocol.DelegateStatu
 func (d *Daemon) handleDelegateWS(client *wsClient, msg *protocol.DelegateMessage) {
 	operation, err := d.startDelegation(context.Background(), msg)
 	if err == nil {
-		for operation.State == protocol.DelegationOperationStateAccepted || operation.State == protocol.DelegationOperationStatePreparing {
-			// A delegation interrupted by stop stays preparing on purpose; the next daemon resumes it.
-			select {
-			case <-time.After(100 * time.Millisecond):
-			case <-d.life.Done():
-				d.sendCommandError(client, protocol.CmdDelegate, errDaemonStopping.Error())
-				return
-			}
-			operation, err = d.delegationOperation(operation.OperationID)
-			if err != nil {
-				break
-			}
+		operation, err = d.awaitDelegationSettled(operation.OperationID, client.gone)
+		if errors.Is(err, errCallerGone) {
+			return
+		}
+		if errors.Is(err, errDaemonStopping) {
+			d.sendCommandError(client, protocol.CmdDelegate, err.Error())
+			return
 		}
 	}
 	var result *protocol.DelegateResult

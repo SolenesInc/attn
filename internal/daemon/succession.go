@@ -78,10 +78,9 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	d.mirrorLabel(sc.To)
 
 	if !sc.KeepFrom {
-		d.recordSessionClose(from.ID, func() (store.SessionClosure, error) {
+		d.recordSessionClose(from.ID, from, func() (store.SessionClosure, error) {
 			return store.SessionClosure{Recorded: true, Asks: outcome.ClosedAsks}, nil
 		})
-		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
 			d.forgetProgramStatus(from.ID)

@@ -1,6 +1,8 @@
 package inbox
 
 import (
+	"slices"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -8,12 +10,17 @@ import (
 type Kind string
 
 const (
-	SeedUpdate   Kind = "garden_seed"
-	PeerMessage  Kind = "peer_message"
-	QuickCapture Kind = "quick_capture"
-	AskAnswer    Kind = "ask_answer"
-	Notice       Kind = "maintenance_prompt"
+	SeedUpdate    Kind = "garden_seed"
+	PeerMessage   Kind = "peer_message"
+	QuickCapture  Kind = "quick_capture"
+	AskAnswer     Kind = "ask_answer"
+	Authorization Kind = "authorization"
+	Notice        Kind = "maintenance_prompt"
 )
+
+func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture, Authorization} }
+
+func (k Kind) Typed() bool { return slices.Contains(TypedKinds(), k) }
 
 const (
 	DefaultInboxLimit = 20

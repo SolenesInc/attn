@@ -67,7 +67,17 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	if key != "" && spec.scope == profileScope && profileErr != nil {
 		return nil, nil, profileErr
 	}
-	values := d.settingsSnapshot(profile.ID)
+	savedAtHome := func(spec settingSpec) bool {
+		return spec.scope == profileScope && !spec.readOnly && d.enrollmentStatus().IsOutpost()
+	}
+	if key != "" && savedAtHome(spec) {
+		return nil, nil, fmt.Errorf("%s is saved at the home for each profile; read it there with attn settings get %s, or read %s for this machine's copy", key, key, SettingNotebookRootEffective)
+	}
+	notebookProfile := profile.ID
+	if d.enrollmentStatus().IsOutpost() && msg.SourceSessionID != nil {
+		notebookProfile, _ = d.sessionNotebookProfile(*msg.SourceSessionID)
+	}
+	values := d.settingsSnapshot(notebookProfile)
 	if key != "" {
 		entry := d.settingEntry(spec, key, d.settingValue(spec, key, values, profile.ID))
 		return nil, &entry, nil
@@ -79,7 +89,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		result.Profile = protocol.Ptr(profile.Name)
 	}
 	for _, spec := range settingSpecs {
-		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profileErr != nil {
+		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profileErr != nil || savedAtHome(spec) {
 			continue
 		}
 		value := d.settingValue(spec, spec.key, values, profile.ID)
@@ -100,7 +110,6 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 }
 
 func (d *Daemon) handleGetSettings(conn net.Conn, msg *protocol.GetSettingsMessage) {
-	d.refreshTailscaleServeState()
 	list, entry, err := d.settingsList(msg)
 	if err != nil {
 		d.sendError(conn, err.Error())

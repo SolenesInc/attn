@@ -6,7 +6,7 @@ import type { Seed } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
 
-const states = ['planted', 'growing', 'dormant', 'harvested', 'withered'];
+const states = ['planted', 'growing', 'parked', 'harvested', 'withered'];
 const now = new Date().toISOString();
 const gardenAgentClaim = { tender: { ref: 'session:garden-agent', name: 'garden-agent', session_id: 'garden-agent' }, claimed: true };
 const base: Seed = {
@@ -15,7 +15,7 @@ const base: Seed = {
   planter: { ref: 'user', name: 'the user' }, ...gardenAgentClaim,
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
-const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
+const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, parked: 1, withered: 1 } };
 const seedDocuments: Partial<DaemonApi> = {
   sendSeedDocumentGet: async (id: string) => ({
     seed: { ...base, id, status: id.startsWith('s-') && states.includes(id.slice(2)) ? id.slice(2) : 'growing' },

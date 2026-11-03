@@ -22,6 +22,7 @@ type Hub struct {
 	peers    map[*peer]struct{}
 	stepping sync.Mutex
 	firing   sync.Mutex
+	settled  chan struct{}
 }
 
 type peerTimer struct {
@@ -33,6 +34,7 @@ type peer struct {
 	conn     net.Conn
 	pid      int
 	ready    bool
+	busy     bool
 	advanced chan struct{}
 	fired    chan struct{}
 	done     chan struct{}
@@ -44,7 +46,7 @@ func Listen(socket string) (*Hub, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &Hub{socket: socket, listener: listener, pending: newPending[peerTimer](), accepted: make(chan struct{}), peers: make(map[*peer]struct{})}
+	h := &Hub{socket: socket, listener: listener, pending: newPending[peerTimer](), accepted: make(chan struct{}), peers: make(map[*peer]struct{}), settled: make(chan struct{})}
 	go func() {
 		defer close(h.accepted)
 		for {
@@ -69,6 +71,7 @@ func (h *Hub) admit(p *peer) {
 		p.conn.Close()
 		h.mu.Lock()
 		delete(h.peers, p)
+		h.markSettledLocked()
 		for _, key := range h.pending.armed() {
 			if key.peer == p {
 				h.pending.disarm(key)
@@ -124,6 +127,10 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 	case len(fields) == 2 && fields[0] == "fired":
 		p.fired <- struct{}{}
 	case len(fields) == 1 && (fields[0] == "busy" || fields[0] == "idle"):
+		h.mu.Lock()
+		p.busy = fields[0] == "busy"
+		h.markSettledLocked()
+		h.mu.Unlock()
 	default:
 		return false
 	}
@@ -185,6 +192,35 @@ func (h *Hub) AwaitTimer(ctx context.Context, name Name) ([]string, bool) {
 	h.stepping.Lock()
 	defer h.stepping.Unlock()
 	return h.pending.await(ctx, &h.mu, name)
+}
+
+// AwaitIdle waits until no connected process holds its clock busy, as the job runner does while it has work in hand.
+// When ctx ends first it returns false with the pids still busy.
+func (h *Hub) AwaitIdle(ctx context.Context) ([]int, bool) {
+	for {
+		h.mu.Lock()
+		var busy []int
+		for p := range h.peers {
+			if p.busy {
+				busy = append(busy, p.pid)
+			}
+		}
+		settled := h.settled
+		h.mu.Unlock()
+		if len(busy) == 0 {
+			return nil, true
+		}
+		select {
+		case <-settled:
+		case <-ctx.Done():
+			return busy, false
+		}
+	}
+}
+
+func (h *Hub) markSettledLocked() {
+	close(h.settled)
+	h.settled = make(chan struct{})
 }
 
 func (h *Hub) Close() {

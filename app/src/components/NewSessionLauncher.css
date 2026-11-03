@@ -1,23 +1,41 @@
 .new-session-launcher {
-  --color-bg-selected: #25252c;
-  --color-bg-input: #0a0a0b;
-  --color-text-dimmed: #5f5f69;
-  --color-border-focus: #44444c;
+  --launcher-accent: #ff6b35;
+  --launcher-accent-text: #ff8a5c;
+  --launcher-on-accent: #1c0c05;
+  --launcher-bg-input: #09090a;
+  --launcher-bg-tile: #141417;
+  --launcher-border-tile: #222227;
+  --launcher-border-input: #2a2a2f;
+  --launcher-hairline: #1b1b1f;
+  --launcher-footer-bg: rgba(0, 0, 0, 0.28);
+  --launcher-text-quiet: #8a8a94;
+  --launcher-text-path: #74747e;
+  --launcher-text-section: #66666f;
+  --launcher-text-faint: #5d5d66;
   --launcher-worktree-color: #9be7a8;
   width: 760px;
-  background: var(--color-bg-app);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  border-color: #26262b;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 24px 60px rgba(0, 0, 0, 0.72),
+    0 0 100px rgba(255, 107, 53, 0.03);
 }
+
 .new-session-launcher .picker-title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  margin: 0 0 9px 2px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(10px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--launcher-accent);
+  text-shadow: none;
 }
 .new-session-launcher .picker-header {
-  padding: 12px 14px 6px;
+  padding: 14px 16px 12px;
   border: 0;
+  border-bottom: 1px solid var(--launcher-hairline);
   background: transparent;
 }
 .new-session-launcher .picker-breadcrumb-path {
@@ -25,112 +43,187 @@
 }
 .new-session-launcher .path-input-field {
   gap: 8px;
-  height: 42px;
+  height: 44px;
   padding: 0 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg-input);
+  border: 1px solid var(--launcher-border-input);
+  border-radius: 8px;
+  background: var(--launcher-bg-input);
 }
 .new-session-launcher .path-input-field:focus-within {
-  border-color: var(--color-border-focus);
+  border-color: color-mix(in srgb, var(--launcher-accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--launcher-accent) 8%, transparent);
 }
 .new-session-launcher .path-input {
   padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
-  caret-color: var(--color-text-primary);
+  caret-color: var(--launcher-accent);
   height: 40px;
 }
 .new-session-launcher .path-input-container {
   --path-input-text-inset: 0px;
+  overflow: hidden;
 }
+.new-session-launcher .path-input::placeholder {
+  color: var(--launcher-text-faint);
+}
+
 .new-session-launcher .picker-results {
-  margin-top: 18px;
-  padding: 4px 6px 8px;
+  padding: 6px 8px 8px;
 }
 .new-session-launcher .picker-section-title {
-  padding: 10px 10px 4px;
+  padding: 10px 10px 6px;
   font-size: calc(10px * var(--ui-scale));
-  letter-spacing: 0.14em;
-  font-weight: 400;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: var(--launcher-text-section);
 }
 .new-session-launcher .picker-item {
-  gap: 10px;
+  gap: 12px;
   padding: 7px 10px;
-  border: 0;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
   transition: none;
 }
 .new-session-launcher .picker-item:hover:not(.selected) {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.025);
+  border-color: transparent;
 }
 .new-session-launcher .picker-item.selected {
-  background: var(--color-bg-selected, #25252c);
+  background: color-mix(in srgb, var(--launcher-accent) 7.5%, transparent);
+  border-color: color-mix(in srgb, var(--launcher-accent) 22%, transparent);
 }
 .new-session-launcher .picker-name {
-  font-size: calc(13.5px * var(--ui-scale));
-  font-weight: 400;
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .new-session-launcher .picker-path {
+  margin-top: 2px;
   font-size: calc(11px * var(--ui-scale));
-  color: var(--color-text-dimmed);
-  margin-top: 1px;
+  color: var(--launcher-text-path);
+}
+.new-session-launcher .picker-item.selected .picker-path {
+  color: var(--launcher-text-quiet);
 }
 .launcher-icon {
-  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
-  font-size: calc(12px * var(--ui-scale));
-  color: var(--color-text-dimmed);
-  text-align: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--launcher-border-tile);
+  border-radius: 6px;
+  background: var(--launcher-bg-tile);
 }
+.launcher-icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--launcher-text-quiet);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.picker-item.selected .launcher-icon {
+  border-color: color-mix(in srgb, var(--launcher-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--launcher-accent) 14%, transparent);
+}
+.picker-item.selected .launcher-icon svg {
+  stroke: var(--launcher-accent-text);
+}
+
 .launcher-badge,
 .launcher-repo-chip {
-  border: 1px solid var(--color-border);
+  flex: none;
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 1px 0;
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: calc(10.5px * var(--ui-scale));
-  color: var(--color-text-tertiary);
+  color: var(--launcher-text-faint);
   white-space: nowrap;
 }
 .launcher-destination {
-  color: var(--color-text-secondary);
+  color: var(--launcher-text-quiet);
 }
 .launcher-worktree,
 .launcher-branch {
   color: var(--launcher-worktree-color);
 }
 .launcher-worktree {
-  border-color: rgba(63, 185, 80, 0.35);
+  padding: 1px 6px;
+  background: rgba(63, 185, 80, 0.09);
 }
 .launcher-repo-chip {
   padding: 3px 8px;
+  border: 1px solid var(--launcher-border-input);
+  border-radius: 6px;
   font-size: calc(12px * var(--ui-scale));
-  background: var(--color-bg-panel);
+  background: var(--launcher-bg-tile);
   color: var(--color-text-secondary);
 }
 .launcher-age {
   width: 30px;
   flex: none;
-  color: var(--color-text-dimmed);
+  color: var(--launcher-text-faint);
   font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: calc(10.5px * var(--ui-scale));
   white-space: nowrap;
   text-align: right;
+}
+.launcher-machine {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.launcher-machine::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--launcher-text-faint);
+}
+.launcher-machine[data-state='connected']::before {
+  background: var(--color-success);
+  box-shadow: none;
+}
+.launcher-machine[data-state='stalled']::before {
+  background: var(--color-warning);
+  box-shadow: none;
+}
+.launcher-machine[data-state='lost']::before,
+.launcher-machine[data-state='refused']::before {
+  background: var(--color-error);
+  box-shadow: none;
+}
+.new-session-launcher .picker-item[data-reach='unreachable'] {
+  opacity: 0.55;
+}
+.launcher-controls .agent-option--missing .agent-option-name {
+  text-decoration: line-through;
+}
+.launcher-error-reason {
+  color: color-mix(in srgb, #ffb4b4 75%, transparent);
+}
+.launcher-progress[data-stalled] {
+  color: var(--color-warning);
 }
 .launcher-branch,
 .launcher-section-hint {
   text-transform: none;
   letter-spacing: normal;
 }
+.launcher-section-hint {
+  font-weight: 400;
+}
 .launcher-error {
-  margin: 0 14px 10px;
+  margin: 10px 16px;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid rgba(239, 68, 68, 0.3);
@@ -140,21 +233,23 @@
   line-height: 1.45;
 }
 .launcher-progress {
-  padding: 10px 14px;
+  padding: 10px 16px;
   font-size: var(--font-size-sm);
 }
 .new-session-launcher .picker-empty {
-  padding: 14px 12px;
+  padding: 16px 12px;
   text-align: left;
   font-family: inherit;
   font-size: calc(12.5px * var(--ui-scale));
 }
+
 .new-session-launcher .picker-footer {
   flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 9px 14px;
-  background: transparent;
-  color: var(--color-text-dimmed);
+  gap: 6px 16px;
+  padding: 9px 16px;
+  border-top-color: var(--launcher-hairline);
+  background: var(--launcher-footer-bg);
+  color: var(--launcher-text-faint);
   font-size: calc(11.5px * var(--ui-scale));
 }
 .new-session-launcher .picker-footer > span {
@@ -163,24 +258,28 @@
   align-items: center;
 }
 .new-session-launcher .picker-footer kbd {
-  padding: 0 5px;
+  padding: 1px 5px;
+  border-color: var(--launcher-border-input);
   border-bottom-width: 2px;
   border-radius: 4px;
   min-width: 0;
+  background: var(--launcher-bg-tile);
+  color: var(--launcher-text-quiet);
   font-size: calc(10.5px * var(--ui-scale));
 }
 .launcher-footer-back {
   margin-left: auto;
 }
+
 .launcher-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 14px;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--launcher-hairline);
+  background: rgba(255, 255, 255, 0.015);
 }
 .launcher-controls .picker-agent-bar,
 .launcher-controls .picker-chief-bar {
@@ -193,70 +292,133 @@
 .launcher-controls .picker-chief-bar > .picker-agent-label {
   display: none;
 }
+.launcher-controls .picker-agent-controls {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.launcher-key-legend {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(10.5px * var(--ui-scale));
+  color: var(--launcher-text-faint);
+}
 .launcher-controls .agent-toggle {
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 2px;
+  padding: 2px;
+  border-color: var(--launcher-border-tile);
+  border-radius: 8px;
+  background: var(--launcher-bg-input);
   box-shadow: none;
 }
 .launcher-controls .agent-option {
   padding: 4px 10px;
-  gap: 6px;
+  gap: 7px;
+  border-radius: 6px;
   font-size: calc(11.5px * var(--ui-scale));
+  color: var(--launcher-text-quiet);
+}
+.launcher-controls .agent-option:hover {
+  color: var(--color-text-primary);
 }
 .launcher-controls .agent-option.active {
-  background: var(--color-bg-selected);
-  color: var(--color-text-primary);
+  background: var(--launcher-accent);
+  color: var(--launcher-on-accent);
+  font-weight: 600;
   box-shadow: none;
 }
 .launcher-controls .agent-shortcut,
 .launcher-controls .agent-option.active .agent-shortcut {
-  padding: 0 4px;
-  font-size: calc(9.5px * var(--ui-scale));
-  border-color: var(--color-border);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-panel);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: calc(10px * var(--ui-scale));
+  color: var(--launcher-text-faint);
 }
-.launcher-controls .picker-agent-controls {
-  flex-wrap: wrap;
+.launcher-controls .agent-option.active .agent-shortcut {
+  color: color-mix(in srgb, var(--launcher-on-accent) 60%, transparent);
 }
 
 .launcher-toggle-group {
   display: inline-flex;
-  gap: 6px;
+  gap: 2px;
 }
 .launcher-toggle-group .agent-toggle {
   padding: 0;
   border: 0;
   background: transparent;
 }
-.launcher-toggle-group .agent-option {
-  padding: 3px 9px;
-  border: 1px solid var(--color-border);
+.launcher-toggle-group .agent-option,
+.launcher-toggle-group .agent-option.active {
+  padding: 4px 8px;
+  gap: 6px;
+  border: 0;
+  background: transparent;
   font-size: calc(11px * var(--ui-scale));
-  color: var(--color-text-dimmed);
+  font-weight: 400;
+}
+.launcher-toggle-group .agent-option::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--launcher-text-faint);
 }
 .launcher-toggle-group .agent-option.active {
   color: var(--color-text-primary);
-  border-color: #3a3a44;
+}
+.launcher-toggle-group .agent-option.active .agent-shortcut {
+  color: var(--launcher-text-faint);
+}
+.launcher-toggle-group .agent-option.active::before {
+  background: var(--color-success);
+  box-shadow: none;
 }
 .launcher-toggle-group [data-testid='location-picker-yolo-toggle'].active {
-  color: #ff6b35;
-  border-color: rgba(255, 107, 53, 0.4);
+  color: var(--launcher-accent-text);
+}
+.launcher-toggle-group [data-testid='location-picker-yolo-toggle'].active::before {
+  background: var(--launcher-accent);
 }
 
 [data-theme='light'] .new-session-launcher {
-  --color-bg-selected: inherit;
-  --color-bg-input: inherit;
-  --color-text-dimmed: inherit;
-  --color-border-focus: inherit;
+  --launcher-accent-text: #d9531f;
+  --launcher-bg-input: var(--color-bg-input);
+  --launcher-bg-tile: var(--color-bg-elevated);
+  --launcher-border-tile: var(--color-border-subtle);
+  --launcher-border-input: var(--color-border);
+  --launcher-hairline: var(--color-border-subtle);
+  --launcher-footer-bg: rgba(0, 0, 0, 0.03);
+  --launcher-text-quiet: var(--color-text-secondary);
+  --launcher-text-path: var(--color-text-tertiary);
+  --launcher-text-section: var(--color-text-tertiary);
+  --launcher-text-faint: var(--color-text-muted);
   --launcher-worktree-color: var(--color-success);
+  border-color: var(--color-border-subtle);
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) .new-session-launcher {
-    --color-bg-selected: inherit;
-    --color-bg-input: inherit;
-    --color-text-dimmed: inherit;
-    --color-border-focus: inherit;
+    --launcher-accent-text: #d9531f;
+    --launcher-bg-input: var(--color-bg-input);
+    --launcher-bg-tile: var(--color-bg-elevated);
+    --launcher-border-tile: var(--color-border-subtle);
+    --launcher-border-input: var(--color-border);
+    --launcher-hairline: var(--color-border-subtle);
+    --launcher-footer-bg: rgba(0, 0, 0, 0.03);
+    --launcher-text-quiet: var(--color-text-secondary);
+    --launcher-text-path: var(--color-text-tertiary);
+    --launcher-text-section: var(--color-text-tertiary);
+    --launcher-text-faint: var(--color-text-muted);
     --launcher-worktree-color: var(--color-success);
+    border-color: var(--color-border-subtle);
   }
+}
+
+.launcher-status {
+  margin: 8px 2px 0;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--launcher-text-quiet);
+}
+.launcher-status[data-bad] {
+  color: #ff9c9c;
 }

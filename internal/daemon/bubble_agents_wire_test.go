@@ -20,7 +20,7 @@ func inBubbleWithAgents(t *testing.T, script func(t *testing.T, w *world)) {
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
 		bubbled.T = t
-		w := &world{World: &bubbled, bubbled: true, terms: testworld.NewTerminals()}
+		w := &world{World: &bubbled, bubbled: true, terms: testworld.NewTerminals(t)}
 		w.start()
 		script(t, w)
 	})

@@ -31,21 +31,21 @@ func notebookFileHolds(t *testing.T, path, want string) {
 func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 	w := newWorld(t)
 	setup := w.App()
-	shared := fsNotebookRoot(t, w)
+	defaultFolder := fsNotebookRoot(t, w)
 	work, home, plain := createProfile(setup, "Work"), createProfile(setup, "Home"), createProfile(setup, "Plain")
 	workApp, homeApp, plainApp := w.AppOn(work.ID), w.AppOn(home.ID), w.AppOn(plain.ID)
 	workRoot, homeRoot := filepath.Join(w.Dir, "work-notebook"), filepath.Join(w.Dir, "home-notebook")
 
-	if saved := notebookSetting(workApp, "notebook.profile_root", workRoot); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(workApp, "notebook.root", workRoot); !protocol.Deref(saved.Success) {
 		t.Fatalf("setting Work's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(workApp, workRoot)
-	if saved := notebookSetting(homeApp, "notebook.profile_root", homeRoot); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(homeApp, "notebook.root", homeRoot); !protocol.Deref(saved.Success) {
 		t.Fatalf("setting Home's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(homeApp, homeRoot)
-	if got := plainApp.Initial.Settings["notebook.root.effective"]; got != shared {
-		t.Fatalf("Plain starts on Notebook folder %v, want the shared folder %s", got, shared)
+	if got := plainApp.Initial.Settings["notebook.root.effective"]; got != defaultFolder {
+		t.Fatalf("Plain starts on Notebook folder %v, want the default folder %s", got, defaultFolder)
 	}
 
 	for _, write := range []struct {
@@ -58,13 +58,13 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 	}
 	for _, event := range plainApp.Log() {
 		var changed protocol.FsChangedMessage
-		if json.Unmarshal(event, &changed) == nil && changed.Event == protocol.EventFsChanged && changed.Root != shared {
+		if json.Unmarshal(event, &changed) == nil && changed.Event == protocol.EventFsChanged && changed.Root != defaultFolder {
 			t.Fatalf("Plain's window heard a change in another profile's Notebook: %+v", changed)
 		}
 	}
 	notebookFileHolds(t, filepath.Join(workRoot, "work.md"), notebookNote("work.md"))
 	notebookFileHolds(t, filepath.Join(homeRoot, "home.md"), notebookNote("home.md"))
-	notebookFileHolds(t, filepath.Join(shared, "plain.md"), notebookNote("plain.md"))
+	notebookFileHolds(t, filepath.Join(defaultFolder, "plain.md"), notebookNote("plain.md"))
 	for _, listed := range []struct {
 		app  *testworld.Peer
 		want []string
@@ -75,17 +75,31 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 	}
 
 	cli := w.Client()
-	for _, tc := range []struct{ profile, want string }{{"Work", workRoot}, {home.ID, homeRoot}, {"Plain", shared}} {
+	for _, tc := range []struct{ profile, want string }{{"Work", workRoot}, {home.ID, homeRoot}, {"Plain", defaultFolder}} {
 		entry, err := cli.Settings(client.SettingsCaller{Profile: tc.profile}, "notebook.root.effective", false)
 		if err != nil || protocol.Deref(entry.Entries[0].Value) != tc.want || entry.Entries[0].Scope != protocol.SettingScopeProfile {
 			t.Fatalf("settings --profile %s notebook.root.effective = %+v (%v), want %s", tc.profile, entry, err, tc.want)
 		}
 	}
-	if _, err := cli.Settings(client.SettingsCaller{}, "notebook.profile_root", false); err == nil || !strings.Contains(err.Error(), "--profile") {
+	if _, err := cli.Settings(client.SettingsCaller{}, "notebook.root", false); err == nil || !strings.Contains(err.Error(), "--profile") {
 		t.Fatalf("reading a profile setting without naming one of several profiles = %v, want a request for --profile", err)
 	}
+	for _, attempt := range []func() error{
+		func() error {
+			_, err := cli.Settings(client.SettingsCaller{Profile: "Work"}, "notebook.profile_root", false)
+			return err
+		},
+		func() error {
+			_, err := cli.SetSetting(client.SettingsCaller{Profile: "Work"}, "notebook.profile_root", filepath.Join(w.Dir, "elsewhere"))
+			return err
+		},
+	} {
+		if err := attempt(); err == nil || !strings.Contains(err.Error(), "unknown setting: notebook.profile_root") {
+			t.Fatalf("using the retired notebook.profile_root = %v, want an unknown setting", err)
+		}
+	}
 	outside := t.TempDir()
-	if _, err := cli.SetSetting(client.SettingsCaller{Profile: "Plain"}, "notebook.profile_root", outside); err == nil || !strings.Contains(err.Error(), "outside instance harness root") {
+	if _, err := cli.SetSetting(client.SettingsCaller{Profile: "Plain"}, "notebook.root", outside); err == nil || !strings.Contains(err.Error(), "outside instance harness root") {
 		t.Fatalf("pointing a harness profile outside the harness = %v, want a refusal", err)
 	}
 
@@ -100,7 +114,7 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 	if err := os.Mkdir(movedRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if saved := notebookSetting(workApp, "notebook.profile_root", movedRoot); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(workApp, "notebook.root", movedRoot); !protocol.Deref(saved.Success) {
 		t.Fatalf("repointing Work's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(workApp, movedRoot)
@@ -116,11 +130,11 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 		t.Fatalf("Home lost its note when Work repointed: %s", protocol.Deref(got.Error))
 	}
 
-	if saved := notebookSetting(workApp, "notebook.profile_root", ""); !protocol.Deref(saved.Success) {
+	if saved := notebookSetting(workApp, "notebook.root", ""); !protocol.Deref(saved.Success) {
 		t.Fatalf("clearing Work's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
-	notebookEffectiveRoot(workApp, shared)
+	notebookEffectiveRoot(workApp, defaultFolder)
 	if got := notebookAskRead(workApp, "plain.md"); !got.Success {
-		t.Fatalf("after clearing its folder, Work cannot read the shared Notebook: %s", protocol.Deref(got.Error))
+		t.Fatalf("after clearing its folder, Work cannot read the default folder: %s", protocol.Deref(got.Error))
 	}
 }

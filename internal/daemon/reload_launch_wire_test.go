@@ -114,7 +114,8 @@ func TestTwoReloadsAtOnceLeaveOneAgentRunning(t *testing.T) {
 			t.Errorf("a concurrent reload failed: %s", protocol.Deref(result.Error))
 		}
 	}
-	boot()
+	boot.Await()
+	boot.Release()
 	last := w.Launched(session)
 	app.TypeLine(session, "run the tests")
 	if got := last.Prompted(); got != "run the tests" {

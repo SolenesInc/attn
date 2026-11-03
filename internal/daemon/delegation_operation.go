@@ -401,6 +401,30 @@ func (d *Daemon) endDelegationRun(id string) {
 	d.delegationMu.Unlock()
 }
 
+func delegationSettled(operation *protocol.DelegationOperation) bool {
+	return operation.State != protocol.DelegationOperationStateAccepted && operation.State != protocol.DelegationOperationStatePreparing
+}
+
+func (d *Daemon) awaitDelegationSettled(id string, callerGone <-chan struct{}) (*protocol.DelegationOperation, error) {
+	for {
+		changed := d.store.DelegationOperationsChanged()
+		operation, err := d.delegationOperation(id)
+		if err != nil || delegationSettled(operation) {
+			return operation, err
+		}
+		select {
+		case <-changed:
+		case <-callerGone:
+			if d.stopping() {
+				return nil, errDaemonStopping
+			}
+			return nil, errCallerGone
+		case <-d.life.Done():
+			return nil, errDaemonStopping
+		}
+	}
+}
+
 func (d *Daemon) delegationOperation(id string) (*protocol.DelegationOperation, error) {
 	record, err := d.store.GetDelegationOperation(strings.TrimSpace(id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -493,8 +517,32 @@ func (d *Daemon) resumePendingDelegations() {
 	}
 }
 
+func (d *Daemon) delegationStatus(msg *protocol.DelegateStatusMessage, selected string, callerGone <-chan struct{}) (*protocol.DelegationOperation, error) {
+	seen := strings.TrimSpace(protocol.Deref(msg.WaitPast))
+	for {
+		changed := d.store.DelegationOperationsChanged()
+		operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), selected)
+		if err != nil || seen == "" || operation.UpdatedAt != seen || delegationSettled(operation) {
+			return operation, err
+		}
+		select {
+		case <-changed:
+		case <-callerGone:
+			if d.stopping() {
+				return nil, errDaemonStopping
+			}
+			return nil, errCallerGone
+		case <-d.life.Done():
+			return nil, errDaemonStopping
+		}
+	}
+}
+
 func (d *Daemon) handleDelegateStatusWS(client *wsClient, msg *protocol.DelegateStatusMessage) {
-	operation, err := d.scopedDelegationOperation(msg.ID, protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), client.selectedProfile())
+	operation, err := d.delegationStatus(msg, client.selectedProfile(), client.gone)
+	if errors.Is(err, errCallerGone) {
+		return
+	}
 	response := protocol.DelegationOperationMessage{
 		Event:     protocol.EventDelegationOperation,
 		Success:   err == nil,

@@ -14,7 +14,29 @@ import (
 )
 
 func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (who.Address, error) {
+	if mailbox.Kind != protocol.QuickCaptureMailboxKindSession && mailbox.SessionID != nil {
+		return who.Address{}, fmt.Errorf("%s mailbox cannot include session_id", mailbox.Kind)
+	}
 	switch mailbox.Kind {
+	case protocol.QuickCaptureMailboxKindSession:
+		if mailbox.MemberID != nil {
+			return who.Address{}, fmt.Errorf("session mailbox cannot include member_id")
+		}
+		id := protocol.TrimID(protocol.Deref(mailbox.SessionID))
+		if id == "" {
+			return who.Address{}, fmt.Errorf("session mailbox requires session_id")
+		}
+		session := d.store.Get(id)
+		if session == nil {
+			return who.Address{}, fmt.Errorf("session %s is not running", id)
+		}
+		if session.ProfileID != profileID {
+			return who.Address{}, fmt.Errorf("session %s belongs to another profile", id)
+		}
+		if !sessionReadsInboxDoorbells(session) {
+			return who.Address{}, fmt.Errorf("session %s is a shell; a capture goes only to an agent session", id)
+		}
+		return d.inboxAddressOf(session.ID), nil
 	case protocol.QuickCaptureMailboxKindChief:
 		if mailbox.MemberID != nil {
 			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
@@ -128,8 +150,29 @@ func (d *Daemon) quickCaptureRequest(profileID string, msg any, downloadChunkByt
 	}
 	return nil, fmt.Errorf("unknown quick capture operation")
 }
+func quickCaptureSenderToken(msg any) (string, bool) {
+	switch m := msg.(type) {
+	case *protocol.QuickCaptureSendMessage:
+		return protocol.Deref(m.SenderToken), true
+	case *protocol.QuickCaptureAttachmentPutMessage:
+		return protocol.Deref(m.SenderToken), true
+	case *protocol.QuickCaptureAttachmentDiscardMessage:
+		return protocol.Deref(m.SenderToken), true
+	}
+	return "", false
+}
+
 func (d *Daemon) handleQuickCapture(conn net.Conn, msg any) {
-	profileID, err := d.quickCaptureProfile(msg, "")
+	var profileID string
+	var err error
+	if token, authoring := quickCaptureSenderToken(msg); authoring {
+		var sender *store.PairedSender
+		if sender, err = d.requirePairedSender(token); err == nil {
+			profileID, err = d.senderProfile(sender, quickCaptureRequestScope(msg).profileID)
+		}
+	} else {
+		profileID, err = d.quickCaptureProfile(msg, "")
+	}
 	var result *protocol.QuickCaptureResult
 	if err == nil {
 		result, err = d.quickCaptureRequest(profileID, msg, quickCaptureSocketDownloadBytes)

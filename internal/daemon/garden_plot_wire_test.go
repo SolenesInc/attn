@@ -130,7 +130,7 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Dormant: 1, Ready: 2, Blocked: 1}
+	want := protocol.SeedPlotProgress{Total: 7, Done: 1, Withered: 1, Growing: 1, Parked: 1, Ready: 2, Blocked: 1}
 	shown, err := cli.SeedShow(protocol.SessionID(planter), planted.Crown.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if primed.Scope != "plot" || primed.Crown == nil || primed.Crown.ID != planted.Crown.ID {
 		t.Fatalf("the delegate's own ready = scope %q crown %+v, want the plot it was dispatched to", primed.Scope, primed.Crown)
 	}
-	if got := gardenPlotSeedIDs(primed.Seeds); !slices.Equal(got, []string{first, second}) {
+	if got := lifeSeedIDs(primed.Seeds); !slices.Equal(got, []string{first, second}) {
 		t.Errorf("the delegate is offered %v, want the plot's unblocked children %v", got, []string{first, second})
 	}
 	if len(primed.Handoffs) != 1 || primed.Handoffs[0].Body != "the fixture is seeded" || authorSessionOf(primed.Handoffs[0]) != protocol.SessionID(planner) {
@@ -317,15 +317,7 @@ func gardenPlotReadyIDs(t *testing.T, cli *client.Client, session, crown string,
 	if err != nil {
 		t.Fatalf("seed ready: %v", err)
 	}
-	return gardenPlotSeedIDs(ready.Seeds)
-}
-
-func gardenPlotSeedIDs(seeds []protocol.Seed) []string {
-	ids := make([]string, 0, len(seeds))
-	for _, seed := range seeds {
-		ids = append(ids, seed.ID)
-	}
-	return ids
+	return lifeSeedIDs(ready.Seeds)
 }
 
 func gardenPlotDelegate(app *testworld.Peer, agent fakeagent.Harness, source, requestID, crown, cwd string) protocol.DelegateResultMessage {

@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types check-gateway-compat generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -175,8 +175,9 @@ ingest-clickhouse:
 ingest-clickhouse-stop:
 	@./scripts/ingest-clickhouse.sh stop
 
+SCRIPT_TESTS ?= $(sort $(wildcard scripts/*_test.sh))
 test-scripts:
-	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
+	@set -e; for script_test in $(SCRIPT_TESTS); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -193,6 +194,16 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 	pnpm --dir app install --frozen-lockfile
 	@touch $@
 
+MOBILE_NODE_MODULES := mobile/node_modules/.attn-installed
+$(MOBILE_NODE_MODULES): mobile/package.json mobile/pnpm-lock.yaml
+	pnpm --dir mobile install --frozen-lockfile
+	@touch $@
+
+SCHEMA_NODE_MODULES := internal/protocol/schema/node_modules/.attn-installed
+$(SCHEMA_NODE_MODULES): internal/protocol/schema/package.json internal/protocol/schema/pnpm-lock.yaml
+	pnpm --dir internal/protocol/schema install --frozen-lockfile
+	@touch $@
+
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
@@ -205,10 +216,9 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: check-go check-frontend
+.PHONY: check-go check-frontend check-browser-runtime check-mobile
 check-go: lint-go
-	go test -exec=true -vet=off ./...
-	go vet $(GO_PACKAGES)
+	go vet ./...
 
 lint-go: $(NATIVE_VT_DEP)
 	go tool staticcheck $(GO_PACKAGES)
@@ -227,8 +237,18 @@ lint-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run lint
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
 
-check-frontend: lint-frontend
-	cd app && pnpm exec tsc --noEmit
+check-frontend: lint-frontend check-browser-runtime
+	cd app && pnpm exec tsrs --noEmit
+
+check-mobile: $(MOBILE_NODE_MODULES)
+	cd mobile && pnpm run check
+
+check-browser-runtime: $(APP_NODE_MODULES)
+	cd app && pnpm run build:browser-runtime
+	@git diff --quiet -- app/src-tauri/generated/browser-runtime.js || { \
+		echo "app/src-tauri/generated/browser-runtime.js differs from a fresh build of its sources. Commit the file this check just rebuilt." >&2; \
+		exit 1; \
+	}
 
 test-e2e: $(APP_NODE_MODULES)
 	cd app && pnpm run e2e
@@ -395,7 +415,7 @@ ensure-go-jsonschema:
 # ~1200-line diff that says nothing. Generating under C makes the output depend
 # only on the schemas.
 generate-types: export LC_ALL = C
-generate-types: ensure-go-jsonschema
+generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 	rm -rf internal/protocol/schema/tsp-output/json-schema
 	cd internal/protocol/schema && pnpm exec tsp compile .
 	$(GO_JSONSCHEMA) -p protocol --only-models --tags json --resolve-extension json \
@@ -422,6 +442,17 @@ generate-types: ensure-go-jsonschema
 		--no-prefer-unions --no-prefer-unknown \
 		-o app/src/types/generated.ts
 	node scripts/generate-protocol-version.mjs
+	rm -rf internal/protocol/schema/tsp-output-gateway
+	cd internal/protocol/schema && pnpm exec tsp compile gateway.tsp --output-dir tsp-output-gateway
+	$(GO_JSONSCHEMA) -p gateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
+		-o internal/protocol/gateway/generated.go \
+		internal/protocol/schema/tsp-output-gateway/json-schema/*.json
+	npx quicktype@26.0.0 \
+		--src internal/protocol/schema/tsp-output-gateway/json-schema/*.json \
+		--src-lang schema --lang typescript \
+		--no-prefer-unions --no-prefer-unknown \
+		-o app/src/types/gatewayGenerated.ts
+	node scripts/generate-gateway.mjs
 
 # CI check: verify generated files are up-to-date.
 #
@@ -430,7 +461,11 @@ generate-types: ensure-go-jsonschema
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/gateway app/src/types/gatewayGenerated.ts app/src/types/gatewayVersion.ts
+
+# Refuses a gateway API change that is not an addition to the schema on origin/main.
+check-gateway-compat:
+	scripts/check-gateway-compat
 
 MIGRATION_BASE ?= origin/main
 
@@ -438,12 +473,15 @@ check-migrations:
 	go run ./cmd/db-migrations check-history --base "$(MIGRATION_BASE)"
 
 generate-schema:
+	go run ./scripts/generate-schema --image > internal/store/schema.sqlite.gz
 	go run ./scripts/generate-schema > internal/store/schema.sql
 
 check-schema:
-	@dump=$$(mktemp); trap 'rm -f "$$dump"' EXIT; \
+	@dump=$$(mktemp); image=$$(mktemp); trap 'rm -f "$$dump" "$$image"' EXIT; \
 		go run ./scripts/generate-schema > "$$dump" && \
-		diff -u internal/store/schema.sql "$$dump"
+		diff -u internal/store/schema.sql "$$dump" && \
+		go run ./scripts/generate-schema --image > "$$image" && \
+		cmp internal/store/schema.sqlite.gz "$$image"
 
 # Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
 # derived from `attn instance resolve` by scripts/build-app-instance.sh: the

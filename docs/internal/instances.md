@@ -1,6 +1,6 @@
 # Instances
 
-An instance isolates data, socket, ports, app, and bundle id.
+An instance has its own data, socket, ports, app, and bundle id.
 
 ```bash
 eval "$(attn instance-env <name>)"   # fish: attn instance-env --fish <name> | source
@@ -9,8 +9,8 @@ attn instance list --json
 eval "$(attn instance-env --unset)"  # fish: attn instance-env --fish --unset | source
 ```
 
-Tooling reads paths from `attn instance resolve --field <field>` instead of
-deriving them. Tests scope with bare `ATTN_DATA_DIR`.
+Tooling reads paths from `attn instance resolve --field <field>` and does not
+derive them. Tests scope their paths with `ATTN_DATA_DIR` alone.
 
 ## Build and install
 
@@ -21,38 +21,34 @@ Follow [production safety](../../AGENTS.md#you-are-probably-running-inside-attn)
 | Go only | `make install-daemon-dev` | `make install-daemon INSTANCE=<name>` |
 | Anything else | `make dev` | `make install INSTANCE=<name>` |
 
-Open a named app with `make run INSTANCE=<name>`. Named instances build a faster,
-less optimized shell; `ATTN_APP_CARGO_PROFILE=release` builds the shipping way.
-Full macOS installs run outside the sandbox so signing keeps permissions. For a
-Linux VM, see [Local Linux runner](linux-runner.md).
+Open a named app with `make run INSTANCE=<name>`. Named instances build a
+faster, less optimized shell. Set `ATTN_APP_CARGO_PROFILE=release` to build the
+shipping profile. Run full macOS installs outside the sandbox. Signing then finds
+the machine's code-signing identity with `security find-identity` and does not
+fall back to an ad-hoc signature, so macOS privacy grants such as Screen
+Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md).
 
 ## GitHub polling
 
 Named instances do not poll GitHub with your `gh` credentials, so they cannot
 spend production's API budget. To test against real GitHub, start the daemon
-with `ATTN_GITHUB_POLLING=on`; harness runs use the mock GitHub without it.
-
-## Iterate on the pi plugin
-
-```bash
-attn plugin uninstall attn-pi
-attn plugin link --path <checkout>/plugins/attn-pi
-```
-
-New pi sessions run the checkout; driver changes (`src/`) need a daemon restart.
-`attn plugin install-bundled attn-pi` restores the bundled copy.
+with `ATTN_GITHUB_POLLING=on`. Without it, harness runs use the mock GitHub.
 
 ## Verification requirements
 
-Lifecycle, protocol, PTY, background-runner, timing, and other app-observable
-changes need scenarios covering them. A pull request needs green packaged-app
-CI on its head; report missing coverage and ask before merging. A landing is
-verified locally and by `main`'s full scenario matrix after it lands; see
+Cover lifecycle, protocol, PTY, background-runner, timing, and other
+app-observable changes with scenarios. A pull request needs green packaged-app
+CI on its head. Report missing coverage and ask before merging. Verify a landing
+locally. After the landing, CI verifies it again with `main`'s full scenario
+matrix. See
 [Verifying before landing](trunk-based-development.md#verifying-before-landing).
 
 CI runs the scenario matrix. Run scenarios locally, in a non-production
-instance, to check a change before landing, reproduce a CI failure, or develop
-a scenario. Check the installed build first, not whatever `attn` is on `PATH`:
+instance, to reproduce a CI failure or develop a scenario. When the machine has
+the capacity, you may also run them to check an app-observable change before
+landing.
+
+Check the installed build first, not the `attn` on `PATH`:
 
 ```bash
 "$(./attn instance resolve --field appDaemon)" preflight
@@ -62,21 +58,27 @@ Before running scenarios, read the [harness guide](../../app/scripts/real-app-ha
 
 ## Clean up
 
-When you move on, run `attn instance clean <name>` for instances you created,
-including runs you abandon. It stops the instance's app, daemon, workers and
-plugin drivers, and removes its data. It takes the instance from its argument
-alone, never from routing variables, and refuses the default (production)
-instance without `--force`.
-Never delete a data directory by hand; cleanup needs its worker registry.
-If clean reports a live app, quit it and rerun. If it reports a process it
-could not confirm or stop, leave that process alone: an agent brings clean's
-output to the user, and a person checks it with `ps -p <pid>`, stops it only
-if it is a stale attn worker, then reruns clean.
-Worker removal waits for the worker's child to exit. When a worker cannot be
-removed, clean exits non-zero and keeps the instance data and worker registry
+When you move on, run `attn instance clean <name>` for instances you
+created, including runs you abandon. `clean` stops the instance's app, daemon,
+workers, and plugin drivers, and removes the instance's data. `clean` takes the
+instance from its argument alone, never from routing variables, and refuses the
+default (production) instance without `--force`.
+Never delete a data directory by hand, because cleanup needs the worker registry.
+
+If `clean` reports a live app, quit the app and rerun `clean`.
+
+If `clean` reports a process it could not confirm or stop:
+
+- If you are an agent, leave that process alone and bring the output of `clean`
+  to the user.
+- If you are a person, check the process with `ps -p <pid>`. Stop it only if it
+  is a stale attn worker, then rerun `clean`.
+
+Worker removal waits for the worker's child to exit. If a worker cannot be
+removed, `clean` exits non-zero and keeps the instance data and worker registry
 for diagnosis.
 
 ## UI automation
 
-Named instances expose a localhost automation bridge. Production needs
-`ATTN_AUTOMATION=1`.
+Named instances run a localhost server in the app that scripts use to drive the
+UI. Production runs it only when `ATTN_AUTOMATION=1`.

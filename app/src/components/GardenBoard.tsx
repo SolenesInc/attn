@@ -84,7 +84,7 @@ function plotCounts(seed: Seed): string {
   if (p.growing) parts.push(`${p.growing} in progress`);
   if (p.ready) parts.push(`${p.ready} ready`);
   if (p.blocked) parts.push(`${p.blocked} blocked`);
-  if (p.dormant) parts.push(`${p.dormant} parked`);
+  if (p.parked) parts.push(`${p.parked} parked`);
   parts.push(`${p.done}/${p.total} done`);
   return parts.join(' · ');
 }

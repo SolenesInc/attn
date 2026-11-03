@@ -215,19 +215,6 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		}
 		d.sessionMonitor(session.ID).StartTranscriptWatcher(binding.TranscriptPath)
 	}
-	d.restorePluginUsageWatchers()
-}
-
-func (d *Daemon) restorePluginUsageWatchers() {
-	if d.store == nil {
-		return
-	}
-	for _, run := range d.store.ListActiveAgentDriverRuns() {
-		if strings.TrimSpace(run.TranscriptPath) == "" || d.store.Get(run.SessionID) == nil {
-			continue
-		}
-		d.sessionMonitor(run.SessionID).WatchDriverUsage(run.TranscriptPath)
-	}
 }
 
 func (d *Daemon) armPluginDriverSilenceWatch(pluginName string) {
@@ -252,11 +239,6 @@ func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
 	if d.sessionMonitor(sessionID).NoteDriverReport() {
 		d.logf("plugin driver silence cleared: session=%s", sessionID)
 	}
-}
-
-func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
-	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: string(data), Source: strings.TrimSpace(source)})
-	return err
 }
 
 func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {

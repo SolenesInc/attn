@@ -41,13 +41,14 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 			}
 			agent.Reply("Outpost ready. <!-- attn:state=waiting_input -->")
 			session := testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
-				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens > 0
+				return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens > 0
 			})
 			if protocol.Deref(session.Host) != pair.Host {
 				t.Fatalf("host = %q, want %q", protocol.Deref(session.Host), pair.Host)
 			}
+			mark := pair.App.EventCount()
 			pair.App.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(id)})
-			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
+			testworld.AwaitSessionSince(pair.App, mark, id, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
 			until := time.Now().Add(time.Hour)
 			if err := home.Client().SnoozeSession("", protocol.SessionID(id), until); err != nil {
 				t.Fatal(err)
@@ -55,8 +56,9 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnSnoozedUntil) == until.UTC().Format(time.RFC3339Nano)
 			})
+			mark = pair.App.EventCount()
 			pair.App.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(id)})
-			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
+			testworld.AwaitSessionSince(pair.App, mark, id, func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnOwed) && protocol.Deref(s.TurnSnoozedUntil) == ""
 			})
 			rename := outpost.Run(testworld.Invocation{Terminal: pair.App.Terminal(id), Args: []string{"session", "rename", "Remote CLI label"}})
@@ -147,8 +149,9 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 			announcements = append(announcements, app)
 			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
 		} else {
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 		}
 		app.TypeLine(id, "after "+restart.name+" restart")
 		agent.Prompted()
@@ -365,8 +368,9 @@ func TestAClosedOutpostConversationResumesWithItsOwnCostAfterAnOutpostRestart(t 
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = app.EventCount()
 	outpost.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+	stopRetries()
 	mark = len(app.Log())
 	app.TypeLine(string(next.ID), "/resume "+original)
 	agent.Prompted()
@@ -385,12 +389,18 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 	syncing := home.PauseAt(pausepoint.NotebookStreamOpen)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
+	outpost.Start()
+	home.Start()
+	own := home.Path("profile-notebook")
+	requireStdout(t, home.Attn("settings", "set", "notebook.root", own))
+	pair.Connect()
 	syncing.Await()
 	withHost := func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) }
 	early, _, _ := home.RequestSpawn(pair.App, fakeagent.Claude, outpost.Path("agent"), withHost)
-	if early.Success || !strings.Contains(protocol.Deref(early.Error), "first sync") {
-		t.Fatalf("first sync gate: success=%v error=%q", early.Success, protocol.Deref(early.Error))
+	for _, want := range []string{"outpost's first sync of the Notebook folder " + own + " has not completed", "remaining work has not been reported yet"} {
+		if early.Success || !strings.Contains(protocol.Deref(early.Error), want) {
+			t.Fatalf("first sync gate: success=%v error=%q, want %q", early.Success, protocol.Deref(early.Error), want)
+		}
 	}
 	t.Logf("first sync gate: %s", protocol.Deref(early.Error))
 	for _, limit := range []struct {
@@ -399,7 +409,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 		want  string
 	}{
 		{fakeagent.Claude, true, "chief and crew run only at the home"},
-		{fakeagent.Harness("pi"), false, "plugin harness pi runs only at the home"},
+		{fakeagent.Harness("plug"), false, "plugin harness plug runs only at the home"},
 	} {
 		denied, _, _ := home.RequestSpawn(pair.App, limit.agent, outpost.Path("agent"), withHost, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(limit.chief) })
 		if denied.Success || !strings.Contains(protocol.Deref(denied.Error), limit.want) {
@@ -415,7 +425,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "chief runs only at the home") {
 		t.Fatalf("chief toggle: %+v", refused)
 	}
-	t.Log("chief/crew and plugin launch limits named; chief toggle refused; first-sync completion permits Claude")
+	t.Log("chief/crew and plugin launch limits named; chief toggle refused; the profile folder's first-sync completion permits Claude")
 }
 
 func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
@@ -440,9 +450,10 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = app.EventCount()
 	outpost.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	deciding.Release()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+	stopRetries()
 	next := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
 	}).Session
@@ -491,8 +502,9 @@ func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T)
 	outcome.Release()
 	outpost.Stop()
 	outpost.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	applied.Await()
+	stopRetries()
 	applied.Release()
 	entry, err := home.Client().SessionShow(next.ID)
 	if err != nil || entry == nil || protocol.Deref(entry.Entry.ClosedAt) == "" {
@@ -708,7 +720,7 @@ func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *
 	}
 }
 
-func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
+func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 	home := testworld.NewStack(t)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	outpost.Vars = append(outpost.Vars, "ATTN_HEADLESS_TASKS=")
@@ -764,8 +776,9 @@ func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
 	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = pair.App.EventCount()
 	outpost.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+	stopRetries()
 	app = outpost.App()
 	retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr("retry-local-review")}, protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == "retry-local-review" })
 	if !retried.Success || retried.Task == nil || retried.Task.State != "queued" {
@@ -853,8 +866,9 @@ func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t 
 			observed := outpost.PauseAt(pausepoint.ConversationObserved)
 			started := len(app.Log())
 			outpost.Start()
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, started)
+			stopRetries()
 			input := command + "\roffline work\r"
 			mark := len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: input})
@@ -1029,8 +1043,9 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 			connectionMark := app.EventCount()
 			outpost.Start()
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 			testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
 			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
 			if !reloaded.Success {
@@ -1200,8 +1215,9 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 			mark = app.EventCount()
 			outpost.Start()
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 			mark = len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after restart\r"})
 			agent.Prompted()

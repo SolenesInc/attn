@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,17 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func outpostsShownAt(p *testworld.Peer, mark int) []protocol.OutpostInfo {
+	rows := p.Initial.Outposts
+	for _, raw := range p.Log()[:mark] {
+		var update protocol.OutpostsUpdatedMessage
+		if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+			rows = update.Outposts
+		}
+	}
+	return rows
+}
 
 func outpostState(p *testworld.Peer, name string, state protocol.OutpostState) protocol.OutpostInfo {
 	var found protocol.OutpostInfo
@@ -71,8 +84,9 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	outpostStateSince(p, "outpost", protocol.OutpostStateLost, mark)
 	mark = p.EventCount()
 	remote.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	again := outpostStateSince(p, "outpost", protocol.OutpostStateConnected, mark)
+	stopRetries()
 	if protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) || protocol.Deref(again.HostKeyFingerprint) != protocol.Deref(first.HostKeyFingerprint) {
 		t.Fatalf("restart changed pins: %+v -> %+v", first, again)
 	}
@@ -142,6 +156,57 @@ func TestOutpostsRemovingARefusedAddKeepsTheOtherHomesShell(t *testing.T) {
 		t.Fatalf("first home's bridge after the second home's Remove: %+v", rows)
 	}
 	t.Logf("second home removed its refused row; first home's enrollment, bridge and shell PID %s survived", strings.TrimSpace(string(after)))
+}
+
+func TestOutpostsAnotherHomesAddOnAnotherBuildLeavesTheOutpostAlone(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home, second := testworld.NewStack(t), testworld.NewStack(t), testworld.NewStack(t)
+	other := testworld.AttnUpdateBinary(t, "second-home", "source", "")
+	second.RunFrom(other)
+	second.Vars = append(second.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+other)
+	for _, s := range []*testworld.Stack{remote, home, second} {
+		ssh.Use(s.World)
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	ssh.Route(address, remote)
+	installed, err := os.ReadFile(ssh.InstallPath(remote))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := enableOutposts(t, home)
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
+	paired := outpostState(p, "outpost", protocol.OutpostStateConnected)
+	shell := home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &paired.ID })
+	pidPath := remote.Path("shell.pid")
+	p.TypeLine(shell, "echo $$ > "+pidPath+"; echo before-$((1+1))")
+	p.AwaitScreen(shell, "before-2")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := enableOutposts(t, second)
+	q.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "taken", Destination: address})
+	refused := outpostState(q, "taken", protocol.OutpostStateRefused)
+	for _, word := range []string{"paired to home", protocol.Deref(p.Initial.DaemonInstanceID), "attn enrollment leave"} {
+		if !strings.Contains(protocol.Deref(refused.LastError), word) {
+			t.Fatalf("refusal omits %q: %+v", word, refused)
+		}
+	}
+	if after, err := os.ReadFile(ssh.InstallPath(remote)); err != nil || !bytes.Equal(after, installed) {
+		t.Fatalf("the second home's Add replaced the first home's outpost binary: %v", err)
+	}
+	p.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-$((2+2))")
+	p.AwaitScreen(shell, "after-4")
+	after, err := os.ReadFile(pidPath)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
+	}
+	if rows := home.App().Initial.Outposts; len(rows) != 1 || rows[0].State != protocol.OutpostStateConnected || protocol.Deref(rows[0].Build) != protocol.Deref(paired.Build) {
+		t.Fatalf("first home's outpost after the second home's Add: %+v", rows)
+	}
+	t.Logf("second home %s was refused before installing; first home stayed on %s with shell PID %s", protocol.Deref(q.Initial.DaemonInstanceID), protocol.Deref(paired.Build), strings.TrimSpace(string(after)))
 }
 
 func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
@@ -226,8 +291,9 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	}
 	mark = p.EventCount()
 	resume()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	again := outpostStateSince(p, "frozen", protocol.OutpostStateConnected, mark)
+	stopRetries()
 	if again.LastError != nil || again.LastErrorAt != nil || protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) {
 		t.Fatalf("recovery: %+v", again)
 	}
@@ -265,8 +331,9 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			replacement.Start()
 			remote := replacement.App()
 			a.Route(address, replacement)
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
+			stopRetries()
 			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
 			if sameKey {
 				words = append(words, protocol.Deref(remote.Initial.DaemonInstanceID))

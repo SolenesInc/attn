@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -127,16 +128,9 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 		t.Fatal(err)
 	}
 	id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)).ID
-	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
-		w.tickSchedulesUntil("a new delivered run", func() bool {
-			runs := automationRuns(t, cli, id)
-			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
-				return false
-			}
-			run = runs[0]
-			return true
-		})
+		run := awaitNextDeliveredRun(t, w, app, id, earlier...)
 		setAutomationEnabled(t, cli, id, false)
 		return run
 	}
@@ -186,7 +180,7 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 	t.Logf("%s lost its transcript and the next run launched %s fresh; closing %s and running again resumed conversation %s", lost, session, session, replacement.ConversationID)
 }
 
-func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionWorking(t *testing.T) {
+func TestEditingASingletonsContractHandsItsSeedToANewSessionAndLeavesTheOldOneWorking(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
@@ -194,17 +188,11 @@ func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionW
 	}
 	claudeSpec := strings.Replace(automationSingletonSpec(w, "Sheriff", "latest", ""), "*/2 * * * *", "@every 3s", 1)
 	codexSpec := strings.Replace(claudeSpec, "launch: {driver: claude}", "launch: {driver: codex}", 1)
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
 	id := applyAutomation(t, cli, codexSpec).ID
-	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
-		w.tickSchedulesUntil("a new delivered run", func() bool {
-			runs := automationRuns(t, cli, id)
-			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
-				return false
-			}
-			run = runs[0]
-			return true
-		})
+		run := awaitNextDeliveredRun(t, w, app, id, earlier...)
 		setAutomationEnabled(t, cli, id, false)
 		return run
 	}
@@ -249,14 +237,42 @@ func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionW
 		t.Fatalf("the old session was not told its stake moved; its inbox holds %q", told)
 	}
 
+	if _, err := cli.SeedTransition(codexSession, stake, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	setAutomationEnabled(t, cli, id, true)
+	var refused protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a settled run after the old session took its stake back", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State == "pending" || slices.Contains([]string{first.ID, again.ID, next.ID}, runs[0].ID) {
+			return false
+		}
+		refused = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	if shown, err = cli.SeedShow("", stake); err != nil {
+		t.Fatal(err)
+	}
+	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != codexSession {
+		t.Fatalf("after %s took %s back, the next ordinary run (%s, %q) left it with %+v", codexSession, stake, refused.State, protocol.Deref(refused.LastError), shown.Seed.Tender)
+	}
+	if refused.State != "failed" || !strings.Contains(protocol.Deref(refused.LastError), "being tended by") {
+		t.Fatalf("the run is %s with %q, want it failed naming the seed's tender", refused.State, protocol.Deref(refused.LastError))
+	}
+
 	applyAutomation(t, cli, automationEditSpec(id, codexSpec))
 	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(codexSpec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
 	setAutomationEnabled(t, cli, id, true)
-	reworded := awaitDelivered(first.ID, again.ID, next.ID)
-	if protocol.Deref(reworded.SeedID) == stake || protocol.Deref(reworded.SessionID) == claudeSession {
-		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session on a new seed", protocol.Deref(reworded.SessionID), protocol.Deref(reworded.SeedID))
+	reworded := awaitDelivered(first.ID, again.ID, next.ID, refused.ID)
+	rewordedSession := protocol.Deref(reworded.SessionID)
+	if protocol.Deref(reworded.SeedID) != stake || rewordedSession == claudeSession {
+		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session continuing seed %s", rewordedSession, protocol.Deref(reworded.SeedID), stake)
 	}
-	t.Logf("codex %s kept working; claude %s took over %s; a later prompt edit started %s", codexSession, claudeSession, stake, protocol.Deref(reworded.SeedID))
+	if prompt := w.Launched(string(rewordedSession)).Prompted(); !strings.Contains(prompt, "Sweep the branches.") || !strings.Contains(prompt, stake) {
+		t.Fatalf("the agent for the new prompt opened on:\n%s", prompt)
+	}
+	t.Logf("codex %s kept working; claude %s took over %s; after a prompt edit %s continued it", codexSession, claudeSession, stake, rewordedSession)
 }
 
 func TestASingletonRunDoesNotTakeBackASeedSomeoneElseTook(t *testing.T) {
@@ -305,4 +321,144 @@ func TestASingletonRunDoesNotTakeBackASeedSomeoneElseTook(t *testing.T) {
 	if refused.State != "failed" || !strings.Contains(protocol.Deref(refused.LastError), "being tended by") {
 		t.Fatalf("the run is %s with %q, want it failed naming the seed's tender", refused.State, protocol.Deref(refused.LastError))
 	}
+}
+
+func TestASingletonWhoseNewSessionNeverStartedOpensItOnTheNextRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)
+	id := applyAutomation(t, cli, spec).ID
+	awaitSettled := func(earlier ...string) (run protocol.AutomationRunSummary) {
+		t.Helper()
+		w.tickSchedulesUntil("a settled run", func() bool {
+			runs := automationRuns(t, cli, id)
+			if len(runs) == 0 || runs[0].State == "pending" || slices.Contains(earlier, runs[0].ID) {
+				return false
+			}
+			run = runs[0]
+			return true
+		})
+		setAutomationEnabled(t, cli, id, false)
+		return run
+	}
+	first := awaitSettled()
+	seed := protocol.Deref(first.SeedID)
+	w.Launched(string(protocol.Deref(first.SessionID))).Prompted()
+	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(spec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
+	other := w.Spawn(app, fakeagent.Claude, w.Path(""))
+	w.Launched(other)
+	if _, err := cli.SeedTransition(protocol.SessionID(other), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	setAutomationEnabled(t, cli, id, true)
+	if refused := awaitSettled(first.ID); refused.State != "failed" {
+		t.Fatalf("with %s holding %s the run is %s, want it refused", other, seed, refused.State)
+	}
+	gardenNudgeMove(t, cli, other, seed, "park")
+
+	setAutomationEnabled(t, cli, id, true)
+	var next protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a delivered run", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State != "delivered" {
+			return false
+		}
+		next = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	if protocol.Deref(next.SeedID) != seed {
+		t.Fatalf("once %s let go, the run is on seed %s, want %s", other, protocol.Deref(next.SeedID), seed)
+	}
+	if opened := w.Launched(string(protocol.Deref(next.SessionID))); opened.Resumed || !strings.Contains(opened.Prompted(), "Sweep the branches.") {
+		t.Fatalf("the never-started session came up as %+v, want it opened on the new prompt", opened)
+	}
+}
+
+func TestASingletonRunCancelledBeforeItsHandoverLeavesTheHandoverToTheNextRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	cli := w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claudeSpec := strings.Replace(automationSingletonSpec(w, "Sheriff", "latest", ""), "*/2 * * * *", "@every 3s", 1)
+	codexSpec := strings.Replace(claudeSpec, "launch: {driver: claude}", "launch: {driver: codex}", 1)
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
+	id := applyAutomation(t, cli, codexSpec).ID
+	first := awaitNextDeliveredRun(t, w, w.App(), id)
+	setAutomationEnabled(t, cli, id, false)
+	stake, codexSession := protocol.Deref(first.SeedID), protocol.Deref(first.SessionID)
+	w.Launched(string(codexSession)).Prompted()
+
+	applyAutomation(t, cli, automationEditSpec(id, claudeSpec))
+	setAutomationEnabled(t, cli, id, true)
+	reserved := w.PauseAt(pausepoint.AutomationRunReserved)
+	w.tickSchedulesUntilPaused("the handover run reserved", reserved)
+	setAutomationEnabled(t, cli, id, false)
+	reserved.Release()
+	var runs []protocol.AutomationRunSummary
+	w.tickSchedulesUntil("the handover run settled", func() bool {
+		runs = automationRuns(t, cli, id)
+		return len(runs) > 0 && runs[0].State != "pending"
+	})
+	if len(runs) < 2 || runs[0].ID == first.ID || runs[0].State != "cancelled" {
+		t.Fatalf("disabling the automation during the handover run left runs %+v, want the handover run cancelled", runs)
+	}
+	cancelled := runs[0]
+	if shown, err := cli.SeedShow("", stake); err != nil {
+		t.Fatal(err)
+	} else if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != codexSession {
+		t.Fatalf("the cancelled handover moved %s to %+v, want it still with %s", stake, tender, codexSession)
+	}
+
+	setAutomationEnabled(t, cli, id, true)
+	var next protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a delivered run after the cancelled handover", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State == "pending" || slices.Contains([]string{first.ID, cancelled.ID}, runs[0].ID) {
+			return false
+		}
+		next = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	claudeSession := protocol.Deref(next.SessionID)
+	if next.State != "delivered" || claudeSession == codexSession || protocol.Deref(next.SeedID) != stake {
+		t.Fatalf("the run after the cancelled handover is %s (%q) on %s/%s, want a new session delivered on %s", next.State, protocol.Deref(next.LastError), claudeSession, protocol.Deref(next.SeedID), stake)
+	}
+	shown, err := cli.SeedShow("", stake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != claudeSession {
+		t.Fatalf("after the handover %s is tended by %+v, want %s", stake, tender, claudeSession)
+	}
+}
+
+func awaitNextDeliveredRun(t *testing.T, w *world, app *testworld.Peer, id int, earlier ...string) protocol.AutomationRunSummary {
+	t.Helper()
+	var next protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a new run", func() bool {
+		runs := automationRuns(t, w.Client(), id)
+		if len(runs) == 0 || slices.Contains(earlier, runs[0].ID) {
+			return false
+		}
+		next = runs[0]
+		return true
+	})
+	for next.State == "pending" {
+		awaitAutomationChanged(app, id)
+		for _, run := range automationRuns(t, w.Client(), id) {
+			if run.ID == next.ID {
+				next = run
+			}
+		}
+	}
+	if next.State != "delivered" {
+		t.Fatalf("run %s is %s with %q, want it delivered", next.ID, next.State, protocol.Deref(next.LastError))
+	}
+	return next
 }

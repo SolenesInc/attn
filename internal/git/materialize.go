@@ -11,6 +11,13 @@ import (
 	"strings"
 )
 
+var ErrAuthorizationMissing = errors.New("fetching over HTTPS needs an authorization")
+
+func missingHTTPSAuthorization(rawURL, authorization string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	return authorization == "" && err == nil && strings.EqualFold(parsed.Scheme, "https")
+}
+
 func RepositoryCacheKey(identity string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(strings.TrimSpace(identity))))
 }
@@ -71,6 +78,9 @@ func (c *Client) EnsureManagedClone(ctx context.Context, cloneURL, target, expec
 		return mainRepo, false, err
 	} else if !os.IsNotExist(err) {
 		return "", false, fmt.Errorf("inspect managed clone: %w", err)
+	}
+	if missingHTTPSAuthorization(cloneURL, authorization) {
+		return "", false, ErrAuthorizationMissing
 	}
 	parent := filepath.Dir(target)
 	if err := os.MkdirAll(parent, 0o700); err != nil {

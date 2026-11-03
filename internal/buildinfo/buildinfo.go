@@ -1,6 +1,9 @@
 package buildinfo
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+	"strings"
+)
 
 var (
 	Version           = "dev"
@@ -19,6 +22,7 @@ func init() {
 	if !ok {
 		return
 	}
+	vcsModified := false
 	for _, setting := range info.Settings {
 		switch setting.Key {
 		case "vcs.revision":
@@ -26,7 +30,19 @@ func init() {
 				GitCommit = setting.Value
 			}
 		case "vcs.modified":
-			Dirty = setting.Value == "true"
+			vcsModified = setting.Value == "true"
 		}
+	}
+	Dirty = shippedSourceDiffersFromCommit(SourceFingerprint, vcsModified)
+}
+
+func shippedSourceDiffersFromCommit(fingerprint string, vcsModified bool) bool {
+	switch {
+	case strings.HasPrefix(fingerprint, "tree:"):
+		return true
+	case strings.HasPrefix(fingerprint, "git:"):
+		return false
+	default:
+		return vcsModified
 	}
 }

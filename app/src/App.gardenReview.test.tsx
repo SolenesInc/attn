@@ -327,7 +327,7 @@ describe('App garden review', () => {
     const plot = daemonSeed('s-plot11', {
       title: 'Ship the review garden',
       body: 'The whole plot.',
-      plot_progress: { total: 2, done: 0, withered: 0, growing: 2, dormant: 0, ready: 0, blocked: 0 },
+      plot_progress: { total: 2, done: 0, withered: 0, growing: 2, parked: 0, ready: 0, blocked: 0 },
     });
     const daemon = await openReview({}, {
       seeds: [reviewed, sibling, plot],

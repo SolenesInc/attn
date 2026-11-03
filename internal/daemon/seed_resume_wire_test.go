@@ -83,7 +83,7 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.Seed) bool { return s.ID == sibling.Seed.ID }) {
+	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.SeedRow) bool { return s.ID == sibling.Seed.ID }) {
 		t.Errorf("ready after resuming a child = %+v, want the original project %s with sibling %s", ready, seed, sibling.Seed.ID)
 	}
 }
@@ -199,16 +199,16 @@ func seedResumeDesktops(w *world) []string {
 }
 
 func TestAResumeWhoseAgentCannotStartKeepsItsPaneAndReleasesItsClaim(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
-	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
+	pluginDriverSettings(app, "plug")
+	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	w.Launched(string(delegated.SessionID))
 	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "park", "", "")
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	before := paneSessions(w)
 
-	defer w.RefusePiLaunches("pi could not start: the model provider is unreachable")()
+	defer w.RefusePlugLaunches("plug could not start: the model provider is unreachable")()
 	if resumed := seedResumeRequest(app, delegated.SeedID); resumed.Success || !strings.Contains(protocol.Deref(resumed.Error), "provider is unreachable") {
 		t.Fatalf("resuming a seed whose agent cannot start = %+v, want the launch failure", resumed)
 	}
@@ -273,11 +273,11 @@ func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
 func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
 	var now atomic.Int64
 	now.Store(time.Now().UnixNano())
-	w := &world{World: prepareWorld(t, fakeagent.Pi, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
+	w := &world{World: prepareWorld(t, fakeagent.Plug, fakeagent.Claude), gardenClock: func() time.Time { return time.Unix(0, now.Load()) }}
 	w.start()
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
-	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
+	pluginDriverSettings(app, "plug")
+	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	w.Launched(string(delegated.SessionID))
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	now.Store(time.Unix(0, now.Load()).Add(garden.DefaultStaleWindow).UnixNano())
@@ -288,7 +288,7 @@ func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
 	testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
 		return m.Review.Run.ID == review.Run.ID && gardenReviewItem(t, &m.Review, delegated.SeedID).Status == "ready"
 	})
-	defer w.RefusePiLaunches("the model provider is unreachable")()
+	defer w.RefusePlugLaunches("the model provider is unreachable")()
 	resumed := testworld.Request(app, protocol.SeedResumeMessage{
 		Cmd: protocol.CmdSeedResume, SeedID: delegated.SeedID, RequestID: protocol.Ptr("resume"),
 		Review: &protocol.SeedReviewActionContext{ReviewID: review.Run.ID, EvidenceVersion: gardenReviewItem(t, &review, delegated.SeedID).EvidenceVersion},
@@ -301,11 +301,11 @@ func TestAReviewedResumeSettlesItsDecisionWhenLaunchFails(t *testing.T) {
 	}
 }
 
-func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+func TestPluginResumeAndReopenRequireTheSavedConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Plug)
 	app, cli := w.App(), w.Client()
-	pluginDriverSettings(app, "pi")
-	delegated := seedResumeDelegate(t, w, fakeagent.Pi, "api")
+	pluginDriverSettings(app, "plug")
+	delegated := seedResumeDelegate(t, w, fakeagent.Plug, "api")
 	first := w.Launched(string(delegated.SessionID))
 	close := func() {
 		closePane(app, sessionPane{session: string(delegated.SessionID)})
@@ -313,15 +313,15 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	close()
 
 	if got := lifeShow(t, cli, delegated.SeedID).Seed.Continuation; got == nil || !got.ResumeAvailable {
-		t.Fatalf("Pi seed with a stored conversation = %+v, want resume available", got)
+		t.Fatalf("The plugin seed with a stored conversation = %+v, want resume available", got)
 	}
 	if got := seedResumeRequest(app, delegated.SeedID); !got.Success {
-		t.Fatalf("resume stored Pi conversation: %+v", got)
+		t.Fatalf("resume stored plugin conversation: %+v", got)
 	}
 	seedResumeContinues(t, w, first, string(delegated.SessionID))
 	close()
 	if got := reopenOverTheWebSocket(app, string(delegated.SessionID)); !got.Success {
-		t.Fatalf("reopen stored Pi conversation: %+v", got)
+		t.Fatalf("reopen stored plugin conversation: %+v", got)
 	}
 	seedResumeContinues(t, w, first, string(delegated.SessionID))
 	close()
@@ -330,21 +330,21 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := filepath.Glob(filepath.Join(home, ".pi", "agent", "sessions", "*", "*"+first.ConversationID+".jsonl"))
+	files, err := filepath.Glob(filepath.Join(home, ".plug", "sessions", "*", "*"+first.ConversationID+".jsonl"))
 	if err != nil || len(files) != 1 {
-		t.Fatalf("Pi conversation files = %v, %v", files, err)
+		t.Fatalf("The plugin conversation files = %v, %v", files, err)
 	}
 	if err := os.Remove(files[0]); err != nil {
 		t.Fatal(err)
 	}
 
 	before := lifeShow(t, cli, delegated.SeedID)
-	if got := before.Seed.Continuation; got == nil || got.ResumeAvailable || !strings.Contains(protocol.Deref(got.ResumeReason), "pi's storage") {
-		t.Fatalf("Pi seed after its file was deleted = %+v, want unavailable with storage reason", got)
+	if got := before.Seed.Continuation; got == nil || got.ResumeAvailable || !strings.Contains(protocol.Deref(got.ResumeReason), "plug's storage") {
+		t.Fatalf("The plugin seed after its file was deleted = %+v, want unavailable with storage reason", got)
 	}
 	verdict := reopenVerdict(t, cli, string(delegated.SessionID))
 	if verdict.Reopenable || len(verdict.Actions) != 0 {
-		t.Fatalf("Pi reopen after deletion = %+v, want no resume action", verdict)
+		t.Fatalf("The plugin reopen after deletion = %+v, want no resume action", verdict)
 	}
 	desktops := seedResumeDesktops(w)
 	panes := paneSessions(w)
@@ -357,12 +357,12 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 		"Resume": {resumed.Success, protocol.Deref(resumed.Error)},
 		"Reopen": {reopened.Success, protocol.Deref(reopened.Error)},
 	} {
-		if result.success || !strings.Contains(result.reason, first.ConversationID) || !strings.Contains(result.reason, "pi's storage") {
-			t.Errorf("Pi %s after deletion = %+v, want refusal naming the missing conversation", name, result)
+		if result.success || !strings.Contains(result.reason, first.ConversationID) || !strings.Contains(result.reason, "plug's storage") {
+			t.Errorf("The plugin %s after deletion = %+v, want refusal naming the missing conversation", name, result)
 		}
 	}
 	if after := lifeShow(t, cli, delegated.SeedID); after.Seed.Rev != before.Seed.Rev || after.NotesTotal != before.NotesTotal {
-		t.Errorf("refused Pi resume changed the seed: %+v -> %+v", before, after)
+		t.Errorf("refused plugin resume changed the seed: %+v -> %+v", before, after)
 	}
 	if after := seedResumeDesktops(w); !slices.Equal(after, desktops) {
 		t.Errorf("refusal changed workspaces: %v -> %v", desktops, after)
@@ -374,6 +374,6 @@ func TestPiResumeAndReopenRequireTheSavedConversation(t *testing.T) {
 		t.Error("refusal reopened the ledger session")
 	}
 	if _, err := os.Stat(files[0]); !os.IsNotExist(err) {
-		t.Errorf("refusal recreated Pi storage: %v", err)
+		t.Errorf("refusal recreated plugin storage: %v", err)
 	}
 }

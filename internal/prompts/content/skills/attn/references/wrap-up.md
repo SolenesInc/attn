@@ -1,10 +1,11 @@
 # Wrap up
 
-The user asks you to wrap up, to close yourself, or whether they can close you
-when they believe your work is done, or don't know what is left. Find what is
-left, settle what needs no decision, raise what does, and close yourself when
-nothing remains. Delegates still running are no reason to stay. They keep
-working after you close, and their seeds keep their reports.
+When the user asks you to wrap up, to close yourself, or whether they can close
+you, they believe your work is done or do not know what is left. Find
+what is left, settle what needs no decision, raise what does, and close
+yourself when nothing remains. Do not stay open for delegates that are still
+running. They keep working after you close, and their seeds keep their
+reports.
 
 Check, don't recall. Before you decide nothing is left, read the seeds you
 tend (`attn presence --seed-ids` lists them), the sessions you dispatched
@@ -12,9 +13,9 @@ tend (`attn presence --seed-ids` lists them), the sessions you dispatched
 
 ## Hand over
 
-Give each live delegate the context it lacks and will need after you close.
-Write it on its seed, and add `attn agent msg <seed-id> "…"` when it needs it
-now.
+Give each live delegate the context the delegate lacks and will need after you
+close. Write the context on the delegate's seed. When the delegate needs the
+context now, also run `attn agent msg <seed-id> "…"`.
 
 ## Clean up without asking
 
@@ -39,9 +40,11 @@ When the answer arrives, act on it, then close.
 
 ## Close yourself
 
-When nothing is left to raise:
+When nothing is left to raise, run:
 
     attn agent close --self -m "<what you settled>"
 
-The close is immediate, so write everything first. The reason lands as a note
-on each seed you still tend, and the session stays in the ledger.
+attn refuses this close when you are the chief of staff or a session a crew
+member works in. Those sessions stay open after the wrap-up. The close is
+immediate, so write everything first. attn adds the reason as a note on each
+seed you still tend, and the session stays in the ledger.

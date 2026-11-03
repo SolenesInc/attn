@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -407,8 +408,8 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 	if swept := sweepAwaitSwept(app, finished.Directory); swept.Action != "removed" {
 		t.Errorf("the sweep recorded %s for the harvested seed's worktree; want it removed", swept.Action)
 	}
-	if kept := sweepAwaitState(app, open.Directory, func(wt protocol.Worktree) bool { return wt.SweepStatus != nil }); protocol.Deref(kept.SweepStatus) != "kept_open_seed" || !strings.Contains(protocol.Deref(kept.SweepReason), open.SeedID) {
-		t.Errorf("the open seed's worktree reads %s (%s); want it kept for %s", protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), open.SeedID)
+	if kept := sweepAwaitState(app, open.Directory, func(wt protocol.Worktree) bool { return wt.SweepStatus != nil }); protocol.Deref(kept.SweepStatus) != "kept_open_seed" || strings.Contains(protocol.Deref(kept.SweepReason), open.SeedID) {
+		t.Errorf("the open seed's worktree reads %s (%s); want it kept for an open seed, without naming %s to every profile", protocol.Deref(kept.SweepStatus), protocol.Deref(kept.SweepReason), open.SeedID)
 	}
 
 	if err := cli.DeleteWorktree(open.Directory, false); err != nil {
@@ -442,4 +443,85 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestTheSweepForgetsARepositoryWhoseFolderIsGoneUntilAttnMakesAWorktreeThere(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		shop := newRepo(t, "shop")
+		path := createWorktree(t, app, shop, "feat-work")
+		replaced := createWorktree(t, app, shop, "feat-replaced")
+		sweepKeep(t, cli, path, true)
+		sweepKeep(t, cli, replaced, true)
+		away := shop + "-unmounted"
+		if err := os.Rename(shop, away); err != nil {
+			t.Fatal(err)
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+
+		if listed, err := cli.WorktreeList(shop, 0); err != nil || len(listed.Worktrees) != 0 {
+			t.Errorf("the missing repository's worktrees are still listed: %+v, %v", listed, err)
+		}
+		log, err := cli.WorktreeSweepLog(shop, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		forgotten := map[string]string{}
+		for _, entry := range log.Entries {
+			if entry.Action == "forgotten" {
+				forgotten[entry.Path] = protocol.Deref(entry.Reason)
+			}
+		}
+		for _, want := range []string{shop, path} {
+			if !strings.Contains(forgotten[want], "repository folder is gone") {
+				t.Errorf("the sweep log has no forgotten entry for %s that says why: %+v", want, log.Entries)
+			}
+		}
+		failedGit := func() int {
+			failed := 0
+			for _, record := range mirroredRecords(t, app, "git.operation.finished") {
+				if strings.Contains(string(record.Props), `"status":"failed"`) {
+					failed++
+				}
+			}
+			return failed
+		}
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if failed := failedGit(); failed != 0 {
+			t.Errorf("the sweep ran git in the missing repository %d times", failed)
+		}
+
+		if err := os.Rename(away, shop); err != nil {
+			t.Fatal(err)
+		}
+		runGit(t, shop, "worktree", "remove", "--force", replaced)
+		runGit(t, shop, "branch", "-D", "feat-replaced")
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		if listed, err := cli.WorktreeList(shop, 0); err != nil || len(listed.Worktrees) != 0 {
+			t.Errorf("the forgotten repository was swept before attn made a worktree there: %+v, %v", listed, err)
+		}
+		if recreated := createWorktree(t, app, shop, "feat-replaced"); recreated != replaced {
+			t.Fatalf("recreated the worktree at %s, want %s", recreated, replaced)
+		}
+		again := createWorktree(t, app, shop, "again")
+		refreshWorktrees(t, cli)
+		synctest.Wait()
+		listed, err := cli.WorktreeList(shop, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paths := worktreeCreatePaths(listed.Worktrees); !slices.Contains(paths, path) || !slices.Contains(paths, again) {
+			t.Errorf("after a new worktree the sweep lists %v, want %s rediscovered beside %s", paths, path, again)
+		}
+		if kept := sweepListed(t, cli, shop, path); !protocol.Deref(kept.Pinned) || protocol.Deref(kept.SweepStatus) != "pinned" {
+			t.Errorf("the worktree kept before its repository went missing came back as %+v; want it still kept", kept)
+		}
+		if fresh := sweepListed(t, cli, shop, replaced); protocol.Deref(fresh.Pinned) {
+			t.Errorf("a new worktree at the path of a kept one that was removed came back kept: %+v", fresh)
+		}
+	})
 }

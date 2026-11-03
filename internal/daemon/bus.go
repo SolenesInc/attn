@@ -76,18 +76,14 @@ const (
 	FactPluginHealthChanged    = "plugin.health.changed"
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
-	FactOutpostChanged        = "outpost.changed"
-	FactSettingChanged        = "setting.changed"
-	FactBackupWritten         = "backup.written"
-	FactTailscaleServeChanged = "tailscale.serve.changed"
+	FactOutpostChanged = "outpost.changed"
+	FactSettingChanged = "setting.changed"
+	FactBackupWritten  = "backup.written"
 
 	FactNotificationCreated = "notification.created"
 	FactNotificationRead    = "notification.read"
 
-	FactAutoModeDenied = "automode.denied"
-
 	FactDelegationPreferencesChanged = "delegation.preferences.changed"
-	FactAutoModeConfigChanged        = "automode.config.changed"
 
 	FactAutomationChanged = "automation.changed"
 	FactTaskChanged       = "task.changed"
@@ -99,18 +95,23 @@ const (
 
 	FactSharedCodexChanged = "shared_codex.changed"
 
+	FactPhonesChanged = "phones.changed"
+
+	FactSendersChanged = "senders.changed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
 
 	FactGardenReviewChanged = "garden.review.changed"
 
-	FactCrewRegistered   = "crew.registered"
-	FactCrewBound        = "crew.bound"
-	FactCrewReleased     = "crew.released"
-	FactCrewUpdated      = "crew.updated"
-	FactQuickCaptureRead = "quick_capture.read"
-	FactBackgroundLaunch = "session.background.launch"
+	FactCrewRegistered         = "crew.registered"
+	FactCrewBound              = "crew.bound"
+	FactCrewReleased           = "crew.released"
+	FactCrewUpdated            = "crew.updated"
+	FactQuickCaptureRead       = "quick_capture.read"
+	FactSeedAuthorizationTyped = "seed_authorization.typed"
+	FactBackgroundLaunch       = "session.background.launch"
 )
 
 var CompactableFacts = []string{FactSessionTitleChanged, FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared, FactSessionAssistantWindowChanged}
@@ -133,6 +134,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostsUpdated() }},
+		{filter: gatewayFacts, apply: func(d *Daemon, _ bus.Event) { d.gateway.nudge() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`
@@ -286,8 +288,15 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
+			filter: bus.Filter{FactSeedAuthorizationTyped},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+		},
+		{
 			filter: bus.Filter{"garden.seed.*"},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenUnchanged() },
+			apply: func(d *Daemon, ev bus.Event) {
+				d.gateway.seedChanged(ev.Subject)
+				d.projectGardenUnchanged()
+			},
 		},
 		{
 			filter: bus.Filter{FactGardenReviewChanged},
@@ -359,7 +368,7 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactPluginDisconnected, FactPluginDriverRegistered,
-				FactBackupWritten, FactTailscaleServeChanged},
+				FactBackupWritten},
 			apply: func(d *Daemon, _ bus.Event) { d.projectSettingsUpdated("") },
 		},
 		{
@@ -379,16 +388,8 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
 		},
 		{
-			filter: bus.Filter{FactAutoModeDenied},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
-		},
-		{
 			filter: bus.Filter{FactDelegationPreferencesChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectDelegationPreferencesChanged() },
-		},
-		{
-			filter: bus.Filter{FactAutoModeConfigChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectAutoModeStateChanged() },
 		},
 		{
 			filter: bus.Filter{FactAutomationChanged},
@@ -417,6 +418,14 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSharedCodexChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
+		},
+		{
+			filter: bus.Filter{FactPhonesChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectPhones() },
+		},
+		{
+			filter: bus.Filter{FactSendersChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSenders() },
 		},
 	}
 }
@@ -576,6 +585,8 @@ const (
 	snapshotAsks        = "asks_updated"
 	snapshotVents       = "vents_updated"
 	snapshotSharedCodex = "shared_codex_changed"
+	snapshotPhones      = "phones_updated"
+	snapshotSenders     = "senders_updated"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"
@@ -586,10 +597,7 @@ const (
 	snapshotNotifs      = "notifications_updated"
 	snapshotAutomations = "automations_changed"
 	snapshotTasks       = "tasks_changed"
-	snapshotAutoMode    = "automode_state_changed"
 )
-
-const AutoModeConfigSubject = "config"
 
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)

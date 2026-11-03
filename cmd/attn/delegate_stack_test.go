@@ -296,6 +296,19 @@ func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
 	}
 	requireLines(t, "roles apply", roles("apply", edited), "revision 4", "build: reordered alternatives")
 	refused("the table changed after revision 3", "apply", edited)
+	withStoppingPoint := strings.Replace(string(raw), `"revision":3`, `"revision":4`, 1)
+	withStoppingPoint = strings.Replace(withStoppingPoint, `"name":"Build"`, `"name":"Build","stopping_point":"Stop once the tests pass"`, 1)
+	if err := os.WriteFile(edited, []byte(withStoppingPoint), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refused(`unknown field "stopping_point"`, "apply", edited)
+	current := strings.Replace(string(raw), `"revision":3`, `"revision":4`, 1)
+	for _, trailing := range []string{"}", "]", " {}", "\n" + current, "x"} {
+		if err := os.WriteFile(edited, []byte(current+trailing), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		refused("content follows the table", "apply", edited)
+	}
 
 	requireLines(t, "roles rollback", roles("rollback"), "revision 5 restores revision 3", "build: reordered alternatives")
 	requireLines(t, "roles rollback", roles("rollback"), "revision 6 restores revision 2", "build: claude sonnet → claude opus high")

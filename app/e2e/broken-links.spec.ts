@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 test.describe('LiveMarkdownEditor broken links', () => {
   test('flags a link to a missing note, leaves real and external links alone', async ({ page }) => {
     await page.goto('/test-harness/?component=BrokenLinks');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
 
     const broken = page.locator('.cm-md-link-broken');
@@ -30,7 +30,7 @@ test.describe('LiveMarkdownEditor broken links', () => {
 
   test('checks and flags a newly-added broken link when the document changes', async ({ page }) => {
     await page.goto('/test-harness/?component=BrokenLinks');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+    await page.evaluate(() => window.__HARNESS_READY__);
     await page.waitForSelector('.cm-content');
     await expect(page.locator('.cm-md-link-broken')).toHaveCount(1);
 

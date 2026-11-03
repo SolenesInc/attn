@@ -6,7 +6,7 @@ import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp'
 import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
-const available = { claude_available: 'true', codex_available: 'true', pi_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', pi_cap_launch_instructions: 'false', new_session_agent: 'claude' };
+const available = { claude_available: 'true', codex_available: 'true', plug_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', plug_cap_launch_instructions: 'false', new_session_agent: 'claude' };
 const slot = () => within(screen.getByTestId('chief-slot'));
 const setup = () => within(screen.getByTestId('chief-setup'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
@@ -24,7 +24,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(setup().getByRole('radio', { name: /Claude/ })).toHaveAttribute('aria-checked', 'true');
     expect(setup().getByRole('radio', { name: /Opus/ })).toHaveAttribute('aria-checked', 'true');
     expect(setup().getByRole('radio', { name: 'low' })).toHaveAttribute('aria-checked', 'true');
-    expect(setup().queryByText('Pi')).toBeNull();
+    expect(setup().queryByText('Plug')).toBeNull();
     const folder = setup().getByRole('textbox', { name: 'Notebook folder' });
     expect(folder).toHaveValue('~/attn-notebook-work');
     await gesture(daemon, () => fireEvent.change(folder, { target: { value: '~/Notes/Work' } }));

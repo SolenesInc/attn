@@ -72,17 +72,46 @@ enum AttachPolicy {
 
 enum GitOperationKind {
   delete_worktree,
-  inspect_branch,
-  // The background worktree refresh: one per repository for the list, the
-  // integration branch and the stash and tree probes, one per worktree row.
+  // The background worktree sweep: one for a repository's worktree list, one
+  // for its integration branch and its stash and tree probes.
   refresh_repository,
-  refresh_worktree,
+}
+
+// Why a git operation failed. The first that applies, in this order, names
+// it: what ended the operation around git, then the step attn was taking,
+// then git's own exit.
+enum GitFailure {
+  cancelled,                   // the caller stopped waiting: a preempted sweep, daemon stop
+  queue_full,                  // attn's git queue was saturated
+  missing_directory,           // the working directory does not exist
+  git_unavailable,             // the git binary could not start
+  timeout,                     // git, or the caller, ran past its deadline
+  integration_ref_unresolved,  // the repository's integration branch did not resolve
+  stash_unreadable,            // the stash list could not be read
+  dirty_worktree,              // the worktree has local changes
+  worktree_not_found,          // no worktree at that path
+  provider_error,              // the checkout provider refused the removal
+  exited,                      // git exited non-zero; exit_code says how
+  unclassified,                // none of the above: a new failure to name
 }
 
 enum GitOperationStatus {
   running,
   succeeded,
   failed,
+}
+
+// Why the daemon refused a request, from a fixed set so a refused command can
+// be counted by cause. A refusal the daemon has not classified carries none,
+// and a client reads that as `unclassified`.
+enum Refusal {
+  invalid_input,
+  limit,
+  not_found,
+  wrong_state,
+  not_tender,
+  conflict,
+  unclassified,
 }
 
 // ============================================================================
@@ -142,7 +171,7 @@ model AutomationProvenance {
 
 model SessionUsageModel {
   `model`: string;
-  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the reviewer attn runs beside it. Rows written before purposes existed read as "agent".
+  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the auto-review reviewer Codex runs beside it. Rows written before purposes existed read as "agent".
   input_tokens: safeint;
   output_tokens: safeint;
   cache_read_tokens: safeint;
@@ -213,6 +242,7 @@ model Session {
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
+  conversation_started?: boolean; // True once the session's agent has named the transcript of its conversation: the agent has started a conversation in the session's folder. The agent may name the transcript before it writes the file, so the transcript can still be unreadable. Absent until the agent names one.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
   last_seen: string;            // ISO timestamp, always set
@@ -293,7 +323,8 @@ model WorktreeSweepEntry {
   path: string;
   main_repo: string;
   branch?: string;
-  // "removed" (the sweep decided) | "deleted" (you did) | "failed"
+  // "removed" (the sweep decided) | "deleted" (you did) | "failed" |
+  // "forgotten" (the repository folder is gone, so the sweep stopped tracking it)
   action: string;
   reason?: string;
   at: string;
@@ -328,7 +359,7 @@ model CopyRow {
   columns?: Record<unknown>;
 }
 
-enum OutpostUpdatePhase { building, downloading, sending, verifying, restarting, done, failed }
+enum OutpostUpdatePhase { connecting, building, downloading, sending, verifying, restarting, done, failed }
 
 model OutpostUpdate {
   phase: OutpostUpdatePhase;
@@ -352,6 +383,20 @@ model NotebookSyncReportMessage {
   report: string;
 }
 
+model NotebookSyncFolder {
+  id: string;
+  key: string;
+  name: string;
+  epoch: string;
+  profiles: string[];
+}
+
+@extension("x-on", #{ here: true })
+model NotebookFoldersMessage {
+  cmd: "notebook_folders";
+  folders: NotebookSyncFolder[];
+}
+
 model OutpostInfo {
   connectable?: boolean;
   id: string;
@@ -363,6 +408,7 @@ model OutpostInfo {
   daemon_id?: string;
   host_key_fingerprint?: string;
   build?: string;
+  home?: string; // The outpost's home directory, which ~ stands for there; absent until it has connected once
   update?: OutpostUpdate;
   notebook?: OutpostNotebook;
   last_error?: string;
@@ -377,12 +423,9 @@ model PluginInfo {
   priority: int32;
   connected: boolean;
   running: boolean;
-  availability: string; // "bundled" | "user"
-  installation_state: string; // "available" | "installed"
   runtime_state: string; // "stopped" | "starting" | "connected" | "degraded" | "parked"
-  can_install: boolean;
   can_uninstall: boolean;
-  // Source checkout a linked plugin points at; absent for copied and bundled plugins.
+  // Source checkout a linked plugin points at; absent for copied plugins.
   link_target?: string;
   // "starting" | "connected" | "backoff" | "stopped". Plain string keeps
   // generated Go/TypeScript consumers aligned with other runtime status fields.
@@ -409,6 +452,8 @@ model GitOperation {
   finished_at?: string; // ISO timestamp
   duration_ms?: int32;
   error?: string;
+  failure?: GitFailure; // set exactly when status is failed
+  exit_code?: int32;    // set when failure is exited
 }
 
 model RepoState {
@@ -423,6 +468,7 @@ model AuthorState {
 }
 
 model RecentLocation {
+  host?: string;        // absent: the home's machine
   path: string;
   repo_root?: string;
   last_seen: string;    // ISO timestamp
@@ -792,10 +838,11 @@ model AgentReloadResult {
   outcomes: AgentReloadOutcome[];
 }
 
-enum QuickCaptureMailboxKind { chief, crew_member }
+enum QuickCaptureMailboxKind { chief, crew_member, session }
 model QuickCaptureMailbox {
   kind: QuickCaptureMailboxKind;
   member_id?: string;
+  session_id?: SessionID;
 }
 model QuickCaptureAttachment {
   id: string;
@@ -828,6 +875,8 @@ model QuickCaptureListResult {
 model QuickCaptureSendMessage {
   profile_id?: string;
   cmd: "quick_capture_send";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   mailbox: QuickCaptureMailbox;
@@ -853,6 +902,8 @@ model QuickCaptureListMessage {
 model QuickCaptureAttachmentPutMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_put";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   attachment_id: string;
@@ -875,6 +926,8 @@ model QuickCaptureAttachmentGetMessage {
 model QuickCaptureAttachmentDiscardMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_discard";
+  // Required on the command socket: the token of a paired sender.
+  sender_token?: string;
   request_id?: string;
   capture_id: string;
   attachment_id: string;
@@ -1021,7 +1074,6 @@ model DelegationRole {
   enabled: boolean;
   description: string;
   instructions: string;
-  stopping_point: string;
   default_choice_id: string;
   choices: DelegationChoice[];
 }
@@ -1241,6 +1293,9 @@ model DelegateMessage {
   provider?: string;
   review?: SeedReviewActionContext;
   desktop?: string; // Desktop of the caller's profile for the delegate: shortcut digit, name or id; empty = beside the caller
+  // The user's words for this task. Saved on the seed before the opening
+  // renders; absent keeps the seed's current authorization.
+  authorization?: string;
 }
 
 model SeedHandoverRequest {
@@ -1257,6 +1312,7 @@ model DelegateStatusMessage {
   source_session_id?: SessionID;
   cmd: "delegate_status";
   id: string; // Request id or daemon-issued operation id
+  wait_past?: string; // The updated_at the caller last saw; the reply waits until the operation changes from it or settles
 }
 
 model NotebookListMessage {
@@ -1348,7 +1404,8 @@ model GetAnalyticsStatusMessage {
 // text. waiting counts rows not yet sent. last_sent_at is when the newest sent
 // row still kept went to attn-ingest. last_refusal says why the last upload
 // failed, naming the limit when attn-ingest refused it; it clears once a batch
-// is accepted.
+// is accepted. ingest_url is where uploads go; ingest_off_reason says why a
+// non-production instance uploads nowhere.
 model GetAnalyticsStatusResultMessage {
   event: "get_analytics_status_result";
   request_id: string;
@@ -1359,6 +1416,8 @@ model GetAnalyticsStatusResultMessage {
   waiting: safeint;
   last_sent_at?: string;
   last_refusal?: string;
+  ingest_url: string;
+  ingest_off_reason?: string;
 }
 
 // Delete everything attn-ingest holds for this install, then start a new
@@ -1401,19 +1460,22 @@ model RecordAnalyticsMessage {
   stream: string; // app or cli
   name: string;
   props?: Record<unknown>;
+  // The session a cli record is about once the caller's terminal no longer
+  // names one, as after the session closed itself.
+  session_id?: SessionID;
 }
 
 // Fields the CLI adds to every frame it writes to the daemon socket.
-// caller_id is the caller's ATTN_TERMINAL_ID, the same field query carries.
+// caller_id is the caller's ATTN_TERMINAL_ID.
 model SocketCaller {
   caller_id?: TerminalID;
 }
 
-// Notifications surface: a global, daemon-level feed of durable notifications.
-// The producer is the task
-// runner, which adds one when a background task reaches terminal `dead`. The
-// frontend lists them, marks them read, and re-lists on the notifications_updated
-// broadcast; the unread count drives a sidebar badge.
+// Notifications surface: a feed of durable notifications for the client's
+// selected profile. A notification belongs to one profile, such as a Notebook
+// conflict in a folder that profile uses, or to none, which every profile sees.
+// The frontend lists them, marks them read, and re-lists on
+// notifications_updated; the unread count drives a sidebar badge.
 model NotificationListMessage {
   cmd: "notification_list";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1545,7 +1607,14 @@ model DelegateWorktreeRequest {
 model QueryMessage {
   cmd: "query";
   filter?: string;
-  caller_id?: TerminalID; // The caller's ATTN_TERMINAL_ID; the response's caller_session_id names the session its terminal shows.
+}
+
+// Names the session the caller's terminal shows in the response's
+// caller_session_id, which the reply omits when that terminal shows no session.
+@extension("x-on", #{ here: true })
+model CallerSessionMessage {
+  cmd: "caller_session";
+  ...SocketCaller;
 }
 
 // SettleTurnMessage is the user closing the turn a session opened. No state
@@ -1706,12 +1775,55 @@ model CreateWorktreeMessage {
   request_id?: string;
 }
 
-@extension("x-on", #{ here: true })
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
+  host?: string;
   path: string;
   force?: boolean;
   request_id?: string;
+}
+
+// A machine about to remove a worktree asks the home, which owns the Garden,
+// which open seeds the worktree serves and whether its branch must stay.
+@extension("x-on", #{ home: true })
+model WorktreeRemovalPrepareMessage {
+  cmd: "worktree_removal_prepare";
+  main_repo: string;
+  path: string;
+  branch: string;
+}
+model WorktreeRemovalPlan {
+  seeds: string[];
+  keep_branch: boolean;
+}
+
+// The worktree sweep on a machine asks the home, which owns the Garden, which
+// of a repository's worktrees on that machine an open seed owns. The answer
+// names no seed, because the sweep's verdicts are shown to every profile.
+@extension("x-on", #{ home: true })
+model WorktreeSeedOwnersMessage {
+  cmd: "worktree_seed_owners";
+  main_repo: string;
+  worktrees: WorktreeCheckout[];
+}
+model WorktreeCheckout {
+  path: string;
+  branch: string;
+}
+model WorktreeSeedOwners {
+  owned_paths: string[];
+}
+
+// A machine that removed a worktree tells the home, which owns the sessions,
+// to close that machine's sessions under the path and note the removal on
+// the seeds the plan named.
+@extension("x-on", #{ home: true })
+model WorktreeRemovedMessage {
+  cmd: "worktree_removed";
+  path: string;
+  seeds?: string[];
+  note?: string;
 }
 
 // The Worktrees surface: every worktree of every repository attn tracks, read
@@ -1833,11 +1945,6 @@ model InstallPluginMessage {
   link?: boolean;
 }
 
-model InstallBundledPluginMessage {
-  cmd: "install_bundled_plugin";
-  name: string;
-}
-
 model UninstallPluginMessage {
   cmd: "uninstall_plugin";
   name: string;
@@ -1881,6 +1988,7 @@ model InjectTestSessionMessage {
 model GetRecentLocationsMessage {
   cmd: "get_recent_locations";
   limit?: int32;  // Default 20
+  home_only?: boolean;  // only the home machine's recents, limited after filtering
   request_id?: string;
 }
 
@@ -1921,15 +2029,19 @@ model RecentFilesMessage {
 // files with those extensions (no dots, e.g. ["md"]) to the listing. Asking for
 // files exposes document names rather than just tree shape, so that variant is
 // restricted to the authenticated app client.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model BrowseDirectoryMessage {
   cmd: "browse_directory";
+  host?: string;
   input_path: string;
   extensions?: string[];
   request_id?: string;
 }
 
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model InspectPathMessage {
   cmd: "inspect_path";
+  host?: string;
   path: string;
   request_id?: string;
 }
@@ -1981,8 +2093,10 @@ model EnsureRepoMessage {
   clone_url: string;     // Git clone URL (e.g., https://github.com/owner/repo.git)
 }
 
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model GetRepoInfoMessage {
   cmd: "get_repo_info";
+  host?: string;
   repo: string;
   request_id?: string;
 }
@@ -2112,18 +2226,6 @@ model SpawnSessionMessage {
   resume_picker?: boolean;
   priority?: boolean;
   yolo_mode?: boolean;
-  // Per-session auto mode, for an agent whose driver advertises `auto_mode`.
-  // Tri-state on purpose: absent follows the promoted config's
-  // `enabled_default`, and true/false is the launcher overriding it for this
-  // session alone. Persisted with the launch intent, so a revive or a reload
-  // relaunches on the choice that was made rather than on today's default.
-  auto_mode?: boolean;
-  // Per-session override of the daemon's auto-mode `approval_policy` /
-  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
-  // means "follow the daemon config"; the values are the same sets as the
-  // auto-mode config carries. Each may be given without the other.
-  approval_policy?: string;
-  sandbox_mode?: string;
   chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
@@ -2239,6 +2341,13 @@ model SupportRuntimeEvidence {
 @extension("x-on", #{ terminal: "id" })
 model TerminalPointerActivityMessage {
   cmd: "terminal_pointer_activity";
+  id: TerminalID; // The terminal (pane runtime_id)
+}
+
+// The user focused the terminal's tile in this client. The client becomes the
+// terminal's size owner, and the size it last asked for with pty_resize applies.
+model TerminalFocusMessage {
+  cmd: "terminal_focus";
   id: TerminalID; // The terminal (pane runtime_id)
 }
 
@@ -2364,6 +2473,12 @@ model BusSetConsumerEnabledResultMessage {
   error?: string;
 }
 
+// Records the size this client asks for. It applies only while this client is
+// the terminal's size owner: the client the user last typed in, pointed at or
+// focused (pty_input of the user's keys, terminal_pointer_activity,
+// terminal_focus) among the clients that asked for a size. Every other client
+// follows pty_resized.
+//
 // xpixel/ypixel are the pane's TOTAL size in device pixels, the units
 // TIOCGWINSZ's ws_xpixel/ws_ypixel and XTWINOPS speak, so image emitters can
 // size an image to the space they were given. Absent or 0 means the client has
@@ -3193,11 +3308,21 @@ model AgentCatalogMessage {
   cmd: "agent_catalog";
   host: string;
   models_for?: string;
+  request_id?: string;
 }
 model AgentCatalogResult {
   machine: string;
   harnesses: Harness[];
   models?: HarnessModel[];
+}
+
+model AgentCatalogResultMessage {
+  event: "agent_catalog_result";
+  request_id?: string;
+  host: string;
+  catalog?: AgentCatalogResult;
+  success: boolean;
+  error?: string;
 }
 
 model ReopenTarget {
@@ -3860,8 +3985,8 @@ model AskPart {
 // named. It is addressed to the seed's tender, so whoever tends the seed next
 // holds it, and harvest or wither closes it. The answer is a note on the seed.
 // An agent that tends no seed asks without one: the ask is addressed to its
-// crew member or chief mailbox, or else to its session, and the answer is a
-// user message in that inbox.
+// crew member or chief mailbox, or else to its session, and the answer is
+// user input in that inbox.
 // base_dir is where the agent asked from; relative image paths resolve there.
 model Ask {
   id: string;
@@ -3895,6 +4020,33 @@ model AskOpenMessage {
   markdown: string;
   subject?: string;
   base_dir: string;
+  images?: AskImage[];
+}
+
+// A local image the ask's markdown shows, read by the asking CLI. path is the
+// image's absolute path on the asker's machine, as the markdown resolves
+// against base_dir; the home keeps the bytes for as long as it keeps the ask.
+model AskImage {
+  path: string;
+  data_base64: string;
+}
+
+// Read one image of an ask from the home's copy. path is the absolute path the
+// ask's markdown resolves the image to against its base_dir.
+model AskImageMessage {
+  cmd: "ask_image";
+  request_id: string;
+  ask_id: string;
+  path: string;
+}
+
+model AskImageResultMessage {
+  event: "ask_image_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  mime_type?: string;
+  data_base64?: string;
 }
 
 @extension("x-on", #{ home: true })
@@ -3980,6 +4132,7 @@ model VentContext {
   harness: string;
   harness_version?: string;
   `model`?: string;
+  model_requested?: string;
   seed_id?: string;
   build: AnalyticsBuild;
   experimental: string[];
@@ -5314,7 +5467,7 @@ model Seed {
   "title": string;
   // Markdown. On a crown this is the plan itself.
   "body": string;
-  // planted | growing | harvested | withered | dormant.
+  // planted | growing | harvested | withered | parked.
   "status": string;
   // The seed's stable name within its plot; derived from the title at planting.
   "step_slug": string;
@@ -5360,9 +5513,35 @@ model Seed {
   "reason"?: string;
   // Present while the seed is armed to harvest itself when a pull request merges.
   "harvest_when"?: SeedHarvestCondition;
+  // The user's words for this task: what agents may do without asking and
+  // where they stop. Delegation openings deliver it.
+  "authorization"?: SeedAuthorization;
   // The document's own revision and stamps. `rev` is what a conditional write
   // hands back; the stamps are the store's, not a copy kept in the body.
   "rev": safeint;
+  "created_at": string;
+  "updated_at": string;
+}
+
+// One seed as a garden listing prints it: no body, checks, variables or
+// authorization. `seed show` reads the whole seed.
+model SeedRow {
+  "profile_id": string;
+  "id": string;
+  "title": string;
+  // planted | growing | harvested | withered | parked.
+  "status": string;
+  "step_slug": string;
+  "tender"?: PartyView;
+  "claimed": boolean;
+  "ready": boolean;
+  "edges": SeedEdge[];
+  // Present exactly when the seed is a crown, as on Seed.
+  "plot_progress"?: SeedPlotProgress;
+  // The seed's own and inherited checks by state, without removed ones.
+  // Absent when it has none.
+  "check_tally"?: SeedCheckTally;
+  "harvest_when"?: SeedHarvestCondition;
   "created_at": string;
   "updated_at": string;
 }
@@ -5377,6 +5556,28 @@ model SeedHarvestCondition {
   "set_at": string;
   "set_by": ActorView;
   "checked_at"?: string;
+}
+
+model SeedAuthorization {
+  // Empty after a clear: set_by and set_at then say who cleared it and when.
+  "text": string;
+  "set_by": ActorView;
+  "set_at": string;
+  // The last typed update of this seed's authorization, absent when no
+  // change has been typed into a tender.
+  "update"?: SeedAuthorizationUpdate;
+}
+
+// A change to a seed's authorization that attn types into the seed's tender
+// as user input.
+model SeedAuthorizationUpdate {
+  // The tender it was addressed to, with the session it was typed into or
+  // waits for.
+  "recipient": PartyView;
+  // Absent while it waits.
+  "typed_at"?: string;
+  // It waits because the recipient needs approval.
+  "needs_approval"?: boolean;
 }
 
 model KeptConversationSeed {
@@ -5516,7 +5717,7 @@ model SeedPlotProgress {
   "done": int32;
   "withered": int32;
   "growing": int32;
-  "dormant": int32;
+  "parked": int32;
   "ready": int32;
   // Open with at least one open blocker.
   "blocked": int32;
@@ -5746,7 +5947,7 @@ model SeedListMessage {
 }
 
 model SeedListResult {
-  "seeds": Seed[];
+  "seeds": SeedRow[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the list
   // hits its bound, and then the receipt that says a list ended early. Under
   // `stale` it is the stale count itself.
@@ -5901,6 +6102,30 @@ model SeedEditMessage {
   "note"?: string;
 }
 
+// Set, clear or read a seed's authorization. With text it sets it, with
+// clear it removes it, and with neither it reads it. A change by someone
+// other than a live tender is typed into the tender as user input.
+@extension("x-on", #{ home: true })
+model SeedAuthorizationMessage {
+  "profile_id"?: string;
+  "source_session_id"?: SessionID;
+  "cmd": "seed_authorization";
+  // Set by a WebSocket caller, which correlates the answer by request_id.
+  "request_id"?: string;
+  "seed_id": string;
+  "text"?: string;
+  "clear"?: boolean;
+}
+
+model SeedAuthorizationResult {
+  "seed": Seed;
+  "changed": boolean;
+  // The typed update this change queued, or the last one when nothing changed.
+  "update"?: SeedAuthorizationUpdate;
+  // The caller tends the seed, so nothing is typed.
+  "caller_tends"?: boolean;
+}
+
 model SeedEditResult {
   "seed": Seed;
   "body_version": int32;
@@ -5992,6 +6217,7 @@ model SeedArtifactTransferHereMessage {
   cmd: "seed_artifact_transfer_here";
   host: string;
   transfer: SeedArtifactTransferMessage;
+  "notebook_folder"?: string;
 }
 
 model SeedArtifactTransferResult {
@@ -6107,17 +6333,17 @@ model SeedReadyMessage {
 }
 
 model SeedReadyResult {
-  "seeds": Seed[];
+  "seeds": SeedRow[];
   // Plot headers needed to nest a garden-wide ready answer. These are context,
   // not ready pickups, so they do not count toward seeds.
-  "plots"?: Seed[];
+  "plots"?: SeedRow[];
   // What the answer was scoped to: garden | plot, and the crown's id when it
   // was a plot.
   "scope": string;
   "scope_id": string;
-  // The crown, carried when the scope is a plot so a launching delegate is
-  // primed — the crown's body is the plan — without a second read.
-  "crown"?: Seed;
+  // The plot's crown, carried when the scope is a plot so the answer can
+  // name the plot it covers and its progress. `seed show` reads its plan.
+  "crown"?: SeedRow;
   // The freshest handoff on each ready seed that has one, newest first. What a
   // delegate dispatched at the plot reads before any work.
   "handoffs"?: SeedNote[];
@@ -6161,6 +6387,15 @@ model SeedTransitionMessage {
 // the source session's open pull requests.
 model SeedHarvestWhenMerged {
   "pull_request_url"?: string;
+}
+
+// SeedAuthorizationResultMessage replies to a WebSocket seed_authorization.
+model SeedAuthorizationResultMessage {
+  "event": "seed_authorization_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "result"?: SeedAuthorizationResult;
 }
 
 // SeedTransitionResultMessage replies to a WebSocket seed_transition,
@@ -6560,351 +6795,44 @@ model GardenReviewUpdatedMessage {
 }
 
 // ============================================================================
-// Auto mode
+// Dictation refinement
 // ============================================================================
-//
-// pi's permission system, configured attn-side. Design:
-//
-// The surface is deliberately split in two, and the split IS the security
-// design. These commands — everything an agent can reach over the unix socket —
-// only ever record a PROPOSAL, which changes nothing a session launches with.
-// Promotion lives on the WebSocket surface alone (automode_promote), because a
-// human in the app is the trust boundary no CLI caller can fake. An agent must
-// not be able to write its own leash.
 
-model GuardianSelection {
-  provider?: string;
-  "model"?: string;
-  effort?: string;
+// Where the refined text will be inserted: plain fields and terminals take
+// plain text; Markdown editors also accept paragraphs and lists.
+enum DictationTextFormat {
+  plain,
+  markdown,
 }
 
-model AutoModeConfigInfo {
-  guardian?: GuardianSelection;
-  "enabled_default": boolean;
-  // "untrusted" | "on-request" | "never".
-  "approval_policy": string;
-  // "read-only" | "workspace-write" | "danger-full-access".
-  "sandbox_mode": string;
-  "environment": AutoModeEnvironmentInfo;
-  "rules": AutoModeRuleInfo[];
-  // The subset of "rules" attn ships rather than a human adding: resolved in at
-  // read, never stored, and not removable. They are what stops a session under
-  // auto mode from rewriting its own policy.
-  "shipped_rules": AutoModeRuleInfo[];
-  "network": AutoModeNetworkInfo;
-  // The subset of network.denied_domains attn ships. It names this daemon's own
-  // WebSocket port, so a client cannot derive it and has to be told.
-  "shipped_denied_domains": string[];
-  // Old allow/hard-deny globs the migration could not turn into a prefix rule.
-  // Nothing enforces them; settings shows them so the user can rewrite them.
-  "legacy_patterns": string[];
-  // The named pairs a client offers instead of two raw dropdowns. Static, and
-  // resolved at read time like the shipped rules, so no client keeps a copy.
-  "presets": AutoModePresetInfo[];
+// Asks the daemon to clean up one dictated transcript with the dictation
+// refinement harness, tool-free. The request is answered once, unless it is
+// cancelled or its connection closes first. The caller keeps the original.
+model DictationRefineMessage {
+  "cmd": "dictation_refine";
+  "request_id": string;
+  "profile_id": string;
+  "raw_text": string;
+  "recording_duration_ms": safeint;
+  "format": DictationTextFormat;
 }
 
-// One named approval policy and sandbox mode pair. "id" is what a launcher
-// names on the CLI; the pair is what reaches spawn_session and delegate.
-model AutoModePresetInfo {
-  "id": string;
-  "label": string;
-  "description": string;
-  "approval_policy": string;
-  "sandbox_mode": string;
+// Stops a pending refinement. No result follows.
+model DictationRefineCancelMessage {
+  "cmd": "dictation_refine_cancel";
+  "request_id": string;
 }
 
-// One Codex prefix rule. "pattern" is the command's leading tokens, and each
-// token is the list of alternatives that token accepts - a token with one
-// alternative is a literal. "match" and "not_match" are pi's own example
-// commands, carried through untouched; pi checks them when it loads the rules.
-model AutoModeRuleInfo {
-  "pattern": string[][];
-  // "allow" | "prompt" | "forbidden".
-  "decision": string;
-  "sandbox": string;
-  // Required for a forbidden rule: it is the text the agent is given.
-  "justification": string;
-  "match": string[][];
-  "not_match": string[][];
-}
-
-model AutoModeNetworkInfo {
-  "enabled": boolean;
-  "allowed_domains": string[];
-  "denied_domains": string[];
-  // Off by default. With it off the driver's proxy hard denies a host that
-  // resolves to a loopback or private address, whoever allowed the name.
-  "allow_local_binding": boolean;
-}
-
-model AutoModeEnvironmentSlot {
-  "id": string;
-  "label": string;
-  "kind": string;
-  "choices": string[];
-  "detail": string;
-  "unset": string;
-  "detected": boolean;
-  "read_by": string[];
-}
-
-model AutoModeEnvironmentInfo {
-  "slots": AutoModeEnvironmentSlotValue[];
-  "notes": string[];
-}
-
-model AutoModeEnvironmentSlotValue {
-  "id": string;
-  "values": string[];
-}
-
-// One proposed change awaiting a human. "kind" says what "value" carries, and
-// promotion applies it as the matching app-only command would:
-//   "rule"        the rule's JSON, {"pattern":..,"decision":..,..}
-//   "rule_remove" {"pattern":..}, the prefix of the rule to take away
-//   "host"        {"host":..,"decision":..}
-//   "host_remove" the same pair, naming the entry to drop
-//   "policy"      {"approval_policy"?,"sandbox_mode"?,"allow_local_binding"?}
-model AutoModeProposalInfo {
-  "id": safeint;
-  "kind": string;
-  // Always empty: no kind takes a target.
-  "target": string;
-  "value": string;
-  // "value" read back as one line, for a list a human scans.
-  "summary": string;
-  // Who proposed it, when the caller said. Empty when nobody did.
-  "proposed_by": string;
-  // "pending" | "promoted" | "discarded".
-  "state": string;
-  "created_at": string;
-  // Empty while still pending.
-  "resolved_at": string;
-}
-
-// One call auto mode refused, as the session reported it.
-model AutoModeDenialInfo {
-  "id": safeint;
-  "session_id": SessionID;
-  "tool": string;
-  // The blocked call in one line — the same text the model was given.
-  "signature": string;
-  "reason": string;
-  // Who decided: the prefix rule that matched, the reviewer that answered, or
-  // "circuit-breaker".
-  "rule": string;
-  "created_at": string;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeShowMessage {
-  "cmd": "automode_show";
-  "cwd"?: string;
-}
-
-model AutoModeShowResult {
-  "config": AutoModeConfigInfo;
-  "global_rules": AutoModeRuleInfo[];
-  "repository_rules": AutoModeRuleInfo[];
-  "repository_rules_path"?: string;
-  // Everything still pending, oldest first.
-  "proposals": AutoModeProposalInfo[];
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeEnvSlotMessage {
-  "cmd": "automode_env_slot";
-  "slot": string;
-  "values": string[];
-  "request_id"?: string;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeEnvNotesMessage {
-  "cmd": "automode_env_notes";
-  "notes": string[];
-  "request_id"?: string;
-}
-
-model AutoModeEnvResult {
-  "environment": AutoModeEnvironmentInfo;
-}
-
-// Record a proposal. Refused at submission when it could never be promoted: a
-// value that is not the JSON of a rule or of a host amendment.
-@extension("x-on", #{ home: true })
-model AutoModeProposeMessage {
-  "cmd": "automode_propose";
-  "kind": string;
-  "target"?: string;
-  "value": string;
-  "proposed_by"?: string;
-}
-
-model AutoModeProposeResult {
-  "proposal": AutoModeProposalInfo;
-}
-
-@extension("x-on", #{ home: true })
-model AutoModeDenialsMessage {
-  "cmd": "automode_denials";
-  "limit"?: safeint;
-}
-
-model AutoModeDenialsResult {
-  "denials": AutoModeDenialInfo[];
-  // What the session-side denial ledger says it lost — records dropped when it
-  // rotated, lines it could not read. Empty when it lost nothing, which is the
-  // ordinary case. A feed that clipped and did not say so reads as a whole
-  // episode.
-  "ledger_note"?: string;
-}
-
-// The app's read: config plus the pending proposals its settings section
-// reviews, plus the recent denials it lists.
-model AutoModeGetMessage {
-  cmd: "automode_get";
-  request_id: string;
-}
-
-model AutoModeStateResultMessage {
-  event: "automode_state_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config: AutoModeConfigInfo;
-  proposals: AutoModeProposalInfo[];
-  denials: AutoModeDenialInfo[];
-  environment_slots: AutoModeEnvironmentSlot[];
-}
-
-model AutoModeStateChangedMessage {
-  event: "automode_state_changed";
-  config: AutoModeConfigInfo;
-  proposals: AutoModeProposalInfo[];
-  denials: AutoModeDenialInfo[];
-  environment_slots: AutoModeEnvironmentSlot[];
-}
-
-// Apply a pending proposal to the config. The app only — this command has no
-// unix-socket half, and that absence is the whole trust boundary.
-model AutoModePromoteMessage {
-  cmd: "automode_promote";
-  id: safeint;
-  request_id: string;
-}
-
-model AutoModePromoteResultMessage {
-  event: "automode_promote_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  proposal?: AutoModeProposalInfo;
-  // The config as it stands after the promotion.
-  config?: AutoModeConfigInfo;
-}
-
-// Write a rule, a host or the policy itself. Every one of these is app-only,
-// for the same reason promotion is: a rule decides what a session may do
-// without asking, so only a human at the trust boundary writes one. Removal is
-// no different from adding - `attn automode rule remove` on the unix socket
-// records a rule_remove proposal, and a human promotes it here.
-//
-// "pattern" is the command's leading tokens, one token per entry. A removal
-// names the pattern rather than an index, because the list a client renders has
-// the shipped rules resolved into it and an index into that is not an index
-// into what is stored. Re-adding a pattern that is already there replaces it,
-// so a rule keeps one decision.
-model AutoModeRuleAddMessage {
-  cmd: "automode_rule_add";
-  pattern: string[];
-  // Absent means "allow", Codex's default.
-  decision?: string;
-  sandbox?: string;
-  justification?: string;
-  request_id: string;
-}
-
-// App-only, like every other config write: on the unix socket `attn automode
-// rule remove` records a rule_remove proposal instead. "pattern" carries the
-// whole prefix - one entry per token, each the alternatives that token accepts,
-// as AutoModeRuleInfo writes it - because the prefix identifies the rule.
-model AutoModeRuleRemoveMessage {
-  cmd: "automode_rule_remove";
-  pattern: string[][];
-  request_id?: string;
-}
-
-// Drop one entry from legacy_patterns. Nothing enforces those, so this only
-// takes the reminder out of the list once its rule is in place.
-model AutoModeLegacyDismissMessage {
-  cmd: "automode_legacy_dismiss";
-  pattern: string;
-  request_id?: string;
-}
-
-model AutoModeHostAddMessage {
-  cmd: "automode_host_add";
-  host: string;
-  // "allow" | "deny". A host holds one decision; this replaces the other.
-  decision: string;
-  request_id: string;
-}
-
-model AutoModeHostRemoveMessage {
-  cmd: "automode_host_remove";
-  host: string;
-  decision: string;
-  request_id?: string;
-}
-
-// Naming neither field is refused rather than silently doing nothing.
-model AutoModePolicySetMessage {
-  cmd: "automode_policy_set";
-  guardian?: GuardianSelection;
-  approval_policy?: string;
-  sandbox_mode?: string;
-  allow_local_binding?: boolean;
-  request_id?: string;
-}
-
-// Every config edit answers with the config it produced, so the section
-// re-renders from what the daemon stored rather than what it hoped it stored.
-model AutoModeConfigResultMessage {
-  event: "automode_config_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
-}
-
-model AutoModeConfigResult {
-  "config": AutoModeConfigInfo;
-}
-
-// Close a pending proposal without applying it. App-only for symmetry: the
-// review list is the app's, and a caller that cannot promote must not be able to
-// clear what a human has not seen.
-model AutoModeDiscardMessage {
-  cmd: "automode_discard";
-  id: safeint;
-  request_id: string;
-}
-
-model AutoModeDiscardResultMessage {
-  event: "automode_discard_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  proposal?: AutoModeProposalInfo;
-}
-
-model AutoModeEnvSetResultMessage {
-  event: "automode_env_set_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
+// limit_ms is set when the refinement did not answer within its limit:
+// 15 s plus a quarter of the recording duration.
+model DictationRefineResultMessage {
+  "event": "dictation_refine_result";
+  "request_id": string;
+  "profile_id": string;
+  "success": boolean;
+  "refined_text"?: string;
+  "error"?: string;
+  "limit_ms"?: safeint;
 }
 
 // ============================================================================
@@ -6928,6 +6856,7 @@ model Response {
   // no code, and a client must treat an unknown code as "broken, stop" rather
   // than matching the message text.
   error_code?: string;
+  refusal?: Refusal;
   error_conflict?: DocumentConflict;
   data?: string;
   delegate_result?: DelegateResult;
@@ -6975,6 +6904,10 @@ model Response {
   agent_close_result?: AgentCloseResult;
   agent_reload_result?: AgentReloadResult;
   quick_capture_result?: QuickCaptureResult;
+  sender_pairing?: SenderPairingRequest;
+  paired_sender_token?: PairedSenderToken;
+  paired_senders?: PairedSender[];
+  sender_sessions?: SenderSession[];
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -7003,6 +6936,7 @@ model Response {
   seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
+  seed_authorization_result?: SeedAuthorizationResult;
   seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
@@ -7023,11 +6957,6 @@ model Response {
   doc_query_result?: DocQueryResult;
   doc_count_result?: DocCountResult;
   doc_subscribe_result?: DocSubscribeResult;
-  automode_show_result?: AutoModeShowResult;
-  automode_env_result?: AutoModeEnvResult;
-  automode_config_result?: AutoModeConfigResult;
-  automode_propose_result?: AutoModeProposeResult;
-  automode_denials_result?: AutoModeDenialsResult;
 }
 
 // One recorded state observation and its fate. Outcome separates the ways an
@@ -8197,9 +8126,10 @@ model NotificationMarkReadResultMessage {
   unread_count: int32;
 }
 
-// Broadcast (no request_id) whenever the feed changes — a new notification is
-// added or one/all are marked read — so every client updates its badge and any
-// open panel re-lists. unread_count is the authoritative post-change count.
+// Sent to every client (no request_id) whenever the feed changes — a new
+// notification is added or one/all are marked read — and to a client when its
+// selected profile changes, so its badge updates and any open panel re-lists.
+// The counts are for the client's selected profile.
 model NotificationsUpdatedMessage {
   event: "notifications_updated";
   unread_count: int32;
@@ -8491,6 +8421,195 @@ model WebSocketEvent {
   total?: int32;
 }
 
+// Phones
+
+// off: phone access is off and the home holds no connection to Attn Cloud.
+enum PhoneLinkState {
+  off: "off",
+  connecting: "connecting",
+  connected: "connected",
+}
+
+// error: why the last attempt to reach Attn Cloud failed; the link keeps
+// retrying. home_id: absent until the home first registered.
+model PhoneLink {
+  state: PhoneLinkState;
+  cloud_url: string;
+  error?: string;
+  home_id?: string;
+}
+
+// A live QR code for pairing a phone with one profile. Its secret works once,
+// until expires_at.
+model PhonePairingOffer {
+  profile_id: string;
+  expires_at: string;
+  qr: string;
+}
+
+// One device's access to one profile. connected: the device holds a gateway
+// conversation right now.
+model PhonePairing {
+  device_id: string;
+  profile_id: string;
+  name: string;
+  created_at: string;
+  last_seen_at: string;
+  connected: boolean;
+}
+
+model PhonesGetMessage {
+  cmd: "phones_get";
+}
+
+// The home's cloud link, live pairing offers and pairings, for every profile.
+// Sent in answer to phones_get and whenever one of them changes.
+model PhonesUpdatedMessage {
+  event: "phones_updated";
+  link: PhoneLink;
+  offers: PhonePairingOffer[];
+  pairings: PhonePairing[];
+}
+
+// Shows a new QR code for the profile, replacing its earlier one.
+model PhonePairBeginMessage {
+  cmd: "phone_pair_begin";
+  request_id: string;
+  profile_id: string;
+}
+
+model PhonePairBeginResultMessage {
+  event: "phone_pair_begin_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  offer?: PhonePairingOffer;
+}
+
+// Removes the pairing and disconnects the device from that profile.
+model PhonePairingRevokeMessage {
+  cmd: "phone_pairing_revoke";
+  request_id: string;
+  device_id: string;
+  profile_id: string;
+}
+
+model PhonePairingRevokeResultMessage {
+  event: "phone_pairing_revoke_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// Paired senders
+
+// A program the user allowed, in the app, to send messages as them with attn
+// send. It belongs to the profile the app showed when the user allowed it, and
+// sends only to that profile's sessions.
+model PairedSender {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
+// A program waiting for the user to allow or deny it in the app. The program
+// shows the same code, so the user can match the two.
+model SenderPairingRequest {
+  id: string;
+  name: string;
+  code: string;
+  requested_at: string;
+}
+
+// The token is returned once, when the user allows the pairing.
+model PairedSenderToken {
+  sender: PairedSender;
+  token: string;
+}
+
+// Asks the user to pair a sender. The daemon replies twice on one connection:
+// first with sender_pairing, then with paired_sender_token or an error. Closing
+// the connection withdraws the request.
+@extension("x-on", #{ home: true })
+model SenderPairMessage {
+  cmd: "sender_pair";
+  name: string;
+}
+
+// profile_id: the profile whose senders to list; the caller session's profile
+// when it runs inside attn, or the only profile.
+@extension("x-on", #{ home: true })
+model SenderListMessage {
+  cmd: "sender_list";
+  profile_id?: string;
+}
+
+// sender: the paired sender's id or name. profile_id as in sender_list; the
+// app's selected profile when the app sends it.
+@extension("x-on", #{ home: true })
+model SenderUnpairMessage {
+  cmd: "sender_unpair";
+  request_id?: string;
+  sender: string;
+  profile_id?: string;
+}
+
+// Lists the live sessions of the paired sender's profile, the ones it can send
+// to, unpaged.
+@extension("x-on", #{ home: true })
+model SenderSessionsMessage {
+  cmd: "sender_sessions";
+  sender_token: string;
+}
+
+model SenderSession {
+  id: SessionID;
+  label: string;
+  agent: string;
+  state: SessionState;
+  // The outpost the session runs on; absent for a session on this machine.
+  host?: string;
+  // When the user last focused the session's terminal in attn; absent when
+  // never.
+  last_focused_at?: string;
+}
+
+model SenderUnpairResultMessage {
+  event: "sender_unpair_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+model SendersGetMessage {
+  cmd: "senders_get";
+}
+
+// The pairing request waiting for the user, if any (attn asks about one
+// program at a time), and the client's profile's paired senders. Sent in
+// answer to senders_get and whenever either changes.
+model SendersUpdatedMessage {
+  event: "senders_updated";
+  request?: SenderPairingRequest;
+  senders: PairedSender[];
+}
+
+// The authenticated app only.
+model SenderPairDecideMessage {
+  cmd: "sender_pair_decide";
+  request_id: string;
+  pairing_id: string;
+  allow: boolean;
+}
+
+model SenderPairDecideResultMessage {
+  event: "sender_pair_decide_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 alias DaemonEvent =
   InitialStateMessage
   | SessionRegisteredMessage
@@ -8514,11 +8633,13 @@ alias DaemonEvent =
   | GardenReviewUpdatedMessage
   | SeedReviewResultMessage
   | SeedReviewDraftResultMessage
+  | DictationRefineResultMessage
   | SeedResumeResultMessage
   | SeedSendToChiefResultMessage
   | SeedDocumentGetResultMessage
   | SeedArtifactTransferResultMessage
   | SeedArtifactTargetResultMessage
+  | SeedAuthorizationResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | SeedCheckResultMessage
@@ -8560,6 +8681,7 @@ alias DaemonEvent =
   | DelegationPreferencesResultMessage
   | DelegationPreferencesChangedMessage
   | HarnessModelsResultMessage
+  | AgentCatalogResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage
@@ -8630,6 +8752,7 @@ alias DaemonEvent =
   | CommandErrorMessage
   | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
+  | AskImageResultMessage
   | AsksUpdatedMessage
   | SetVentDismissedResultMessage
   | PlantVentSeedResultMessage
@@ -8640,6 +8763,12 @@ alias DaemonEvent =
   | SetVentSendResultMessage
   | SetVentKindResultMessage
   | VentsUpdatedMessage
+  | PhonesUpdatedMessage
+  | PhonePairBeginResultMessage
+  | PhonePairingRevokeResultMessage
+  | SendersUpdatedMessage
+  | SenderPairDecideResultMessage
+  | SenderUnpairResultMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage
   | InstallCodexUpdateResultMessage
@@ -8651,13 +8780,7 @@ alias DaemonEvent =
   | BusStatusResultMessage
   | BusSetConsumerEnabledResultMessage
   | DocSubscriptionDeliveryMessage
-  | DocSubscriptionEndedMessage
-  | AutoModeStateResultMessage
-  | AutoModePromoteResultMessage
-  | AutoModeConfigResultMessage
-  | AutoModeDiscardResultMessage
-  | AutoModeEnvSetResultMessage
-  | AutoModeStateChangedMessage;
+  | DocSubscriptionEndedMessage;
 
 @extension("x-on", #{ home: true })
 model TerminalExitedMessage {

@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 )
 
-func runPrompts() { os.Exit(writePrompts(os.Stdout, os.Stderr, os.Args[2:])) }
+func runPrompts() { exit(writePrompts(os.Stdout, os.Stderr, os.Args[2:])) }
 
 func writePrompts(stdout, stderr io.Writer, args []string) int {
 	fail := func(err error) int {
@@ -22,6 +22,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 		return 0
 	}
 	command := args[0]
+	setCommandPathIn("prompts", command, "list", "show", "render", "explain")
 	var positional []string
 	values := prompts.Values{}
 	asJSON := false
@@ -47,7 +48,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 			return 0
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				recordUsageError("prompts", usageErrorUnknownFlag)
+				recordUsageError(invocation.path, usageErrorUnknownFlag)
 				return fail(fmt.Errorf("unknown option %q", args[i]))
 			}
 			positional = append(positional, args[i])
@@ -208,8 +209,8 @@ options:
 example:
   attn prompts explain session launch --set notebook_root=/tmp/notebook --set garden_available=true
 
-The catalog covers launch, crew, delegation, automation, notifications, skills,
-background model tasks, and Pi auto mode. Caller-rendered inputs link to their
-producer events. A preview does not establish what a harness received.
+The catalog covers launch, crew, delegation, automation, notifications, skills
+and background model tasks. Caller-rendered inputs link to their producer
+events. A preview does not establish what a harness received.
 `)
 }

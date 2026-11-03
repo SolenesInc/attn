@@ -372,6 +372,7 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 			d.ensureChiefs()
 		}
 		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
+			d.notebookFoldersChanged()
 			d.publishFact(FactProfileCreated, profile.ID, nil)
 		}}, err
 	})
@@ -414,9 +415,13 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				}
 			}
 		})
+		if link := d.cloudLink(); link != nil {
+			link.ProfileRemoved(deleted.ID)
+		}
 		return profileActionOutcome{arranges: true, publish: func() {
-			d.pruneRootWatchers()
+			d.notebookFoldersChanged()
 			d.announceClosedAsks(closedAsks)
+			d.publishFact(FactPhonesChanged, deleted.ID, nil)
 			d.publishFact(FactProfileDeleted, deleted.ID, nil)
 		}}, nil
 	})
@@ -783,7 +788,9 @@ func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	d.sendToClient(client, &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, Settings: d.settingsSnapshot(d.profileForClient(client))})
 	d.sendGardenFull(client)
 	d.sendToClient(client, asksSnapshot(profileID, d.asks()))
+	d.sendToClient(client, d.sendersSnapshot(d.profileForClient(client)))
 	d.sendToClient(client, d.ventsSnapshot(profileID))
+	d.sendToClient(client, d.notificationsUpdated(profileID))
 	if profileID != "" {
 		d.sendToClient(client, d.codexShared().changedMessage(profileID))
 	}

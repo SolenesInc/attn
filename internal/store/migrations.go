@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
@@ -350,28 +351,21 @@ func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
 }
 
 func applyPendingMigrations(db *sql.DB, history migrationHistory, through int) error {
-	pending := history.pending(through)
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("starting the schema upgrade transaction: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(baseSchema); err != nil {
-		return fmt.Errorf("creating the base schema: %w", err)
-	}
-	if err := recordLegacySchemaVersions(tx, history.legacyRecorded, history.legacy); err != nil {
-		return err
-	}
-	for _, m := range pending {
-		if err := m.run(tx); err != nil {
-			return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+	return transactWritingCopies(context.Background(), db, func(tx *sql.Tx) error {
+		if _, err := tx.Exec(baseSchema); err != nil {
+			return fmt.Errorf("creating the base schema: %w", err)
 		}
-		if _, err := tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))", m.version); err != nil {
-			return fmt.Errorf("recording migration %d: %w", m.version, err)
+		if err := recordLegacySchemaVersions(tx, history.legacyRecorded, history.legacy); err != nil {
+			return err
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing the schema upgrade: %w", err)
-	}
-	return nil
+		for _, m := range history.pending(through) {
+			if err := m.run(tx); err != nil {
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+			if _, err := tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))", m.version); err != nil {
+				return fmt.Errorf("recording migration %d: %w", m.version, err)
+			}
+		}
+		return nil
+	})
 }

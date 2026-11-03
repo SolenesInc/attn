@@ -9,7 +9,9 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -98,5 +100,26 @@ func TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites(t *testing.T)
 		restore()
 		copied.Release()
 		synctest.Wait()
+	})
+}
+
+func TestTheDaemonBacksUpEveryIntervalAndTheAppsSettingsShowIt(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	lastBackup := func(settings map[string]any) time.Time {
+		shown, _ := settings["db.last_backup_at"].(string)
+		at, _ := time.Parse(time.RFC3339, shown)
+		return at
+	}
+	started := lastBackup(app.Initial.Settings)
+	if started.IsZero() {
+		started = lastBackup(testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+			return !lastBackup(m.Settings).IsZero()
+		}).Settings)
+	}
+	w.awaitTimer(daemon.BackupTimer)
+	w.advance(daemon.BackupInterval)
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return lastBackup(m.Settings).Equal(started.Add(daemon.BackupInterval))
 	})
 }
