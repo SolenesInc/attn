@@ -807,16 +807,16 @@ func TestEveryGardenReadShowsTheWriteBeforeIt(t *testing.T) {
 		return ""
 	})
 
-	if _, err := editSeedBody(t, cli, second, "the new body"); err != nil {
+	if _, err := editSeedBody(t, cli, second, "the new body names a quokka"); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 	expect("the edit", protocol.SeedPlotProgress{Total: 2, Growing: 1, Blocked: 1, Checks: &protocol.SeedCheckTally{Total: 1, Reported: 1}}, func(map[string]protocol.SeedRow) string {
-		shown, err := cli.SeedShow(planter, second)
+		found, err := cli.SeedSearch(planter, "quokka", 0)
 		if err != nil {
-			return "show after the edit: " + err.Error()
+			return "search after the edit: " + err.Error()
 		}
-		if shown.Seed.Body != "the new body" {
-			return "the shown body is " + strconv.Quote(shown.Seed.Body)
+		if len(found.Hits) != 1 || found.Hits[0].Seed.ID != second {
+			return fmt.Sprintf("a search for the edited body's word finds %+v, want only %s", found.Hits, second)
 		}
 		return ""
 	})
