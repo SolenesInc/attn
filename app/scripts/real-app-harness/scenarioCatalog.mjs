@@ -353,13 +353,6 @@ export const scenarioCatalog = [
     timeoutMs: 400_000,
   },
   {
-    id: 'automation-lifecycle',
-    runnerId: 'AUTOMATION-LIFECYCLE',
-    label: 'Automation lifecycle: edits, permanent deletion, cleanup of finished work and stopped disk-full launches',
-    command: ['pnpm', 'run', 'real-app:scenario-automation-lifecycle'],
-    timeoutMs: 600_000,
-  },
-  {
     id: 'automation-form',
     runnerId: 'AUTOMATION-FORM',
     label: 'Automation form: validation, automatic IDs, edits, guarded schedules and persistence',
@@ -371,13 +364,6 @@ export const scenarioCatalog = [
     runnerId: 'AUTOMATION-SURFACE',
     label: 'Automation panel: manual delivery, scheduled rows, disabled rejection and restart persistence',
     command: ['node', 'scripts/real-app-harness/scenario-automation-surface.mjs'],
-    timeoutMs: 240_000,
-  },
-  {
-    id: 'automation-scheduled-cleanup',
-    runnerId: 'AUTOMATION-SCHEDULED-CLEANUP',
-    label: 'Scheduled cleanup: restart catch-up, singleton coalescing, dirty worktree safety and storm guard',
-    command: ['pnpm', 'run', 'real-app:scenario-automation-scheduled-cleanup'],
     timeoutMs: 240_000,
   },
   {

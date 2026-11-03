@@ -141,17 +141,22 @@ func TestEditingAScheduledAutomationKeepsItsSeedAndReplacesItsSessionOnlyForACon
 		w.advance(2 * time.Minute)
 		edit("Sweep, renamed", "skip", "second")
 		w.advance(2 * time.Minute)
+		edit("Sweep, renamed", "skip", "first")
+		w.advance(2 * time.Minute)
 
 		runs := automationRuns(t, cli, 1)
-		if got, want := automationOccurrenceKeys(runs), []string{"scheduled:2000-01-01T00:06:00Z", "scheduled:2000-01-01T00:04:00Z", "scheduled:2000-01-01T00:02:00Z"}; !slices.Equal(got, want) {
+		if got, want := automationOccurrenceKeys(runs), []string{"scheduled:2000-01-01T00:08:00Z", "scheduled:2000-01-01T00:06:00Z", "scheduled:2000-01-01T00:04:00Z", "scheduled:2000-01-01T00:02:00Z"}; !slices.Equal(got, want) {
 			t.Fatalf("the automation fired %v, want %v", got, want)
 		}
-		moved, renamed, original := runs[0], runs[1], runs[2]
+		reverted, moved, renamed, original := runs[0], runs[1], runs[2], runs[3]
 		if *renamed.SeedID != *original.SeedID || *renamed.SessionID != *original.SessionID {
 			t.Errorf("after a rename the run is on %s/%s, want the thread %s/%s", *renamed.SeedID, *renamed.SessionID, *original.SeedID, *original.SessionID)
 		}
 		if *moved.SeedID != *original.SeedID || *moved.SessionID == *original.SessionID {
 			t.Errorf("after a location change the run is on %s/%s, want a new session continuing seed %s", *moved.SeedID, *moved.SessionID, *original.SeedID)
+		}
+		if *reverted.SeedID != *original.SeedID || *reverted.SessionID == *original.SessionID || *reverted.SessionID == *moved.SessionID {
+			t.Errorf("after moving back to the first location the run is on %s/%s, want a third session continuing seed %s", *reverted.SeedID, *reverted.SessionID, *original.SeedID)
 		}
 	})
 }

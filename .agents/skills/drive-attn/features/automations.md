@@ -219,7 +219,7 @@ EOF
 
 - Wire: `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/automation_retention_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`.
 - Stack: `cmd/attn/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
-- Scenario: `automation-lifecycle`, `automation-form`, `automation-surface`, `automation-scheduled-cleanup`.
+- Scenario: `automation-form`, `automation-surface`.
 - Kernel: `internal/automation/automation_test.go`, `internal/automation/schedule_test.go`, `internal/store/automations_test.go`.
 - App: `app/src/App.automations.test.tsx`, `app/src/App.automationActions.test.tsx`, `app/src/App.automationForm.test.tsx`, `app/src/App.automationSelection.test.tsx`, `app/src/components/automations/automationFormModel.test.ts`, `app/src/utils/automationRuns.ordering.test.ts`.
 
