@@ -134,7 +134,7 @@ describe('App session succession', () => {
       sessions: [daemonSession('s3', { state: 'idle' }), daemonSession('s1', { state: 'idle' })],
       desktops: [soloDesktop('s3'), terminalDesktop('s1', terminal)],
     });
-    daemon.on('client_hello', () => initialState({ sessions: [daemonSession('s3', { state: 'idle' })], desktops: [soloDesktop('s3')] }));
+    daemon.on('client_hello', () => initialState({ sessions: [daemonSession('s3', { state: 'idle' })], desktops: [soloDesktop('s3')], profiles: [defaultProfile('desktop-s3')] }));
 
     const reconnected = await daemon.reconnect();
     await daemon.idle();

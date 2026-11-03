@@ -72,6 +72,7 @@ export function AppDesktops() {
     sendDesktopSetSplitRatio,
     sendDesktopUpdateTile,
     desktopTileContents,
+    isReady,
   } = useDaemonApi();
   const { createSplitSession } = useSessionLaunchContext();
   const { handleCloseTerminalTile } = useSessionLifecycleContext();
@@ -180,6 +181,7 @@ export function AppDesktops() {
           isSessionViewVisible={view === 'session'}
           terminalsLive
           attachOnlyDrawn={settings.pty_shared_host_enabled === 'true'}
+          connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {
             void createSplitSession('shell', direction, targetPaneId);

@@ -47,7 +47,7 @@ function createTerminal(): GhosttyTerminalHandle {
     applyPlacements: vi.fn(() => Promise.resolve()),
     seedPlacements: vi.fn(() => Promise.resolve()),
     drain: vi.fn(() => Promise.resolve()),
-    holdInput: vi.fn(),
+    holdInput: vi.fn(() => 1),
     releaseInput: vi.fn(() => Promise.resolve()),
   };
 }

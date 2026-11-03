@@ -1199,6 +1199,7 @@ export function useDaemonSocket({
             if (nextWarnings.length > 0 && ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
             }
+            rejectPendingByPredicate((key) => key.startsWith('pty_attach_'), new Error('The daemon disconnected before answering the attach'));
             hasReceivedInitialStateRef.current = true;
             setIsReady(true);
             setHasReceivedInitialState(true);
@@ -1214,15 +1215,6 @@ export function useDaemonSocket({
                 cursor: theme.cursor,
                 ansi_palette: theme.ansi_palette,
               }));
-            }
-            if (ws.readyState === WebSocket.OPEN) {
-              const reattachIds = ptyTransportRef.current.listAttachedRuntimeIds();
-              if (reattachIds.length > 0) {
-                recordDiag({ kind: 'attach', reason: 'recovery_reattach', sessions: reattachIds });
-              }
-              for (const sessionId of reattachIds) {
-                ws.send(JSON.stringify({ cmd: 'attach_session', id: sessionId }));
-              }
             }
             break;
 
@@ -1939,9 +1931,11 @@ export function useDaemonSocket({
           case 'pty_desync':
             if (data.id) {
               recordDiag({ kind: 'desync', session: data.id, reason: data.reason || 'desync' });
-              emitPtyEvent({ event: 'reset', id: data.id, reason: data.reason || 'desync' });
+              const attaching = pendingActionsRef.current.has(`pty_attach_${data.id}`);
+              if (!attaching && !ptyTransportRef.current.hasAttachedRuntime(data.id)) break;
               ptyTransportRef.current.clearRuntimeStream(data.id);
-              ws.send(JSON.stringify({ cmd: 'attach_session', id: data.id }));
+              emitPtyEvent({ event: 'reset', id: data.id, reason: data.reason || 'desync' });
+              if (attaching) ws.send(JSON.stringify({ cmd: 'attach_session', id: data.id }));
             }
             break;
 
@@ -1950,11 +1944,10 @@ export function useDaemonSocket({
             if (data.id) {
               const attaching = pendingActionsRef.current.has(`pty_attach_${data.id}`);
               if (attaching && ptyTransportRef.current.getAttachContext(data.id)?.policy === 'revive') break;
-              emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
-              if (!attaching && !ptyTransportRef.current.hasAttachedRuntime(data.id)) break;
               recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               ptyTransportRef.current.clearRuntimeStream(data.id);
-              ws.send(JSON.stringify({ cmd: 'attach_session', id: data.id, attach_policy: 'relaunch_restore' }));
+              emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
+              if (attaching) ws.send(JSON.stringify({ cmd: 'attach_session', id: data.id, attach_policy: 'relaunch_restore' }));
             }
             break;
 

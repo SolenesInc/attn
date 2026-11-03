@@ -34,18 +34,20 @@ footprint change, never to silence a regression you don't understand.
 ## Terminal streaming
 
 `scenario-perf-pty-stream` measures what streaming terminal output costs while
-three shells print `seq 1 400` every 20 ms, with the shared terminal host on. It
-prints one JSON line per run and a summary with the median, min and max of each
-number: CPU as a share of a core for the app, WebContent, WebKit Networking,
+three shells print `seq 1 400` every 20 ms, with the shared terminal host on
+unless `--shared-host false` turns it off. With it on, the app streams only the
+terminals it draws. It prints one JSON line per run and a summary with the
+median, min and max of each number: CPU as a share of a core for the app, WebContent, WebKit Networking,
 WebKit GPU, the daemon and the PTY host; WebSocket messages and bytes a second;
 events a second per terminal from the daemon and from the app; the terminals
 `daemon.log` shows streaming to the app; key-to-echo p50 and p90 in a quiet
 shell under the load; and, for `hidden`, how long the streaming panes take to
-show the daemon's screen once the user returns to them.
+show the daemon's screen once the user returns to them, and when a command
+typed during that switch reaches its terminal.
 
 ```bash
 ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-stream -- \
-  --workload hidden|drawn|unmounted --streams 3 --seconds 30 --runs 5
+  --workload hidden|drawn|unmounted --streams 3 --seconds 30 --runs 5 [--shared-host false]
 ```
 
 `drawn` draws the streams as splits beside the quiet shell, `hidden` puts them

@@ -75,6 +75,7 @@ export function useGhosttyPaneRuntime(
   isActiveSessionRef: { current: boolean },
   terminalsLive = true,
   attachOnlyDrawn = false,
+  connected = true,
 ): GhosttyPaneRuntime {
   const panesRef = useRef(panes);
   const handlesRef = useRef(new Map<string, GhosttyTerminalHandle>());
@@ -98,11 +99,13 @@ export function useGhosttyPaneRuntime(
   const terminalsLiveRef = useRef(terminalsLive);
   const attachHolderRef = useRef<object>({});
   const attachOnlyDrawnRef = useRef(attachOnlyDrawn);
+  const connectedRef = useRef(connected);
   panesRef.current = panes;
   terminalsLiveRef.current = terminalsLive;
   attachOnlyDrawnRef.current = attachOnlyDrawn;
+  connectedRef.current = connected;
   const attachable = useCallback((pane: PaneRuntimeSpec | undefined) => (
-    reachable(pane) && (!attachOnlyDrawnRef.current || Boolean(pane?.drawn))
+    connectedRef.current && reachable(pane) && (!attachOnlyDrawnRef.current || Boolean(pane?.drawn))
   ), []);
 
   const paneFor = useCallback((paneId: string) => panesRef.current.find((pane) => pane.paneId === paneId), []);
@@ -180,7 +183,7 @@ export function useGhosttyPaneRuntime(
     handlesRef.current.delete(paneId);
   }, []);
 
-  const attachPane = useCallback(async (paneId: string, terminal: GhosttyTerminalHandle, respawned = false) => {
+  const attachPane = useCallback(async (paneId: string, terminal: GhosttyTerminalHandle, restoring = false) => {
     handlesRef.current.set(paneId, terminal);
     const pane = paneFor(paneId);
     if (!pane || !attachable(pane) || !terminalsLiveRef.current) return;
@@ -203,7 +206,7 @@ export function useGhosttyPaneRuntime(
     const modelSize = terminal.getSize();
     if (!modelSize || !terminalIsCurrent()) return;
     const stopped = Boolean(pane.terminalExit) || pane.state_reason === 'process_exited';
-    const attachPolicy = respawned
+    const attachPolicy = restoring
       ? 'relaunch_restore'
       : stopped
       ? 'same_app_remount'
@@ -232,7 +235,7 @@ export function useGhosttyPaneRuntime(
       pendingResizeRef.current.delete(pane.runtimeId);
     }
     runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
-    terminal.holdInput();
+    const inputHold = terminal.holdInput();
     const controller = new AbortController();
     const attachPromise = ptyAttach({
       args: {
@@ -283,7 +286,7 @@ export function useGhosttyPaneRuntime(
       if (connectingRef.current.get(pane.runtimeId)?.generation === attachGeneration) {
         connectingRef.current.delete(pane.runtimeId);
       }
-      if (!connectingRef.current.has(pane.runtimeId)) void terminal.releaseInput();
+      void terminal.releaseInput(inputHold);
     }
   }, [attachable, flushPendingResize, paneFor]);
   const handleTerminalReady = useCallback(
@@ -353,10 +356,7 @@ export function useGhosttyPaneRuntime(
       case 'reset':
         stoppedRuntimesRef.current.delete(event.id);
         terminal.reset();
-        if (
-          event.reason === 'respawn' && pane && terminalsLiveRef.current && attachable(pane)
-          && !runtimeAttachHolds.holds(pane.runtimeId, attachHolderRef.current)
-        ) {
+        if (pane && terminalsLiveRef.current && attachable(pane) && !connectingRef.current.has(pane.runtimeId)) {
           void attachPane(paneId, terminal, true);
         }
         break;
@@ -409,7 +409,7 @@ export function useGhosttyPaneRuntime(
         }
       }
     }
-  }, [attachable, attachOnlyDrawn, cancelRuntimeConnection, handleTerminalReady, panes, terminalsLive]);
+  }, [attachable, attachOnlyDrawn, cancelRuntimeConnection, connected, handleTerminalReady, panes, terminalsLive]);
 
   const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);

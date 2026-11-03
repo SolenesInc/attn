@@ -17,6 +17,7 @@ import { currentHarnessInstance, dataDirForInstance, defaultWSURLForInstance } f
 import { captureWebKitPids, collectDescendantPids, isRelevantWebKitProcess, readLiveDaemonPid, readProcessTable, stopDaemonKeepingTerminals } from './perfMeasure.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
+import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -29,7 +30,7 @@ const PROCESS_CLASSES = ['app', 'webkit_webcontent', 'webkit_networking', 'webki
 
 function parseArgs(argv) {
   const args = argv.filter((arg) => arg !== '--');
-  const extras = { workload: 'drawn', streams: 3, seconds: 30, runs: 5, keys: 30, profileDir: null, pprofPort: null };
+  const extras = { workload: 'drawn', streams: 3, seconds: 30, runs: 5, keys: 30, profileDir: null, pprofPort: null, sharedHost: 'true' };
   const passthrough = [];
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -46,8 +47,10 @@ function parseArgs(argv) {
     else if (arg === '--keys') extras.keys = Number(value());
     else if (arg === '--profile-dir') extras.profileDir = path.resolve(value());
     else if (arg === '--pprof-port') extras.pprofPort = Number(value());
+    else if (arg === '--shared-host') extras.sharedHost = value();
     else passthrough.push(arg);
   }
+  if (!['true', 'false'].includes(extras.sharedHost)) throw new Error(`--shared-host must be true or false, got ${extras.sharedHost}`);
   if (!WORKLOADS.includes(extras.workload)) throw new Error(`--workload must be one of ${WORKLOADS.join(', ')}, got ${extras.workload}`);
   for (const key of ['streams', 'seconds', 'runs']) {
     if (!Number.isInteger(extras[key]) || extras[key] < 1) throw new Error(`--${key} must be a positive integer, got ${extras[key]}`);
@@ -60,7 +63,7 @@ function parseArgs(argv) {
 function printHelp() {
   printCommonHelp('scripts/real-app-harness/scenario-perf-pty-stream.mjs');
   console.log(`
-Measures what streaming terminal output costs, with the shared terminal host on.
+Measures what streaming terminal output costs, with the shared terminal host on unless --shared-host false.
 
   --workload hidden|drawn|unmounted
       hidden: the streaming shells are splits on the previous desktop; a quiet shell is drawn.
@@ -73,6 +76,8 @@ Measures what streaming terminal output costs, with the shared terminal host on.
   --profile-dir D profile the daemon, the PTY host and WebContent during each window into D.
                   Profiling costs CPU, so profiled runs are not baselines.
   --pprof-port P  restart the instance's daemon with ATTN_PPROF=P so the daemon profile is taken too
+  --shared-host true|false
+                  pty_shared_host_enabled for the run (default true); it also turns on streaming only to drawn panes
 
 Prints one {"type":"run"} JSON line per run, then one {"type":"summary"} line with the
 median, min and max of each number.`);
@@ -442,7 +447,7 @@ function stopStreams(observer, streams) {
   for (const pane of streams) observer.send({ cmd: 'pty_input', id: pane.runtimeId, data: '\u0003', source: 'automation' });
 }
 
-async function hiddenCatchUp({ client, observer, workload, runIndex }) {
+async function hiddenCatchUp({ client, driver, observer, workload, runIndex }) {
   const token = `${Date.now().toString(36)}${runIndex}`;
   stopStreams(observer, workload.streams);
   for (const pane of workload.streams) {
@@ -456,16 +461,33 @@ async function hiddenCatchUp({ client, observer, workload, runIndex }) {
       await delay(50);
     }
   }
+  const typedMarker = `TYPED_${token}`;
   const startedAt = performance.now();
-  await client.request('select_session', { sessionId: workload.streams[0].sessionId });
+  const selected = client.request('select_session', { sessionId: workload.streams[0].sessionId })
+    .then(() => performance.now() - startedAt);
+  await driver.typeText(`printf 'TY''PED_%s\\n' ${token}`);
+  await driver.pressKey('Return');
+  const typedAtMs = performance.now() - startedAt;
+  const selectedMs = await selected;
   const caughtUp = await Promise.all(workload.streams.map(async (pane) => {
     await waitForPaneText(client, pane.sessionId, pane.paneId, (text) => text.includes(marker), `${pane.runtimeId} shows the daemon's screen`, 15_000);
     return performance.now() - startedAt;
   }));
-  return { slowestPaneMs: round(Math.max(...caughtUp)), perPaneMs: caughtUp.map((ms) => round(ms)) };
+  const typedTarget = workload.streams[0];
+  const typedDeadline = Date.now() + 15_000;
+  while (!(await daemonScreen(observer, typedTarget.runtimeId)).text.includes(typedMarker)) {
+    if (Date.now() > typedDeadline) throw new Error(`Keys typed while switching to ${typedTarget.runtimeId} never reached it: the daemon's screen never showed ${typedMarker}`);
+    await delay(50);
+  }
+  const typedArrivedMs = performance.now() - startedAt;
+  return {
+    slowestPaneMs: round(Math.max(...caughtUp)),
+    perPaneMs: caughtUp.map((ms) => round(ms)),
+    typedWhileSwitching: { typedAtMs: round(typedAtMs), selectedMs: round(selectedMs), arrivedMs: round(typedArrivedMs) },
+  };
 }
 
-async function measureRun({ client, observer, extras, runner, runIndex, pids: launchPids, dataDir, logPath, cwd }) {
+async function measureRun({ client, driver, observer, extras, runner, runIndex, pids: launchPids, dataDir, logPath, cwd }) {
   const createdSessionIds = [];
   const runLogStart = daemonLogSize(logPath);
   try {
@@ -503,7 +525,7 @@ async function measureRun({ client, observer, extras, runner, runIndex, pids: la
     }));
 
     const keyProbe = await keyToEcho(client, workload.quiet, extras.keys);
-    const catchUp = extras.workload === 'hidden' ? await hiddenCatchUp({ client, observer, workload, runIndex }) : null;
+    const catchUp = extras.workload === 'hidden' ? await hiddenCatchUp({ client, driver, observer, workload, runIndex }) : null;
 
     const sumStreams = (pick) => terminals.filter((terminal) => terminal.role !== 'quiet').reduce((sum, terminal) => sum + (pick(terminal) ?? 0), 0);
     const record = {
@@ -527,6 +549,7 @@ async function measureRun({ client, observer, extras, runner, runIndex, pids: la
         keyToEchoMs: keyProbe ? keyProbe.echoMs : undefined,
         keyToPaintMs: keyProbe ? keyProbe.paintMs : undefined,
         catchUpMs: catchUp ? catchUp.slowestPaneMs : undefined,
+        typedWhileSwitchingArrivedMs: catchUp ? catchUp.typedWhileSwitching.arrivedMs : undefined,
       },
       terminals,
       streamedTerminals: {
@@ -564,6 +587,7 @@ async function main() {
   });
   const launchEnv = extras.pprofPort ? { ATTN_PPROF: String(extras.pprofPort) } : null;
   const client = new UiAutomationClient({ appPath: options.appPath, launchEnv });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl || defaultWSURLForInstance(instance) });
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
@@ -578,8 +602,8 @@ async function main() {
       const webkitBaseline = await captureWebKitPids();
       await launchFreshAppAndConnect(client, observer);
       queueDaemonSettingRestore(observer, 'pty_shared_host_enabled');
-      await writeDaemonSettings([{ key: 'pty_shared_host_enabled', value: 'true' }]);
-      await observer.waitFor(() => observer.getSetting('pty_shared_host_active') === 'true', 'the shared terminal host active for new terminals', 20_000);
+      await writeDaemonSettings([{ key: 'pty_shared_host_enabled', value: extras.sharedHost }]);
+      await observer.waitFor(() => observer.getSetting('pty_shared_host_active') === extras.sharedHost, `the shared terminal host active=${extras.sharedHost} for new terminals`, 20_000);
       const appPid = client.readManifest()?.pid;
       const daemonPid = readLiveDaemonPid(instance);
       if (!appPid || !daemonPid) throw new Error(`Missing pids: app=${appPid} daemon=${daemonPid}`);
@@ -590,11 +614,11 @@ async function main() {
     const cwd = path.join(runner.sessionDir, 'shells');
     fs.mkdirSync(cwd, { recursive: true });
     for (let runIndex = 0; runIndex < extras.runs; runIndex += 1) {
-      const record = await runner.step(`run_${runIndex + 1}`, () => measureRun({ client, observer, extras, runner, runIndex, pids, dataDir, logPath, cwd }));
+      const record = await runner.step(`run_${runIndex + 1}`, () => measureRun({ client, driver, observer, extras, runner, runIndex, pids, dataDir, logPath, cwd }));
       records.push(record);
       console.log(JSON.stringify(record));
     }
-    const summary = { type: 'summary', workload: extras.workload, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
+    const summary = { type: 'summary', workload: extras.workload, sharedHost: extras.sharedHost, runs: records.length, seconds: extras.seconds, streams: extras.streams, profiled: Boolean(extras.profileDir), metrics: summarize(records) };
     runner.writeJson('summary-metrics.json', summary);
     console.log(JSON.stringify(summary));
     await runner.finishSuccess({ summary });

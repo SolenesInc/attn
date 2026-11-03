@@ -4,12 +4,12 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_SNAPSHOT_FORMAT } from './pty/attachPlanning';
 import { openSession } from './test/appFixtures';
-import { daemonSession, soloDesktop, splitDesktop } from './test/daemonFixtures';
+import { daemonSession, defaultProfile, soloDesktop, splitDesktop } from './test/daemonFixtures';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
-import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
 
 const NATIVE_SNAPSHOT: Uint8Array = readFileSync('src/ghostty/testdata/native-snapshot.bin');
 const sharedHost = (enabled: boolean) => ({ settings: { pty_shared_host_enabled: String(enabled) } });
@@ -142,6 +142,52 @@ describe('streaming only the terminals the window draws', () => {
     await daemon.idle();
     expect(daemon.sentOf('attach_session').map((command) => command.id).slice(-1)).toEqual(['s2']);
     expect(streams(daemon, start)).toEqual(['attach s2']);
+  });
+
+  it('does not re-attach a pane whose desync arrives after it stopped being drawn', async () => {
+    const daemon = await openDesktops(true);
+    await openSession(daemon, 's2');
+    const start = daemon.sent.length;
+
+    daemon.emit({ event: 'pty_desync', id: 's1', reason: 'stream_backpressure' });
+    await daemon.idle();
+
+    expect(streams(daemon, start)).toEqual([]);
+  });
+
+  it('attaches, after a reconnect, the pane the daemon now shows and not the one shown before', async () => {
+    const daemon = await openDesktops(true, ['s1', 's2']);
+    daemon.on('client_hello', () => initialState({
+      settings: sharedHost(true).settings,
+      sessions: ['s1', 's2'].map((id) => daemonSession(id, { state: 'idle' })),
+      desktops: ['s1', 's2'].map((id, index) => soloDesktop(id, { shortcut_slot: index + 1 })),
+      profiles: [defaultProfile('desktop-s2')],
+    }));
+
+    const reconnected = await daemon.reconnect();
+    await daemon.idle();
+
+    expect(reconnected.sent.filter((command) => command.cmd === 'attach_session').map(({ id }) => id)).toEqual(['s2']);
+  });
+
+  it('keeps holding keys for the newest attach when an older one for the same pane settles first', async () => {
+    const daemon = await openDesktops(true, ['s1', 's2']);
+    await openSession(daemon, 's2');
+    const held: CommandMessage<'attach_session'>[] = [];
+    daemon.on('attach_session', (command) => { held.push(command); return undefined; });
+
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    const s1 = () => held.filter((command) => command.id === 's1');
+    await gesture(daemon, () => daemon.replyTo(s1()[0], { event: 'attach_result', id: 's1', success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+    expect(s1()).toHaveLength(2);
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'x', code: 'KeyX' }));
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+
+    await gesture(daemon, () => daemon.replyTo(s1()[1], { event: 'attach_result', id: 's1', success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 's1', data: 'x' })]);
   });
 
   it('delivers keys typed while switching to an undrawn pane after its attach replay lands', async () => {

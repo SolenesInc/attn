@@ -248,8 +248,8 @@ export interface GhosttyTerminalHandle {
   getBlockState: () => BlockStateSnapshot;
   getPlacementState: () => PlacementStateSnapshot;
   drain: () => Promise<void>;
-  holdInput: () => void;
-  releaseInput: () => Promise<void>;
+  holdInput: () => number;
+  releaseInput: (hold: number) => Promise<void>;
 }
 
 export interface BlockStateSnapshotBlock {
@@ -1996,15 +1996,18 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     fitRef.current = fit;
 
+    const inputHoldRef = useRef(0);
     const holdInput = useCallback(() => {
+      inputHoldRef.current += 1;
       inputReadyRef.current = false;
       if (containerRef.current) containerRef.current.dataset.terminalInputReady = '0';
+      return inputHoldRef.current;
     }, []);
-    const releaseInput = useCallback(async () => {
+    const releaseInput = useCallback(async (hold: number) => {
       const terminal = terminalRef.current;
       await writeChainRef.current;
       const container = containerRef.current;
-      if (!terminal || terminalRef.current !== terminal || !container) return;
+      if (inputHoldRef.current !== hold || !terminal || terminalRef.current !== terminal || !container) return;
       inputReadyRef.current = true;
       container.dataset.terminalInputReady = '1';
       const sessionId = runtimeMetaRef.current?.sessionId;
@@ -2284,6 +2287,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         startupRef.current.firstReadyRows = terminal.rows;
         // The desktop observer projects collapse/restore before the next frame.
         resources.observeResize(container, scheduleCoalescedRefit);
+        const constructionHold = holdInput();
         await onReadyRef.current({
           fit,
           openFind,
@@ -2324,7 +2328,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           holdInput,
           releaseInput,
         });
-        await releaseInput();
+        await releaseInput(constructionHold);
         if (!active || terminalRef.current !== terminal) return;
         if (recoveredModelFault) {
           modelRecoveryPendingRef.current = false;

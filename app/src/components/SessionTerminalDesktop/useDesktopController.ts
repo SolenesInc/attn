@@ -106,6 +106,7 @@ export function useDesktopController(
     isSessionViewVisible = true,
     terminalsLive = true,
     attachOnlyDrawn = false,
+    connected = true,
     eventRouter,
     onSplitPane,
     onClosePane,
@@ -408,6 +409,7 @@ export function useDesktopController(
     isActiveSessionRef,
     terminalsLive,
     attachOnlyDrawn,
+    connected,
   );
   const setTerminalHandle = runtime.setTerminalHandle;
   const terminalRefCallbacksRef = useRef(

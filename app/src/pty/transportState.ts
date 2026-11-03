@@ -2,7 +2,6 @@ import type { PendingAttachOutputChunk } from './attachPlanning';
 
 export interface PtyTransportState<TAttachContext> {
   hasAttachedRuntime(id: string): boolean;
-  listAttachedRuntimeIds(): string[];
   markRuntimeAttached(id: string): void;
   clearRuntime(id: string): void;
   clearRuntimeStream(id: string): void;
@@ -26,10 +25,6 @@ export function createPtyTransportState<TAttachContext>(): PtyTransportState<TAt
   return {
     hasAttachedRuntime(id: string) {
       return attachedRuntimeIds.has(id);
-    },
-
-    listAttachedRuntimeIds() {
-      return Array.from(attachedRuntimeIds);
     },
 
     markRuntimeAttached(id: string) {
