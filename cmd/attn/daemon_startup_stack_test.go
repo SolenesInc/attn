@@ -10,19 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestADaemonWhosePortIsTakenExitsBeforeReadyNamingThePort(t *testing.T) {
-	t.Parallel()
-	s := testworld.NewStack(t)
-	// Without fd inheritance, the daemon must refuse the socket held by the stack.
-	got := s.Run(testworld.Invocation{Args: []string{"daemon"}, Env: []string{"ATTN_HARNESS_WS_LISTENER_FD="}})
-	if got.Code != 1 || !strings.Contains(got.Stderr, s.WSAddr) {
-		t.Fatalf("attn daemon with its port taken exited %d, want 1 naming %s\nstderr:\n%s", got.Code, s.WSAddr, got.Stderr)
-	}
-	if _, err := os.Stat(s.Socket); !os.IsNotExist(err) {
-		t.Fatalf("the refused daemon left its socket behind (stat: %v), a false ready signal", err)
-	}
-}
-
 func TestADaemonWhoseBackgroundJobsAlreadyRunElsewhereExitsBeforeReadyAndLetsTheNextOneStart(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)

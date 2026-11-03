@@ -45,7 +45,12 @@ func rowOf(table, id string) string {
 
 func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	t.Parallel()
+	const zone = "America/Los_Angeles"
+	if _, err := time.LoadLocation(zone); err != nil {
+		t.Fatalf("this machine has no tzdata for %s, so the daemon would run in UTC: %v", zone, err)
+	}
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "TZ="+zone)
 
 	for _, tc := range []struct {
 		args []string
@@ -92,8 +97,13 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	app := s.App()
 	repo := s.Path("shop")
 	gitRepo(t, repo)
+	since := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 	source := s.Spawn(app, fakeagent.Claude, repo)
 	s.Launched(source)
+	until := time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
+	if got := listedRows(t, s, "--since", since, "--until", until); !slices.Equal(got, []string{source}) {
+		t.Errorf("session list --since %s --until %s from a daemon in %s = %q, want the session seen inside that window", since, until, zone, got)
+	}
 	started := s.Run(testworld.Invocation{Session: source, Args: []string{"delegate",
 		"--brief", "Write the ledger", "--cwd", repo, "--new-worktree", "--branch", "feat/ledger", "--from", "main", "--model", "default"}})
 	if started.Code != 0 {
@@ -194,25 +204,5 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 	}
 	if again := s.Attn("session", "reopen", worker.SessionID); again.Code != 0 || !strings.Contains(again.Stdout, worker.SessionID+" is already running") {
 		t.Errorf("reopening a live session exited %d with %q, want it reported as running", again.Code, again.Stdout+again.Stderr)
-	}
-}
-
-func TestSessionListWindowKeepsALiveSessionWhenTheDaemonRunsOutsideUTC(t *testing.T) {
-	t.Parallel()
-	const zone = "America/Los_Angeles"
-	if _, err := time.LoadLocation(zone); err != nil {
-		t.Fatalf("this machine has no tzdata for %s, so the daemon would run in UTC: %v", zone, err)
-	}
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	s.Vars = append(s.Vars, "TZ="+zone)
-	s.Start()
-
-	since := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
-	live := s.Spawn(s.App(), fakeagent.Claude, s.Path("shop"))
-	s.Launched(live)
-	until := time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
-
-	if got := listedRows(t, s, "--since", since, "--until", until); !slices.Equal(got, []string{live}) {
-		t.Errorf("session list --since %s --until %s = %q, want the session seen inside that window", since, until, got)
 	}
 }

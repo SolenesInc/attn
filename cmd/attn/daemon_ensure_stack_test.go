@@ -56,37 +56,6 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	t.Logf("daemon pid %s and its embedded shell survived both Ensure callers", strings.TrimSpace(string(pid)))
 }
 
-func TestDaemonEnsureReplacesAConfirmedDifferentBuild(t *testing.T) {
-	t.Parallel()
-	s := testworld.NewStack(t)
-	s.StartBinary(testworld.AttnUpdateBinary(t, "ensure-before", "stable", ""))
-	pidPath := filepath.Join(s.Dir, "attn.pid")
-	before, err := os.ReadFile(pidPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	next := testworld.AttnUpdateBinary(t, "ensure-after", "stable", "")
-	got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}})
-	t.Cleanup(func() { s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "stop"}}) })
-	var result struct {
-		Status string `json:"status"`
-		Reason string `json:"reason"`
-	}
-	got.JSON(t, &result)
-	if got.Code != 0 || result.Status != "restarted" || result.Reason != "source_fingerprint_mismatch" {
-		t.Fatalf("ensure from a different build: %+v", got)
-	}
-	s.AwaitStopped()
-	after, err := os.ReadFile(pidPath)
-	if err != nil || string(after) == string(before) {
-		t.Fatalf("replacement PID = %q, %v; want a new PID instead of %q", after, err, before)
-	}
-	if got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}}); got.Code != 0 || !strings.Contains(got.Stdout, `"already_running"`) {
-		t.Fatalf("ensure from the replacement build: %+v", got)
-	}
-	t.Logf("confirmed build mismatch replaced pid %s with pid %s", strings.TrimSpace(string(before)), strings.TrimSpace(string(after)))
-}
-
 func TestDaemonEnsureStartsOneDaemonForRacingCallersAndSaysWhyOneCannotStart(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)

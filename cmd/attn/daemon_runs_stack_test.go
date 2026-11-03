@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,10 +36,19 @@ func TestDaemonStartRecordsHowThePreviousRunEnded(t *testing.T) {
 	sampleOnce(s, s.App())
 
 	t.Cleanup(func() { s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "stop"}}) })
-	if got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}}); got.Code != 0 {
+	got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}})
+	var ensured struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	got.JSON(t, &ensured)
+	if got.Code != 0 || ensured.Status != "restarted" || ensured.Reason != "source_fingerprint_mismatch" {
 		t.Fatalf("attn daemon ensure from a second build: %+v", got)
 	}
 	s.AwaitStopped()
+	if got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}}); got.Code != 0 || !strings.Contains(got.Stdout, `"already_running"`) {
+		t.Fatalf("attn daemon ensure from the replacement build: %+v", got)
+	}
 	records := sampleRecords(t, s.App())
 
 	var runs []string

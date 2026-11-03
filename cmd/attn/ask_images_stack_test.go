@@ -89,33 +89,6 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	}
 }
 
-func TestAnAskOpenedBeforeImagesTravelledGetsItsImagesCopiedWhenTheDaemonStarts(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	s.Start()
-	app := s.App()
-	turnAsksOn(app)
-	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
-	s.Launched(asker)
-	shot := writeImage(t, s.Path("work", "shot.png"), 1024)
-	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "Before: ![shot](shot.png) ![later](later.png)\n", "", s.Path("work"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	s.Stop()
-	s.Start()
-	later := writeImage(t, s.Path("work", "later.png"), 512)
-	s.Stop()
-	s.Start()
-	removeAll(t, s.Path("work"))
-	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "shot.png")); !bytes.Equal(got, shot) {
-		t.Fatalf("after the restart, the ask opened without images shows %d bytes for its image, want its %d", len(got), len(shot))
-	}
-	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "later.png")); !bytes.Equal(got, later) {
-		t.Fatalf("an image that appeared after the first restart shows %d bytes after the next, want its %d", len(got), len(later))
-	}
-}
-
 func TestAnAskFromAFolderWhoseNameEndsInASpaceKeepsItsOwnImageAcrossARestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -147,7 +120,7 @@ func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *test
 	s.Launched(asker)
 	small := writeImage(t, s.Path("work", "small.png"), 1024)
 	large := writeImage(t, s.Path("work", "large.png"), 4<<20)
-	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "![small](small.png) ![large](large.png)\n", "", s.Path("work"))
+	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "![small](small.png) ![large](large.png) ![later](later.png)\n", "", s.Path("work"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +133,7 @@ func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *test
 	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "small.png")); !bytes.Equal(got, small) {
 		t.Fatalf("the small image shows %d bytes, want its %d", len(got), len(small))
 	}
+	later := writeImage(t, s.Path("work", "later.png"), 512)
 
 	s.Stop()
 	s.Start()
@@ -169,6 +143,9 @@ func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *test
 	}
 	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "small.png")); !bytes.Equal(got, small) {
 		t.Fatalf("on the next start the small image shows %d bytes, want its %d", len(got), len(small))
+	}
+	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "later.png")); !bytes.Equal(got, later) {
+		t.Fatalf("an image that appeared after a start shows %d bytes after the next, want its %d", len(got), len(later))
 	}
 }
 
