@@ -68,20 +68,28 @@ func (c *Client) ResolveRepoDir(ctx context.Context, repoDir string) (string, er
 }
 
 func (c *Client) originRepoName(ctx context.Context, path string) string {
-	out, err := c.Output(ctx, OpMetadata, path, "remote", "get-url", "origin")
+	remote, err := c.configuredOriginURL(ctx, path)
 	if err != nil {
 		return ""
 	}
-	return repoNameFromRemote(strings.TrimSpace(string(out)))
+	return repoNameFromRemote(remote)
 }
 
 func (c *Client) OriginHostOwnerRepo(ctx context.Context, path string) (host, ownerRepo string, err error) {
-	out, err := c.Output(ctx, OpMetadata, path, "remote", "get-url", "origin")
+	remote, err := c.configuredOriginURL(ctx, path)
 	if err != nil {
 		return "", "", err
 	}
-	host, ownerRepo = hostOwnerRepoFromRemote(strings.TrimSpace(string(out)))
+	host, ownerRepo = hostOwnerRepoFromRemote(remote)
 	return host, ownerRepo, nil
+}
+
+func (c *Client) configuredOriginURL(ctx context.Context, path string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, path, "config", "--get", "remote.origin.url")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {

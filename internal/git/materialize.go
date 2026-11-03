@@ -41,11 +41,11 @@ func (c *Client) ValidateLocalClone(ctx context.Context, path, expectedIdentity 
 	if identity != strings.ToLower(expectedIdentity) {
 		return "", fmt.Errorf("local clone origin mismatch: got %s want %s", identity, strings.ToLower(expectedIdentity))
 	}
-	remoteURL, err := c.Output(ctx, OpMetadata, mainRepo, "remote", "get-url", "origin")
+	remoteURL, err := c.configuredOriginURL(ctx, mainRepo)
 	if err != nil {
 		return "", fmt.Errorf("read local clone origin: %w", err)
 	}
-	if _, err := authorizationForGitURL(strings.TrimSpace(string(remoteURL)), "validation"); err != nil {
+	if _, err := authorizationForGitURL(remoteURL, "validation"); err != nil {
 		return "", err
 	}
 	return mainRepo, nil

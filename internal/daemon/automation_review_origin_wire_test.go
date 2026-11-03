@@ -15,14 +15,18 @@ func TestAReviewCloneOverrideMustBeTheRepositoryItselfOverAnEncryptedOrigin(t *t
 	w := newWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	for _, tc := range []struct {
-		name, origin, refusal string
+		name, origin, rewrite, refusal string
 	}{
-		{"cased", "git@github.test:Acme/Shop.git", ""},
-		{"other", "git@github.test:acme/shop-fork.git", "origin mismatch"},
-		{"plain", "http://github.test/acme/shop.git", "plaintext HTTP"},
+		{"cased", "git@github.test:Acme/Shop.git", "", ""},
+		{"other", "git@github.test:acme/shop-fork.git", "", "origin mismatch"},
+		{"plain", "http://github.test/acme/shop.git", "", "plaintext HTTP"},
+		{"mirrored", "https://github.test/acme/shop.git", "https://mirror.test/", ""},
 	} {
 		clone := newRepo(t, tc.name)
 		runGit(t, clone, "remote", "add", "origin", tc.origin)
+		if tc.rewrite != "" {
+			runGit(t, clone, "config", "url."+tc.rewrite+".insteadOf", "https://github.test/")
+		}
 		_, err := cli.AutomationApply(automationReviewSpec("review-"+tc.name, "manual", automationReviewOverride(clone)))
 		if tc.refusal == "" && err != nil {
 			t.Errorf("a clone whose origin is %s was refused: %v", tc.origin, err)
