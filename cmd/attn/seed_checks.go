@@ -265,6 +265,13 @@ func seedOrPlotCheckTally(seed protocol.Seed) protocol.SeedCheckTally {
 	return seedCheckTally(seed.Checks)
 }
 
+func seedRowCheckTally(row protocol.SeedRow) protocol.SeedCheckTally {
+	if row.PlotProgress != nil {
+		return plotCheckTally(row.PlotProgress)
+	}
+	return protocol.Deref(row.CheckTally)
+}
+
 func checkTallySuffix(seed protocol.Seed) string {
 	return checkTallyShort(seedOrPlotCheckTally(seed))
 }

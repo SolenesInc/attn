@@ -5523,6 +5523,29 @@ model Seed {
   "updated_at": string;
 }
 
+// One seed as a garden listing prints it: no body, checks, variables or
+// authorization. `seed show` reads the whole seed.
+model SeedRow {
+  "profile_id": string;
+  "id": string;
+  "title": string;
+  // planted | growing | harvested | withered | parked.
+  "status": string;
+  "step_slug": string;
+  "tender"?: PartyView;
+  "claimed": boolean;
+  "ready": boolean;
+  "edges": SeedEdge[];
+  // Present exactly when the seed is a crown, as on Seed.
+  "plot_progress"?: SeedPlotProgress;
+  // The seed's own and inherited checks by state, without removed ones.
+  // Absent when it has none.
+  "check_tally"?: SeedCheckTally;
+  "harvest_when"?: SeedHarvestCondition;
+  "created_at": string;
+  "updated_at": string;
+}
+
 // What a seed waits on before it harvests itself. The daemon settles it when the
 // pull request merges; a pull request closed without merging clears it instead.
 model SeedHarvestCondition {
@@ -5924,7 +5947,7 @@ model SeedListMessage {
 }
 
 model SeedListResult {
-  "seeds": Seed[];
+  "seeds": SeedRow[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the list
   // hits its bound, and then the receipt that says a list ended early. Under
   // `stale` it is the stale count itself.
@@ -6310,17 +6333,17 @@ model SeedReadyMessage {
 }
 
 model SeedReadyResult {
-  "seeds": Seed[];
+  "seeds": SeedRow[];
   // Plot headers needed to nest a garden-wide ready answer. These are context,
   // not ready pickups, so they do not count toward seeds.
-  "plots"?: Seed[];
+  "plots"?: SeedRow[];
   // What the answer was scoped to: garden | plot, and the crown's id when it
   // was a plot.
   "scope": string;
   "scope_id": string;
-  // The crown, carried when the scope is a plot so a launching delegate is
-  // primed — the crown's body is the plan — without a second read.
-  "crown"?: Seed;
+  // The plot's crown, carried when the scope is a plot so the answer can
+  // name the plot it covers and its progress. `seed show` reads its plan.
+  "crown"?: SeedRow;
   // The freshest handoff on each ready seed that has one, newest first. What a
   // delegate dispatched at the plot reads before any work.
   "handoffs"?: SeedNote[];

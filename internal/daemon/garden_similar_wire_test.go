@@ -92,7 +92,7 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 				t.Errorf("suggestion %d like = %s, want %s", i, hit.Like, like)
 			}
 		}
-		for _, id := range append([]string{planted.Crown.ID}, gardenPlotSeedIDs(planted.Children)...) {
+		for _, id := range append([]string{planted.Crown.ID}, lifeSeedIDs(planted.Children)...) {
 			if slices.Contains(got, id) {
 				t.Errorf("plot suggests its own seed %s", id)
 			}

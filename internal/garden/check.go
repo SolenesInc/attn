@@ -147,6 +147,13 @@ func (t *CheckTally) Add(state CheckState) {
 	}
 }
 
+func (t *CheckTally) AddTally(other CheckTally) {
+	t.Total += other.Total
+	t.Reported += other.Reported
+	t.Confirmed += other.Confirmed
+	t.Rejected += other.Rejected
+}
+
 func (t CheckTally) Open() int { return t.Total - t.Reported - t.Confirmed - t.Rejected }
 
 const (
@@ -319,17 +326,19 @@ func (t PlotTree) SharedCheckRollups(id string) []SharedCheckRollup {
 }
 
 func (t PlotTree) CheckTally(crownID string) CheckTally {
-	var tally CheckTally
-	count := func(id string) {
-		for _, check := range t.EffectiveChecks(id) {
-			if !check.Removed {
-				tally.Add(check.Result.State())
-			}
-		}
-	}
-	count(crownID)
+	tally := t.EffectiveCheckTally(crownID)
 	for _, seed := range t.descendants(crownID) {
-		count(seed.ID)
+		tally.AddTally(t.EffectiveCheckTally(seed.ID))
+	}
+	return tally
+}
+
+func (t PlotTree) EffectiveCheckTally(id string) CheckTally {
+	var tally CheckTally
+	for _, check := range t.EffectiveChecks(id) {
+		if !check.Removed {
+			tally.Add(check.Result.State())
+		}
 	}
 	return tally
 }

@@ -140,7 +140,8 @@ suggestion is the same work.
 --flat prints one list. --plot lists every child of one plot, oldest
 first, harvested and withered included. --stale narrows to open seeds
 whose log has not moved for the window (default %s) — a query for
-your judgment, never a reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
+your judgment, never a reaper. --json prints the table's rows,
+without bodies or checks; attn seed show <id> reads one seed whole.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
 	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by words across your profile's garden, harvested and withered
 included: titles, bodies and log entries. Words match as stemmed prefixes;
 identifier parts match too. Seeds carrying some words also appear.
@@ -152,7 +153,7 @@ Search before you plant, so a duplicate is found instead of created.`, []string{
 nobody is holding it, and it is not a plot — a plot's work is its
 children. With no flags the scope is your profile's garden — unless this
 session was dispatched at a plot, and then that plot; --all steps back
-out to the garden.`, []string{"plot", "all", "json"}, true},
+out to the garden. --json prints rows, without bodies or checks.`, []string{"plot", "all", "json"}, true},
 	{`link`, `link <a> <blocks|part-of|discovered-from> <b> [--json]`, `relate two seeds. "a blocks b" keeps b out of ready until a closes;
 "a part-of b" puts a under b; b is then a plot. "a discovered-from b"
 records where work came from without ordering it. A structural cycle
@@ -462,9 +463,15 @@ func seedFail(verb string, err error) {
 	exit(1)
 }
 
+type seedCaller struct {
+	profile string
+	session protocol.SessionID
+}
+
 type seedFlags struct {
 	verb           seedVerb
 	fs             *flag.FlagSet
+	caller         *seedCaller
 	profile        string
 	session        string
 	assignee       string
@@ -560,6 +567,14 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 }
 
 func (f *seedFlags) scope() (string, protocol.SessionID) {
+	if f.caller == nil {
+		profile, session := f.resolveCaller()
+		f.caller = &seedCaller{profile: profile, session: session}
+	}
+	return f.caller.profile, f.caller.session
+}
+
+func (f *seedFlags) resolveCaller() (string, protocol.SessionID) {
 	profile := strings.TrimSpace(f.profile)
 	if id := strings.TrimSpace(f.session); id != "" {
 		return profile, protocol.SessionID(id)
@@ -650,7 +665,7 @@ func runSeedPlant(args []string) {
 		writeJSON(result.Seed)
 		return
 	}
-	fmt.Println(seedLine(result.Seed))
+	fmt.Println(seedLine(result.Seed.ID, result.Seed.StepSlug, result.Seed.Title))
 	for _, check := range result.Seed.Checks {
 		if protocol.Deref(check.From) == "" {
 			fmt.Printf("  %s  %s\n", check.ID, check.Text)
@@ -659,8 +674,8 @@ func runSeedPlant(args []string) {
 	fprintSeedSimilar(os.Stdout, result.Similar, false)
 }
 
-func seedLine(seed protocol.Seed) string {
-	return fmt.Sprintf("%s  %s  %s", seed.ID, seed.StepSlug, seed.Title)
+func seedLine(id, slug, title string) string {
+	return fmt.Sprintf("%s  %s  %s", id, slug, title)
 }
 
 func seedHandle(seed protocol.Seed) string {
@@ -696,7 +711,7 @@ func fprintSeedSearch(out io.Writer, query string, result *protocol.SeedSearchRe
 	fmt.Fprintf(out, "%s %s every word, %d carry some — best first\n\n",
 		plural(result.Matched, "seed"), carriesVerb(result.Matched), result.Partial)
 	for _, hit := range result.Hits {
-		fmt.Fprintf(out, "%s\n  %s · %s  %s  %s\n", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive), hit.Where, hit.Snippet)
+		fmt.Fprintf(out, "%s\n  %s · %s  %s  %s\n", seedLine(hit.Seed.ID, hit.Seed.StepSlug, hit.Seed.Title), hit.Seed.Status, seedLastActive(hit.LastActive), hit.Where, hit.Snippet)
 	}
 	if total > len(result.Hits) {
 		fmt.Fprintf(out, "\nshowing %d of %d — `--limit <n>` for more, up to %d\n", len(result.Hits), total, garden.MaxSearchResults)
@@ -772,7 +787,7 @@ func runSeedList(args []string) {
 	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(partyLabel(row.seed.Tender)),
-			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
+			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, seedRowSuffix(row.seed))
 	}
 	w.Flush()
 	if result.Total > len(result.Seeds) {
@@ -922,17 +937,21 @@ func staleWindowLabel(seconds *int) string {
 	return formatWindow(time.Duration(*seconds) * time.Second)
 }
 
-func plotProgressSuffix(seed protocol.Seed) string {
-	if seed.PlotProgress == nil {
+func seedRowSuffix(row protocol.SeedRow) string {
+	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen)
+}
+
+func plotProgressSuffix(progress *protocol.SeedPlotProgress) string {
+	if progress == nil {
 		return ""
 	}
-	p := *seed.PlotProgress
+	p := *progress
 	return fmt.Sprintf("  [%d/%d done · %d growing · %d ready · %d blocked]",
 		p.Done, p.Total, p.Growing, p.Ready, p.Blocked)
 }
 
-func harvestWhenSuffix(seed protocol.Seed) string {
-	if line := harvestWhenLine(seed.HarvestWhen); line != "" {
+func harvestWhenSuffix(condition *protocol.SeedHarvestCondition) string {
+	if line := harvestWhenLine(condition); line != "" {
 		return "  [" + line + "]"
 	}
 	return ""
@@ -990,7 +1009,7 @@ func runSeedPlot(args []string) {
 		writeJSON(result)
 		return
 	}
-	fmt.Println(seedLine(result.Crown))
+	fmt.Println(seedLine(result.Crown.ID, result.Crown.StepSlug, result.Crown.Title))
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, child := range result.Children {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
@@ -1005,7 +1024,7 @@ func fprintSeedSimilar(out io.Writer, similar []protocol.SeedSimilar, plot bool)
 	}
 	fmt.Fprintln(out, "\nsimilar open seeds")
 	for _, hit := range similar {
-		fmt.Fprintf(out, "  %s  %s · %s", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive))
+		fmt.Fprintf(out, "  %s  %s · %s", seedLine(hit.Seed.ID, hit.Seed.StepSlug, hit.Seed.Title), hit.Seed.Status, seedLastActive(hit.LastActive))
 		if plot {
 			fmt.Fprintf(out, "  like %s", hit.Like)
 		}
@@ -1036,11 +1055,11 @@ func readPlotPayload(path string) []byte {
 }
 
 type seedRow struct {
-	seed  protocol.Seed
+	seed  protocol.SeedRow
 	depth int
 }
 
-func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
+func seedRows(seeds []protocol.SeedRow, flat bool) []seedRow {
 	rows := make([]seedRow, 0, len(seeds))
 	if flat {
 		for _, seed := range seeds {
@@ -1048,11 +1067,11 @@ func seedRows(seeds []protocol.Seed, flat bool) []seedRow {
 		}
 		return rows
 	}
-	byID := make(map[string]protocol.Seed, len(seeds))
+	byID := make(map[string]protocol.SeedRow, len(seeds))
 	domain := make([]garden.Seed, 0, len(seeds))
 	for _, seed := range seeds {
 		byID[seed.ID] = seed
-		domain = append(domain, gardenSeedFromWire(seed))
+		domain = append(domain, gardenSeedFromRow(seed))
 	}
 	for _, row := range garden.Tree(domain) {
 		rows = append(rows, seedRow{seed: byID[row.Seed.ID], depth: row.Depth})
@@ -1617,7 +1636,8 @@ func runSeedReady(args []string) {
 
 func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Fprintf(out, "%s%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown), checkTallySuffix(*result.Crown))
+		crown := *result.Crown
+		fmt.Fprintf(out, "%s%s%s\n\n", seedLine(crown.ID, crown.StepSlug, crown.Title), plotProgressSuffix(crown.PlotProgress), checkTallyShort(seedRowCheckTally(crown)))
 	}
 	if len(result.Seeds) == 0 {
 		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
@@ -1644,7 +1664,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			status = "plot"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
-			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+checkTallySuffix(seed)+harvestWhenSuffix(seed))
+			strings.Repeat("  ", row.depth), seed.Title, seedRowSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(actorLabel(handoff.Author)), firstLine(handoff.Body))
@@ -2195,9 +2215,9 @@ func runSeedExport(args []string) {
 	fmt.Printf("wrote %s; edit it with any tool, keep its first line, then: attn seed edit %s -m - < %s\n", absolute, result.Seed.ID, absolute)
 }
 
-func gardenSeedFromWire(seed protocol.Seed) garden.Seed {
+func gardenSeedFromRow(seed protocol.SeedRow) garden.Seed {
 	out := garden.Seed{
-		ID: seed.ID, Title: seed.Title, Body: seed.Body, Status: seed.Status,
+		ID: seed.ID, Title: seed.Title, Status: seed.Status,
 		Edges: make([]garden.Edge, 0, len(seed.Edges)),
 	}
 	for _, edge := range seed.Edges {

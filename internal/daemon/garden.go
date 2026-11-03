@@ -328,6 +328,39 @@ func (g gardenRead) wire(seeds []garden.Seed) []protocol.Seed {
 	return out
 }
 
+func (g gardenRead) rows(seeds []garden.Seed) []protocol.SeedRow {
+	out := make([]protocol.SeedRow, 0, len(seeds))
+	for _, seed := range seeds {
+		out = append(out, g.row(seed, g.docs[seed.ID]))
+	}
+	return out
+}
+
+func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRow {
+	row := protocol.SeedRow{
+		ProfileID:    seed.ProfileID,
+		ID:           seed.ID,
+		Title:        seed.Title,
+		Status:       seed.Status,
+		StepSlug:     seed.StepSlug,
+		Claimed:      seed.ClaimHolds(g.daemon.partyHolds),
+		Ready:        g.ready[seed.ID],
+		Edges:        make([]protocol.SeedEdge, 0, len(seed.Edges)),
+		PlotProgress: g.progress(seed.ID),
+		CheckTally:   checkTallyToProtocol(g.plots.EffectiveCheckTally(seed.ID)),
+		HarvestWhen:  g.daemon.harvestConditionView(seed.HarvestWhen),
+		CreatedAt:    doc.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    doc.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if !seed.Tender.IsZero() {
+		row.Tender = protocol.Ptr(g.daemon.partyView(seed.Tender))
+	}
+	for _, e := range seed.Edges {
+		row.Edges = append(row.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
+	}
+	return row
+}
+
 func (g gardenRead) seed(seed garden.Seed, doc docstore.Document) protocol.Seed {
 	wire := g.daemon.seedToProtocol(seed, doc, g.ready[seed.ID])
 	wire.PlotProgress = g.progress(seed.ID)
@@ -402,16 +435,7 @@ func (d *Daemon) seedToProtocol(seed garden.Seed, doc docstore.Document, ready b
 	if seed.Reason != "" {
 		out.Reason = protocol.Ptr(seed.Reason)
 	}
-	if seed.HarvestWhen != nil {
-		condition := protocol.SeedHarvestCondition{
-			PullRequest: seed.HarvestWhen.PullRequest,
-			URL:         seed.HarvestWhen.URL,
-			SetAt:       seed.HarvestWhen.SetAt,
-			Reason:      protocol.Ptr(seed.HarvestWhen.Reason),
-			SetBy:       d.actorView(seed.HarvestWhen.SetBy),
-		}
-		out.HarvestWhen = &condition
-	}
+	out.HarvestWhen = d.harvestConditionView(seed.HarvestWhen)
 	out.Authorization = d.seedAuthorizationView(seed.Authorization)
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
@@ -436,6 +460,19 @@ func (d *Daemon) seedToProtocol(seed garden.Seed, doc docstore.Document, ready b
 		out.Vars = append(out.Vars, wire)
 	}
 	return out
+}
+
+func (d *Daemon) harvestConditionView(condition *garden.HarvestCondition) *protocol.SeedHarvestCondition {
+	if condition == nil {
+		return nil
+	}
+	return &protocol.SeedHarvestCondition{
+		PullRequest: condition.PullRequest,
+		URL:         condition.URL,
+		SetAt:       condition.SetAt,
+		Reason:      protocol.Ptr(condition.Reason),
+		SetBy:       d.actorView(condition.SetBy),
+	}
 }
 
 func (d *Daemon) seedDetailsWire(read gardenRead, seed garden.Seed, doc docstore.Document) protocol.Seed {
@@ -821,7 +858,7 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 		result.Total = len(seeds)
 		result.StaleWindowSeconds = protocol.Ptr(int(window / time.Second))
 	}
-	result.Seeds = read.wire(seeds[:min(len(seeds), gardenSnapshotLimit)])
+	result.Seeds = read.rows(seeds[:min(len(seeds), gardenSnapshotLimit)])
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedListResult: result})
 }
 
@@ -1213,8 +1250,8 @@ func (d *Daemon) gardenReadyResult(crown string, profileID ...string) (*protocol
 		}
 		ready, result.Scope, result.ScopeID = scoped, "plot", crown
 		if crownSeed, crownDoc, err := d.readSeed(crown); err == nil {
-			wire := read.seed(crownSeed, crownDoc)
-			result.Crown = &wire
+			row := read.row(crownSeed, crownDoc)
+			result.Crown = &row
 		}
 	} else {
 		selected := make(map[string]bool, len(ready))
@@ -1224,11 +1261,11 @@ func (d *Daemon) gardenReadyResult(crown string, profileID ...string) (*protocol
 		plots := garden.PlotHeaders(read.seeds, selected)
 		slices.Reverse(plots)
 		for _, plot := range plots {
-			result.Plots = append(result.Plots, read.seed(plot, read.docs[plot.ID]))
+			result.Plots = append(result.Plots, read.row(plot, read.docs[plot.ID]))
 		}
 	}
 	slices.Reverse(ready)
-	result.Seeds = read.wire(ready)
+	result.Seeds = read.rows(ready)
 	if result.Scope == "plot" {
 		for _, seed := range ready {
 			if handoff := d.gardenHandoff(seed.ID); handoff != nil {

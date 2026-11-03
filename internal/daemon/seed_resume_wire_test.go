@@ -83,7 +83,7 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.Seed) bool { return s.ID == sibling.Seed.ID }) {
+	if ready.ScopeID != seed || !slices.ContainsFunc(ready.Seeds, func(s protocol.SeedRow) bool { return s.ID == sibling.Seed.ID }) {
 		t.Errorf("ready after resuming a child = %+v, want the original project %s with sibling %s", ready, seed, sibling.Seed.ID)
 	}
 }

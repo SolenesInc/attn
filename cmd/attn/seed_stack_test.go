@@ -699,6 +699,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		if !strings.HasSuffix(row, "[checks ✓0/2 · 1 to judge]") {
 			t.Errorf("the plot's ls row ends %q, want its check tally", row)
 		}
+		if _, row = lineOf(t, seedAs(t, s, "", "ls"), child); !strings.HasSuffix(row, "[checks ✓0/2 · 1 to judge]") {
+			t.Errorf("the child's ls row ends %q, want its own and its inherited checks", row)
+		}
 		unchecked := plant(t, s, "Unchecked seed")
 		if _, row = lineOf(t, seedAs(t, s, "", "ls"), unchecked.ID); strings.Contains(row, "checks") {
 			t.Errorf("a seed without checks shows a tally: %q", row)
@@ -1018,7 +1021,7 @@ func TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren(t *testing.T) {
 	if !slices.Equal(shown.Seed.Edges, wantEdges) {
 		t.Errorf("the crown's edges = %+v, want %+v", shown.Seed.Edges, wantEdges)
 	}
-	children := map[string]protocol.Seed{}
+	children := map[string]protocol.SeedRow{}
 	var listed protocol.SeedListResult
 	s.Attn("seed", "ls", "--plot", crown, "--json").JSON(t, &listed)
 	var order []string
@@ -1037,7 +1040,7 @@ func TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren(t *testing.T) {
 	}
 	var ready protocol.SeedReadyResult
 	s.Attn("seed", "ready", "--plot", "prune-hedge", "--json").JSON(t, &ready)
-	if got, want := readyIDs(ready.Seeds), readyIDs([]protocol.Seed{children["cut-back"], children["sharpen-shears"]}); !slices.Equal(got, want) {
+	if got, want := readyIDs(ready.Seeds), readyIDs([]protocol.SeedRow{children["cut-back"], children["sharpen-shears"]}); !slices.Equal(got, want) {
 		t.Errorf("ready in the new plot = %v, want the two children sweep-up waits for", got)
 	}
 
@@ -1058,7 +1061,7 @@ func TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren(t *testing.T) {
 	}
 }
 
-func readyIDs(seeds []protocol.Seed) []string {
+func readyIDs(seeds []protocol.SeedRow) []string {
 	ids := make([]string, 0, len(seeds))
 	for _, seed := range seeds {
 		ids = append(ids, seed.ID)
