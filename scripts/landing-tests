@@ -48,6 +48,7 @@ go ./cmd/attn TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCo
 go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
 go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
+go ./internal/daemon TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

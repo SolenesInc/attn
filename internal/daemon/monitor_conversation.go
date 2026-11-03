@@ -108,9 +108,6 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 	}
 	d.bindMonitorTitle(monitor)
 	monitor.ResumeUsage()
-	if candidate != source {
-		monitor.StartCost()
-	}
 	monitor.EnsureTranscriptWatcher(proposed.TranscriptPath)
 	if !source.SettleConversation(outcome.Conversation, monitor, "") {
 		return

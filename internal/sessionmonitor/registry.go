@@ -170,6 +170,7 @@ type Start struct {
 	Conversation string
 	Linked       bool
 	Candidate    *Monitor
+	FreshCost    bool
 	Launch       func() Launch
 	Policy       Policy
 }
@@ -235,6 +236,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	if start.Candidate == nil {
 		m.initializeLocked(start)
 		m.input = m.freshLaneLocked()
+		m.saved.cost = sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 	} else {
 		m.policy = start.Policy
 		launch := start.Launch()
@@ -246,6 +248,8 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 			}
 		}
 		m.loadCostLocked(launch.Cost)
+		m.saved.cost = launch.Cost
+		m.costInitialized = m.costInitialized || start.FreshCost
 		if !m.policy.TitlesAllowed {
 			m.harnessTitle = launch.HarnessTitle
 		}
@@ -255,7 +259,6 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	} else {
 		m.saved.view = View{}
 	}
-	m.saved.cost = sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 	w.monitors[m] = struct{}{}
 	r.monitors[m] = struct{}{}
 	return m

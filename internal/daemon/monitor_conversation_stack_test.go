@@ -451,3 +451,27 @@ func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) 
 	title.Answer("Fix cart discounts")
 	awaitLabel(app, string(next.ID), "Fix cart discounts")
 }
+
+func TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	binding := s.PauseAt(pausepoint.ConversationCandidateStart)
+	s.Start()
+	app := s.App()
+	first := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(first)
+	app.TypeLine(first, "find the flaky checkout test")
+	codex.Prompted()
+	found := "It races the tax lookup. <!-- attn:state=idle -->"
+	codex.Reply(found)
+	awaitUsageTokens(app, first, claudeTokens(found))
+	app.TypeLine(first, "/new")
+	codex.Prompted()
+	app.TypeLine(first, "now fix it")
+	codex.Prompted()
+	binding.Await()
+	next := awaitSuccessor(app, first)
+	fixed := "Fixed with a lock. <!-- attn:state=idle -->"
+	codex.Reply(fixed)
+	binding.Release()
+	awaitUsageTokens(app, string(next.ID), claudeTokens(fixed))
+}

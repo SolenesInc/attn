@@ -116,7 +116,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	r := d.monitors()
 	start := func() sessionmonitor.Start {
-		return sessionmonitor.Start{Session: sessionID, Terminal: terminal, Conversation: conversation, Linked: linked, Candidate: candidate,
+		return sessionmonitor.Start{Session: sessionID, Terminal: terminal, Conversation: conversation, Linked: linked, Candidate: candidate, FreshCost: candidate != nil && candidate != previous,
 			Launch: func() sessionmonitor.Launch { return d.monitorLaunch(sessionID) }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), sessionID)}
 	}
 	r.policyMu.Lock()
