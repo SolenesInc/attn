@@ -28,7 +28,7 @@ go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndI
 go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
 go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne
-go ./internal/daemon TestASnoozeTheMonitorSavedIsStillSnoozedAfterARestart
+go ./internal/daemon TestAPendingSnoozeOutlivesARestart
 go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnected
 go ./internal/daemon TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover
 go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites
