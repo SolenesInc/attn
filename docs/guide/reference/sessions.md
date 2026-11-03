@@ -168,7 +168,7 @@ The worktree's row in the Worktrees tab, and `attn worktree list`, name the firs
 6. The worktree's branch hasn't merged.
 7. The worktree has commits the merge doesn't account for.
 
-A branch counts as merged when GitHub shows its pull request merged, or when its work is already in the branch the repository merges into (named next to the repository), squash merges included. For a GitHub repository, Attn learns that branch from where its pull requests merge. Until it has, Attn keeps the repository's worktrees undecided whenever GitHub can't list those pull requests. Idle time starts at the newest file change, commit, or creation. A younger worktree shows a "removing in" countdown. The countdown means only that Attn checks the worktree when it ends, so any condition in the list can still keep the worktree.
+A branch counts as merged when GitHub shows its pull request merged, or when its work is already in the branch the repository merges into (named next to the repository), squash merges included. For a GitHub repository, Attn learns that branch from where its pull requests merge. Until it has, Attn keeps the repository's worktrees undecided whenever GitHub can't list those pull requests, whether GitHub is down or your token can't read the repository. The worktree's reason names GitHub's error. Idle time starts at the newest file change, commit, or creation. A younger worktree shows a "removing in" countdown. The countdown means only that Attn checks the worktree when it ends, so any condition in the list can still keep the worktree.
 </details>
 
 <details>
