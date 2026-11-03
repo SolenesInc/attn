@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace Gateway;
 
-const GATEWAY_API_VERSION = 6;
+const GATEWAY_API_VERSION = 7;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model GatewayHello {
@@ -412,6 +412,14 @@ model GatewaySeedDetail {
   log_total: int32;
   body_too_large_bytes?: int32;
   max_frame_bytes?: int32;
+}
+
+// Since api 7: something in a seed's detail changed, such as its body, its log,
+// its checks or its links, including changes that leave its garden_seeds copy
+// unchanged. A phone showing that seed reads it again with seed_get.
+model GatewaySeedChanged {
+  event: "seed_changed";
+  seed_id: string;
 }
 
 model GatewaySeedError {

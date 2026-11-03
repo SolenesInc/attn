@@ -46,7 +46,10 @@ The app merges every pairing into one queue.
 The **Garden** tab lists the open seeds of every paired profile: plots with how
 far their children have come, then the seeds growing, ready, blocked and
 parked. Tap a seed to read it: its state and tender, its body, the seeds that
-are part of it, its checks and the newest entries of its log.
+are part of it, its checks and the newest entries of its log. The seed stays
+current while you read it: when an agent adds a note or edits the body, the
+phone reads it again, and it catches up whenever it connects to the home
+again, such as when the app comes back to the foreground.
 
 - To add a note to the log, write it under **Log** and tap **Add note**. The
   note is yours, as one written on the computer is.

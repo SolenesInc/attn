@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayCheckState, GatewayCheckTally, GatewayGarden, GatewayGardenSeeds, GatewayHello, GatewayPing, GatewayPlotProgress, GatewayPong, GatewayProfile, GatewayRefused, GatewaySeed, GatewaySeedCheck, GatewaySeedDetail, GatewaySeedError, GatewaySeedGet, GatewaySeedLogEntry, GatewaySeedMove, GatewaySeedNoteCommand, GatewaySeedResult, GatewaySeedStatus, GatewaySeedVerb, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
+//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayCheckState, GatewayCheckTally, GatewayGarden, GatewayGardenSeeds, GatewayHello, GatewayPing, GatewayPlotProgress, GatewayPong, GatewayProfile, GatewayRefused, GatewaySeed, GatewaySeedChanged, GatewaySeedCheck, GatewaySeedDetail, GatewaySeedError, GatewaySeedGet, GatewaySeedLogEntry, GatewaySeedMove, GatewaySeedNoteCommand, GatewaySeedResult, GatewaySeedStatus, GatewaySeedVerb, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
 //
 //   const gatewayAsk = Convert.toGatewayAsk(json);
 //   const gatewayAskAnswer = Convert.toGatewayAskAnswer(json);
@@ -27,6 +27,7 @@
 //   const gatewayProfile = Convert.toGatewayProfile(json);
 //   const gatewayRefused = Convert.toGatewayRefused(json);
 //   const gatewaySeed = Convert.toGatewaySeed(json);
+//   const gatewaySeedChanged = Convert.toGatewaySeedChanged(json);
 //   const gatewaySeedCheck = Convert.toGatewaySeedCheck(json);
 //   const gatewaySeedDetail = Convert.toGatewaySeedDetail(json);
 //   const gatewaySeedError = Convert.toGatewaySeedError(json);
@@ -393,6 +394,16 @@ export interface GatewaySeed {
     title:            string;
     waits_for:        string[];
     [property: string]: any;
+}
+
+export interface GatewaySeedChanged {
+    event:   GatewaySeedChangedEvent;
+    seed_id: string;
+    [property: string]: any;
+}
+
+export enum GatewaySeedChangedEvent {
+    SeedChanged = "seed_changed",
 }
 
 export interface GatewaySeedCheck {
@@ -924,6 +935,14 @@ export class Convert {
 
     public static gatewaySeedToJson(value: GatewaySeed): string {
         return JSON.stringify(uncast(value, r("GatewaySeed")), null, 2);
+    }
+
+    public static toGatewaySeedChanged(json: string): GatewaySeedChanged {
+        return cast(JSON.parse(json), r("GatewaySeedChanged"));
+    }
+
+    public static gatewaySeedChangedToJson(value: GatewaySeedChanged): string {
+        return JSON.stringify(uncast(value, r("GatewaySeedChanged")), null, 2);
     }
 
     public static toGatewaySeedCheck(json: string): GatewaySeedCheck {
@@ -1490,6 +1509,10 @@ const typeMap: any = {
         { json: "title", js: "title", typ: "" },
         { json: "waits_for", js: "waits_for", typ: a("") },
     ], "any"),
+    "GatewaySeedChanged": o([
+        { json: "event", js: "event", typ: r("GatewaySeedChangedEvent") },
+        { json: "seed_id", js: "seed_id", typ: "" },
+    ], "any"),
     "GatewaySeedCheck": o([
         { json: "from", js: "from", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -1709,6 +1732,9 @@ const typeMap: any = {
     ],
     "GatewayRefusedEvent": [
         "refused",
+    ],
+    "GatewaySeedChangedEvent": [
+        "seed_changed",
     ],
     "GatewayCheckState": [
         "confirmed",

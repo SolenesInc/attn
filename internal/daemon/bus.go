@@ -293,7 +293,10 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{"garden.seed.*"},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenUnchanged() },
+			apply: func(d *Daemon, ev bus.Event) {
+				d.gateway.seedChanged(ev.Subject)
+				d.projectGardenUnchanged()
+			},
 		},
 		{
 			filter: bus.Filter{FactGardenReviewChanged},

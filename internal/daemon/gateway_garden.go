@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 )
 
 const gatewayGardenAPI = 6
+
+const gatewaySeedChangedAPI = 7
 
 const gatewayClosedSeedShownFor = 24 * time.Hour
 
@@ -41,6 +44,32 @@ func (d *Daemon) gatewaySendGarden(conn *gatewayConn) error {
 		seeds[seed.ID] = read.gatewaySeed(seed)
 	}
 	return d.gatewaySendGardenWindow(conn, ids, seeds)
+}
+
+func (d *Daemon) gatewaySendSeedChanges(conn *gatewayConn) error {
+	conn.changedSeedsMu.Lock()
+	changed := conn.changedSeeds
+	conn.changedSeeds = nil
+	conn.changedSeedsMu.Unlock()
+	if conn.api < gatewaySeedChangedAPI {
+		return nil
+	}
+	for _, id := range slices.Sorted(maps.Keys(changed)) {
+		seed, _, err := d.readSeed(id)
+		if err != nil {
+			if refusal := protocol.RefusalOf(err); refusal == nil || *refusal != protocol.RefusalNotFound {
+				d.logf("gateway: device %s misses a change to seed %s: %v", conn.device.DeviceID, id, err)
+			}
+			continue
+		}
+		if seed.ProfileID != conn.device.ProfileID {
+			continue
+		}
+		if err := gatewaySend(conn, gateway.GatewaySeedChanged{Event: "seed_changed", SeedID: id}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (g gardenRead) changedSince(seed garden.Seed, since time.Time) bool {

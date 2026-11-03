@@ -338,6 +338,14 @@ type GatewaySeed struct {
 	WaitsFor []string `json:"waits_for"`
 }
 
+type GatewaySeedChanged struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+}
+
 type GatewaySeedCheck struct {
 	// From corresponds to the JSON schema field "from".
 	From *string `json:"from,omitempty,omitzero"`

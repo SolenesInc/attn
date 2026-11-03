@@ -369,6 +369,68 @@ describe('the Garden on the phone', () => {
     )
   })
 
+  it('shows an agent’s new handoff and edited plan on an open seed, live and after a reconnect', () => {
+    const handoff = {
+      id: 'n3',
+      kind: 'handoff',
+      body: 'Handing off: read the new plan.',
+      author: 'phone-builder',
+      createdAt: now,
+    }
+    Scene.scene(
+      { update, view },
+      Scene.given(online()),
+      Scene.click(Scene.role('button', { name: 'Garden' })),
+      garden,
+      Scene.click(Scene.role('button', { name: /Read seeds/ })),
+      Scene.Command.resolve(
+        GetSeed({ pairingId: personal.id, seedId: 's-read' }),
+        Message.LoadedSeed({ pairingId: personal.id, seedId: 's-read', detail: readingDetail }),
+      ),
+      Scene.expect(Scene.text('List and read.')).toExist(),
+
+      Scene.Subscription.emit(Message.ChangedSeed({ pairingId: personal.id, seedId: 's-read' })),
+      Scene.Command.resolve(
+        GetSeed({ pairingId: personal.id, seedId: 's-read' }),
+        Message.LoadedSeed({
+          pairingId: personal.id,
+          seedId: 's-read',
+          detail: { ...readingDetail, log: [handoff], logTotal: 1 },
+        }),
+      ),
+      Scene.expect(Scene.text('Handing off: read the new plan.')).toExist(),
+
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: false })),
+      Scene.Subscription.emit(Message.ChangedForeground({ foreground: true })),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 7, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Command.resolve(
+        GetSeed({ pairingId: personal.id, seedId: 's-read' }),
+        Message.LoadedSeed({
+          pairingId: personal.id,
+          seedId: 's-read',
+          detail: { ...readingDetail, body: 'Read seeds, then plots.', log: [handoff], logTotal: 1 },
+        }),
+      ),
+      Scene.expect(Scene.text('Read seeds, then plots.')).toExist(),
+      Scene.expect(Scene.text('List and read.')).toBeAbsent(),
+    )
+  })
+
+  it('leaves a seed the phone does not show alone when it changes', () => {
+    let model = update(online(), Message.ClickedGardenTab()).model
+    model = update(model, Message.ReceivedGarden({ pairingId: personal.id, seeds: [reading, loose] })).model
+    model = update(model, Message.ClickedSeed({ pairingId: personal.id, seedId: 's-read' })).model
+    expect(
+      update(model, Message.ChangedSeed({ pairingId: personal.id, seedId: 's-loose' })).commands ?? [],
+    ).toHaveLength(0)
+    const listing = update(model, Message.ClickedGardenTab()).model
+    expect(
+      update(listing, Message.ChangedSeed({ pairingId: personal.id, seedId: 's-read' })).commands ?? [],
+    ).toHaveLength(0)
+  })
+
   it('says which home is too old to show the Garden', () => {
     Scene.scene(
       { update, view },

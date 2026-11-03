@@ -148,6 +148,7 @@ export const Message = defineMessageUnion({
   ReceivedSessions: { pairingId: Schema.String, sessions: Schema.Array(QueueSession) },
   ReceivedAsks: { pairingId: Schema.String, asks: Schema.Array(PhoneAsk) },
   ReceivedGarden: { pairingId: Schema.String, seeds: Schema.Array(GardenSeed) },
+  ChangedSeed: { pairingId: Schema.String, seedId: Schema.String },
   ClickedGardenTab: {},
   ClickedSeed: { pairingId: Schema.String, seedId: Schema.String },
   LoadedSeed: { pairingId: Schema.String, seedId: Schema.String, detail: SeedDetail },
@@ -769,11 +770,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
           (home.pairing.homeName !== homeName || home.pairing.profileName !== profileName),
       )
       const home = model.homes.find((home) => home.pairing.id === pairingId)
+      const open = openSeedOf(model)
       return {
         model: welcomed,
         commands: [
           ...(renamed ? [saved(welcomed.homes)] : []),
           ...(home && model.pushToken ? registerWith([home], model.pushToken) : []),
+          ...(model.screen === 'seed' && open?.pairingId === pairingId ? [GetSeed(open)] : []),
         ],
       }
     },
@@ -788,6 +791,13 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     }),
     ReceivedAsks: ({ pairingId, asks }) => receiveAsks(model, pairingId, asks),
     ReceivedGarden: ({ pairingId, seeds }) => receiveGarden(model, pairingId, seeds),
+    ChangedSeed: ({ pairingId, seedId }) => ({
+      model,
+      commands:
+        model.screen === 'seed' && openSeedKey(model) === seedKey(pairingId, seedId)
+          ? [GetSeed({ pairingId, seedId })]
+          : [],
+    }),
     ClickedGardenTab: () => ({
       model: modifyFields(model, {
         screen: () => 'garden' as const,
@@ -1150,6 +1160,8 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
       return Message.ReceivedAsks({ pairingId, asks: event.asks.map(fromGatewayAsk) })
     case 'Garden':
       return Message.ReceivedGarden({ pairingId, seeds: event.seeds.map(fromGatewaySeed) })
+    case 'SeedChanged':
+      return Message.ChangedSeed({ pairingId, seedId: event.seedId })
     case 'HomeOffline':
       return Message.WentOffline({ pairingId })
     case 'Lost':

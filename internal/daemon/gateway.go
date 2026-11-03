@@ -84,6 +84,9 @@ type gatewayConn struct {
 	sentSeedIDs []string
 	sentSeeds   map[string][]byte
 
+	changedSeedsMu sync.Mutex
+	changedSeeds   map[string]struct{}
+
 	order       terminalOrder
 	terminalsMu sync.Mutex
 	terminals   map[protocol.TerminalID]*gatewayTerminal
@@ -110,6 +113,23 @@ func (g *gatewayConns) nudge() {
 
 func (g *gatewayConns) nudgeGarden() {
 	g.signal(func(conn *gatewayConn) chan struct{} { return conn.gardenChanged })
+}
+
+func (g *gatewayConns) seedChanged(seedID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for conn := range g.conns {
+		conn.changedSeedsMu.Lock()
+		if conn.changedSeeds == nil {
+			conn.changedSeeds = map[string]struct{}{}
+		}
+		conn.changedSeeds[seedID] = struct{}{}
+		conn.changedSeedsMu.Unlock()
+		select {
+		case conn.gardenChanged <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (g *gatewayConns) signal(channel func(*gatewayConn) chan struct{}) {
@@ -171,6 +191,9 @@ func (d *Daemon) ServeGateway(device GatewayDevice, stream GatewayStream) error 
 				return d.gatewayRefuse(conn, phoneAccessOff)
 			}
 			if err := d.gatewaySendGarden(conn); err != nil {
+				return err
+			}
+			if err := d.gatewaySendSeedChanges(conn); err != nil {
 				return err
 			}
 		case <-conn.pinged:

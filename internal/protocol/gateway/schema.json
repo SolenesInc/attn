@@ -592,6 +592,22 @@
     ],
     "type": "object"
   },
+  "GatewaySeedChanged": {
+    "properties": {
+      "event": {
+        "const": "seed_changed",
+        "type": "string"
+      },
+      "seed_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "seed_id"
+    ],
+    "type": "object"
+  },
   "GatewaySeedCheck": {
     "properties": {
       "from": {

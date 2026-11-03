@@ -59,6 +59,7 @@ export type LinkEvent =
   | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<GatewaySession> }
   | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<GatewayAsk> }
   | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<GatewaySeed> }
+  | { readonly _tag: 'SeedChanged'; readonly seedId: string }
   | { readonly _tag: 'HomeOffline' }
   | { readonly _tag: 'Lost'; readonly reason: string }
   | { readonly _tag: 'Closed'; readonly reason: string }
@@ -286,6 +287,8 @@ const openSocket = (
         for (const id of seeds.keys()) if (!open.has(id)) seeds.delete(id)
         return onEvent({ _tag: 'Garden', seeds: event.ids.flatMap((id) => seeds.get(id) ?? []) })
       }
+      case 'seed_changed':
+        return onEvent({ _tag: 'SeedChanged', seedId: event.seed_id })
       case 'seed_detail':
       case 'seed_error':
       case 'seed_result':

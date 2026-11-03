@@ -89,7 +89,7 @@ func (pt *phoneTerminal) read() string {
 			t.Fatalf("the home sent %q, neither JSON nor an output frame", frame)
 		}
 		switch head.Event {
-		case "sessions", "asks", "ask":
+		case "sessions", "asks", "ask", "garden_seeds", "garden":
 			continue
 		case "terminal_screen":
 			var screen gateway.TerminalScreen

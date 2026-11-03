@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
 )
@@ -274,5 +275,71 @@ func TestGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t *te
 	detail, failure = phone.readSeed(vast.Seed.ID)
 	if failure != "" || detail.Body != "" || protocol.Deref(detail.BodyTooLargeBytes) != 100_000 || protocol.Deref(detail.MaxFrameBytes) != cloudlink.MaxMessageBytes {
 		t.Fatalf("the vast seed arrived as body %d bytes, too large %v of max %v (%s), want no body and both sizes", len(detail.Body), detail.BodyTooLargeBytes, detail.MaxFrameBytes, failure)
+	}
+}
+
+func (p *testPhone) seedChangesUntil(seedID string) []string {
+	p.t.Helper()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	var changed []string
+	for {
+		frame := p.receive(guard, "seed_changed for "+seedID)
+		var message gateway.GatewaySeedChanged
+		if json.Unmarshal(frame, &message) != nil || message.Event != "seed_changed" {
+			continue
+		}
+		changed = append(changed, message.SeedID)
+		if message.SeedID == seedID {
+			return changed
+		}
+	}
+}
+
+func TestGatewayTellsThePhoneWhenASeedsNotesOrBodyChange(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	personal := app.SelectedProfile()
+	work := createProfile(app, "Work")
+	for _, s := range []struct{ id, profile string }{{"mine", personal}, {"theirs", work.ID}} {
+		if err := w.InjectSession(s.id, s.id+" label", w.Path(s.id), protocol.SessionAgentClaude, s.profile); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open, err := cli.SeedPlant("mine", "Open on the phone", "The first plan.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere, err := cli.SeedPlant("theirs", "Work only", "Not for the personal phone.", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone := connectPhone(t, w, "phone", personal)
+	phone.welcomed()
+	phone.readSeed(open.Seed.ID)
+
+	if _, err := cli.SeedNote("theirs", elsewhere.Seed.ID, "Work goes on.", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SeedNote("mine", open.Seed.ID, "Handing off: read the new plan.", "handoff", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	changed := phone.seedChangesUntil(open.Seed.ID)
+	detail, _ := phone.readSeed(open.Seed.ID)
+	if len(detail.Log) == 0 || detail.Log[0].Body != "Handing off: read the new plan." {
+		t.Fatalf("after seed_changed the seed's log reads %+v, want the handoff newest", detail.Log)
+	}
+
+	if _, err := cli.WithGardenProfile("", "mine").SeedEdit(open.Seed.ID, "The second plan.", garden.BodySHA256("The first plan."), ""); err != nil {
+		t.Fatal(err)
+	}
+	changed = append(changed, phone.seedChangesUntil(open.Seed.ID)...)
+	detail, _ = phone.readSeed(open.Seed.ID)
+	if detail.Body != "The second plan." {
+		t.Fatalf("after seed_changed the seed's body reads %q, want the edit", detail.Body)
+	}
+	if slices.Contains(changed, elsewhere.Seed.ID) {
+		t.Fatalf("the personal phone heard seed_changed for %v, which includes the work seed %s", changed, elsewhere.Seed.ID)
 	}
 }

@@ -14,6 +14,7 @@ import {
   type GatewayPong,
   type GatewayRefused,
   type GatewaySeedDetail,
+  type GatewaySeedChanged,
   type GatewaySeedError,
   type GatewaySeedResult,
   type GatewaySessions,
@@ -43,6 +44,7 @@ export type GatewayEvent =
   | GatewayGardenSeeds
   | GatewayGarden
   | GatewaySeedDetail
+  | GatewaySeedChanged
   | GatewaySeedError
   | GatewaySeedResult;
 
@@ -135,6 +137,8 @@ export function decodeGatewayEvent(frame: string): GatewayEvent | null {
         children: withKnownStatuses(message.children),
         checks: withKnownCheckStates(message.checks),
       }));
+    case 'seed_changed':
+      return Convert.toGatewaySeedChanged(frame);
     case 'seed_error':
       return Convert.toGatewaySeedError(frame);
     case 'seed_result':
