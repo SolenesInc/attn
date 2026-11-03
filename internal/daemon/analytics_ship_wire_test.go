@@ -51,7 +51,7 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		if status.LastSentAt == nil || status.LastRefusal != nil {
 			t.Fatalf("after an accepted upload the status is last_sent_at %v, last_refusal %q", status.LastSentAt, protocol.Deref(status.LastRefusal))
 		}
-		assertServerHoldsWhatWasSent(t, clickHouse, status)
+		assertServerHoldsWhatWasSent(t, clickHouseEvents(t, clickHouse), status)
 		build := analytics.CurrentBuild()
 		if got, want := clickHouse.Query(t, "SELECT DISTINCT build_protocol, build_os, build_arch, app_version, app_channel FROM events"),
 			strings.Join([]string{build.Protocol, build.Os, build.Arch, testworld.AppVersion, testworld.AppChannel}, "\t"); got != want {
@@ -90,7 +90,7 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		if duplicates := ingest.Metric(t, "attn_ingest_events_duplicate_total"); duplicates < 1 {
 			t.Fatalf("the retried batch counted %d duplicates, want the lost batch's records", duplicates)
 		}
-		assertServerHoldsWhatWasSent(t, clickHouse, status)
+		assertServerHoldsWhatWasSent(t, clickHouseEvents(t, clickHouse), status)
 
 		link.RefuseNextEvents(http.StatusTooManyRequests, minuteLimitRefusal)
 		recordAndAdvance(w, app, uploadInterval)
@@ -127,8 +127,7 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 }
 
 func TestForgettingWhileAttnIngestIsUnreachableChangesNothing(t *testing.T) {
-	clickHouse := testworld.NewClickHouse(t)
-	ingest := testworld.StartIngest(t, clickHouse)
+	ingest := testworld.StartFakeIngest(t)
 	link := ingest.Link(t)
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
 		app := w.App()
@@ -136,9 +135,9 @@ func TestForgettingWhileAttnIngestIsUnreachableChangesNothing(t *testing.T) {
 		sendAppAction(app, "settings_section", map[string]any{"section": "analytics"})
 		setSetting(t, app, "analytics.sharing_enabled", "true")
 		w.advance(0)
-		installs := clickHouse.Query(t, "SELECT install_id FROM installs")
-		if installs == "" {
-			t.Fatal("sharing registered no install")
+		installs := ingest.Installs()
+		if len(installs) != 1 {
+			t.Fatalf("sharing registered the installs %v, want one", installs)
 		}
 
 		link.Cut()
@@ -152,16 +151,15 @@ func TestForgettingWhileAttnIngestIsUnreachableChangesNothing(t *testing.T) {
 		if status := analyticsStatus(app); status.LastRefusal != nil {
 			t.Fatalf("after a refused forget the install no longer uploads: %s", *status.LastRefusal)
 		}
-		if now := clickHouse.Query(t, "SELECT install_id FROM installs"); now != installs {
-			t.Fatalf("a refused forget changed the install from %q to %q", installs, now)
+		if now := ingest.Installs(); !slices.Equal(now, installs) {
+			t.Fatalf("a refused forget changed the installs from %v to %v", installs, now)
 		}
-		assertServerHoldsWhatWasSent(t, clickHouse, analyticsStatus(app))
+		assertServerHoldsWhatWasSent(t, ingest.Events(), analyticsStatus(app))
 	})
 }
 
 func TestTurningSharingOffDuringTheFirstRegistrationSendsNothing(t *testing.T) {
-	clickHouse := testworld.NewClickHouse(t)
-	link := testworld.StartIngest(t, clickHouse).Link(t)
+	link := testworld.StartFakeIngest(t).Link(t)
 	arrived, release := link.HoldNextRegistration()
 	defer release()
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
@@ -185,8 +183,8 @@ func TestTurningSharingOffDuringTheFirstRegistrationSendsNothing(t *testing.T) {
 }
 
 func TestRecordsMadeAfterClearingDuringAnUploadAreStillSent(t *testing.T) {
-	clickHouse := testworld.NewClickHouse(t)
-	link := testworld.StartIngest(t, clickHouse).Link(t)
+	ingest := testworld.StartFakeIngest(t)
+	link := ingest.Link(t)
 	stored, release := link.HoldNextEventsReply()
 	defer release()
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
@@ -195,7 +193,7 @@ func TestRecordsMadeAfterClearingDuringAnUploadAreStillSent(t *testing.T) {
 		sendAppAction(app, "settings_section", map[string]any{"section": "analytics"})
 		setSetting(t, app, "analytics.sharing_enabled", "true")
 		<-stored
-		first := clickHouse.Query(t, "SELECT count() FROM events FINAL")
+		first := ingest.Events()
 		cleared := testworld.Request(app, protocol.ClearAnalyticsRecordsMessage{Cmd: protocol.CmdClearAnalyticsRecords, RequestID: "clear"},
 			protocol.EventClearAnalyticsRecordsResult, func(r protocol.ClearAnalyticsRecordsResultMessage) bool { return r.RequestID == "clear" })
 		if !cleared.Success {
@@ -208,12 +206,8 @@ func TestRecordsMadeAfterClearingDuringAnUploadAreStillSent(t *testing.T) {
 		release()
 		w.advance(uploadInterval)
 		status := analyticsStatus(app)
-		firstCount, err := strconv.Atoi(first)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if want, got := strconv.Itoa(firstCount+status.Records-status.Waiting), clickHouse.Query(t, "SELECT count() FROM events FINAL"); got != want {
-			t.Fatalf("ClickHouse holds %s events, want the %d from before the clear plus the %d rows marked sent since", got, firstCount, status.Records-status.Waiting)
+		if want, got := first+status.Records-status.Waiting, ingest.Events(); got != want {
+			t.Fatalf("attn-ingest holds %d events, want the %d from before the clear plus the %d rows marked sent since", got, first, status.Records-status.Waiting)
 		}
 	})
 }
@@ -368,11 +362,20 @@ func forgetInstall(app *testworld.Peer) protocol.ForgetAnalyticsInstallResultMes
 		protocol.EventForgetAnalyticsInstallResult, func(r protocol.ForgetAnalyticsInstallResultMessage) bool { return r.RequestID == "forget" })
 }
 
-func assertServerHoldsWhatWasSent(t *testing.T, clickHouse testworld.ClickHouse, status protocol.GetAnalyticsStatusResultMessage) {
+func assertServerHoldsWhatWasSent(t *testing.T, stored int, status protocol.GetAnalyticsStatusResultMessage) {
 	t.Helper()
-	if stored, sent := clickHouse.Query(t, "SELECT count() FROM events FINAL"), status.Records-status.Waiting; stored != strconv.Itoa(sent) {
-		t.Fatalf("ClickHouse holds %s events, want the %d rows this machine marked sent", stored, sent)
+	if sent := status.Records - status.Waiting; stored != sent {
+		t.Fatalf("attn-ingest holds %d events, want the %d rows this machine marked sent", stored, sent)
 	}
+}
+
+func clickHouseEvents(t *testing.T, clickHouse testworld.ClickHouse) int {
+	t.Helper()
+	stored, err := strconv.Atoi(clickHouse.Query(t, "SELECT count() FROM events FINAL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stored
 }
 
 func TestInstancesOtherThanProductionUploadNowhereUnlessToldWhere(t *testing.T) {

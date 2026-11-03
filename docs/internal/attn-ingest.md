@@ -121,9 +121,12 @@ service. Only the default instance on the default data folder uploads to
 
 ## Testing
 
-The stack tests in `cmd/attn-ingest` and the analytics upload wire tests in
-`internal/daemon` run against a real ClickHouse, each test in its own
-database, through `testworld.NewClickHouse` and `testworld.StartIngest`.
+The stack tests in `cmd/attn-ingest` and the daemon's end-to-end upload test,
+`TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall`, run
+against a real ClickHouse, each test in its own database, through
+`testworld.NewClickHouse` and `testworld.StartIngest`. The other analytics
+upload wire tests in `internal/daemon` run against `testworld.StartFakeIngest`,
+an in-process server that keeps attn-ingest's HTTP contract.
 
 `ATTN_TEST_CLICKHOUSE_URL` names the ClickHouse to use. Without it, the first
 test in each test process runs `scripts/ingest-clickhouse.sh start`, which

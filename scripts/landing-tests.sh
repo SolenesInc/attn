@@ -56,13 +56,8 @@ summarize() {
 # Go replays a test's cached pass while its test binary, its flags, and the
 # environment variables and files it read are unchanged, so a rebase reruns only
 # the tests its commits reach. These tests also depend on something Go cannot
-# see, so they run every time: a ClickHouse server, or attn built during the test
-# at another version.
-uncached_go_units="go ./internal/daemon TestEachUploadBatchCarriesTheBuildThatRecordedItsRecords
-go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
-go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
-go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
-go ./internal/daemon TestRecordsMadeAfterClearingDuringAnUploadAreStillSent
+# see, a ClickHouse server, so they run every time.
+uncached_go_units="go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
 go ./cmd/attn-ingest TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted
 go ./cmd/attn-ingest TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected
 go ./cmd/attn-ingest TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay

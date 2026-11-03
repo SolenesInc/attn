@@ -3,8 +3,10 @@ package testworld
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +22,8 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+
+	"github.com/victorarias/attn/internal/analytics"
 )
 
 const (
@@ -189,6 +193,138 @@ func StartIngest(t testing.TB, clickHouse ClickHouse, env ...string) Ingest {
 		}
 	})
 	return Ingest{URL: "http://" + address}
+}
+
+type FakeIngest struct {
+	URL string
+
+	mu       sync.Mutex
+	installs map[string]string
+	events   map[string]map[fakeEventKey]bool
+	batches  []analytics.Batch
+}
+
+type fakeEventKey struct {
+	stream analytics.Stream
+	seq    int64
+}
+
+func StartFakeIngest(t testing.TB) *FakeIngest {
+	t.Helper()
+	fake := &FakeIngest{installs: map[string]string{}, events: map[string]map[fakeEventKey]bool{}}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/installs", fake.register)
+	mux.HandleFunc("POST /v1/events", fake.acceptEvents)
+	mux.HandleFunc("DELETE /v1/installs/me", fake.deleteInstall)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	fake.URL = server.URL
+	return fake
+}
+
+func (f *FakeIngest) Link(t testing.TB) *IngestLink {
+	t.Helper()
+	return Ingest{URL: f.URL}.Link(t)
+}
+
+func (f *FakeIngest) Installs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	installs := make([]string, 0, len(f.installs))
+	for _, install := range f.installs {
+		installs = append(installs, install)
+	}
+	return installs
+}
+
+func (f *FakeIngest) Events() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	stored := 0
+	for _, events := range f.events {
+		stored += len(events)
+	}
+	return stored
+}
+
+func (f *FakeIngest) Batches() []analytics.Batch {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]analytics.Batch(nil), f.batches...)
+}
+
+func (f *FakeIngest) register(w http.ResponseWriter, _ *http.Request) {
+	registration := analytics.Registration{InstallID: "install-" + rand.Text(), Token: rand.Text()}
+	f.mu.Lock()
+	f.installs[registration.Token] = registration.InstallID
+	f.events[registration.InstallID] = map[fakeEventKey]bool{}
+	f.mu.Unlock()
+	_ = json.NewEncoder(w).Encode(registration)
+}
+
+func (f *FakeIngest) acceptEvents(w http.ResponseWriter, r *http.Request) {
+	batch, err := readFakeBatch(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	install, ok := f.installs[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+	if !ok {
+		http.Error(w, `{"error":"unknown install token"}`, http.StatusUnauthorized)
+		return
+	}
+	f.batches = append(f.batches, batch)
+	var accepted analytics.Accepted
+	for _, record := range batch.Records {
+		key := fakeEventKey{record.Stream, record.Seq}
+		if f.events[install][key] {
+			accepted.Duplicates++
+			continue
+		}
+		f.events[install][key] = true
+		accepted.Accepted++
+	}
+	_ = json.NewEncoder(w).Encode(accepted)
+}
+
+func (f *FakeIngest) deleteInstall(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	install, ok := f.installs[token]
+	if !ok {
+		http.Error(w, `{"error":"unknown install token"}`, http.StatusUnauthorized)
+		return
+	}
+	delete(f.installs, token)
+	delete(f.events, install)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func readFakeBatch(body io.Reader) (analytics.Batch, error) {
+	var batch analytics.Batch
+	unzipped, err := gzip.NewReader(body)
+	if err != nil {
+		return batch, err
+	}
+	lines := json.NewDecoder(unzipped)
+	var header struct {
+		Build analytics.Build `json:"build"`
+	}
+	if err := lines.Decode(&header); err != nil {
+		return batch, err
+	}
+	batch.Build = header.Build
+	for lines.More() {
+		var record analytics.Record
+		if err := lines.Decode(&record); err != nil {
+			return batch, err
+		}
+		batch.Records = append(batch.Records, record)
+	}
+	return batch, nil
 }
 
 func randomHex(t testing.TB, n int) string {
