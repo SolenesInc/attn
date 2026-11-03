@@ -29,6 +29,9 @@ start to the last land. Started together, their fetches collide on
 refs/remotes/origin/main, shared by every worktree, and all but one fail before
 checking anything.
 
+Every land commits a change no earlier land compiled, so Go builds the changed
+package cold, as a real land does, instead of reusing the shared build cache.
+
 Lands never reach the real origin or the shared test history. They run in a
 scratch clone of HEAD, beside this checkout, whose origin is a local bare
 repository. Every worktree of the clone shares a scratch test-history spool
@@ -50,6 +53,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -162,13 +166,14 @@ class Scratch:
 
     def reset(self, run):
         git("update-ref", "refs/heads/main", self.base, cwd=self.origin)
+        change_id = uuid.uuid4().hex
         for i, path in enumerate(self.worktrees):
             git("reset", "--quiet", "--hard", self.base, cwd=path)
             package = path / LAND_PACKAGES[i % len(LAND_PACKAGES)]
             source_file = next(f for f in sorted(package.glob("*.go")) if not f.name.endswith("_test.go"))
             name = next(line.split()[1] for line in source_file.read_text().splitlines() if line.startswith("package "))
             change = package / f"verification_cost_{i + 1}.go"
-            change.write_text(f"package {name}\n\nconst VerificationCostChange{i + 1} = {run}\n")
+            change.write_text(f"package {name}\n\nconst VerificationCostChange{i + 1} = \"{change_id}\"\n")
             git("add", str(change), cwd=path)
             git("commit", "--quiet", "--no-verify", "-m", f"Verification cost change {i + 1}, run {run}", cwd=path)
 
