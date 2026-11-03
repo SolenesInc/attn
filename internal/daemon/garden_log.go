@@ -131,8 +131,9 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 
 func (d *Daemon) seedChangeLogWire(l seedChangeLog, now time.Time) []protocol.SeedNote {
 	wire := make([]protocol.SeedNote, len(l.entries))
+	parties := d.partiesNow()
 	for i, entry := range l.entries {
-		wire[i] = d.noteToProtocol(entry, docstore.Document{CreatedAt: now})
+		wire[i] = noteToProtocol(parties, entry, docstore.Document{CreatedAt: now})
 	}
 	return wire
 }

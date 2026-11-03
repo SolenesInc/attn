@@ -200,6 +200,9 @@ func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
 	}
 	rev := lifeShow(t, cli, seed).Seed.Rev
 	crewHandoff(t, cli, string(first), "Ready to wake later.", false)
+	if asleep := lifeShow(t, cli, seed).Seed; !asleep.Claimed || asleep.Ready || asleep.Tender == nil || asleep.Tender.SessionID != nil {
+		t.Fatalf("an asleep member's seed shows claimed=%v ready=%v tender %+v, want it claimed with no session named", asleep.Claimed, asleep.Ready, asleep.Tender)
+	}
 	if offered := seedReaderDocument(app, seed); !offered.Success || offered.Document.Seed.Continuation == nil || !offered.Document.Seed.Continuation.ResumeAvailable {
 		t.Fatalf("an asleep member's seed does not offer Resume: %+v", offered.Document)
 	}
@@ -326,5 +329,31 @@ func TestWorkTheUserAssignsToAnAsleepMemberResumesWithTheMember(t *testing.T) {
 	if !resumed.Success || protocol.Deref(resumed.SessionID) != member || !protocol.Deref(resumed.AlreadyRunning) ||
 		shown.Tender == nil || shown.Tender.Ref != "member:keel" {
 		t.Fatalf("Resume after the member parked = %+v with tender %+v, want the member's session %s and a member:keel claim", resumed, shown.Tender, member)
+	}
+}
+
+func TestAWorkerThatExitsLapsesASessionsClaimButNotAMembers(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	member := wakeCrew(t, cli, "keel", "").SessionID
+	w.Launched(string(member))
+	session := spawnPanes(w, app, w.Path("plain"))[0].session
+	memberSeed := plantSeedAs(t, cli, string(member), "Held by a member")
+	lifeMove(t, cli, string(member), memberSeed, "tend", "", "")
+	sessionSeed := plantSeedAs(t, cli, session, "Held by a session")
+	lifeMove(t, cli, session, sessionSeed, "tend", "", "")
+	if shown := lifeShow(t, cli, memberSeed).Seed; !shown.Claimed || protocol.Deref(shown.Tender.SessionID) != member {
+		t.Fatalf("a live member's seed shows claimed=%v tender %+v, want it naming %s", shown.Claimed, shown.Tender, member)
+	}
+
+	for _, id := range []protocol.SessionID{member, protocol.SessionID(session)} {
+		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: id})
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == id })
+	}
+	if shown := lifeShow(t, cli, memberSeed).Seed; !shown.Claimed || shown.Ready || shown.Tender == nil || shown.Tender.Ref != "member:keel" || shown.Tender.SessionID != nil {
+		t.Fatalf("with its worker gone the member's seed shows claimed=%v ready=%v tender %+v, want it claimed with no session named", shown.Claimed, shown.Ready, shown.Tender)
+	}
+	if shown := lifeShow(t, cli, sessionSeed).Seed; shown.Claimed || !shown.Ready || shown.Tender == nil || shown.Tender.SessionID != nil {
+		t.Fatalf("with its worker gone the session's seed shows claimed=%v ready=%v tender %+v, want it released and ready", shown.Claimed, shown.Ready, shown.Tender)
 	}
 }

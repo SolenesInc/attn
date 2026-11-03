@@ -100,8 +100,19 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	panes := spawnPanes(w, app, w.Path("first"), w.Path("second"), w.Path("departing"))
-	first, second, departing := panes[0].session, panes[1].session, panes[2]
+	panes := spawnPanes(w, app, w.Path("first"), w.Path("second"), w.Path("departing"), w.Path("leaving"))
+	first, second, departing, leaving := panes[0].session, panes[1].session, panes[2], panes[3]
+
+	t.Run("a session's claim is refused to another session until the session closes", func(t *testing.T) {
+		seed := plantSeedAs(t, cli, first, "held by a session")
+		lifeMove(t, cli, leaving.session, seed, "tend", "", "")
+		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", false, client.SeedTransitionOptions{})
+		lifeRefusal(t, "a tend while the tender is open", err, seed, leaving.session, "--force")
+		closePane(app, leaving)
+		if taken := lifeMove(t, cli, second, seed, "tend", "", ""); string(tenderSessionOf(taken)) != second || !taken.Claimed {
+			t.Fatalf("a tend after the tender closed = %+v, want the second session to hold it", taken.Tender)
+		}
+	})
 
 	t.Run("a member's claim is refused to a second session until it is parked", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, first, "contended")

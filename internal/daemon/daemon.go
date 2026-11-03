@@ -3279,13 +3279,21 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
+	dispatchers := d.gardenDispatchersBySession()
+	var parties parties
+	if session != nil {
+		if _, dispatched := dispatchers[session.ID]; dispatched {
+			parties = d.partiesNow()
+		}
+	}
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
 		d.profileChiefs(),
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
-		d.gardenDispatchersBySession(),
+		dispatchers,
+		parties,
 	)
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
@@ -3303,6 +3311,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	crewBySession map[protocol.SessionID]crew.Member,
 	seedBySession map[protocol.SessionID]string,
 	dispatcherBySession map[protocol.SessionID]who.Actor,
+	parties parties,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -3319,7 +3328,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
-	d.decorateSessionDispatcher(clone, dispatcherBySession)
+	d.decorateSessionDispatcher(clone, dispatcherBySession, parties)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
 		clone.Dispatcher, clone.DispatcherSessionID = nil, nil
 		clone.DelegatedFromChief = nil
@@ -3341,6 +3350,10 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	var parties parties
+	if len(dispatcherBySession) > 0 {
+		parties = d.partiesNow()
+	}
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
@@ -3352,7 +3365,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	sharedConversations := d.conversationsSharedByLiveSessions()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession, parties); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.ConversationSharedWith = sharedConversations[decorated.ID]

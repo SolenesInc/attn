@@ -81,7 +81,7 @@ func (d *Daemon) seedAuthorizationRequest(msg *protocol.SeedAuthorizationMessage
 	}
 	if change.typed != nil {
 		d.deliverSavedInbox(change.typed.To, change.typed.ID, savedAt)
-		result.Update = d.authorizationUpdateView(change.typed.ID)
+		result.Update = d.authorizationUpdateView(d.partiesNow(), change.typed.ID)
 	}
 	result.Seed = d.seedWire(change.seed, change.doc)
 	if !change.changed && result.Seed.Authorization != nil {
@@ -191,7 +191,7 @@ func (d *Daemon) authorizationUpdateText(seed garden.Seed, replaced, text string
 	return prompts.RenderText("delegation", "authorization-update", values)
 }
 
-func (d *Daemon) authorizationUpdateView(itemID string) *protocol.SeedAuthorizationUpdate {
+func (d *Daemon) authorizationUpdateView(parties parties, itemID string) *protocol.SeedAuthorizationUpdate {
 	if itemID == "" {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (d *Daemon) authorizationUpdateView(itemID string) *protocol.SeedAuthorizat
 	if !ok {
 		return nil
 	}
-	view := &protocol.SeedAuthorizationUpdate{Recipient: d.partyView(tender)}
+	view := &protocol.SeedAuthorizationUpdate{Recipient: parties.view(tender)}
 	if item.ReadAt != "" {
 		view.TypedAt = protocol.Ptr(item.ReadAt)
 		if item.ReadBy != "" {
@@ -243,11 +243,11 @@ func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) 
 	return fmt.Errorf("%s is tended by %s; only %s, the sessions above %s in the delegation chain, the chief or the user can set its authorization", seed.ID, tender, tender, tender)
 }
 
-func (d *Daemon) seedAuthorizationView(a *garden.Authorization) *protocol.SeedAuthorization {
+func (d *Daemon) seedAuthorizationView(parties parties, a *garden.Authorization) *protocol.SeedAuthorization {
 	if a == nil {
 		return nil
 	}
-	return &protocol.SeedAuthorization{Text: a.Text, SetBy: d.actorView(a.SetBy), SetAt: a.SetAt, Update: d.authorizationUpdateView(a.TypedUpdate)}
+	return &protocol.SeedAuthorization{Text: a.Text, SetBy: parties.actor(a.SetBy), SetAt: a.SetAt, Update: d.authorizationUpdateView(parties, a.TypedUpdate)}
 }
 
 func (d *Daemon) authorizationSetterName(a garden.Authorization) string {

@@ -15,6 +15,7 @@ CREATE UNIQUE INDEX idx_crew_members_name ON crew_members(profile_id, name COLLA
 CREATE INDEX idx_crew_members_profile ON crew_members(profile_id);
 CREATE UNIQUE INDEX idx_delegation_operations_active_ticket ON delegation_operations(ticket_id) WHERE ticket_id != '' AND state IN ('accepted', 'preparing');
 CREATE INDEX idx_delegation_operations_operation_id ON delegation_operations(operation_id);
+CREATE INDEX idx_delegation_operations_reserved ON delegation_operations(session_id) WHERE state IN ('accepted', 'preparing');
 CREATE INDEX idx_delegation_operations_session ON delegation_operations(session_id);
 CREATE INDEX idx_desktop_panes_desktop ON desktop_panes(desktop_id);
 CREATE INDEX idx_desktop_panes_session ON desktop_panes(session_id, created_at);

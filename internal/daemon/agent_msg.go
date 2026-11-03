@@ -189,13 +189,17 @@ func agentMessageQueuedDetail(err error) string {
 }
 
 func sessionDisplayName(session *protocol.Session) string {
-	if label := strings.TrimSpace(session.Label); label != "" {
+	return displayName(session.ID, session.Label, protocol.Deref(session.Title))
+}
+
+func displayName(id protocol.SessionID, label, title string) string {
+	if label := strings.TrimSpace(label); label != "" {
 		return label
 	}
-	if title := protocol.Deref(session.Title); title != "" {
+	if title != "" {
 		return title
 	}
-	return shortSessionID(session.ID)
+	return shortSessionID(id)
 }
 
 func shortSessionID(id protocol.SessionID) string {

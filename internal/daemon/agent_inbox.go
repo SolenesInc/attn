@@ -107,6 +107,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		return
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
+	parties := d.partiesNow()
 	for _, delivery := range deliveries {
 		item := protocol.AgentInboxItem{
 			Address: delivery.Item.To.String(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
@@ -120,7 +121,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
 		if delivery.Peer != nil {
-			item.Sender = protocol.Ptr(d.partyView(delivery.Peer.Sender))
+			item.Sender = protocol.Ptr(parties.view(delivery.Peer.Sender))
 			item.ReplyTo = protocol.Ptr(d.replyTo(delivery.Peer.Sender))
 		}
 		items = append(items, item)

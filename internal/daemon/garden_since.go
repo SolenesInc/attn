@@ -59,6 +59,7 @@ func (d *Daemon) readEntriesSince(read gardenRead, crownID string, after int64, 
 		return nil, err
 	}
 	entries := make([]protocol.SeedNote, 0, len(added))
+	parties := d.partiesNow()
 	for i := len(added) - 1; i >= 0; i-- {
 		event := added[i]
 		var payload seedEvents.NoteAddedPayload
@@ -76,7 +77,7 @@ func (d *Daemon) readEntriesSince(read gardenRead, crownID string, after int64, 
 		if err != nil {
 			return nil, fmt.Errorf("entry %s has an unreadable body: %w", payload.NoteID, err)
 		}
-		entry := d.noteToProtocol(note, *doc)
+		entry := noteToProtocol(parties, note, *doc)
 		entry.Seq = protocol.Ptr(int(event.Seq))
 		entries = append(entries, entry)
 	}

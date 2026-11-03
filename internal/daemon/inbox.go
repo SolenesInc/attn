@@ -66,23 +66,6 @@ func (d *Daemon) partyOfSession(id protocol.SessionID) who.Party {
 	return who.Session(id)
 }
 
-func (d *Daemon) partyView(p who.Party) protocol.PartyView {
-	view := protocol.PartyView{Ref: protocol.PartyRef(p.String())}
-	if live, ok := d.liveSessionOf(p); ok && d.sessionActive(live) {
-		view.SessionID = protocol.Ptr(live)
-	}
-	if key, member := p.Member(); member {
-		view.Name = d.crewMemberName(key.String())
-		return view
-	}
-	id, _ := p.Session()
-	view.Name = shortSessionID(id)
-	if session := d.store.Get(id); session != nil {
-		view.Name = sessionDisplayName(session)
-	}
-	return view
-}
-
 func (d *Daemon) replyTo(p who.Party) string {
 	if key, member := p.Member(); member {
 		return d.crewMemberName(key.String())

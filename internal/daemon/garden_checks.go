@@ -332,7 +332,7 @@ func (g gardenRead) checks(id string) []protocol.SeedCheck {
 	for _, check := range effective {
 		wire := protocol.SeedCheck{
 			ID: check.ID, Text: check.Text, Removed: check.Removed, State: string(check.Result.State()),
-			Report: g.daemon.checkReportToProtocol(check.Result.Report), Verdict: g.daemon.checkVerdictToProtocol(check.Result.Verdict),
+			Report: checkReportToProtocol(g.parties, check.Result.Report), Verdict: checkVerdictToProtocol(g.parties, check.Result.Verdict),
 		}
 		if check.From != "" {
 			wire.From = protocol.Ptr(check.From)
@@ -374,7 +374,7 @@ func (g gardenRead) sharedChecks(id string) []protocol.SeedSharedCheck {
 	return out
 }
 
-func (d *Daemon) checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport {
+func checkReportToProtocol(parties parties, report *garden.CheckReport) *protocol.SeedCheckReport {
 	if report == nil {
 		return nil
 	}
@@ -402,11 +402,11 @@ func (d *Daemon) checkReportToProtocol(report *garden.CheckReport) *protocol.See
 	if report.Detail {
 		wire.Detail = protocol.Ptr(true)
 	}
-	wire.By = d.actorView(report.By)
+	wire.By = parties.actor(report.By)
 	return wire
 }
 
-func (d *Daemon) checkVerdictToProtocol(verdict *garden.CheckVerdict) *protocol.SeedCheckVerdict {
+func checkVerdictToProtocol(parties parties, verdict *garden.CheckVerdict) *protocol.SeedCheckVerdict {
 	if verdict == nil {
 		return nil
 	}
@@ -414,7 +414,7 @@ func (d *Daemon) checkVerdictToProtocol(verdict *garden.CheckVerdict) *protocol.
 	if verdict.Reason != "" {
 		wire.Reason = protocol.Ptr(verdict.Reason)
 	}
-	wire.By = d.actorView(verdict.By)
+	wire.By = parties.actor(verdict.By)
 	return wire
 }
 
