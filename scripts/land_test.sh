@@ -3,7 +3,13 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-test.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+release_held_checks() {
+  [ -p "$work/hold/release" ] || return 0
+  exec 4<>"$work/hold/release"
+  echo release >&4
+  exec 4>&-
+}
+trap 'release_held_checks; rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin" "$work/repo"
 cat >"$work/bin/make" <<'EOF'
@@ -15,6 +21,10 @@ if [ -e "$LAND_MOVE_MAIN" ]; then
   git -C "$LAND_OTHER" pull -q origin main
   git -C "$LAND_OTHER" commit -q --allow-empty -m 'Landed during the gate'
   git -C "$LAND_OTHER" push -q origin HEAD:main
+fi
+if [ -n "${LAND_HOLD:-}" ]; then
+  echo started >"$LAND_HOLD/started"
+  read -r _ <"$LAND_HOLD/release"
 fi
 exit "${LAND_CHECK_EXIT:-0}"
 EOF
@@ -223,5 +233,61 @@ refuses() {
 
 refuses 'a failed app check' LAND_CHECK_EXIT=1
 refuses 'a failed landing test' LAND_TESTS_EXIT=1
+
+hold="$work/hold" second="$work/second"
+mkdir "$hold"
+mkfifo "$hold/started" "$hold/release" "$work/second-output"
+git worktree add -q -b second "$second" origin/main
+
+hold_queue() {
+  printf '\n' >>app/src/example.ts
+  git add -A
+  git commit -qm "$1"
+  LAND_HOLD="$hold" bash "$root/scripts/land.sh" >"$work/holder-output" 2>&1 &
+  holder=$!
+  read -r _ <"$hold/started"
+}
+
+land_second_in_background() {
+  git -C "$second" pull -q --rebase origin main
+  printf '%s\n' "$1" >"$second/$1.md"
+  git -C "$second" add -A
+  git -C "$second" commit -qm "$1"
+  (cd "$second" && exec bash "$root/scripts/land.sh") >"$work/second-output" 2>&1 &
+  waiter=$!
+  exec 3<"$work/second-output"
+  read -r first_line <&3
+}
+
+finish_second() {
+  { printf '%s\n' "$first_line"; cat <&3; } >"$work/output"
+  exec 3<&-
+  wait "$waiter" || { cat "$work/output" >&2; exit 1; }
+  [ "$(git -C "$second" rev-parse HEAD)" = "$(git --git-dir="$work/remote" rev-parse main)" ]
+}
+
+hold_queue 'App change that holds the land queue'
+land_second_in_background waits
+case "$first_line" in
+  "land: waiting for the land queue: held by pid $holder (repo) since "*) ;;
+  *) echo "the second land did not wait for the queue: $first_line" >&2; exit 1 ;;
+esac
+echo release >"$hold/release"
+wait "$holder"
+finish_second
+expect_output 'land: took the land queue'
+if grep -qF 'main moved' "$work/output"; then cat "$work/output" >&2; exit 1; fi
+
+hold_queue 'App change whose land is killed'
+kill -KILL "$holder"
+wait "$holder" 2>/dev/null || true
+land_second_in_background follows-killed
+echo release >"$hold/release"
+case "$first_line" in
+  "land: main is at "*) ;;
+  *) echo "a killed land kept the queue: $first_line" >&2; exit 1 ;;
+esac
+finish_second
+git reset -q --hard origin/main
 
 echo 'landing fast gate: OK'
