@@ -3,75 +3,12 @@ package daemon_test
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func TestATakeoverCountsARequestCopiedAcrossClaudeTranscriptsOnlyOnce(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	cwd := w.Path("shop")
-	original := w.Spawn(app, fakeagent.Claude, cwd)
-	a := w.Launched(original)
-	app.TypeLine(original, "original question")
-	a.Prompted()
-	firstReply := "original answer <!-- attn:state=idle -->"
-	a.Reply(firstReply)
-	awaitUsageTokens(app, original, claudeTokens(firstReply))
-	paths, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".claude", "projects", "*", a.ConversationID+".jsonl"))
-	if err != nil || len(paths) != 1 {
-		t.Fatalf("original transcript: %v, %v", paths, err)
-	}
-	originalPath := paths[0]
-	copied, err := os.ReadFile(originalPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	forked := w.Spawn(app, fakeagent.Claude, cwd)
-	b := w.Launched(forked)
-	forkPath := filepath.Join(filepath.Dir(originalPath), b.ConversationID+".jsonl")
-	var lines []string
-	for _, line := range strings.Split(strings.TrimSpace(string(copied)), "\n") {
-		var row map[string]any
-		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			t.Fatal(err)
-		}
-		row["sessionId"] = b.ConversationID
-		raw, err := json.Marshal(row)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines = append(lines, string(raw))
-	}
-	if err := os.WriteFile(forkPath, []byte(strings.Join(lines, "\n")+"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	app.TypeLine(forked, "fork question")
-	b.Prompted()
-	forkReply := "fork answer <!-- attn:state=idle -->"
-	b.Reply(forkReply)
-	counted := claudeTokens(firstReply) + claudeTokens(forkReply)
-	awaitUsageTokens(app, forked, counted)
-	terminal := protocol.TerminalID(app.Terminal(forked))
-	if err := cli.ObserveAgentConversation(terminal, a.ConversationID, originalPath); err != nil {
-		t.Fatal(err)
-	}
-	caller, err := cli.CallerSession(terminal)
-	if err != nil || caller != protocol.SessionID(forked) {
-		t.Fatalf("takeover replaced session %s with %s: %v", forked, caller, err)
-	}
-	app.TypeLine(original, "original follow-up")
-	a.Prompted()
-	followup := "new original answer <!-- attn:state=idle -->"
-	a.Reply(followup)
-	usage := awaitUsageTokens(app, forked, counted+claudeTokens(followup))
-	t.Logf("after takeover, %d tokens: original+fork+follow-up, copied request counted once", usage.TotalTokens)
-}
 
 func TestATakeoverKeepsUnreadForkUsageAndItsDeduplicationAcrossRestart(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {

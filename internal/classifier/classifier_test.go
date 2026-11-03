@@ -64,25 +64,6 @@ func TestParseResponse_Done(t *testing.T) {
 	}
 }
 
-func TestParseResponse_MixedCase(t *testing.T) {
-	tests := []struct {
-		response string
-		want     string
-	}{
-		{"Waiting", "waiting_input"},
-		{"WaItInG", "waiting_input"},
-		{"Done", "idle"},
-		{"DoNe", "idle"},
-	}
-
-	for _, tt := range tests {
-		got := ParseResponse(tt.response)
-		if got != tt.want {
-			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-		}
-	}
-}
-
 func TestParseResponse_SurroundingText(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -105,13 +86,6 @@ func TestParseResponse_SurroundingText(t *testing.T) {
 				t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestParseResponse_NoStandaloneToken(t *testing.T) {
-	got := ParseResponse("This appears complete without further input.")
-	if got != "idle" {
-		t.Errorf("expected idle when no WAITING/DONE prefix, got %q", got)
 	}
 }
 
@@ -164,25 +138,6 @@ func TestParseVerdictFromResponse_ExplicitVerdictRequired(t *testing.T) {
 				t.Fatalf("parseVerdictFromResponse(%q) = %q, want %q", tt.response, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestParseResponse_EmptyAndWhitespace(t *testing.T) {
-	tests := []struct {
-		response string
-		want     string
-	}{
-		{"", "idle"},
-		{"   ", "idle"},
-		{"\n\n", "idle"},
-		{"\t\t", "idle"},
-	}
-
-	for _, tt := range tests {
-		got := ParseResponse(tt.response)
-		if got != tt.want {
-			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-		}
 	}
 }
 

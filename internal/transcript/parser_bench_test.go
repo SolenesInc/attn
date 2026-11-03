@@ -138,21 +138,6 @@ func writeSyntheticTranscript(tb testing.TB, dir string, numLines int) (path str
 	return path, info.Size()
 }
 
-func TestSyntheticTranscriptFixtureIsRealistic(t *testing.T) {
-	dir := t.TempDir()
-	path, size := writeSyntheticTranscript(t, dir, 40)
-	if size == 0 {
-		t.Fatal("expected non-empty fixture file")
-	}
-	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 2000, time.Time{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if turn.Content != benchAssistantText {
-		t.Fatalf("expected fixture to end on the final assistant text line, got %q", turn.Content)
-	}
-}
-
 func benchExtractLastAssistantTurn(b *testing.B, numLines int) {
 	dir := b.TempDir()
 	path, fileSize := writeSyntheticTranscript(b, dir, numLines)

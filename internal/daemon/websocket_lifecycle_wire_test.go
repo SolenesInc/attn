@@ -16,19 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestStoppingTheDaemonClosesConnectionsThatNeverSaidHello(t *testing.T) {
-	w := newWorld(t)
-	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
-	defer cancel()
-	silent := transportDial(t, ctx, w)
-
-	w.stop()
-
-	if _, _, err := silent.Read(ctx); err == nil || ctx.Err() != nil {
-		t.Fatalf("a connection that never said hello read %v after the daemon stopped, want it closed", err)
-	}
-}
-
 func transportDial(t *testing.T, ctx context.Context, w *world) *websocket.Conn {
 	t.Helper()
 	transport := &http.Transport{

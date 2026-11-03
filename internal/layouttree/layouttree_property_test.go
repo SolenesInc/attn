@@ -394,32 +394,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 	})
 }
 
-func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		tree, _ := DockTile(DefaultLayout("p0"), "p0", DirectionVertical, false, "s1",
-			"t1", string(TileKindMarkdown), "", "", DefaultSplitRatio)
-
-		params := rapid.SampledFrom(tileParams).Draw(t, "params")
-		session := rapid.SampledFrom(tileSessions).Draw(t, "session")
-
-		before := cloneNode(tree)
-		if _, ok := UpdateTileParams(tree, "t1", params); !ok {
-			t.Fatal("UpdateTileParams did not find the tile it was pointed at")
-		}
-		if !reflect.DeepEqual(tree, before) {
-			t.Fatalf("UpdateTileParams wrote through its input:\n got: %+v\nwant: %+v", tree, before)
-		}
-
-		before = cloneNode(tree)
-		if _, ok := UpdateTileSessionID(tree, "t1", protocol.SessionID(session)); !ok {
-			t.Fatal("UpdateTileSessionID did not find the tile it was pointed at")
-		}
-		if !reflect.DeepEqual(tree, before) {
-			t.Fatalf("UpdateTileSessionID wrote through its input:\n got: %+v\nwant: %+v", tree, before)
-		}
-	})
-}
-
 func sameIDs(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

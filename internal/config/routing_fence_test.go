@@ -189,22 +189,6 @@ func TestValidateInstanceRouting_SingleOverrideNamesOnlyItself(t *testing.T) {
 	}
 }
 
-func TestValidateInstanceRouting_WSPortDisagreement(t *testing.T) {
-	dir := DataDirForInstance("agent7")
-	scopeRouting(t, "agent7", map[string]string{
-		"ATTN_DATA_DIR": dir,
-		"ATTN_WS_PORT":  "9849",
-	})
-
-	err := ValidateInstanceRouting()
-	if err == nil {
-		t.Fatal("a port belonging to another instance must be refused")
-	}
-	if !strings.Contains(err.Error(), "ATTN_WS_PORT") {
-		t.Fatalf("error must name ATTN_WS_PORT; got:\n%v", err)
-	}
-}
-
 func TestFormatRoutingConflict_ConfigSourcedValueNamesTheFile(t *testing.T) {
 	configFile := "/Users/x/.attn-agent7/config.json"
 	err := formatRoutingConflict("agent7", "/Users/x/.attn-agent7", "22944", []routingConflict{

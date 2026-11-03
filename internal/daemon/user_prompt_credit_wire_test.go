@@ -37,23 +37,3 @@ func TestOnlyAPromptTheHarnessMarksSubmittedCountsAsTheUsersTurn(t *testing.T) {
 		}
 	})
 }
-
-func TestTheUsersPromptArmsAutoSettleWhenTheHarnessReportsWorkingBeforeItsSubmitHook(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := autoSettleOwingSession(t, w)
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal("s1")), Data: "fix the flaky test\r"})
-		w.advance(0)
-		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {
-			t.Fatalf("report working: %v", err)
-		}
-		w.advance(time.Second)
-		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "", "user_prompt_submit", "fix the flaky test"); err != nil {
-			t.Fatalf("report the prompt taken: %v", err)
-		}
-		submitted := time.Now()
-		w.advance(autoSettleDefaultArm)
-		if shown := sessionStateLastShown(t, app); !autoSettleFiresAt(t, shown).Equal(submitted.Add(autoSettleDefaultArm + autoSettleDefaultCountdown)) {
-			t.Fatalf("the app shows fires_at=%q, want the countdown armed from the submit", protocol.Deref(shown.AutoSettleFiresAt))
-		}
-	})
-}

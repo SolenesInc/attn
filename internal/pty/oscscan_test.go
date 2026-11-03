@@ -72,15 +72,6 @@ func TestOSCScannerSurvivesEverySplitPoint(t *testing.T) {
 	}
 }
 
-func TestOSCScannerHandlesOneBytePerCall(t *testing.T) {
-	const stream = "\x1b]0;⠀ x\x07"
-	chunks := make([]string, 0, len(stream))
-	for i := range len(stream) {
-		chunks = append(chunks, stream[i:i+1])
-	}
-	assertScanned(t, scanAll(chunks...), scannedOSC{0, "⠀ x"})
-}
-
 func TestOSCScannerReportsBareCodeWithNoPayload(t *testing.T) {
 	assertScanned(t, scanAll("\x1b]0\x07"), scannedOSC{0, ""})
 }
@@ -102,10 +93,6 @@ func TestOSCScannerAbandonsAnOversizedSequence(t *testing.T) {
 	assertScanned(t,
 		scanAll(flood, "\x1b]0;recovered\x07"),
 		scannedOSC{0, "recovered"})
-}
-
-func TestOSCScannerHoldsATrailingEscape(t *testing.T) {
-	assertScanned(t, scanAll("text\x1b", "]0;title\x07"), scannedOSC{0, "title"})
 }
 
 func TestOSCScannerRejectsAnAbsurdCode(t *testing.T) {

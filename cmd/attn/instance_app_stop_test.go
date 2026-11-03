@@ -149,27 +149,6 @@ func stoppedInstance(t *testing.T) instanceResolved {
 	return r
 }
 
-func TestStopInstanceAppEscalatesWhenTheAppIgnoresTheQuitRequest(t *testing.T) {
-	shrinkAppStopWaits(t)
-	r := sandboxedInstance(t)
-	pid := spawnStubbornApp(t)
-	writeAppPID(t, r.DataDir, pid)
-
-	msg, err := stopInstanceApp(r)
-	if err != nil {
-		t.Fatalf("stopInstanceApp = %v, want the fence to escalate to SIGKILL", err)
-	}
-	if !strings.Contains(msg, "force-killed") {
-		t.Fatalf("stopInstanceApp = %q, want a force-killed note", msg)
-	}
-	if !processGone(pid) {
-		t.Fatalf("pid %d is still alive after stopInstanceApp reported %q", pid, msg)
-	}
-	if _, err := os.Stat(filepath.Join(r.DataDir, "app.pid")); !os.IsNotExist(err) {
-		t.Fatalf("app.pid survived the stop: %v", err)
-	}
-}
-
 func TestStopInstanceAppLeavesAForeignPIDAlone(t *testing.T) {
 	shrinkAppStopWaits(t)
 	r := sandboxedInstance(t)

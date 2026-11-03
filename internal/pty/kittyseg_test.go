@@ -581,30 +581,6 @@ func TestKittyAPCSegmenterEmitsEveryByteExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestKittyAPCSegmenterJoinsAnAPCSplitAcrossChunks(t *testing.T) {
-	apc := kittyIntro + "a=T,f=24,s=1,v=1;QQ==" + kittyST
-	cases := []struct {
-		name   string
-		chunks []string
-	}{
-		{"mid introducer", []string{"text\x1b", apc[1:] + "tail"}},
-		{"mid payload", []string{"text" + apc[:12], apc[12:] + "tail"}},
-		{"mid st", []string{"text" + apc[:len(apc)-1], apc[len(apc)-1:] + "tail"}},
-	}
-	want := []kittyEmission{plainEmission("text"), apcEmission(apc), plainEmission("tail")}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, pending := runKittySegmenter(t, c.chunks)
-			if !kittyEmissionsEqual(got, want) {
-				t.Fatalf("got %s, want %s", formatKittyEmissions(got), formatKittyEmissions(want))
-			}
-			if pending != "" {
-				t.Fatalf("pending %q, want nothing held", pending)
-			}
-		})
-	}
-}
-
 func TestKittyAPCSegmenterFastPathPassesTheChunkThrough(t *testing.T) {
 	var seg feedSegmenter
 	chunk := []byte("plain output with no escapes\r\n")

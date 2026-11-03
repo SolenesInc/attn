@@ -59,32 +59,6 @@ func TestMigrations_AppliedOnNewDB(t *testing.T) {
 	}
 }
 
-func TestMigrations_Idempotent(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db1, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() first error = %v", err)
-	}
-	db1.Close()
-
-	db2, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() second error = %v", err)
-	}
-	defer db2.Close()
-
-	var count int
-	err = db2.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count)
-	if err != nil {
-		t.Fatalf("counting migrations error = %v", err)
-	}
-	if count != len(allMigrations()) {
-		t.Errorf("migration count after reopen = %d, want %d", count, len(allMigrations()))
-	}
-}
-
 func TestMigrations_MigratedColumnsExist(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")

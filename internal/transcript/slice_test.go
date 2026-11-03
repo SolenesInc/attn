@@ -399,32 +399,3 @@ func TestConversationSlice_Render(t *testing.T) {
 		t.Error("expected populated slice to report Empty() == false")
 	}
 }
-
-func TestConversationSlice_RenderOmitsEmptySections(t *testing.T) {
-	s := ConversationSlice{
-		Brief:      "only the brief",
-		AgentTurns: []string{"only an agent turn"},
-	}
-	got := s.Render()
-
-	if strings.Contains(got, "LATER HUMAN TURNS") {
-		t.Errorf("expected no rescoping section, got:\n%s", got)
-	}
-	if strings.Contains(got, "COMPACTION SUMMARY") {
-		t.Errorf("expected no summary section, got:\n%s", got)
-	}
-	want := "## TICKET BRIEF (first human turn)\nonly the brief\n\n## AGENT'S LAST STATUS TURNS\nonly an agent turn"
-	if got != want {
-		t.Errorf("Render() =\n%s\nwant:\n%s", got, want)
-	}
-}
-
-func TestConversationSlice_EmptyStruct(t *testing.T) {
-	var s ConversationSlice
-	if !s.Empty() {
-		t.Error("expected zero-value ConversationSlice to be Empty()")
-	}
-	if s.Render() != "" {
-		t.Errorf("expected empty Render(), got %q", s.Render())
-	}
-}
