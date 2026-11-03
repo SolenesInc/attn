@@ -133,6 +133,7 @@ import {
   shouldReportApplicationMouseMove,
   viewportBufferStart,
   viewportRowFromBufferRow,
+  scrolledViewportCells,
   type ApplicationSelectionAnchor,
 } from '../utils/ghosttyScroll';
 import {
@@ -764,16 +765,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     const getViewportCells = useCallback((): GhosttyCell[] | undefined => {
       const terminal = terminalRef.current;
-      if (!terminal || viewportOffsetRef.current === 0) return undefined;
-      const active = terminal.getViewport();
-      const history = terminal.getScrollbackLength();
-      const start = viewportBufferStart(history, viewportOffsetRef.current);
-      const cells: GhosttyCell[] = [];
-      for (let row = start; row < start + terminal.rows; row += 1) {
-        const line = row < history ? terminal.getScrollbackLine(row) : active.slice((row - history) * terminal.cols, (row - history + 1) * terminal.cols);
-        if (line) cells.push(...line);
-      }
-      return cells;
+      return terminal ? scrolledViewportCells(terminal, viewportOffsetRef.current) : undefined;
     }, []);
 
     const renderSurface = useCallback((force = false) => {

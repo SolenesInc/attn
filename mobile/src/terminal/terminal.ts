@@ -8,7 +8,17 @@ import {
   getTerminalAnsiPalette,
   getTerminalTheme,
 } from '@attn/utils/terminalSizing'
+import { applicationWheelInput, scrolledViewportCells } from '@attn/utils/ghosttyScroll'
 import { terminalCreditBytes, type Link, type OpenTerminal, type TerminalRequest } from '../link'
+import {
+  afterOutput,
+  atBottom,
+  drag,
+  historyRows,
+  settle,
+  type ScrollFrame,
+  type ScrollPosition,
+} from './scroll'
 
 export const terminalKeys = ['Esc', 'Up', 'Down', 'Enter', '1', '2', '3', 'Tab', 'CtrlC', 'ShiftTab'] as const
 export type TerminalKey = (typeof terminalKeys)[number]
@@ -59,8 +69,8 @@ export const mountTerminal = (
   let owed = 0
   let scale = 1
   let panX = 0
-  let panY = 0
-  let followBottom = true
+  let position: ScrollPosition = atBottom
+  let shownHistory = 0
   let requested: TerminalRequest = { cols: 0, rows: 0 }
   let stableWidth = 0
   let stableHeight = 0
@@ -68,7 +78,8 @@ export const mountTerminal = (
   const paint = () => {
     rafId = null
     if (!terminal || !renderer) return
-    renderer.render(terminal, forcePaint)
+    place()
+    renderer.render(terminal, forcePaint, scrolledViewportCells(terminal, shownHistory), null, shownHistory)
     forcePaint = false
     if (owed >= returnCreditAt) {
       open?.grant(owed)
@@ -84,20 +95,36 @@ export const mountTerminal = (
     width: (terminal?.cols ?? 0) * (renderer?.cellWidth ?? 0),
     height: (terminal?.rows ?? 0) * (renderer?.cellHeight ?? 0),
   })
-  const place = () => {
+  const scrollFrame = (): ScrollFrame | null => {
     const { width, height } = canvasSize()
-    if (!width) return
+    if (!terminal || !renderer || !width) return null
     scale = viewport.clientWidth / width
+    return {
+      rowHeight: renderer.cellHeight,
+      overflow: Math.max(0, height - viewport.clientHeight / scale),
+      history: terminal.getScrollbackLength(),
+      programScrolls: terminal.hasMouseTracking() || terminal.isAlternateScreen(),
+    }
+  }
+  const place = () => {
+    const frame = scrollFrame()
+    if (!frame) return
+    const { width, height } = canvasSize()
+    position = settle(position, frame)
     const shownWidth = width * scale
-    const shownHeight = height * scale
     panX =
       shownWidth <= viewport.clientWidth ? 0 : Math.min(0, Math.max(viewport.clientWidth - shownWidth, panX))
-    const bottom = viewport.clientHeight - shownHeight
-    panY = shownHeight <= viewport.clientHeight || followBottom ? bottom : Math.min(0, Math.max(bottom, panY))
+    const gap = viewport.clientHeight - height * scale
+    const panY = Math.min(gap + position.fromBottom * scale, Math.max(0, gap))
     stage.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`
+    const rows = historyRows(position, frame)
+    if (rows !== shownHistory) {
+      shownHistory = rows
+      schedulePaint(true)
+    }
   }
   const anchorBottom = () => {
-    followBottom = true
+    position = atBottom
     place()
   }
 
@@ -149,8 +176,12 @@ export const mountTerminal = (
         onStatus('')
       },
       output: (data) => {
-        terminal?.write(data)
+        if (!terminal) return
+        const historyBefore = terminal.getScrollbackLength()
+        terminal.write(data)
         owed += data.length
+        const frame = position.fromBottom === 0 ? null : scrollFrame()
+        if (frame) position = afterOutput(position, frame, historyBefore)
         schedulePaint()
       },
       resized: resizeModel,
@@ -174,14 +205,33 @@ export const mountTerminal = (
   const down = (event: PointerEvent) => {
     dragFrom = { x: event.clientX, y: event.clientY }
   }
+  const wheelAt = (event: PointerEvent, lines: number) => {
+    if (!terminal) return
+    const box = canvas.getBoundingClientRect()
+    const cell = (offset: number, size: number, count: number) =>
+      Math.min(count, Math.max(1, Math.floor((offset / size) * count) + 1))
+    send(
+      applicationWheelInput(
+        lines,
+        cell(event.clientX - box.left, box.width, terminal.cols),
+        cell(event.clientY - box.top, box.height, terminal.rows),
+        terminal.hasMouseTracking(),
+        terminal.getMode(1006),
+      ),
+    )
+  }
   const move = (event: PointerEvent) => {
     if (!dragFrom) return
+    const frame = scrollFrame()
     panX += event.clientX - dragFrom.x
-    panY += event.clientY - dragFrom.y
+    const down = (event.clientY - dragFrom.y) / scale
     dragFrom = { x: event.clientX, y: event.clientY }
-    followBottom = false
+    if (frame) {
+      const dragged = drag(position, frame, down)
+      position = dragged.position
+      if (dragged.wheelLines !== 0) wheelAt(event, dragged.wheelLines)
+    }
     place()
-    followBottom = panY <= viewport.clientHeight - canvasSize().height * scale
   }
   const up = () => {
     dragFrom = null
