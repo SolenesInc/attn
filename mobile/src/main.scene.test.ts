@@ -544,6 +544,29 @@ describe('answering an agent from the phone', () => {
     )
   })
 
+  it('closes the keyboard when the person taps the terminal', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given({ ...withSession(4), keyboardHeight: 336 }),
+      Scene.click(Scene.text('Land the fix')),
+      keepFocus,
+      Scene.Mount.resolve(TerminalMount, Message.TappedTerminal()),
+      Scene.Command.expectHas(HideKeyboard),
+      Scene.Command.resolve(HideKeyboard, Message.CompletedCommand()),
+    )
+  })
+
+  it('ignores a tap on the terminal while the keyboard is closed', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(withSession(4)),
+      Scene.click(Scene.text('Land the fix')),
+      keepFocus,
+      Scene.Mount.resolve(TerminalMount, Message.TappedTerminal()),
+      Scene.Command.expectNone(),
+    )
+  })
+
   it('says why when the home is too old to open terminals', () => {
     Scene.scene(
       { update, view },

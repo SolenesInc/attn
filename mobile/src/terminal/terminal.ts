@@ -48,6 +48,7 @@ export const mountTerminal = (
   link: Link,
   terminalId: string,
   onStatus: (text: string) => void,
+  onTap: () => void,
 ): (() => void) => {
   let disposed = false
   const viewport = document.createElement('div')
@@ -240,6 +241,7 @@ export const mountTerminal = (
   viewport.addEventListener('pointermove', move)
   viewport.addEventListener('pointerup', up)
   viewport.addEventListener('pointercancel', up)
+  viewport.addEventListener('click', onTap)
   viewport.addEventListener('dblclick', anchorBottom)
 
   const handle: MountedTerminal = {

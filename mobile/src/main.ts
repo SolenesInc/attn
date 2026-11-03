@@ -204,6 +204,7 @@ export const Message = defineMessageUnion({
   StartedLink: { pairingId: Schema.String, link: Schema.Finite },
   ClickedKey: { key: Schema.Literals(terminalKeys) },
   ClickedHideKeyboard: {},
+  TappedTerminal: {},
   ChangedKeyboard: { height: Schema.Finite },
   ChangedViewport: { height: Schema.Finite },
   ChangedTerminalStatus: { text: Schema.String },
@@ -478,7 +479,7 @@ const SendKey = Command.define('SendKey', {
     ),
 })
 
-// iOS gives a web view no gesture that closes the keyboard, so the keys bar carries one.
+// iOS gives a web view no gesture that closes the keyboard, so Hide and a tap on the terminal carry one.
 export const HideKeyboard = Command.define('HideKeyboard', {
   messages: [Message.CompletedCommand],
   execute: Effect.promise(async () => {
@@ -1067,6 +1068,7 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       return { model, commands: [SendKey({ key, homeName: home?.pairing.homeName ?? 'the home' })] }
     },
     ClickedHideKeyboard: () => ({ model, commands: [HideKeyboard()] }),
+    TappedTerminal: () => ({ model, commands: model.keyboardHeight > 0 ? [HideKeyboard()] : [] }),
     ChangedKeyboard: ({ height }) => ({ model: modifyFields(model, { keyboardHeight: () => height }) }),
     ChangedViewport: ({ height }) => ({
       model: model.keyboardHeight === 0 ? modifyFields(model, { fullHeight: () => height }) : model,
@@ -1628,9 +1630,9 @@ const pairingsView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 export const TerminalMount = Mount.defineStream('TerminalMount', {
   args: { pairingId: Schema.String, terminalId: Schema.String, link: Schema.Finite },
-  messages: [Message.ChangedTerminalStatus],
+  messages: [Message.ChangedTerminalStatus, Message.TappedTerminal],
   execute: ({ element, pairingId, terminalId }) =>
-    Stream.callback<typeof Message.ChangedTerminalStatus.Type>((queue) =>
+    Stream.callback<typeof Message.ChangedTerminalStatus.Type | typeof Message.TappedTerminal.Type>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
           const link = liveLinks.get(pairingId)
@@ -1639,7 +1641,9 @@ export const TerminalMount = Mount.defineStream('TerminalMount', {
             status('This home is not connected.')
             return () => {}
           }
-          return mountTerminal(element as HTMLElement, link, terminalId, status)
+          return mountTerminal(element as HTMLElement, link, terminalId, status, () =>
+            Queue.offerUnsafe(queue, Message.TappedTerminal()),
+          )
         }),
         (dispose) => Effect.sync(dispose),
       ).pipe(Effect.flatMap(() => Effect.never)),
