@@ -105,6 +105,7 @@ export function useDesktopController(
     isActiveSession,
     isSessionViewVisible = true,
     terminalsLive = true,
+    attachOnlyDrawn = false,
     eventRouter,
     onSplitPane,
     onClosePane,
@@ -197,62 +198,6 @@ export function useDesktopController(
     activeAgentPaneIdRef.current = activeAgentPaneId;
   }, [terminalState.layoutTree, activeLeafId, activeAgentPaneId]);
 
-  const runtimePanes = useMemo(() => {
-    const panes = [];
-    for (const pane of agentPanes) {
-      if (pane.status && pane.status !== 'ready') continue;
-      const paneSession = sessionById.get(pane.sessionId);
-      if (!paneSession) continue;
-      panes.push({
-        paneId: pane.id,
-        runtimeId: pane.runtimeId,
-        paneKind: 'agent' as const,
-        agent: paneSession?.agent ?? 'shell',
-        sessionId: pane.sessionId,
-        testSessionId: pane.sessionId,
-        state: paneSession?.state,
-        reach: paneSession?.reach,
-        state_reason: paneSession?.state_reason,
-        terminalExit: paneSession?.terminalExit,
-      });
-    }
-    return panes;
-  }, [agentPanes, sessionById]);
-
-  const runtime = useGhosttyPaneRuntime(
-    runtimePanes,
-    activeAgentPaneId,
-    eventRouter,
-    isActiveSessionRef,
-    terminalsLive,
-  );
-  const setTerminalHandle = runtime.setTerminalHandle;
-  const terminalRefCallbacksRef = useRef(
-    new Map<string, (handle: GhosttyTerminalHandle | null) => void>(),
-  );
-  const terminalRefForPane = useCallback(
-    (paneId: string) => {
-      const existing = terminalRefCallbacksRef.current.get(paneId);
-      if (existing) return existing;
-      const callback = (handle: GhosttyTerminalHandle | null) => {
-        setTerminalHandle(paneId, handle);
-      };
-      terminalRefCallbacksRef.current.set(paneId, callback);
-      return callback;
-    },
-    [setTerminalHandle],
-  );
-  const fitPane = runtime.fitPane;
-  const scheduleTerminalFitAfterResize = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      for (const pane of runtimePanes) {
-        fitPane(pane.paneId);
-      }
-    });
-  }, [fitPane, runtimePanes]);
-  const getPaneSize = runtime.getPaneSize;
-  const setPaneSurfaceReleased = runtime.setPaneSurfaceReleased;
-  const paneOverflowsContainer = runtime.paneOverflowsContainer;
   const splitLayoutActive = terminalState.layoutTree?.type === 'split';
   const showPaneHeader = paneIds.length + tileLeafById.size > 1;
   const leafIdSet = useMemo(() => new Set(leafIds), [leafIds]);
@@ -427,6 +372,70 @@ export function useDesktopController(
   }, [panePaths, renderedPaneBounds]);
   const renderedPaneIds = useMemo(() => Array.from(panePaths.keys()), [panePaths]);
   const renderedPaneIdsKey = renderedPaneIds.join('|');
+  const terminalPaneIds = useMemo(
+    () => new Set(renderedPaneIds.filter((paneId) => effectivePaneId || !suspendedLeafIds.has(paneId))),
+    [effectivePaneId, renderedPaneIds, suspendedLeafIds],
+  );
+  const desktopDrawn = isActiveSession && isSessionViewVisible;
+  const runtimePanes = useMemo(() => {
+    const panes = [];
+    for (const pane of agentPanes) {
+      if (pane.status && pane.status !== 'ready') continue;
+      if (!terminalPaneIds.has(pane.id)) continue;
+      const paneSession = sessionById.get(pane.sessionId);
+      if (!paneSession) continue;
+      panes.push({
+        paneId: pane.id,
+        runtimeId: pane.runtimeId,
+        paneKind: 'agent' as const,
+        agent: paneSession?.agent ?? 'shell',
+        sessionId: pane.sessionId,
+        testSessionId: pane.sessionId,
+        state: paneSession?.state,
+        reach: paneSession?.reach,
+        state_reason: paneSession?.state_reason,
+        terminalExit: paneSession?.terminalExit,
+        drawn: desktopDrawn,
+      });
+    }
+    return panes;
+  }, [agentPanes, desktopDrawn, sessionById, terminalPaneIds]);
+
+  const runtime = useGhosttyPaneRuntime(
+    runtimePanes,
+    activeAgentPaneId,
+    eventRouter,
+    isActiveSessionRef,
+    terminalsLive,
+    attachOnlyDrawn,
+  );
+  const setTerminalHandle = runtime.setTerminalHandle;
+  const terminalRefCallbacksRef = useRef(
+    new Map<string, (handle: GhosttyTerminalHandle | null) => void>(),
+  );
+  const terminalRefForPane = useCallback(
+    (paneId: string) => {
+      const existing = terminalRefCallbacksRef.current.get(paneId);
+      if (existing) return existing;
+      const callback = (handle: GhosttyTerminalHandle | null) => {
+        setTerminalHandle(paneId, handle);
+      };
+      terminalRefCallbacksRef.current.set(paneId, callback);
+      return callback;
+    },
+    [setTerminalHandle],
+  );
+  const fitPane = runtime.fitPane;
+  const scheduleTerminalFitAfterResize = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      for (const pane of runtimePanes) {
+        fitPane(pane.paneId);
+      }
+    });
+  }, [fitPane, runtimePanes]);
+  const getPaneSize = runtime.getPaneSize;
+  const setPaneSurfaceReleased = runtime.setPaneSurfaceReleased;
+  const paneOverflowsContainer = runtime.paneOverflowsContainer;
   const suspendedLeafIdsKey = [...suspendedLeafIds].sort().join('|');
   const prevPaneGeometryRef = useRef(paneGeometry);
   const sessionVisibleRef = useRef(false);

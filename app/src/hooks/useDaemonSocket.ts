@@ -818,7 +818,12 @@ export function useDaemonSocket({
     for (const desktop of useProfilesStore.getState().desktops) {
       for (const pane of desktop.panes) attachableIDs.add(pane.runtime_id);
     }
-    ptyTransportRef.current.pruneDetachedRuntimes(attachableIDs);
+    const ws = wsRef.current;
+    for (const runtimeId of ptyTransportRef.current.pruneDetachedRuntimes(attachableIDs)) {
+      if (ws?.readyState !== WebSocket.OPEN) break;
+      recordPtyCommand('detach_session', runtimeId);
+      ws.send(JSON.stringify({ cmd: 'detach_session', id: runtimeId }));
+    }
   }, []);
 
   const rejectPendingByPredicate = useCallback((predicate: (key: string) => boolean, error: Error) => {
@@ -1943,12 +1948,11 @@ export function useDaemonSocket({
           case 'runtime_respawned':
             // The daemon replaced the runtime in place; restore its new stream and screen.
             if (data.id) {
-              if (
-                pendingActionsRef.current.has(`pty_attach_${data.id}`)
-                && ptyTransportRef.current.getAttachContext(data.id)?.policy === 'revive'
-              ) break;
-              recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
+              const attaching = pendingActionsRef.current.has(`pty_attach_${data.id}`);
+              if (attaching && ptyTransportRef.current.getAttachContext(data.id)?.policy === 'revive') break;
               emitPtyEvent({ event: 'reset', id: data.id, reason: 'respawn' });
+              if (!attaching && !ptyTransportRef.current.hasAttachedRuntime(data.id)) break;
+              recordDiag({ kind: 'attach', session: data.id, reason: 'runtime_respawned' });
               ptyTransportRef.current.clearRuntimeStream(data.id);
               ws.send(JSON.stringify({ cmd: 'attach_session', id: data.id, attach_policy: 'relaunch_restore' }));
             }
@@ -2551,12 +2555,12 @@ export function useDaemonSocket({
   }, [sendAttachSession]);
 
   const sendDetachSession = useCallback((id: string) => {
+    ptyTransportRef.current.clearRuntime(id);
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (pendingActionsRef.current.has(`pty_attach_${id}`)) {
       canceledAttachIdsRef.current.add(id);
     }
-    ptyTransportRef.current.clearRuntime(id);
     recordPtyCommand('detach_session', id);
     ws.send(JSON.stringify({ cmd: 'detach_session', id }));
   }, []);

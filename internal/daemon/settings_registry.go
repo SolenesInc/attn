@@ -181,7 +181,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingTheme), scope: daemonScope, description: "App color theme: dark, light or system.", validate: func(d *Daemon, key, value string) error {
 		return validateTheme(value)
 	}},
-	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host: true or false.", validate: func(d *Daemon, key, value string) error {
+	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
 	{key: string(SettingAutoApproveEnabled), scope: daemonScope, description: "Auto-approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {

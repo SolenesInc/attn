@@ -988,7 +988,7 @@ describe('App terminal runtime', () => {
     expect([lines?.[0], lines?.[lines.length - 1], lines?.length]).toEqual(['chunk-9', 'chunk-520', 512]);
   });
 
-  it('re-attaches a pane whose terminal remounts when the maximized pane is restored', async () => {
+  it('detaches a pane hidden by a maximized pane and re-attaches it when restored', async () => {
     const { daemon } = await openSplit((script) => {
       script.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     });
@@ -1001,11 +1001,12 @@ describe('App terminal runtime', () => {
     expect(attachesAndDetaches(daemon)).toEqual([
       { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
       { cmd: 'attach_session', id: 's2', attach_policy: 'same_app_remount' },
+      { cmd: 'detach_session', id: 's2' },
       { cmd: 'attach_session', id: 's2', attach_policy: 'same_app_remount' },
     ]);
   });
 
-  it('keeps streaming to a remounted pane whose re-attach failed', async () => {
+  it('shows a failed re-attach in a pane restored from behind a maximized pane', async () => {
     let s2Attaches = 0;
     const { daemon } = await openSplit((script) => {
       script.on('attach_session', ({ id }) => (
@@ -1019,11 +1020,7 @@ describe('App terminal runtime', () => {
     pressShortcut('terminal.toggleMaximize');
     await daemon.idle();
 
-    daemon.emit({ event: 'pty_output', id: 's2', seq: 1, data: btoa('still streaming') });
-    await daemon.idle();
-
-    expect(visibleText('s2')).toBe('[Failed to attach PTY: Error: daemon busy]\nstill streaming');
-    expect(daemon.sentOf('detach_session')).toEqual([]);
+    expect(visibleText('s2')).toContain('[Failed to attach PTY: Error: daemon busy]');
   });
 
   it('shows a failed revive in the terminal and leaves retrying to the user', async () => {

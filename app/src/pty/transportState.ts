@@ -7,7 +7,7 @@ export interface PtyTransportState<TAttachContext> {
   clearRuntime(id: string): void;
   clearRuntimeStream(id: string): void;
   clearStreamCaches(): void;
-  pruneDetachedRuntimes(attachableIds: Set<string>): void;
+  pruneDetachedRuntimes(attachableIds: Set<string>): string[];
   getLastSeq(id: string): number | undefined;
   setLastSeq(id: string, seq: number): void;
   getQueuedAttachOutputs(id: string): PendingAttachOutputChunk[] | undefined;
@@ -54,14 +54,14 @@ export function createPtyTransportState<TAttachContext>(): PtyTransportState<TAt
     },
 
     pruneDetachedRuntimes(attachableIds: Set<string>) {
-      for (const runtimeId of Array.from(attachedRuntimeIds)) {
-        if (!attachableIds.has(runtimeId)) {
-          attachedRuntimeIds.delete(runtimeId);
-          runtimeSeqById.delete(runtimeId);
-          pendingAttachOutputsById.delete(runtimeId);
-          attachContextById.delete(runtimeId);
-        }
+      const pruned = Array.from(attachedRuntimeIds).filter((runtimeId) => !attachableIds.has(runtimeId));
+      for (const runtimeId of pruned) {
+        attachedRuntimeIds.delete(runtimeId);
+        runtimeSeqById.delete(runtimeId);
+        pendingAttachOutputsById.delete(runtimeId);
+        attachContextById.delete(runtimeId);
       }
+      return pruned;
     },
 
     getLastSeq(id: string) {

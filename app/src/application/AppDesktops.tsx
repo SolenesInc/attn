@@ -58,7 +58,7 @@ export function AppDesktops() {
   const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
-  const { daemonSessions } = useAppInputs();
+  const { daemonSessions, settings } = useAppInputs();
   const { showError } = useAppErrorsContext();
   const allSessions = useSessionStore((state) => state.sessions);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -179,6 +179,7 @@ export function AppDesktops() {
           isActiveSession={isCurrent && view !== 'dashboard'}
           isSessionViewVisible={view === 'session'}
           terminalsLive
+          attachOnlyDrawn={settings.pty_shared_host_enabled === 'true'}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {
             void createSplitSession('shell', direction, targetPaneId);

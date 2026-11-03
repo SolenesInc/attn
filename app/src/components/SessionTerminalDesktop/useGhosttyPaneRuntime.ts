@@ -27,6 +27,7 @@ export interface PaneRuntimeSpec {
   reach?: TerminalReach;
   state_reason?: string;
   terminalExit?: import('../../types/generated').TerminalExit;
+  drawn: boolean;
 }
 
 export type TerminalReach = `${OutpostReach}`;
@@ -73,6 +74,7 @@ export function useGhosttyPaneRuntime(
   eventRouter: PaneRuntimeEventRouter,
   isActiveSessionRef: { current: boolean },
   terminalsLive = true,
+  attachOnlyDrawn = false,
 ): GhosttyPaneRuntime {
   const panesRef = useRef(panes);
   const handlesRef = useRef(new Map<string, GhosttyTerminalHandle>());
@@ -95,8 +97,13 @@ export function useGhosttyPaneRuntime(
   const focusRetryTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const terminalsLiveRef = useRef(terminalsLive);
   const attachHolderRef = useRef<object>({});
+  const attachOnlyDrawnRef = useRef(attachOnlyDrawn);
   panesRef.current = panes;
   terminalsLiveRef.current = terminalsLive;
+  attachOnlyDrawnRef.current = attachOnlyDrawn;
+  const attachable = useCallback((pane: PaneRuntimeSpec | undefined) => (
+    reachable(pane) && (!attachOnlyDrawnRef.current || Boolean(pane?.drawn))
+  ), []);
 
   const paneFor = useCallback((paneId: string) => panesRef.current.find((pane) => pane.paneId === paneId), []);
   const flushPendingResize = useCallback((runtimeId: string) => {
@@ -120,103 +127,6 @@ export function useGhosttyPaneRuntime(
     }
     void ptyDetach({ id: runtimeId });
   }, []);
-
-  const deliverEvent = useCallback((paneId: string, event: PtyEventPayload) => {
-    const terminal = handlesRef.current.get(paneId);
-    if (!terminal) return;
-    const pane = paneFor(paneId);
-    if (pane && !reachable(pane)) return;
-    if (pane) {
-      readyRuntimesRef.current.add(pane.runtimeId);
-    }
-    switch (event.event) {
-      case 'data':
-        void terminal.write(decodePtyBytes(event.data), {
-          suppressResponses: event.suppressResponses,
-        });
-        break;
-      case 'restore_snapshot':
-        void terminal.restoreSnapshot(decodePtyBytes(event.data));
-        break;
-      case 'restore_fallback':
-        void terminal.write(decodePtyBytes(event.data), {
-          onlyIfRestoreRejected: true,
-          suppressResponses: event.suppressResponses,
-        });
-        break;
-      case 'local_resize':
-        void terminal.resizeLocal(
-          event.cols,
-          event.rows,
-          { restore: event.source === 'attach_restore' },
-        );
-        break;
-      case 'seed_blocks':
-        void terminal.seedBlocks(event.blocks);
-        break;
-      case 'placements':
-        void terminal.applyPlacements(event.id, event.seq, event.placements);
-        break;
-      case 'seed_placements':
-        void terminal.seedPlacements(event.id, event.placements);
-        break;
-      case 'attach_complete': {
-        if (event.running === false) {
-          stoppedRuntimesRef.current.add(event.id);
-          cancelRuntimeConnection(event.id);
-        } else {
-          stoppedRuntimesRef.current.delete(event.id);
-        }
-        const refit = event.restored || !pane || !connectingRef.current.has(pane.runtimeId);
-        if (event.running !== false && pane && terminalsLiveRef.current) {
-          runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
-          attachedRuntimesRef.current.add(pane.runtimeId);
-          flushPendingResize(pane.runtimeId);
-        }
-        void terminal.drain().then(() => {
-          if (isActiveSessionRef.current && refit) {
-            terminal.fit();
-          }
-        });
-        break;
-      }
-      case 'reset':
-        stoppedRuntimesRef.current.delete(event.id);
-        terminal.reset();
-        break;
-      case 'exit_screen':
-        stoppedRuntimesRef.current.add(event.id);
-        cancelRuntimeConnection(event.id);
-        terminal.reset();
-        if (event.cols > 0 && event.rows > 0) terminal.resizeLocal(event.cols, event.rows, { restore: true });
-        void terminal.write(new TextEncoder().encode(event.text.trimEnd().replace(/\r?\n/g, '\r\n')), { suppressResponses: true });
-        void terminal.drain().then(() => terminal.fit());
-        break;
-      case 'exit':
-        stoppedRuntimesRef.current.add(event.id);
-        cancelRuntimeConnection(event.id);
-        void terminal.write(`\r\n${formatExitNotice(event.code, event.signal)}\r\n`);
-        break;
-      case 'error':
-        void terminal.write(`\r\n[Error: ${event.error}]\r\n`);
-        break;
-      default:
-        break;
-    }
-  }, [cancelRuntimeConnection, flushPendingResize, isActiveSessionRef, paneFor]);
-
-  useEffect(() => {
-    const disposers = panes.map((pane) => eventRouter.registerBinding({
-      sessionId: pane.testSessionId,
-      paneId: pane.paneId,
-      runtimeId: pane.runtimeId,
-      onEvent: (event) => deliverEvent(pane.paneId, event),
-      isLive: () => terminalsLiveRef.current && reachable(paneFor(pane.paneId)) && handlesRef.current.has(pane.paneId),
-    }));
-    return () => {
-      disposers.forEach((dispose) => dispose());
-    };
-  }, [deliverEvent, eventRouter, paneFor, panes]);
 
   useEffect(() => {
     const desiredRuntimeIds = new Set(panes.map((pane) => pane.runtimeId));
@@ -270,14 +180,14 @@ export function useGhosttyPaneRuntime(
     handlesRef.current.delete(paneId);
   }, []);
 
-  const handleTerminalReady = useCallback((paneId: string) => async (terminal: GhosttyTerminalHandle) => {
+  const attachPane = useCallback(async (paneId: string, terminal: GhosttyTerminalHandle, respawned = false) => {
     handlesRef.current.set(paneId, terminal);
     const pane = paneFor(paneId);
-    if (!pane || !reachable(pane) || !terminalsLiveRef.current) return;
+    if (!pane || !attachable(pane) || !terminalsLiveRef.current) return;
     const terminalIsCurrent = () => (
       terminalsLiveRef.current
       && panesRef.current.some((entry) => (
-        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && reachable(entry)
+        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && attachable(entry)
       ))
       && handlesRef.current.get(paneId) === terminal
     );
@@ -293,7 +203,9 @@ export function useGhosttyPaneRuntime(
     const modelSize = terminal.getSize();
     if (!modelSize || !terminalIsCurrent()) return;
     const stopped = Boolean(pane.terminalExit) || pane.state_reason === 'process_exited';
-    const attachPolicy = stopped
+    const attachPolicy = respawned
+      ? 'relaunch_restore'
+      : stopped
       ? 'same_app_remount'
       : pane.state === 'recoverable'
         ? 'revive'
@@ -312,7 +224,7 @@ export function useGhosttyPaneRuntime(
     // A pane mounted while its session is inactive never measured its container, so its
     // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
-    const forceResizeBeforeAttach = !stopped && attachPolicy !== 'revive' && geometryMeasured;
+    const forceResizeBeforeAttach = !stopped && attachPolicy !== 'revive' && attachPolicy !== 'relaunch_restore' && geometryMeasured;
     const measuredResize = geometryMeasured ? pendingResizeRef.current.get(pane.runtimeId) : undefined;
     const attachResize = forceResizeBeforeAttach ? measuredResize : undefined;
     const size = measuredResize ?? modelSize;
@@ -320,6 +232,7 @@ export function useGhosttyPaneRuntime(
       pendingResizeRef.current.delete(pane.runtimeId);
     }
     runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
+    terminal.holdInput();
     const controller = new AbortController();
     const attachPromise = ptyAttach({
       args: {
@@ -370,15 +283,124 @@ export function useGhosttyPaneRuntime(
       if (connectingRef.current.get(pane.runtimeId)?.generation === attachGeneration) {
         connectingRef.current.delete(pane.runtimeId);
       }
+      if (!connectingRef.current.has(pane.runtimeId)) void terminal.releaseInput();
     }
-  }, [flushPendingResize, paneFor]);
+  }, [attachable, flushPendingResize, paneFor]);
+  const handleTerminalReady = useCallback(
+    (paneId: string) => (terminal: GhosttyTerminalHandle) => attachPane(paneId, terminal),
+    [attachPane],
+  );
 
-  const unavailableRuntimesRef = useRef(new Set<string>());
+  const deliverEvent = useCallback((paneId: string, event: PtyEventPayload) => {
+    const terminal = handlesRef.current.get(paneId);
+    if (!terminal) return;
+    const pane = paneFor(paneId);
+    if (pane && !reachable(pane)) return;
+    if (pane) {
+      readyRuntimesRef.current.add(pane.runtimeId);
+    }
+    switch (event.event) {
+      case 'data':
+        void terminal.write(decodePtyBytes(event.data), {
+          suppressResponses: event.suppressResponses,
+        });
+        break;
+      case 'restore_snapshot':
+        void terminal.restoreSnapshot(decodePtyBytes(event.data));
+        break;
+      case 'restore_fallback':
+        void terminal.write(decodePtyBytes(event.data), {
+          onlyIfRestoreRejected: true,
+          suppressResponses: event.suppressResponses,
+        });
+        break;
+      case 'local_resize':
+        void terminal.resizeLocal(
+          event.cols,
+          event.rows,
+          { restore: event.source === 'attach_restore' },
+        );
+        break;
+      case 'seed_blocks':
+        void terminal.seedBlocks(event.blocks);
+        break;
+      case 'placements':
+        void terminal.applyPlacements(event.id, event.seq, event.placements);
+        break;
+      case 'seed_placements':
+        void terminal.seedPlacements(event.id, event.placements);
+        break;
+      case 'attach_complete': {
+        if (event.running === false) {
+          stoppedRuntimesRef.current.add(event.id);
+          cancelRuntimeConnection(event.id);
+        } else {
+          stoppedRuntimesRef.current.delete(event.id);
+        }
+        const refit = event.restored || !pane || !connectingRef.current.has(pane.runtimeId);
+        if (event.running !== false && pane && terminalsLiveRef.current && attachable(pane)) {
+          runtimeAttachHolds.hold(pane.runtimeId, attachHolderRef.current);
+          attachedRuntimesRef.current.add(pane.runtimeId);
+          flushPendingResize(pane.runtimeId);
+        }
+        void terminal.drain().then(() => {
+          if (isActiveSessionRef.current && refit) {
+            terminal.fit();
+          }
+        });
+        break;
+      }
+      case 'reset':
+        stoppedRuntimesRef.current.delete(event.id);
+        terminal.reset();
+        if (
+          event.reason === 'respawn' && pane && terminalsLiveRef.current && attachable(pane)
+          && !runtimeAttachHolds.holds(pane.runtimeId, attachHolderRef.current)
+        ) {
+          void attachPane(paneId, terminal, true);
+        }
+        break;
+      case 'exit_screen':
+        stoppedRuntimesRef.current.add(event.id);
+        cancelRuntimeConnection(event.id);
+        terminal.reset();
+        if (event.cols > 0 && event.rows > 0) terminal.resizeLocal(event.cols, event.rows, { restore: true });
+        void terminal.write(new TextEncoder().encode(event.text.trimEnd().replace(/\r?\n/g, '\r\n')), { suppressResponses: true });
+        void terminal.drain().then(() => terminal.fit());
+        break;
+      case 'exit':
+        stoppedRuntimesRef.current.add(event.id);
+        cancelRuntimeConnection(event.id);
+        void terminal.write(`\r\n${formatExitNotice(event.code, event.signal)}\r\n`);
+        break;
+      case 'error':
+        void terminal.write(`\r\n[Error: ${event.error}]\r\n`);
+        break;
+      default:
+        break;
+    }
+  }, [attachPane, attachable, cancelRuntimeConnection, flushPendingResize, isActiveSessionRef, paneFor]);
+
   useEffect(() => {
-    const previous = unavailableRuntimesRef.current;
-    unavailableRuntimesRef.current = new Set(panes.filter((pane) => !reachable(pane)).map((pane) => pane.runtimeId));
+    const disposers = panes.map((pane) => eventRouter.registerBinding({
+      sessionId: pane.testSessionId,
+      paneId: pane.paneId,
+      runtimeId: pane.runtimeId,
+      onEvent: (event) => deliverEvent(pane.paneId, event),
+      isLive: () => terminalsLiveRef.current && reachable(paneFor(pane.paneId)) && handlesRef.current.has(pane.paneId),
+    }));
+    return () => {
+      disposers.forEach((dispose) => dispose());
+    };
+  }, [deliverEvent, eventRouter, paneFor, panes]);
+
+
+  const unattachableRuntimesRef = useRef(new Set<string>());
+  useEffect(() => {
+    const previous = unattachableRuntimesRef.current;
+    unattachableRuntimesRef.current = new Set(panes.filter((pane) => !attachable(pane)).map((pane) => pane.runtimeId));
     for (const pane of panes) {
-      if (!reachable(pane)) {
+      if (!attachable(pane)) {
         if (!previous.has(pane.runtimeId)) cancelRuntimeConnection(pane.runtimeId);
       } else if (previous.has(pane.runtimeId) && terminalsLive) {
         const terminal = handlesRef.current.get(pane.paneId);
@@ -387,7 +409,7 @@ export function useGhosttyPaneRuntime(
         }
       }
     }
-  }, [cancelRuntimeConnection, handleTerminalReady, panes, terminalsLive]);
+  }, [attachable, attachOnlyDrawn, cancelRuntimeConnection, handleTerminalReady, panes, terminalsLive]);
 
   const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);

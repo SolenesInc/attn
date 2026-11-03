@@ -47,11 +47,13 @@ function createTerminal(): GhosttyTerminalHandle {
     applyPlacements: vi.fn(() => Promise.resolve()),
     seedPlacements: vi.fn(() => Promise.resolve()),
     drain: vi.fn(() => Promise.resolve()),
+    holdInput: vi.fn(),
+    releaseInput: vi.fn(() => Promise.resolve()),
   };
 }
 
 describe('useGhosttyPaneRuntime shared runtime holds', () => {
-  const pane = { paneId: 'pane-shared', runtimeId: 'runtime-shared', paneKind: 'agent' as const };
+  const pane = { paneId: 'pane-shared', runtimeId: 'runtime-shared', paneKind: 'agent' as const, drawn: true };
   let router: PaneRuntimeEventRouter;
 
   beforeEach(() => {

@@ -669,7 +669,7 @@ export function ExperimentalSettings({
           <div>
             <p className="settings-row-title">Shared terminal host</p>
             <p className="settings-row-copy" id="shared-pty-host-description">
-              Reduce memory use by sharing a host process across terminals.
+              Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.
             </p>
           </div>
           <button

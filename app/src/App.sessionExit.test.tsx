@@ -50,11 +50,14 @@ describe('App session exit', () => {
 
   it('reattaches a respawned terminal with relaunch_restore instead of treating it as an exit', async () => {
     const daemon = await renderSessions();
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
+    const before = daemon.sentOf('attach_session').length;
 
     daemon.emit({ event: 'runtime_respawned', id: 'terminal-1' });
     await daemon.idle();
 
-    expect(daemon.sentOf('attach_session')).toContainEqual({ cmd: 'attach_session', id: 'terminal-1', attach_policy: 'relaunch_restore' });
+    expect(daemon.sentOf('attach_session').slice(before)).toEqual([{ cmd: 'attach_session', id: 'terminal-1', attach_policy: 'relaunch_restore' }]);
     expect(daemon.sentOf('unregister')).toEqual([]);
   });
 

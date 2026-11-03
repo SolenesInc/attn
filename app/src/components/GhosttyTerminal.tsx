@@ -248,6 +248,8 @@ export interface GhosttyTerminalHandle {
   getBlockState: () => BlockStateSnapshot;
   getPlacementState: () => PlacementStateSnapshot;
   drain: () => Promise<void>;
+  holdInput: () => void;
+  releaseInput: () => Promise<void>;
 }
 
 export interface BlockStateSnapshotBlock {
@@ -1994,6 +1996,21 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     fitRef.current = fit;
 
+    const holdInput = useCallback(() => {
+      inputReadyRef.current = false;
+      if (containerRef.current) containerRef.current.dataset.terminalInputReady = '0';
+    }, []);
+    const releaseInput = useCallback(async () => {
+      const terminal = terminalRef.current;
+      await writeChainRef.current;
+      const container = containerRef.current;
+      if (!terminal || terminalRef.current !== terminal || !container) return;
+      inputReadyRef.current = true;
+      container.dataset.terminalInputReady = '1';
+      const sessionId = runtimeMetaRef.current?.sessionId;
+      if (sessionId) usePendingTerminalInput.getState().deliver(sessionId, container);
+    }, []);
+
     useImperativeHandle(ref, () => ({
       fit,
       openFind,
@@ -2047,7 +2064,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       getBlockState,
       getPlacementState,
       drain: () => writeChainRef.current,
-    }), [applyPlacements, fit, getBlockState, getPlacementState, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, resizeLocal, restoreSnapshot, seedBlocks, seedPlacements, setSurfaceReleased, write]);
+      holdInput,
+      releaseInput,
+    }), [applyPlacements, fit, getBlockState, getPlacementState, getText, getVisibleContent, getVisibleStyleSummary, holdInput, openFind, releaseInput, renderSurface, resizeLocal, restoreSnapshot, seedBlocks, seedPlacements, setSurfaceReleased, write]);
 
     useLayoutEffect(() => {
       const container = containerRef.current;
@@ -2302,13 +2321,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           getBlockState,
           getPlacementState,
           drain: () => writeChainRef.current,
+          holdInput,
+          releaseInput,
         });
-        await writeChainRef.current;
+        await releaseInput();
         if (!active || terminalRef.current !== terminal) return;
-        inputReadyRef.current = true;
-        container.dataset.terminalInputReady = '1';
-        const sessionId = runtimeMetaRef.current?.sessionId;
-        if (sessionId) usePendingTerminalInput.getState().deliver(sessionId, container);
         if (recoveredModelFault) {
           modelRecoveryPendingRef.current = false;
         }

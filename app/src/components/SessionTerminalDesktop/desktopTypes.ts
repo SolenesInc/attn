@@ -103,6 +103,7 @@ export interface SessionTerminalDesktopProps {
   isActiveSession: boolean;
   isSessionViewVisible?: boolean;
   terminalsLive?: boolean;
+  attachOnlyDrawn?: boolean;
   eventRouter: PaneRuntimeEventRouter;
   onSplitPane: (targetPaneId: string, direction: TerminalSplitDirection) => void;
   onClosePane: (paneId: string) => void;
