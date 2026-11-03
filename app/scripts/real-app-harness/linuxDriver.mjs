@@ -285,6 +285,10 @@ export class LinuxDriver extends TargetedWindowDriver {
     return this.windowGeometry(windowId);
   }
 
+  async parkPointerBeside({ x, y, width, height }) {
+    await this.runXdotool(['mousemove', String(x + width + 1), String(y + height + 1)]);
+  }
+
   async screenshot(outputPath, opts = {}) {
     const windowId = await this.requireWindow(opts);
     await this.windowGeometry(windowId).catch((error) => {
