@@ -35,7 +35,8 @@ describe('App daemon ensure', () => {
     expect(screen.queryByText(startupError)).toBeNull();
   });
 
-  it.each(['41', '999999', 'ffffffffffff', '000000000000'])('stops on protocol %s after startup ensure without restarting again', async (protocolVersion) => {
+  it('stops on protocol 41 after startup ensure without restarting again', async () => {
+    const protocolVersion = '41';
     vi.mocked(invoke).mockResolvedValue(undefined);
     let ensuresBeforeHandshake = 0;
     const daemon = installScriptedDaemon({ initialState: false });

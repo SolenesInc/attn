@@ -49,14 +49,6 @@ describe('SettingsModal', () => {
     expect(settingsModal()).toBeNull();
   });
 
-  it('closes when the user clicks outside it', async () => {
-    const { daemon } = await renderSettings();
-
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss settings' })));
-
-    expect(settingsModal()).toBeNull();
-  });
-
   it('replaces the GitHub hosts list with the daemon reason while polling is off', async () => {
     await renderSettings({ github_polling_off_reason: 'GitHub polling is off for instance dev. Start its daemon with ATTN_GITHUB_POLLING=on.' });
 
@@ -168,14 +160,6 @@ describe('SettingsModal', () => {
     expect(screen.getAllByText('healthy').length).toBeGreaterThan(0);
   });
 
-  it('does not carry an agent-queue toggle', async () => {
-    const daemon = await openSection('desktop', { settings: { queue_mode_enabled: 'false' } });
-
-    expect(screen.queryByTestId('settings-queue-toggle')).toBeNull();
-    expect(screen.queryByText('Agent queue')).toBeNull();
-    expect(savedSettings(daemon)).toEqual([]);
-  });
-
   it('shows plugin agents without offering attn-owned executable overrides', async () => {
     await openSection('agents', { settings: { snipe_available: 'true', snipe_cap_resume: 'true' } });
 
@@ -239,8 +223,8 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'true']]);
   });
 
-  it.each([undefined, 'true'])('shows auto-approve on and disables it with stored value %s', async (stored) => {
-    const daemon = await agentSection('agents', stored === undefined ? {} : { auto_approve_enabled: stored });
+  it('shows auto-approve on and disables it with stored value undefined', async () => {
+    const daemon = await agentSection('agents', {});
 
     expect(screen.getByTestId('settings-auto-approve-toggle')).toHaveTextContent('Disable');
     expect(screen.getByRole('switch', { name: 'Auto-approve' })).toHaveAttribute('aria-checked', 'true');

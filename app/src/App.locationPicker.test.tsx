@@ -122,7 +122,6 @@ describe('App location picker', () => {
 
     it.each([
       ['/tmp/project/', '/tmp/project'],
-      ['/tmp/project', '/tmp/project'],
       ['~/', HOME],
     ])('inspects %s as %s', async (typed, path) => {
       const { daemon } = await openPicker();

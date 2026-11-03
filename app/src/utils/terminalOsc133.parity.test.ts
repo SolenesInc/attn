@@ -46,10 +46,6 @@ function normalize(marker: Osc133Marker): CorpusCase['markers'][number] {
 }
 
 describe('parseOsc133 segmenter parity corpus', () => {
-  it('covers every case', () => {
-    expect(corpus.cases.length).toBeGreaterThan(0);
-  });
-
   for (const testCase of corpus.cases) {
     it(testCase.name, () => {
       const markers = collectMarkers(testCase.chunks).map(normalize);

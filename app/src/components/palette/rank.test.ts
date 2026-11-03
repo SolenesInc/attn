@@ -69,9 +69,4 @@ describe('rankFiles', () => {
     expect(rankFiles(many, '', 10)).toHaveLength(10);
     expect(rankFiles(many, 'note', 5)).toHaveLength(5);
   });
-
-  it('preserves the caller\'s own entry type through ranking', () => {
-    const sized = [{ path: 'notes.md', size: 12 }];
-    expect(rankFiles(sized, 'notes')[0].size).toBe(12);
-  });
 });

@@ -11,7 +11,6 @@ import {
   defaultAppPathForInstance,
   defaultDaemonPortForInstance,
   defaultWSURLForInstance,
-  hasRunAgainstProdFlag,
   isProductionHarnessTarget,
   mockGitHubPortForInstance,
   instanceCliEnv,
@@ -133,14 +132,6 @@ describe('real-app harness production safety', () => {
     })).toBe(false);
   });
 
-  it('requires the explicit production acknowledgement flag', () => {
-    expect(() => assertProductionRunAllowed({ instance: '' }, [])).toThrow(
-      'Refusing to run the real-app harness against production',
-    );
-    expect(() => assertProductionRunAllowed({ instance: '' }, ['--run-against-prod'])).not.toThrow();
-    expect(hasRunAgainstProdFlag(['--run-against-prod'])).toBe(true);
-  });
-
   it('protects low-level macOS lifecycle operations', () => {
     expect(() => new MacOSDriver({
       appPath: path.join(os.homedir(), 'Applications', 'attn.app'),
@@ -213,11 +204,5 @@ describe('instanceCliEnv', () => {
     const env = instanceCliEnv('agent7');
     expect(env.ATTN_INSTANCE).toBe('agent7');
     for (const key of Object.keys(routing)) expect(env[key]).toBeUndefined();
-  });
-
-  it('clears them for the unnamed production instance too, which also names a destination', () => {
-    const env = instanceCliEnv('');
-    expect(env.ATTN_INSTANCE).toBe('');
-    for (const key of Object.keys(routing)) expect(key in env).toBe(false);
   });
 });

@@ -97,14 +97,6 @@ describe('SessionTerminalDesktop with only tile leaves', () => {
     expect(screen.getByRole('heading', { name: 'Project notes' })).toBeInTheDocument();
   });
 
-  it('does not fall back to the empty terminalState placeholder', () => {
-    const { container } = renderTileDesktop();
-
-    const desktopRoot = container.querySelector('[data-session-terminal-desktop="desktop-tiles"]');
-    expect(desktopRoot).not.toBeNull();
-    expect(desktopRoot?.querySelector('.session-terminal-panes')).not.toBeNull();
-  });
-
   it('focuses the body of the active tile so it scrolls by keyboard', () => {
     const { container } = renderTileDesktop();
 

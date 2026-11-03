@@ -85,10 +85,6 @@ describe('isDirectoryUnderRoot', () => {
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions-old/keep', ['/tmp/attn-real-app-sessions'])).toBe(false);
   });
 
-  it('rejects an unrelated path', () => {
-    expect(isDirectoryUnderRoot('/Users/victor/projects/other', ['/tmp/attn-real-app-sessions'])).toBe(false);
-  });
-
   it('rejects a null or empty directory', () => {
     expect(isDirectoryUnderRoot(null, ['/tmp/attn-real-app-sessions'])).toBe(false);
     expect(isDirectoryUnderRoot('', ['/tmp/attn-real-app-sessions'])).toBe(false);

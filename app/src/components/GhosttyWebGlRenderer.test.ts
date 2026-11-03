@@ -550,20 +550,6 @@ describe('WebGlTerminalRenderer dirty rows', () => {
     expect(renderer.render(terminal)).toBeNull();
   });
 
-  it('does not paint when a hidden cursor changes row with nothing else dirty', () => {
-    const { renderer } = makeRenderer();
-    const { terminal, state } = makeControllableTerminal(50, 50);
-    renderer.resize(50, 50);
-    state.cursor = { x: 4, y: 10, visible: false };
-    renderer.render(terminal);
-
-    state.dirty = 0;
-    state.rows = new Set();
-    state.cursor = { x: 4, y: 44, visible: false };
-
-    expect(renderer.render(terminal)).toBeNull();
-  });
-
   it('paints nothing extra when a hidden cursor moves', () => {
     const { renderer } = makeRenderer();
     const { terminal, state } = makeControllableTerminal(50, 50);

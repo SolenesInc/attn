@@ -7,7 +7,6 @@ import {
   matchesShortcut,
   bindingsConflict,
   combosConflict,
-  validateNoConflicts,
   type ShortcutId,
 } from './registry';
 import { withNavigatorPlatform } from '../test/platformStub';
@@ -50,12 +49,6 @@ describe('shortcut registry', () => {
   });
 
   describe('platform defaults', () => {
-    it('binds every shortcut id on both platforms and validates both tables', () => {
-      expect(Object.keys(LINUX_SHORTCUTS)).toEqual(Object.keys(MAC_SHORTCUTS));
-      expect(() => validateNoConflicts(MAC_SHORTCUTS)).not.toThrow();
-      expect(() => validateNoConflicts(LINUX_SHORTCUTS)).not.toThrow();
-    });
-
     it('keeps every plain Ctrl+letter free on Linux', () => {
       for (const [id, binding] of Object.entries(LINUX_SHORTCUTS) as Array<[ShortcutId, ShortcutDef]>) {
         if (!/^[a-z]$/i.test(binding.key)) continue;

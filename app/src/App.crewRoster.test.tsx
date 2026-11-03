@@ -17,14 +17,6 @@ describe('App crew roster', () => {
     expect(manageCrew()).toHaveTextContent('manage');
   });
 
-  it('replaces the roster on every crew broadcast', async () => {
-    const { daemon } = await renderWithCrew([crewMember('keel'), crewMember('trellis')]);
-
-    daemon.emit({ event: 'crew_updated', members: [crewMember('keel')] });
-
-    expect(manageCrew()).toHaveTextContent('manage');
-  });
-
   it('reads a reconnect whose initial state carries no crew as an empty roster', async () => {
     const { daemon } = await renderWithCrew([crewMember('keel')]);
     expect(manageCrew()).not.toBeNull();

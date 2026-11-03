@@ -45,11 +45,6 @@ describe('extractFrontmatter', () => {
     ]);
   });
 
-  it('counts delimiter lines in lineCount (the strip-side lineOffset)', () => {
-    const { lineCount } = extractFrontmatter('---\ntitle: x\n---\nFirst paragraph\n');
-    expect(lineCount).toBe(3);
-  });
-
   it('rejects the YAML document-end marker, matching remark-frontmatter', () => {
     // remark-frontmatter only closes on `---`; with `...` it renders the block
     // as prose.

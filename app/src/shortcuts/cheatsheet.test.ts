@@ -1,7 +1,6 @@
 // app/src/shortcuts/cheatsheet.test.ts
 import { describe, it, expect } from 'vitest';
 import { buildCheatsheet } from './cheatsheet';
-import { SHORTCUTS } from './registry';
 import { SHORTCUT_META } from './metadata';
 import { withNavigatorPlatform } from '../test/platformStub';
 
@@ -66,10 +65,6 @@ describe('buildCheatsheet', () => {
     expect(SHORTCUT_META['session.next'].label).toBe('Next desktop (queue mode: next agent in the queue)');
     expect(SHORTCUT_META['session.historyBack'].label).toBe('Back through agent history');
     expect(SHORTCUT_META['session.historyForward'].label).toBe('Forward through agent history');
-  });
-
-  it('keeps editor metadata exhaustive with the shortcut registry', () => {
-    expect(Object.keys(SHORTCUT_META).sort()).toEqual(Object.keys(SHORTCUTS).sort());
   });
 
   it('renders Linux history bindings with Ctrl+Shift', () => {

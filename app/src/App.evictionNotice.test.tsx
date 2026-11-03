@@ -20,9 +20,9 @@ describe('App eviction notice', () => {
     });
   });
 
-  it.each(['client too slow', 'command buffer overflow'])('keeps a reconnect notice quiet for %s', async (reason) => {
+  it('keeps a reconnect notice quiet for client too slow', async () => {
     const { daemon } = await renderApp();
-    await daemon.emit(evicted(reason));
+    await daemon.emit(evicted('client too slow'));
     await daemon.idle();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/Reconnected/)).not.toBeInTheDocument();

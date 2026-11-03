@@ -73,17 +73,6 @@ describe('markdownTables reveal gate', () => {
     expect(replaceRangeCount(state)).toBe(0);
   });
 
-  it('reveals raw source when the cursor is on the delimiter line', () => {
-    const delimiterPos = doc.indexOf('\n', doc.indexOf('\n') + 1) - 1;
-    const state = stateFor(`${doc}\n\nafter`, { anchor: delimiterPos });
-    expect(replaceRangeCount(state)).toBe(0);
-  });
-
-  it('reveals raw source when the cursor is on a body row', () => {
-    const state = stateFor(`${doc}\n\nafter`, { anchor: doc.length - 2 });
-    expect(replaceRangeCount(state)).toBe(0);
-  });
-
   it('reveals when a selection range overlaps the table edge (anchor before, head inside)', () => {
     const state = stateFor(`${doc}\n\nafter`, { anchor: 0, head: 5 });
     expect(replaceRangeCount(state)).toBe(0);

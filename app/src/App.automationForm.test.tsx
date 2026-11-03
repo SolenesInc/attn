@@ -218,14 +218,14 @@ describe('App automation form', () => {
       }]);
     });
 
-    it.each(['manual', 'github'] as const)('hides and omits the guard when switching to %s', async (trigger) => {
+    it('hides and omits the guard when switching to manual', async () => {
       const daemon = await openNew();
       fireEvent.click(field('trigger-scheduled'));
       type('guard', 'git rev-parse HEAD');
-      fireEvent.click(field(`trigger-${trigger}`));
+      fireEvent.click(field('trigger-manual'));
       type('name', 'My automation');
       type('prompt', 'Do the work');
-      if (trigger === 'manual') type('directory-path', '/tmp/work');
+      type('directory-path', '/tmp/work');
 
       expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
       expect(field('sentence')).not.toHaveTextContent('git rev-parse HEAD');

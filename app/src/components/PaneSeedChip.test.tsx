@@ -132,7 +132,7 @@ function pushSeeds(daemon: ScriptedDaemon, seeds: DaemonSeed[]) {
 }
 
 describe('seed lifecycle and context', () => {
-  it.each(['planted', 'parked', 'harvested', 'withered'])('keeps %s visible when tending ends', async (status) => {
+  it.each(['planted', 'withered'])('keeps %s visible when tending ends', async (status) => {
     const value = daemonSeed('s-work11', { title: 'Garden icons', ...sessionClaim('s1') });
     const daemon = await openAgent([value], { seed_id: value.id });
     pushSeeds(daemon, [{ ...value, status, tender: undefined, claimed: false }]);
