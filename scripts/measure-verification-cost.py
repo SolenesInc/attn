@@ -324,21 +324,22 @@ def ci_chains(run, jobs):
     go_lint = named("Go vet and lint") or go_tests
     shards = [job for job in jobs if job["name"].startswith("App acceptance shard ")]
     build = next((job for job in jobs if job["name"] == "App acceptance build"), None)
-    macos = next((job for job in jobs if job["name"] == "App acceptance macOS"), None)
-    chain = [*go_tests, *go_lint, build, macos, *shards]
-    if not go_tests or not shards or any(job is None or job["conclusion"] != "success" for job in chain):
+    macos = named("App acceptance macOS")
+    chain = [*go_tests, *go_lint, build, *macos, *shards]
+    if not go_tests or not shards or not macos or any(job is None or job["conclusion"] != "success" for job in chain):
         return None
     step = lambda job, prefix: next(seconds(s["started_at"], s["completed_at"]) for s in job["steps"] if s["name"].startswith(prefix))
     job_wall = lambda job: seconds(job["started_at"], job["completed_at"])
     span = lambda group: seconds(min(job["started_at"] for job in group), max(job["completed_at"] for job in group))
     started = [job for job in jobs if job["started_at"] and job["conclusion"] != "skipped"]
-    waits = sorted(started, key=lambda job: seconds(job["created_at"], job["started_at"]))
+    wait = lambda job: seconds(job["created_at"], job["started_at"])
+    waits = sorted(started, key=wait)
     return {
         "ok": True,
         "run": run["id"],
         "wall": seconds(run["created_at"], run["updated_at"]),
         "queue": seconds(run["created_at"], min(job["started_at"] for job in started)),
-        "job_wait": seconds(waits[-1]["created_at"], waits[-1]["started_at"]),
+        "job_wait": wait(waits[-1]),
         "job_wait_name": waits[-1]["name"],
         "go_tests": span(go_tests),
         "go_test_runners": len(go_tests),
@@ -349,9 +350,11 @@ def ci_chains(run, jobs):
         "linux_build": job_wall(build),
         "linux_shards": len(shards),
         "linux_shard_max": max(job_wall(job) for job in shards),
-        "macos_acceptance": job_wall(macos),
-        "macos_build": step(macos, "Build the App acceptance tree"),
-        "macos_scenarios": step(macos, "Run native"),
+        "macos_acceptance": span(macos),
+        "macos_jobs": len(macos),
+        "macos_wait": max(wait(job) for job in macos),
+        "macos_build": max(step(job, "Build the App acceptance tree") for job in macos),
+        "macos_scenarios": max(step(job, "Run native") for job in macos),
     }
 
 
@@ -379,7 +382,7 @@ def measure_ci(source, run_ids):
             f" longest job queue wait {row['job_wait']:.0f}s ({row['job_wait_name']}),"
             f" go tests {row['go_tests']:.0f}s on {row['go_test_runners']} runners,"
             f" linux acceptance {row['linux_acceptance']:.0f}s with {row['linux_shards']} shards,"
-            f" macos acceptance {row['macos_acceptance']:.0f}s",
+            f" macos acceptance {row['macos_acceptance']:.0f}s on {row['macos_jobs']} runners, longest macos queue wait {row['macos_wait']:.0f}s",
             flush=True,
         )
     if not rows:
@@ -388,7 +391,7 @@ def measure_ci(source, run_ids):
     print(f"ci.yml, {label}: wall {column('wall')}, queue before the first job {column('queue')}, longest job queue wait {column('job_wait')}", flush=True)
     print(f"  go tests, first runner start to last runner end {column('go_tests')}: slowest Test step {column('go_test_step_max')}; vet {column('go_vet')}, lint {column('go_lint')}", flush=True)
     print(f"  linux acceptance, build start to last shard end {column('linux_acceptance')}: build job {column('linux_build')}, slowest shard {column('linux_shard_max')}", flush=True)
-    print(f"  macos acceptance job {column('macos_acceptance')}: build {column('macos_build')}, scenarios {column('macos_scenarios')}", flush=True)
+    print(f"  macos acceptance, first job start to last job end {column('macos_acceptance')}: longest queue wait {column('macos_wait')}, slowest build {column('macos_build')}, slowest scenarios {column('macos_scenarios')}", flush=True)
 
 
 def main():
