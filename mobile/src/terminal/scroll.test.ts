@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { afterOutput, atBottom, drag, historyRows, type ScrollFrame } from './scroll'
+import { afterOutput, atBottom, drag, historyRows, returnToBottom, type ScrollFrame } from './scroll'
 
 const shell: ScrollFrame = { rowHeight: 10, overflow: 0, history: 100, programScrolls: false }
 const fullscreenAgent: ScrollFrame = { rowHeight: 10, overflow: 0, history: 0, programScrolls: true }
@@ -51,4 +51,24 @@ describe('output while the phone shows the terminal', () => {
     const after = { ...frame, history: frame.history + grown }
     expect(historyRows(afterOutput(position, after, frame.history), after)).toBe(rows)
   })
+})
+
+describe('a double tap returns to the latest output', () => {
+  it.each([
+    ['a program that scrolls itself gets back every line swiped up', fullscreenAgent, [35, 120], 15],
+    ['minus the lines already swiped back down', fullscreenAgent, [150, -40], 11],
+    ['and nothing once it is back at the bottom', fullscreenAgent, [60, -200], 0],
+    ['the hidden screen and scrollback need no wheel', { ...shell, overflow: 40 }, [400], 0],
+  ])('%s', (_, frame, downs, wheelLines) => {
+    const returned = returnToBottom(swipe(frame, downs).position, frame)
+    expect({ wheelLines: returned.wheelLines, seen: historyRows(returned.position, frame) }).toEqual({
+      wheelLines,
+      seen: 0,
+    })
+  })
+})
+
+it('sends no wheel lines to a program that stopped scrolling itself', () => {
+  const { position } = swipe(fullscreenAgent, [150])
+  expect(returnToBottom(position, { ...shell, history: 0 }).wheelLines).toBe(0)
 })

@@ -15,6 +15,7 @@ import {
   atBottom,
   drag,
   historyRows,
+  returnToBottom,
   settle,
   type ScrollFrame,
   type ScrollPosition,
@@ -125,7 +126,7 @@ export const mountTerminal = (
     }
   }
   const anchorBottom = () => {
-    position = atBottom
+    position = { ...atBottom, programRowsUp: position.programRowsUp }
     place()
   }
 
@@ -206,20 +207,26 @@ export const mountTerminal = (
   const down = (event: PointerEvent) => {
     dragFrom = { x: event.clientX, y: event.clientY }
   }
-  const wheelAt = (event: PointerEvent, lines: number) => {
+  const wheelAt = (event: MouseEvent, lines: number) => {
     if (!terminal) return
     const box = canvas.getBoundingClientRect()
     const cell = (offset: number, size: number, count: number) =>
       Math.min(count, Math.max(1, Math.floor((offset / size) * count) + 1))
-    send(
-      applicationWheelInput(
-        lines,
-        cell(event.clientX - box.left, box.width, terminal.cols),
-        cell(event.clientY - box.top, box.height, terminal.rows),
-        terminal.hasMouseTracking(),
-        terminal.getMode(1006),
-      ),
-    )
+    const col = cell(event.clientX - box.left, box.width, terminal.cols)
+    const row = cell(event.clientY - box.top, box.height, terminal.rows)
+    let input = ''
+    for (let left = lines; left !== 0; left -= Math.sign(left) * Math.min(5, Math.abs(left))) {
+      input += applicationWheelInput(left, col, row, terminal.hasMouseTracking(), terminal.getMode(1006))
+    }
+    send(input)
+  }
+  const backToBottom = (event: MouseEvent) => {
+    const frame = scrollFrame()
+    if (!frame) return
+    const returned = returnToBottom(position, frame)
+    position = returned.position
+    if (returned.wheelLines !== 0 && terminal?.hasMouseTracking()) wheelAt(event, returned.wheelLines)
+    place()
   }
   const move = (event: PointerEvent) => {
     if (!dragFrom) return
@@ -242,7 +249,7 @@ export const mountTerminal = (
   viewport.addEventListener('pointerup', up)
   viewport.addEventListener('pointercancel', up)
   viewport.addEventListener('click', onTap)
-  viewport.addEventListener('dblclick', anchorBottom)
+  viewport.addEventListener('dblclick', backToBottom)
 
   const handle: MountedTerminal = {
     sendKey: (key) => {

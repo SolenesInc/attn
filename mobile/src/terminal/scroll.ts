@@ -8,9 +8,10 @@ export type ScrollFrame = {
 export type ScrollPosition = {
   readonly fromBottom: number
   readonly wheelRows: number
+  readonly programRowsUp: number
 }
 
-export const atBottom: ScrollPosition = { fromBottom: 0, wheelRows: 0 }
+export const atBottom: ScrollPosition = { fromBottom: 0, wheelRows: 0, programRowsUp: 0 }
 
 const furthest = (frame: ScrollFrame) =>
   frame.programScrolls ? frame.overflow : frame.overflow + frame.history * frame.rowHeight
@@ -34,11 +35,22 @@ export const drag = (
 ): { readonly position: ScrollPosition; readonly wheelLines: number } => {
   const wanted = position.fromBottom + down
   const fromBottom = clamp(wanted, furthest(frame))
-  if (!frame.programScrolls) return { position: { fromBottom, wheelRows: 0 }, wheelLines: 0 }
+  if (!frame.programScrolls) return { position: { ...position, fromBottom, wheelRows: 0 }, wheelLines: 0 }
   const rows = position.wheelRows + (wanted - fromBottom) / frame.rowHeight
   const up = Math.trunc(rows)
-  return { position: { fromBottom, wheelRows: rows - up }, wheelLines: -up }
+  return {
+    position: { fromBottom, wheelRows: rows - up, programRowsUp: Math.max(0, position.programRowsUp + up) },
+    wheelLines: -up,
+  }
 }
+
+export const returnToBottom = (
+  position: ScrollPosition,
+  frame: ScrollFrame,
+): { readonly position: ScrollPosition; readonly wheelLines: number } => ({
+  position: atBottom,
+  wheelLines: frame.programScrolls ? position.programRowsUp : 0,
+})
 
 export const afterOutput = (
   position: ScrollPosition,
