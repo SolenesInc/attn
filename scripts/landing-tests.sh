@@ -60,7 +60,6 @@ summarize() {
 # at another version.
 uncached_go_units="go ./internal/daemon TestEachUploadBatchCarriesTheBuildThatRecordedItsRecords
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
-go ./internal/daemon TestAttnIngestRefusingTheDaysBytesIsShownAndWaitedOut
 go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
 go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
 go ./internal/daemon TestRecordsMadeAfterClearingDuringAnUploadAreStillSent
