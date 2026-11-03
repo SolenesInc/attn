@@ -171,7 +171,7 @@ run_checks() {
     if ! touches '^go\.(mod|sum)$'; then
       packages="$(while IFS= read -r file; do
         case "$file" in
-          *.go)
+          (*.go)
             dir="$(dirname "$file")"
             if compgen -G "$dir/*.go" >/dev/null; then
               printf './%s\n' "$dir"
