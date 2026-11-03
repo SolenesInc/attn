@@ -87,6 +87,30 @@ func TestAMergedPullRequestKeepsItsWorktreeMergedAfterGitHubStopsListingIt(t *te
 	}
 }
 
+func TestAPullRequestMergedInAnotherOriginURLDoesNotSweepTheWorktree(t *testing.T) {
+	pulls := newMergedPullRequests(t)
+	pulls.answerEveryAsk(t)
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	repo := newRepo(t, "ledger")
+	runGit(t, repo, "remote", "add", "origin", "https://github.test/acme/ledger.git")
+	runGit(t, repo, "config", "--add", "remote.origin.url", "https://github.test/acme/shop.git")
+	runGit(t, repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+	path := createWorktree(t, app, repo, "feat-login")
+	head := commitFile(t, path, "login.go", "package login\n")
+	pulls.list(mergedPullRequest{Number: 7, MergedAt: "2026-08-06T10:00:00Z", Head: ref{Ref: "feat-login", SHA: head}, Base: ref{Ref: "main"}})
+
+	refreshWorktrees(t, cli)
+	testworld.Await(app, protocol.EventWorktreeStateChanged, func(e protocol.WebSocketEvent) bool {
+		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path &&
+			protocol.Deref(e.Worktrees[0].HeadSHA) == head && protocol.Deref(e.Worktrees[0].SweepStatus) == "kept_unmerged"
+	})
+	if !worktreeDeleteBranchExists(repo, "feat-login") {
+		t.Error("the sweep deleted feat-login, which only the second origin URL's repository reports as merged")
+	}
+}
+
 type ref struct {
 	Ref string `json:"ref"`
 	SHA string `json:"sha,omitempty"`
@@ -144,6 +168,21 @@ func (m *mergedPullRequests) awaitSweepAsking(t *testing.T) chan<- struct{} {
 		t.Fatalf("no sweep pass asked GitHub for merged pull requests within %s", fakeagent.HangGuard)
 		return nil
 	}
+}
+
+func (m *mergedPullRequests) answerEveryAsk(t *testing.T) {
+	done := make(chan struct{})
+	t.Cleanup(func() { close(done) })
+	go func() {
+		for {
+			select {
+			case answer := <-m.asking:
+				close(answer)
+			case <-done:
+				return
+			}
+		}
+	}()
 }
 
 func (m *mergedPullRequests) list(pulls ...mergedPullRequest) {

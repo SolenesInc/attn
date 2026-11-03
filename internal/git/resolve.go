@@ -85,11 +85,12 @@ func (c *Client) OriginHostOwnerRepo(ctx context.Context, path string) (host, ow
 }
 
 func (c *Client) configuredOriginURL(ctx context.Context, path string) (string, error) {
-	out, err := c.Output(ctx, OpMetadata, path, "config", "--get", "remote.origin.url")
+	out, err := c.Output(ctx, OpMetadata, path, "config", "--get-all", "remote.origin.url")
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	fetchURL, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return fetchURL, nil
 }
 
 func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {
