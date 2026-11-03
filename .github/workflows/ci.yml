@@ -853,6 +853,14 @@ jobs:
             find "$data_dir/pty-hosts" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
           fi
           ls "$EVIDENCE_DIR/daemon"
+          app_debug_dir="$(./attn instance resolve --field appLocalDataDir 2>/dev/null || true)/debug"
+          mkdir -p "$EVIDENCE_DIR/app"
+          for file in ui-automation-server.log ui-diagnostics.jsonl; do
+            if [ -f "$app_debug_dir/$file" ]; then
+              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/app/"
+            fi
+          done
+          ls "$EVIDENCE_DIR/app"
 
       - name: Upload app acceptance evidence
         if: always()
@@ -871,6 +879,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/other-fixture.log
             ${{ runner.temp }}/attn-real-app-harness/**/*idle*.txt
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
+            ${{ runner.temp }}/attn-real-app-harness/app/*
 
       - name: Upload shard result
         if: always()
@@ -1063,6 +1072,13 @@ jobs:
           if [ -d "$data_dir" ]; then
             find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
           fi
+          app_debug_dir="$(./attn instance resolve --field appLocalDataDir 2>/dev/null || true)/debug"
+          mkdir -p "$EVIDENCE_DIR/app"
+          for file in ui-automation-server.log ui-diagnostics.jsonl; do
+            if [ -f "$app_debug_dir/$file" ]; then
+              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/app/"
+            fi
+          done
 
       - name: Upload macOS acceptance evidence
         if: always()
@@ -1078,6 +1094,7 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/app-launch-*.log
             ${{ runner.temp }}/attn-real-app-harness/**/native-*.log
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
+            ${{ runner.temp }}/attn-real-app-harness/app/*
 
       - name: Clean instance
         if: always()

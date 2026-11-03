@@ -72,6 +72,11 @@ async function append(line: string): Promise<void> {
   }
 }
 
+function writeUiDiag(entry: UiDiagEvent): void {
+  const line = `${JSON.stringify(entry)}\n`;
+  writeChain = writeChain.catch(() => {}).then(() => append(line));
+}
+
 export function recordUiDiag(event: Omit<UiDiagEvent, 'at'>): void {
   if (typeof window === 'undefined') return;
   exposeGlobals();
@@ -79,8 +84,11 @@ export function recordUiDiag(event: Omit<UiDiagEvent, 'at'>): void {
   ringTotal += 1;
   if (ring.length >= RING_LIMIT) ring.shift();
   ring.push(entry);
-  const line = `${JSON.stringify(entry)}\n`;
-  writeChain = writeChain.catch(() => {}).then(() => append(line));
+  writeUiDiag(entry);
+}
+
+export function recordUiDiagToFileOnly(event: Omit<UiDiagEvent, 'at'>): void {
+  writeUiDiag({ ...event, at: Date.now() } as UiDiagEvent);
 }
 
 export function supportUiDiagnosticsSnapshot(): { capacity: number; total: number; events: UiDiagEvent[] } {

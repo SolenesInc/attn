@@ -11,7 +11,7 @@ import {
 } from './nativeInputWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
 import { parseNativeTarget, settledNativePoint, waitForFiniteAnimations } from './uiAutomationSettledTarget';
-import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
+import { recordUiDiagToFileOnly, supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -616,6 +616,8 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
     void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
     const unlistenPromise = listen<AutomationRequest>(UI_AUTOMATION_REQUEST_EVENT, async (event) => {
       const request = event.payload;
+      const receivedAt = performance.now();
+      recordUiDiagToFileOnly({ kind: 'automation_request_received', requestId: request.request_id, action: request.action });
       let response: AutomationResponse;
       try {
         // Settle before reading the ref: the wait spans renders, so a handler picked
@@ -634,6 +636,13 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
           error: error instanceof Error ? error.message : String(error),
         };
       }
+      recordUiDiagToFileOnly({
+        kind: 'automation_request_handled',
+        requestId: request.request_id,
+        action: request.action,
+        ok: response.ok,
+        elapsedMs: Math.round(performance.now() - receivedAt),
+      });
       await emit(UI_AUTOMATION_RESPONSE_EVENT, response);
     });
 

@@ -24,6 +24,7 @@ const CAPTURE_READY_TRIPWIRE: Duration = Duration::from_secs(30);
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 const MANIFEST_RELATIVE_PATH: &str = "debug/ui-automation.json";
 const LOG_RELATIVE_PATH: &str = "debug/ui-automation-server.log";
+const LOG_FRESH_START_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Default)]
 struct CaptureBridge {
@@ -869,12 +870,10 @@ pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
     };
 
     let token = generate_token();
-    if let Some(path) = log_path(app) {
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::write(&path, "");
-    }
+    let replaced_log_bytes = log_path(app).and_then(|path| {
+        let bytes = fs::metadata(&path).ok()?.len();
+        (bytes > LOG_FRESH_START_BYTES && fs::remove_file(&path).is_ok()).then_some(bytes)
+    });
     let manifest = AutomationManifest {
         enabled: true,
         port,
@@ -891,6 +890,14 @@ pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
             port,
         ),
     );
+    if let Some(bytes) = replaced_log_bytes {
+        append_log(
+            app,
+            &format!(
+                "log started fresh: previous launches reached {bytes} bytes, past LOG_FRESH_START_BYTES={LOG_FRESH_START_BYTES}"
+            ),
+        );
+    }
 
     let pending = PendingAutomationResponses::new();
     let frontend_ready = Arc::new(AtomicBool::new(false));

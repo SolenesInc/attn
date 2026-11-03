@@ -152,6 +152,12 @@ jobs:
           if [ -d "$data_dir/pty-hosts" ]; then
             (cd "$data_dir" && find pty-hosts -name '*.log' -exec cp --parents {} "$EVIDENCE_DIR" \;)
           fi
+          app_debug_dir="$(./attn instance resolve --field appLocalDataDir)/debug"
+          for file in ui-automation-server.log ui-diagnostics.jsonl; do
+            if [ -f "$app_debug_dir/$file" ]; then
+              cp "$app_debug_dir/$file" "$EVIDENCE_DIR/"
+            fi
+          done
 
       - name: Upload failed-iteration evidence
         if: always() && steps.soak.outcome != 'success'
