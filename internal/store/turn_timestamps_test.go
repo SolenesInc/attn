@@ -18,48 +18,14 @@ var raggedOffsets = []struct {
 
 func turnBase() time.Time { return time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC) }
 
+func snoozedUntil() time.Time { return turnBase().Add(time.Hour) }
+
 func chronologicalRaggedIDs() []string {
 	out := make([]string, 0, len(raggedOffsets))
 	for _, r := range raggedOffsets {
 		out = append(out, r.id)
 	}
 	return out
-}
-
-func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := newStoreAtVersion(dbPath, 167)
-	if err != nil {
-		t.Fatalf("NewWithDB: %v", err)
-	}
-	defer s.Close()
-	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('s1', 's1', '/tmp/s1', 'working', '', '', '')`); err != nil {
-		t.Fatal(err)
-	}
-
-	until := turnBase().Add(time.Hour)
-	if _, err := s.db.Exec(`UPDATE sessions SET turn_snoozed_until = ? WHERE id = 's1'`,
-		until.Format(time.RFC3339Nano)); err != nil {
-		t.Fatalf("plant old snooze stamp: %v", err)
-	}
-
-	if _, err := s.db.Exec(`DELETE FROM schema_migrations WHERE version >= 95`); err != nil {
-		t.Fatalf("unrecord migration 95: %v", err)
-	}
-
-	if got := plantedSnoozeStamp(t, s); got == turnStamp(until) {
-		t.Fatalf("the planted stamp %q already matches; this test would pass without the migration", got)
-	}
-
-	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
-		t.Fatalf("migrateDB: %v", err)
-	}
-	if got := parseTurnStamp(plantedSnoozeStamp(t, s)); !got.Equal(until) {
-		t.Fatalf("stored deadline reads back as %s, want %s", got, until)
-	}
-	if got := plantedSnoozeStamp(t, s); got != turnStamp(until) {
-		t.Fatalf("after migration 95 the stored deadline is %q, want %q so the fired timer can cash it", got, turnStamp(until))
-	}
 }
 
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
@@ -70,7 +36,7 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 	}
 	defer s.Close()
 
-	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('s1', 's1', '/tmp/s1', 'working', '', '', '')`); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, label, directory, state, state_since, state_updated_at, last_seen) VALUES ('s1', 's1', '/tmp/s1', 'working', '', '', ''), ('snoozed', 'snoozed', '/tmp/snoozed', 'working', '', '', '')`); err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range raggedOffsets {
@@ -85,6 +51,10 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		turnBase().Format(time.RFC3339Nano),
 		turnBase().Add(500*time.Millisecond).Format(time.RFC3339Nano)); err != nil {
 		t.Fatalf("plant old turn stamps: %v", err)
+	}
+	if _, err := s.db.Exec(`UPDATE sessions SET turn_snoozed_until = ? WHERE id = 'snoozed'`,
+		snoozedUntil().Format(time.RFC3339Nano)); err != nil {
+		t.Fatalf("plant old snooze stamp: %v", err)
 	}
 	for _, r := range raggedOffsets {
 		old := turnBase().Add(r.offset).Format(time.RFC3339Nano)
@@ -104,6 +74,9 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 
 	if opened, settled := plantedTurnStamps(t, s); opened == turnStamp(turnBase()) || settled == turnStamp(turnBase().Add(500*time.Millisecond)) {
 		t.Fatalf("the planted turn stamps %q and %q already sort; this test would pass without the migration", opened, settled)
+	}
+	if snoozed := plantedSnoozeStamp(t, s); snoozed == turnStamp(snoozedUntil()) {
+		t.Fatalf("the planted snooze stamp %q already matches; this test would pass without the migration", snoozed)
 	}
 
 	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
@@ -167,6 +140,9 @@ func assertMigration95Applied(t *testing.T, s *Store) {
 	if snoozed != "" {
 		t.Fatalf("turn_snoozed_until became %q; the unsnoozed sentinel must be left as it is", snoozed)
 	}
+	if got := plantedSnoozeStamp(t, s); got != turnStamp(snoozedUntil()) {
+		t.Fatalf("after migration 95 the stored snooze deadline is %q, want %q so the fired timer can cash it", got, turnStamp(snoozedUntil()))
+	}
 }
 
 func stampDigest(t *testing.T, s *Store) string {
@@ -187,7 +163,7 @@ func stampDigest(t *testing.T, s *Store) string {
 func plantedSnoozeStamp(t *testing.T, s *Store) string {
 	t.Helper()
 	var stamp string
-	if err := s.db.QueryRow(`SELECT turn_snoozed_until FROM sessions WHERE id = 's1'`).Scan(&stamp); err != nil {
+	if err := s.db.QueryRow(`SELECT turn_snoozed_until FROM sessions WHERE id = 'snoozed'`).Scan(&stamp); err != nil {
 		t.Fatal(err)
 	}
 	return stamp

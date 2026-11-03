@@ -163,17 +163,12 @@ func TestManifestWriteRecordsMain(t *testing.T) {
 	}
 }
 
-func TestCandidateValidationAcceptsAPreparedRelease(t *testing.T) {
+func TestCandidateValidationAllowsMainToMoveOn(t *testing.T) {
 	repo := newTestRepository(t)
 	mainSHA, headSHA := repo.prepareCandidate()
 	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA)); err != nil {
-		t.Fatal(err)
+		t.Fatalf("prepared candidate: %v", err)
 	}
-}
-
-func TestCandidateValidationAllowsMainToMoveOn(t *testing.T) {
-	repo := newTestRepository(t)
-	_, headSHA := repo.prepareCandidate()
 	repo.git("switch", "-q", "main")
 	repo.write("later.txt", "later work\n")
 	repo.commit("fix(queue): later work")

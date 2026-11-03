@@ -17,8 +17,9 @@ import (
 )
 
 func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
-	older := migration{version: 20261005210000, desc: "older sessions column", sql: `ALTER TABLE sessions ADD COLUMN older_column TEXT NOT NULL DEFAULT 'older'`}
-	newer := migration{version: 20261005210100, desc: "newer sessions column", sql: `ALTER TABLE sessions ADD COLUMN newer_column TEXT NOT NULL DEFAULT 'newer'`}
+	stamp := time.Date(2026, 10, 6, 12, 34, 56, 123456000, time.UTC)
+	older := migration{version: int(stamp.UnixMicro()), desc: "older sessions column", sql: `ALTER TABLE sessions ADD COLUMN older_column TEXT NOT NULL DEFAULT 'older'`}
+	newer := migration{version: int(stamp.Add(time.Microsecond).UnixMicro()), desc: "newer sessions column", sql: `ALTER TABLE sessions ADD COLUMN newer_column TEXT NOT NULL DEFAULT 'newer'`}
 	for _, first := range []migration{older, newer} {
 		t.Run(first.desc, func(t *testing.T) {
 			original := timestampedMigrations
@@ -56,6 +57,9 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 			}
 			if _, err := os.Stat(upgrade.BackupPath); err != nil {
 				t.Fatalf("pre-migration backup: %v", err)
+			}
+			if filepath.Dir(upgrade.BackupPath) != BackupDirForDatabase(path) || !strings.HasPrefix(filepath.Base(upgrade.BackupPath), "attn-premigration-") {
+				t.Fatalf("pre-migration backup %s; want an attn-premigration- file in %s", upgrade.BackupPath, BackupDirForDatabase(path))
 			}
 			s.Close()
 			db, err = OpenDBAtSchemaVersion(path, newer.version)
@@ -387,47 +391,5 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 				})
 			}
 		}
-	}
-}
-
-func TestAnOlderMicrosecondMigrationAppliesAfterANewerOne(t *testing.T) {
-	original := timestampedMigrations
-	defer func() { timestampedMigrations = original }()
-	timestampedMigrations = nil
-	stamp := time.Date(2026, 10, 6, 12, 34, 56, 123456000, time.UTC)
-	older := migration{version: int(stamp.UnixMicro()), desc: "older microsecond", sql: `ALTER TABLE sessions ADD COLUMN microsecond_older TEXT`}
-	newer := migration{version: int(stamp.Add(time.Microsecond).UnixMicro()), desc: "newer microsecond", sql: `ALTER TABLE sessions ADD COLUMN microsecond_newer TEXT`}
-	registerMigration(newer)
-	path := filepath.Join(t.TempDir(), "attn.db")
-	db, err := OpenDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	registerMigration(older)
-	current, err := OpenCurrent(path)
-	if current != nil {
-		current.Close()
-	}
-	var behind *SchemaBehindError
-	if !errors.As(err, &behind) || !reflect.DeepEqual(behind.Missing, []int{older.version}) {
-		t.Fatalf("missing older id = %v", err)
-	}
-	s, upgrade, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Close()
-	if upgrade.From != newer.version || upgrade.To != newer.version {
-		t.Fatalf("upgrade = %+v", upgrade)
-	}
-	db, err = OpenDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	var columns int
-	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('sessions') WHERE name IN ('microsecond_older','microsecond_newer')`).Scan(&columns); err != nil || columns != 2 {
-		t.Fatalf("microsecond columns = %d (%v)", columns, err)
 	}
 }

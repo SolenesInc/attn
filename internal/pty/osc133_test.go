@@ -108,33 +108,20 @@ func mustJSON(v any) string {
 func TestOsc133SegmenterCorpus(t *testing.T) {
 	for _, c := range loadSegCorpus(t) {
 		t.Run(c.Name, func(t *testing.T) {
-			seg := &feedSegmenter{}
-			got, plain := collectMarkers(seg, c.Chunks)
-			if !markersEqual(got, c.Markers) {
-				t.Fatalf("markers mismatch\n got: %s\nwant: %s", mustJSON(got), mustJSON(c.Markers))
-			}
-			if bytes.Contains(plain, osc133Prefix) {
-				t.Fatalf("plain output still contains an OSC 133 introducer: %q", plain)
-			}
-		})
-	}
-}
-
-func TestOsc133SegmenterByteSplitting(t *testing.T) {
-	for _, c := range loadSegCorpus(t) {
-		t.Run(c.Name, func(t *testing.T) {
 			var singleByte []string
 			for _, chunk := range c.Chunks {
 				for i := 0; i < len(chunk); i++ {
 					singleByte = append(singleByte, chunk[i:i+1])
 				}
 			}
-			got, plain := collectMarkers(&feedSegmenter{}, singleByte)
-			if !markersEqual(got, c.Markers) {
-				t.Fatalf("byte-split markers mismatch\n got: %s\nwant: %s", mustJSON(got), mustJSON(c.Markers))
-			}
-			if bytes.Contains(plain, osc133Prefix) {
-				t.Fatalf("byte-split plain output contains an OSC 133 introducer: %q", plain)
+			for split, chunks := range map[string][]string{"as recorded": c.Chunks, "byte by byte": singleByte} {
+				got, plain := collectMarkers(&feedSegmenter{}, chunks)
+				if !markersEqual(got, c.Markers) {
+					t.Fatalf("%s: markers mismatch\n got: %s\nwant: %s", split, mustJSON(got), mustJSON(c.Markers))
+				}
+				if bytes.Contains(plain, osc133Prefix) {
+					t.Fatalf("%s: plain output still contains an OSC 133 introducer: %q", split, plain)
+				}
 			}
 		})
 	}
