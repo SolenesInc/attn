@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { assertFreshWorldTargetSafe, commandRunsExecutable, registeredPtyHostPids } from './freshWorld.mjs';
+import { assertDaemonStopKeepsTerminals, assertFreshWorldTargetSafe, commandRunsExecutable, registeredPtyHostPids } from './freshWorld.mjs';
 
 describe('assertFreshWorldTargetSafe', () => {
   it('throws when instance is empty (the prod instance string)', () => {
@@ -30,6 +30,26 @@ describe('assertFreshWorldTargetSafe', () => {
   it('does not throw for a realistic named-instance target', () => {
     expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn-fxm1.app' }))
       .not.toThrow();
+  });
+});
+
+describe('assertDaemonStopKeepsTerminals', () => {
+  const target = { instance: 'fxm1', appPath: '/Users/victor/Applications/attn-fxm1.app' };
+  const answering = (value) => () => JSON.stringify({ key: 'pty_backend_mode', value });
+
+  it.each(['worker', 'shared', 'migrating'])('allows stopping a daemon on the %s backend, whose terminals outlive it', (backend) => {
+    expect(() => assertDaemonStopKeepsTerminals({ ...target, run: answering(backend) })).not.toThrow();
+  });
+
+  it.each(['embedded', 'unknown', ''])('refuses to stop a daemon on the %j backend', (backend) => {
+    expect(() => assertDaemonStopKeepsTerminals({ ...target, run: answering(backend) }))
+      .toThrow(/refusing to stop the "fxm1" daemon[\s\S]*ends every terminal it hosts/);
+  });
+
+  it('refuses when the daemon cannot say which backend it runs', () => {
+    const run = () => { throw new Error('connection refused'); };
+    expect(() => assertDaemonStopKeepsTerminals({ ...target, run }))
+      .toThrow(/could not read its pty_backend_mode \(connection refused\)/);
   });
 });
 

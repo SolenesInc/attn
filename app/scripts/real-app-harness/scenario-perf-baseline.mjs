@@ -13,7 +13,7 @@ import { instanceForAppPath } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
-import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, assertDaemonRestartDoesNotHostSession, stopDaemon, paneIdForSession, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
+import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, stopDaemonKeepingTerminals, paneIdForSession, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -230,8 +230,7 @@ async function main() {
   try {
     if (port && options.restartDaemon) {
       const instance = instanceForAppPath(options.appPath);
-      assertDaemonRestartDoesNotHostSession(instance);
-      const killed = await stopDaemon(instance);
+      const killed = await stopDaemonKeepingTerminals(instance, { appPath: options.appPath });
       console.log(`[perf] stopped ${instance || 'production'} daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
     }
 

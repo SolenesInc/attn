@@ -166,6 +166,16 @@ describe('the daemon a scenario inherits', () => {
 
   const target = { instance: 'dev', appPath: '/tmp/attn-dev.app' };
 
+  function daemonCli(backend = 'migrating') {
+    return vi.fn((_binary, args) => (
+      args[0] === 'settings' ? JSON.stringify({ key: 'pty_backend_mode', value: backend }) : ''
+    ));
+  }
+
+  function stopCalls(run) {
+    return run.mock.calls.filter(([, args]) => args[0] === 'daemon' && args[1] === 'stop');
+  }
+
   it('leaves a daemon that already carries this scenario marker alone', () => {
     const run = vi.fn();
     const result = ensureDaemonCarriesTripwire({
@@ -182,7 +192,7 @@ describe('the daemon a scenario inherits', () => {
   });
 
   it('stops a daemon carrying this marker but not the headless switch', () => {
-    const run = vi.fn();
+    const run = daemonCli();
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -194,11 +204,11 @@ describe('the daemon a scenario inherits', () => {
     });
 
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(run).toHaveBeenCalled();
+    expect(stopCalls(run)).toHaveLength(1);
   });
 
   it('stops a daemon that predates the tripwire so the app brings up an armed one', () => {
-    const run = vi.fn();
+    const run = daemonCli();
     const result = ensureDaemonCarriesTripwire({
       ...target,
       marker: 'shims|claude',
@@ -209,8 +219,38 @@ describe('the daemon a scenario inherits', () => {
     });
 
     expect(result).toEqual({ restarted: true, reason: 'daemon stopped' });
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][1]).toEqual(['daemon', 'stop']);
+    expect(stopCalls(run)).toHaveLength(1);
+  });
+
+  it('refuses an armed scenario rather than stopping a daemon whose terminals die with it', () => {
+    const run = daemonCli('embedded');
+
+    expect(() => ensureDaemonCarriesTripwire({
+      ...target,
+      scenarioId: 'PERF-PTY-STREAM',
+      marker: 'shims|claude',
+      armed: true,
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: () => {},
+    })).toThrow(/PERF-PTY-STREAM[\s\S]*pty_backend_mode is "embedded"[\s\S]*ends every terminal it hosts/);
+    expect(stopCalls(run)).toHaveLength(0);
+  });
+
+  it('leaves an embedded daemon running for an unarmed scenario', () => {
+    const run = daemonCli('embedded');
+    const result = ensureDaemonCarriesTripwire({
+      ...target,
+      marker: 'shims|claude',
+      pidPath: pidFileFor(process.pid),
+      readEnvironment: () => 'PATH=/usr/bin',
+      run,
+      log: () => {},
+    });
+
+    expect(result).toEqual({ restarted: false, reason: 'target refuses a daemon restart' });
+    expect(stopCalls(run)).toHaveLength(0);
   });
 
   it('never stops a production daemon', () => {
@@ -258,7 +298,7 @@ describe('the daemon a scenario inherits', () => {
       readEnvironment: () => 'PATH=/usr/bin',
       run,
       log: () => {},
-    })).toThrow(/a production daemon is never restarted/);
+    })).toThrow(/target refuses a restart[\s\S]*production/);
     expect(run).not.toHaveBeenCalled();
   });
 });

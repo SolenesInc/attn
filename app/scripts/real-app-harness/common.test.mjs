@@ -66,6 +66,20 @@ describe('parseCommonArgs production safety', () => {
   });
 });
 
+describe('parseCommonArgs instance selection', () => {
+  it('refuses an app path that names another instance than the harness targets', () => {
+    expect(() => parseCommonArgs(['--app-path', installedAppPath('attn-perf')])).toThrow(
+      /is instance "perf", but the harness targets instance "dev"[\s\S]*ATTN_HARNESS_INSTANCE=perf/,
+    );
+  });
+
+  it('accepts an app path for the instance the harness targets', () => {
+    process.env.ATTN_HARNESS_INSTANCE = 'dev';
+
+    expect(parseCommonArgs(['--app-path', '/tmp/build/attn-dev.app']).appPath).toBe('/tmp/build/attn-dev.app');
+  });
+});
+
 describe('isDirectoryUnderRoot', () => {
   it('rejects a sibling directory that merely shares the root as a string prefix', () => {
     expect(isDirectoryUnderRoot('/tmp/attn-real-app-sessions-old/keep', ['/tmp/attn-real-app-sessions'])).toBe(false);

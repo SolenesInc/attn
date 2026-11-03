@@ -14,7 +14,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, dataDirForInstance, defaultWSURLForInstance } from './harnessInstance.mjs';
-import { captureWebKitPids, collectDescendantPids, isRelevantWebKitProcess, readLiveDaemonPid, readProcessTable, stopDaemon } from './perfMeasure.mjs';
+import { captureWebKitPids, collectDescendantPids, isRelevantWebKitProcess, readLiveDaemonPid, readProcessTable, stopDaemonKeepingTerminals } from './perfMeasure.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -573,7 +573,7 @@ async function main() {
     const pids = await runner.step('launch_app_with_the_shared_host', async () => {
       if (extras.pprofPort) {
         await client.quitApp();
-        await stopDaemon(instance);
+        await stopDaemonKeepingTerminals(instance, { appPath: options.appPath });
       }
       const webkitBaseline = await captureWebKitPids();
       await launchFreshAppAndConnect(client, observer);

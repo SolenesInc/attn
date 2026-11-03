@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { harnessArtifactsRoot } from './common.mjs';
 import { MOCK_AGENT_AGENTS, MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
-import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
+import { assertDaemonStopKeepsTerminals, assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { MOCK_GITHUB_URL_VAR } from './mockGitHub.mjs';
 import {
   currentHarnessInstance,
@@ -365,9 +365,10 @@ export function ensureDaemonCarriesTripwire({
 
   try {
     assertFreshWorldTargetSafe({ instance, appPath });
+    assertDaemonStopKeepsTerminals({ instance, appPath, run });
   } catch (error) {
     if (armed) {
-      refuse(`the daemon predates this tripwire and the target refuses a restart (${error?.message || error}); a production daemon is never restarted`);
+      refuse(`the daemon predates this tripwire and the target refuses a restart (${error?.message || error})`);
     }
     log(`WARNING: daemon pid ${pid} predates this tripwire and the target refuses a restart (${error?.message || error}); session and headless execs may go unseen.`);
     return { restarted: false, reason: 'target refuses a daemon restart' };

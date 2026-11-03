@@ -46,11 +46,25 @@ export function parseCommonArgs(argv) {
   // `attn instance resolve`, which needs ./attn built.
   if (isHelp) return options;
 
-  if (!appPathExplicit) options.appPath = defaultAppPathForInstance();
+  if (appPathExplicit) assertAppPathNamesHarnessInstance(options.appPath);
+  else options.appPath = defaultAppPathForInstance();
   if (!wsUrlExplicit) options.wsUrl = defaultWSURLForInstance(instanceForAppPath(options.appPath));
 
   assertCommonTargetAllowed(options, safetyArgv);
   return options;
+}
+
+function assertAppPathNamesHarnessInstance(appPath) {
+  const harnessInstance = currentHarnessInstance();
+  const appInstance = instanceForAppPath(appPath, harnessInstance);
+  if (appInstance === harnessInstance) return;
+  const name = (instance) => JSON.stringify(instance || 'production');
+  throw new Error(
+    `--app-path ${appPath} is instance ${name(appInstance)}, but the harness targets instance `
+    + `${name(harnessInstance)} (ATTN_HARNESS_INSTANCE, then ATTN_INSTANCE, then dev), and its daemon `
+    + `stops, settings and observer would reach ${name(harnessInstance)}. `
+    + `Set ATTN_HARNESS_INSTANCE=${appInstance || '<empty> with --run-against-prod'} to run against ${name(appInstance)}.`,
+  );
 }
 
 export function assertCommonTargetAllowed(options, argv = process.argv.slice(2)) {
