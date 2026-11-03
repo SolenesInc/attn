@@ -151,6 +151,9 @@ func TestSendDeliversFilesToLocalAndOutpostSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if none := home.Run(testworld.Invocation{Args: []string{"send", "senders", "--json"}}); none.Code != 0 || strings.TrimSpace(none.Stdout) != "[]" {
+		t.Fatalf("send senders --json with no senders = %+v; an app reads an empty JSON array", none)
+	}
 	token := pairSender(t, home, "Capture")
 	if none := home.Run(testworld.Invocation{Args: []string{"send", "sessions", "--token-stdin", "--json"}, Stdin: token + "\n"}); none.Code != 0 || strings.TrimSpace(none.Stdout) != "[]" {
 		t.Fatalf("send sessions --json with no sessions = %+v; an app reads an empty JSON array", none)

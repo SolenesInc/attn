@@ -223,6 +223,9 @@ func executeSendSenders(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if *asJSON {
+		if senders == nil {
+			senders = []protocol.PairedSender{}
+		}
 		printJSONLine(stdout, senders)
 		return 0
 	}
