@@ -451,7 +451,7 @@ jobs:
       - name: Verify shared host output and resize order on the daemon wire
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test ./internal/daemon -run '^(TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat|TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable|TestAProgramReadsThePixelGeometryOfItsLastResize)$' -count=1
       - name: Verify instance cleanup with live host generations
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart|TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning)' -count=1
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestShellProgramTitleInsideHeavyOutputIsKept|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart|TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning)' -count=1
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
