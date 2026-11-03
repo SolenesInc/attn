@@ -1,7 +1,3 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
 import {
   waitForFirstDesktopPane,
   waitForPaneInputFocus,
@@ -9,57 +5,6 @@ import {
   waitForPaneVisibleContent,
 } from './scenarioAssertions.mjs';
 import { mockAgentSplash, writeMockAgentFixture } from './mockAgent.mjs';
-
-// Writes into the real ~/.claude.json. Safe only because the harness session dir
-// is fresh per run, so the entry cannot shadow a user-curated trust decision.
-export function preTrustClaudeFolder(folderPath) {
-  // Claude keys projects by the realpath of cwd: an unresolved /var/folders path
-  // sits next to Claude's canonical entry and is never read.
-  const resolvedFolder = path.resolve(folderPath);
-  const absoluteFolder = (() => {
-    try {
-      return fs.realpathSync(resolvedFolder);
-    } catch {
-      return resolvedFolder;
-    }
-  })();
-  const configPath = path.join(os.homedir(), '.claude.json');
-
-  let config = {};
-  // Carry the existing mode forward: this config holds account metadata, and the
-  // umask would widen a 0600 file to 0644.
-  let fileMode = 0o600;
-  try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    if (raw.trim()) {
-      config = JSON.parse(raw);
-    }
-    fileMode = fs.statSync(configPath).mode & 0o777;
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-
-  if (!config.projects || typeof config.projects !== 'object') {
-    config.projects = {};
-  }
-  const existing = config.projects[absoluteFolder] && typeof config.projects[absoluteFolder] === 'object'
-    ? config.projects[absoluteFolder]
-    : {};
-  config.projects[absoluteFolder] = {
-    ...existing,
-    hasTrustDialogAccepted: true,
-    hasCompletedProjectOnboarding: true,
-  };
-
-  // Write atomically: writing through a temp file keeps the 90+KB user
-  // config from being truncated if the harness is killed mid-write.
-  const tmpPath = `${configPath}.harness-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: fileMode });
-  fs.renameSync(tmpPath, configPath);
-  return absoluteFolder;
-}
 
 function hasTrustPrompt(text) {
   return (

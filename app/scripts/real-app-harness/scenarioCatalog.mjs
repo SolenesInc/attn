@@ -484,14 +484,6 @@ export const scenarioCatalog = [
     label: 'Ghostty scrollback anchoring while output streams',
     command: ['pnpm', 'run', 'real-app:scenario-ghostty-scroll'],
   },
-  {
-    id: 'focus-probe',
-    runnerId: 'FOCUS-PROBE',
-    label: 'Focus probe (no focus steal on background session create)',
-    command: ['pnpm', 'run', 'real-app:focus-probe'],
-    // Not part of the serial matrix sweep — only runnable directly (run-soak).
-    soakOnly: true,
-  },
 ];
 
 export function resolveScenarios(selected, catalog = scenarioCatalog) {

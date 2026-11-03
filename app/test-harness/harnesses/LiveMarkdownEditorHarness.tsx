@@ -37,10 +37,9 @@ const answer = 42;
 const LONG = `# Long note\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph line number ${i + 1} of the long note.`).join('\n\n')}\n`;
 
 // Editing-harness controls the spec drives directly. applyExternal goes through the
-// scroll-preserving minimal-edit handle; swapValue replaces `value` wholesale.
+// scroll-preserving minimal-edit handle.
 interface EditorHarnessControls {
   applyExternal: (next: string) => void;
-  swapValue: (next: string) => void;
 }
 declare global {
   interface Window {
@@ -69,7 +68,6 @@ export function LiveMarkdownEditorHarness({ onReady, setTriggerRerender }: Harne
     setTriggerRerender(() => force((n) => n + 1));
     window.__EDITOR_HARNESS__ = {
       applyExternal: (next: string) => editorRef.current?.applyExternalContent(next),
-      swapValue: (next: string) => setValue(next),
     };
     onReady();
   }, [onReady, setTriggerRerender]);

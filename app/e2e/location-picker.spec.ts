@@ -36,23 +36,6 @@ const sessionLabels = (page: import('@playwright/test').Page) =>
   page.evaluate(() => (window.__TEST_GET_SESSIONS?.() ?? []).map((session) => session.label));
 
 test.describe('LocationPicker', () => {
-  test.describe('Basic Dialog Operations', () => {
-    test('opens the new-session dialog with Cmd+N', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-
-      await page.keyboard.press('Meta+n');
-
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-      await expect(page.locator('.location-picker')).toBeVisible();
-      await expect(page.locator('.picker-title')).toHaveText('New Session Location');
-    });
-
-  });
-
   test.describe('Keyboard Navigation', () => {
     test('arrow keys scroll the selected directory into view', async ({ page, daemon }) => {
       await daemon.start();

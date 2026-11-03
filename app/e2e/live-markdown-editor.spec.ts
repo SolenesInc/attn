@@ -4,7 +4,6 @@ declare global {
   interface Window {
     __EDITOR_HARNESS__?: {
       applyExternal: (next: string) => void;
-      swapValue: (next: string) => void;
     };
   }
 }
@@ -112,23 +111,6 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
     await expect
       .poll(() => scroller.evaluate((el, b) => Math.abs(el.scrollTop - b), before))
       .toBeLessThanOrEqual(4);
-  });
-
-  test('contrast: a full value swap snaps the scroller to the top (the bug the fix avoids)', async ({ page }) => {
-    await page.goto('/test-harness/?component=LiveMarkdownEditor&long=1');
-    await page.evaluate(() => window.__HARNESS_READY__);
-    await page.waitForSelector('.cm-content');
-
-    const scroller = page.locator('.cm-scroller');
-    expect(await scrollIntoLongNote(page)).toBeGreaterThan(400);
-
-    await page.evaluate(() => {
-      const doc = Array.from({ length: 80 }, (_, i) => `Paragraph line number ${i + 1} of the long note.`);
-      doc[79] = 'Paragraph line number 80 of the long note — EDITED BY AGENT.';
-      window.__EDITOR_HARNESS__!.swapValue(`# Long note\n\n${doc.join('\n\n')}\n`);
-    });
-
-    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeLessThan(50);
   });
 
   test('renders list bullets, task checkboxes, and a fenced code block, and toggles a checkbox on click', async ({ page }) => {
