@@ -124,12 +124,6 @@ for the changed paths, and pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.
 
-One land runs at a time per clone. When a land from another worktree of the
-clone holds the land queue, `scripts/land.sh` prints `land: waiting for the
-land queue: held by pid <pid> (<worktree>) since <time>` and waits. Waiting is normal: leave the land
-running, and do not kill it or start it again. It prints `land: took the land
-queue` when its turn comes.
-
 When `main` moves during landing, `scripts/land.sh` rebases, runs its gate
 again and pushes on its own. Your checks still count. When `scripts/land.sh`
 stops on a conflict in your code, resolve the conflict with

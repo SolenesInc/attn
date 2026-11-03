@@ -50,17 +50,9 @@ landing changes, and pushes:
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
 
-One land runs at a time per clone. `land.sh` takes the clone's land queue, a
-lock that every worktree of the clone shares, before its first fetch, and holds
-it until it exits. A land that finds the queue taken prints the holder's PID,
-worktree and start time, waits, and says when it takes the queue. The lock dies
-with its process, so a land that crashes or is killed holds nothing. Lands from
-one clone therefore never push under each other's running gate.
-
 When only protocol types or prompt catalogs conflict, `land.sh` regenerates
-them. When `main` moves during landing, such as from a land in another clone or
-on another machine, `land.sh` rebases, runs the gate again on the new
-combination, and pushes.
+them. When `main` moves during landing, `land.sh` rebases, runs the gate again
+on the new combination, and pushes.
 
 ## Verifying before landing
 

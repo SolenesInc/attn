@@ -24,8 +24,10 @@ takes a lock on /tmp/attn-verification-cost.lock, waits while another process
 holds it and prints the holder. The kernel releases the lock when its process
 exits.
 
-Concurrent lands start together and wait for each other in land.sh's land
-queue. Their wall time runs from the start to the last land.
+Concurrent lands start a second apart, and their wall time runs from the first
+start to the last land. Started together, their fetches collide on
+refs/remotes/origin/main, shared by every worktree, and all but one fail before
+checking anything.
 
 Lands never reach the real origin or the shared test history. They run in a
 scratch clone of HEAD, beside this checkout, whose origin is a local bare
@@ -54,6 +56,7 @@ from pathlib import Path
 BASELINES = ("land", "lands3", "suites", "daemon", "ci")
 LAND_PACKAGES = ("internal/daemon", "internal/store", "cmd/attn")
 CI_GREEN_RUNS = 5
+LAND_STAGGER_SECONDS = 1
 MEASUREMENT_LOCK = Path("/tmp/attn-verification-cost.lock")
 
 
@@ -98,6 +101,7 @@ def run_concurrently(jobs):
     results = [None] * len(jobs)
 
     def run(i, job):
+        time.sleep(i * LAND_STAGGER_SECONDS)
         results[i] = run_measured(*job)
 
     threads = [threading.Thread(target=run, args=(i, job)) for i, job in enumerate(jobs)]

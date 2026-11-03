@@ -235,40 +235,18 @@ sync_history() {
   go tool test-history sync || echo "land: $1" >&2
 }
 
-lock_land_queue() {
-  perl -MFcntl=:flock -e 'open(my $queue, ">&=9") or die "land: $!\n"; flock($queue, LOCK_EX | ($ARGV[0] ? LOCK_NB : 0)) or exit 1' "$1"
-}
-
-take_land_queue() {
-  local queue holder
-  queue="$(git rev-parse --git-common-dir)/attn-land-queue"
-  exec 9>>"$queue"
-  if ! lock_land_queue nonblocking; then
-    holder="$(cat "$queue")"
-    echo "land: waiting for the land queue: held by ${holder:-a land that is starting}" >&2
-    lock_land_queue ""
-    echo "land: took the land queue" >&2
+for _ in $(seq "$max_attempts"); do
+  git fetch --quiet origin main
+  [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
+  rebase_onto_main
+  run_checks
+  if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
+    echo "land: main is at $(git rev-parse --short HEAD)"
+    sync_history "this landing's test receipts upload at the next sync"
+    exit 0
   fi
-  echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
-}
-
-land() {
-  for _ in $(seq "$max_attempts"); do
-    git fetch --quiet origin main
-    [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
-    rebase_onto_main
-    run_checks
-    if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
-      echo "land: main is at $(git rev-parse --short HEAD)"
-      sync_history "this landing's test receipts upload at the next sync"
-      exit 0
-    fi
-    git fetch --quiet origin main
-    git merge-base --is-ancestor origin/main HEAD && fail "git push failed, and not because main moved"
-    echo "land: main moved; rebasing again" >&2
-  done
-  fail "main moved $max_attempts times while landing; run scripts/land.sh again"
-}
-
-take_land_queue
-land 9>&-
+  git fetch --quiet origin main
+  git merge-base --is-ancestor origin/main HEAD && fail "git push failed, and not because main moved"
+  echo "land: main moved; rebasing again" >&2
+done
+fail "main moved $max_attempts times while landing; run scripts/land.sh again"
