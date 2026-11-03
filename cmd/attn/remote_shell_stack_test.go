@@ -662,7 +662,7 @@ func TestRemoteReloadDoesNotSendQueuedInputToTheReplacementShell(t *testing.T) {
 	for i := range 20 {
 		app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 80 + i%2, Rows: 24})
 	}
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: fmt.Sprintf("printf '%%s' \"${GENERATION-missing}\" > %q\r", marker), ProbeID: protocol.Ptr("old-input")})
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: fmt.Sprintf("printf '%%s' \"${GENERATION-missing}\" > %[1]q.tmp && mv %[1]q.tmp %[1]q\r", marker), ProbeID: protocol.Ptr("old-input")})
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 80, Rows: 24})
 	testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: "queued-before-resume", RuntimeIds: []protocol.TerminalID{terminal}}, protocol.EventSupportSnapshotResult, func(m protocol.SupportSnapshotResultMessage) bool { return m.RequestID == "queued-before-resume" })
 	resume()
