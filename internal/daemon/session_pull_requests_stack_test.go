@@ -42,7 +42,7 @@ func TestAPullRequestRecordedWhileTheSessionsConversationIsAppliedIsListedOnceAc
 	}
 }
 
-func TestAPullRequestRecordedWhileAClearIsAppliedIsNotAcknowledgedForTheClosedSession(t *testing.T) {
+func TestAPullRequestReportedFromTheTerminalWhileAClearIsAppliedStaysOnTheClearedSessionThroughItsResume(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	deciding := s.PauseAt(pausepoint.ConversationDecision)
 	awaited := s.PauseAt(pausepoint.ConversationApplyAwaited)
@@ -50,14 +50,42 @@ func TestAPullRequestRecordedWhileAClearIsAppliedIsNotAcknowledgedForTheClosedSe
 	app, cli := s.App(), s.Client()
 	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	agent := s.Launched(first)
+	terminal := protocol.TerminalID(app.Terminal(first))
+	app.TypeLine(first, "add a discount field")
+	agent.Prompted()
+	conversation := agent.ConversationID
+	agent.Reply("Added. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
 	deciding.Await()
-	release, err := recordDuringConversationApply(cli.RecordPullRequestCreated, first, deciding, awaited)
+	fromTerminal := func(_ protocol.SessionID, url string) error {
+		return cli.RecordPullRequestCreatedFromTerminal(terminal, url)
+	}
+	release, err := recordDuringConversationApply(fromTerminal, first, deciding, awaited)
 	release()
+	if err != nil {
+		t.Fatalf("record from the terminal while /clear was applied: %v", err)
+	}
 	successor := awaitSuccessor(app, first)
-	if err == nil {
-		t.Fatalf("record for %s was acknowledged, but /clear closed it; its successor %s lists %v", first, successor.ID, pullNumbers(queriedSession(t, cli, string(successor.ID))))
+	resumeClaude(app, agent, string(successor.ID), conversation)
+	if back := awaitSuccessor(app, string(successor.ID)); string(back.ID) != first {
+		t.Fatalf("/resume %s opened %s, want the cleared session %s", conversation, back.ID, first)
+	}
+	mark := len(app.Log())
+	app.TypeLine(first, "keep going")
+	agent.Prompted()
+	agent.Reply("Going. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSessionSince(app, mark, first, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+	})
+	if got := pullNumbers(queriedSession(t, cli, first)); !slices.Equal(got, []int{4}) {
+		t.Fatalf("pull requests of the resumed session after another turn = %v, want [4]", got)
+	}
+	s.Stop()
+	s.Start()
+	if got := pullNumbers(restartedSession(s.App(), first)); !slices.Equal(got, []int{4}) {
+		t.Fatalf("pull requests of the resumed session after a restart = %v, want [4]", got)
 	}
 }
 

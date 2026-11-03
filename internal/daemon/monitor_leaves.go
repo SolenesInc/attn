@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/activity"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -109,7 +110,30 @@ func (d *Daemon) changePullRequestLink(_ context.Context, msg protocol.PullReque
 	if msg.Kind == "forget" {
 		return protocol.PullRequestLinkResult{Applied: monitor.ForgetPullRequest(msg.PRID)}, nil
 	}
-	return protocol.PullRequestLinkResult{Applied: monitor.ReportPullRequest(msg.PRID, sessionmonitor.PullRequest{Repository: protocol.Deref(msg.Repository), Number: protocol.Deref(msg.Number), URL: protocol.Deref(msg.URL)})}, nil
+	link := sessionmonitor.PullRequest{Repository: protocol.Deref(msg.Repository), Number: protocol.Deref(msg.Number), URL: protocol.Deref(msg.URL)}
+	if monitor.ReportPullRequest(msg.PRID, link) {
+		return protocol.PullRequestLinkResult{Applied: true}, nil
+	}
+	if d.sessionMonitor(msg.SessionID) == monitor {
+		return protocol.PullRequestLinkResult{}, nil
+	}
+	if err := d.recordLinkOfStoppedMonitor(msg.SessionID, msg.PRID, link); err != nil {
+		return protocol.PullRequestLinkResult{}, err
+	}
+	return protocol.PullRequestLinkResult{Applied: true}, nil
+}
+
+func (d *Daemon) recordLinkOfStoppedMonitor(session protocol.SessionID, prID string, link sessionmonitor.PullRequest) error {
+	recorded, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
+		SessionID: session, PRID: prID, Repository: link.Repository, Number: link.Number, URL: link.URL,
+	}, time.Now())
+	if err != nil {
+		return fmt.Errorf("pull request %s: %w", prID, err)
+	}
+	if recorded {
+		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: prID})
+	}
+	return nil
 }
 
 func (d *Daemon) renameLink(_ context.Context, msg protocol.LinkRenameMessage) (struct{}, error) {
