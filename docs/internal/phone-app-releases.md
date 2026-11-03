@@ -52,13 +52,16 @@ that step's `error:` lines and the path of its log.
 App Store Connect processes a build before TestFlight offers it. The first
 builds took 2 to 4 minutes.
 
-## Answer export compliance
+## Export compliance
 
-App Store Connect holds each new build at **Missing Compliance** until someone
-says whether the app uses encryption beyond what Apple's operating system
-provides. TestFlight does not offer the build until then. Open
-**Apps → attn.codes → TestFlight**, click the build, and answer the questions
-next to **Missing Compliance**.
+App Store Connect asks of every build whether the app uses encryption beyond
+what Apple's operating system provides, and TestFlight does not offer a build
+until it has the answer. The answer is no: the phone's Noise encryption runs
+on CryptoKit, Apple's own cryptography. `ITSAppUsesNonExemptEncryption` is
+`false` in `mobile/ios/App/App/Info.plist`, so each build carries the answer
+and never stops at **Missing Compliance**. If the phone ever ships its own
+cryptography, that answer changes: remove the key and answer the questions in
+**Apps → attn.codes → TestFlight** for the build.
 
 ## Secrets
 
