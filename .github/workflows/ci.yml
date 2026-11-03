@@ -308,17 +308,13 @@ jobs:
       matrix:
         include:
           - group: 1
-            jobs: packages race
+            jobs: packages race attn-1
           - group: 2
-            jobs: daemon-1 daemon-2
+            jobs: daemon-1 daemon-2 attn-2
           - group: 3
-            jobs: daemon-3 daemon-4
+            jobs: daemon-3 daemon-4 attn-3
           - group: 4
-            jobs: daemon-5 attn-1
-          - group: 5
-            jobs: attn-2
-          - group: 6
-            jobs: attn-3
+            jobs: daemon-5 attn-4 attn-5 attn-6
     steps:
       - uses: actions/checkout@v4
 

@@ -210,6 +210,10 @@ steps of landing.
 `--packages` passes the remaining arguments to `go test` without running the
 full suite. `scripts/test-go.sh` passes leading `--unit` and `--receipt-out` options to
 `go tool test-history capture`.
+A full run is thirteen `go test` jobs run at once: `packages`, `race`,
+`daemon-1` to `daemon-5` and `attn-1` to `attn-6`. Leading `--job <name>` options run only
+the jobs they name, as CI does to spread the suite across runners:
+`./scripts/test-go.sh --job daemon-3 --job attn-1`.
 The runner and Makefile use `-trimpath` so unchanged packages can reuse build
 artifacts across worktrees. The runner gives targeted and full test runs the
 same isolated outer data directory, and each package's `TestMain` still creates

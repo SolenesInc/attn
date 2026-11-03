@@ -7,7 +7,7 @@ source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
 cli_package="github.com/victorarias/attn/cmd/attn"
 shard_count="${ATTN_GO_TEST_SHARDS:-5}"
-cli_shard_count=3
+cli_shard_count=6
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
 test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
 # -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
