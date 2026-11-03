@@ -17,7 +17,9 @@ large. Split the range into units, and give each unit a context of its own.
    pass. Make one temporary folder for the pass,
    `$TMPDIR/review-main-<head short sha>`.
 1. Close the fixers you delegated whose seeds are harvested.
-   `attn seed ls --plot <your seed> --json` lists them. Close each with
+   `attn seed ls --plot <your seed>` lists them. For each, read the session
+   that worked it from `seed.last_execution_id` in
+   `attn seed show <id> --json`, and close it with
    `attn agent close <last_execution_id> -m "<reason>"`.
 2. Split the range `origin/reviewed..<head>` into units. A unit is the commits
    of one seed, grouped by their `Attn-Seed:` trailers. A commit that names
