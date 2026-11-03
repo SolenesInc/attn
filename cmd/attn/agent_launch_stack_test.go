@@ -63,7 +63,13 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 						want = "attn-pty-host"
 					}
 					if !strings.Contains(string(out), want) {
-						t.Fatalf("%s's parent is %s, want %s", h, out, want)
+						t.Errorf("%s's parent is %s, want %s", h, out, want)
+						for read := range 3 {
+							states, err := exec.Command("ps", "-o", "pid,ppid,stat,etime,comm", "-p", parent+","+pid).CombinedOutput()
+							t.Logf("process states, read %d (err %v):\n%s", read+1, err, states)
+						}
+						t.Logf("%s wrapper:\n%s", h, s.WrapperEvidence(session))
+						t.FailNow()
 					}
 					receipt, err := exec.Command("ps", "-p", fmt.Sprintf("%s,%s", pid, parent), "-o", "pid,ppid,rss,args").Output()
 					if err != nil {
