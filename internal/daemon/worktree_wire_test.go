@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -111,6 +112,52 @@ func TestAPullRequestMergedInAnotherOriginURLDoesNotSweepTheWorktree(t *testing.
 	}
 }
 
+func TestAWorktreeOnlyOriginHEADHoldsWaitsForGitHubToLearnTheIntegrationBranch(t *testing.T) {
+	pulls := newMergedPullRequests(t)
+	pulls.answerEveryAsk(t)
+	pulls.down.Store(true)
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	shop := newRepo(t, "shop")
+	runGit(t, shop, "remote", "add", "origin", "https://github.test/acme/shop.git")
+	path := createWorktree(t, app, shop, "feat-login")
+	head := commitFile(t, path, "login.go", "package login\n")
+	develop := commitFile(t, shop, "develop.go", "package develop\n")
+	runGit(t, shop, "update-ref", "refs/remotes/origin/main", head)
+	runGit(t, shop, "update-ref", "refs/remotes/origin/develop", develop)
+	runGit(t, shop, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+
+	setSetting(t, app, "worktree_sweep_enabled", "false")
+	refreshWorktrees(t, cli)
+	offline := sweepAwaitState(app, path, func(wt protocol.Worktree) bool {
+		return protocol.Deref(wt.HeadSHA) == head && protocol.Deref(wt.SweepReason) != ""
+	})
+	if reason := protocol.Deref(offline.SweepReason); !strings.Contains(reason, "merged pull requests unavailable") {
+		t.Fatalf("while GitHub was down the sweep decided %q, want it undecided until GitHub says where pull requests merge", reason)
+	}
+
+	pulls.list(mergedPullRequest{Number: 3, MergedAt: "2026-08-06T10:00:00Z", Head: ref{Ref: "feat-billing", SHA: develop}, Base: ref{Ref: "develop"}})
+	pulls.down.Store(false)
+	setSetting(t, app, "worktree_sweep_enabled", "true")
+	refreshWorktrees(t, cli)
+	kept := sweepAwaitState(app, path, func(wt protocol.Worktree) bool {
+		return protocol.Deref(wt.SweepStatus) == "kept_unmerged"
+	})
+	if reason := protocol.Deref(kept.SweepReason); !strings.Contains(reason, "develop") {
+		t.Errorf("kept feat-login because %q, want it judged against develop, where pull requests merge", reason)
+	}
+
+	pulls.list(
+		mergedPullRequest{Number: 3, MergedAt: "2026-08-06T10:00:00Z", Head: ref{Ref: "feat-billing", SHA: develop}, Base: ref{Ref: "develop"}},
+		mergedPullRequest{Number: 4, MergedAt: "2026-08-07T10:00:00Z", Head: ref{Ref: "feat-login", SHA: head}, Base: ref{Ref: "develop"}},
+	)
+	refreshWorktrees(t, cli)
+	if swept := sweepAwaitSwept(app, path); swept.Action != "removed" {
+		t.Errorf("the sweep recorded %s (%s), want feat-login removed once its pull request merged", swept.Action, protocol.Deref(swept.Reason))
+	}
+}
+
 type ref struct {
 	Ref string `json:"ref"`
 	SHA string `json:"sha,omitempty"`
@@ -124,6 +171,7 @@ type mergedPullRequest struct {
 }
 
 type mergedPullRequests struct {
+	down   atomic.Bool
 	pulls  []mergedPullRequest
 	asking chan chan struct{}
 	server *httptest.Server
@@ -134,6 +182,15 @@ func newMergedPullRequests(t *testing.T) *mergedPullRequests {
 	m := &mergedPullRequests{asking: make(chan chan struct{})}
 	m.server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
+		if m.down.Load() {
+			rw.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = rw.Write([]byte(`{"message":"service unavailable"}`))
+			return
+		}
+		if r.URL.Path == "/repos/acme/ledger/pulls" {
+			_, _ = rw.Write([]byte(`[]`))
+			return
+		}
 		if r.URL.Path != "/repos/acme/shop/pulls" {
 			rw.WriteHeader(http.StatusNotFound)
 			_, _ = rw.Write([]byte(`{"message":"Not Found"}`))

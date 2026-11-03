@@ -16,8 +16,9 @@ import (
 const integrationBranchTTL = 24 * time.Hour
 
 var (
-	errWorktreeStashCounts      = errors.New("worktree stash counts unavailable")
-	errIntegrationRefUnresolved = errors.New("resolve integration ref")
+	errWorktreeStashCounts           = errors.New("worktree stash counts unavailable")
+	errIntegrationRefUnresolved      = errors.New("resolve integration ref")
+	errMergedPullRequestsUnavailable = errors.New("merged pull requests unavailable")
 )
 
 type repositoryFacts struct {
@@ -79,7 +80,13 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 	facts := &repositoryFacts{repo: repo}
 
 	if err := d.refreshMergedPullRequestsContext(ctx, repo, now); err != nil {
-		return nil, err
+		if !errors.Is(err, errMergedPullRequestsUnavailable) {
+			return nil, err
+		}
+		if !d.integrationBranchLearnedFromPullRequests(repo) {
+			return nil, fmt.Errorf("%w; no integration branch has been learned from them yet", err)
+		}
+		d.logf("worktree refresh: %s: %v; keeping the recorded integration branch and merged branches", repo, err)
 	}
 	integrationBranch, err := d.integrationBranchContext(ctx, repo, now)
 	if err != nil {
@@ -181,9 +188,7 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 		return nil
 	}
 	if limited, resetAt := client.IsRateLimited("core"); limited {
-		d.logf("worktree refresh: %s rate limited until %s, merged branches stay as recorded",
-			host, resetAt.Format(time.RFC3339))
-		return nil
+		return fmt.Errorf("%w: %s rate limited until %s", errMergedPullRequestsUnavailable, host, resetAt.Format(time.RFC3339))
 	}
 
 	merged, err := client.ListMergedPullRequestsContext(ctx, ownerRepo)
@@ -191,8 +196,7 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 		if context.Cause(ctx) != nil {
 			return context.Cause(ctx)
 		}
-		d.logf("worktree refresh: %s: listing merged pull requests: %v", repo, err)
-		return nil
+		return fmt.Errorf("%w: listing %s: %w", errMergedPullRequestsUnavailable, ownerRepo, err)
 	}
 	if cause := context.Cause(ctx); cause != nil {
 		return cause
@@ -215,6 +219,11 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 		d.store.SetRepoIntegrationBranch(repo, base, "pull_requests", now)
 	}
 	return nil
+}
+
+func (d *Daemon) integrationBranchLearnedFromPullRequests(repo string) bool {
+	record := d.store.RepoIntegrationBranch(repo)
+	return record != nil && record.Source == "pull_requests" && record.Branch != ""
 }
 
 func modalBaseBranch(counts map[string]int) (string, bool) {
