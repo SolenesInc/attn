@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -25,25 +26,29 @@ type codexFolderTrust struct {
 	repository string
 	saved      string
 	worked     bool
-	config     *codexTrustConfig
 }
 
 func (d *Daemon) readCodexFolderTrust(path, profile string) (codexFolderTrust, error) {
+	config, err := readCodexTrust(codexConfigPath())
+	if err != nil {
+		return codexFolderTrust{}, err
+	}
+	return assessCodexFolderTrust(path, config, d.store.StartedConversationDirectories(profile)), nil
+}
+
+func assessCodexFolderTrust(path string, config *codexTrustConfig, workedDirectories []string) codexFolderTrust {
 	trust := codexFolderTrust{path: path, repository: path}
 	worktrees := repositoryWorktrees(path)
 	if len(worktrees) > 0 {
 		trust.repository = worktrees[0]
 	}
-	config, err := readCodexTrust(codexConfigPath())
-	if err != nil {
-		return trust, err
-	}
-	trust.config = config
 	if trust.saved = config.level(path); trust.saved == "" {
 		trust.saved = config.level(trust.repository)
 	}
-	trust.worked = d.store.HasStartedConversationIn(profile, append([]string{path}, worktrees...))
-	return trust, nil
+	trust.worked = slices.ContainsFunc(append([]string{path}, worktrees...), func(directory string) bool {
+		return slices.Contains(workedDirectories, directory)
+	})
+	return trust
 }
 
 func repositoryWorktrees(path string) []string {
@@ -53,10 +58,10 @@ func repositoryWorktrees(path string) []string {
 	return nil
 }
 
-func (d *Daemon) workedInRepository(repository, profile string) bool {
+func workedInRepository(repository string, workedDirectories []string, originOf func(repository string) string) bool {
 	origin, originRead := "", false
 	seen := map[string]bool{}
-	for _, directory := range d.store.StartedConversationDirectories(profile) {
+	for _, directory := range workedDirectories {
 		worktrees := repositoryWorktrees(directory)
 		if len(worktrees) == 0 || seen[worktrees[0]] {
 			continue
@@ -66,9 +71,9 @@ func (d *Daemon) workedInRepository(repository, profile string) bool {
 			return true
 		}
 		if !originRead {
-			origin, originRead = d.repositoryOrigin(repository), true
+			origin, originRead = originOf(repository), true
 		}
-		if origin != "" && d.repositoryOrigin(worktrees[0]) == origin {
+		if origin != "" && originOf(worktrees[0]) == origin {
 			return true
 		}
 	}
@@ -137,24 +142,32 @@ func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, profi
 	}
 	d.codexTrustMu.Lock()
 	defer d.codexTrustMu.Unlock()
-	trust, err := d.readCodexFolderTrust(opts.CWD, profile)
-	switch {
-	case err != nil:
-		return err
-	case trust.saved == codexTrusted:
-		return nil
-	case trust.saved != "":
-		return fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
-	case !trust.worked && !d.workedInRepository(trust.repository, profile):
-		return fmt.Errorf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path)
-	case shared:
-		return nil
-	}
-	if err := trust.config.addTrusted(trust.repository); err != nil {
+	config, err := readCodexTrust(codexConfigPath())
+	if err != nil {
 		return err
 	}
-	d.logf("automation launch: saved %s as trusted in Codex's config %s, since an agent session worked in it", trust.repository, trust.config.path)
+	repository, err := unattendedCodexTrustToAdd(opts.CWD, config, d.store.StartedConversationDirectories(profile), d.repositoryOrigin)
+	if err != nil || repository == "" || shared {
+		return err
+	}
+	if err := config.addTrusted(repository); err != nil {
+		return err
+	}
+	d.logf("automation launch: saved %s as trusted in Codex's config %s, since an agent session worked in it", repository, config.path)
 	return nil
+}
+
+func unattendedCodexTrustToAdd(path string, config *codexTrustConfig, workedDirectories []string, originOf func(repository string) string) (string, error) {
+	trust := assessCodexFolderTrust(path, config, workedDirectories)
+	switch {
+	case trust.saved == codexTrusted:
+		return "", nil
+	case trust.saved != "":
+		return "", fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
+	case !trust.worked && !workedInRepository(trust.repository, workedDirectories, originOf):
+		return "", fmt.Errorf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path)
+	}
+	return trust.repository, nil
 }
 
 func codexConfigPath() string {

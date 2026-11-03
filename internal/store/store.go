@@ -714,32 +714,6 @@ func (s *Store) StartedConversationDirectories(profileID string) []string {
 	return directories
 }
 
-func (s *Store) HasStartedConversationIn(profileID string, directories []string) bool {
-	if len(directories) == 0 {
-		return false
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.db == nil {
-		return false
-	}
-
-	args := []any{profileID, protocol.AgentShellValue}
-	for _, directory := range directories {
-		args = append(args, directory)
-	}
-	var started bool
-	err := s.db.QueryRow(`
-		SELECT EXISTS(
-			SELECT 1 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
-			WHERE s.profile_id = ? AND s.agent != ?
-				AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')
-				AND s.directory IN (?`+strings.Repeat(", ?", len(directories)-1)+`))`, args...).Scan(&started)
-	return err == nil && started
-}
-
 func (s *Store) HasSessionInDirectory(directory string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
