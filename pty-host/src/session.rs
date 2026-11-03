@@ -7,7 +7,6 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{SyncSender, TrySendError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,6 +18,8 @@ use serde_json::{Value, json};
 
 use crate::ghostty::{HandoverScreen, Terminal, Theme};
 use crate::handover::SessionHandoff;
+use crate::outbox::{Line, Outbox, Refused};
+use crate::output_batch::{OUTPUT_BATCH_MAX_BYTES, OutputBatch};
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
     output_event, resize_event, state_event,
@@ -32,7 +33,9 @@ use crate::signals::{self, SignalObserver};
 use crate::wire::{WireFeeder, mint_epoch};
 
 const READER_STACK_BYTES: usize = 256 * 1024;
+const READ_BUFFER_BYTES: usize = 4 * 1024;
 const OUTPUT_EVENT_MAX_BYTES: usize = (256 + 16) * 1024;
+const _: () = assert!(OUTPUT_BATCH_MAX_BYTES + READ_BUFFER_BYTES <= OUTPUT_EVENT_MAX_BYTES);
 const EXITED_SESSION_TTL: Duration = Duration::from_secs(45);
 const TERMINATE_TIMEOUT: Duration = Duration::from_secs(10);
 const SIGTERM_TO_HUP_GRACE: Duration = Duration::from_secs(2);
@@ -182,7 +185,7 @@ struct Lifecycle {
 
 struct Subscriber {
     connection_id: String,
-    sender: SyncSender<Value>,
+    sender: Outbox,
     shutdown: UnixStream,
 }
 
@@ -247,7 +250,7 @@ pub struct Session {
     reader_finished: AtomicBool,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
-    watchers: Mutex<HashMap<String, SyncSender<Value>>>,
+    watchers: Mutex<HashMap<String, Outbox>>,
     cleanup_dir: String,
     cleanup: Cleanup,
     broadcast: Broadcast,
@@ -656,7 +659,7 @@ impl Session {
         &self,
         subscriber_id: String,
         connection_id: String,
-        sender: SyncSender<Value>,
+        sender: Outbox,
         shutdown: UnixStream,
         omit_replay: bool,
     ) -> Value {
@@ -709,22 +712,22 @@ impl Session {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    pub fn watch(&self, watcher_id: String, sender: SyncSender<Value>) -> Value {
+    pub fn watch(&self, watcher_id: String, sender: Outbox) -> Value {
         let model = self.model.lock().expect("model mutex poisoned");
         self.watchers
             .lock()
             .expect("watchers mutex poisoned")
             .insert(watcher_id, sender.clone());
         let lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
-        let _ = sender.try_send(self.title_event(&model.signals.title.title()));
-        let _ = sender.try_send(state_event(
+        let _ = sender.offer_value(&self.title_event(&model.signals.title.title()));
+        let _ = sender.offer_value(&state_event(
             &self.id,
             &lifecycle.state,
             &lifecycle.state_detail,
             lifecycle.replayed_source(),
         ));
         if !lifecycle.running {
-            let _ = sender.try_send(exit_event(
+            let _ = sender.offer_value(&exit_event(
                 &self.id,
                 lifecycle.exit_code.unwrap_or_default(),
                 lifecycle.exit_signal.as_deref(),
@@ -1072,7 +1075,8 @@ impl Session {
     }
 
     fn read_until_closed(&self, reader: &mut File) {
-        let mut buffer = vec![0_u8; 4 * 1024];
+        let mut buffer = vec![0_u8; READ_BUFFER_BYTES];
+        let mut last_emit = None;
         loop {
             if self
                 .quiesce
@@ -1081,13 +1085,40 @@ impl Session {
             {
                 return;
             }
-            match reader.read(&mut buffer) {
+            let first = match reader.read(&mut buffer) {
                 Ok(0) => return,
-                Ok(read) => self.observe_output(&buffer[..read], &self.delivery.admit_output()),
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Ok(read) => read,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
                 Err(_) => return,
+            };
+            let admission = self.delivery.admit_output();
+            let mut batch = OutputBatch::start(&buffer[..first], Instant::now(), last_emit);
+            let open = self.gather(reader, &mut buffer, &mut batch);
+            self.observe_output(batch.bytes(), &admission);
+            drop(admission);
+            last_emit = Some(Instant::now());
+            if !open {
+                return;
             }
         }
+    }
+
+    fn gather(&self, reader: &mut File, buffer: &mut [u8], batch: &mut OutputBatch) -> bool {
+        while let Some(wait) = batch.wait(Instant::now()) {
+            match self.quiesce.readable_within(reader.as_raw_fd(), wait) {
+                Ok(true) => {}
+                Ok(false) => return true,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(_) => return false,
+            }
+            match reader.read(buffer) {
+                Ok(0) => return false,
+                Ok(read) => batch.push(&buffer[..read]),
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(_) => return false,
+            }
+        }
+        true
     }
 
     fn parser_at_ground(&self) -> bool {
@@ -1172,21 +1203,24 @@ impl Session {
         if subscribers.is_empty() {
             return;
         }
-        let event = output_event(&self.id, seq, &BASE64.encode(data));
-        let mut dropped = Vec::new();
-        for (id, subscriber) in &*subscribers {
-            match subscriber.sender.try_send(event.clone()) {
-                Ok(()) => {}
-                Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => {
-                    dropped.push(id.clone());
+        let line = Line::encode(&output_event(&self.id, seq, &BASE64.encode(data)));
+        self.offer_subscribers(&mut subscribers, &line);
+    }
+
+    fn offer_subscribers(&self, subscribers: &mut HashMap<String, Subscriber>, line: &Line) {
+        subscribers.retain(|id, subscriber| match subscriber.sender.offer(line) {
+            Ok(()) => true,
+            Err(refused) => {
+                if let Refused::Full { .. } = refused {
+                    eprintln!(
+                        "PTY host dropped subscriber {id} of terminal {}: {refused}",
+                        self.id
+                    );
                 }
-            }
-        }
-        for id in dropped {
-            if let Some(subscriber) = subscribers.remove(&id) {
                 let _ = subscriber.shutdown.shutdown(std::net::Shutdown::Both);
+                false
             }
-        }
+        });
     }
 
     fn broadcast_placements(&self, seq: u32, placements: &[crate::ghostty::KittyPlacement]) {
@@ -1194,10 +1228,10 @@ impl Session {
     }
 
     fn force_resync(&self, reason: &str) {
-        let event = desync_event(&self.id, reason);
+        let line = Line::encode(&desync_event(&self.id, reason));
         let mut subscribers = self.subscribers.lock().expect("subscribers mutex poisoned");
         for (_, subscriber) in subscribers.drain() {
-            let _ = subscriber.sender.try_send(event.clone());
+            let _ = subscriber.sender.offer(&line);
             let _ = subscriber.shutdown.shutdown(std::net::Shutdown::Both);
         }
     }
@@ -1205,17 +1239,7 @@ impl Session {
     #[allow(clippy::needless_pass_by_value)]
     fn broadcast_subscriber_event(&self, event: Value) {
         let mut subscribers = self.subscribers.lock().expect("subscribers mutex poisoned");
-        let mut dropped = Vec::new();
-        for (id, subscriber) in &*subscribers {
-            if subscriber.sender.try_send(event.clone()).is_err() {
-                dropped.push(id.clone());
-            }
-        }
-        for id in dropped {
-            if let Some(subscriber) = subscribers.remove(&id) {
-                let _ = subscriber.shutdown.shutdown(std::net::Shutdown::Both);
-            }
-        }
+        self.offer_subscribers(&mut subscribers, &Line::encode(&event));
     }
 
     pub fn kitty_image(&self, image_id: u32) -> Option<crate::ghostty::KittyImage> {
@@ -1277,7 +1301,19 @@ impl Session {
     #[allow(clippy::needless_pass_by_value)]
     fn broadcast_watch(&self, event: Value) {
         let mut watchers = self.watchers.lock().expect("watchers mutex poisoned");
-        watchers.retain(|_, sender| sender.try_send(event.clone()).is_ok());
+        let line = Line::encode(&event);
+        watchers.retain(|id, sender| match sender.offer(&line) {
+            Ok(()) => true,
+            Err(refused) => {
+                if let Refused::Full { .. } = refused {
+                    eprintln!(
+                        "PTY host dropped watcher {id} of terminal {}: {refused}",
+                        self.id
+                    );
+                }
+                false
+            }
+        });
     }
 
     fn schedule_cleanup(self: &Arc<Self>) {

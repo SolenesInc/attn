@@ -104,6 +104,26 @@ impl Quiesce {
         }
     }
 
+    pub fn readable_within(&self, fd: RawFd, wait: Duration) -> std::io::Result<bool> {
+        let millis = i32::try_from(wait.as_micros().div_ceil(1000)).unwrap_or(i32::MAX);
+        let mut fds = [
+            libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: self.wake_read.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            },
+        ];
+        if unsafe { libc::poll(fds.as_mut_ptr(), 2, millis) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(fds[1].revents == 0 && fds[0].revents != 0)
+    }
+
     fn requested_at(&self) -> Option<Instant> {
         self.state
             .lock()

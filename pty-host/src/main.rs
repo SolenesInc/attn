@@ -3,6 +3,8 @@ mod boundary;
 mod ghostty;
 mod handover;
 mod host;
+mod outbox;
+mod output_batch;
 mod png_decoder;
 mod probe_child;
 mod process;

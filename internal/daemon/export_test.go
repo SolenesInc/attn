@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -32,9 +33,21 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	if gardenClock != nil {
 		d.gardenNow = gardenClock
 	}
-	if terminals != nil {
+	switch host := os.Getenv("ATTN_TEST_PTY_HOST"); {
+	case terminals != nil:
 		d.ptyBackend = terminals
-	} else {
+	case host != "" && nativeWatch:
+		shared, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+			DataRoot:         filepath.Dir(socketPath),
+			DaemonInstanceID: "wire-shared-host",
+			BinaryPath:       host,
+			Logf:             d.logf,
+		})
+		if err != nil {
+			return nil, err
+		}
+		d.ptyBackend = shared
+	default:
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {

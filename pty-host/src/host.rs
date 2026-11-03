@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::os::fd::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -19,6 +18,7 @@ use serde_json::{Value, json};
 
 use crate::ghostty::{HandoverScreen, Theme};
 use crate::handover::{self, Fallback, HostHandoff, write_private};
+use crate::outbox::{Outbox, Refused, outbox};
 use crate::protocol::{
     AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
     ERR_SESSION_NOT_FOUND, ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION,
@@ -30,7 +30,6 @@ use crate::session::{
     Broadcast, ChildReaper, Cleanup, Commit, Session, SessionRuntime, parse_signal,
 };
 
-const CONNECTION_QUEUE_SIZE: usize = 256;
 const CONNECTION_STACK_BYTES: usize = 256 * 1024;
 
 #[derive(Clone)]
@@ -140,7 +139,7 @@ impl HostState {
 }
 
 struct HostWatcher {
-    sender: SyncSender<Value>,
+    sender: Outbox,
     shutdown: UnixStream,
 }
 
@@ -703,7 +702,7 @@ impl Host {
         })
     }
 
-    fn watch_all(&self, watcher_id: String, sender: SyncSender<Value>, shutdown: UnixStream) {
+    fn watch_all(&self, watcher_id: String, sender: Outbox, shutdown: UnixStream) {
         let mut watchers = self.watchers.lock().expect("host watchers mutex poisoned");
         let sessions = self
             .state
@@ -717,7 +716,7 @@ impl Host {
             .iter()
             .flat_map(|session| session.lifecycle_events())
         {
-            if sender.send(event).is_err() {
+            if !sender.send(&event) {
                 let _ = shutdown.shutdown(std::net::Shutdown::Both);
                 return;
             }
@@ -752,7 +751,10 @@ impl Host {
             let mut watchers = self.watchers.lock().expect("host watchers mutex poisoned");
             let mut dropped = Vec::new();
             for (id, watcher) in &*watchers {
-                if watcher.sender.try_send(event.clone()).is_err() {
+                if let Err(refused) = watcher.sender.offer_value(event) {
+                    if let Refused::Full { .. } = refused {
+                        eprintln!("PTY host dropped lifecycle watcher {id}: {refused}");
+                    }
                     dropped.push(id.clone());
                 }
             }
@@ -818,7 +820,7 @@ enum CloseAction {
 
 struct Connection {
     id: String,
-    sender: SyncSender<Value>,
+    sender: Outbox,
     shutdown: UnixStream,
     selected: Option<Arc<Session>>,
     subscriber_id: String,
@@ -831,12 +833,12 @@ struct Connection {
 }
 
 impl Connection {
-    fn send(&self, value: Value) -> bool {
-        self.sender.send(value).is_ok()
+    fn send(&self, value: &Value) -> bool {
+        self.sender.send(value)
     }
 
     fn fail(&self, id: &str, code: &str, message: impl Into<String>) -> bool {
-        self.send(error(id, code, message))
+        self.send(&error(id, code, message))
     }
 
     fn session(&self, host: &Host, request: &Request) -> Result<Arc<Session>, Value> {
@@ -869,11 +871,11 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
             return;
         }
     };
-    let (sender, receiver) = sync_channel(CONNECTION_QUEUE_SIZE);
+    let (sender, outgoing) = outbox();
     let writer = thread::Builder::new()
         .name(format!("pty-rpc-write-{id}"))
         .stack_size(128 * 1024)
-        .spawn(move || write_connection(writer_stream, receiver));
+        .spawn(move || outgoing.write_to(writer_stream));
     let Ok(writer) = writer else {
         eprintln!("PTY host connection {id} writer thread failed");
         return;
@@ -974,7 +976,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 return connection.fail(&request.id, ERR_IO, error);
             }
             connection.close_action = CloseAction::ShutdownHost;
-            connection.send(response(&request.id, json!({"ok": true})));
+            connection.send(&response(&request.id, json!({"ok": true})));
             false
         }
         "spawn" => {
@@ -997,7 +999,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                         "attempt_index": session.attempt_index
                     });
                     connection.pending_sessions.push(session);
-                    connection.send(response(&request.id, reply))
+                    connection.send(&response(&request.id, reply))
                 }
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }
@@ -1015,7 +1017,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
             };
             match host.commit(&params.session_id) {
-                Ok(true) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(true) => connection.send(&response(&request.id, json!({"ok": true}))),
                 Ok(false) => {
                     connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found")
                 }
@@ -1030,19 +1032,19 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     "host_info requires a host-level hello",
                 );
             }
-            connection.send(response(&request.id, host.host_info()))
+            connection.send(&response(&request.id, host.host_info()))
         }
         "info" => with_session(host, connection, &request, Session::info),
         "read_text" => {
             let session = match connection.session(host, &request) {
                 Ok(s) => s,
-                Err(e) => return connection.send(e),
+                Err(e) => return connection.send(&e),
             };
             let mode = request.params["mode"].as_str().unwrap_or_default();
             let lines = usize::try_from(request.params["lines"].as_u64().unwrap_or(0))
                 .unwrap_or(usize::MAX);
             match session.read_text(mode, lines) {
-                Ok(result) => connection.send(response(&request.id, result)),
+                Ok(result) => connection.send(&response(&request.id, result)),
                 Err(message) => connection.fail(&request.id, ERR_BAD_REQUEST, message),
             }
         }
@@ -1052,7 +1054,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             }
             let session = match connection.session(host, &request) {
                 Ok(s) => s,
-                Err(e) => return connection.send(e),
+                Err(e) => return connection.send(&e),
             };
             let cancelled = Arc::new(AtomicBool::new(false));
             connection
@@ -1064,7 +1066,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     Ok(result) => response(&request.id, result),
                     Err(message) => error(&request.id, ERR_BAD_REQUEST, message),
                 };
-                let _ = sender.send(result);
+                let _ = sender.send(&result);
             });
             true
         }
@@ -1103,7 +1105,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 params.omit_replay,
             );
             connection.subscriber_id = subscriber_id;
-            connection.send(response(&request.id, result))
+            connection.send(&response(&request.id, result))
         }
         "detach" => {
             if connection.selected.is_none() {
@@ -1117,7 +1119,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 session.detach(&connection.subscriber_id, &connection.id);
             }
             connection.subscriber_id.clear();
-            connection.send(response(&request.id, json!({"ok": true})))
+            connection.send(&response(&request.id, json!({"ok": true})))
         }
         "input" => {
             let params: InputParams = match decode_params(&request) {
@@ -1135,7 +1137,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
             match session.input(&data) {
-                Ok(()) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(()) => connection.send(&response(&request.id, json!({"ok": true}))),
                 Err(message) if message.contains("not running") => {
                     connection.fail(&request.id, ERR_SESSION_NOT_RUNNING, message)
                 }
@@ -1151,7 +1153,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
             match session.resize(params.cols, params.rows, params.xpixel, params.ypixel) {
-                Ok(changed) => connection.send(response(
+                Ok(changed) => connection.send(&response(
                     &request.id,
                     json!({"ok": true, "changed": changed, "stream_ordered": true}),
                 )),
@@ -1167,7 +1169,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
             match session.set_theme(&theme) {
-                Ok(()) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(()) => connection.send(&response(&request.id, json!({"ok": true}))),
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }
         }
@@ -1180,7 +1182,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
             match session.signal(parse_signal(&params.signal)) {
-                Ok(()) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(()) => connection.send(&response(&request.id, json!({"ok": true}))),
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }
         }
@@ -1195,7 +1197,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     "host is handing its terminals over to a new build; retry the removal",
                 );
             }
-            let sent = connection.send(response(&request.id, json!({"ok": true})));
+            let sent = connection.send(&response(&request.id, json!({"ok": true})));
             session.remove();
             sent
         }
@@ -1210,7 +1212,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Ok(session) = connection.session(host, &request) else {
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
-            if !connection.send(response(&request.id, json!({"ok": true}))) {
+            if !connection.send(&response(&request.id, json!({"ok": true}))) {
                 return false;
             }
             session.watch(connection.id.clone(), connection.sender.clone());
@@ -1225,7 +1227,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     "watch_all requires a host-level connection",
                 );
             }
-            if !connection.send(response(&request.id, json!({"ok": true}))) {
+            if !connection.send(&response(&request.id, json!({"ok": true}))) {
                 return false;
             }
             host.watch_all(
@@ -1243,7 +1245,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Ok(session) = connection.session(host, &request) else {
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
-            connection.send(response(
+            connection.send(&response(
                 &request.id,
                 json!({"ok": true, "running": session.is_running()}),
             ))
@@ -1259,7 +1261,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Some(image) = session.kitty_image(params.image_id) else {
                 return connection.fail(&request.id, ERR_IMAGE_NOT_FOUND, "kitty image not found");
             };
-            connection.send(response(
+            connection.send(&response(
                 &request.id,
                 json!({
                     "image_id": image.image_id,
@@ -1332,7 +1334,7 @@ fn handle_hello(host: &Host, connection: &mut Connection, request: &Request) -> 
         connection.selected = Some(session);
     }
     connection.authed = true;
-    connection.send(response(
+    connection.send(&response(
         &request.id,
         json!({
             "worker_version": "attn-rust",
@@ -1354,24 +1356,12 @@ fn with_session(
     let Ok(session) = connection.session(host, request) else {
         return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
     };
-    connection.send(response(&request.id, call(&session)))
+    connection.send(&response(&request.id, call(&session)))
 }
 
 fn decode_params<T: DeserializeOwned>(request: &Request) -> Result<T, String> {
     serde_json::from_value(request.params.clone())
         .map_err(|error| format!("invalid {} params: {error}", request.method))
-}
-
-fn write_connection(stream: UnixStream, receiver: Receiver<Value>) {
-    let mut writer = BufWriter::new(stream);
-    for value in receiver {
-        if serde_json::to_writer(&mut writer, &value).is_err()
-            || writer.write_all(b"\n").is_err()
-            || writer.flush().is_err()
-        {
-            return;
-        }
-    }
 }
 
 #[cfg(feature = "adopt-fault")]
