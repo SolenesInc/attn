@@ -1,10 +1,15 @@
 # Shared PTY host
 
 The shared Rust PTY host is experimental and off by default. Enable it under
-**Settings → Experimental → Shared terminal host**. The setting applies to new and
-explicitly reloaded sessions. Running sessions keep their current backend. If the
-host is unavailable, new launches fall back to Go workers.
-`ATTN_PTY_BACKEND` overrides the setting.
+**Settings → Experimental → Shared terminal host**. The setting moves new and
+explicitly reloaded sessions to the host. Running sessions keep their current
+backend. If the host is unavailable, new launches fall back to Go workers.
+`ATTN_PTY_BACKEND` overrides the backend choice.
+
+The same setting makes the app stream output only to the terminals it draws.
+That applies to every terminal at once, whatever its backend: a terminal on
+another desktop, behind the dashboard, or in a pane the layout collapses keeps
+its last frame and attaches with the daemon's screen when it is drawn again.
 
 ## Host builds
 
