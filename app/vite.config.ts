@@ -82,6 +82,8 @@ export default defineConfig(async ({ command }) => ({
   test: {
     globals: true,
     environment: "happy-dom",
+    pool: "vmThreads",
+    vmMemoryLimit: "512MB",
     env: { VITE_ATTN_BUILD_INSTANCE: "", VITE_CLIENT_TOKEN: "" },
     globalSetup: ["./scripts/vitest-ghostty-vt.mjs"],
     setupFiles: ["./src/test/setup.ts"],
