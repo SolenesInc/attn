@@ -4,6 +4,7 @@ import type { NormalizedPaneBounds, TileLeaf } from '../../types/desktop';
 import { tileContentKey } from '../../types/desktop';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDockTile } from './DesktopDockTile';
+import { leafShowsAsStrip } from './attentionLayout';
 
 const noRequestContent = () => {};
 
@@ -49,7 +50,7 @@ export function DesktopTilePane({
     effectiveDraggingLeafId,
   } = useDesktopContext();
 
-  if (suspendedLeafIds.has(tileLeaf.tileId) && !effectivePaneId) {
+  if (leafShowsAsStrip(tileLeaf.tileId, suspendedLeafIds, effectivePaneId)) {
     return (
       <SuspendedDesktopPane
         leafId={tileLeaf.tileId}

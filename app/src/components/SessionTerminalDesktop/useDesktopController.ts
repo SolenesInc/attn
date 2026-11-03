@@ -31,6 +31,7 @@ import { annotationSurfaceOwnsFocus } from './annotationFocus';
 import {
   applyDragSuspension,
   dragRatioBounds,
+  leafShowsAsStrip,
   releaseSuspendedLeaf,
   resolveDesktopLayout,
   type AttentionViewport,
@@ -374,7 +375,7 @@ export function useDesktopController(
   const renderedPaneIds = useMemo(() => Array.from(panePaths.keys()), [panePaths]);
   const renderedPaneIdsKey = renderedPaneIds.join('|');
   const terminalPaneIds = useMemo(
-    () => new Set(renderedPaneIds.filter((paneId) => effectivePaneId || !suspendedLeafIds.has(paneId))),
+    () => new Set(renderedPaneIds.filter((paneId) => !leafShowsAsStrip(paneId, suspendedLeafIds, effectivePaneId))),
     [effectivePaneId, renderedPaneIds, suspendedLeafIds],
   );
   const desktopDrawn = isActiveSession && isSessionViewVisible;

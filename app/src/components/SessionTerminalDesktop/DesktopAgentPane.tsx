@@ -1,5 +1,6 @@
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
+import { leafShowsAsStrip } from './attentionLayout';
 import type { CSSProperties } from 'react';
 import type { NormalizedPaneBounds, TerminalDesktopState } from '../../types/desktop';
 import { StateIndicator } from '../StateIndicator';
@@ -31,7 +32,7 @@ export function DesktopAgentPane({
 
   const paneSession = sessionById.get(agentPane.sessionId);
   const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
-  if (suspendedLeafIds.has(agentPane.id) && !effectivePaneId) {
+  if (leafShowsAsStrip(agentPane.id, suspendedLeafIds, effectivePaneId)) {
     return (
       <SuspendedDesktopPane
         leafId={agentPane.id}

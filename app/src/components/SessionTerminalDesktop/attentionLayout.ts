@@ -404,6 +404,10 @@ function zoomLayoutTowardLeaf(node: TerminalLayoutNode, leafId: string): Termina
   };
 }
 
+export function leafShowsAsStrip(leafId: string, suspendedLeafIds: ReadonlySet<string>, focusedLeafId: string | null): boolean {
+  return !focusedLeafId && suspendedLeafIds.has(leafId);
+}
+
 export function resolveDesktopLayout(input: ResolveDesktopLayoutInput): DesktopLayoutPlan {
   const pendingRatioOverrides = input.pendingRatioOverrides ?? new Map<string, number>();
   const sourceTree = applyRatioOverrides(input.sourceTree, pendingRatioOverrides);
