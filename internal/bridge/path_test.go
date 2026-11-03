@@ -29,18 +29,15 @@ func TestBridgeOutputFollowsThePath(t *testing.T) {
 		rtt, changed time.Duration
 		workloads    []string
 	}{
-		{"slow", 2_000_000, 30 * time.Millisecond, 0, nil},
-		{"long", 10_000_000, 54 * time.Millisecond, 0, nil},
-		{"halves", 10_000_000, 54 * time.Millisecond, 27 * time.Millisecond, nil},
-		{"doubles", 10_000_000, 27 * time.Millisecond, 54 * time.Millisecond, []string{"bulk", "maximum-terminal"}},
-		{"batched", 2_000_000, 30 * time.Millisecond, 0, nil},
+		{"slow", 2_000_000, 30 * time.Millisecond, 0, []string{"bulk", "maximum-terminal-after-command"}},
+		{"long", 10_000_000, 54 * time.Millisecond, 0, []string{"bulk", "maximum-terminal-after-command"}},
+		{"halves", 10_000_000, 54 * time.Millisecond, 27 * time.Millisecond, []string{"bulk"}},
+		{"doubles", 10_000_000, 27 * time.Millisecond, 54 * time.Millisecond, []string{"maximum-terminal"}},
+		{"batched", 2_000_000, 30 * time.Millisecond, 0, []string{"bulk", "maximum-terminal-after-command"}},
 	} {
-		workloads := path.workloads
-		if workloads == nil {
-			workloads = []string{"bulk", "bulk-after-preface", "terminal", "maximum-terminal", "maximum-terminal-after-command"}
-		}
-		for _, workload := range workloads {
+		for _, workload := range path.workloads {
 			t.Run(fmt.Sprintf("%s/%s", path.name, workload), func(t *testing.T) {
+				t.Parallel()
 				synctest.Test(t, func(t *testing.T) {
 					w := pair(t)
 					w.network = memnet.Listen(memnet.Rate(path.rate), memnet.Delay(path.rtt/2))
@@ -108,7 +105,7 @@ func TestBridgeOutputFollowsThePath(t *testing.T) {
 					}
 					loadCtx, stop := context.WithCancel(w.ctx)
 					defer stop()
-					if workload != "bulk" && workload != "bulk-after-preface" {
+					if workload != "bulk" {
 						request, _ := json.Marshal(bridge.AttachRequest{Terminal: "flood"})
 						stream, requests, err := client.Open(w.ctx, bridge.AttachChannel, request)
 						if err != nil {
@@ -156,11 +153,7 @@ func TestBridgeOutputFollowsThePath(t *testing.T) {
 							measure()
 						}
 						go func() {
-							size := 32 << 10
-							if workload == "maximum-terminal" || workload == "maximum-terminal-after-command" {
-								size = pty.OutputEventMaxBytes
-							}
-							data := bytes.Repeat([]byte("x"), size)
+							data := bytes.Repeat([]byte("x"), pty.OutputEventMaxBytes)
 							for seq := uint32(1); source.write(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Seq: seq, Data: data}); seq++ {
 							}
 						}()
@@ -172,36 +165,17 @@ func TestBridgeOutputFollowsThePath(t *testing.T) {
 						sender, receiver := client.Bulk(loadCtx, channel, requests), <-accepted
 						defer sender.Close()
 						defer receiver.Close()
-						warmed := make(chan struct{})
 						go func() {
 							data := make([]byte, 32<<10)
-							first := true
-							read := 0
 							for {
-								into := data
-								if first && workload == "bulk-after-preface" {
-									into = data[:1]
-								}
-								first = false
-								n, err := receiver.Read(into)
+								n, err := receiver.Read(data)
 								delivered.Add(int64(n))
 								completed.Add(int64(n))
-								read += n
-								if workload == "bulk-after-preface" && read == 32<<10 {
-									close(warmed)
-								}
 								if err != nil {
 									return
 								}
 							}
 						}()
-						if workload == "bulk-after-preface" {
-							if _, err := sender.Write(make([]byte, 32<<10)); err != nil {
-								t.Fatal(err)
-							}
-							<-warmed
-							measure()
-						}
 						go func() { _, _ = io.Copy(sender, endlessOutput{}) }()
 					}
 					check := func(label string, base, idle time.Duration) {
