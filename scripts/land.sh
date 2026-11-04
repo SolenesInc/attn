@@ -187,7 +187,7 @@ run_checks() {
   touches '^internal/protocol/(schema/gateway\.tsp|gateway/)' && targets+=(check-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
-  touches '^mobile/|^app/src/gateway/|^app/src/types/gateway|^internal/cloudlink/testdata/' && targets+=(check-mobile)
+  touches '^mobile/|^app/src/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"
   if [ -n "$script_tests" ]; then
     targets+=(test-scripts "SCRIPT_TESTS=$script_tests")

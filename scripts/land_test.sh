@@ -119,17 +119,12 @@ expect_checks check-go 'GO_PACKAGES=./...' "${go_choice[@]}" sync
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
 land 'App change'
-expect_checks check-frontend land --group app "${selected_tests[@]}" sync
+expect_checks check-frontend check-mobile land --group app "${selected_tests[@]}" sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
 land 'Mobile change'
 expect_checks check-mobile sync
-
-mkdir -p app/src/gateway
-printf 'export {};\n' >app/src/gateway/example.ts
-land 'Gateway client shared with the phone'
-expect_checks check-frontend check-mobile land --group app "${selected_tests[@]}" sync
 
 mkdir -p scripts internal/protocol/schema internal/prompts
 printf 'true\n' >scripts/example.sh

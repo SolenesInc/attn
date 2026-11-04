@@ -100,8 +100,7 @@ jobs:
               - '.github/actions/setup-toolchains/**'
             mobile:
               - 'mobile/**'
-              - 'app/src/gateway/**'
-              - 'app/src/types/gateway*'
+              - 'app/src/**'
               - 'internal/cloudlink/testdata/**'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
