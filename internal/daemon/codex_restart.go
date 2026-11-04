@@ -374,7 +374,7 @@ func (r *codexShared) startingViews(profile string) []codexStarting {
 	r.mu.Lock()
 	var terminals []harness.TerminalID
 	for _, v := range r.views {
-		if v.profile == profile && !v.started {
+		if v.profile == profile && (!v.started || v.opening > 0) {
 			terminals = append(terminals, v.terminal)
 		}
 	}

@@ -99,9 +99,9 @@ the sessions Attn waits on, and you can jump to each one.
   new app-server on their own. What you typed and haven't sent stays where it
   was. The old app-server first shuts down the MCP servers its conversations
   started, so with a few MCP servers the terminals wait up to about 20 seconds.
-- A terminal that is still starting, or that is asking whether to trust its
-  folder, can't reconnect. Attn waits to restart until that terminal shows its
-  conversation.
+- A terminal that is still starting, that is asking whether to trust its folder,
+  or that is writing a new conversation to disk after `/new` can't reconnect
+  safely. Attn waits to restart until that terminal shows its conversation.
 - Until the restart, a new or reloaded terminal runs the app-server's Codex
   while that Codex is still installed. Codex's standalone installer keeps every
   release. npm and Homebrew replace the old release, so after an update through

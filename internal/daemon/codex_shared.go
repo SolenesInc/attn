@@ -92,7 +92,9 @@ type codexView struct {
 	socket     string
 	server     *http.Server
 	proxies    map[*codexProxy]bool
+	replies    sync.Mutex
 	started    bool
+	opening    int
 	thread     string
 	shownSeq   uint64
 	trusted    string
@@ -629,7 +631,9 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 		_ = down.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	codexshared.Proxy(ctx, down, up, func(m *codexshared.Message) (func(*codexshared.Message), error) { return r.prepare(v, m) }, nil)
+	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message), error) {
+		return r.prepare(connection, v, m)
+	}, nil)
 }
 
 func (r *codexShared) proxying(v *codexView) (context.Context, *codexProxy) {
@@ -649,7 +653,7 @@ func (r *codexShared) proxied(v *codexView, proxy *codexProxy) {
 	r.viewsChanged(v.profile)
 }
 
-func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
+func (r *codexShared) prepare(connection context.Context, v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
 	method := m.Method
 	switch method {
 	case "initialize":
@@ -713,28 +717,49 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 				Parent string `json:"parentThreadId"`
 			} `json:"thread"`
 		}
-		r.started(v)
-		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
-			return
-		}
+		established := len(reply.Error) == 0 && json.Unmarshal(reply.Result, &result) == nil && result.Thread.ID != ""
 		thread := result.Thread
-		if thread.Parent != "" {
-			r.adopt(v.profile, thread.ID, thread.Parent)
-			return
+		if established && thread.Parent == "" && opened {
+			r.openingChanged(v, 1)
+			defer r.openingChanged(v, -1)
+			err := r.materialize(connection, v.terminal, v.profile, thread.ID)
+			if connection.Err() != nil {
+				return
+			}
+			if err != nil {
+				established = false
+				r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
+				reply.Result = nil
+				reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
+			}
 		}
-		if !opened {
+		if established && thread.Parent == "" && !opened {
 			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
-		} else if err := r.materialize(v.terminal, v.profile, thread.ID); err != nil {
-			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
-			reply.Result = nil
-			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
+		}
+		v.replies.Lock()
+		defer v.replies.Unlock()
+		if connection.Err() != nil {
 			return
 		}
-		r.show(v, thread.ID, opened)
-		if !firstOfItsSession {
-			r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
+		r.started(v)
+		switch {
+		case !established:
+		case thread.Parent != "":
+			r.adopt(v.profile, thread.ID, thread.Parent)
+		default:
+			r.show(v, thread.ID, opened)
+			if !firstOfItsSession {
+				r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
+			}
 		}
 	}, nil
+}
+
+func (r *codexShared) openingChanged(v *codexView, by int) {
+	r.mu.Lock()
+	v.opening += by
+	r.mu.Unlock()
+	r.viewsChanged(v.profile)
 }
 
 func (r *codexShared) started(v *codexView) {
@@ -834,7 +859,7 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string,
 	return launch.Content
 }
 
-func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) error {
+func (r *codexShared) materialize(connection context.Context, terminal protocol.TerminalID, profile, conversation string) error {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -846,7 +871,7 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 		r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
 		return errors.New("no connection to its app-server")
 	}
-	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexOpeningNoteLimit)
+	ctx, cancel := context.WithTimeout(connection, codexOpeningNoteLimit)
 	defer cancel()
 	note := prompts.RenderText("session", "codex-opened", nil)
 	started := time.Now()
@@ -857,6 +882,9 @@ func (r *codexShared) materialize(terminal protocol.TerminalID, profile, convers
 			"content": []any{map[string]any{"type": "input_text", "text": note}},
 		}},
 	})
+	if connection.Err() != nil {
+		err = connection.Err()
+	}
 	r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
 		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexOpeningNoteLimit, codexCallOutcome(err))
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -872,6 +900,8 @@ func codexCallOutcome(err error) string {
 		return "ok"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "local_deadline"
+	case errors.Is(err, context.Canceled):
+		return "connection_ended"
 	case errors.As(err, &refused):
 		return "server_error"
 	default:
@@ -914,14 +944,12 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 	}
 	r.mu.Lock()
 	v := r.views[opts.ID]
-	if v != nil {
-		v.started = false
-	}
 	r.mu.Unlock()
 	if v == nil {
 		opts.LaunchExecutable = installed
 		return nil
 	}
+	r.retireConnections(v)
 	opts.CodexRemote = "unix://" + v.socket
 	r.answerTrustIfKnown(opts, v.profile)
 	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
@@ -929,6 +957,17 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
 	}
 	opts.LaunchExecutable = r.terminalBinary(v.profile, installed)
 	return nil
+}
+
+func (r *codexShared) retireConnections(v *codexView) {
+	v.replies.Lock()
+	defer v.replies.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	v.started = false
+	for proxy := range v.proxies {
+		proxy.drop()
+	}
 }
 
 func (r *codexShared) terminalExited(t harness.TerminalID) {

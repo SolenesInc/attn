@@ -199,7 +199,7 @@ func (c *Client) Connected() bool {
 	}
 }
 
-func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message) (func(*Message), error), observe func(Message)) {
+func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connection context.Context, m *Message) (func(*Message), error), observe func(Message)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
@@ -241,7 +241,7 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(*Message)
 		}
 		var m Message
 		if json.Unmarshal(data, &m) == nil && m.Method != "" {
-			callback, err := prepare(&m)
+			callback, err := prepare(ctx, &m)
 			if err != nil {
 				refusal, _ := json.Marshal(Message{ID: m.ID, Error: mustJSON(map[string]any{"code": -32603, "message": err.Error()})})
 				if down.Write(ctx, websocket.MessageText, refusal) != nil {

@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -264,4 +265,98 @@ func TestARestartNamesEachSessionOnceByWhatMostNeedsTheUser(t *testing.T) {
 		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
 			slices.Equal(s.Blockers, blockedBy(session, protocol.SharedCodexBlockerReasonQuestion))
 	})
+}
+
+func TestAQuietRestartWaitsUntilANewAutomationsConversationIsWritten(t *testing.T) {
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(w.Path("check"), "trusted")
+	applyAutomation(t, w.Client(), manualAutomation(w, "Check the code."))
+	awaitAutomationChanged(app, 1)
+
+	arrived, release := w.CodexServer().HoldNextInjectReply()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "while-writing"})
+	arrived()
+	awaitAutomationRunResult(app, "while-writing")
+	w.SetCodexVersion("0.163.0")
+	restartSharedCodex(t, app, false)
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
+			slices.ContainsFunc(s.Blockers, func(b protocol.SharedCodexBlocker) bool { return b.Reason == protocol.SharedCodexBlockerReasonStarting })
+	})
+
+	release("")
+	run := awaitOnlyRunSettled(t, w, app)
+	if run.State != "delivered" {
+		t.Fatalf("the automation whose conversation was being written when the restart came is %s with %q, want delivered", run.State, protocol.Deref(run.LastError))
+	}
+	w.Launched(string(protocol.Deref(run.SessionID))).Reply("Checked. <!-- attn:state=idle -->")
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)
+	})
+}
+
+func TestAQueuedRestartWaitsUntilASlashNewConversationIsWritten(t *testing.T) {
+	w, app, session, codex := sharedCodexOn(t, "0.162.1")
+	terminal := app.Terminal(session)
+	app.TypeLine(session, "find the flaky checkout test")
+	codex.Prompted()
+	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	original := codex.ConversationID
+
+	arrived, release := w.CodexServer().HoldNextInjectReply()
+	typeInto(app, terminal, "/new\r")
+	arrived()
+	restartSharedCodex(t, app, false)
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return s.Restart == protocol.SharedCodexRestartPending && slices.Equal(s.Blockers, blockedBy(session, protocol.SharedCodexBlockerReasonStarting))
+	})
+
+	mark := app.EventCount()
+	release("")
+	codex.Prompted()
+	testworld.AwaitSince(app, mark, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+		return m.SharedCodex.Restart == protocol.SharedCodexRestartNone && len(m.SharedCodex.Blockers) == 0
+	})
+	typeInto(app, terminal, "add a discount field\r")
+	if got := codex.Prompted(); got != "add a discount field" {
+		t.Fatalf("after /new and the restart it waited for, codex took %q", got)
+	}
+	if codex.ConversationID == original {
+		t.Fatalf("after /new and the restart it waited for, the prompt reached the old conversation %s", original)
+	}
+}
+
+func TestReloadingDuringASlashNewWriteKeepsTheTerminalOnTheConversationItShows(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session, first, terminal := sharedCodexWaiting(t, w, app)
+	original := first.ConversationID
+	arrived, release := w.CodexServer().HoldNextInjectReply()
+	app.TypeLine(session, "/new")
+	arrived()
+
+	launchIntentReload(t, app, session)
+	reloaded := w.Launched(session)
+	if !reloaded.Resumed || reloaded.ConversationID != original {
+		t.Fatalf("the reload resumed=%t conversation %q, want the original %q", reloaded.Resumed, reloaded.ConversationID, original)
+	}
+	release("")
+
+	app.TypeLine(session, "lock the tax lookup")
+	if got := reloaded.Prompted(); got != "lock the tax lookup" {
+		t.Fatalf("after the reload the conversation took %q", got)
+	}
+	reloaded.Reply("Locked. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if shown := app.Terminal(session); shown != terminal {
+		t.Fatalf("session %s shows in terminal %s after the old write finished, want %s", session, shown, terminal)
+	}
+	if reloaded.ConversationID != original {
+		t.Fatalf("the prompt reached conversation %s, want the original %s", reloaded.ConversationID, original)
+	}
 }
