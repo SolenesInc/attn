@@ -121,7 +121,7 @@ func (gh fakeGitHub) calls() string {
 }
 
 func pullRequestJSON(state, mergeState string) string {
-	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":7,"url":"https://github.com/acme/widgets/pull/7","state":%q,"author":{"__typename":"User","login":"ben"},"headRefOid":"abcdef012345","mergeStateStatus":%q,"reactions":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]},"commits":{"nodes":[]}}}}}`, state, mergeState)
+	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":7,"url":"https://github.com/acme/widgets/pull/7","state":%q,"viewerDidAuthor":true,"headRefOid":"abcdef012345","mergeStateStatus":%q,"reactions":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]},"commits":{"nodes":[]}}}}}`, state, mergeState)
 }
 
 type ghComment struct {
@@ -132,7 +132,7 @@ type ghComment struct {
 func feedbackJSON(comments ...ghComment) string {
 	nodes := make([]map[string]any, 0, len(comments))
 	for _, c := range comments {
-		nodes = append(nodes, map[string]any{"id": c.id, "bodyText": c.body, "createdAt": c.at.UTC().Format(time.RFC3339), "author": map[string]string{"login": c.author}})
+		nodes = append(nodes, map[string]any{"id": c.id, "bodyText": c.body, "createdAt": c.at.UTC().Format(time.RFC3339), "author": map[string]string{"login": c.author}, "viewerDidAuthor": true})
 	}
 	body, _ := json.Marshal(map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
 		"comments": map[string]any{"nodes": nodes}, "reviews": map[string]any{"nodes": []any{}}, "reviewThreads": map[string]any{"nodes": []any{}},

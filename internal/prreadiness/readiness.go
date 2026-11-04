@@ -45,7 +45,7 @@ func ParseOwnComments(value string) (OwnComments, error) {
 	case OwnCommentsRing:
 		return OwnCommentsRing, nil
 	default:
-		return "", fmt.Errorf("%q is not a choice for the pull request author's own comments; use quiet or ring", value)
+		return "", fmt.Errorf("%q is not a choice for your own pull request comments; use quiet or ring", value)
 	}
 }
 
@@ -70,6 +70,7 @@ type FeedbackItem struct {
 	ID        string    `json:"id"`
 	Kind      string    `json:"kind"`
 	Author    string    `json:"author"`
+	ByViewer  bool      `json:"-"`
 	Body      string    `json:"body,omitempty"`
 	Location  string    `json:"location,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
@@ -79,6 +80,7 @@ type ThreadState struct {
 	ID       string `json:"id"`
 	Resolved bool   `json:"resolved"`
 	Author   string `json:"author,omitempty"`
+	ByViewer bool   `json:"-"`
 	Body     string `json:"body,omitempty"`
 	Location string `json:"location,omitempty"`
 }
@@ -93,7 +95,7 @@ type Observation struct {
 	Number             int             `json:"number"`
 	URL                string          `json:"url"`
 	Title              string          `json:"title"`
-	Author             string          `json:"author,omitempty"`
+	ViewerAuthored     bool            `json:"-"`
 	State              string          `json:"state"`
 	Draft              bool            `json:"draft"`
 	Merged             bool            `json:"merged"`
@@ -280,12 +282,10 @@ func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string,
 	}
 	var actions []Action
 	feedbackBaselinePending := !cursor.Initialized || cursor.FeedbackBaselinePending
-	quiet := func(author string) bool {
-		return ownComments != OwnCommentsRing && observation.Author != "" && sameActor(author, observation.Author)
-	}
+	quiet := ownComments != OwnCommentsRing
 	if !feedbackBaselinePending && observation.FeedbackComplete {
 		for _, feedback := range observation.Feedback {
-			if feedback.ID == "" || seen[feedback.ID] || quiet(feedback.Author) {
+			if feedback.ID == "" || seen[feedback.ID] || (quiet && feedback.ByViewer) {
 				continue
 			}
 			item := feedback
@@ -294,7 +294,7 @@ func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string,
 		for _, thread := range observation.Threads {
 			if wasResolved, known := cursor.ThreadStates[thread.ID]; known && wasResolved && !thread.Resolved {
 				next.ThreadGenerations[thread.ID]++
-				if quiet(thread.Author) {
+				if quiet && thread.ByViewer && observation.ViewerAuthored {
 					continue
 				}
 				actions = append(actions, Action{

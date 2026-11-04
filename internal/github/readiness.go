@@ -46,6 +46,7 @@ type readinessReview struct {
 	BodyText    string         `json:"bodyText"`
 	SubmittedAt time.Time      `json:"submittedAt"`
 	Author      readinessActor `json:"author"`
+	ByViewer    bool           `json:"viewerDidAuthor"`
 }
 
 type readinessReviewRequest struct {
@@ -73,7 +74,7 @@ type readinessPullRequest struct {
 	Number           int                                         `json:"number"`
 	URL              string                                      `json:"url"`
 	Title            string                                      `json:"title"`
-	Author           readinessActor                              `json:"author"`
+	ViewerDidAuthor  bool                                        `json:"viewerDidAuthor"`
 	State            string                                      `json:"state"`
 	IsDraft          bool                                        `json:"isDraft"`
 	Merged           bool                                        `json:"merged"`
@@ -99,7 +100,7 @@ type readinessPullRequest struct {
 const pullRequestReadinessQuery = `
 query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    number url title author{__typename login} state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
+    number url title viewerDidAuthor state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
     reactions(first:100){nodes{id content user{__typename login}} pageInfo{hasNextPage endCursor}}
 	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
 	reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
@@ -340,7 +341,7 @@ func checkContexts(pr *readinessPullRequest) *readinessConnection[readinessCheck
 
 func buildReadinessObservation(pr *readinessPullRequest) *prreadiness.Observation {
 	observation := &prreadiness.Observation{
-		Number: pr.Number, URL: pr.URL, Title: pr.Title, Author: canonicalActor(pr.Author),
+		Number: pr.Number, URL: pr.URL, Title: pr.Title, ViewerAuthored: pr.ViewerDidAuthor,
 		State: strings.ToLower(pr.State), Draft: pr.IsDraft, Merged: pr.Merged,
 		HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName,
 		MergeStateStatus: strings.ToUpper(pr.MergeStateStatus),
@@ -474,6 +475,7 @@ type feedbackComment struct {
 	Line         *int           `json:"line"`
 	OriginalLine *int           `json:"originalLine"`
 	Author       readinessActor `json:"author"`
+	ByViewer     bool           `json:"viewerDidAuthor"`
 }
 
 func (c feedbackComment) location() string {
@@ -505,10 +507,10 @@ type feedbackPullRequest struct {
 const pullRequestFeedbackQuery = `
 query PullRequestFeedback($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    comments(first:100){nodes{id bodyText createdAt author{__typename login}} pageInfo{hasNextPage endCursor}}
-    reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+    comments(first:100){nodes{id bodyText createdAt author{__typename login} viewerDidAuthor} pageInfo{hasNextPage endCursor}}
+    reviews(first:100){nodes{id state bodyText submittedAt author{__typename login} viewerDidAuthor} pageInfo{hasNextPage endCursor}}
     reviewThreads(first:100){nodes{id isResolved comments(first:100){
-      nodes{id bodyText createdAt path line originalLine author{__typename login}}
+      nodes{id bodyText createdAt path line originalLine author{__typename login} viewerDidAuthor}
       pageInfo{hasNextPage endCursor}
     }} pageInfo{hasNextPage endCursor}}
   }}
@@ -517,14 +519,14 @@ query PullRequestFeedback($owner:String!,$name:String!,$number:Int!){
 const pullRequestFeedbackReviewPageQuery = `
 query PullRequestReviewBodies($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename login} viewerDidAuthor} pageInfo{hasNextPage endCursor}}
   }}
 }`
 
 const pullRequestCommentPageQuery = `
 query PullRequestComments($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    comments(first:100,after:$cursor){nodes{id bodyText createdAt author{__typename login}} pageInfo{hasNextPage endCursor}}
+    comments(first:100,after:$cursor){nodes{id bodyText createdAt author{__typename login} viewerDidAuthor} pageInfo{hasNextPage endCursor}}
   }}
 }`
 
@@ -532,7 +534,7 @@ const pullRequestThreadPageQuery = `
 query PullRequestThreads($owner:String!,$name:String!,$number:Int!,$cursor:String!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     reviewThreads(first:100,after:$cursor){nodes{id isResolved comments(first:100){
-      nodes{id bodyText createdAt path line originalLine author{__typename login}}
+      nodes{id bodyText createdAt path line originalLine author{__typename login} viewerDidAuthor}
       pageInfo{hasNextPage endCursor}
     }} pageInfo{hasNextPage endCursor}}
   }}
@@ -541,7 +543,7 @@ query PullRequestThreads($owner:String!,$name:String!,$number:Int!,$cursor:Strin
 const pullRequestThreadCommentsPageQuery = `
 query PullRequestThreadComments($id:ID!,$cursor:String!){
   node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$cursor){
-    nodes{id bodyText createdAt path line originalLine author{__typename login}}
+    nodes{id bodyText createdAt path line originalLine author{__typename login} viewerDidAuthor}
     pageInfo{hasNextPage endCursor}
   }}}
 }`
@@ -669,7 +671,7 @@ func buildFeedback(pr *feedbackPullRequest) []prreadiness.FeedbackItem {
 			continue
 		}
 		items = append(items, prreadiness.FeedbackItem{
-			ID: review.ID, Kind: "review", Author: canonicalActor(review.Author), Body: review.BodyText, CreatedAt: review.SubmittedAt,
+			ID: review.ID, Kind: "review", Author: canonicalActor(review.Author), ByViewer: review.ByViewer, Body: review.BodyText, CreatedAt: review.SubmittedAt,
 		})
 	}
 	for _, thread := range pr.ReviewThreads.Nodes {
@@ -692,7 +694,7 @@ func buildFeedback(pr *feedbackPullRequest) []prreadiness.FeedbackItem {
 
 func feedbackItem(comment feedbackComment, kind string) prreadiness.FeedbackItem {
 	return prreadiness.FeedbackItem{
-		ID: comment.ID, Kind: kind, Author: canonicalActor(comment.Author), Body: comment.BodyText,
+		ID: comment.ID, Kind: kind, Author: canonicalActor(comment.Author), ByViewer: comment.ByViewer, Body: comment.BodyText,
 		Location: comment.location(), CreatedAt: comment.CreatedAt,
 	}
 }
@@ -703,7 +705,7 @@ func buildThreads(pr *feedbackPullRequest) []prreadiness.ThreadState {
 		state := prreadiness.ThreadState{ID: thread.ID, Resolved: thread.IsResolved}
 		if len(thread.Comments.Nodes) > 0 {
 			first := thread.Comments.Nodes[0]
-			state.Author, state.Body, state.Location = canonicalActor(first.Author), first.BodyText, first.location()
+			state.Author, state.ByViewer, state.Body, state.Location = canonicalActor(first.Author), first.ByViewer, first.BodyText, first.location()
 		}
 		threads = append(threads, state)
 	}

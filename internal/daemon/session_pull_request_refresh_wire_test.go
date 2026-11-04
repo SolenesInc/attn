@@ -33,7 +33,7 @@ type refreshedPullRequest struct {
 	readinessGate              <-chan struct{}
 	keepAlive                  bool
 	codexThumbsUp, checkFails  bool
-	author                     string
+	author, viewer             string
 	comments, reviewBodies     []map[string]any
 	threads                    []map[string]any
 	limitedUntil               time.Time
@@ -120,8 +120,8 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		}
 		answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
 			"number": 71, "url": shopPull(71), "title": gh.title, "state": "OPEN", "merged": false,
-			"author":     map[string]any{"__typename": "User", "login": gh.author},
-			"headRefOid": "head-a", "headRefName": "status-refresh", "mergeStateStatus": "CLEAN",
+			"viewerDidAuthor": gh.viewer != "" && gh.viewer == gh.author,
+			"headRefOid":      "head-a", "headRefName": "status-refresh", "mergeStateStatus": "CLEAN",
 			"reactions": map[string]any{"nodes": reactions}, "latestOpinionatedReviews": map[string]any{"nodes": []any{}},
 			"reviews": map[string]any{"nodes": []any{}}, "reviewRequests": map[string]any{"nodes": []any{}},
 			"commits": map[string]any{"nodes": commits},
@@ -845,7 +845,7 @@ func (gh *refreshedPullRequest) comment(id, login, typeName, body string) {
 	gh.set(func(gh *refreshedPullRequest) {
 		gh.comments = append(gh.comments, map[string]any{
 			"id": id, "bodyText": body, "createdAt": "2026-11-04T10:00:00Z",
-			"author": map[string]any{"__typename": typeName, "login": login},
+			"author": map[string]any{"__typename": typeName, "login": login}, "viewerDidAuthor": login == gh.viewer,
 		})
 	})
 }
@@ -854,7 +854,7 @@ func (gh *refreshedPullRequest) reviewBody(id, login, body string) {
 	gh.set(func(gh *refreshedPullRequest) {
 		gh.reviewBodies = append(gh.reviewBodies, map[string]any{
 			"id": id, "state": "COMMENTED", "bodyText": body, "submittedAt": "2026-11-04T10:00:00Z",
-			"author": map[string]any{"__typename": "User", "login": login},
+			"author": map[string]any{"__typename": "User", "login": login}, "viewerDidAuthor": login == gh.viewer,
 		})
 	})
 }
@@ -862,9 +862,24 @@ func (gh *refreshedPullRequest) reviewBody(id, login, body string) {
 func (gh *refreshedPullRequest) thread(id, login, body string) {
 	gh.set(func(gh *refreshedPullRequest) {
 		gh.threads = append(gh.threads, map[string]any{"id": id, "isResolved": false, "comments": map[string]any{"nodes": []any{
-			map[string]any{"id": id + "-comment", "bodyText": body, "createdAt": "2026-11-04T10:00:00Z", "path": "loop.go", "line": 12,
-				"author": map[string]any{"__typename": "User", "login": login}},
+			reviewThreadComment(id+"-comment", login, body, gh.viewer),
 		}}})
+	})
+}
+
+func reviewThreadComment(id, login, body, viewer string) map[string]any {
+	return map[string]any{"id": id, "bodyText": body, "createdAt": "2026-11-04T10:00:00Z", "path": "loop.go", "line": 12,
+		"author": map[string]any{"__typename": "User", "login": login}, "viewerDidAuthor": login == viewer}
+}
+
+func (gh *refreshedPullRequest) reply(threadID, id, login, body string) {
+	gh.set(func(gh *refreshedPullRequest) {
+		for _, thread := range gh.threads {
+			if thread["id"] == threadID {
+				comments := thread["comments"].(map[string]any)
+				comments["nodes"] = append(comments["nodes"].([]any), reviewThreadComment(id, login, body, gh.viewer))
+			}
+		}
 	})
 }
 
@@ -880,7 +895,7 @@ func (gh *refreshedPullRequest) resolveThread(id string, resolved bool) {
 
 func TestAPullRequestAuthorsOwnCommentsRingItsWatchOnlyWhenTheProfileAsks(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
-	gh.set(func(gh *refreshedPullRequest) { gh.author = "victor" })
+	gh.set(func(gh *refreshedPullRequest) { gh.author, gh.viewer = "victor", "victor" })
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		if got := app.Initial.Settings["pull_requests.own_comments"]; got != "quiet" {
@@ -944,6 +959,59 @@ func TestAPullRequestAuthorsOwnCommentsRingItsWatchOnlyWhenTheProfileAsks(t *tes
 		}
 		if quiet := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Contains(quiet, "Address the review next") || strings.Contains(quiet, "review thread reopened") {
 			t.Errorf("s1's profile stays quiet, but its inbox = %q", quiet)
+		}
+	})
+}
+
+func TestAReviewersWatchOnAnotherAuthorsPullRequestHearsThatAuthorAndStaysQuietOnItsOwnComments(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.author, gh.viewer = "alice", "bob" })
+	gh.thread("thread-bob", "bob", "This loop never ends")
+	gh.thread("thread-alice", "alice", "Is this the right name?")
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "reviewer")
+		watchPullRequestOn(t, cli, "reviewer", protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+
+		gh.reply("thread-bob", "reply-alice", "alice", "Fixed in the next push")
+		gh.reply("thread-bob", "reply-bob", "bob", "Thanks, checking now")
+		gh.comment("comment-alice", "alice", "User", "Ready for another look")
+		gh.comment("comment-bob", "bob", "User", "Looking again")
+		gh.reviewBody("review-alice", "alice", "Self-review after your finding")
+		gh.reviewBody("review-bob", "bob", "One finding left")
+		gh.reply("thread-alice", "reply-carol", "carol", "I prefer the old name")
+		w.advance(protocol.HeatHotInterval)
+		quiet := inboxContents(readInbox(t, cli, "reviewer", 0).Items)
+		for _, want := range []string{"alice: loop.go:12: Fixed in the next push", "alice: Ready for another look", "alice: Self-review after your finding", "carol: loop.go:12: I prefer the old name"} {
+			if !strings.Contains(quiet, want) {
+				t.Errorf("under quiet the reviewer's inbox = %q, want %q", quiet, want)
+			}
+		}
+		for _, own := range []string{"Thanks, checking now", "Looking again", "One finding left"} {
+			if strings.Contains(quiet, own) {
+				t.Errorf("under quiet the reviewer's inbox = %q, want none of its own %q", quiet, own)
+			}
+		}
+
+		gh.resolveThread("thread-bob", true)
+		gh.resolveThread("thread-alice", true)
+		w.advance(protocol.HeatHotInterval)
+		gh.resolveThread("thread-bob", false)
+		gh.resolveThread("thread-alice", false)
+		w.advance(protocol.HeatHotInterval)
+		if reopened := inboxContents(readInbox(t, cli, "reviewer", 0).Items); strings.Count(reopened, "review thread reopened") != 2 {
+			t.Errorf("the reviewer's inbox = %q, want both reopened threads, because GitHub does not say who reopened one", reopened)
+		}
+
+		if _, err := cli.SetSetting(client.SettingsCaller{SessionID: "reviewer"}, "pull_requests.own_comments", "ring"); err != nil {
+			t.Fatalf("set pull_requests.own_comments to ring: %v", err)
+		}
+		gh.reply("thread-bob", "reply-bob-2", "bob", "Second look done")
+		w.advance(protocol.HeatHotInterval)
+		ringing := inboxContents(readInbox(t, cli, "reviewer", 0).Items)
+		if !strings.Contains(ringing, "bob: loop.go:12: Second look done") || strings.Contains(ringing, "Thanks, checking now") {
+			t.Errorf("under ring the reviewer's inbox = %q, want its new reply without replaying the one skipped earlier", ringing)
 		}
 	})
 }

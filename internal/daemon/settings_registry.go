@@ -284,7 +284,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 		}
 		return validateNotebookRoot(key, value)
 	}},
-	{key: string(SettingPullRequestOwnComments), scope: profileScope, description: "How a pull request watch treats the comments, review bodies and reopened review threads that the pull request's author wrote: quiet skips them, ring delivers them to the agent. Agents post as you, so quiet keeps an agent's own comments from coming back to it; ring lets you steer agents with comments on your pull requests. State changes always reach the agent. Empty means quiet, the default.", validate: func(d *Daemon, key, value string) error {
+	{key: string(SettingPullRequestOwnComments), scope: profileScope, description: "How a pull request watch treats the comments and review bodies your GitHub account wrote, and the reopened review threads you started on your own pull requests: quiet skips them, ring delivers them to the agent. Agents post as you, so quiet keeps an agent's own comments from coming back to it; ring lets you steer agents with your comments. Comments by others and state changes always reach the agent. Empty means quiet, the default.", validate: func(d *Daemon, key, value string) error {
 		_, err := prreadiness.ParseOwnComments(value)
 		return err
 	}},

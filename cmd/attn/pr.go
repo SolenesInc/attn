@@ -528,9 +528,10 @@ commands:
   status [<url>] [--session <id>] [--json]             show recorded watch/readiness state
   wait-ready <number-or-url> [options]                 wait for the next actionable update
 
-watch skips the comments the pull request's author wrote, because agents post as
-the user. State changes still reach the agent. To have watch deliver those
-comments too, the user runs:
+watch skips the comments the user's GitHub account wrote, because agents post as
+the user. Comments by others, including the author of a pull request under
+review, and state changes still reach the agent. To have watch deliver the
+user's comments too, the user runs:
   attn settings set pull_requests.own_comments ring
 wait-ready does not skip them; --ignore-author skips a login.
 

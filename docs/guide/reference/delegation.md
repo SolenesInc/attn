@@ -187,13 +187,17 @@ and failed checks are feedback the agent hears about. None of them adds a
 condition for ready. A watch never changes anything on
 GitHub and never grants permission to merge.
 
-Agents post to GitHub with your login, so the author of your pull request is you
-and your agents. So that an agent doesn't hear about its own `gh pr comment`, a
-watch skips the comments, review comments, review bodies and reopened review
-threads that the author started. Changes of state, such as ready, changes
-requested, failed checks, merged and closed, always reach the agent. If you
-steer an agent by commenting on your own pull request, turn on **Ring on my own
-PR comments** in **Settings → Agents and models**, or run
+Agents post to GitHub with your account, so a comment from your account usually
+comes from an agent. So that an agent doesn't hear about its own `gh pr comment`,
+a watch skips the comments, replies and review bodies that the account attn uses
+for that GitHub host wrote, on any pull request. Everyone else's reach the agent,
+including those from the author of a pull request you review. On your own pull
+request, a watch also skips reopened review threads that you started. GitHub
+doesn't say who reopened a thread, so on someone else's pull request every
+reopened thread reaches the agent. Changes of state, such as ready, changes
+requested, failed checks, merged and closed, always reach the agent. If you steer
+an agent by commenting from your own account, turn on **Ring on my own PR
+comments** in **Settings → Agents and models**, or run
 `attn settings set pull_requests.own_comments ring`. The setting belongs to your
 profile and defaults to `quiet`. Attn doesn't replay the comments that a watch
 skipped before you switched to `ring`.

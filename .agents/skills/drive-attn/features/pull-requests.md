@@ -44,7 +44,7 @@ requests and review requests from GitHub, with approve, merge and mute.
 ### Triggers
 
 - When a Claude Code or Codex agent runs `gh pr create`, attn records the URL in the command's output on the agent's session (`internal/hooks/pullrequest.go`).
-- Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. When a watched pull request changes readiness or gets new feedback, attn creates an inbox notice, and the notice rings the agent. Feedback and reopened threads that the pull request's author wrote make no notice unless the watching session's profile sets `pull_requests.own_comments` to `ring`. State changes always make one. attn also checks a codex-mode watch again at the watch's settling deadline (`internal/daemon/session_pull_request_refresh.go`).
+- Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. When a watched pull request changes readiness or gets new feedback, attn creates an inbox notice, and the notice rings the agent. Feedback that the GitHub account attn uses for the host wrote, and reopened threads that account started on its own pull request, make no notice unless the watching session's profile sets `pull_requests.own_comments` to `ring`. State changes always make one. attn also checks a codex-mode watch again at the watch's settling deadline (`internal/daemon/session_pull_request_refresh.go`).
 - The daemon polls GitHub for the user's pull requests every 90 seconds, on a named instance only with the mock GitHub or `ATTN_GITHUB_POLLING=on` (`internal/daemon/daemon.go`, `internal/daemon/github_polling.go`).
 
 ## Driving it
