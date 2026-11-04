@@ -274,10 +274,12 @@ wakes the member before it rings.
   when the session first reaches a safe prompt, and gets the user input as
   soon as it works. That ring is part of the same attempt. Items that arrive
   during the wake share the attempt.
-- The woken session's first prompt names what woke it: each unread item with
-  attempts left, up to 8, then a count of the rest. A seed update reads as the
-  inbox prints it, with its `attn seed show <id> --since <n>` command. A peer
-  message names only its sender. The prompt says the user did not open the
+- The woken session's first prompt names what woke it: each unread seed
+  update and peer message with attempts left, up to 8, then a count of the
+  rest. A seed update reads as the inbox prints it, with its
+  `attn seed show <id> --since <n>` command. A peer message names only its
+  sender. A wake with neither, such as one for a notice, opens with the plain
+  greeting. The prompt says the user did not open the
   session, and tells the member to run `attn agent inbox` first. A member with
   a charter then does what its charter says. A member without a charter, one
   with onboarding pending, and the Chief still greet the user after the cause.

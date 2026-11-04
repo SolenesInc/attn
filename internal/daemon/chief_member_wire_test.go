@@ -410,7 +410,9 @@ func TestSendingASeedToASleepingChiefMemberWakesIt(t *testing.T) {
 	if sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+chief.ID) || chief.BindingSession == nil {
 		t.Fatalf("the seed went to %+v and the Chief is %+v; want the Chief member to tend it and wake", sent.Seed.Tender, chief)
 	}
-	w.Launched(string(*chief.BindingSession))
+	if prompt := w.Launched(string(*chief.BindingSession)).Prompted(); prompt != crewV2WakeGreeting {
+		t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
+	}
 	if home := filepath.Dir(chief.CharterPath); home != chief.HomeDir {
 		t.Fatalf("charter %s is outside home %s", chief.CharterPath, chief.HomeDir)
 	}

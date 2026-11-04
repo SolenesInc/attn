@@ -11,6 +11,8 @@ import (
 
 const crewWakeGreeting = "You have been woken for today. Orient from your charter and your predecessor's letter, verify anything they left you that you will act on, then greet the user in a few lines: who you are, what you were left with, what you believe the current state is, and what you would do next."
 
+const crewV2WakeGreeting = "You have been woken. Get up to speed, confirming what your letter says against its sources, then greet the user in a few lines: who you are, where things stand now, and what you would do next."
+
 const updateWakeLead = "Updates woke you; the user did not open this session"
 
 func wakePrompt(t *testing.T, w *world, sessionID string) string {

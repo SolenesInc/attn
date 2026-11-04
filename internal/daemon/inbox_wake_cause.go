@@ -34,6 +34,9 @@ func (d *Daemon) inboxWakeCause(a who.Address) (string, error) {
 		}
 		lines = append(lines, "- "+line)
 	}
+	if len(lines) == 0 {
+		return "", nil
+	}
 	if unlisted > 0 {
 		lines = append(lines, "- "+prompts.RenderText("session", "wake-cause-more", prompts.Values{"count": strconv.Itoa(unlisted)}))
 	}
