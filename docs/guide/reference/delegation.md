@@ -225,6 +225,25 @@ Agents work the garden with `attn seed`: `plant`, `tend`, `park`, `harvest`,
 `attn seed --help` lists them all, and `attn seed guide` explains how agents
 write seeds and plots.
 
+### Reminders
+
+An agent, or you from your shell, can set a reminder on a seed:
+
+```sh
+attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new build"
+```
+
+At that time Attn posts the message to the seed's mailbox, which delivers it
+to whoever tends the seed then. When nobody tends the seed, the message waits
+for the next tender. Attn checks once a minute, so a message can arrive up to
+a minute late. To pick a time of day, use `--at` instead of `--in`, with a date
+and time such as `2026-11-05T09:00:00+01:00`.
+
+A seed holds one reminder, and a new one replaces it. To remove it, run
+`attn seed remind s-7k3f9m --clear`. The reminder also ends when Attn posts
+the message, and when the seed is harvested or withered. Until then,
+`attn seed show` and `attn seed ls` print it.
+
 ### Why the garden uses a gardening metaphor
 
 Every verb and noun in the garden maps to a term in a classic work tracker such

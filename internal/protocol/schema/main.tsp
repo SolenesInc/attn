@@ -5468,6 +5468,8 @@ model Seed {
   "reason"?: string;
   // Present while the seed is armed to harvest itself when a pull request merges.
   "harvest_when"?: SeedHarvestCondition;
+  // Present while a reminder is set on the seed.
+  "reminder"?: SeedReminder;
   // The user's words for this task: what agents may do without asking and
   // where they stop. Delegation openings deliver it.
   "authorization"?: SeedAuthorization;
@@ -5497,8 +5499,19 @@ model SeedRow {
   // Absent when it has none.
   "check_tally"?: SeedCheckTally;
   "harvest_when"?: SeedHarvestCondition;
+  "reminder"?: SeedReminder;
   "created_at": string;
   "updated_at": string;
+}
+
+// A time and a message set on a seed. At that time attn posts the message to
+// the seed mailbox and clears the reminder.
+model SeedReminder {
+  // RFC3339, UTC.
+  "at": string;
+  "message": string;
+  "set_at": string;
+  "set_by": ActorView;
 }
 
 // What a seed waits on before it harvests itself. The daemon settles it when the
@@ -6070,6 +6083,27 @@ model SeedAuthorizationMessage {
   "seed_id": string;
   "text"?: string;
   "clear"?: boolean;
+}
+
+// Set or clear a seed's reminder. A new reminder replaces the one the seed
+// has. `in` is a Go duration the daemon adds to its own clock; `at` is an
+// RFC3339 time. Pass exactly one of them with message, or clear alone.
+@extension("x-on", #{ home: true })
+model SeedReminderMessage {
+  "profile_id"?: string;
+  "source_session_id"?: SessionID;
+  "cmd": "seed_reminder";
+  "seed_id": string;
+  "at"?: string;
+  "in"?: string;
+  "message"?: string;
+  "clear"?: boolean;
+}
+
+model SeedReminderResult {
+  "seed": Seed;
+  // False when --clear found no reminder.
+  "changed": boolean;
 }
 
 model SeedAuthorizationResult {
@@ -6892,6 +6926,7 @@ model Response {
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
   seed_authorization_result?: SeedAuthorizationResult;
+  seed_reminder_result?: SeedReminderResult;
   seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;

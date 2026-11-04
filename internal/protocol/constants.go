@@ -140,6 +140,7 @@ const (
 	CmdSeedEdit                      = "seed_edit"
 	CmdSeedRollback                  = "seed_rollback"
 	CmdSeedAuthorization             = "seed_authorization"
+	CmdSeedReminder                  = "seed_reminder"
 	CmdSeedTransition                = "seed_transition"
 	CmdSeedNote                      = "seed_note"
 	CmdSeedCheck                     = "seed_check"

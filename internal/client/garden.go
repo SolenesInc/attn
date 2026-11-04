@@ -255,6 +255,37 @@ func (c *Client) SeedAuthorization(seedID, text string, clear bool) (*protocol.S
 	return resp.SeedAuthorizationResult, nil
 }
 
+type SeedReminderOptions struct {
+	In      string
+	At      string
+	Message string
+	Clear   bool
+}
+
+func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protocol.SeedReminderResult, error) {
+	msg := protocol.SeedReminderMessage{Cmd: protocol.CmdSeedReminder, SeedID: seedID}
+	if opts.In != "" {
+		msg.In = protocol.Ptr(opts.In)
+	}
+	if opts.At != "" {
+		msg.At = protocol.Ptr(opts.At)
+	}
+	if opts.Message != "" {
+		msg.Message = protocol.Ptr(opts.Message)
+	}
+	if opts.Clear {
+		msg.Clear = protocol.Ptr(true)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedReminderResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the reminder but returned no seed")
+	}
+	return resp.SeedReminderResult, nil
+}
+
 func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
 	resp, err := c.send(protocol.SeedRollbackMessage{Cmd: protocol.CmdSeedRollback, SeedID: seedID, Version: version})
 	if err != nil {

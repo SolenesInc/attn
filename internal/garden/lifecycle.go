@@ -169,6 +169,7 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	}
 	if Closed(next.Status) {
 		next.HarvestWhen = nil
+		next.Reminder = nil
 	}
 	return Outcome{Seed: next, Moved: true, Displaced: displaced, By: by}, nil
 }

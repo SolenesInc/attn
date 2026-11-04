@@ -160,6 +160,32 @@ read returns them too. Any `show` or `notes` of the seed resets the bell for
 the next meaningful move. You cannot recall updates already read or handed to
 an agent.
 
+## Reminders
+
+A reminder is a time and a message on a seed. At that time attn posts the
+message to the seed's mailbox, which delivers it to whoever tends the seed
+then. The tender reads it in `attn agent inbox`, where it arrives as a notice
+and not as a seed update. When nobody tends the seed, the message waits for the
+next tender.
+
+    attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new build"
+    attn seed remind s-7k3f9m --at 2026-11-05T09:00:00+01:00 -m "Ask for the review"
+    attn seed remind s-7k3f9m --clear
+
+`--in` counts from now, and `--at` takes an RFC3339 time. attn checks once a
+minute, so a message can arrive up to a minute late.
+
+A seed holds one reminder, and a new one replaces it. The reminder ends when
+attn posts the message, when `--clear` removes it, and when the seed is
+harvested or withered. Until then, `attn seed show` and `attn seed ls` print
+it. Setting or clearing a reminder adds a quiet note to the seed's log, and
+posting the message adds no entry.
+
+Setting or clearing a reminder needs the same standing as a move: the tender, a
+session above the tender in the delegation chain, the chief, or the user. When
+nobody holds the claim, anyone can. There is no `--force`. You can offer a
+reminder to the user.
+
 ## Artifacts
 
 To bring a local file into durable seed ownership, choose Move or Copy

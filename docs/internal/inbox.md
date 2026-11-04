@@ -157,6 +157,8 @@ recovers.
 Notices are attn's own messages to an agent:
 
 - a seed sent to the chief
+- a reminder that came due on a seed (`attn seed remind`), addressed to the
+  seed
 - crew sleep and auto-sleep requests
 
 ## Coalescing

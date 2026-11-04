@@ -1,0 +1,4 @@
+kind: added
+area: garden
+change: "`attn seed remind <seed> --in 20m -m \"…\"` (or `--at <time>`) sets a reminder on a seed. At that time attn posts the message to the seed's mailbox, so whoever tends the seed then reads it in their inbox. `--clear` removes it, and harvest or wither clears it."
+notes: A seed holds one reminder; a new one replaces it. Reminders persist across daemon restarts and fire on the first one-minute tick after their time. `attn seed show` and `attn seed ls` show an armed reminder.

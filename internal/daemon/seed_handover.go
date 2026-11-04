@@ -49,7 +49,7 @@ func (d *Daemon) prepareSeedHandover(
 		return plan, nil
 	}
 	if msg.Authorization != "" {
-		if err := d.checkAuthorizationStanding(seed, d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID)))); err != nil {
+		if err := d.checkSeedStanding(seed, d.actorOfSession(protocol.TrimID(protocol.Deref(msg.SourceSessionID))), "set its authorization"); err != nil {
 			return nil, err
 		}
 	}

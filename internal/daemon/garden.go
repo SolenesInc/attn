@@ -354,6 +354,7 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 		PlotProgress: g.progress(seed.ID),
 		CheckTally:   checkTallyToProtocol(g.plots.EffectiveCheckTally(seed.ID)),
 		HarvestWhen:  harvestConditionView(g.parties, seed.HarvestWhen),
+		Reminder:     reminderView(g.parties, seed.Reminder),
 		CreatedAt:    doc.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -441,6 +442,7 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 		out.Reason = protocol.Ptr(seed.Reason)
 	}
 	out.HarvestWhen = harvestConditionView(g.parties, seed.HarvestWhen)
+	out.Reminder = reminderView(g.parties, seed.Reminder)
 	out.Authorization = g.daemon.seedAuthorizationView(g.parties, seed.Authorization)
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
@@ -477,6 +479,18 @@ func harvestConditionView(parties parties, condition *garden.HarvestCondition) *
 		SetAt:       condition.SetAt,
 		Reason:      protocol.Ptr(condition.Reason),
 		SetBy:       parties.actor(condition.SetBy),
+	}
+}
+
+func reminderView(parties parties, reminder *garden.Reminder) *protocol.SeedReminder {
+	if reminder == nil {
+		return nil
+	}
+	return &protocol.SeedReminder{
+		At:      reminder.At.UTC().Format(time.RFC3339),
+		Message: reminder.Message,
+		SetAt:   formatGardenTime(reminder.SetAt),
+		SetBy:   parties.actor(reminder.SetBy),
 	}
 }
 

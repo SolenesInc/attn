@@ -62,6 +62,7 @@ When attn sends an update notification, run the read that the notification names
     attn seed notes <id>             the whole log, newest first. It takes `--since <N>`, and `--kind <kind>` for one kind
                                      of entry, such as handoff or answer
     attn seed watch <id>             watch this seed and its descendants. `unwatch` removes the subscription
+    attn seed remind <id> --in 20m -m "…"    at that time, attn posts the message to the seed's mailbox, for whoever tends the seed then. A seed holds one reminder, and a new one replaces it. `--clear` removes it, and harvest or wither clears it
     attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership, replacing a file of the same name. Prefer Move
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere

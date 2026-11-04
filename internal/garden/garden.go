@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
@@ -28,7 +29,10 @@ const (
 	StatusParked    = "parked"
 )
 
-const HarvestWhenPullRequestField = "harvest_when_pull_request"
+const (
+	HarvestWhenPullRequestField = "harvest_when_pull_request"
+	RemindAtField               = "remind_at"
+)
 
 type Edge struct {
 	Kind string `json:"kind"`
@@ -64,6 +68,9 @@ type Seed struct {
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
 
+	Reminder *Reminder `json:"reminder,omitempty"`
+	RemindAt int64     `json:"remind_at,omitempty"`
+
 	Authorization *Authorization `json:"authorization,omitempty"`
 
 	Checks       []Check                `json:"checks,omitempty"`
@@ -93,6 +100,23 @@ type HarvestCondition struct {
 	SetBy       who.Actor `json:"set_by,omitzero"`
 }
 
+type Reminder struct {
+	At      time.Time `json:"at"`
+	Message string    `json:"message"`
+	SetAt   time.Time `json:"set_at"`
+	SetBy   who.Actor `json:"set_by,omitzero"`
+}
+
+func ValidateReminder(r Reminder, seedID string) error {
+	if strings.TrimSpace(r.Message) == "" {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs the message it posts: attn seed remind %s --in 20m -m \"…\"", seedID)
+	}
+	if r.At.IsZero() {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs a time: attn seed remind %s --in 20m or --at <RFC3339 time>", seedID)
+	}
+	return nil
+}
+
 func ValidateHarvestCondition(c HarvestCondition) error {
 	if strings.TrimSpace(c.PullRequest) == "" {
 		return protocol.Refuse(protocol.RefusalInvalidInput, "a harvest condition needs the pull request it waits on, as host:owner/repo#number")
@@ -115,6 +139,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender", Type: docstore.FieldString},
 			{Name: HarvestWhenPullRequestField, Type: docstore.FieldString},
+			{Name: RemindAtField, Type: docstore.FieldNumber},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},
@@ -276,6 +301,10 @@ func (s Seed) Encode() ([]byte, error) {
 	s.HarvestWhenPullRequest = ""
 	if s.HarvestWhen != nil {
 		s.HarvestWhenPullRequest = s.HarvestWhen.PullRequest
+	}
+	s.RemindAt = 0
+	if s.Reminder != nil {
+		s.RemindAt = s.Reminder.At.Unix()
 	}
 	return json.Marshal(s)
 }

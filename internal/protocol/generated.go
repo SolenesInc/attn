@@ -9198,6 +9198,9 @@ type Response struct {
 	// SeedReadyResult corresponds to the JSON schema field "seed_ready_result".
 	SeedReadyResult *SeedReadyResult `json:"seed_ready_result,omitempty,omitzero"`
 
+	// SeedReminderResult corresponds to the JSON schema field "seed_reminder_result".
+	SeedReminderResult *SeedReminderResult `json:"seed_reminder_result,omitempty,omitzero"`
+
 	// SeedReviewResult corresponds to the JSON schema field "seed_review_result".
 	SeedReviewResult *SeedReviewResult `json:"seed_review_result,omitempty,omitzero"`
 
@@ -9381,6 +9384,9 @@ type Seed struct {
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
+
+	// Reminder corresponds to the JSON schema field "reminder".
+	Reminder *SeedReminder `json:"reminder,omitempty,omitzero"`
 
 	// Rev corresponds to the JSON schema field "rev".
 	Rev int `json:"rev"`
@@ -10438,6 +10444,54 @@ type SeedRelation struct {
 	Title string `json:"title"`
 }
 
+type SeedReminder struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+
+	// SetAt corresponds to the JSON schema field "set_at".
+	SetAt string `json:"set_at"`
+
+	// SetBy corresponds to the JSON schema field "set_by".
+	SetBy ActorView `json:"set_by"`
+}
+
+type SeedReminderMessage struct {
+	// At corresponds to the JSON schema field "at".
+	At *string `json:"at,omitempty,omitzero"`
+
+	// Clear corresponds to the JSON schema field "clear".
+	Clear *bool `json:"clear,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// In corresponds to the JSON schema field "in".
+	In *string `json:"in,omitempty,omitzero"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedReminderResult struct {
+	// Changed corresponds to the JSON schema field "changed".
+	Changed bool `json:"changed"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
 type SeedResumeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10706,6 +10760,9 @@ type SeedRow struct {
 
 	// Ready corresponds to the JSON schema field "ready".
 	Ready bool `json:"ready"`
+
+	// Reminder corresponds to the JSON schema field "reminder".
+	Reminder *SeedReminder `json:"reminder,omitempty,omitzero"`
 
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`

@@ -56,6 +56,9 @@ func runSeed() {
 		runSeedRollback(args)
 	case "authorization":
 		runSeedAuthorization(args)
+	case "remind":
+		setCommandPath("seed remind")
+		runSeedRemind(args)
 	case "send-to-chief":
 		setCommandPath("seed send-to-chief")
 		runSeedSendToChief(args)
@@ -201,6 +204,18 @@ neither words nor --clear, prints them and the state of the last typed update.
 Who may change them follows seed moves: the tender, sessions above it in
 the delegation chain, and the profile's chief; anyone in the profile while
 nobody holds the seed.`, []string{"clear", "json"}, false},
+	{`remind`, `remind <id> (--in <duration> | --at <time>) -m "<message>" | remind <id> --clear [--json]`, `set a reminder: at that time attn posts the message to the seed's mailbox,
+which delivers it to whoever tends the seed then. When nobody tends it, the
+message waits for the next tender, who reads it with attn agent inbox.
+--in counts from now, as in 20m, 2h or 1h30m. --at takes an RFC3339 time.
+attn checks once a minute, so a message can arrive up to a minute late.
+A seed holds one reminder, and a new one replaces it. The reminder ends when
+attn posts the message, when --clear removes it, and when the seed is
+harvested or withered. show and ls print it until then.
+Example: attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new build"
+While someone tends the seed, only the tender, sessions above it in the
+delegation chain, the profile's chief and the user can set or clear its
+reminder. There is no --force.`, []string{"in", "at", "m", "clear", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -299,7 +314,9 @@ var seedFlagDefs = []seedFlagDef{
 	{`note`, `<text>`, `what changed, saved on the edit entry`, func(f *seedFlags) { f.fs.StringVar(&f.editNote, "note", "", "") }},
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
-	{`clear`, ``, `remove the harvest condition (with --when-merged), or the authorization`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`clear`, ``, `remove the harvest condition (with --when-merged), the authorization, or the reminder`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`in`, `<duration>`, `how long from now until the reminder: 20m, 2h or 1h30m`, func(f *seedFlags) { f.fs.StringVar(&f.remindIn, "in", "", "") }},
+	{`at`, `<time>`, `the time of the reminder, as an RFC3339 time such as 2026-11-05T09:00:00+01:00`, func(f *seedFlags) { f.fs.StringVar(&f.remindAt, "at", "", "") }},
 	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
 	{`plot`, `<plot>`, `a plot: ready keeps to it, ls lists all its children`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
 	{`all`, ``, `the whole garden, overriding a dispatched session's plot`, func(f *seedFlags) { f.fs.BoolVar(&f.all, "all", false, "") }},
@@ -503,6 +520,8 @@ type seedFlags struct {
 	reference      bool
 	clear          bool
 	whenMerged     bool
+	remindIn       string
+	remindAt       string
 	force          bool
 	evidence       repeatedFlag
 	checks         repeatedFlag
@@ -938,7 +957,14 @@ func staleWindowLabel(seconds *int) string {
 }
 
 func seedRowSuffix(row protocol.SeedRow) string {
-	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen)
+	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen) + reminderSuffix(row.Reminder)
+}
+
+func reminderSuffix(reminder *protocol.SeedReminder) string {
+	if reminder == nil {
+		return ""
+	}
+	return "  [reminder " + shortStamp(reminder.At) + "]"
 }
 
 func plotProgressSuffix(progress *protocol.SeedPlotProgress) string {
@@ -1264,6 +1290,44 @@ func runSeedAuthorization(args []string) {
 		return
 	}
 	fmt.Println(seedAuthorizationReply(result, text != "" || f.clear, f.clear))
+}
+
+func runSeedRemind(args []string) {
+	f := newSeedFlags("remind")
+	positionals := f.parse("remind", args)
+	if len(positionals) != 1 {
+		seedUsageError("remind", fmt.Errorf("needs exactly one seed id: attn seed remind s-7k3f9m --in 20m -m \"Check the rollout\""))
+	}
+	message := strings.TrimSpace(f.text("remind"))
+	switch {
+	case f.clear && (f.remindIn != "" || f.remindAt != "" || message != ""):
+		seedUsageError("remind", fmt.Errorf("--clear takes no time or message"))
+	case !f.clear && (f.remindIn == "") == (f.remindAt == ""):
+		seedUsageError("remind", fmt.Errorf("pass one of --in or --at, or --clear"))
+	case !f.clear && message == "":
+		seedUsageError("remind", fmt.Errorf("-m names what the reminder says"))
+	}
+	id := f.seedID("remind", positionals[0])
+	result, err := f.client().SeedReminder(id, client.SeedReminderOptions{In: f.remindIn, At: f.remindAt, Message: message, Clear: f.clear})
+	if err != nil {
+		seedFail("remind", err)
+	}
+	if f.json {
+		writeJSON(result)
+		return
+	}
+	switch r := result.Seed.Reminder; {
+	case r != nil:
+		fmt.Printf("%s reminder %s\n", result.Seed.ID, reminderLine(*r))
+	case result.Changed:
+		fmt.Printf("%s reminder cleared.\n", result.Seed.ID)
+	default:
+		fmt.Printf("%s has no reminder.\n", result.Seed.ID)
+	}
+}
+
+func reminderLine(r protocol.SeedReminder) string {
+	return fmt.Sprintf("at %s: %q  set by %s", shortStamp(r.At), r.Message, orDash(actorLabel(r.SetBy)))
 }
 
 func seedAuthorizationReply(result *protocol.SeedAuthorizationResult, changing, clear bool) string {
@@ -1734,6 +1798,9 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	}
 	if a := seed.Authorization; a != nil {
 		fmt.Fprintf(w, "authorization\t%s\n", authorizationSummary(*a))
+	}
+	if r := seed.Reminder; r != nil {
+		fmt.Fprintf(w, "reminder\t%s\n", reminderLine(*r))
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")

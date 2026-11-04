@@ -122,7 +122,7 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			entryBody = fmt.Sprintf("Cleared the authorization. These words no longer apply: %q", previous.Text)
 		}
 		if typeIntoTender {
-			if err := d.checkAuthorizationStanding(seed, setter); err != nil {
+			if err := d.checkSeedStanding(seed, setter, "set its authorization"); err != nil {
 				return authorizationChange{}, err
 			}
 			standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
@@ -230,7 +230,7 @@ func partyAt(a who.Address) (who.Party, bool) {
 	return who.Party{}, false
 }
 
-func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) error {
+func (d *Daemon) checkSeedStanding(seed garden.Seed, setter who.Actor, action string) error {
 	if _, isParty := setter.Party(); !isParty {
 		return nil
 	}
@@ -240,7 +240,7 @@ func (d *Daemon) checkAuthorizationStanding(seed garden.Seed, setter who.Actor) 
 		return nil
 	}
 	tender := standing.Name(held)
-	return fmt.Errorf("%s is tended by %s; only %s, the sessions above %s in the delegation chain, the chief or the user can set its authorization", seed.ID, tender, tender, tender)
+	return fmt.Errorf("%s is tended by %s; only %s, the sessions above %s in the delegation chain, the chief or the user can %s", seed.ID, tender, tender, tender, action)
 }
 
 func (d *Daemon) seedAuthorizationView(parties parties, a *garden.Authorization) *protocol.SeedAuthorization {

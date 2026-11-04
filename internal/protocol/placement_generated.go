@@ -167,6 +167,7 @@ var Placements = map[string][]Placement{
 	"seed_plant":                       {Placement{LocatorHome, ""}},
 	"seed_plot":                        {Placement{LocatorHome, ""}},
 	"seed_ready":                       {Placement{LocatorHome, ""}},
+	"seed_reminder":                    {Placement{LocatorHome, ""}},
 	"seed_review_cancel":               {Placement{LocatorHome, ""}},
 	"seed_review_keep":                 {Placement{LocatorHome, ""}},
 	"seed_review_retry":                {Placement{LocatorHome, ""}},
@@ -1975,6 +1976,18 @@ func (m SeedReadyMessage) Placement() Placement {
 }
 
 func (m SeedReadyMessage) Locate() string {
+	return ""
+}
+
+func (SeedReminderMessage) CommandName() string {
+	return "seed_reminder"
+}
+
+func (m SeedReminderMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReminderMessage) Locate() string {
 	return ""
 }
 
