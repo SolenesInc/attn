@@ -35,12 +35,11 @@ func (s gardenStanding) Oversees(actor who.Actor, held who.Party) bool {
 	if s.daemon.chiefOfProfile(s.profileID) == asking {
 		return true
 	}
-	tender, ok := s.daemon.liveSessionOf(held)
+	tender, ok := held.Session()
 	if !ok {
-		return false
+		tender, ok = s.daemon.liveSessionOf(held)
 	}
-	target := s.daemon.store.Get(tender)
-	return target != nil && s.daemon.mayActOnSession(asking, target, "move a seed tended by") == nil
+	return ok && (tender == asking || s.daemon.inDelegationChain(asking, caller.ProfileID, tender))
 }
 
 func (d *Daemon) seedMoveAuditBody(seed garden.Seed, verb garden.Verb, actor who.Actor, displaced who.Party, by garden.Means) string {

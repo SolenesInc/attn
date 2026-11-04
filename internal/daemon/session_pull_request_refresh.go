@@ -646,6 +646,8 @@ func (d *Daemon) schedulePullRequestRefreshNow(sessionID protocol.SessionID, prI
 	}
 }
 
+const pullRequestWatchHint = "pull request update"
+
 func pullRequestWatchMailboxItem(
 	watch store.PullRequestWatch,
 	eventID, coalesceKey, kind string,
@@ -666,7 +668,7 @@ func pullRequestWatchMailboxItem(
 	return inbox.Item{
 		ID: id, To: watch.To, Kind: inbox.Notice,
 		Source: watch.PRID, Key: coalesceKey,
-		Hint: "pull request update", Text: prompt,
+		Hint: pullRequestWatchHint, Text: prompt,
 	}
 }
 

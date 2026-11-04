@@ -9248,6 +9248,9 @@ type Response struct {
 	// SeedShowResult corresponds to the JSON schema field "seed_show_result".
 	SeedShowResult *SeedShowResult `json:"seed_show_result,omitempty,omitzero"`
 
+	// SeedStandbyResult corresponds to the JSON schema field "seed_standby_result".
+	SeedStandbyResult *SeedStandbyResult `json:"seed_standby_result,omitempty,omitzero"`
+
 	// SeedTransitionResult corresponds to the JSON schema field
 	// "seed_transition_result".
 	SeedTransitionResult *SeedTransitionResult `json:"seed_transition_result,omitempty,omitzero"`
@@ -9424,6 +9427,9 @@ type Seed struct {
 
 	// SharedChecks corresponds to the JSON schema field "shared_checks".
 	SharedChecks []SeedSharedCheck `json:"shared_checks,omitempty,omitzero"`
+
+	// Standby corresponds to the JSON schema field "standby".
+	Standby *SeedStandbyView `json:"standby,omitempty,omitzero"`
 
 	// StateChangedAt corresponds to the JSON schema field "state_changed_at".
 	StateChangedAt string `json:"state_changed_at"`
@@ -10795,6 +10801,9 @@ type SeedRow struct {
 	// Reminder corresponds to the JSON schema field "reminder".
 	Reminder *SeedReminder `json:"reminder,omitempty,omitzero"`
 
+	// Standby corresponds to the JSON schema field "standby".
+	Standby *SeedStandbyView `json:"standby,omitempty,omitzero"`
+
 	// Status corresponds to the JSON schema field "status".
 	Status string `json:"status"`
 
@@ -11025,6 +11034,54 @@ type SeedSinceExpired struct {
 
 	// RetentionSeconds corresponds to the JSON schema field "retention_seconds".
 	RetentionSeconds int `json:"retention_seconds"`
+}
+
+type SeedStandbyMessage struct {
+	// Clear corresponds to the JSON schema field "clear".
+	Clear *bool `json:"clear,omitempty,omitzero"`
+
+	// Close corresponds to the JSON schema field "close".
+	Close *bool `json:"close,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedStandbyResult struct {
+	// Changed corresponds to the JSON schema field "changed".
+	Changed bool `json:"changed"`
+
+	// Close corresponds to the JSON schema field "close".
+	Close *AgentCloseResult `json:"close,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
+type SeedStandbyView struct {
+	// Note corresponds to the JSON schema field "note".
+	Note string `json:"note"`
+
+	// SetAt corresponds to the JSON schema field "set_at".
+	SetAt string `json:"set_at"`
+
+	// SetBy corresponds to the JSON schema field "set_by".
+	SetBy ActorView `json:"set_by"`
+
+	// WakeBlocked corresponds to the JSON schema field "wake_blocked".
+	WakeBlocked *string `json:"wake_blocked,omitempty,omitzero"`
 }
 
 type SeedTransitionMessage struct {

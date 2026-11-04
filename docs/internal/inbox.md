@@ -5,7 +5,8 @@
 The inbox is how attn delivers information to an agent: messages from other
 agents, seed updates, the user's answers and Quick Captures, and attn's own
 notices. A sender saves an item for an address. attn then decides when to ring
-the agent, when to wake an asleep crew member first, and when to stop. In a
+the agent, when to wake an asleep crew member or resume a standby seed's closed
+tender first, and when to stop. In a
 ring, attn types what the user wrote into the conversation as the user's
 message. The agent reads everything else with `attn agent inbox`.
 
@@ -24,7 +25,7 @@ session holds it reads.
 | session | that session | The item waits, and attn never resumes a closed session to deliver an item. A seed update is the exception: attn withdraws it when the session closes (see [Seed updates](#seed-updates)). |
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
 | chief | the profile's current chief session | The item waits for the next chief. attn never wakes a chief. With crew v2 on, the Chief is a crew member and new items for it use the Chief's member address instead. |
-| seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. |
+| seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. A closed session tender is resumed only when the seed is on standby (see [Wakes](#wakes)). |
 
 An item follows its mailbox. When a member's session ends, their next session
 gets the unread items. When a seed gets a new tender, the new tender gets the
@@ -240,7 +241,9 @@ With the experimental `claude_mod_enabled` setting on, a Claude session's mod
 takes each ring instead of the terminal while the mod is connected. attn types as
 usual while the mod is not connected, such as while Claude starts or waits on its
 folder trust question, and on an outpost, where the inbox lives on another
-daemon. With the mod connected:
+daemon. The exception is a Claude session that attn resumed for a standby seed's
+mail: attn waits for its mod and never types (see
+[A seed on standby](#a-seed-on-standby)). With the mod connected:
 
 - After the user stops the session with Esc while Claude works, the mod refuses
   every ring. Its items stay unread, the refusal costs no attempt, and attn rings
@@ -288,6 +291,8 @@ change nothing.
 
 ## Wakes
 
+### A crew member
+
 When a crew member's address has unread items and the member is asleep, attn
 wakes the member before it rings. When a restart interrupted the member's latest
 session, attn resumes that session and rings it instead of starting a new one.
@@ -311,7 +316,9 @@ session, attn resumes that session and rings it instead of starting a new one.
 - An inbox wake counts against the member's wake limit: 8 wakes per 12 hours,
   set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A wake from
   the sidebar, a wake from `attn crew wake` and a wake for an unread user
-  message do not count, because the user causes each of them.
+  message do not count, because the user causes each of them. A wake for seed
+  mail counts against the seed's wake limit instead (see
+  [A seed on standby](#a-seed-on-standby)).
 - A wake that fails still uses an attempt, including one the wake limit
   refuses. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
@@ -327,6 +334,70 @@ session, attn resumes that session and rings it instead of starting a new one.
 - A manual wake does not ring for items that have no attempts left. The agent
   still finds those items with `attn agent inbox`. attn types user input
   regardless of their attempts.
+
+### A seed on standby
+
+A seed on standby carries a note from its tender, set with
+`attn seed standby <seed> -m "<what to do next>"`. Seed mail is an item
+addressed to a seed: a PR watch update, a reminder, a peer message sent to the
+seed's id, and the answer to an ask about the seed.
+
+When seed mail is unread and the seed's tender is a closed session, attn
+resumes that session as itself, with the same session id and conversation. It
+resumes the session only when all of these hold:
+
+- The seed is on standby. A closed session whose seed is not on standby stays
+  closed, and the mail waits for the next tender.
+- The session is the one the seed names as its tender.
+- `garden.tender_wake` allows the item. `any`, the default, allows all seed
+  mail. `watches` allows PR watch updates and reminders only. `off` allows
+  nothing, and the mail waits.
+- The seed has had fewer than 48 tender wakes in the last 24 hours.
+
+Who closed the session does not matter. The resume needs no connected app, and
+the session opens on its last desktop. A crew member that tends the seed is
+woken as a member under every value of `garden.tender_wake`.
+
+The woken session gets its mail only through a path that knows when the agent
+reads input. For Codex, attn rings right after the resume. For Claude, attn
+waits for the reopened session's first Claude mod poll and delivers through the
+mod. attn types nothing into a Claude terminal. A Claude session cannot be woken
+while `claude_mod_enabled` is off, or when its mod does not poll within 30
+seconds of the resume. `attn seed standby` refuses to run in a Claude session
+that runs without the mod and names `claude_mod_enabled`.
+
+The first prompt carries the mail and the standby note. It says the user may
+not be watching, and names the ways to end the turn: put the seed on standby
+again, harvest it, ask the user with `attn ask`, or report. A woken session that
+stops owes the user a turn, as any resumed session does.
+
+Standby ends when attn delivers seed mail to the tender, whether the session
+was open or woken. It also ends when the seed is parked, harvested or withered,
+and when the seed gets a new tender. attn delivers seed mail again when a
+session closes and when the daemon restarts, so a seed on standby with unread
+mail wakes its tender right after either.
+
+`attn seed standby --close` and `attn agent close --self` refuse while a seed
+the session tends is on standby and has unread seed mail. The refusal names
+`attn agent inbox`.
+
+Every tender wake for seed mail, of a session or of a crew member, counts
+against one limit for the seed: 48 wakes per 24 hours, held in memory. The count
+restarts empty when the daemon restarts. These wakes do not count against
+`crew.wake_limit`, so a member that tends several seeds is not capped across
+them. The daemon log records each tender wake with the seed and its cause.
+
+A wake that fails for a reason that does not fix itself writes a note on the
+seed that names the reason and the item, and rings the seed's watchers and the
+tenders of the plots above it. It also raises a critical notification with an
+action that opens the seed. The reasons are a removed worktree, a missing
+conversation, a conversation that would reopen in another profile, a Claude
+session that cannot receive the mail through its mod, and the 48-wake limit. The
+seed row carries the reason as `wake_blocked`. The item stays queued. attn does
+not retry these wakes, except at the 48-wake limit: attn delivers the item when
+the 24-hour window has room again. A failure that can fix itself leaves the item
+queued, and attn tries again after 5 minutes. Each wake uses one of the item's 3
+attempts.
 
 ## Reading and receipts
 
@@ -360,6 +431,7 @@ notified, or read.
 | Time between attempts (user input does not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items. The repeats were harness outages. |
 | Inbox wakes per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
+| Tender wakes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender wake with the seed and its cause. |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
 | Same text to one address | once per 10 s | `agentMessageDedupeWindow` | |
 | Peer messages from one sender to one address | 8 per 30 s | `agentMessageRateLimit` | |
@@ -377,7 +449,7 @@ requested count. Existing IDs still return their delivery receipts.
 
 The database keeps items, attempts and outstanding rings. After a daemon
 restart, attn resumes delivery for every address with unread items when
-recovery finishes. A restart does not give items new attempts. A wake that a
+recovery finishes, and the delivery can wake the tender of a seed on standby. A restart does not give items new attempts. A wake that a
 restart interrupts still counts as an attempt. The woken session's ring then
 waits 5 minutes and is a second attempt.
 
@@ -409,6 +481,14 @@ another session tends it. attn withdraws the old tender's update, unless the
 old tender also tends a plot above it or watches the seed. The new tender gets
 no update for the earlier event. A message sent to the seed's id goes to the
 new tender.
+
+**A reminder on standby.** An agent runs
+`attn seed remind s-x --in 20m -m "Check the rollout"`, then
+`attn seed standby s-x -m "Read the rollout dashboard and report" --close`. The
+session closes. When the reminder comes due, the seed is on standby and
+`garden.tender_wake` is `any`, so attn resumes the closed session. For a Claude
+session, attn waits for the mod's first poll. The session reads the reminder and
+the note, and standby ends. The agent reports, or goes on standby again.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
 member's 8th wake in 12 hours. The reply to the sender names `crew.wake_limit`.

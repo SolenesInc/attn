@@ -45,6 +45,11 @@ When nothing is left to raise, run:
     attn agent close --self -m "<what you settled>"
 
 attn refuses this close when you are the chief of staff or a session a crew
-member works in. Those sessions stay open after the wrap-up. The close is
-immediate, so write everything first. attn adds the reason as a note on each
-seed you still tend, and the session stays in the ledger.
+member works in. Those sessions stay open after the wrap-up. attn also refuses
+it while a seed you tend is on standby and has unread mail. Read the mail with
+`attn agent inbox`, then close. The close is immediate, so write everything
+first. attn adds the reason as a note on each seed you still tend, and the
+session stays in the ledger.
+
+A seed you tend that is on standby stays on standby after you close, so its next
+mail wakes your session. To stop that, run `attn seed standby <id> --clear`.

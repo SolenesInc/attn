@@ -200,6 +200,7 @@ type Daemon struct {
 	routes                   *Router
 	terminalState            *terminalRegistry
 	claudeModOnce            sync.Once
+	tenderWakes              tenderWakeLedger
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
@@ -2956,6 +2957,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedAuthorization(conn, msg.(*protocol.SeedAuthorizationMessage))
 	case protocol.CmdSeedReminder:
 		d.handleSeedReminder(conn, msg.(*protocol.SeedReminderMessage))
+	case protocol.CmdSeedStandby:
+		d.handleSeedStandby(conn, msg.(*protocol.SeedStandbyMessage))
 	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:

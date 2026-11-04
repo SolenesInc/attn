@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu } from './test/appFixtures';
-import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop, soloDesktop, daemonSession } from './test/daemonFixtures';
+import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop, soloDesktop, daemonSeed, daemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -28,9 +28,9 @@ function notification(overrides: Partial<Notification>): Notification {
   };
 }
 
-async function openNotifications(notifications: Notification[]) {
+async function openNotifications(notifications: Notification[], seeds = [daemonSeed('s-wake', { title: 'Watch the deploy' })]) {
   const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1'), daemonSession('session-1')], desktops: [soloDesktop('s1'), soloDesktop('session-1')] },
+    initialState: { sessions: [daemonSession('s1'), daemonSession('session-1')], desktops: [soloDesktop('s1'), soloDesktop('session-1')], seeds },
   });
   daemon.on('notification_list', () => ({
     event: 'notification_list_result',
@@ -101,6 +101,25 @@ describe('App notifications', () => {
     await click(daemon, 'Open session');
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
     expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'session-1' });
+  });
+
+  it('opens the seed of a blocked tender wake in the Garden', async () => {
+    const daemon = await openNotifications([
+      notification({
+        id: 'wake',
+        kind: 'tender_wake_blocked',
+        severity: 'critical',
+        title: 's-wake could not wake its tender',
+        source_kind: 'seed',
+        source_id: 's-wake',
+        actions: [{ kind: 'open_seed', label: 'Open seed', target_id: 's-wake' }],
+      }),
+    ]);
+
+    await gesture(daemon, () => fireEvent.click(row('s-wake could not wake its tender')));
+    await click(daemon, 'Open seed');
+    expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
+    expect(within(screen.getByTestId('garden-frame')).getAllByText('Watch the deploy').length).toBeGreaterThan(0);
   });
 
   it('installs a Codex update from its notification on the current desktop, and shows it installing until it finishes', async () => {

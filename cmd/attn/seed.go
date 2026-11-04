@@ -59,6 +59,9 @@ func runSeed() {
 	case "remind":
 		setCommandPath("seed remind")
 		runSeedRemind(args)
+	case "standby":
+		setCommandPath("seed standby")
+		runSeedStandby(args)
 	case "send-to-chief":
 		setCommandPath("seed send-to-chief")
 		runSeedSendToChief(args)
@@ -216,6 +219,17 @@ Example: attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new bui
 While someone tends the seed, only the tender, sessions above it in the
 delegation chain, the profile's chief and the user can set or clear its
 reminder. There is no --force.`, []string{"in", "at", "m", "clear", "json"}, false},
+	{`standby`, `standby <id> -m "<what to do next>" [--close] | standby <id> --clear [--json]`, `put a seed you tend on standby with a note saying what to do next. While
+it is on standby, mail to the seed (attn agent msg <id>, a reminder, an ask
+answer) wakes you: when your session is closed, attn resumes it as itself and
+delivers the mail with the note. The setting garden.tender_wake chooses which
+mail wakes a session: any (the default), watches or off. Standby ends when
+seed mail reaches you, and when the seed is parked, harvested, withered or
+gets a new tender. --close then closes this session as attn agent close
+--self does; it refuses while the seed's mailbox holds mail you have not read.
+Only the seed's tender sets standby. A Claude session needs claude_mod_enabled
+when it launched. --clear ends standby.
+Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close`, []string{"m", "close", "clear", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -314,7 +328,8 @@ var seedFlagDefs = []seedFlagDef{
 	{`note`, `<text>`, `what changed, saved on the edit entry`, func(f *seedFlags) { f.fs.StringVar(&f.editNote, "note", "", "") }},
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
-	{`clear`, ``, `remove the harvest condition (with --when-merged), the authorization, or the reminder`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`close`, ``, `close this session once the seed is on standby`, func(f *seedFlags) { f.fs.BoolVar(&f.closeSelf, "close", false, "") }},
+	{`clear`, ``, `remove the harvest condition (with --when-merged), the authorization, the reminder, or standby`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
 	{`in`, `<duration>`, `how long from now until the reminder: 20m, 2h or 1h30m`, func(f *seedFlags) { f.fs.StringVar(&f.remindIn, "in", "", "") }},
 	{`at`, `<time>`, `the time of the reminder, as an RFC3339 time such as 2026-11-05T09:00:00+01:00`, func(f *seedFlags) { f.fs.StringVar(&f.remindAt, "at", "", "") }},
 	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
@@ -521,6 +536,7 @@ type seedFlags struct {
 	clear          bool
 	whenMerged     bool
 	remindIn       string
+	closeSelf      bool
 	remindAt       string
 	force          bool
 	evidence       repeatedFlag
@@ -957,7 +973,7 @@ func staleWindowLabel(seconds *int) string {
 }
 
 func seedRowSuffix(row protocol.SeedRow) string {
-	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen) + reminderSuffix(row.Reminder)
+	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen) + reminderSuffix(row.Reminder) + standbySuffix(row.Standby)
 }
 
 func reminderSuffix(reminder *protocol.SeedReminder) string {
@@ -1324,6 +1340,57 @@ func runSeedRemind(args []string) {
 	default:
 		fmt.Printf("%s has no reminder.\n", result.Seed.ID)
 	}
+}
+
+func runSeedStandby(args []string) {
+	f := newSeedFlags("standby")
+	positionals := f.parse("standby", args)
+	if len(positionals) != 1 {
+		seedUsageError("standby", fmt.Errorf("needs exactly one seed id: attn seed standby s-7k3f9m -m \"what to do next\""))
+	}
+	note := strings.TrimSpace(f.text("standby"))
+	switch {
+	case f.clear && (note != "" || f.closeSelf):
+		seedUsageError("standby", fmt.Errorf("--clear takes no note and no --close"))
+	case !f.clear && note == "":
+		seedUsageError("standby", fmt.Errorf("-m says what to do when mail wakes you"))
+	}
+	id := f.seedID("standby", positionals[0])
+	if f.closeSelf {
+		outliveTheCloseOfOwnSession()
+	}
+	result, err := f.client().SeedStandby(id, client.SeedStandbyOptions{Note: note, Clear: f.clear, Close: f.closeSelf})
+	if err != nil {
+		seedFail("standby", err)
+	}
+	if result.Close != nil {
+		recordAsClosedSession(result.Close.TargetSessionID)
+	}
+	if f.json {
+		writeJSON(result)
+		return
+	}
+	switch s := result.Seed.Standby; {
+	case s != nil:
+		fmt.Printf("%s on standby: %q\n", result.Seed.ID, s.Note)
+	case result.Changed:
+		fmt.Printf("%s is off standby.\n", result.Seed.ID)
+	default:
+		fmt.Printf("%s was not on standby.\n", result.Seed.ID)
+	}
+	if result.Close != nil {
+		printAgentClose(os.Stdout, result.Close)
+	}
+}
+
+func standbySuffix(standby *protocol.SeedStandbyView) string {
+	if standby == nil {
+		return ""
+	}
+	if blocked := protocol.Deref(standby.WakeBlocked); blocked != "" {
+		return "  [standby · wake blocked: " + blocked + "]"
+	}
+	return "  [standby]"
 }
 
 func reminderLine(r protocol.SeedReminder) string {
@@ -1801,6 +1868,12 @@ func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	}
 	if r := seed.Reminder; r != nil {
 		fmt.Fprintf(w, "reminder\t%s\n", reminderLine(*r))
+	}
+	if s := seed.Standby; s != nil {
+		fmt.Fprintf(w, "standby\t%q  set by %s\n", s.Note, orDash(actorLabel(s.SetBy)))
+		if blocked := protocol.Deref(s.WakeBlocked); blocked != "" {
+			fmt.Fprintf(w, "wake blocked\t%s\n", blocked)
+		}
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")

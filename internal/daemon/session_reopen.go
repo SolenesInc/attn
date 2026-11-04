@@ -525,10 +525,11 @@ func mutateReopenWorktreeAdmitted(
 }
 
 type sessionReopenPlan struct {
-	SessionID protocol.SessionID
-	Directory string
-	Title     string
-	ProfileID string
+	SessionID       protocol.SessionID
+	Directory       string
+	Title           string
+	ProfileID       string
+	StartsLaunching bool
 }
 
 type sessionRuntimeReopened struct {
@@ -634,6 +635,7 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	}
 	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
 	policy.fromLedger = true
+	policy.startsLaunching = plan.StartsLaunching
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}

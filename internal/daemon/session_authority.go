@@ -14,25 +14,29 @@ func (d *Daemon) mayActOnSession(callerID protocol.SessionID, target *protocol.S
 	if caller == nil || caller.ProfileID != target.ProfileID {
 		return fmt.Errorf("unknown live session %s", target.ID)
 	}
-	if d.chiefOfProfile(target.ProfileID) == callerID {
+	if d.chiefOfProfile(target.ProfileID) == callerID || d.inDelegationChain(callerID, caller.ProfileID, target.ID) {
 		return nil
 	}
+	return fmt.Errorf("delegation-chain rule: a session may %s itself or an agent in its delegation chain; the profile's chief may act on any agent. %s (%s) is outside %s's chain", action, target.ID, target.Label, callerID)
+}
+
+func (d *Daemon) inDelegationChain(callerID protocol.SessionID, profileID string, targetID protocol.SessionID) bool {
 	dispatchers := d.gardenDispatchersBySession()
 	seen := map[protocol.SessionID]bool{}
-	for id := target.ID; !seen[id]; {
+	for id := targetID; !seen[id]; {
 		seen[id] = true
 		dispatcher, ok := d.sessionOfActor(dispatchers[id])
 		if !ok {
-			break
+			return false
 		}
 		ancestor := d.store.Get(dispatcher)
-		if ancestor == nil || ancestor.ProfileID != caller.ProfileID {
-			break
+		if ancestor == nil || ancestor.ProfileID != profileID {
+			return false
 		}
 		if dispatcher == callerID {
-			return nil
+			return true
 		}
 		id = dispatcher
 	}
-	return fmt.Errorf("delegation-chain rule: a session may %s itself or an agent in its delegation chain; the profile's chief may act on any agent. %s (%s) is outside %s's chain", action, target.ID, target.Label, callerID)
+	return false
 }

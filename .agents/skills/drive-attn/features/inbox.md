@@ -42,6 +42,7 @@ does to the queue.
 
 - An item lands, an outstanding ring ends, or the agent reaches a safe prompt: attn rings the address, retrying every 5 minutes up to 3 attempts per item (`internal/daemon/inbox_delivery.go`, `internal/daemon/inbox.go`).
 - An item for an asleep crew member wakes the member first. [crew.md](crew.md) has the recipe that drives it.
+- An item for a seed on standby whose tender is a closed session resumes that session first, when `garden.tender_wake` allows the item ([garden.md](garden.md)).
 - Seed updates ([garden.md](garden.md)), PR watch updates ([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures ([quick-capture.md](quick-capture.md)), authorization changes ([delegation.md](delegation.md)) and crew notices ([crew.md](crew.md)) arrive through this inbox. Drive the events that cause them in each feature's file.
 
 ## Driving it

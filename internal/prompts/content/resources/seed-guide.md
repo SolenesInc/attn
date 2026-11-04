@@ -222,8 +222,14 @@ HANDOFFS AND STEERING
                                             and waits when none is reachable
     attn seed show <id> --since <N>         only what was saved after bookmark N.
                                             show and notes print the bookmark to use next
+    attn seed standby <id> -m "…"           wait on mail for the seed. The note goes to whoever
+                                            wakes for it. --close closes your session in the
+                                            same move
 
 Leave a handoff whenever you park a seed, or stop partway through the work and
 do not intend to continue. State the outcome, the evidence, and the next action.
 Put long reasoning in an attached artifact, not in the note. Noting does not end
 your session, so keep working unless you are blocked or done.
+
+A standby note is a handoff to your own next session. It says what to do next,
+and what the user approved up front.

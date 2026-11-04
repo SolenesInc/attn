@@ -73,6 +73,7 @@ const (
 	SettingDefaultEffortPrefix           = settingkeys.SettingDefaultEffortPrefix
 	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
 	SettingPullRequestOwnComments        = settingkeys.SettingPullRequestOwnComments
+	SettingGardenTenderWake              = settingkeys.SettingGardenTenderWake
 	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
 	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
 	SettingActivityConfig                = settingkeys.SettingActivityConfig
@@ -290,6 +291,10 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	}},
 	{key: string(SettingPullRequestOwnComments), scope: profileScope, description: "How a pull request watch treats the comments and review bodies your GitHub account wrote, and the reopened review threads you started on your own pull requests: quiet skips them, ring delivers them to the agent. Agents post as you, so quiet keeps an agent's own comments from coming back to it; ring lets you steer agents with your comments. Comments by others and state changes always reach the agent. Empty means quiet, the default.", validate: func(d *Daemon, key, value string) error {
 		_, err := prreadiness.ParseOwnComments(value)
+		return err
+	}},
+	{key: string(SettingGardenTenderWake), scope: profileScope, description: "Which seed mail wakes the closed session tending a seed on standby: any wakes it for every message, pull request watch update and reminder; watches only for pull request watch updates and reminders; off never resumes a session, and the mail waits. Crew members tending a seed wake under every value. Empty means any, the default.", validate: func(d *Daemon, key, value string) error {
+		_, err := parseTenderWakeSetting(value)
 		return err
 	}},
 	{key: string(SettingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {

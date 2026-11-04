@@ -19,42 +19,46 @@ const agentCloseReasonMaxChars = garden.MaxReasonChars
 const agentCloseTendedSeedLimit = 100
 
 func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage) {
+	result, closing, refusal := d.beginAgentClose(msg)
+	if refusal != nil {
+		d.replyAgentMsgError(conn, refusal.code, refusal.message)
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
+	d.finishSessionClose(result.TargetSessionID, closing)
+}
+
+func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.AgentCloseResult, sessionCloseInFlight, *agentCloseRefusal) {
 	caller, errCode := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID))
 	if caller == nil {
-		d.replyAgentMsgError(conn, "sender_"+errCode, fmt.Sprintf(
-			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID)))
-		return
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"sender_" + errCode, fmt.Sprintf(
+			"the caller %q is not a session on this daemon; a close is attributed to the session that asked for it", protocol.TrimID(msg.SourceSessionID))}
 	}
 
 	reason := strings.TrimSpace(msg.Reason)
 	switch {
 	case reason == "":
-		d.replyAgentMsgError(conn, "close_reason_required",
-			"a close needs a reason: the ledger keeps the row, and the reason is all the next reader gets")
-		return
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_reason_required",
+			"a close needs a reason: the ledger keeps the row, and the reason is all the next reader gets"}
 	case utf8.RuneCountInString(reason) > agentCloseReasonMaxChars:
-		d.replyAgentMsgError(conn, "close_reason_required", fmt.Sprintf(
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_reason_required", fmt.Sprintf(
 			"that reason is %d characters and the limit is %d; say why it is done and put the detail on the seed",
-			utf8.RuneCountInString(reason), agentCloseReasonMaxChars))
-		return
+			utf8.RuneCountInString(reason), agentCloseReasonMaxChars)}
 	}
 
 	target, refusal := d.resolveAgentCloseTarget(msg, caller)
 	if refusal != nil {
-		d.replyAgentMsgError(conn, refusal.code, refusal.message)
-		return
+		return nil, sessionCloseInFlight{}, refusal
 	}
 
 	if dispatch, ok := d.gardenDispatch(target.ID); caller.ID != target.ID && ok && strings.TrimSpace(dispatch.Crown) != "" {
 		if err := d.requireSeedInProfile(dispatch.Crown, caller.ProfileID, false); err != nil {
-			d.replyAgentMsgError(conn, "cross_profile", err.Error())
-			return
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"cross_profile", err.Error()}
 		}
 	}
 
 	if err := d.mayActOnSession(caller.ID, target, "close"); err != nil {
-		d.replyAgentMsgError(conn, "close_not_authorized", err.Error())
-		return
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_not_authorized", err.Error()}
 	}
 	rule := protocol.AgentCloseRuleDispatcher
 	if caller.ID == target.ID {
@@ -62,28 +66,29 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 	} else if d.chiefOfProfile(target.ProfileID) == caller.ID {
 		rule = protocol.AgentCloseRuleChiefOfStaff
 	}
+	if rule == protocol.AgentCloseRuleSelf {
+		if err := d.unreadStandbyMailRefusal(target, ""); err != nil {
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"standby_mail_unread", err.Error()}
+		}
+	}
 	if protectErr := d.sessionCloseError(target.ID); protectErr != nil {
-		d.replyAgentMsgError(conn, "session_close_protected", protectErr.Error())
-		return
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"session_close_protected", protectErr.Error()}
 	}
 
 	d.logf("agent close: session %s closes %s as %s: %s", caller.ID, target.ID, rule, reason)
 	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(caller.ID).Actor(), Reason: reason}, nil)
 	if err != nil {
-		d.replyAgentMsgError(conn, "close_failed", fmt.Sprintf(
-			"session %s is still running: %v", shortSessionID(target.ID), err))
-		return
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_failed", fmt.Sprintf(
+			"session %s is still running: %v", shortSessionID(target.ID), err)}
 	}
 
-	result := &protocol.AgentCloseResult{
+	return &protocol.AgentCloseResult{
 		TargetSessionID: target.ID,
 		Label:           sessionDisplayName(target),
 		Reason:          reason,
 		Rule:            rule,
 		SeedIds:         d.noteCloseOnTendedSeeds(target, caller, rule, reason),
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
-	d.finishSessionClose(target.ID, closing)
+	}, closing, nil
 }
 
 type agentCloseRefusal struct {
@@ -164,8 +169,13 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 		d.logf("agent close: reading the seeds %s tended: %v", target.ID, err)
 		return noted
 	}
-	body := agentCloseSeedNote(target, caller, rule, reason)
 	for _, doc := range read.Documents {
+		standby, err := d.store.SeedStandby(doc.ID)
+		if err != nil {
+			d.logf("agent close: reading the standby of %s: %v", doc.ID, err)
+		}
+		onStandby := standby != nil && standby.Tender == who.Session(target.ID)
+		body := agentCloseSeedNote(target, caller, rule, reason, onStandby)
 		if _, err := d.appendSeedNote(doc.ID, body, d.actorOfSession(caller.ID), garden.NoteKindNote, nil, false, caller.ID); err != nil {
 			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
 			continue
@@ -182,7 +192,7 @@ func agentCloseSessionRef(session *protocol.Session) string {
 	return shortSessionID(session.ID)
 }
 
-func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string) string {
+func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentCloseRule, reason string, onStandby bool) string {
 	closer := agentCloseSessionRef(caller)
 	switch rule {
 	case protocol.AgentCloseRuleSelf:
@@ -192,11 +202,15 @@ func agentCloseSeedNote(target, caller *protocol.Session, rule protocol.AgentClo
 	case protocol.AgentCloseRuleDispatcher:
 		closer = "its dispatcher, " + closer
 	}
+	next := "so whoever comes next takes it or parks it"
+	if onStandby {
+		next = "and the seed is on standby, so its next seed mail reopens that session"
+	}
 	return fmt.Sprintf(
 		"Session %s was closed by %s while tending this seed. Reason: %s\n\n"+
-			"The seed did not move. It still names that session as its tender, so whoever comes next "+
-			"takes it or parks it. `attn session show %s` reads the closed row back.",
-		agentCloseSessionRef(target), closer, reason, shortSessionID(target.ID))
+			"The seed did not move. It still names that session as its tender, %s. "+
+			"`attn session show %s` reads the closed row back.",
+		agentCloseSessionRef(target), closer, reason, next, shortSessionID(target.ID))
 }
 
 func (d *Daemon) seedTenderSession(seedID string) (string, error) {

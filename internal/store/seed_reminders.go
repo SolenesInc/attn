@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (s *Store) SeedReminder(seedID string) (*garden.Reminder, error) {
@@ -106,11 +107,13 @@ func armSeedReminder(tx *sql.Tx, seedID string, reminder garden.Reminder) error 
 }
 
 type SeedChangeEffects struct {
-	SeedID   string
-	Post     *inbox.Item
-	Withdraw *InboxKey
-	Arm      *garden.Reminder
-	Disarm   bool
+	SeedID         string
+	Post           *inbox.Item
+	Withdraw       *InboxKey
+	Arm            *garden.Reminder
+	Disarm         bool
+	Standby        *SeedStandby
+	StandbyKeptFor who.Party
 }
 
 func (s *Store) CommitSeedChange(
@@ -134,6 +137,14 @@ func (s *Store) CommitSeedChange(
 		}
 		if effects.Arm != nil {
 			if err := armSeedReminder(tx, effects.SeedID, *effects.Arm); err != nil {
+				return false, err
+			}
+		}
+		if err := keepSeedStandbyOnlyFor(tx, effects.SeedID, effects.StandbyKeptFor); err != nil {
+			return false, err
+		}
+		if effects.Standby != nil {
+			if err := putSeedStandby(tx, effects.SeedID, *effects.Standby); err != nil {
 				return false, err
 			}
 		}

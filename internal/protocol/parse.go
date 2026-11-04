@@ -146,6 +146,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSeedEdit:                      decodeInto[SeedEditMessage],
 	CmdSeedAuthorization:             decodeInto[SeedAuthorizationMessage],
 	CmdSeedReminder:                  decodeInto[SeedReminderMessage],
+	CmdSeedStandby:                   decodeInto[SeedStandbyMessage],
 	CmdSeedRollback:                  decodeInto[SeedRollbackMessage],
 	CmdSeedTransition:                decodeInto[SeedTransitionMessage],
 	CmdSeedNote:                      decodeInto[SeedNoteMessage],

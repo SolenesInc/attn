@@ -796,6 +796,51 @@
           }
         },
         {
+          "id": "tender-wake",
+          "delivery": "user_message",
+          "description": "Typed before the seed mail that woke the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.",
+          "body": {
+            "kind": "text",
+            "id": "session.tender-wake",
+            "source": "content/session/tender-wake.md",
+            "bindings": [
+              {
+                "name": "seed_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_id",
+                    "kind": "text",
+                    "description": "Seed id."
+                  }
+                }
+              },
+              {
+                "name": "seed_title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "seed_title",
+                    "kind": "text",
+                    "description": "Seed title."
+                  }
+                }
+              },
+              {
+                "name": "note",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "note",
+                    "kind": "text",
+                    "description": "The standby note."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "wake-cause-message",
           "delivery": "message_fragment",
           "description": "inboxWakeCause: an unread peer message that woke the recipient. Names the sender, never the body.",
@@ -6112,5 +6157,5 @@
       ]
     }
   ],
-  "definitions_hash": "de0b7b552202eb1d89dda099c936c2fd45a14bb7f62094d48c9c1f2bc5daa975"
+  "definitions_hash": "9c9df81be1b07b146a4d9607fef514e01f07078bab2dbf06906b5d11dc04a2bd"
 }

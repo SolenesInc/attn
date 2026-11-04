@@ -55,39 +55,69 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if garden.Closed(seed.Status) {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
+	return d.wakeSeedTender(protection, seed, tenderWakeCause{
+		tend: func(claimant who.Party, actor who.Actor) error {
+			_, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
+				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", d.sessionActive, expectedRev)
+			return err
+		},
+		settle: func() {
+			if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
+				d.logf("Garden review: settle %s after Resume: %v", seedID, err)
+			}
+		},
+	})
+}
+
+type tenderWakeCause struct {
+	tend   func(claimant who.Party, actor who.Actor) error
+	settle func()
+	mail   bool
+}
+
+type tenderWakeBlocked struct{ err error }
+
+func (e tenderWakeBlocked) Error() string { return e.err.Error() }
+func (e tenderWakeBlocked) Unwrap() error { return e.err }
+
+func blockedWake(err error) error { return tenderWakeBlocked{err: err} }
+
+func (d *Daemon) wakeSeedTender(protection foregroundCleanupProtection, seed garden.Seed, cause tenderWakeCause) (*seedResumeOutcome, error) {
+	seedID := seed.ID
+	tend, settle := cause.tend, cause.settle
 	continuation := d.continuationForSeedForeground(seed)
 	var executed protocol.SessionID
 	if continuation != nil {
 		executed = continuation.Execution.SessionID
 	}
 	if key, member := d.seedResumeMember(seed, executed); member {
-		return d.resumeMemberSeed(protection, seed, key, review, expectedRev, seed.Tender.IsZero())
+		return d.resumeMemberSeed(seed, key, tend, settle, seed.Tender.IsZero())
 	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
-			return nil, protocol.Refuse(protocol.RefusalWrongState, "%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender))
+			return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender)))
 		}
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
 	}
 	execution := continuation.Execution
 	sessionID := protocol.TrimID(execution.SessionID)
 	if sessionID == "" {
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
+	}
+	if tender, _ := seed.Tender.Session(); cause.mail && tender != sessionID {
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s names session %s as its tender, but its saved conversation is session %s's; resume it from the Garden to choose", seedID, shortSessionID(tender), shortSessionID(sessionID)))
 	}
 	actor := who.Session(sessionID)
 	if existing := d.store.Get(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name))
 	}
 	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
-		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seedID, garden.VerbTend, garden.Ask{Actor: actor.Actor(), Claimant: actor}, "", d.sessionActive, expectedRev); err != nil {
+		if err := tend(actor, actor.Actor()); err != nil {
 			return nil, err
 		}
-		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
-			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
-		}
+		settle()
 		return &seedResumeOutcome{
 			SessionID: existing.ID, ProfileID: existing.ProfileID, AlreadyRunning: true,
 		}, nil
@@ -97,31 +127,29 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 		if reason == "" {
 			reason = "the original conversation is unavailable"
 		}
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: %s", seedID, reason)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: %s", seedID, reason))
 	}
 	recorded := sessionReopenVerdict{SessionID: sessionID}
 	d.planReopenProfile(&recorded)
 	if recorded.ProfileDeleted {
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: its profile was deleted", seedID)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: its profile was deleted", seedID))
 	}
 	profileID := recorded.ProfileID
 	if profileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		target, _ := d.store.GetProfile(profileID)
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name)
+		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name))
 	}
-	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-		seedID, garden.VerbTend, garden.Ask{Actor: actor.Actor(), Claimant: actor}, "", d.sessionActive, expectedRev); err != nil {
+	if err := tend(actor, actor.Actor()); err != nil {
 		return nil, err
 	}
-	if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
-		d.logf("Garden review: settle %s after Resume: %v", seedID, err)
-	}
+	settle()
 	reopened, err := d.reopenSessionRuntimeWithProtection(protection, sessionReopenPlan{
-		SessionID: sessionID,
-		Directory: execution.Cwd,
-		Title:     seed.Title,
-		ProfileID: profileID,
+		SessionID:       sessionID,
+		Directory:       execution.Cwd,
+		Title:           seed.Title,
+		ProfileID:       profileID,
+		StartsLaunching: cause.mail,
 	})
 	if err != nil {
 		return nil, err
@@ -146,16 +174,13 @@ func (d *Daemon) seedResumeMember(seed garden.Seed, executed protocol.SessionID)
 }
 
 func (d *Daemon) resumeMemberSeed(
-	protection foregroundCleanupProtection,
-	seed garden.Seed, key who.MemberKey, review *protocol.SeedReviewActionContext, expectedRev int64, claim bool,
+	seed garden.Seed, key who.MemberKey, tend func(who.Party, who.Actor) error, settle func(), claim bool,
 ) (*seedResumeOutcome, error) {
 	if retired, ok := d.retiredCrewMember(key.String()); ok {
-		return nil, retiredMemberError(retired)
+		return nil, blockedWake(retiredMemberError(retired))
 	}
 	if claim {
-		member := who.Member(key)
-		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-			seed.ID, garden.VerbTend, garden.Ask{Actor: who.User(), Claimant: member}, "", d.sessionActive, expectedRev); err != nil {
+		if err := tend(who.Member(key), who.User()); err != nil {
 			return nil, err
 		}
 	}
@@ -163,9 +188,7 @@ func (d *Daemon) resumeMemberSeed(
 	if err != nil {
 		return nil, err
 	}
-	if err := d.resolveGardenReviewAction(review, seed.ID, "resume"); err != nil {
-		d.logf("Garden review: settle %s after Resume: %v", seed.ID, err)
-	}
+	settle()
 	profileID := woken.ProfileID
 	if profileID == "" {
 		profileID = seed.ProfileID

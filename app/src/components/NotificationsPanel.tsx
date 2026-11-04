@@ -9,6 +9,7 @@ interface NotificationsPanelProps {
   markRead: (notificationId?: string) => Promise<number>;
   retryTask: (taskId: string) => Promise<Task | null>;
   onOpenSession: (sessionId: string) => void;
+  onOpenSeed: (seedId: string) => void;
   installingCodexUpdate: boolean;
   onInstallCodexUpdate: () => void;
   changeSignal: number;
@@ -37,6 +38,7 @@ export function NotificationsPanel({
   markRead,
   retryTask,
   onOpenSession,
+  onOpenSeed,
   installingCodexUpdate,
   onInstallCodexUpdate,
   changeSignal,
@@ -239,6 +241,21 @@ export function NotificationsPanel({
                                     onClick={() => {
                                       onClose();
                                       onOpenSession(action.target_id);
+                                    }}
+                                  >
+                                    {action.label}
+                                  </button>
+                                );
+                              }
+                              if (action.kind === 'open_seed') {
+                                return (
+                                  <button
+                                    key={`${action.kind}:${action.target_id}`}
+                                    type="button"
+                                    className="notification-row-action"
+                                    onClick={() => {
+                                      onClose();
+                                      onOpenSeed(action.target_id);
                                     }}
                                   >
                                     {action.label}

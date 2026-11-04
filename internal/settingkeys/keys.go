@@ -64,6 +64,7 @@ const (
 	SettingNotebookRoot                  ProfileSetting = "notebook.root"
 	SettingNotebookRootEffective         MachineSetting = "notebook.root.effective"
 	SettingPullRequestOwnComments        ProfileSetting = "pull_requests.own_comments"
+	SettingGardenTenderWake              ProfileSetting = "garden.tender_wake"
 	SettingActivityEnabled               HomeSetting    = "activity.enabled"
 	SettingActivityConfig                HomeSetting    = "activity.config"
 	SettingActivityIntervals             HomeSetting    = "activity.intervals"

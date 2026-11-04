@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const documentColumns = `id, body, rev, created_at, updated_at`
@@ -403,9 +404,15 @@ func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch SeedW
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watches []SeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, seedID string, tender who.Party, watches []SeedWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, subscribe(watches, now))
+	subscribeWatches := subscribe(watches, now)
+	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
+		if err := keepSeedStandbyOnlyFor(tx, seedID, tender); err != nil {
+			return false, err
+		}
+		return subscribeWatches(tx)
+	})
 }
 
 func (s *Store) commitDocumentWrites(

@@ -132,7 +132,8 @@ the seed log, the last message, and the diff.
 
 To close yourself, run `attn agent close --self -m "reason"`. You do not need
 your id. The command ends your session mid-command, so write everything you
-meant to write before you run it. To ask another agent to close itself, name
+meant to write before you run it. attn refuses the command while a seed you
+tend is on standby and has unread mail, and names `attn agent inbox`. To ask another agent to close itself, name
 that command. When the user asks you to wrap up, or asks whether they can close
 you, follow [wrap-up.md](wrap-up.md) first.
 

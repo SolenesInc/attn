@@ -107,6 +107,7 @@ CREATE TABLE reviewer_sessions ( id TEXT PRIMARY KEY, review_id TEXT NOT NULL, c
 CREATE TABLE reviews ( id TEXT PRIMARY KEY, branch TEXT NOT NULL, pr_number INTEGER, repo_path TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(repo_path, branch) );
 CREATE TABLE schema_migrations ( version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL );
 CREATE TABLE seed_reminders ( seed_id TEXT PRIMARY KEY, remind_at INTEGER NOT NULL, reminder TEXT NOT NULL );
+CREATE TABLE seed_standby ( seed_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, tender TEXT NOT NULL, note TEXT NOT NULL, set_at TEXT NOT NULL, set_by TEXT NOT NULL );
 CREATE TABLE session_annotation_drafts ( session_id TEXT PRIMARY KEY, annotations_json TEXT NOT NULL, generation INTEGER NOT NULL, tombstone_generation INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL , note TEXT NOT NULL DEFAULT '');
 CREATE TABLE session_exit_screens ( session_id TEXT PRIMARY KEY, text TEXT NOT NULL DEFAULT '', cols INTEGER NOT NULL DEFAULT 0, rows INTEGER NOT NULL DEFAULT 0, exit_code INTEGER NOT NULL DEFAULT 0, exit_signal TEXT NOT NULL DEFAULT '', exited_at TEXT NOT NULL );
 CREATE TABLE session_focus (session_id TEXT PRIMARY KEY, focused_at TEXT NOT NULL);

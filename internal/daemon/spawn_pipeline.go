@@ -34,6 +34,7 @@ type internalSpawnPolicy struct {
 	preserveApprovalRoute bool
 	userStarted           bool
 	fromLedger            bool
+	startsLaunching       bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -388,7 +389,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	terminal := d.launchTerminal(req)
 	plan.spawnOpts.ID = terminal
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, nil)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, nil)
 	session := plan.launchSession
 	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {

@@ -192,7 +192,7 @@ Not by default. Members keep their rows in the Crew section and stay out of the 
 <details>
 <summary>Why did a member wake up on its own?</summary>
 
-An item arrived in the member's mailbox: another agent messaged the member, a seed the member tends or a seed under a plot it tends changed, or an ask the member sent got an answer. Attn wakes the member to read the new item. When the item is a seed update or an agent's message, the member's session opens with it. These wakes are capped at 8 per member every 12 hours (`crew.wake_limit` and `crew.wake_limit_window_seconds`, set with `attn settings set`), and `0` turns them off. Your own wakes and wakes for your messages never count. When Attn refuses a wake because of the cap, the reply to the sender names the limit, and you can still wake the member yourself.
+An item arrived in the member's mailbox: another agent messaged the member, a seed the member tends or a seed under a plot it tends changed, or an ask the member sent got an answer. Attn wakes the member to read the new item. When the item is a seed update or an agent's message, the member's session opens with it. These wakes are capped at 8 per member every 12 hours (`crew.wake_limit` and `crew.wake_limit_window_seconds`, set with `attn settings set`), and `0` turns them off. Your own wakes and wakes for your messages never count. Wakes for mail addressed to a seed the member tends, such as a reminder or a message to the seed's id, count against that seed's limit of 48 per 24 hours and not against this cap, as [Seeds on standby](delegation.md#seeds-on-standby) says. When Attn refuses a wake because of the cap, the reply to the sender names the limit, and you can still wake the member yourself.
 </details>
 
 <details>

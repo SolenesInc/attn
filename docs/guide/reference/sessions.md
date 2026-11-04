@@ -71,6 +71,10 @@ the desktop it was last on. When that desktop is gone, the FAQ "Where does an
 agent open when I resume it?" in [Desktop flow](desktops.md) says where it
 opens.
 
+Attn also resumes a closed session on its own when the session tends a seed that
+is on standby and mail reaches the seed. [Seeds on
+standby](delegation.md#seeds-on-standby) says which mail and when.
+
 Attn keeps a copy of some conversations that Claude Code would delete. The FAQ
 "Which conversations does Attn keep a copy of?" says which. To keep a copy
 forever, click Keep conversation on the session in the ledger. To delete a copy,

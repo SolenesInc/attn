@@ -141,7 +141,13 @@ func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepcloc
 		delete(m.firstPoll, terminal)
 	}
 	m.mu.Unlock()
-	if missed && m.d.terminalLive(terminal) {
+	if !missed {
+		return
+	}
+	if session, ok := m.d.shownIn(terminal); ok {
+		m.d.tenderWakeModMissed(session)
+	}
+	if m.d.terminalLive(terminal) {
 		m.d.logf("claude mod: first_poll_tripwire=%s; Claude in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, terminal)
 	}
 }
@@ -243,6 +249,11 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 	if t == nil {
 		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld)}
 		m.terminals[terminal] = t
+		m.d.life.Go("claudeModReachable", func() {
+			if session, ok := m.d.shownIn(terminal); ok {
+				m.d.kickSessionInboxAddresses(session)
+			}
+		})
 	}
 	if t.replacedInstances[instance] {
 		return nil

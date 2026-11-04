@@ -188,6 +188,7 @@ func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID stri
 		settings[string(SettingNotebookRoot)] = own
 	}
 	settings[string(SettingPullRequestOwnComments)] = string(d.pullRequestOwnComments(profileID))
+	settings[string(SettingGardenTenderWake)] = string(d.tenderWakeSetting(profileID))
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[string(SettingNotebookRootEffective)] = root
 	}

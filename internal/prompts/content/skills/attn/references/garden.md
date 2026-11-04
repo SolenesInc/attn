@@ -92,7 +92,7 @@ The moves are tend, park, harvest, wither and replant. A move needs no `--force`
 - a session above the tender in the delegation chain
 - the profile's chief
 
-A move also needs no `--force` after the tender's session ends, because a session's claim lapses when the session ends. The claim holds again if the session resumes. A crew member's claim lasts across the member's sessions.
+A move also needs no `--force` after the tender's session ends, because a session's claim lapses when the session ends, unless the seed is on standby. The claim holds again if the session resumes. A crew member's claim lasts across the member's sessions.
 
 Everyone else needs `--force`, and the log records that they used it. A call without a live session has no standing. A move records who acted and whose claim ended, and prints the audit note and the sessions attn rang. A delegate hears the move through the delegate's delegation watch.
 
@@ -185,6 +185,61 @@ Setting or clearing a reminder needs the same standing as a move: the tender, a
 session above the tender in the delegation chain, the chief, or the user. When
 nobody holds the claim, anyone can. There is no `--force`. You can offer a
 reminder to the user.
+
+## Standby
+
+A seed on standby waits for mail without a session held open for it. The seed's
+tender puts it on standby with a note that says what to do next. When mail
+reaches the seed, attn wakes the tender and hands over the note.
+
+    attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."
+    attn seed standby s-7k3f9m -m "Check the rollout of the new build" --close
+    attn seed standby s-7k3f9m --clear
+
+Standby keeps your claim, so only the tender of a growing seed can put it on
+standby, from its own session. Clearing it needs the same standing as a move.
+Seed mail is an item addressed to the seed's mailbox: a reminder, a message sent
+with `attn agent msg <seed-id>`, the answer to an ask about the seed, and an
+update from a PR watch that addresses the seed.
+
+When seed mail arrives for a seed on standby and the tender's session is closed,
+attn resumes that session as itself, or wakes the crew member that tends the
+seed. A session the user closed wakes the same way. A closed session whose seed
+is not on standby stays closed, and its mail waits for the next tender.
+
+The woken session reads the mail and your standby note. The user may not be
+watching, so it ends its turn one of four ways: it puts the seed on standby
+again, harvests it, asks the user with `attn ask`, or reports.
+
+Standby ends when seed mail reaches the tender, whether the session was open or
+woken. It also ends when the seed is parked, harvested or withered, and when the
+seed gets a new tender. A new standby replaces the note. Write down anything
+the user approved up front, such as "merge once approved". The session that
+wakes may have compacted its conversation, and the note is what it reads first.
+
+`--close` closes your session in the same move, as `attn agent close --self`
+does. attn refuses it while the seed has unread mail and names
+`attn agent inbox`. Read the mail, then run the command again.
+
+A Claude Code session needs the Claude mod, because attn delivers a woken Claude
+session's mail through the mod and never types it. `attn seed standby` refuses
+in a Claude session that runs without the mod and names `claude_mod_enabled`. A
+wake also fails while the setting is off. Codex sessions and crew members need
+no setting.
+
+The profile setting `garden.tender_wake` decides which mail wakes a closed
+session. `any` (the default) wakes for all seed mail. `watches` wakes for PR
+watch updates and reminders only. `off` wakes no session, and the mail waits in
+the inbox. A crew member that tends the seed wakes under every value.
+`attn settings set garden.tender_wake watches` changes it, and the user can
+change it in Settings.
+
+attn allows 48 wakes per seed in 24 hours. When it cannot wake the tender, it
+adds a note to the seed that names the reason and the item, and it sends the
+user a critical notification that opens the seed. The reasons are a removed
+worktree, a missing conversation, a Claude session whose mod does not poll
+after the resume, and the 48-wake limit. The mail stays unread. You can offer
+standby to the user when a seed waits on someone else.
 
 ## Artifacts
 

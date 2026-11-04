@@ -90,7 +90,9 @@ Agents can message each other with `attn agent msg`. For example, you can ask
 the agent that started a delegate to send the delegate a message. The target
 can be a session, a crew member, or a seed id. A seed id reaches whoever tends
 that seed now, or whoever tends it next if nobody does yet. The message waits in the recipient's inbox, and Attn
-lets the recipient know it's there.
+lets the recipient know it's there. When the seed is on standby and its tender's
+session is closed, the message wakes the tender, as [Seeds on
+standby](#seeds-on-standby) describes.
 
 ### Handing work to a fresh agent
 
@@ -273,6 +275,52 @@ A seed holds one reminder, and a new one replaces it. To remove it, run
 the message, and when the seed is harvested or withered. Until then,
 `attn seed show` and `attn seed ls` print it.
 
+### Seeds on standby
+
+An agent that waits on someone else can put its seed on standby, instead of
+keeping a session open for the wait:
+
+```sh
+attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (approved by the user up front), then follow the deploy." --close
+```
+
+The note says what to do next, and `--close` closes the agent's session in the
+same move. When mail reaches the seed, Attn resumes the closed session as
+itself, or wakes the crew member that tends the seed, and hands over the mail
+with the note. Mail for a seed is a reminder, an update from a pull request
+watch that addresses the seed, a message to the seed's id, and your answer to an
+ask about the seed. Only the seed's tender can put a seed on standby.
+
+Standby ends when mail reaches the agent. It also ends when the seed is parked,
+harvested or withered, and when the seed gets a new tender. A session you closed
+yourself wakes the same way while its seed is on standby. A closed session
+whose seed isn't on standby stays closed, and its mail waits for the next
+tender. To keep an agent closed, park or wither its seed.
+
+A woken agent ends its turn by going on standby again, by harvesting the seed,
+by asking you with `attn ask`, or by reporting. Like any agent that stops, it is
+owed a turn in your queue.
+
+**Settings → Agents and models → Seeds on standby** picks which mail wakes a
+closed agent: **Any mail**, **PRs and reminders**, or **Never**. The choice
+belongs to your profile, and `attn settings set garden.tender_wake` changes it
+with `any`, `watches` or `off`. Mail that doesn't wake an agent waits in its
+inbox. A crew member that tends the seed wakes under every choice.
+
+A Claude Code session wakes only while the [Claude mod](using-claude-mod.md) is
+on. Attn delivers a woken Claude session's mail through the mod and never types
+it into the terminal. `attn seed standby` refuses in a Claude session without
+the mod, and the refusal names `claude_mod_enabled`. Codex sessions and crew
+members need no setting.
+
+Attn wakes the tender of one seed at most 48 times in 24 hours, and the count
+restarts when the daemon restarts. A crew member's wakes for seed mail count
+against the seed's 48, and not against the member's `crew.wake_limit`. When Attn
+can't wake the tender, it adds a note to the seed that names the reason and the
+mail, and shows you a critical notification that opens the seed. The reasons
+are a removed worktree, a conversation that is gone, a Claude session whose mod
+doesn't connect after the resume, and the 48 wakes. The mail stays unread.
+
 ### Why the garden uses a gardening metaphor
 
 Every verb and noun in the garden maps to a term in a classic work tracker such
@@ -328,7 +376,7 @@ Attn maintains the text of its own roles and updates the text with releases, whi
 <details>
 <summary>What happens to a delegate's seed when the delegate closes?</summary>
 
-The seed doesn't move. The seed keeps its state and still names the closed session as its tender, but the claim no longer blocks anyone, so any agent can tend or delegate the seed without `--force`. When an agent closes the delegate, Attn adds a note to the seed that says who closed it and why. Resuming the closed session makes the claim apply again.
+The seed doesn't move. The seed keeps its state and still names the closed session as its tender, but the claim no longer blocks anyone, so any agent can tend or delegate the seed without `--force`. When an agent closes the delegate, Attn adds a note to the seed that says who closed it and why. Resuming the closed session makes the claim apply again. When the seed is on standby, the claim still applies, and mail for the seed resumes the session.
 </details>
 
 <details>

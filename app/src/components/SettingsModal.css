@@ -475,6 +475,58 @@
   opacity: 0.45;
 }
 
+.settings-wake-explain {
+  max-width: 640px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  padding: 12px 14px;
+}
+
+.settings-wake-explain-title {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-wake-cases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-wake-cases li {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: var(--font-size-md);
+}
+
+.settings-wake-verdict {
+  padding: 2px 0;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.settings-wake-verdict.wakes {
+  color: #f59b4a;
+  background: rgba(245, 155, 74, 0.14);
+}
+
+.settings-wake-verdict.waits {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-button);
+}
+
 .settings-row-card {
   min-height: 56px;
   display: grid;

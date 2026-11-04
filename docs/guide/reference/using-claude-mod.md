@@ -57,6 +57,10 @@ failed to load. A session whose mod has not connected 30 seconds after it
 launched gets a warning in the daemon log, including when you take longer than
 that to answer the trust question. Sessions on an outpost are always typed.
 
+Attn never types the mail for a session it resumes because its seed is on
+standby. Attn waits for the mod's first connection and delivers through it, as
+[Seeds on standby](delegation.md#seeds-on-standby) describes.
+
 ## Upgrades and restarts
 
 Attn keeps the mod in a `claude-mod` folder in its data directory. When an Attn

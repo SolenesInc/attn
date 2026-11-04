@@ -201,6 +201,7 @@ type gardenRead struct {
 	ready     map[string]bool
 	plots     garden.PlotTree
 	reminders map[string]garden.Reminder
+	standby   map[string]store.SeedStandby
 }
 
 type gardenSeeds struct {
@@ -228,8 +229,12 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	if err != nil {
 		return gardenRead{}, err
 	}
+	standby, err := d.store.SeedsOnStandby()
+	if err != nil {
+		return gardenRead{}, err
+	}
 	seeds := all.inProfile(firstProfile(profileID))
-	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders}
+	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders, standby: standby}
 	for _, seed := range garden.Ready(out.seeds, parties.holds) {
 		out.ready[seed.ID] = true
 	}
@@ -360,6 +365,7 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 		CheckTally:   checkTallyToProtocol(g.plots.EffectiveCheckTally(seed.ID)),
 		HarvestWhen:  harvestConditionView(g.parties, seed.HarvestWhen),
 		Reminder:     g.reminderView(seed),
+		Standby:      g.standbyView(seed),
 		CreatedAt:    doc.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -448,6 +454,7 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 	}
 	out.HarvestWhen = harvestConditionView(g.parties, seed.HarvestWhen)
 	out.Reminder = g.reminderView(seed)
+	out.Standby = g.standbyView(seed)
 	out.Authorization = g.daemon.seedAuthorizationView(g.parties, seed.Authorization)
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})

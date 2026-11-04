@@ -103,6 +103,25 @@ type Reminder struct {
 	SetBy   who.Actor `json:"set_by,omitzero"`
 }
 
+type Standby struct {
+	Note  string
+	SetAt time.Time
+	SetBy who.Actor
+}
+
+const MaxStandbyNoteBytes = 8 << 10
+
+func ValidateStandby(s Standby, seedID string) error {
+	note := strings.TrimSpace(s.Note)
+	if note == "" {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "standby needs a note saying what to do when mail arrives: attn seed standby %s -m \"<what to do next>\"", seedID)
+	}
+	if n := len(note); n > MaxStandbyNoteBytes {
+		return protocol.Refuse(protocol.RefusalLimit, "that standby note is %d bytes and the limit is %d; put the detail on the seed with attn seed note and point the note at it", n, MaxStandbyNoteBytes)
+	}
+	return nil
+}
+
 func ValidateReminder(r Reminder, seedID string) error {
 	if strings.TrimSpace(r.Message) == "" {
 		return protocol.Refuse(protocol.RefusalInvalidInput, "a reminder needs the message it posts: attn seed remind %s --in 20m -m \"…\"", seedID)

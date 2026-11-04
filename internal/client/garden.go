@@ -286,6 +286,33 @@ func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protoco
 	return resp.SeedReminderResult, nil
 }
 
+type SeedStandbyOptions struct {
+	Note  string
+	Clear bool
+	Close bool
+}
+
+func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.SeedStandbyResult, error) {
+	msg := protocol.SeedStandbyMessage{Cmd: protocol.CmdSeedStandby, SeedID: seedID}
+	if opts.Note != "" {
+		msg.Note = protocol.Ptr(opts.Note)
+	}
+	if opts.Clear {
+		msg.Clear = protocol.Ptr(true)
+	}
+	if opts.Close {
+		msg.Close = protocol.Ptr(true)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedStandbyResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the standby but returned no seed")
+	}
+	return resp.SeedStandbyResult, nil
+}
+
 func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
 	resp, err := c.send(protocol.SeedRollbackMessage{Cmd: protocol.CmdSeedRollback, SeedID: seedID, Version: version})
 	if err != nil {

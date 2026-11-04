@@ -18,6 +18,11 @@ When only the merge remains, report the pull request and arm harvest with
 describes. Wait for the user before you merge or push to the main line, unless
 the task authorizes you to merge or push.
 
+A seed that waits on a review, a merge or a rollout can wait on standby instead
+of a session held open, as [Standby](garden.md#standby) describes. Standby
+grants nothing. A merge or a push still needs the task's authorization, so write
+what the user approved into the standby note.
+
 ## Trunk
 
 Plan in landings. A landing is one push of finished commits to the main line

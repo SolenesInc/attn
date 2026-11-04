@@ -68,8 +68,40 @@ func (d *Daemon) readParties() (parties, error) {
 		}
 		out.sessions[claim.ID] = party
 	}
+	d.holdStandbyClaims(out.sessions)
 	out.members = d.readMemberParties(out.sessions)
 	return out, nil
+}
+
+func (d *Daemon) holdStandbyClaims(sessions map[protocol.SessionID]sessionParty) {
+	rows, err := d.store.SeedsOnStandby()
+	if err != nil {
+		d.logf("parties: reading seeds on standby: %v", err)
+		return
+	}
+	for seedID, row := range rows {
+		id, isSession := row.Tender.Session()
+		if !isSession || sessions[id].holds {
+			continue
+		}
+		seed, _, err := d.readSeed(seedID)
+		if refusal := protocol.RefusalOf(err); refusal != nil && *refusal == protocol.RefusalNotFound {
+			continue
+		}
+		if err != nil {
+			d.logf("parties: reading standby seed %s: %v", seedID, err)
+			continue
+		}
+		if standbyOf(seed, &row) == nil {
+			continue
+		}
+		party, known := sessions[id]
+		if !known {
+			party.name = shortSessionID(id)
+		}
+		party.holds = true
+		sessions[id] = party
+	}
 }
 
 func (d *Daemon) readMemberParties(sessions map[protocol.SessionID]sessionParty) map[string]memberParty {

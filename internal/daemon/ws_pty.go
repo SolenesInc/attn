@@ -282,14 +282,14 @@ func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID protocol.SessionID
 	})
 }
 
-func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label, profileID string, existing *protocol.Session, isShell, pluginReportsNoState bool, parentSessionID protocol.SessionID, branchInfo *git.BranchInfo) *protocol.Session {
+func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label, profileID string, existing *protocol.Session, startsLaunching, isShell, pluginReportsNoState bool, parentSessionID protocol.SessionID, branchInfo *git.BranchInfo) *protocol.Session {
 	nowStr := string(protocol.TimestampNow())
 	state := protocol.SessionStateLaunching
 	if isShell {
 		state = protocol.SessionStateIdle
 	}
 	stateSince, stateUpdatedAt := nowStr, nowStr
-	if existing != nil && existing.State != protocol.SessionStateRecoverable {
+	if existing != nil && !startsLaunching && existing.State != protocol.SessionStateRecoverable {
 		state, stateSince, stateUpdatedAt = existing.State, existing.StateSince, existing.StateUpdatedAt
 		if stateSince == "" {
 			stateSince = nowStr

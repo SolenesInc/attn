@@ -68,7 +68,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 - **Wrap up before the user closes you, or close yourself:** read
   [references/wrap-up.md](references/wrap-up.md).
 - **Plant, tend, or report on work in the garden, including seeds, plots,
-  reminders, what makes a good seed body, and artifacts:** read
+  reminders, standby, what makes a good seed body, and artifacts:** read
   [references/garden.md](references/garden.md).
 - **Read or maintain the durable Notebook (the journal and the knowledge base),
   especially as chief of staff:** read

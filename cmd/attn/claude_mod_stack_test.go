@@ -9,10 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -235,6 +238,19 @@ type mockModel struct {
 	mu      sync.Mutex
 	prompts []string
 	changed chan struct{}
+	bash    []mockBashStep
+}
+
+type mockBashStep struct{ after, command string }
+
+type mockTool struct {
+	Name string `json:"name"`
+}
+
+func (m *mockModel) runBashAfter(prompt, command string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.bash = append(m.bash, mockBashStep{after: prompt, command: command})
 }
 
 func startMockModel(t *testing.T) *mockModel {
@@ -290,8 +306,9 @@ func (m *mockModel) serve(w http.ResponseWriter, r *http.Request) {
 
 func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Model    string `json:"model"`
-		Stream   bool   `json:"stream"`
+		Model    string     `json:"model"`
+		Stream   bool       `json:"stream"`
+		Tools    []mockTool `json:"tools"`
 		Messages []struct {
 			Role    string          `json:"role"`
 			Content json.RawMessage `json:"content"`
@@ -302,17 +319,28 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	callsTool := false
+	bash := slices.Contains(body.Tools, mockTool{Name: "Bash"})
+	command := ""
 	for i := len(body.Messages) - 1; i >= 0; i-- {
 		if body.Messages[i].Role != "user" {
 			continue
 		}
 		prompt := contentText(body.Messages[i].Content)
 		callsTool = strings.Contains(prompt, mockModelToolPrompt)
+		m.mu.Lock()
+		if bash && len(m.bash) > 0 && strings.Contains(prompt, m.bash[0].after) {
+			command, m.bash = m.bash[0].command, m.bash[1:]
+		}
+		m.mu.Unlock()
 		m.record(prompt)
 		break
 	}
 	const say = "Noted."
 	usage := map[string]int{"input_tokens": 1200, "output_tokens": 2, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+	if command != "" && body.Stream {
+		writeBashToolUse(w, body.Model, command, usage)
+		return
+	}
 	if !body.Stream {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -348,20 +376,44 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 	send("message_stop", map[string]any{})
 }
 
+func writeBashToolUse(w http.ResponseWriter, model, command string, usage map[string]int) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	send := func(event string, payload map[string]any) {
+		payload["type"] = event
+		encoded, _ := json.Marshal(payload)
+		_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encoded)
+	}
+	input, _ := json.Marshal(map[string]string{"command": command, "description": "Run attn"})
+	send("message_start", map[string]any{"message": map[string]any{
+		"id": "msg_mock_bash", "type": "message", "role": "assistant", "model": model, "content": []any{},
+		"stop_reason": nil, "stop_sequence": nil, "usage": usage,
+	}})
+	send("content_block_start", map[string]any{"index": 0, "content_block": map[string]any{"type": "tool_use", "id": "toolu_" + uuid.NewString()[:8], "name": "Bash", "input": map[string]any{}}})
+	send("content_block_delta", map[string]any{"index": 0, "delta": map[string]string{"type": "input_json_delta", "partial_json": string(input)}})
+	send("content_block_stop", map[string]any{"index": 0})
+	send("message_delta", map[string]any{"delta": map[string]any{"stop_reason": "tool_use", "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 20}})
+	send("message_stop", map[string]any{})
+}
+
 func contentText(content json.RawMessage) string {
 	var text string
 	if json.Unmarshal(content, &text) == nil {
 		return text
 	}
 	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type    string          `json:"type"`
+		Text    string          `json:"text"`
+		Content json.RawMessage `json:"content"`
 	}
 	_ = json.Unmarshal(content, &blocks)
 	parts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
-		if block.Type == "text" {
+		switch block.Type {
+		case "text":
 			parts = append(parts, block.Text)
+		case "tool_result":
+			parts = append(parts, contentText(block.Content))
 		}
 	}
 	return strings.Join(parts, "\n")

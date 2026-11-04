@@ -89,6 +89,7 @@ export function AppLibrarySurfaces() {
   const { handleSelectSession } = useNavigationContext();
   const {
     handleOpenSeedTile,
+    handleRevealSeedInGarden,
     handleOpenMarkdownArtifact,
     checkArtifactPath,
     handleResumeSeed,
@@ -195,6 +196,7 @@ export function AppLibrarySurfaces() {
           markRead={sendNotificationMarkRead}
           retryTask={sendTaskRetry}
           onOpenSession={handleSelectSession}
+          onOpenSeed={handleRevealSeedInGarden}
           installingCodexUpdate={installingCodexUpdate}
           onInstallCodexUpdate={installCodexUpdate}
           changeSignal={notificationsChangeSignal}

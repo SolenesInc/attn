@@ -30,15 +30,17 @@ func plainSeedEvents(occurrences ...seedEvents.Occurrence) []seedEvent {
 }
 
 type seedChange struct {
-	author    who.Actor
-	cause     protocol.SessionID
-	born      []string
-	events    []seedEvent
-	entries   []seedMoveNote
-	typed     *inbox.Item
-	withdrawn *store.InboxKey
-	arm       *garden.Reminder
-	disarm    bool
+	author     who.Actor
+	cause      protocol.SessionID
+	born       []string
+	events     []seedEvent
+	entries    []seedMoveNote
+	typed      *inbox.Item
+	withdrawn  *store.InboxKey
+	arm        *garden.Reminder
+	disarm     bool
+	standby    *garden.Standby
+	endStandby bool
 }
 
 type seedChangeLog struct {
@@ -180,6 +182,7 @@ func (d *Daemon) writeSeedChangeProtected(
 		written, eventSeqs, err = d.store.CommitSeedChange(commits, log.events, store.SeedChangeEffects{
 			SeedID: seed.ID, Post: change.typed, Withdraw: change.withdrawn,
 			Arm: change.arm, Disarm: change.disarm || garden.Closed(seed.Status),
+			Standby: change.standbyFor(seed), StandbyKeptFor: change.standbyKeptFor(seed),
 		}, now)
 		if err != nil {
 			var conflict *docstore.ConflictError
@@ -204,6 +207,20 @@ func (d *Daemon) writeSeedChangeProtected(
 	}
 	return docstore.Document{}, nil, fmt.Errorf(
 		"minted %d note ids and every one was taken, which a working random source does not do: %v", mintAttempts, lastErr)
+}
+
+func (c seedChange) standbyKeptFor(seed garden.Seed) who.Party {
+	if c.endStandby || seed.Status != garden.StatusGrowing {
+		return who.Party{}
+	}
+	return seed.Tender
+}
+
+func (c seedChange) standbyFor(seed garden.Seed) *store.SeedStandby {
+	if c.standby == nil {
+		return nil
+	}
+	return &store.SeedStandby{ProfileID: seed.ProfileID, Tender: seed.Tender, Standby: *c.standby}
 }
 
 func (c seedChange) occurrences() []seedEvents.Occurrence {

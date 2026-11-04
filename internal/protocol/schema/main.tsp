@@ -5488,6 +5488,8 @@ model Seed {
   "harvest_when"?: SeedHarvestCondition;
   // Present while a reminder is set on the seed.
   "reminder"?: SeedReminder;
+  // Present while the seed is on standby: its tender waits for seed mail.
+  "standby"?: SeedStandbyView;
   // The user's words for this task: what agents may do without asking and
   // where they stop. Delegation openings deliver it.
   "authorization"?: SeedAuthorization;
@@ -5518,6 +5520,7 @@ model SeedRow {
   "check_tally"?: SeedCheckTally;
   "harvest_when"?: SeedHarvestCondition;
   "reminder"?: SeedReminder;
+  "standby"?: SeedStandbyView;
   "created_at": string;
   "updated_at": string;
 }
@@ -5530,6 +5533,17 @@ model SeedReminder {
   "message": string;
   "set_at": string;
   "set_by": ActorView;
+}
+
+// A seed on standby: its tender set a note saying what to do next, and seed
+// mail wakes the tender. Delivering seed mail to the tender ends it.
+model SeedStandbyView {
+  "note": string;
+  "set_at": string;
+  "set_by": ActorView;
+  // Why the last tender wake could not happen and will not retry by itself.
+  // Absent while nothing blocks a wake.
+  "wake_blocked"?: string;
 }
 
 // What a seed waits on before it harvests itself. The daemon settles it when the
@@ -6116,6 +6130,28 @@ model SeedReminderMessage {
   "in"?: string;
   "message"?: string;
   "clear"?: boolean;
+}
+
+// Put a seed on standby with a note, or clear its standby. Only the seed's
+// tender sets it. With close, the calling session then closes itself as
+// `attn agent close --self` does.
+@extension("x-on", #{ home: true })
+model SeedStandbyMessage {
+  "profile_id"?: string;
+  "source_session_id"?: SessionID;
+  "cmd": "seed_standby";
+  "seed_id": string;
+  "note"?: string;
+  "clear"?: boolean;
+  "close"?: boolean;
+}
+
+model SeedStandbyResult {
+  "seed": Seed;
+  // False when --clear found no standby.
+  "changed": boolean;
+  // Present when close closed the calling session.
+  "close"?: AgentCloseResult;
 }
 
 model SeedReminderResult {
@@ -6946,6 +6982,7 @@ model Response {
   seed_edit_result?: SeedEditResult;
   seed_authorization_result?: SeedAuthorizationResult;
   seed_reminder_result?: SeedReminderResult;
+  seed_standby_result?: SeedStandbyResult;
   seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
