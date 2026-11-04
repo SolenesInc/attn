@@ -264,6 +264,79 @@ default permission mode:
 - With `/model`, `/resume`, `/config`, `/permissions` or the Esc-Esc rewind
   menu open, Claude sends no report and fires no hook.
 
+### Mods
+
+A mod is a plugin whose `hooks/hooks.json` names a TypeScript hooks module.
+The module's API is typed in the `plugin-authoring` skill's
+`types/claude-code.d.ts`. Probed on 2.1.316 under a scratch PTY against a
+local mock API, launched with attn's environment, `--settings` hooks and
+`--permission-mode auto`:
+
+- `--plugin-dir <folder>` and `CLAUDE_CODE_PLUGIN_DIRS=<folder>` both load the
+  module in an interactive session with no consent question. Claude watches
+  the folder: a change to the module's content reloads it, which runs
+  `session.start` again. On 2.1.317, touching the file does not reload it.
+- A `session.start` hook can keep a `$.process.spawn` child for the session's
+  life, as a direct child of the `claude` process. The child survives
+  `/clear`, `/compact` and `/resume`. A reload, `/exit` and a SIGKILL of
+  `claude` end it. Its stdin is written once and closed.
+- `$.prompt.submit({ text, asUser: true })` on an idle session starts a turn
+  with the text bare, as typed. UserPromptSubmit and Stop fire with the current
+  conversation id. The transcript keeps a `user` row with the text as a string
+  and `origin: {"kind":"plugin","name":<plugin>,"asUser":true}`. The screen
+  shows "› Prompt from the <plugin> plugin" above the prompt. The call resolves
+  `{ text, origin }` as the turn starts.
+- `$.prompt.submit` during a turn resolves only when that turn completes, then
+  starts its own turn. It never reaches the running turn.
+- A prompt typed into the PTY during a turn reaches the running turn: the next
+  model request carries it after the tool result, as "The user sent a new
+  message while you were working:" and the text. The `prompt.submit` hooks see
+  it with `origin: {"kind":"composer"}` and the running `turnId`.
+- `$.session.append({ message: { type: "user", content: [text block] } })`
+  during a tool call adds the text, bare, to the running turn's next model
+  request, after the tool result. The transcript keeps it as an `isMeta` user
+  row with the plugin's origin. The screen does not show it.
+- An append made inside a `turn.step` hook, before `next(e)`, misses that
+  request: it reaches the model only on a later request.
+- A `turn.complete` hook that calls `$.prompt.submit` starts a new turn right
+  after an answered turn ends.
+- `$.session.send` to the session's own id fails: `isDelivered: false`, "no
+  live session on this machine has id <id>".
+- `/clear` raises `session.end` with `reason: "clear"` and no `session.start`;
+  `$.session.id()` returns the new id from then on. `/resume <id>` raises
+  `session.end` with `reason: "resume"`. Both still fire the SessionStart
+  settings hook.
+
+Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
+
+- The terminal raises no `ui.render` for `UserMessage` rows, so a mod cannot
+  redraw a prompt row or remove the "Prompt from the <plugin> plugin" line. A
+  `$.session.append` of a `system` row is stored but not drawn.
+  `$.ui.log(text)` draws a transcript line as `<plugin>: <text>`, which the
+  model never reads.
+- `$.env.get(name)` reads the `claude` process's environment.
+- A loop started from `session.start` can call `$.http.fetch` with
+  `socketPath` on a Unix socket. A call with no complete answer after 30 s
+  rejects: "aborted: no complete answer within 30000ms". A reload aborts the
+  old module's call in flight, and `/exit` closes it.
+- Appends made after a main-loop `tool.call` hook's `next(e)` resolves reach
+  the next model request, all of them, after the tool result. This holds when
+  the tool call waited on a permission question that the user approved.
+- Esc during a tool call resolves that `next(e)` with `next.signal.aborted`
+  true, and `turn.complete` reports `reason: "aborted"`. An append made then is
+  stored and reaches the model only with the next turn. Until the user sends
+  input, `$.prompt.submit` resolves `{ drop: "the session was stopped and
+  nobody has sent input since" }` and starts no turn. A prompt typed into the
+  PTY during the turn is sent as its own turn as soon as Esc stops it.
+- Denying a permission question also sets `next.signal.aborted`, but
+  `turn.complete` reports `reason: "answer"`, and a `$.prompt.submit` right
+  after starts a turn.
+- The Agent tool runs a subagent in the background: the main turn completes
+  while the screen shows "Waiting for 1 background agent to finish". A
+  `$.prompt.submit` or a typed prompt in that time starts a main turn at once.
+  When the subagent finishes, a main turn starts with empty text. The
+  subagent's `turn.start`, `tool.call` and `turn.complete` carry its `agentId`.
+
 ## Codex
 
 Read in the source at openai/codex 60947e2341.
