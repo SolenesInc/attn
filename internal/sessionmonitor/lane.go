@@ -121,9 +121,10 @@ func (r runRef) valid() bool { return r.epoch > 0 }
 
 // Custody is a delivery's only result: never confirm afterwards that the harness used it.
 type Attempt struct {
-	Stage Stage
-	At    time.Time
-	Err   error
+	Stage   Stage
+	At      time.Time
+	Err     error
+	steered bool
 }
 
 type runState struct {
@@ -240,7 +241,22 @@ func (m *Monitor) Place(ctx context.Context, delivery Delivery) Attempt {
 	if credited.valid() {
 		m.armAutoSettleForUserInput(credited)
 	}
+	if attempt.Stage == Placed && delivery.origin.kind == originMaintenance {
+		m.settleForRunningNotification()
+	}
 	return attempt
+}
+
+func (m *Monitor) settleForRunningNotification() {
+	m.mu.Lock()
+	if m.state.State != protocol.SessionStateWorking {
+		m.mu.Unlock()
+		return
+	}
+	m.syncAutoSettleLocked()
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
 func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef) {
@@ -272,10 +288,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 
 	steering := l.run != nil || l.questionInTurn
-	armedNotification := delivery.origin.kind == originMaintenance && !steering && l.notifyNextRun == ""
-	if armedNotification {
-		l.notifyNextRun = delivery.origin.source
-	}
+	epochAtPlacing := l.epoch
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
@@ -284,11 +297,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 			return deferred(ErrBlockedByApproval)
 		}
 		attempt = l.placePTYLocked(ctx, delivery)
+		attempt.steered = l.run != nil
 	}
 	if attempt.Stage != Placed {
-		if armedNotification {
-			l.notifyNextRun = ""
-		}
 		return attempt, runRef{}
 	}
 	if l.placed == nil {
@@ -298,7 +309,19 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if steering {
 		m.runSteeredLocked()
 	}
+	if delivery.origin.kind == originMaintenance && !steering && !attempt.steered {
+		l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
+	}
 	return attempt, l.tookLocked(delivery)
+}
+
+func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
+	switch {
+	case l.epoch == epochAtPlacing:
+		l.notifyNextRun = source
+	case l.run != nil:
+		l.run.notification = source
+	}
 }
 
 func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
@@ -329,7 +352,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	if !custody.Taken {
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true
 	}
-	return Attempt{Stage: Placed, At: custody.At}, true
+	return Attempt{Stage: Placed, At: custody.At, steered: custody.Steered}, true
 }
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.

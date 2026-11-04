@@ -677,3 +677,65 @@ func TestAnAnswerThatStartsARunThroughTheModStaysOutOfTheQueue(t *testing.T) {
 		t.Fatal("a run the answer started opened a turn with quiet notifications on")
 	}
 }
+
+func TestARingTheModNeverTookLeavesTheUsersTurnOwedThroughAnUnrelatedRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	setSetting(t, app, "queue_quiet_notifications", "true")
+	registerSessions(t, w, cli, "reviewer")
+	session, run := moddedClaude(t, w, app)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+	owed := userRunStops(app, run, idle, "run a background agent", "Waiting for it. <!-- attn:state=waiting_input -->")
+	if !protocol.Deref(owed.TurnOwed) || protocol.Deref(owed.TurnByAgent) {
+		t.Fatalf("the user's run stopped with owed=%t by_agent=%t, want their turn owed", protocol.Deref(owed.TurnOwed), protocol.Deref(owed.TurnByAgent))
+	}
+
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		sendAgentMessage(t, cli, "reviewer", session, "a review arrived")
+	}()
+	w.awaitTimer(daemon.ClaudeModAckTimer)
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
+		t.Fatalf("the background agent finishes: %v", err)
+	}
+	working := testworld.AwaitStateAfter(app, owed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	w.advance(claudeModReachWindow)
+	<-returned
+
+	run.Reply("Background work is done. <!-- attn:state=waiting_input -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	w.restart()
+	after := queriedSession(t, w.Client(), session)
+	for name, s := range map[string]protocol.Session{"the unrelated run": working, "its stop": stopped, "a restart": after} {
+		if !protocol.Deref(s.TurnOwed) || protocol.Deref(s.TurnByAgent) {
+			t.Errorf("at %s owed=%t by_agent=%t, want the user's turn owed", name, protocol.Deref(s.TurnOwed), protocol.Deref(s.TurnByAgent))
+		}
+	}
+}
+
+func TestARingThroughTheModToAWaitingAgentSettlesItsTurnAndStaysOutOfTheQueue(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	setSetting(t, app, "queue_quiet_notifications", "true")
+	registerSessions(t, w, cli, "reviewer")
+	session, run := moddedClaude(t, w, app)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+	owed := userRunStops(app, run, idle, "look at the build", "Done. <!-- attn:state=waiting_input -->")
+
+	sendAgentMessage(t, cli, "reviewer", session, "a review arrived")
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("the agent took %q, want the inbox doorbell", got)
+	}
+	working := testworld.AwaitStateAfter(app, owed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) && protocol.Deref(s.TurnByAgent) })
+	run.Reply("Read it. <!-- attn:state=waiting_input -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if protocol.Deref(stopped.TurnOwed) {
+		t.Fatal("a run the ring started opened a turn with quiet notifications on")
+	}
+}

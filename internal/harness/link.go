@@ -33,6 +33,7 @@ type Custody struct {
 	Reason        string
 	Stopped       bool
 	ComposerEmpty bool
+	Steered       bool
 }
 
 // Link delivers input to a harness without going through its terminal.

@@ -385,7 +385,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 			t.accepted++
 			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input, accepted: t.accepted}
 		}
-		answer(taken)
+		answer(harness.Custody{Taken: true, At: taken.At, Steered: true})
 	case claudeModOutcomeSubmitted:
 		delete(t.held, ack.ID)
 		answer(taken)
