@@ -1,3 +1,4 @@
+// @vitest-environment-options {"settings": {"enableIframePageLoading": true}}
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "./runtime";
 

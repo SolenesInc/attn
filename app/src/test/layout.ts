@@ -58,11 +58,11 @@ export function layOutBlocksAcrossSizedAncestors(windowWidth: number) {
     }
   };
 
-  const width = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'width')!;
+  const setProperty = CSSStyleDeclaration.prototype.setProperty;
   const spies = [
-    vi.spyOn(CSSStyleDeclaration.prototype, 'width', 'set').mockImplementation(function (this: CSSStyleDeclaration, value: string) {
-      width.set!.call(this, value);
-      relayout();
+    vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty').mockImplementation(function (this: CSSStyleDeclaration, name: string, value: string | null, priority?: string) {
+      setProperty.call(this, name, value, priority);
+      if (name === 'width') relayout();
     }),
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
       return laidOutWidth(this);
