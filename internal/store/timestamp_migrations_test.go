@@ -14,6 +14,7 @@ import (
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/victorarias/attn/internal/garden"
 )
 
 func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
@@ -392,4 +393,108 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestABuildWithoutSeedRemindersRefusesADatabaseHoldingThem(t *testing.T) {
+	const newestMigrationOfABuildWithoutReminders = 1793722176352779
+	path := filepath.Join(t.TempDir(), "attn.db")
+	older, err := newStoreAtVersion(path, newestMigrationOfABuildWithoutReminders)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	if _, err := older.DefineDocumentCollection(garden.SeedsSchema(), now); err != nil {
+		t.Fatal(err)
+	}
+	declared, _, err := older.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := *declared
+	profile, err := older.ProfileMigration()
+	if err != nil {
+		t.Fatal(err)
+	}
+	remembered := map[string]string{}
+	for _, id := range []string{"s-armed", "s-control"} {
+		body, err := garden.Seed{ID: id, ProfileID: profile.Manifest.ProfileID, Title: id, Status: garden.StatusPlanted, Reminder: &garden.Reminder{
+			At: now.Add(time.Hour), Message: "Check the rollout", SetAt: now,
+		}}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := older.PutDocument(schema, id, body, now, nil); err != nil {
+			t.Fatal(err)
+		}
+		remembered[id] = string(body)
+	}
+	if err := older.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	assertRemindersKept := func(s *Store) {
+		t.Helper()
+		for id, body := range remembered {
+			doc, found, err := s.GetDocument(schema, id)
+			if err != nil || !found {
+				t.Fatalf("read %s: found=%t err=%v", id, found, err)
+			}
+			if string(doc.Body) != body {
+				t.Fatalf("%s holds %s, want %s", id, doc.Body, body)
+			}
+		}
+	}
+
+	upgraded, _, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRemindersKept(upgraded)
+	if err := upgraded.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := withMigrationsThrough(newestMigrationOfABuildWithoutReminders, func() error {
+		for name, open := range map[string]func() error{
+			"Open": func() error {
+				s, _, err := Open(path)
+				if s != nil {
+					s.Close()
+				}
+				return err
+			},
+			"OpenCurrent": func() error {
+				s, err := OpenCurrent(path)
+				if s != nil {
+					s.Close()
+				}
+				return err
+			},
+		} {
+			if err := open(); err == nil || !strings.Contains(err.Error(), "which this attn build does not support") {
+				return fmt.Errorf("%s from a build without reminders = %v, want the refusal", name, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("the refused opens changed the database")
+	}
+
+	current, _, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer current.Close()
+	assertRemindersKept(current)
 }

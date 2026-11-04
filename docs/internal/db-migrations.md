@@ -32,6 +32,12 @@ or restore a backup taken before the upgrade with `attn db restore`.
   The command creates `internal/store/migration_<timestamp>_<slug>.go` with its
   registration. Implement the generated function. The placeholder returns an
   error until you replace it.
+- Add a migration when you add a persisted field to a typed document, such as a
+  seed, even when the schema stays the same. An older build decodes the document
+  into its own type and writes back only the fields it knows, so it erases the
+  new field without an error. The migration makes that build refuse the
+  database. When there is nothing to change, write `SELECT 1;`, because an empty
+  file does not load.
 - Never edit or rename a merged migration. Never change the frozen legacy
   ladder, its migration definitions, or their reachable package-level helpers and types.
   `make check-migrations` compares all of these with `origin/main` and checks that
