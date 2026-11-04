@@ -140,3 +140,42 @@ func crewRunningSessions(t *testing.T, cli *client.Client) []protocol.SessionID 
 	}
 	return running
 }
+
+func TestTheEndOfASleepingDaysRunLeavesItsResumedRunAwake(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	day := wakeCrew(t, cli, "alder", "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
+
+	ending := w.PauseAt(pausepoint.PtyExitOwnerResolved)
+	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
+	ending.Await()
+
+	starting := w.PauseAt(pausepoint.TerminalStarting)
+	reopened := make(chan error, 1)
+	go func() {
+		_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: day.SessionID})
+		reopened <- err
+	}()
+	starting.Await()
+
+	ended := w.PauseAt(pausepoint.PtyExitHandled)
+	ending.Release()
+	ended.Await()
+	ended.Release()
+	starting.Release()
+	if err := <-reopened; err != nil {
+		t.Fatalf("reopen while the earlier run was ending: %v", err)
+	}
+	w.Launched(string(day.SessionID))
+
+	woken := wakeCrew(t, cli, "alder", "")
+	if !woken.AlreadyAwake || woken.SessionID != day.SessionID {
+		t.Fatalf("wake after the resume = %+v, want alder already awake in %s", woken, day.SessionID)
+	}
+	if running := crewRunningSessions(t, cli); len(running) != 1 || running[0] != day.SessionID {
+		t.Fatalf("running sessions = %v, want only the resumed day %s", running, day.SessionID)
+	}
+}
