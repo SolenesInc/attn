@@ -221,6 +221,53 @@ func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
 
+func TestADelegationToAPluginHarnessWaitsForItsPluginAcrossARestartDuringTheCapture(t *testing.T) {
+	w := &world{World: prepareWorld(t)}
+	shell := installBlockedLoginShell(t, w)
+	w.start()
+	answerBeforeTheCapture(t, w)
+	app := w.App()
+	driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
+	awaitDriverAvailable(app, "plug")
+
+	repo := newRepo(t, "shop")
+	request := delegateCheckoutAt(repo, delegateNewWorktree("feature/plug", "main"))
+	request.RequestID, request.Label, request.Agent = "plug-delegation", protocol.Ptr("plug-delegation"), protocol.Ptr("plug")
+	driver.mu.Lock()
+	driver.holdLaunch = true
+	driver.mu.Unlock()
+	accepted, err := w.Client().StartDelegation(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var launching driverLaunch
+	driver.asked("driver.spawn", &launching)
+
+	shell.block()
+	finishStop := w.beginStop(t)
+	driver.hangUp()
+	finishStop()
+	w.start()
+	w.App()
+	shell.release()
+	driver = connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
+
+	delegated := make(chan *protocol.DelegateResult, 1)
+	go func() {
+		result, err := w.Client().Delegate(request)
+		if err != nil {
+			t.Errorf("the delegation after the restart: %v", err)
+		}
+		delegated <- result
+	}()
+	if err := driver.state(driver.launched(), 1, "working"); err != nil {
+		t.Fatal(err)
+	}
+	if result := <-delegated; result == nil || result.SessionID != accepted.SessionID {
+		t.Fatalf("after the restart the delegation = %+v, want it finished on %s", result, accepted.SessionID)
+	}
+}
+
 func TestStoppingDuringTheCaptureDoesNotWaitForAChildHoldingTheShellsOutput(t *testing.T) {
 	w := &world{World: prepareWorld(t)}
 	gate := filepath.Join(w.Dir, "child-gate")

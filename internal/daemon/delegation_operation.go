@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/supervise"
 )
 
 type acceptedDelegationRequest struct {
@@ -512,8 +514,49 @@ func (d *Daemon) resumePendingDelegations() {
 		return
 	}
 	for i := range records {
-		operationID := records[i].Operation.OperationID
-		d.life.Go("runDelegationOperation", func() { d.runDelegationOperation(operationID) })
+		record := &records[i]
+		operationID := record.Operation.OperationID
+		d.life.Go("runDelegationOperation", func() {
+			d.awaitPluginHarnessOfResumedDelegation(record)
+			d.runDelegationOperation(operationID)
+		})
+	}
+}
+
+// A plugin that fails to connect restarts with backoff that reaches 61 s, the same time supervise needs to call a connection stable.
+const resumedDelegationPluginLimit = supervise.StableConnection
+
+func (d *Daemon) awaitPluginHarnessOfResumedDelegation(record *store.DelegationOperationRecord) {
+	if !d.backgroundLoginEnv {
+		return
+	}
+	var msg protocol.DelegateMessage
+	if err := json.Unmarshal([]byte(record.RequestJSON), &msg); err != nil {
+		return
+	}
+	agent := strings.TrimSpace(protocol.Deref(msg.Agent))
+	if source := d.store.Get(protocol.Deref(msg.SourceSessionID)); agent == "" && source != nil {
+		agent = source.Agent
+	}
+	if agent == "" || agent == protocol.AgentShellValue || agentdriver.Get(agent) != nil {
+		return
+	}
+	_, _ = d.loginEnv.Wait(d.life.Context())
+	limit := time.NewTimer(resumedDelegationPluginLimit)
+	defer limit.Stop()
+	for {
+		registered, next := d.ensurePluginRegistry().driverOrRegistration(agent)
+		if registered {
+			return
+		}
+		select {
+		case <-next:
+		case <-limit.C:
+			d.logf("delegate operation %s resumes without harness %q: no plugin registered it within %s of the login environment capture", record.Operation.OperationID, agent, resumedDelegationPluginLimit)
+			return
+		case <-d.life.Done():
+			return
+		}
 	}
 }
 

@@ -196,7 +196,16 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 		Agent:        agent,
 		Capabilities: capabilities,
 	}
+	close(r.driverRegistered)
+	r.driverRegistered = make(chan struct{})
 	return nil
+}
+
+func (r *pluginRegistry) driverOrRegistration(agent string) (registered bool, nextRegistration <-chan struct{}) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, registered = r.drivers[strings.TrimSpace(strings.ToLower(agent))]
+	return registered, r.driverRegistered
 }
 
 func (r *pluginRegistry) driver(agent string) (pluginDriverRegistration, bool) {

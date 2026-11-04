@@ -70,6 +70,8 @@ type pluginRegistry struct {
 	surfaces   map[string][]pluginSurfaceHandler
 	drivers    map[string]pluginDriverRegistration
 	priorities map[string]int
+
+	driverRegistered chan struct{}
 }
 
 func newPluginRegistry() *pluginRegistry {
@@ -78,6 +80,8 @@ func newPluginRegistry() *pluginRegistry {
 		surfaces:   make(map[string][]pluginSurfaceHandler),
 		drivers:    make(map[string]pluginDriverRegistration),
 		priorities: make(map[string]int),
+
+		driverRegistered: make(chan struct{}),
 	}
 }
 
