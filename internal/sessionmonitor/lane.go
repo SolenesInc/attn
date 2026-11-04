@@ -271,7 +271,11 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
-	steering := l.run != nil
+	steering := l.run != nil || l.questionInTurn
+	armedNotification := delivery.origin.kind == originMaintenance && !steering && l.notifyNextRun == ""
+	if armedNotification {
+		l.notifyNextRun = delivery.origin.source
+	}
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
@@ -282,6 +286,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		attempt = l.placePTYLocked(ctx, delivery)
 	}
 	if attempt.Stage != Placed {
+		if armedNotification {
+			l.notifyNextRun = ""
+		}
 		return attempt, runRef{}
 	}
 	if l.placed == nil {
@@ -326,9 +333,6 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.
 func (l *lane) tookLocked(delivery Delivery) runRef {
-	if delivery.origin.kind == originMaintenance && l.run == nil {
-		l.notifyNextRun = delivery.origin.source
-	}
 	if delivery.origin.kind != originUserConversation {
 		return runRef{}
 	}

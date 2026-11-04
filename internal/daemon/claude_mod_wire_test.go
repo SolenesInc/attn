@@ -578,3 +578,72 @@ func TestAMenuKeyInAQuestionDoesNotHoldBackAReturnedAnnotation(t *testing.T) {
 	modEvent(t, run, fakeagent.ModEventRefusedStop, "check the rounding")
 	typedOnce(t, app, run, session, "check the rounding")
 }
+
+func TestAnAnswerDuringAUsersPermissionQuestionKeepsTheirTurnOwedAcrossARestart(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		answer bool
+	}{
+		{"with no answer", false},
+		{"with an answer during the question", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			setSetting(t, app, "queue_mode_enabled", "true")
+			setSetting(t, app, "queue_quiet_notifications", "true")
+			setSetting(t, app, "asks_enabled", "true")
+			session, run := moddedClaude(t, w, app)
+			app.TypeLine(session, "find why the build fails")
+			run.Prompted()
+			working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			permissionQuestion(t, w, app, session)
+
+			if tc.answer {
+				cacheAskAnswered(t, w, app, session)
+				modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+			}
+			if err := w.Client().UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
+				t.Fatalf("approve: %v", err)
+			}
+			resumed := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			if tc.answer {
+				if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
+					t.Fatalf("the tool boundary appended %v, want the answer", appended)
+				}
+			}
+			run.Reply("an invalid flag <!-- attn:state=waiting_input -->")
+			stopped := testworld.AwaitStateAfter(app, resumed, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {
+				t.Fatalf("the user's run stopped with owed=%t by_agent=%t, want their turn owed", protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent))
+			}
+
+			w.restart()
+			after := queriedSession(t, w.Client(), session)
+			if !protocol.Deref(after.TurnOwed) || protocol.Deref(after.TurnByAgent) {
+				t.Fatalf("after a restart owed=%t by_agent=%t, want their turn owed", protocol.Deref(after.TurnOwed), protocol.Deref(after.TurnByAgent))
+			}
+		})
+	}
+}
+
+func TestAnAnswerThatStartsARunThroughTheModStaysOutOfTheQueue(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	setSetting(t, app, "queue_quiet_notifications", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	session, run := moddedClaude(t, w, app)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+
+	cacheAskAnswered(t, w, app, session)
+	if got := run.Prompted(); !strings.Contains(got, cacheAnswerText) {
+		t.Fatalf("the agent took %q, want the answer", got)
+	}
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Reply("noted <!-- attn:state=waiting_input -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if protocol.Deref(stopped.TurnOwed) {
+		t.Fatal("a run the answer started opened a turn with quiet notifications on")
+	}
+}
