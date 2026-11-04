@@ -1,10 +1,8 @@
 package automation
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -74,26 +72,4 @@ func NewScheduledInput(intended, observed time.Time) ScheduledInput {
 		IntendedAt: intended.UTC().Format(time.RFC3339),
 		ObservedAt: observed.UTC().Format(time.RFC3339),
 	}
-}
-
-func ParseScheduledInput(raw json.RawMessage) (ScheduledInput, error) {
-	var input ScheduledInput
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&input); err != nil {
-		return input, fmt.Errorf("parse scheduled input: %w", err)
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		return input, errors.New("parse scheduled input: expected one JSON object")
-	}
-	if input.Provider != "schedule" {
-		return input, errors.New("scheduled input provider must be schedule")
-	}
-	if _, err := time.Parse(time.RFC3339, input.IntendedAt); err != nil {
-		return input, fmt.Errorf("scheduled input intended_at: %w", err)
-	}
-	if _, err := time.Parse(time.RFC3339, input.ObservedAt); err != nil {
-		return input, fmt.Errorf("scheduled input observed_at: %w", err)
-	}
-	return input, nil
 }

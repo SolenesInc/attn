@@ -27,7 +27,7 @@ func runConsumer(t *testing.T, s *memStore, onFirst func()) (handled chan string
 	handled = make(chan string, 8)
 	release := make(chan struct{})
 	first := true
-	if err := b.Register("c", ParseFilter("a.*"), func(_ context.Context, ev Event) error {
+	if err := b.Register("c", Filter{"a.*"}, func(_ context.Context, ev Event) error {
 		handled <- ev.Name
 		if first {
 			first = false

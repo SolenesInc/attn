@@ -1,7 +1,6 @@
 package automation
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -218,29 +217,6 @@ func TestDueInstantsMidWindowCursor(t *testing.T) {
 		if got := instant.UTC().Format(time.RFC3339); got != want[i] {
 			t.Fatalf("instant[%d]=%s, want %s", i, got, want[i])
 		}
-	}
-}
-
-func TestParseScheduledInput(t *testing.T) {
-	valid := json.RawMessage(`{"provider":"schedule","intended_at":"2026-06-01T09:00:00Z","observed_at":"2026-06-01T09:00:02Z"}`)
-	input, err := ParseScheduledInput(valid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if input.Provider != "schedule" || input.IntendedAt != "2026-06-01T09:00:00Z" || input.ObservedAt != "2026-06-01T09:00:02Z" {
-		t.Fatalf("input = %#v", input)
-	}
-	for name, raw := range map[string]string{
-		"unknown field":  `{"provider":"schedule","intended_at":"2026-06-01T09:00:00Z","observed_at":"2026-06-01T09:00:02Z","extra":true}`,
-		"wrong provider": `{"provider":"github","intended_at":"2026-06-01T09:00:00Z","observed_at":"2026-06-01T09:00:02Z"}`,
-		"trailing json":  `{"provider":"schedule","intended_at":"2026-06-01T09:00:00Z","observed_at":"2026-06-01T09:00:02Z"}{}`,
-		"bad timestamp":  `{"provider":"schedule","intended_at":"not-a-time","observed_at":"2026-06-01T09:00:02Z"}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := ParseScheduledInput(json.RawMessage(raw)); err == nil {
-				t.Fatal("accepted invalid scheduled input")
-			}
-		})
 	}
 }
 

@@ -6,19 +6,6 @@ type Filter []string
 
 var All = Filter{"*"}
 
-func ParseFilter(expr string) Filter {
-	var out Filter
-	for _, part := range strings.Split(expr, ",") {
-		if p := strings.TrimSpace(part); p != "" {
-			out = append(out, p)
-		}
-	}
-	if len(out) == 0 {
-		return All
-	}
-	return out
-}
-
 func (f Filter) String() string {
 	if len(f) == 0 {
 		return "*"

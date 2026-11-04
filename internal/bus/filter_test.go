@@ -28,18 +28,19 @@ func TestFilterMatching(t *testing.T) {
 	}
 }
 
-func TestParseFilterRoundTrip(t *testing.T) {
-	f := ParseFilter("session.*, ticket.commented ")
-	if len(f) != 2 || f[0] != "session.*" || f[1] != "ticket.commented" {
-		t.Fatalf("ParseFilter dropped or mangled patterns: %v", f)
+func TestFilterStringJoinsPatterns(t *testing.T) {
+	cases := []struct {
+		filter Filter
+		want   string
+	}{
+		{Filter{"session.*", "ticket.commented"}, "session.*,ticket.commented"},
+		{Filter{"session.*"}, "session.*"},
+		{Filter{}, "*"},
+		{nil, "*"},
 	}
-	if f.String() != "session.*,ticket.commented" {
-		t.Fatalf("String() = %q", f.String())
-	}
-	if got := ParseFilter(""); !got.Matches("whatever.happened") {
-		t.Fatalf("empty expression should mean All, got %v", got)
-	}
-	if got := ParseFilter("  ,  "); !got.Matches("whatever.happened") {
-		t.Fatalf("blank expression should mean All, got %v", got)
+	for _, tc := range cases {
+		if got := tc.filter.String(); got != tc.want {
+			t.Errorf("Filter%v.String() = %q, want %q", []string(tc.filter), got, tc.want)
+		}
 	}
 }
