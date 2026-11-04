@@ -130,7 +130,7 @@ func (source ghPRSource) Feedback(ctx context.Context, opts prWaitOptions) ([]pr
 }
 
 type ghCommandTransport struct {
-	host string
+	host, repo string
 }
 
 func (transport ghCommandTransport) GraphQL(ctx context.Context, query string, variables map[string]any) ([]byte, error) {
@@ -149,7 +149,9 @@ func (transport ghCommandTransport) GraphQL(ctx context.Context, query string, v
 	if transport.host != "" && transport.host != "github.com" {
 		args = append(args, "--hostname", transport.host)
 	}
-	output, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
+	command := exec.CommandContext(ctx, "gh", args...)
+	command.Env = append(os.Environ(), "GH_REPO="+transport.host+"/"+transport.repo)
+	output, err := command.CombinedOutput()
 	if err != nil {
 		if cause := context.Cause(ctx); cause != nil {
 			return nil, cause
@@ -221,7 +223,7 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 	if opts.JSON {
 		progress = stderr
 	}
-	source := ghPRSource{transport: ghCommandTransport{host: opts.Host}}
+	source := ghPRSource{transport: ghCommandTransport{host: opts.Host, repo: opts.repo()}}
 	result := waitForPRActionable(ctx, source, opts, cursor, progress)
 	if err := savePRWaitCursor(opts.CursorDir, opts, result.BeforeOutputCursor, time.Now()); err != nil {
 		fmt.Fprintf(stderr, "pr wait-ready: could not save cursor: %v\n", err)

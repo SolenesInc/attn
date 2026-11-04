@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ import (
 )
 
 const fakeGHScript = `#!/bin/sh
-echo "$*" | tr '\n' ' ' >> %[1]q/calls
+echo "GH_REPO=$GH_REPO $*" | tr '\n' ' ' >> %[1]q/calls
 echo >> %[1]q/calls
 mkdir -p %[1]q/requests && printf '%%s\0' "$@" > "$(mktemp %[1]q/requests/XXXXXX)"
 case "$*" in
@@ -200,6 +201,9 @@ func TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations(t *testing.
 		calls := gh.calls()
 		if !strings.Contains(calls, "owner="+tc.owner) || !strings.Contains(calls, "name="+tc.name) || !strings.Contains(calls, "number="+tc.number) {
 			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant %s/%s#%s", tc.args, calls, tc.owner, tc.name, tc.number)
+		}
+		if repo := cmp.Or(tc.hostname, "github.com") + "/" + tc.owner + "/" + tc.name; !strings.Contains(calls, "GH_REPO="+repo+" ") {
+			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant GH_REPO=%s so gh credentials follow the pull request's repository", tc.args, calls, repo)
 		}
 		if asked := strings.Contains(calls, "--hostname"); asked != (tc.hostname != "") || (asked && !strings.Contains(calls, "--hostname "+tc.hostname)) {
 			t.Errorf("pr wait-ready %q asked gh:\n%s\nwant hostname %q", tc.args, calls, tc.hostname)
