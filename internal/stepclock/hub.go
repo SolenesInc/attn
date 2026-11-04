@@ -31,14 +31,13 @@ type peerTimer struct {
 }
 
 type peer struct {
-	conn     net.Conn
-	pid      int
-	ready    bool
-	busy     bool
-	advanced chan struct{}
-	fired    chan struct{}
-	done     chan struct{}
-	err      error
+	conn       net.Conn
+	pid        int
+	ready      bool
+	busy       bool
+	unanswered map[string][]chan struct{}
+	done       chan struct{}
+	err        error
 }
 
 func Listen(socket string) (*Hub, error) {
@@ -54,7 +53,7 @@ func Listen(socket string) (*Hub, error) {
 			if err != nil {
 				return
 			}
-			p := &peer{conn: conn, advanced: make(chan struct{}, 1), fired: make(chan struct{}, 1), done: make(chan struct{})}
+			p := &peer{conn: conn, unanswered: make(map[string][]chan struct{}), done: make(chan struct{})}
 			h.mu.Lock()
 			h.peers[p] = struct{}{}
 			h.mu.Unlock()
@@ -122,10 +121,8 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 		h.mu.Lock()
 		h.pending.disarm(peerTimer{p, fields[1]})
 		h.mu.Unlock()
-	case len(fields) == 2 && fields[0] == "advanced":
-		p.advanced <- struct{}{}
-	case len(fields) == 2 && fields[0] == "fired":
-		p.fired <- struct{}{}
+	case len(fields) == 2 && (fields[0] == "advanced" || fields[0] == "fired"):
+		return h.answer(p, fields[0])
 	case len(fields) == 1 && (fields[0] == "busy" || fields[0] == "idle"):
 		h.mu.Lock()
 		p.busy = fields[0] == "busy"
@@ -137,6 +134,18 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 	return true
 }
 
+func (h *Hub) answer(p *peer, answer string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	oldest := p.unanswered[answer]
+	if len(oldest) == 0 {
+		return false
+	}
+	close(oldest[0])
+	p.unanswered[answer] = oldest[1:]
+	return true
+}
+
 // Advance moves every connected process's clock by d and returns once each has fired its due timers or exited.
 func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	h.stepping.Lock()
@@ -144,7 +153,7 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	h.mu.Lock()
 	h.pending.mark()
 	h.mu.Unlock()
-	return h.command(ctx, fmt.Sprintf("advance %s", d), func(p *peer) chan struct{} { return p.advanced })
+	return h.command(ctx, fmt.Sprintf("advance %s", d), "advanced")
 }
 
 // Fire fires every timer named name in every connected process now, without moving the clocks, and returns once each
@@ -153,15 +162,18 @@ func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 func (h *Hub) Fire(ctx context.Context, name Name) error {
 	h.firing.Lock()
 	defer h.firing.Unlock()
-	return h.command(ctx, fmt.Sprintf("fire %s", name), func(p *peer) chan struct{} { return p.fired })
+	return h.command(ctx, fmt.Sprintf("fire %s", name), "fired")
 }
 
-func (h *Hub) command(ctx context.Context, command string, answer func(*peer) chan struct{}) error {
+func (h *Hub) command(ctx context.Context, command, answer string) error {
 	h.mu.Lock()
 	peers := make([]*peer, 0, len(h.peers))
+	answers := make(map[*peer]chan struct{}, len(h.peers))
 	for p := range h.peers {
 		if p.ready {
 			peers = append(peers, p)
+			answers[p] = make(chan struct{})
+			p.unanswered[answer] = append(p.unanswered[answer], answers[p])
 		}
 	}
 	h.mu.Unlock()
@@ -177,7 +189,7 @@ func (h *Hub) command(ctx context.Context, command string, answer func(*peer) ch
 	}
 	for _, p := range peers {
 		select {
-		case <-answer(p):
+		case <-answers[p]:
 		case <-p.done:
 		case <-ctx.Done():
 			return fmt.Errorf("process %d did not answer %s", p.pid, command)

@@ -52,6 +52,8 @@ go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
 go ./internal/daemon TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession
 go ./internal/daemon TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart
+go ./internal/daemon TestAFailureInsideAPeerAwaitEndsTheTestAtOnceWithItsScreensAndDaemonLog
+go ./internal/stepclock TestAnAdvanceItsCallerGaveUpOnNeitherStallsItsProcessNorAnswersTheNextAdvance
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

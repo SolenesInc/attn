@@ -408,10 +408,7 @@ func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
-		p.mu.Lock()
-		done, err := check()
-		grew, closeErr, described := p.grew, p.closeErr, awaiting()
-		p.mu.Unlock()
+		done, grew, closeErr, described, err := p.observe(awaiting, check)
 		switch {
 		case err != nil:
 			p.T.Fatalf("while awaiting %s: %v", described, err)
@@ -429,6 +426,13 @@ func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 			p.T.Fatalf("still awaiting %s after fakeagent.HangGuard=%s", described, fakeagent.HangGuard)
 		}
 	}
+}
+
+func (p *Peer) observe(awaiting func() string, check func() (bool, error)) (done bool, grew chan struct{}, closeErr error, described string, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	done, err = check()
+	return done, p.grew, p.closeErr, awaiting(), err
 }
 
 func Await[T any](p *Peer, event string, match func(T) bool) T {
