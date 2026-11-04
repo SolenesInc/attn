@@ -57,6 +57,10 @@ type Priming struct {
 	Plots      []PlotReady
 }
 
+func CharterWritten(charter string) bool {
+	return strings.TrimSpace(charter) != ""
+}
+
 func SortHandoffNames(names []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(names)))
 }
@@ -70,7 +74,7 @@ func (p Priming) Block() string {
 		"crew_v2_enabled":  fmt.Sprint(p.V2Enabled),
 		"display_name":     p.Name,
 		"home_dir":         p.HomeDir,
-		"has_charter":      fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
+		"has_charter":      fmt.Sprint(CharterWritten(p.Charter)),
 		"charter_file":     CharterFileName,
 		"charter_path":     filepath.Join(p.HomeDir, CharterFileName),
 		"cwd":              strings.TrimSpace(p.CWD),

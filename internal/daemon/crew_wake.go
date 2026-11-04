@@ -123,11 +123,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		priming.Onboarding, _ = member.PendingOnboarding()
 	}
 	d.primeCrewGarden(&priming, member)
-	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
-		priming.Charter = string(charter)
-	} else if !os.IsNotExist(err) {
-		d.logf("crew: reading %s's charter at %s: %v", member.Name, member.CharterPath(d.dataRoot), err)
-	}
+	priming.Charter = d.crewCharterText(member)
 
 	handoffsDir, err := d.validateCrewHandoffsDir(member)
 	if err != nil {
@@ -359,13 +355,20 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	return result, nil
 }
 
+func (d *Daemon) crewCharterText(member crew.Member) string {
+	charter, err := os.ReadFile(member.CharterPath(d.dataRoot))
+	if err != nil && !os.IsNotExist(err) {
+		d.logf("crew: reading %s's charter at %s: %v", member.Name, member.CharterPath(d.dataRoot), err)
+	}
+	return string(charter)
+}
+
 func (d *Daemon) crewWakePrompt(member crew.Member, cause string) string {
 	_, onboarding := member.PendingOnboarding()
-	_, charterErr := os.Stat(member.CharterPath(d.dataRoot))
 	return prompts.RenderText("crew", "wake", prompts.Values{
 		"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled()),
 		"wake_cause":      cause,
-		"charter_decides": fmt.Sprint(charterErr == nil && !onboarding && !member.Chief),
+		"charter_decides": fmt.Sprint(crew.CharterWritten(d.crewCharterText(member)) && !onboarding && !member.Chief),
 	})
 }
 

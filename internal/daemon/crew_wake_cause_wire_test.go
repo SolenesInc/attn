@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -137,4 +138,113 @@ func TestAWakeForTheUsersQuickCaptureKeepsTheGreeting(t *testing.T) {
 			t.Errorf("a wake for the user's capture opened with %q, want today's greeting", prompt)
 		}
 	})
+}
+
+func TestAPeerMessageWakeFollowsTheMembersCharterOnlyWhenItHasWrittenOne(t *testing.T) {
+	const charterDirected = "Greet the user only if your charter says to."
+	modes := []struct {
+		name, v2, greeting string
+	}{
+		{"crew v1", "false", crewWakeGreeting},
+		{"crew v2", "true", crewV2WakeGreeting},
+	}
+	charters := []struct {
+		name    string
+		content *string
+		written bool
+	}{
+		{"new member", nil, false},
+		{"whitespace charter", protocol.Ptr(" \n\t\n"), false},
+		{"written charter", protocol.Ptr("# Keel\nI keep the build green.\n"), true},
+	}
+	for _, mode := range modes {
+		for _, charter := range charters {
+			t.Run(mode.name+"/"+charter.name, func(t *testing.T) {
+				inBubbleWithAgents(t, func(t *testing.T, w *world) {
+					cli := w.Client()
+					setSetting(t, w.App(), "crew_v2_enabled", mode.v2)
+					keel := createCrew(t, cli, "Keel")
+					if charter.content != nil {
+						if err := os.WriteFile(keel.CharterPath, []byte(*charter.content), 0o644); err != nil {
+							t.Fatal(err)
+						}
+					}
+					registerSessions(t, w, cli, "sender")
+					sendAgentMessage(t, cli, "sender", "keel", "please look")
+					w.advance(0)
+					day := crewRosterMember(t, cli, "keel").BindingSession
+					if day == nil {
+						t.Fatal("the message did not wake keel")
+					}
+
+					prompt := wakePrompt(t, w, string(*day))
+					for _, want := range []string{updateWakeLead, "A message from sender.", "attn agent inbox"} {
+						if !strings.Contains(prompt, want) {
+							t.Errorf("the first prompt lacks %q:\n%s", want, prompt)
+						}
+					}
+					if got := strings.Contains(prompt, charterDirected); got != charter.written {
+						t.Errorf("the first prompt defers to the charter = %v, want %v:\n%s", got, charter.written, prompt)
+					}
+					if got := strings.Contains(prompt, mode.greeting); got == charter.written {
+						t.Errorf("the first prompt carries the greeting = %v, want %v:\n%s", got, !charter.written, prompt)
+					}
+
+					primed, err := cli.CrewPrime(*day)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if got := strings.Contains(protocol.Deref(primed.Guidance), "There is no charter"); got == charter.written {
+						t.Errorf("priming calls this the first day = %v, want %v:\n%s", got, !charter.written, protocol.Deref(primed.Guidance))
+					}
+				})
+			})
+		}
+	}
+}
+
+func TestAUserWakeOfAMemberWithoutACharterKeepsTheGreeting(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		createCrew(t, cli, "Keel")
+		woken := wakeCrew(t, cli, "keel", "")
+		if prompt := wakePrompt(t, w, string(woken.SessionID)); prompt != crewWakeGreeting {
+			t.Errorf("the user's wake opened with %q, want today's greeting", prompt)
+		}
+	})
+}
+
+func TestAPeerMessageWakeOfTheChiefKeepsTheGreetingDespiteAWrittenCharter(t *testing.T) {
+	for _, onboarding := range []bool{true, false} {
+		name := "onboarded"
+		if onboarding {
+			name = "onboarding"
+		}
+		t.Run(name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				cli := w.Client()
+				chief := turnOnCrewV2(t, w)
+				setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+				if !onboarding {
+					onboardingPending(t, cli, protocol.OnboardingActionDone, "")
+				}
+				if err := os.WriteFile(chief.CharterPath, []byte("# Chief\nI run the day.\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				registerSessions(t, w, cli, "sender")
+				sendAgentMessage(t, cli, "sender", "chief", "please look")
+				w.advance(0)
+				day := chiefOfRoster(t, crewRoster(t, cli)).BindingSession
+				if day == nil {
+					t.Fatal("the message did not wake the Chief")
+				}
+				prompt := wakePrompt(t, w, string(*day))
+				for _, want := range []string{updateWakeLead, "A message from sender.", crewV2WakeGreeting} {
+					if !strings.Contains(prompt, want) {
+						t.Errorf("the Chief's first prompt lacks %q:\n%s", want, prompt)
+					}
+				}
+			})
+		})
+	}
 }
