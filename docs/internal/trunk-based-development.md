@@ -50,6 +50,12 @@ landing changes, and pushes:
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
 
+The Go checks and the landing tests run side by side. `land.sh` first compiles
+the changed packages and the packages of the matching groups' Go tests in one
+process, while it chooses the landing tests. Both then read that one build. It
+waits for both and prints both outcomes, and a failure in either stops the
+push. The other checks run before them, because some rewrite tracked files.
+
 One land runs at a time per clone. `land.sh` takes the clone's land queue, a
 lock that every worktree of the clone shares, before its first fetch, and holds
 it until it exits. A land that finds the queue taken prints the holder's PID,

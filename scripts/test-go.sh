@@ -107,6 +107,7 @@ provide_e2e_binary() {
     fi
   done
   source_e2e_bin="${ATTN_E2E_BIN:-}"
+  case "$source_e2e_bin" in "$e2e_store"/*) return 0 ;; esac
   if [ -z "$source_e2e_bin" ]; then
     source_e2e_bin="$test_root/attn"
     "$go_bin" -C "$root" build -buildvcs=false -o "$source_e2e_bin" ./cmd/attn &
@@ -135,6 +136,15 @@ provide_e2e_binary() {
   fi
   export ATTN_E2E_BIN="$e2e_cache_dir/attn"
 }
+
+if [ "${1:-}" = "--provide-e2e-binary" ]; then
+  e2e_binary_out="$2"
+  shift 2
+  unset GOMAXPROCS
+  provide_e2e_binary "$@" --
+  printf '%s\n' "$ATTN_E2E_BIN" >"$e2e_binary_out"
+  exit 0
+fi
 
 if [ "${1:-}" = "--packages" ]; then
   shift

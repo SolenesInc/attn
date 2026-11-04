@@ -216,7 +216,10 @@ lint: lint-go lint-frontend
 
 GO_PACKAGES ?= ./...
 
-.PHONY: check-go check-frontend check-browser-runtime check-mobile
+.PHONY: compile-go check-go check-frontend check-browser-runtime check-mobile
+compile-go: $(NATIVE_VT_DEP)
+	go list -test -deps -export $(GO_PACKAGES) >/dev/null
+
 check-go: lint-go
 	go vet ./...
 

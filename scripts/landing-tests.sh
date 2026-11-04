@@ -67,18 +67,29 @@ go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes"
 
+# ./cmd/attn's stack tests wait on real processes, one after another in one test
+# binary: 20s of a go test step that used 19 CPU-s (2026-11-04). Each shard links
+# its own binary, under 1.9 CPU-s. Five keep today's two slowest tests apart.
+stack_test_package=./cmd/attn
+stack_test_shards=5
+
 run_go_units() {
   local name="$1" go_entries="$2" status=0 package unit
   shift 2
-  local packages=() units=() unit_options=() run_regex
+  local packages=() unit_options=() run_regex
   while IFS= read -r package; do packages+=("$package"); done < <(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
-  while IFS= read -r unit; do units+=("$unit"); done <<<"$go_entries"
-  for unit in "${units[@]}"; do unit_options+=(--unit "$unit"); done
+  while IFS= read -r unit; do unit_options+=(--unit "$unit"); done <<<"$go_entries"
   run_regex="^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$"
   echo "landing tests: go test${*:+ $*} -run '$run_regex' ${packages[*]}"
   ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/$name.json" \
-    "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
-  if ! summarize "$work/$name.json" "$status" "${units[@]}"; then
+    -vet=off "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
+  echo "$status" >"$work/$name.status"
+}
+
+settle_go_units() {
+  local name="$1" go_entries="$2" unit units=()
+  while IFS= read -r unit; do units+=("$unit"); done <<<"$go_entries"
+  if ! summarize "$work/$name.json" "$(cat "$work/$name.status")" "${units[@]}"; then
     cat "$work/$name.log" >&2
     failed=1
     awk '$1 != "PASS" && $1 != "SKIP" { print "rerun: ./scripts/test-go.sh --packages -count=1 -run '\''^" $4 "$'\'' " $3 }' "$work/lines" >>"$work/reruns"
@@ -88,11 +99,40 @@ run_go_units() {
 go_entries="$(awk '$1 == "go"' <<<"$entries")"
 cached_go_entries="$(grep -vxF -- "$uncached_go_units" <<<"$go_entries" || true)"
 uncached_go_entries="$(grep -xF -- "$uncached_go_units" <<<"$go_entries" || true)"
-if [ -n "$cached_go_entries" ]; then run_go_units go "$cached_go_entries"; fi
-if [ -n "$uncached_go_entries" ]; then run_go_units go-uncached "$uncached_go_entries" -count=1; fi
+go_run_names=()
+add_go_run() {
+  if [ -n "$2" ]; then
+    go_run_names+=("$1")
+    printf '%s\n' "$2" >"$work/$1.units"
+  fi
+}
+add_go_run go "$(awk '$2 != "'"$stack_test_package"'"' <<<"$cached_go_entries")"
+for ((shard = 0; shard < stack_test_shards; shard++)); do
+  add_go_run "go-stack-$shard" "$(awk -v shards="$stack_test_shards" -v shard="$shard" '$2 == "'"$stack_test_package"'" && ++seen % shards == shard' <<<"$cached_go_entries")"
+done
+run_all_go_units() {
+  local name
+  for name in ${go_run_names[@]+"${go_run_names[@]}"}; do run_go_units "$name" "$(cat "$work/$name.units")" & done
+  wait
+  if [ -n "$uncached_go_entries" ]; then run_go_units go-uncached "$uncached_go_entries" -count=1; fi
+}
+settle_all_go_units() {
+  local name
+  for name in ${go_run_names[@]+"${go_run_names[@]}"}; do settle_go_units "$name" "$(cat "$work/$name.units")"; done
+  if [ -n "$uncached_go_entries" ]; then settle_go_units go-uncached "$uncached_go_entries"; fi
+}
+
+if [ -n "$go_entries" ]; then
+  ./scripts/test-go.sh --provide-e2e-binary "$work/e2e-binary" $(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
+  ATTN_E2E_BIN="$(cat "$work/e2e-binary")"
+  export ATTN_E2E_BIN
+fi
 
 app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"
-if [ -n "$app_entries" ]; then
+if [ -z "$app_entries" ]; then
+  run_all_go_units
+  settle_all_go_units
+else
   make -s app/node_modules/.attn-installed
   mkdir -p "$work/data"
   read -r daemon_port vite_port < <(node -e '
@@ -118,11 +158,15 @@ if [ -n "$app_entries" ]; then
     done <"$work/app-units"
   }
   awk '{ print NR, $1, $2 }' <<<"$app_entries" >"$work/app-units"
+  run_all_go_units &
+  go_job=$!
   run_app_units vitest >"$work/vitest.log" 2>&1 &
   vitest_job=$!
   run_app_units playwright
   wait "$vitest_job"
+  wait "$go_job"
   cat "$work/vitest.log"
+  settle_all_go_units
   while read -r run runner file; do
     status="$(cat "$work/app-$run.status")"
     if ! summarize "$work/app-$run.json" "$status" "$runner $file"; then

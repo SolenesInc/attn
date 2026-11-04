@@ -163,7 +163,7 @@ script_tests_for() {
 }
 
 run_checks() {
-  local changed file dir packages group pattern script_tests targets=() landing_groups=()
+  local changed file dir group pattern script_tests packages="" targets=() go_checks=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
   if touches '\.go$|^go\.(mod|sum)$'; then
@@ -181,7 +181,7 @@ run_checks() {
       done <<<"$changed" | sort -u | paste -sd ' ' -)"
       packages="${packages:-./...}"
     fi
-    targets+=(check-go "GO_PACKAGES=$packages")
+    go_checks=(check-go "GO_PACKAGES=$packages")
   fi
   touches '^internal/protocol/schema/' && targets+=(check-types)
   touches '^internal/protocol/(schema/gateway\.tsp|gateway/)' && targets+=(check-gateway-compat)
@@ -200,26 +200,68 @@ run_checks() {
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"
   fi
+  run_go_checks_beside_landing_tests
+}
+
+run_go_checks_beside_landing_tests() {
+  local go_checks_log go_checks_job choosing_job status=0 units_file
+  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
   if [ "${#landing_groups[@]}" -gt 0 ]; then
-    run_landing_tests "${landing_groups[@]}"
+    choose_landing_tests "$units_file" &
+    choosing_job=$!
   fi
+  if [ "${#go_checks[@]}" -gt 0 ]; then
+    make -s compile-go "GO_PACKAGES=$packages $(landing_test_packages)" || status=$?
+    if [ "$status" -ne 0 ]; then
+      wait
+      rm -f "$units_file"
+      return "$status"
+    fi
+    go_checks_log="$(mktemp "${TMPDIR:-/tmp}/attn-land-go-checks.XXXXXX")"
+    make "${go_checks[@]}" >"$go_checks_log" 2>&1 &
+    go_checks_job=$!
+  fi
+  if [ "${#landing_groups[@]}" -gt 0 ]; then
+    wait "$choosing_job"
+    run_landing_tests "$units_file" "${landing_groups[@]}" || status=$?
+  fi
+  rm -f "$units_file"
+  if [ "${#go_checks[@]}" -gt 0 ]; then
+    wait "$go_checks_job" || status=$?
+    cat "$go_checks_log"
+    rm -f "$go_checks_log"
+  fi
+  return "$status"
+}
+
+landing_test_packages() {
+  local package
+  awk -v wanted=" ${landing_groups[*]-} " '
+    $1 == "group" { selected = index(wanted, " " $2 " ") > 0; next }
+    selected && $1 == "go" && !seen[$2]++ { print $2 }
+  ' scripts/landing-tests | while IFS= read -r package; do
+    if [ -d "$package" ]; then printf '%s ' "$package"; fi
+  done
+}
+
+choose_landing_tests() {
+  local group group_options=()
+  [ "$landing_tests" = selected ] || return 0
+  for group in "${landing_groups[@]}"; do group_options+=(--group "$group"); done
+  go tool test-history land --units-out "$1" "${group_options[@]}" || : >"$1"
 }
 
 run_landing_tests() {
-  local units_file unit group units=() group_options=()
+  local units_file="$1" unit units=()
+  shift
   if [ "$landing_tests" = baseline ]; then
     echo "land: running the baseline landing tests (--baseline)"
     scripts/landing-tests.sh "$@"
     return
   fi
-  for group in "$@"; do group_options+=(--group "$group"); done
-  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
-  if go tool test-history land --units-out "$units_file" "${group_options[@]}"; then
-    while IFS= read -r unit || [ -n "$unit" ]; do
-      if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
-    done <"$units_file"
-  fi
-  rm -f "$units_file"
+  while IFS= read -r unit || [ -n "$unit" ]; do
+    if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
+  done <"$units_file"
   if [ "${#units[@]}" -eq 0 ]; then
     echo "land: choosing landing tests failed; running the baseline groups $*" >&2
     scripts/landing-tests.sh "$@"
@@ -270,5 +312,8 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
+# GOGC=400 cut staticcheck on internal/daemon from 19.4 to 15.3 CPU-s and added
+# about 1 GiB to its peak of 1.2 GiB (2026-11-04).
+export GOGC="${GOGC:-400}"
 take_land_queue
 land 9>&-

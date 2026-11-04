@@ -15,7 +15,9 @@ mkdir -p "$work/bin" "$work/repo"
 cat >"$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[ "${2:-}" != compile-go ] || exit 0
 printf '%s\n' "$@" >>"$LAND_CHECK_LOG"
+echo "make ran: $*"
 if [ -e "$LAND_MOVE_MAIN" ]; then
   rm "$LAND_MOVE_MAIN"
   git -C "$LAND_OTHER" pull -q origin main
@@ -93,9 +95,13 @@ expect_output() {
   grep -qF -- "$1" "$work/output" || { echo "missing from the landing output: $1" >&2; cat "$work/output" >&2; exit 1; }
 }
 
+go_checks_last() {
+  awk '$0 == "check-go" { getline packages; last = last $0 "\n" packages "\n"; next } { print } END { printf "%s", last }' "$1"
+}
+
 expect_checks() {
   printf '%s\n' "$@" >"$work/expected"
-  diff -u "$work/expected" "$LAND_CHECK_LOG"
+  diff -u <(go_checks_last "$work/expected") <(go_checks_last "$LAND_CHECK_LOG")
 }
 
 printf '\n' >>internal/example/example.go
@@ -218,8 +224,8 @@ expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group 
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
-  local before
-  printf '\n' >>app/src/example.ts
+  local before changing="${3:-app/src/example.ts}"
+  printf '\n' >>"$changing"
   git add -A
   git commit -qm "$1"
   before="$(git --git-dir="$work/remote" rev-parse main)"
@@ -233,6 +239,10 @@ refuses() {
 
 refuses 'a failed app check' LAND_CHECK_EXIT=1
 refuses 'a failed landing test' LAND_TESTS_EXIT=1
+refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go
+grep -qF 'make ran: check-go' "$work/failure" || { echo 'the failed Go check left no output' >&2; cat "$work/failure" >&2; exit 1; }
+refuses 'a failed landing test beside passing Go checks' LAND_TESTS_EXIT=1 internal/example/example.go
+grep -qF 'make ran: check-go' "$work/failure" || { echo 'the Go checks left no output' >&2; cat "$work/failure" >&2; exit 1; }
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"
