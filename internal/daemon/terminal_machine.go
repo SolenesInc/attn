@@ -71,11 +71,11 @@ func (d *Daemon) decodeLaunch(launch string) (ptybackend.SpawnOptions, error) {
 	if err := json.Unmarshal([]byte(launch), &opts); err != nil {
 		return opts, fmt.Errorf("decode terminal launch: %w", err)
 	}
-	opts.Theme, opts.LoginShellEnv = d.currentTerminalTheme(), d.cachedLoginShellEnv()
+	opts.Theme = d.currentTerminalTheme()
 	return opts, nil
 }
 
-func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (_ struct{}, launchErr error) {
+func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMessage) (_ struct{}, launchErr error) {
 	pausepoint.At(pausepoint.TerminalStarting)
 	opts, err := d.decodeLaunch(msg.Launch)
 	if err != nil {
@@ -85,6 +85,7 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 	if err != nil {
 		return struct{}{}, err
 	}
+	opts.LoginShellEnv = d.launchEnv(ctx)
 	startedAt := time.Now()
 	session := msg.Session
 	if len(msg.Copy) > 0 {
@@ -182,6 +183,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 		defer plugin.abort()
 	}
 	d.monitors().registry.DropPendingConversations(msg.TerminalID)
+	opts.LoginShellEnv = d.launchEnv(ctx)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.syncMonitorConversation(sessionID)
@@ -355,9 +357,9 @@ func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeM
 	return struct{}{}, nil
 }
 
-func (d *Daemon) loginShell(_ context.Context, _ protocol.TerminalShellMessage) (protocol.TerminalShellResult, error) {
+func (d *Daemon) loginShell(ctx context.Context, _ protocol.TerminalShellMessage) (protocol.TerminalShellResult, error) {
 	shell := pty.GetUserLoginShell()
-	env := pty.MergeEnvironment(os.Environ(), d.cachedLoginShellEnv())
+	env := pty.MergeEnvironment(os.Environ(), d.launchEnv(ctx))
 	home, _ := os.UserHomeDir()
 	return protocol.TerminalShellResult{Shell: shell, IntegrationExpected: pty.ShellIntegrationExpected(shell, env), Home: home}, nil
 }

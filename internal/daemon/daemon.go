@@ -253,9 +253,7 @@ type Daemon struct {
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
 
-	loginShellEnvMu   sync.RWMutex
-	loginShellEnv     []string
-	loginShellEnvOnce sync.Once
+	loginEnv *loginEnv
 
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
@@ -420,34 +418,6 @@ func (d *Daemon) dropPendingInitialState(client *wsClient) {
 	delete(d.pendingInitialWS, client)
 }
 
-func (d *Daemon) warmLoginShellEnvCache() {
-	shell := pty.GetUserLoginShell()
-	if shell == "" {
-		return
-	}
-	env, err := pty.ReadLoginShellEnv(shell)
-	if err != nil {
-		d.logf("login shell env pre-warm failed for %s: %v", shell, err)
-		return
-	}
-	d.loginShellEnvMu.Lock()
-	d.loginShellEnv = env
-	d.loginShellEnvMu.Unlock()
-	d.logf("login shell env pre-warmed: shell=%s vars=%d", shell, len(env))
-}
-
-func (d *Daemon) loginShellEnvironment() []string {
-	d.loginShellEnvOnce.Do(d.warmLoginShellEnvCache)
-	return d.cachedLoginShellEnv()
-}
-
-func (d *Daemon) cachedLoginShellEnv() []string {
-	d.loginShellEnvMu.RLock()
-	env := d.loginShellEnv
-	d.loginShellEnvMu.RUnlock()
-	return env
-}
-
 func (d *Daemon) currentTerminalTheme() pty.TerminalTheme {
 	d.terminalThemeMu.Lock()
 	theme := d.terminalTheme
@@ -537,6 +507,7 @@ func New(socketPath string) *Daemon {
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
 	d.sessionTitleExec = d.execSessionTitle
+	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	return d
 }
 
@@ -573,6 +544,7 @@ func NewForTesting(socketPath string) *Daemon {
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
+	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	return d
 }
 
@@ -612,6 +584,7 @@ func (d *Daemon) Start() error {
 		}
 		d.Stop()
 	}()
+	d.loginEnv.Begin()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -642,6 +615,7 @@ func (d *Daemon) Start() error {
 	}
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
+	_, _ = d.loginEnv.Wait(d.life.Context())
 	d.ensureAvailableAgentSkills()
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	d.copyImagesOfAsksOpenedBeforeImagesTravelled()
@@ -767,8 +741,6 @@ func (d *Daemon) Start() error {
 			fmt.Sprintf("PTY backend %q is not available in this build. Falling back to embedded.", selectedBackend),
 		)
 	}
-
-	d.life.Go("warmLoginShellEnvCache", func() { d.loginShellEnvironment() })
 
 	d.setRecovering(true)
 	defer func() {

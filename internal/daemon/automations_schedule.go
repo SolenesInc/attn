@@ -84,7 +84,7 @@ func (d *Daemon) observeDueSchedules(ctx context.Context, now time.Time) {
 			continue
 		}
 		if env == nil {
-			env = d.loginShellEnvironment()
+			env = d.launchEnv(ctx)
 		}
 		checks.Add(1)
 		if !d.life.Go("automationGuard", func() {

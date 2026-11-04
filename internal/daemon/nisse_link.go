@@ -85,7 +85,7 @@ func (d *Daemon) agentOffered(agent string) bool {
 }
 
 func (l *nisseLink) home() string {
-	env := pty.MergeEnvironment(os.Environ(), l.d.loginShellEnvironment())
+	env := pty.MergeEnvironment(os.Environ(), l.d.launchEnv(l.d.life.Context()))
 	lookup := func(key string) string {
 		for i := len(env) - 1; i >= 0; i-- {
 			if name, value, ok := strings.Cut(env[i], "="); ok && name == key {
@@ -297,7 +297,7 @@ func (l *nisseLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptio
 		Executable:    resolvedBinary(executable),
 		AgentArgv:     []string{executable, "serve"},
 		AgentEnv:      append(append([]string(nil), nisseServerEnv...), "NISSE_HOME="+home),
-		LoginShellEnv: l.d.loginShellEnvironment(),
+		LoginShellEnv: l.d.launchEnv(ctx),
 		DaemonEnv:     l.d.spawnRoutingEnv(),
 	}
 	if err := l.d.ptyBackend.Spawn(ctx, withLifecycleID(spawn)); err != nil {

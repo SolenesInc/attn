@@ -638,7 +638,7 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	if len(shellEnv) > 0 {
 		env = MergeEnvironment(env, shellEnv)
 	} else if loginShell != "" {
-		if captured, err := ReadLoginShellEnv(loginShell); err == nil {
+		if captured, err := ReadLoginShellEnv(context.Background(), loginShell); err == nil {
 			env = MergeEnvironment(env, captured)
 		} else if logf != nil {
 			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
@@ -678,8 +678,8 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	return env
 }
 
-func ReadLoginShellEnv(shellPath string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), shellEnvTimeout)
+func ReadLoginShellEnv(parent context.Context, shellPath string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(parent, shellEnvTimeout)
 	defer cancel()
 
 	args := []string{"-l", "-c", "env -0"}

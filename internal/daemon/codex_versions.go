@@ -35,7 +35,7 @@ func (r *codexShared) binary(configured string) (string, error) {
 
 func (r *codexShared) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, binary, args...)
-	cmd.Env = pty.MergeEnvironment(os.Environ(), r.d.loginShellEnvironment())
+	cmd.Env = pty.MergeEnvironment(os.Environ(), r.d.launchEnv(ctx))
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

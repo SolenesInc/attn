@@ -503,7 +503,7 @@ func (r *codexShared) preflight(s *codexServer, binary string) (string, error) {
 	defer os.Remove(socket)
 	cmd := exec.Command(binary, r.serverArgs(s.profile, socket)...)
 	cmd.Dir = r.dir()
-	cmd.Env = pty.MergeEnvironment(pty.MergeEnvironment(pty.MergeEnvironment(os.Environ(), r.d.loginShellEnvironment()), codexServerAgentEnv), r.d.spawnRoutingEnv())
+	cmd.Env = pty.MergeEnvironment(pty.MergeEnvironment(pty.MergeEnvironment(os.Environ(), r.d.launchEnv(r.d.life.Context())), codexServerAgentEnv), r.d.spawnRoutingEnv())
 	refusal := &tailBuffer{limit: codexRefusalLimit}
 	cmd.Stdout, cmd.Stderr = nil, refusal
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

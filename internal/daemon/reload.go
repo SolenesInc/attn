@@ -489,7 +489,6 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		CodexExecutable:  params.CodexExecutable,
 		Model:            params.Model,
 		Effort:           params.Effort,
-		LoginShellEnv:    d.cachedLoginShellEnv(),
 		AutoApprove:      false,
 		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isLegacyChiefSession(sessionID)),
 	}

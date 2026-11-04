@@ -233,7 +233,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		if driver == nil || !d.agentOffered(name) {
 			continue
 		}
-		available := d.isAgentExecutableAvailable(driver, "")
+		available := d.harnessAvailability(driver)
 		settings[availabilitySettingKey(name)] = strconv.FormatBool(available)
 
 		caps := agentdriver.EffectiveCapabilities(driver)
@@ -342,8 +342,8 @@ func (d *Daemon) ptyBackendMode() string {
 	}
 }
 
-func (d *Daemon) isAgentExecutableAvailable(driver agentdriver.Driver, configured string) bool {
-	_, err := d.machineAgentExecutable(driver, configured)
+func (d *Daemon) harnessAvailability(driver agentdriver.Driver) bool {
+	_, err := d.machineAgentExecutable(driver, "")
 	return err == nil
 }
 

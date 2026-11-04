@@ -278,7 +278,7 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 		Executable:    resolvedBinary(binary),
 		AgentArgv:     command,
 		AgentEnv:      codexServerAgentEnv,
-		LoginShellEnv: r.d.loginShellEnvironment(),
+		LoginShellEnv: r.d.launchEnv(ctx),
 		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
