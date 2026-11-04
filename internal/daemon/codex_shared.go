@@ -1024,10 +1024,6 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 			r.serverGone(profile.ID)
 			continue
 		}
-		if s := r.server(profile.ID); r.serverRunning(ctx, s.terminal) && !r.listening(s) {
-			r.stopUnreachable(s)
-			continue
-		}
 		connectCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
 		if _, err := r.ensureServer(connectCtx, profile.ID, ""); err != nil {
 			r.d.logf("shared Codex: reconnect to the app-server of profile %s: %v", profile.ID, err)
@@ -1041,18 +1037,6 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 			}
 		}
 	}
-}
-
-func (r *codexShared) listening(s *codexServer) bool {
-	_, err := os.Stat(s.socket)
-	return !errors.Is(err, os.ErrNotExist)
-}
-
-func (r *codexShared) stopUnreachable(s *codexServer) {
-	s.ensureMu.Lock()
-	defer s.ensureMu.Unlock()
-	r.stop(s, codexServerReleaseGrace)
-	r.d.logf("shared Codex: stopped the app-server of profile %s, which does not listen at %s; the next connection starts it again", s.profile, s.socket)
 }
 
 func (r *codexShared) recoverViews(ctx context.Context) {
