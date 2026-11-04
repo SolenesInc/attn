@@ -463,6 +463,32 @@ func (s *Store) RepoIntegrationBranch(mainRepo string) *RepoIntegrationBranch {
 	return &record
 }
 
+func (s *Store) RememberGitHubHost(host string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	s.execLog(`INSERT OR IGNORE INTO github_hosts (host) VALUES (?)`, host)
+}
+
+func (s *Store) IsGitHubHost(host string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return false
+	}
+
+	var known bool
+	if err := s.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM github_hosts WHERE host = ?)`, host).Scan(&known); err != nil {
+		return false
+	}
+	return known
+}
+
 type MergedBranch struct {
 	Branch   string `json:"branch"`
 	MergedAt string `json:"merged_at,omitempty"`

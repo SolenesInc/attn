@@ -2525,7 +2525,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 			d.logf("GitHub client create failed for %s: %v", hostInfo.Host, err)
 			continue
 		}
-		d.ghRegistry.Register(hostInfo.Host, client)
+		d.registerGitHubClient(hostInfo.Host, client)
 		discovered[hostInfo.Host] = true
 	}
 	// Stop cancels the token fetches; hosts it cut short are not gone.
@@ -2545,6 +2545,11 @@ func (d *Daemon) refreshGitHubHosts() error {
 
 	d.broadcastGitHubHosts(hostsBefore)
 	return nil
+}
+
+func (d *Daemon) registerGitHubClient(host string, client *github.Client) {
+	d.store.RememberGitHubHost(host)
+	d.ghRegistry.Register(host, client)
 }
 
 func (d *Daemon) gitHubHosts() []string {
@@ -2615,7 +2620,7 @@ func (d *Daemon) registerMockClient(mockURL string) error {
 	for _, existing := range d.ghRegistry.Hosts() {
 		d.ghRegistry.Remove(existing)
 	}
-	d.ghRegistry.Register(host, client)
+	d.registerGitHubClient(host, client)
 	d.logf("Mock GitHub client registered for %s (%s)", host, mockURL)
 	return nil
 }

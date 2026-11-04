@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -180,12 +181,16 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 	if host == "" || ownerRepo == "" {
 		return nil
 	}
-	if d.ghRegistry == nil {
-		return nil
-	}
-	client, ok := d.ghRegistry.Get(host)
+	client, ok := d.gitHubClient(host)
 	if !ok {
-		return nil
+		if !d.store.IsGitHubHost(host) {
+			return nil
+		}
+		remedy := gitHubPollingOffReason()
+		if remedy == "" {
+			remedy = "sign in with gh auth login --hostname " + host
+		}
+		return fmt.Errorf("%w: attn has no GitHub client for %s (%s)", errMergedPullRequestsUnavailable, host, remedy)
 	}
 	if limited, resetAt := client.IsRateLimited("core"); limited {
 		return fmt.Errorf("%w: %s rate limited until %s", errMergedPullRequestsUnavailable, host, resetAt.Format(time.RFC3339))
@@ -219,6 +224,13 @@ func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo stri
 		d.store.SetRepoIntegrationBranch(repo, base, "pull_requests", now)
 	}
 	return nil
+}
+
+func (d *Daemon) gitHubClient(host string) (*github.Client, bool) {
+	if d.ghRegistry == nil {
+		return nil, false
+	}
+	return d.ghRegistry.Get(host)
 }
 
 func (d *Daemon) integrationBranchLearnedFromPullRequests(repo string) bool {

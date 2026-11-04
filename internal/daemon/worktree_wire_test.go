@@ -158,6 +158,109 @@ func TestAWorktreeOnlyOriginHEADHoldsWaitsForGitHubToLearnTheIntegrationBranch(t
 	}
 }
 
+func TestAGitHubWorktreeWaitsForASignedInClientToLearnWhereItsPullRequestsMerge(t *testing.T) {
+	signOutOfGitHub(t)
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	shop := newRepo(t, "shop")
+	runGit(t, shop, "remote", "add", "origin", "https://github.com/acme/shop.git")
+	path := createWorktree(t, app, shop, "feat-login")
+	head := commitFile(t, path, "login.go", "package login\n")
+	develop := commitFile(t, shop, "develop.go", "package develop\n")
+	runGit(t, shop, "update-ref", "refs/remotes/origin/main", head)
+	runGit(t, shop, "update-ref", "refs/remotes/origin/develop", develop)
+	runGit(t, shop, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+
+	setSetting(t, app, "worktree_sweep_enabled", "false")
+	refreshWorktrees(t, cli)
+	signedOut := sweepAwaitState(app, path, func(wt protocol.Worktree) bool {
+		return protocol.Deref(wt.HeadSHA) == head && protocol.Deref(wt.SweepReason) != ""
+	})
+	if reason := protocol.Deref(signedOut.SweepReason); !strings.Contains(reason, "no GitHub client for github.com") {
+		t.Fatalf("signed out of GitHub, the sweep decided %q, want feat-login undecided until GitHub says where pull requests merge", reason)
+	}
+
+	pulls := newMergedPullRequests(t)
+	pulls.answerEveryAsk(t)
+	t.Setenv("ATTN_MOCK_GH_HOST", "github.com")
+	pulls.list(mergedPullRequest{Number: 3, MergedAt: "2026-08-06T10:00:00Z", Head: ref{Ref: "feat-billing", SHA: develop}, Base: ref{Ref: "develop"}})
+	w.restart()
+	app, cli = w.App(), w.Client()
+	setSetting(t, app, "worktree_sweep_enabled", "true")
+	refreshWorktrees(t, cli)
+	signedIn := sweepAwaitState(app, path, func(wt protocol.Worktree) bool {
+		return protocol.Deref(wt.SweepStatus) == "kept_unmerged"
+	})
+	if reason := protocol.Deref(signedIn.SweepReason); !strings.Contains(reason, "develop") {
+		t.Fatalf("signed in, the sweep kept feat-login because %q, want it judged against develop, where pull requests merge", reason)
+	}
+
+	signOutOfGitHub(t)
+	w.restart()
+	app, cli = w.App(), w.Client()
+	base := strings.TrimSpace(runGit(t, shop, "rev-parse", "main"))
+	merge := strings.TrimSpace(runGit(t, shop, "commit-tree", head+"^{tree}", "-p", develop, "-p", head, "-m", "Merge feat-login into develop"))
+	runGit(t, shop, "update-ref", "refs/remotes/origin/develop", merge)
+	runGit(t, shop, "update-ref", "refs/remotes/origin/main", base)
+	refreshWorktrees(t, cli)
+	if swept := sweepAwaitSwept(app, path); swept.Action != "removed" {
+		t.Errorf("signed out after feat-login merged into develop, the sweep recorded %s (%s), want it removed against develop, the branch GitHub named", swept.Action, protocol.Deref(swept.Reason))
+	}
+}
+
+func TestAGitHubEnterpriseHostStaysGitHubAfterSigningOutWhileOtherHostsKeepOriginHEAD(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	pulls := newMergedPullRequests(t)
+	pulls.answerEveryAsk(t)
+	t.Setenv("ATTN_MOCK_GH_HOST", "ghe.test")
+	w := newWorld(t)
+	app := w.App()
+	if !slices.Contains(app.Initial.GithubHosts, "ghe.test") {
+		testworld.Await(app, protocol.EventGitHubHostsUpdated, func(e protocol.GitHubHostsUpdatedMessage) bool {
+			return slices.Contains(e.GithubHosts, "ghe.test")
+		})
+	}
+
+	signOutOfGitHub(t)
+	w.restart()
+	app, cli := w.App(), w.Client()
+	enterprise := newRepo(t, "enterprise")
+	runGit(t, enterprise, "remote", "add", "origin", "https://ghe.test/acme/enterprise.git")
+	forge := newRepo(t, "forge")
+	runGit(t, forge, "remote", "add", "origin", "git@forge.test:acme/forge.git")
+	merged := make(map[string]string)
+	for _, repo := range []string{enterprise, forge} {
+		path := createWorktree(t, app, repo, "feat-login")
+		head := commitFile(t, path, "login.go", "package login\n")
+		runGit(t, repo, "update-ref", "refs/remotes/origin/main", head)
+		runGit(t, repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+		merged[repo] = path
+	}
+
+	refreshWorktrees(t, cli)
+	if swept := sweepAwaitSwept(app, merged[forge]); swept.Action != "removed" {
+		t.Errorf("the sweep recorded %s (%s) on a host attn never had a GitHub client for, want feat-login removed against origin/HEAD", swept.Action, protocol.Deref(swept.Reason))
+	}
+	undecided := sweepAwaitState(app, merged[enterprise], func(wt protocol.Worktree) bool {
+		return protocol.Deref(wt.SweepReason) != ""
+	})
+	if reason := protocol.Deref(undecided.SweepReason); !strings.Contains(reason, "no GitHub client for ghe.test") || !strings.Contains(reason, "--hostname ghe.test") {
+		t.Errorf("signed out of ghe.test, the sweep decided %q, want feat-login undecided with the sign-in that fixes it", reason)
+	}
+	if !worktreeDeleteBranchExists(enterprise, "feat-login") {
+		t.Error("the sweep deleted feat-login on a GitHub host while signed out of it")
+	}
+}
+
+func signOutOfGitHub(t *testing.T) {
+	t.Helper()
+	t.Setenv("GH_CONFIG_DIR", t.TempDir())
+	for _, key := range []string{"ATTN_MOCK_GH_URL", "ATTN_MOCK_GH_TOKEN", "ATTN_MOCK_GH_HOST", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_HOST"} {
+		t.Setenv(key, "")
+	}
+}
+
 type ref struct {
 	Ref string `json:"ref"`
 	SHA string `json:"sha,omitempty"`
