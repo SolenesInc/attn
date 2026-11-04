@@ -49,6 +49,7 @@ go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding
 go ./internal/daemon TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate
 go ./internal/store TestUpgradeKeepsEveryProfileOnTheNotebookFolderItUsed
 go ./internal/daemon TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession
+go ./internal/daemon TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

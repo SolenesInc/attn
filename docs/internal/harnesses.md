@@ -129,6 +129,11 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   provider probe, the fifth member request closed the session while the file
   retained only the four work requests. Persisted closure records therefore
   do not guarantee a complete trace of that final call.
+- Enter depends on the byte and on when it arrives. After boot, CR alone
+  submits and LF alone inserts a newline. attn does not change the terminal's
+  modes, so the PTY translates CR to LF until Claude switches it to raw: a line
+  typed during boot lands in the composer and is not submitted. Probed on
+  2.1.318 through a PTY, with the turn read from the transcript.
 - An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
   the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
   hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved

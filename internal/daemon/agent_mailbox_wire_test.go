@@ -111,12 +111,9 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 
 	w.restart()
 	app = w.App()
-	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.ID = protocol.SessionID(recipient)
-		m.ResumeSessionID = protocol.Ptr(recipient)
-	})
+	resumed := revive(w, app, fakeagent.Claude, recipient, w.Path("shop"))
 	app.TypeLine(recipient, "what changed?")
-	if got := w.Launched(recipient).Prompted(); got != "what changed?" {
+	if got := resumed.Prompted(); got != "what changed?" {
 		t.Fatalf("restart renewed an outstanding ring: %q", got)
 	}
 

@@ -37,7 +37,9 @@ The one way to reach inside is a pause point, below.
 - Name the agents the test spawns, as in `newWorld(t, fakeagent.Claude, ...)`.
   The test then plays the model behind each one.
 - `w.Spawn` starts a session. `w.Launched` returns the `fakeagent.Run` for its
-  agent.
+  agent, once the agent's terminal is raw and reads input. Call it before typing
+  at a new agent: a line typed earlier does not submit to Claude, as
+  `docs/internal/harnesses.md` says.
 - `w.RequestSpawn` sends the same requests and returns the spawn result with
   the desktop and tile it added, so the test can close a refused spawn's
   tile the way the app does.
