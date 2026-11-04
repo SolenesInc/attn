@@ -473,6 +473,11 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 - `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a
   socket. `PATH` is a symlink to that socket, under `/tmp/codex-daemon-<uid>/`.
   When `PATH` is long, a client must resolve the symlink before connecting.
+- From 0.158.0 through at least 0.167.0-alpha.4, the socket's name is the
+  SHA-256 of `PATH` with its parent folder canonicalized. On Linux,
+  `systemd-tmpfiles` removes an aged symlink but keeps a listening socket, so
+  the server stays reachable at that name after `PATH` is gone. Probed with the
+  link and its folder removed on 0.164.0 (Linux) and 0.166.0 (macOS).
 - Hooks given to the server with `-c` are session-flag hooks. A
   `hooks.state."/<session-flags>/config.toml:<event>:0:0".trusted_hash` given
   the same way trusts them. They run in the server's environment, with the

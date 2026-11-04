@@ -34,6 +34,8 @@ func (e *RPCError) Error() string { return fmt.Sprintf("codex %s: %s", e.Method,
 func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		path = resolved
+	} else if socket, found := socketBehindRemovedLink(path); found {
+		path = socket
 	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", path)

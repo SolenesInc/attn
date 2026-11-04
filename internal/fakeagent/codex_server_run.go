@@ -2,6 +2,11 @@ package fakeagent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -18,6 +23,36 @@ func (s *CodexServer) AwaitStopped() {
 	case <-s.fake.peer.done:
 	case <-time.After(HangGuard):
 		s.t.Fatalf("Codex app-server (pid %d) still runs %s after nothing needs it", s.fake.Pid, HangGuard)
+	}
+}
+
+func (s *CodexServer) LoseSocketLink() {
+	s.t.Helper()
+	path := codexListenPath(s.fake.Argv)
+	folder, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		s.t.Fatalf("resolve the socket folder of Codex app-server (pid %d): %v", s.fake.Pid, err)
+	}
+	temporaryRoot, err := filepath.EvalSymlinks("/tmp")
+	if err != nil {
+		s.t.Fatalf("resolve /tmp: %v", err)
+	}
+	daemonDir := filepath.Join(temporaryRoot, fmt.Sprintf("codex-daemon-%d", os.Geteuid()))
+	if err := os.MkdirAll(daemonDir, 0o700); err != nil {
+		s.t.Fatalf("create Codex's socket directory: %v", err)
+	}
+	sum := sha256.Sum256([]byte(filepath.Join(folder, filepath.Base(path))))
+	socket := filepath.Join(daemonDir, hex.EncodeToString(sum[:]))
+	s.t.Cleanup(func() { _ = os.Remove(socket) })
+	if err := os.Rename(path, socket); err != nil {
+		s.t.Fatalf("move the socket of Codex app-server (pid %d): %v", s.fake.Pid, err)
+	}
+}
+
+func (s *CodexServer) LoseSocketFolder() {
+	s.t.Helper()
+	if err := os.RemoveAll(filepath.Dir(codexListenPath(s.fake.Argv))); err != nil {
+		s.t.Fatalf("remove the socket folder of Codex app-server (pid %d): %v", s.fake.Pid, err)
 	}
 }
 

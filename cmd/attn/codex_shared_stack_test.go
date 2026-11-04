@@ -70,6 +70,42 @@ func TestASharedCodexKeepsItsAppServerTerminalAndConversationAcrossADaemonRestar
 	}
 }
 
+func TestASharedCodexKeepsServingWhenLinuxCleansItsSocketLink(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	first := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	firstCodex := s.Launched(first)
+	servers := s.CodexServers()
+	server := s.CodexServer()
+
+	server.LoseSocketLink()
+	second := s.Spawn(app, fakeagent.Codex, s.Path("till"))
+	app.TypeLine(second, "count the drawer")
+	if got := s.Launched(second).Prompted(); got != "count the drawer" {
+		t.Fatalf("a launch after the link went away received %q", got)
+	}
+
+	s.Stop()
+	server.LoseSocketFolder()
+	s.Start()
+	app = s.App()
+	app.TypeLine(first, "add a discount field")
+	if got := firstCodex.Prompted(); got != "add a discount field" {
+		t.Fatalf("after the restart the running session received %q", got)
+	}
+	third := s.Spawn(app, fakeagent.Codex, s.Path("stock"))
+	app.TypeLine(third, "recount the shelves")
+	if got := s.Launched(third).Prompted(); got != "recount the shelves" {
+		t.Fatalf("a launch after the restart received %q", got)
+	}
+	if got := s.CodexServers(); !slices.Equal(got, servers) {
+		t.Errorf("app-servers launched = %v, want the first one, %v, still serving", got, servers)
+	}
+}
+
 func TestASharedCodexSubagentCanReadAndWriteSeedsBeforeAndAfterADaemonRestart(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))

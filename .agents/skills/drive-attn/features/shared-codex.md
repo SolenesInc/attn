@@ -97,7 +97,7 @@ bridge --launch --wait-ready ping
 
 ## Contexts
 
-- **Durability across restarts**: the app-server runs as a terminal of its own, so it keeps running through app and daemon restarts, and the terminals reconnect and resume the conversations they show. If the app-server crashes, its running turns stop. attn starts the app-server again on the next connection, and hidden sessions whose turns stopped go idle.
+- **Durability across restarts**: the app-server runs as a terminal of its own, so it keeps running through app and daemon restarts, and the terminals reconnect and resume the conversations they show. When Linux's `/tmp` cleanup removes the app-server's socket link, attn keeps reaching the same app-server. If the app-server crashes, its running turns stop. attn starts the app-server again on the next connection, and hidden sessions whose turns stopped go idle.
 - **Profiles**: one app-server per profile. Inside a session, `attn codex` acts on the session's profile. Elsewhere, `attn codex` needs `--profile` when there is more than one profile.
 - **Performance and idle cost**: one app-server per profile replaces a Codex process per terminal and uses less memory. With no open shared session and no shared terminal left, the app-server stops.
 - **Harnesses**: Codex only. Claude Code has no link, so a second tile on one of its conversations is a second session ([harnesses.md](harnesses.md)).
