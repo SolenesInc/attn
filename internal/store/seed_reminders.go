@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 )
@@ -75,6 +76,22 @@ func (s *Store) DisarmSeedReminder(seedID string) error {
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`DELETE FROM seed_reminders WHERE seed_id = ?`, seedID)
 	return err
+}
+
+func (s *Store) DisarmSeedReminderAtRev(schema docstore.CollectionSchema, seedID string, rev int64) (bool, error) {
+	table, err := s.documentTable(schema)
+	if err != nil {
+		return false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result, err := s.db.Exec(`DELETE FROM seed_reminders WHERE seed_id = ?
+		AND EXISTS (SELECT 1 FROM `+table+` WHERE id = ? AND rev = ?)`, seedID, seedID, rev)
+	if err != nil {
+		return false, err
+	}
+	removed, err := result.RowsAffected()
+	return removed > 0, err
 }
 
 func armSeedReminder(tx *sql.Tx, seedID string, reminder garden.Reminder) error {

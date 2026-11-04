@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -163,6 +164,7 @@ func (d *Daemon) fireDueSeedReminders(now time.Time) {
 		return
 	}
 	for _, seedID := range due {
+		pausepoint.At(pausepoint.SeedReminderDue)
 		fired, err := d.fireSeedReminder(seedID, now)
 		if err != nil {
 			d.logf("seed reminders: %s: %v", seedID, err)
@@ -188,15 +190,20 @@ func (d *Daemon) fireSeedReminder(seedID string, now time.Time) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		if garden.Closed(seed.Status) {
-			return false, d.store.DisarmSeedReminder(seedID)
-		}
 		reminder, err := d.store.SeedReminder(seedID)
 		if err != nil {
 			return false, err
 		}
+		pausepoint.At(pausepoint.SeedReminderRead)
 		if reminder == nil || reminder.At.After(now) {
 			return false, nil
+		}
+		if garden.Closed(seed.Status) {
+			disarmed, err := d.store.DisarmSeedReminderAtRev(*schema, seedID, doc.Rev)
+			if err != nil || disarmed {
+				return false, err
+			}
+			continue
 		}
 		item := seedReminderItem(seed, *reminder, d.actorView(reminder.SetBy).Name)
 		d.lockGardenRoles()
