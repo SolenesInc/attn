@@ -10,6 +10,8 @@ func feedbackEvents() []Event {
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),
 		On("inbox-quiet", "cli_output", "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.", Use("session.inbox-quiet", "content/session/inbox-quiet.md")),
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
+		On("wake-cause-message", "message_fragment", "inboxWakeCause: an unread peer message that woke the recipient. Names the sender, never the body.", template("session.wake-cause-message", "content/session/wake-cause-message.md", TextField("sender", "Sender name."))),
+		On("wake-cause-more", "message_fragment", "inboxWakeCause: the unread items past the listing's tripwire.", template("session.wake-cause-more", "content/session/wake-cause-more.md", TextField("count", "Items not listed."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
 			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target."))),
 	}

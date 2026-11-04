@@ -69,6 +69,13 @@ func crewRecipient() Recipient {
 	plots := template("crew.garden-plots", "content/crew/garden-plots.md", plotReady)
 	noHoldings := Use("crew.garden-empty", "content/crew/garden-empty.md")
 
+	greeting := Choose(Enabled(v2), Use("crew.v2.wake", "content/crew/v2/wake.md"), Use("crew.wake", "content/crew/wake.md"))
+	wakeCause := TextField("wake_cause", "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it.")
+	charterDecides := FlagField("charter_decides", "The member has a charter and is not the Chief or onboarding, so its charter decides what an update wake does.")
+	wokenByCharter := Choose(Enabled(v2),
+		Use("crew.v2.woken-by-charter", "content/crew/v2/woken-by-charter.md"),
+		Use("crew.woken-by-charter", "content/crew/woken-by-charter.md"))
+
 	return Recipient{ID: "crew", Description: "Permanent crew member: launch identity and lifecycle messages.", Events: []Event{
 		On("truncated-handoff", "message_fragment", "The adapter cuts the letter at a UTF-8 boundary; the catalog adds its full-file location.", template("crew.truncated-handoff", "content/crew/truncated-handoff.md", TextField("text", "Bounded letter."), TextField("limit", "Filing limit in bytes."), TextField("total", "Original bytes."), TextField("path", "Full letter path."))),
 		On("trimmed-note", "message_fragment", "The adapter cuts a seed's handoff note at a UTF-8 boundary; the catalog adds the command for the whole note.", template("crew.trimmed-note", "content/crew/trimmed-note.md", TextField("text", "Bounded note."), TextField("limit", "Priming budget in bytes."), TextField("total", "Original bytes."), TextField("seed", "Seed the note belongs to."))),
@@ -87,7 +94,9 @@ func crewRecipient() Recipient {
 					noLetter),
 				When(Present(holdings), Input(holdings)),
 				closure)),
-		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Enabled(v2), Use("crew.v2.wake", "content/crew/v2/wake.md"), Use("crew.wake", "content/crew/wake.md"))),
+		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Present(wakeCause),
+			Compose(template("crew.woken-by", "content/crew/woken-by.md", wakeCause), Choose(Enabled(charterDecides), wokenByCharter, greeting)),
+			greeting)),
 		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Choose(Enabled(v2), Use("crew.v2.successor", "content/crew/v2/successor.md"), Use("crew.successor", "content/crew/successor.md"))),
 		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
 		On("settings-applied", "user_message", "crew_apply.go: the member's session reloaded in place with its saved settings.", Use("crew.settings-applied", "content/crew/settings-applied.md", Bind("charter_path", Input(TextField("charter_path", "Charter path."))))),

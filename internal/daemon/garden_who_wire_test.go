@@ -210,7 +210,9 @@ func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
 	if !resumed.Success || resumed.SessionID == nil || *resumed.SessionID == first || protocol.Deref(resumed.AlreadyRunning) {
 		t.Fatalf("resuming an asleep member's seed = %+v, want a new session for the member", resumed)
 	}
-	w.Launched(string(*resumed.SessionID))
+	if prompt := w.Launched(string(*resumed.SessionID)).Prompted(); prompt != crewWakeGreeting {
+		t.Errorf("a resumed member opened with %q, want today's greeting", prompt)
+	}
 	again := seedResumeRequest(app, seed)
 	if !again.Success || !protocol.Deref(again.AlreadyRunning) || protocol.Deref(again.SessionID) != *resumed.SessionID {
 		t.Fatalf("resuming an awake member's seed = %+v, want its session %s", again, *resumed.SessionID)

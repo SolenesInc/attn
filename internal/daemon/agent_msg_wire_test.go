@@ -254,8 +254,8 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 		t.Fatalf("a message while Trellis wakes = %+v, want it queued behind the same day", second)
 	}
 	wake := trellisDay.Prompted()
-	if strings.Contains(wake, "broken build") || strings.Contains(wake, "flaky test") || strings.Contains(wake, "attn agent inbox") {
-		t.Fatalf("the woken day was primed with %q, want the wake prompt without the mail", wake)
+	if strings.Contains(wake, "broken build") || strings.Contains(wake, "flaky test") || !strings.Contains(wake, "A message from sender.") {
+		t.Fatalf("the woken day was primed with %q, want the wake prompt to name the sender without the mail", wake)
 	}
 	trellisDay.Reply("Morning. <!-- attn:state=idle -->")
 	if got := trellisDay.Prompted(); !strings.Contains(got, inboxDoorbell) {

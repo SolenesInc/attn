@@ -115,11 +115,7 @@ func (d *Daemon) inboxWakeRequester(a who.Address) string {
 		return "a quick capture"
 	}
 	if peer := deliveries[0].Peer; peer != nil {
-		if key, member := peer.Sender.Member(); member {
-			return d.crewMemberName(key.String())
-		}
-		id, _ := peer.Sender.Session()
-		return d.launchRequester(id, "another agent")
+		return d.peerSenderName(peer.Sender)
 	}
 	return ""
 }
@@ -226,6 +222,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		if holder == nil {
 			if member := memberID; member != "" {
+				cause, err := d.inboxWakeCause(a)
+				if err != nil {
+					return receipt, err
+				}
 				d.crewWakeMu.Lock()
 				result, err := d.crewWakeDayWithChargeLocked(member, "", attempt.FromUser == 0, func() error {
 					started, err := d.store.StampInboxAttempt(a, now)
@@ -237,7 +237,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					}
 					d.logInboxExhaustion(a)
 					return nil
-				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a)})
+				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a), Cause: cause})
 				d.crewWakeMu.Unlock()
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil

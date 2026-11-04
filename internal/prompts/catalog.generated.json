@@ -826,6 +826,52 @@
           }
         },
         {
+          "id": "wake-cause-message",
+          "delivery": "message_fragment",
+          "description": "inboxWakeCause: an unread peer message that woke the recipient. Names the sender, never the body.",
+          "body": {
+            "kind": "text",
+            "id": "session.wake-cause-message",
+            "source": "content/session/wake-cause-message.md",
+            "bindings": [
+              {
+                "name": "sender",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "sender",
+                    "kind": "text",
+                    "description": "Sender name."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "wake-cause-more",
+          "delivery": "message_fragment",
+          "description": "inboxWakeCause: the unread items past the listing's tripwire.",
+          "body": {
+            "kind": "text",
+            "id": "session.wake-cause-more",
+            "source": "content/session/wake-cause-more.md",
+            "bindings": [
+              {
+                "name": "count",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "count",
+                    "kind": "text",
+                    "description": "Items not listed."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "peer-message",
           "delivery": "cli_output",
           "description": "Attributed peer message, including the trust boundary and reply command.",
@@ -2021,22 +2067,117 @@
             "kind": "choose",
             "condition": {
               "field": {
-                "name": "crew_v2_enabled",
-                "kind": "flag",
-                "description": "Use the crew v2 operating model."
+                "name": "wake_cause",
+                "kind": "text",
+                "description": "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it."
               },
-              "test": "enabled"
+              "test": "present"
             },
             "children": [
               {
-                "kind": "text",
-                "id": "crew.v2.wake",
-                "source": "content/crew/v2/wake.md"
+                "kind": "compose",
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "crew.woken-by",
+                    "source": "content/crew/woken-by.md",
+                    "bindings": [
+                      {
+                        "name": "wake_cause",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "wake_cause",
+                            "kind": "text",
+                            "description": "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it."
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "charter_decides",
+                        "kind": "flag",
+                        "description": "The member has a charter and is not the Chief or onboarding, so its charter decides what an update wake does."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "crew_v2_enabled",
+                            "kind": "flag",
+                            "description": "Use the crew v2 operating model."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.v2.woken-by-charter",
+                            "source": "content/crew/v2/woken-by-charter.md"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "crew.woken-by-charter",
+                            "source": "content/crew/woken-by-charter.md"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "crew_v2_enabled",
+                            "kind": "flag",
+                            "description": "Use the crew v2 operating model."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.v2.wake",
+                            "source": "content/crew/v2/wake.md"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "crew.wake",
+                            "source": "content/crew/wake.md"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
               },
               {
-                "kind": "text",
-                "id": "crew.wake",
-                "source": "content/crew/wake.md"
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "crew_v2_enabled",
+                    "kind": "flag",
+                    "description": "Use the crew v2 operating model."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "crew.v2.wake",
+                    "source": "content/crew/v2/wake.md"
+                  },
+                  {
+                    "kind": "text",
+                    "id": "crew.wake",
+                    "source": "content/crew/wake.md"
+                  }
+                ]
               }
             ]
           }
@@ -6001,5 +6142,5 @@
       ]
     }
   ],
-  "definitions_hash": "9db7f0a7d2845172e655442cc25ba514bc64473cf5074ad691aa869bd30a515c"
+  "definitions_hash": "0d8ddd579a6418fd91c9607b84c642d757f6a5b13f6091fdfae9f2b62c1bd1f4"
 }

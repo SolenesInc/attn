@@ -66,6 +66,7 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 type crewWakeRequest struct {
 	RequestedBy string
 	UserStarted bool
+	Cause       string
 }
 
 func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
@@ -326,7 +327,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 
-	initialPrompt := prompts.RenderText("crew", "wake", prompts.Values{"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled())})
+	initialPrompt := d.crewWakePrompt(member, request.Cause)
 	_, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
@@ -363,6 +364,16 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		result.ReleasedSessionID = protocol.Ptr(releasedSessionID)
 	}
 	return result, nil
+}
+
+func (d *Daemon) crewWakePrompt(member crew.Member, cause string) string {
+	_, onboarding := member.PendingOnboarding()
+	_, charterErr := os.Stat(member.CharterPath(d.dataRoot))
+	return prompts.RenderText("crew", "wake", prompts.Values{
+		"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled()),
+		"wake_cause":      cause,
+		"charter_decides": fmt.Sprint(charterErr == nil && !onboarding && !member.Chief),
+	})
 }
 
 func (d *Daemon) crewSessionActuallyLive(sessionID protocol.SessionID) (bool, error) {
