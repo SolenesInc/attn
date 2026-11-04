@@ -15,8 +15,6 @@ runs:
     - name: Install Linux desktop dependencies
       if: runner.os == 'Linux'
       uses: ./.github/actions/setup-linux-app-deps
-      with:
-        role: run
 
     - name: Install macOS shell dependencies
       if: runner.os == 'macOS'

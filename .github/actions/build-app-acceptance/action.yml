@@ -18,7 +18,7 @@ runs:
       if: runner.os == 'Linux'
       uses: ./.github/actions/setup-linux-app-deps
       with:
-        role: build
+        build-on-miss: 'true'
 
     - name: Set up macOS signing tools
       if: runner.os == 'macOS'

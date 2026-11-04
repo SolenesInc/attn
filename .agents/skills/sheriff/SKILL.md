@@ -59,6 +59,15 @@ says when it applies.
   ask with `attn ask` and keep working. Run `attn turn open` only for the
   escalations that [Choose the path](#choose-the-path) lists.
 
+## Corrected failure classes
+
+When a failure belongs to a class listed here, the fix did not hold. The
+Correction seed you plant moves the class to a stronger fix.
+
+| Class | Instance | What prevents it |
+|---|---|---|
+| A package host that a job is not testing turns App acceptance red | Run 41902160029, shard 2/10: `apt download exceeded 300s`, no test failed | `setup-linux-app-deps`: shards restore a frozen apt layer and install with every network source removed. Only the build job can reach the mirror, on a cache miss |
+
 ## Find the failure
 
 ```bash

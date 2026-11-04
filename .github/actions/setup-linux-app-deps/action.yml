@@ -1,81 +1,42 @@
 name: Set up Linux app dependencies
-description: Install the apt packages the packaged app is built with, or the ones a real-app scenario runs against.
+description: Install the packaged app's apt packages from a frozen layer in the GitHub cache. Only a job with build-on-miss may reach the Ubuntu mirror.
 inputs:
-  role:
-    description: '"build" for the Tauri build, "run" for a runner that launches the app and drives scenarios'
-    required: true
+  build-on-miss:
+    description: '"true" for the one job in a run that builds the layer on a cache miss. Every other job fails on a miss.'
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
-    - name: Resolve packages
-      id: resolve
+    - name: Resolve layer key
+      id: key
       shell: bash
       env:
-        ROLE: ${{ inputs.role }}
-        ARCHIVES: ${{ runner.temp }}/apt-archives
-      run: |
-        case "$ROLE" in
-          build)
-            packages="desktop-file-utils libayatana-appindicator3-dev librsvg2-dev libssl-dev
-              libwebkit2gtk-4.1-dev libxdo-dev"
-            ;;
-          run)
-            # Do not drop the PPA: terminal-block-copy and terminal-context-menu
-            # need fish >= 4 for its OSC 133 markers, and 24.04 ships 3.7.
-            ./scripts/ci-retry.sh -- sudo add-apt-repository -y ppa:fish-shell/release-4
-            packages="bash coreutils curl desktop-file-utils fish imagemagick
-              libayatana-appindicator3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev
-              libxdo-dev neovim sqlite3 xauth xclip xdg-utils xdotool xvfb zsh"
-            ;;
-          *)
-            echo "unknown role '$ROLE': expected build or run" >&2
-            exit 1
-            ;;
-        esac
-        ./scripts/ci-retry.sh -- sudo apt-get update
-        mkdir -p "$ARCHIVES/partial"
-        # shellcheck disable=SC2086 # the package list is a word list by construction
-        digest="$(apt-get install -y -qq --print-uris -o Dir::Cache::Archives="$ARCHIVES" $packages | sha256sum | cut -c1-16)"
-        echo "packages=$(tr -s '[:space:]' ' ' <<<"$packages")" >> "$GITHUB_OUTPUT"
-        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        LIST_HASH: ${{ hashFiles('.github/actions/setup-linux-app-deps/packages.txt', '.github/actions/setup-linux-app-deps/apt-layer.sh') }}
+      run: echo "key=apt-layer-$ImageOS-$RUNNER_ARCH-$LIST_HASH" >> "$GITHUB_OUTPUT"
 
-    - name: Restore downloaded packages
+    - name: Restore apt layer
       id: restore
       uses: actions/cache/restore@v4
       with:
-        path: ${{ runner.temp }}/apt-archives/*.deb
-        key: apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ inputs.role }}-${{ steps.resolve.outputs.digest }}
+        path: ${{ runner.temp }}/apt-layer
+        key: ${{ steps.key.outputs.key }}
+        fail-on-cache-miss: ${{ inputs.build-on-miss != 'true' }}
 
-    - name: Download packages
+    - name: Build apt layer from the Ubuntu mirror
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
-      env:
-        PACKAGES: ${{ steps.resolve.outputs.packages }}
-        ARCHIVES: ${{ runner.temp }}/apt-archives
-      run: |
-        # 11s for 107 MB on a healthy runner (run 40029078354, shard 4/4).
-        download_timeout=300
-        status=0
-        # shellcheck disable=SC2086 # the package list is a word list by construction
-        sudo timeout "$download_timeout" apt-get install -y --download-only -o Acquire::Retries=3 \
-          -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES || status=$?
-        if [ "$status" = 124 ]; then
-          printf '\n::error::apt download exceeded %ss (healthy: 11s for 107 MB); the Ubuntu mirror is slow from this runner: a network failure, not a commit\n' "$download_timeout"
-        fi
-        exit "$status"
+      run: ${{ github.action_path }}/apt-layer.sh build "$RUNNER_TEMP/apt-layer"
 
-    - name: Save downloaded packages
+    - name: Save apt layer
       if: steps.restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: ${{ runner.temp }}/apt-archives/*.deb
-        key: ${{ steps.restore.outputs.cache-primary-key }}
+        path: ${{ runner.temp }}/apt-layer
+        key: ${{ steps.key.outputs.key }}
 
-    - name: Install packages
+    - name: Install from apt layer
       shell: bash
       env:
-        PACKAGES: ${{ steps.resolve.outputs.packages }}
-        ARCHIVES: ${{ runner.temp }}/apt-archives
-      run: |
-        # shellcheck disable=SC2086 # the package list is a word list by construction
-        sudo apt-get install -y --no-download -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES
+        APT_LAYER_KEY: ${{ steps.key.outputs.key }}
+      run: ${{ github.action_path }}/apt-layer.sh install "$RUNNER_TEMP/apt-layer"
