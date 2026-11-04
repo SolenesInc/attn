@@ -231,8 +231,10 @@ that input. A ring lost to an open menu in the harness stays lost.
 ### With the Claude mod
 
 With the experimental `claude_mod_enabled` setting on, a Claude session's mod
-takes each ring instead of the terminal, except on an outpost, where the inbox
-lives on another daemon and attn types as usual:
+takes each ring instead of the terminal while the mod is connected. attn types as
+usual while the mod is not connected, such as while Claude starts or waits on its
+folder trust question, and on an outpost, where the inbox lives on another
+daemon. With the mod connected:
 
 - After the user stops the session with Esc, the mod refuses every ring. Its
   items stay unread, the refusal costs no attempt, and attn rings again at the

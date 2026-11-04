@@ -366,6 +366,10 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
   permission mode?". attn reports the session as needing approval until the user
   answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it
   with `permissions.defaultMode` set to `default`.
+- In a folder with no trust recorded, `claude` makes its first poll only after
+  the user answers the trust question: 0.3 to 1.4 s after the answer in 4 runs,
+  and never before it. In a trusted folder, launched by attn, the first poll
+  came 0.71 to 5.54 s after launch (12 launches, median 0.9 s).
 
 ## Codex
 

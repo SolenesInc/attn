@@ -21,20 +21,22 @@ import (
 )
 
 const (
-	ClaudeModPollHoldTimer    stepclock.Name = "claude-mod-poll-hold"
-	ClaudeModReachTimer       stepclock.Name = "claude-mod-reach"
-	ClaudeModAckTimer         stepclock.Name = "claude-mod-ack"
-	claudeModPollHold                        = 25 * time.Second
-	claudeModReachWindow                     = 5 * time.Second
-	claudeModAckWait                         = 10 * time.Second
-	claudeModPollPath                        = "/claude/next"
-	claudeModAckPath                         = "/claude/ack"
-	claudeModReturnPath                      = "/claude/return"
-	claudeModOutcomeHeld                     = "held"
-	claudeModOutcomeAppended                 = "appended"
-	claudeModOutcomeSubmitted                = "submitted"
-	claudeModOutcomeStopped                  = "stopped"
-	claudeModOutcomeRefused                  = "refused"
+	ClaudeModPollHoldTimer     stepclock.Name = "claude-mod-poll-hold"
+	ClaudeModReachTimer        stepclock.Name = "claude-mod-reach"
+	ClaudeModAckTimer          stepclock.Name = "claude-mod-ack"
+	ClaudeModFirstPollTimer    stepclock.Name = "claude-mod-first-poll"
+	claudeModPollHold                         = 25 * time.Second
+	claudeModFirstPollTripwire                = 30 * time.Second
+	claudeModReachWindow                      = 5 * time.Second
+	claudeModAckWait                          = 10 * time.Second
+	claudeModPollPath                         = "/claude/next"
+	claudeModAckPath                          = "/claude/ack"
+	claudeModReturnPath                       = "/claude/return"
+	claudeModOutcomeHeld                      = "held"
+	claudeModOutcomeAppended                  = "appended"
+	claudeModOutcomeSubmitted                 = "submitted"
+	claudeModOutcomeStopped                   = "stopped"
+	claudeModOutcomeRefused                   = "refused"
 )
 
 type claudeMod struct {
@@ -43,6 +45,7 @@ type claudeMod struct {
 	server               *http.Server
 	closed               bool
 	terminals            map[harness.TerminalID]*claudeModTerminal
+	firstPoll            map[harness.TerminalID]stepclock.Timer
 	ringsBackBeforeStamp map[string]bool
 	returned             map[protocol.SessionID][]sessionmonitor.Delivery
 }
@@ -82,6 +85,7 @@ func (d *Daemon) claudeMod() *claudeMod {
 		d.claudeModState = &claudeMod{
 			d:                    d,
 			terminals:            make(map[harness.TerminalID]*claudeModTerminal),
+			firstPoll:            make(map[harness.TerminalID]stepclock.Timer),
 			ringsBackBeforeStamp: make(map[string]bool),
 			returned:             make(map[protocol.SessionID][]sessionmonitor.Delivery),
 		}
@@ -93,7 +97,7 @@ func (d *Daemon) claudeModEnabled() bool {
 	return d.enrollmentStatus().IsHome() && parseBooleanSetting(d.homeSetting(SettingClaudeModEnabled))
 }
 
-func (d *Daemon) claudeModForLaunch(agent string) agentdriver.ClaudeMod {
+func (d *Daemon) claudeModForLaunch(terminal harness.TerminalID, agent string) agentdriver.ClaudeMod {
 	if agent != string(protocol.SessionAgentClaude) || !d.claudeModEnabled() {
 		return agentdriver.ClaudeMod{}
 	}
@@ -101,6 +105,7 @@ func (d *Daemon) claudeModForLaunch(agent string) agentdriver.ClaudeMod {
 		d.logf("claude mod: this session is typed into: %v", err)
 		return agentdriver.ClaudeMod{}
 	}
+	d.claudeMod().awaitFirstPoll(terminal)
 	return agentdriver.ClaudeMod{Dir: claudemod.Dir(d.dataRoot), Socket: claudemod.SocketPath(d.dataRoot)}
 }
 
@@ -113,6 +118,31 @@ func (m *claudeMod) serve() error {
 		return fmt.Errorf("install in %s: %w", dir, err)
 	}
 	return nil
+}
+
+func (m *claudeMod) awaitFirstPoll(terminal harness.TerminalID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if earlier := m.firstPoll[terminal]; earlier != nil {
+		earlier.Stop()
+	}
+	var timer stepclock.Timer
+	timer = m.d.clock.AfterFunc(ClaudeModFirstPollTimer, claudeModFirstPollTripwire, func() {
+		m.d.life.Do("claudeModFirstPollMissed", func() { m.firstPollMissed(terminal, &timer) })
+	})
+	m.firstPoll[terminal] = timer
+}
+
+func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepclock.Timer) {
+	m.mu.Lock()
+	missed := m.firstPoll[terminal] == *timer
+	if missed {
+		delete(m.firstPoll, terminal)
+	}
+	m.mu.Unlock()
+	if missed && m.d.terminalLive(terminal) {
+		m.d.logf("claude mod: first_poll_tripwire=%s; Claude in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, terminal)
+	}
 }
 
 func (m *claudeMod) listen() error {
@@ -200,6 +230,10 @@ func (m *claudeMod) servePoll(w http.ResponseWriter, r *http.Request) {
 func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll *claudeModPoll) *claudeModTerminal {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if timer := m.firstPoll[terminal]; timer != nil {
+		timer.Stop()
+		delete(m.firstPoll, terminal)
+	}
 	t := m.terminals[terminal]
 	if t == nil {
 		t = &claudeModTerminal{id: terminal, handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld)}

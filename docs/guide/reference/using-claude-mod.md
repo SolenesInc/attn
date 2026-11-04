@@ -42,8 +42,11 @@ listed in the band until your next prompt.
 ## When Attn still types
 
 Typing stays the fallback. Attn types into the terminal whenever the mod is not
-connected, for example while Claude is starting or if the mod failed to load.
-Sessions on an outpost are always typed.
+connected, for example while Claude is starting, while Claude waits for you to
+answer its trust question in a folder it has not trusted yet, or if the mod
+failed to load. A session whose mod has not connected 30 seconds after it
+launched gets a warning in the daemon log, including when you take longer than
+that to answer the trust question. Sessions on an outpost are always typed.
 
 ## Upgrades and restarts
 
