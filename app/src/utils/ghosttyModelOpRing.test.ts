@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createGhosttyModelOpRing,
-  decodeModelFaultCapture,
+  type EncodedModelOp,
   MODEL_FAULT_CAPTURE_MAX_BYTES,
   MODEL_OP_RING_MAX_BYTES,
   MODEL_OP_RING_MAX_OPS,
@@ -34,6 +34,14 @@ function fingerprint(bytes: Uint8Array): string {
 
 function summarize(op: Kept) {
   return op.kind === 'write' ? { kind: op.kind, bytes: fingerprint(op.bytes) } : op;
+}
+
+function bytesFromBase64(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
+}
+
+function summarizeEncoded({ t: _t, ...op }: EncodedModelOp) {
+  return op.kind === 'write' ? { kind: op.kind, bytes: fingerprint(bytesFromBase64(op.b64)) } : op;
 }
 
 function concat(chunks: Uint8Array[]): Uint8Array {
@@ -167,12 +175,11 @@ describe('the model fault-capture ring', () => {
       truncated: snapshot.received.length > kept,
     });
 
-    const decoded = decodeModelFaultCapture(capture);
-    expect(decoded.snapshot && fingerprint(decoded.snapshot)).toEqual(snapshot && fingerprint(snapshot.received.subarray(0, kept)));
+    expect(capture.snapshot && fingerprint(bytesFromBase64(capture.snapshot.b64))).toEqual(snapshot && fingerprint(snapshot.received.subarray(0, kept)));
     expect(capture.droppedForRecordBudget > 0).toBe(overRecordBudget);
     expect(capture.encodedBytesEstimate).toBeLessThanOrEqual(MODEL_FAULT_CAPTURE_MAX_BYTES);
     const recorded = retained.slice(capture.droppedForRecordBudget);
-    expect(decoded.ops.map(({ t: _t, ...op }) => summarize(op))).toEqual(recorded.map(summarize));
+    expect(capture.ops.map(summarizeEncoded)).toEqual(recorded.map(summarize));
     const start = lastResize(retained.slice(0, capture.droppedForRecordBudget)) ?? lastResize(dropped) ?? base;
     expect({ cols: capture.startCols, rows: capture.startRows }).toEqual({ cols: start.cols, rows: start.rows });
   });

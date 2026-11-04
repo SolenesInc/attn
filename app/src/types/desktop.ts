@@ -140,24 +140,17 @@ function withDimensions(bounds: PaneBounds): NormalizedPaneBounds {
   };
 }
 
-type LeafKind = 'pane' | 'tile';
-
-interface LeafBounds {
-  bounds: PaneBounds;
-  kind: LeafKind;
-}
-
 function collectLeafBounds(
   node: TerminalLayoutNode,
   bounds: PaneBounds,
-  result: Map<string, LeafBounds>
+  result: Map<string, PaneBounds>
 ): void {
   if (node.type === 'pane') {
-    result.set(node.paneId, { bounds, kind: 'pane' });
+    result.set(node.paneId, bounds);
     return;
   }
   if (node.type === 'tile') {
-    result.set(node.tileId, { bounds, kind: 'tile' });
+    result.set(node.tileId, bounds);
     return;
   }
 
@@ -175,10 +168,10 @@ function collectLeafBounds(
 }
 
 export function getNormalizedPaneBounds(node: TerminalLayoutNode): Map<string, NormalizedPaneBounds> {
-  const rects = new Map<string, LeafBounds>();
+  const rects = new Map<string, PaneBounds>();
   collectLeafBounds(node, paneBounds(0, 0, 1, 1), rects);
   return new Map(
-    Array.from(rects.entries()).map(([slotId, { bounds }]) => [slotId, withDimensions(bounds)]),
+    Array.from(rects.entries()).map(([slotId, bounds]) => [slotId, withDimensions(bounds)]),
   );
 }
 
@@ -247,71 +240,48 @@ export function findLeafInDirection(
   fromLeafId: string,
   direction: TerminalNavigationDirection
 ): string | null {
-  return findInDirection(node, fromLeafId, direction, null);
-}
-
-export function findPaneInDirection(
-  node: TerminalLayoutNode,
-  fromPaneId: string,
-  direction: TerminalNavigationDirection
-): string | null {
-  return findInDirection(node, fromPaneId, direction, 'pane');
-}
-
-function findInDirection(
-  node: TerminalLayoutNode,
-  fromPaneId: string,
-  direction: TerminalNavigationDirection,
-  onlyKind: LeafKind | null
-): string | null {
-  const leaves = new Map<string, LeafBounds>();
-  collectLeafBounds(node, paneBounds(0, 0, 1, 1), leaves);
   const rects = new Map<string, PaneBounds>();
-  for (const [slotId, { bounds, kind }] of leaves) {
-    if (!onlyKind || kind === onlyKind) {
-      rects.set(slotId, bounds);
-    }
-  }
-  const current = rects.get(fromPaneId);
+  collectLeafBounds(node, paneBounds(0, 0, 1, 1), rects);
+  const current = rects.get(fromLeafId);
   if (!current) {
     return null;
   }
 
   const candidates = Array.from(rects.entries())
-    .filter(([paneId]) => paneId !== fromPaneId)
-    .map(([paneId, candidate]) => {
+    .filter(([leafId]) => leafId !== fromLeafId)
+    .map(([leafId, candidate]) => {
       switch (direction) {
         case 'left': {
           const primary = current.left - candidate.right;
           if (primary < -1e-6) return null;
           const overlap = overlapSize(current.top, current.bottom, candidate.top, candidate.bottom);
           if (overlap <= 0) return null;
-          return { paneId, primary, secondary: Math.abs(current.centerY - candidate.centerY) };
+          return { leafId, primary, secondary: Math.abs(current.centerY - candidate.centerY) };
         }
         case 'right': {
           const primary = candidate.left - current.right;
           if (primary < -1e-6) return null;
           const overlap = overlapSize(current.top, current.bottom, candidate.top, candidate.bottom);
           if (overlap <= 0) return null;
-          return { paneId, primary, secondary: Math.abs(current.centerY - candidate.centerY) };
+          return { leafId, primary, secondary: Math.abs(current.centerY - candidate.centerY) };
         }
         case 'up': {
           const primary = current.top - candidate.bottom;
           if (primary < -1e-6) return null;
           const overlap = overlapSize(current.left, current.right, candidate.left, candidate.right);
           if (overlap <= 0) return null;
-          return { paneId, primary, secondary: Math.abs(current.centerX - candidate.centerX) };
+          return { leafId, primary, secondary: Math.abs(current.centerX - candidate.centerX) };
         }
         case 'down': {
           const primary = candidate.top - current.bottom;
           if (primary < -1e-6) return null;
           const overlap = overlapSize(current.left, current.right, candidate.left, candidate.right);
           if (overlap <= 0) return null;
-          return { paneId, primary, secondary: Math.abs(current.centerX - candidate.centerX) };
+          return { leafId, primary, secondary: Math.abs(current.centerX - candidate.centerX) };
         }
       }
     })
-    .filter((value): value is { paneId: string; primary: number; secondary: number } => Boolean(value))
+    .filter((value): value is { leafId: string; primary: number; secondary: number } => Boolean(value))
     .sort((a, b) => {
       if (a.primary !== b.primary) {
         return a.primary - b.primary;
@@ -319,10 +289,10 @@ function findInDirection(
       if (a.secondary !== b.secondary) {
         return a.secondary - b.secondary;
       }
-      return a.paneId.localeCompare(b.paneId);
+      return a.leafId.localeCompare(b.leafId);
     });
 
-  return candidates[0]?.paneId ?? null;
+  return candidates[0]?.leafId ?? null;
 }
 
 function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {

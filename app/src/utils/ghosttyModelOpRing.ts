@@ -99,15 +99,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 export function createGhosttyModelOpRing(options?: { now?: () => number }): GhosttyModelOpRing {
   const now = options?.now ?? (() => Date.now());
   const slots: Array<ModelOp | undefined> = Array.from({ length: MODEL_OP_RING_MAX_OPS }, () => undefined);
@@ -310,27 +301,4 @@ function concat(chunks: Uint8Array[], total: number): Uint8Array {
     offset += chunk.length;
   }
   return out;
-}
-
-export function decodeModelFaultCapture(capture: ModelFaultCapture): {
-  cols: number | null;
-  rows: number | null;
-  snapshot: Uint8Array | null;
-  ops: ModelOp[];
-} {
-  const ops: ModelOp[] = capture.ops.map((op) => {
-    if (op.kind === 'write') {
-      return { t: op.t, kind: 'write', bytes: base64ToBytes(op.b64) };
-    }
-    if (op.kind === 'resize') {
-      return { t: op.t, kind: 'resize', cols: op.cols, rows: op.rows, noReflow: op.noReflow };
-    }
-    return { t: op.t, kind: 'reset' };
-  });
-  return {
-    cols: capture.snapshot ? capture.snapshot.cols : capture.startCols,
-    rows: capture.snapshot ? capture.snapshot.rows : capture.startRows,
-    snapshot: capture.snapshot ? base64ToBytes(capture.snapshot.b64) : null,
-    ops,
-  };
 }

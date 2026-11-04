@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   findLeafInDirection,
-  findPaneInDirection,
   getNormalizedPaneBounds,
   parseNotebookTileParams,
   serializeNotebookTileParams,
@@ -82,22 +81,21 @@ const PANE_TILE_PANE: TerminalLayoutNode = {
 };
 
 describe('directional focus', () => {
-  it.each<[string, TerminalLayoutNode, string, Direction, string | null, string | null]>([
-    ['across siblings', SIDE_BY_SIDE, 'left', 'right', 'right', 'right'],
-    ['back across siblings', SIDE_BY_SIDE, 'right', 'left', 'left', 'left'],
-    ['past the left edge', SIDE_BY_SIDE, 'left', 'left', null, null],
-    ['past the right edge', SIDE_BY_SIDE, 'right', 'right', null, null],
-    ['from a leaf not in the layout', SIDE_BY_SIDE, 'missing', 'right', null, null],
-    ['down a nested split', RIGHT_COLUMN, 'top-right', 'down', 'bottom-right', 'bottom-right'],
-    ['up a nested split', RIGHT_COLUMN, 'bottom-right', 'up', 'top-right', 'top-right'],
-    ['to the nearest pane on the right', TOP_ROW, 'top-left', 'right', 'top-right', 'top-right'],
-    ['to the nearest pane below', TOP_ROW, 'top-right', 'down', 'bottom', 'bottom'],
-    ['over a tile to the next pane', PANE_TILE_PANE, 'a', 'right', 'b', 'md'],
-    ['back over a tile', PANE_TILE_PANE, 'b', 'left', 'a', 'md'],
-    ['out of a tile to the right', PANE_TILE_PANE, 'md', 'right', null, 'b'],
-    ['out of a tile to the left', PANE_TILE_PANE, 'md', 'left', null, 'a'],
-  ])('moves %s', (_, layout, from, direction, pane, leaf) => {
-    expect(findPaneInDirection(layout, from, direction)).toBe(pane);
+  it.each<[string, TerminalLayoutNode, string, Direction, string | null]>([
+    ['across siblings', SIDE_BY_SIDE, 'left', 'right', 'right'],
+    ['back across siblings', SIDE_BY_SIDE, 'right', 'left', 'left'],
+    ['past the left edge', SIDE_BY_SIDE, 'left', 'left', null],
+    ['past the right edge', SIDE_BY_SIDE, 'right', 'right', null],
+    ['from a leaf not in the layout', SIDE_BY_SIDE, 'missing', 'right', null],
+    ['down a nested split', RIGHT_COLUMN, 'top-right', 'down', 'bottom-right'],
+    ['up a nested split', RIGHT_COLUMN, 'bottom-right', 'up', 'top-right'],
+    ['to the nearest pane on the right', TOP_ROW, 'top-left', 'right', 'top-right'],
+    ['to the nearest pane below', TOP_ROW, 'top-right', 'down', 'bottom'],
+    ['into a tile from its left', PANE_TILE_PANE, 'a', 'right', 'md'],
+    ['into a tile from its right', PANE_TILE_PANE, 'b', 'left', 'md'],
+    ['out of a tile to the right', PANE_TILE_PANE, 'md', 'right', 'b'],
+    ['out of a tile to the left', PANE_TILE_PANE, 'md', 'left', 'a'],
+  ])('moves %s', (_, layout, from, direction, leaf) => {
     expect(findLeafInDirection(layout, from, direction)).toBe(leaf);
   });
 });
