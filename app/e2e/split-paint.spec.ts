@@ -15,9 +15,6 @@ interface RenderTraceEntry {
   offset: number;
   modelPrintable: number;
   quads: number | null;
-  cellsArrayLen?: number | null;
-  skipNull?: number | null;
-  skipZeroWidth?: number | null;
   cols: number;
   rows: number;
 }

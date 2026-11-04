@@ -136,11 +136,6 @@ export interface WebGlRenderSample {
   modelPrintable: number;
   quads: number;
   glyphUploads: number;
-  // TEMP (blank-on-split): diagnostics for drawn quads falling below the printable-
-  // cell count after a resize. Remove with the render-trace instrumentation.
-  cellsArrayLen: number;
-  printableSkippedNull: number;
-  printableSkippedZeroWidth: number;
 }
 
 function graphemeAtViewportCell(
@@ -537,9 +532,6 @@ export class WebGlTerminalRenderer {
         (spansByRow[row] ??= []).push({ startCol, endCol, rgb, alpha, kind: overlay.kind });
       }
     }
-    // TEMP (blank-on-split): distinguishes "cells array too short" from "width===0".
-    let printableSkippedNull = 0;
-    let printableSkippedZeroWidth = 0;
 
     gl.clearColor(defaultBg.r / 255, defaultBg.g / 255, defaultBg.b / 255, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -564,16 +556,7 @@ export class WebGlTerminalRenderer {
       for (let col = 0; col < terminal.cols; col += 1) {
         const cell = cells[row * terminal.cols + col];
         if (cell && cell.codepoint > 32) printableInRow += 1;
-        if (!cell || cell.width === 0) {
-          if (cell && cell.codepoint > 32) {
-            printableSkippedZeroWidth += 1;
-          } else if (!cell) {
-            if (row * terminal.cols + col < terminal.cols * terminal.rows) {
-              printableSkippedNull += 1;
-            }
-          }
-          continue;
-        }
+        if (!cell || cell.width === 0) continue;
         const width = Math.max(cell.width, 1) * this.cellWidth * scale;
         const x = col * this.cellWidth * scale;
         const y = row * this.cellHeight * scale;
@@ -715,9 +698,6 @@ export class WebGlTerminalRenderer {
       modelPrintable: sampleModelPrintable,
       quads: submittedQuads,
       glyphUploads: this.glyphs.size - glyphCountBefore,
-      cellsArrayLen: cells.length,
-      printableSkippedNull,
-      printableSkippedZeroWidth,
     };
   }
 

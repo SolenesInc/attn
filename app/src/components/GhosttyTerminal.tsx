@@ -956,9 +956,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         offset: viewportOffsetRef.current,
         modelPrintable: sample?.modelPrintable ?? lastModelPrintableRef.current,
         quads: sample ? sample.quads : null,
-        cellsArrayLen: sample ? sample.cellsArrayLen : null,
-        skipNull: sample ? sample.printableSkippedNull : null,
-        skipZeroWidth: sample ? sample.printableSkippedZeroWidth : null,
       });
       return true;
       } catch (reason) {

@@ -348,9 +348,6 @@ export interface PaintSample {
   offset: number;
   modelPrintable: number;
   quads: number | null;
-  cellsArrayLen: number | null;
-  skipNull: number | null;
-  skipZeroWidth: number | null;
 }
 
 export function recordPaint(sample: PaintSample): void {
@@ -390,15 +387,10 @@ export function recordPaint(sample: PaintSample): void {
   const quads = sample.quads;
   const underdrawn = sample.modelPrintable >= MIN_CONTENT_CELLS
     && quads < sample.modelPrintable * UNDERDRAW_RATIO;
-  const droppedCells = (sample.skipZeroWidth ?? 0) + (sample.skipNull ?? 0)
-    >= sample.modelPrintable * UNDERDRAW_RATIO && sample.modelPrintable >= MIN_CONTENT_CELLS;
-  if (underdrawn || droppedCells) {
-    maybeFlushIncident(sample.pane, underdrawn ? 'paint_underdraw' : 'paint_dropped_cells', {
+  if (underdrawn) {
+    maybeFlushIncident(sample.pane, 'paint_underdraw', {
       modelPrintable: sample.modelPrintable,
       quads,
-      skipNull: sample.skipNull,
-      skipZeroWidth: sample.skipZeroWidth,
-      cellsArrayLen: sample.cellsArrayLen,
       cols: sample.cols,
       rows: sample.rows,
       force: sample.force,

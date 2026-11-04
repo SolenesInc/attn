@@ -88,7 +88,7 @@ const RECORDS = {
     marker: '"reason":"paint_underdraw"',
     write: (diagnostics: Diagnostics) => diagnostics.recordPaint({
       pane: 'pane-incident', session: 's-1', cols: 80, rows: 24, force: false, offset: 0,
-      modelPrintable: 500, quads: 3, cellsArrayLen: null, skipNull: null, skipZeroWidth: null,
+      modelPrintable: 500, quads: 3,
     }),
   },
 };
