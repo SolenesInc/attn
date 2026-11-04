@@ -194,12 +194,13 @@ func (d *Daemon) readSeed(id string) (garden.Seed, docstore.Document, error) {
 }
 
 type gardenRead struct {
-	daemon  *Daemon
-	parties parties
-	seeds   []garden.Seed
-	docs    map[string]docstore.Document
-	ready   map[string]bool
-	plots   garden.PlotTree
+	daemon    *Daemon
+	parties   parties
+	seeds     []garden.Seed
+	docs      map[string]docstore.Document
+	ready     map[string]bool
+	plots     garden.PlotTree
+	reminders map[string]garden.Reminder
 }
 
 type gardenSeeds struct {
@@ -223,8 +224,12 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	if err != nil {
 		return gardenRead{}, err
 	}
+	reminders, err := d.store.SeedReminders()
+	if err != nil {
+		return gardenRead{}, err
+	}
 	seeds := all.inProfile(firstProfile(profileID))
-	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}}
+	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders}
 	for _, seed := range garden.Ready(out.seeds, parties.holds) {
 		out.ready[seed.ID] = true
 	}
@@ -354,7 +359,7 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 		PlotProgress: g.progress(seed.ID),
 		CheckTally:   checkTallyToProtocol(g.plots.EffectiveCheckTally(seed.ID)),
 		HarvestWhen:  harvestConditionView(g.parties, seed.HarvestWhen),
-		Reminder:     reminderView(g.parties, seed.Reminder),
+		Reminder:     g.reminderView(seed),
 		CreatedAt:    doc.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    doc.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -442,7 +447,7 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 		out.Reason = protocol.Ptr(seed.Reason)
 	}
 	out.HarvestWhen = harvestConditionView(g.parties, seed.HarvestWhen)
-	out.Reminder = reminderView(g.parties, seed.Reminder)
+	out.Reminder = g.reminderView(seed)
 	out.Authorization = g.daemon.seedAuthorizationView(g.parties, seed.Authorization)
 	for _, e := range seed.Edges {
 		out.Edges = append(out.Edges, protocol.SeedEdge{Kind: e.Kind, To: e.To})
@@ -482,15 +487,16 @@ func harvestConditionView(parties parties, condition *garden.HarvestCondition) *
 	}
 }
 
-func reminderView(parties parties, reminder *garden.Reminder) *protocol.SeedReminder {
-	if reminder == nil {
+func (g gardenRead) reminderView(seed garden.Seed) *protocol.SeedReminder {
+	reminder, armed := g.reminders[seed.ID]
+	if !armed || garden.Closed(seed.Status) {
 		return nil
 	}
 	return &protocol.SeedReminder{
 		At:      reminder.At.UTC().Format(time.RFC3339),
 		Message: reminder.Message,
 		SetAt:   formatGardenTime(reminder.SetAt),
-		SetBy:   parties.actor(reminder.SetBy),
+		SetBy:   g.parties.actor(reminder.SetBy),
 	}
 }
 

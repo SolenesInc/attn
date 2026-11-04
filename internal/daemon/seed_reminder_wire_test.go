@@ -1,13 +1,18 @@
 package daemon_test
 
 import (
+	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func TestASeedReminderPostsToTheSeedMailboxOnceAfterARestart(t *testing.T) {
@@ -72,6 +77,82 @@ func TestAHarvestedSeedsReminderNeverFires(t *testing.T) {
 		w.advance(0)
 		if items := seedMail(t, cli, "tender", seed); len(items) != 0 {
 			t.Fatalf("after the harvest, replanted and tended again, the seed mailbox holds %q; want nothing", inboxContents(items))
+		}
+	})
+}
+
+func TestAnOlderBuildRewritingSeedsLeavesTheirRemindersArmed(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		id := w.Spawn(app, fakeagent.Claude, w.Path("tender"))
+		tender := w.bootBubbleClaude(t, id)
+		tender.reply("Ready. <!-- attn:state=waiting_input -->")
+		arm := func(title string) string {
+			seed := plantSeedAs(t, cli, id, title)
+			lifeMove(t, cli, id, seed, "tend", "", "")
+			if _, err := cli.WithGardenProfile("", protocol.SessionID(id)).SeedReminder(seed, client.SeedReminderOptions{In: "20m", Message: title}); err != nil {
+				t.Fatal(err)
+			}
+			return seed
+		}
+		parked, untouched, harvested := arm("Parked by the older build"), arm("Untouched"), arm("Harvested by the older build")
+		w.advance(0)
+
+		w.stop()
+		older, err := store.NewWithDB(config.DBPath())
+		if err != nil {
+			t.Fatal(err)
+		}
+		schema, found, err := older.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+		if err != nil || !found {
+			t.Fatalf("the seeds collection = %v, %v", found, err)
+		}
+		for seed, status := range map[string]string{parked: "dormant", harvested: garden.StatusHarvested} {
+			doc, _, err := older.GetDocument(*schema, seed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(doc.Body, &body); err != nil {
+				t.Fatal(err)
+			}
+			delete(body, "reminder")
+			delete(body, "remind_at")
+			body["status"] = status
+			rewritten, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := older.PutDocument(*schema, seed, rewritten, time.Now(), &doc.Rev); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := older.Close(); err != nil {
+			t.Fatal(err)
+		}
+		w.start()
+		cli = w.Client()
+		tender.cli = cli
+
+		if r := lifeShow(t, cli, parked).Seed.Reminder; r == nil || r.Message != "Parked by the older build" {
+			t.Fatalf("the rewritten seed shows reminder %+v; want it still armed", r)
+		}
+		if r := lifeShow(t, cli, harvested).Seed.Reminder; r != nil {
+			t.Fatalf("the seed the older build harvested shows reminder %+v", r)
+		}
+		w.advance(time.Hour)
+		mailboxes := map[string]int{}
+		for _, item := range readInbox(t, cli, id, 0).Items {
+			mailboxes[item.Address]++
+		}
+		if want := map[string]int{"seed:" + parked: 1, "seed:" + untouched: 1}; !maps.Equal(mailboxes, want) {
+			t.Errorf("the tender's mailboxes hold %v; want %v", mailboxes, want)
+		}
+		lifeMove(t, cli, id, harvested, "replant", "", "")
+		lifeMove(t, cli, id, harvested, "tend", "", "")
+		w.advance(time.Hour)
+		if items := seedMail(t, cli, id, harvested); len(items) != 0 {
+			t.Errorf("after the tick and a replant, the mailbox of %s holds %q; want nothing", harvested, inboxContents(items))
 		}
 	})
 }

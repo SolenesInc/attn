@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 )
 
@@ -395,7 +397,7 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 	}
 }
 
-func TestABuildWithoutSeedRemindersRefusesADatabaseHoldingThem(t *testing.T) {
+func TestAnUpgradeMovesArmedRemindersOutOfSeedsAndBuildsWithTheGuardStillRefuse(t *testing.T) {
 	const newestMigrationOfABuildWithoutReminders = 1793722176352779
 	path := filepath.Join(t.TempDir(), "attn.db")
 	older, err := newStoreAtVersion(path, newestMigrationOfABuildWithoutReminders)
@@ -403,53 +405,68 @@ func TestABuildWithoutSeedRemindersRefusesADatabaseHoldingThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-	if _, err := older.DefineDocumentCollection(garden.SeedsSchema(), now); err != nil {
+	declared := garden.SeedsSchema()
+	declared.Fields = append(declared.Fields, docstore.FieldSpec{Name: "remind_at", Type: docstore.FieldNumber})
+	if _, err := older.DefineDocumentCollection(declared, now); err != nil {
 		t.Fatal(err)
 	}
-	declared, _, err := older.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	stored, _, err := older.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema := *declared
+	schema := *stored
 	profile, err := older.ProfileMigration()
 	if err != nil {
 		t.Fatal(err)
 	}
-	remembered := map[string]string{}
-	for _, id := range []string{"s-armed", "s-control"} {
-		body, err := garden.Seed{ID: id, ProfileID: profile.Manifest.ProfileID, Title: id, Status: garden.StatusPlanted, Reminder: &garden.Reminder{
-			At: now.Add(time.Hour), Message: "Check the rollout", SetAt: now,
-		}}.Encode()
+	at := now.Add(time.Hour)
+	withReminder := func(id, message string) []byte {
+		t.Helper()
+		plain, err := garden.Seed{ID: id, ProfileID: profile.Manifest.ProfileID, Title: id, Status: garden.StatusPlanted}.Encode()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := older.PutDocument(schema, id, body, now, nil); err != nil {
+		var body map[string]any
+		if err := json.Unmarshal(plain, &body); err != nil {
 			t.Fatal(err)
 		}
-		remembered[id] = string(body)
+		if message != "" {
+			body["reminder"] = garden.Reminder{At: at, Message: message, SetAt: now}
+			body["remind_at"] = at.Unix()
+		}
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return encoded
+	}
+	for id, message := range map[string]string{"s-armed": "Check the rollout", "s-plain": ""} {
+		if _, err := older.PutDocument(schema, id, withReminder(id, message), now, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := older.Close(); err != nil {
 		t.Fatal(err)
-	}
-
-	assertRemindersKept := func(s *Store) {
-		t.Helper()
-		for id, body := range remembered {
-			doc, found, err := s.GetDocument(schema, id)
-			if err != nil || !found {
-				t.Fatalf("read %s: found=%t err=%v", id, found, err)
-			}
-			if string(doc.Body) != body {
-				t.Fatalf("%s holds %s, want %s", id, doc.Body, body)
-			}
-		}
 	}
 
 	upgraded, _, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertRemindersKept(upgraded)
+	armed, err := upgraded.SeedReminder("s-armed")
+	if err != nil || armed == nil || armed.Message != "Check the rollout" || !armed.At.Equal(at) {
+		t.Fatalf("the upgraded seed's reminder = %+v, %v; want the one it held", armed, err)
+	}
+	if plain, err := upgraded.SeedReminder("s-plain"); err != nil || plain != nil {
+		t.Fatalf("the seed without a reminder holds %+v, %v", plain, err)
+	}
+	doc, found, err := upgraded.GetDocument(schema, "s-armed")
+	if err != nil || !found {
+		t.Fatalf("read s-armed: found=%t err=%v", found, err)
+	}
+	if bytes.Contains(doc.Body, []byte("remind")) {
+		t.Fatalf("the upgraded seed document still holds the reminder: %s", doc.Body)
+	}
 	if err := upgraded.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -490,11 +507,4 @@ func TestABuildWithoutSeedRemindersRefusesADatabaseHoldingThem(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("the refused opens changed the database")
 	}
-
-	current, _, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer current.Close()
-	assertRemindersKept(current)
 }

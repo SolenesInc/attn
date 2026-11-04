@@ -105,7 +105,11 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 		if err != nil {
 			return nil, err
 		}
-		if reminder == nil && seed.Reminder == nil {
+		armed, err := d.store.SeedReminder(seed.ID)
+		if err != nil {
+			return nil, err
+		}
+		if reminder == nil && armed == nil {
 			return &protocol.SeedReminderResult{Seed: d.seedWire(seed, doc)}, nil
 		}
 		if reminder != nil && garden.Closed(seed.Status) {
@@ -115,8 +119,6 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 		if err := d.checkSeedStanding(seed, setter, "set its reminder"); err != nil {
 			return nil, err
 		}
-		next := seed
-		next.Reminder = reminder
 		body := "Cleared the reminder."
 		if reminder != nil {
 			body = fmt.Sprintf("Reminder set for %s: %s", reminder.At.Format(time.RFC3339), reminder.Message)
@@ -127,7 +129,7 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 			CausedBySessionID: cause,
 		}
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}})
+		written, _, err := d.writeSeedChange(*schema, seed, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, arm: reminder, disarm: reminder == nil})
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {
 			continue
@@ -135,7 +137,7 @@ func (d *Daemon) writeSeedReminder(seedID string, reminder *garden.Reminder, set
 		if err != nil {
 			return nil, err
 		}
-		return &protocol.SeedReminderResult{Seed: d.seedWire(next, written), Changed: true}, nil
+		return &protocol.SeedReminderResult{Seed: d.seedWire(seed, written), Changed: true}, nil
 	}
 	return nil, protocol.Refuse(protocol.RefusalConflict,
 		"%s was rewritten under all %d attempts to save its reminder; read it again with `attn seed show %s`", seedID, attempts, seedID)
@@ -155,7 +157,7 @@ func (d *Daemon) fireDueSeedReminders(now time.Time) {
 		return
 	}
 	defer release()
-	due, err := d.dueSeedReminders(now)
+	due, err := d.store.DueSeedReminders(now)
 	if err != nil {
 		d.logf("seed reminders: list due: %v", err)
 		return
@@ -172,30 +174,6 @@ func (d *Daemon) fireDueSeedReminders(now time.Time) {
 	}
 }
 
-func (d *Daemon) dueSeedReminders(now time.Time) ([]string, error) {
-	var due []string
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace:  garden.Namespace,
-			Collection: garden.CollectionSeeds,
-			Filters:    []docstore.Filter{{Field: garden.RemindAtField, Op: docstore.OpLte, Value: now.Unix()}},
-			Limit:      gardenSnapshotLimit,
-			After:      after,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, doc := range read.Documents {
-			due = append(due, doc.ID)
-		}
-		if len(read.Documents) < gardenSnapshotLimit {
-			return due, nil
-		}
-		after = read.Documents[len(read.Documents)-1].ID
-	}
-}
-
 func (d *Daemon) fireSeedReminder(seedID string, now time.Time) (bool, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -204,18 +182,25 @@ func (d *Daemon) fireSeedReminder(seedID string, now time.Time) (bool, error) {
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(seedID)
+		if refusal := protocol.RefusalOf(err); refusal != nil && *refusal == protocol.RefusalNotFound {
+			return false, d.store.DisarmSeedReminder(seedID)
+		}
 		if err != nil {
 			return false, err
 		}
-		reminder := seed.Reminder
+		if garden.Closed(seed.Status) {
+			return false, d.store.DisarmSeedReminder(seedID)
+		}
+		reminder, err := d.store.SeedReminder(seedID)
+		if err != nil {
+			return false, err
+		}
 		if reminder == nil || reminder.At.After(now) {
 			return false, nil
 		}
-		next := seed
-		next.Reminder = nil
 		item := seedReminderItem(seed, *reminder, d.actorView(reminder.SetBy).Name)
 		d.lockGardenRoles()
-		_, _, err = d.writeSeedChange(*schema, next, doc.Rev, seedChange{author: who.Attn(), typed: &item})
+		_, _, err = d.writeSeedChange(*schema, seed, doc.Rev, seedChange{author: who.Attn(), typed: &item, disarm: true})
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {
 			continue

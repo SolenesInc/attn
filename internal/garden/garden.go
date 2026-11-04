@@ -31,7 +31,6 @@ const (
 
 const (
 	HarvestWhenPullRequestField = "harvest_when_pull_request"
-	RemindAtField               = "remind_at"
 )
 
 type Edge struct {
@@ -67,9 +66,6 @@ type Seed struct {
 
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
-
-	Reminder *Reminder `json:"reminder,omitempty"`
-	RemindAt int64     `json:"remind_at,omitempty"`
 
 	Authorization *Authorization `json:"authorization,omitempty"`
 
@@ -139,7 +135,6 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender", Type: docstore.FieldString},
 			{Name: HarvestWhenPullRequestField, Type: docstore.FieldString},
-			{Name: RemindAtField, Type: docstore.FieldNumber},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},
@@ -301,10 +296,6 @@ func (s Seed) Encode() ([]byte, error) {
 	s.HarvestWhenPullRequest = ""
 	if s.HarvestWhen != nil {
 		s.HarvestWhenPullRequest = s.HarvestWhen.PullRequest
-	}
-	s.RemindAt = 0
-	if s.Reminder != nil {
-		s.RemindAt = s.Reminder.At.Unix()
 	}
 	return json.Marshal(s)
 }

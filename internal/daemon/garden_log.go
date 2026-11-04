@@ -37,6 +37,8 @@ type seedChange struct {
 	entries   []seedMoveNote
 	typed     *inbox.Item
 	withdrawn *store.InboxKey
+	arm       *garden.Reminder
+	disarm    bool
 }
 
 type seedChangeLog struct {
@@ -175,14 +177,10 @@ func (d *Daemon) writeSeedChangeProtected(
 		now := d.gardenTime()
 		var written []store.DocumentWriteResult
 		var eventSeqs []int64
-		switch {
-		case change.typed != nil:
-			written, eventSeqs, err = d.store.CommitDocumentWritesWithEventsAndInbox(commits, log.events, *change.typed, now)
-		case change.withdrawn != nil:
-			written, eventSeqs, err = d.store.CommitDocumentWritesWithEventsWithdrawingInbox(commits, log.events, *change.withdrawn, now)
-		default:
-			written, eventSeqs, err = d.store.CommitDocumentWritesWithEvents(commits, log.events, now)
-		}
+		written, eventSeqs, err = d.store.CommitSeedChange(commits, log.events, store.SeedChangeEffects{
+			SeedID: seed.ID, Post: change.typed, Withdraw: change.withdrawn,
+			Arm: change.arm, Disarm: change.disarm || garden.Closed(seed.Status),
+		}, now)
 		if err != nil {
 			var conflict *docstore.ConflictError
 			if errors.As(err, &conflict) && conflict.Namespace == garden.Namespace &&

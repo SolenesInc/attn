@@ -37,7 +37,9 @@ or restore a backup taken before the upgrade with `attn db restore`.
   into its own type and writes back only the fields it knows, so it erases the
   new field without an error. The migration makes that build refuse the
   database. When there is nothing to change, write `SELECT 1;`, because an empty
-  file does not load.
+  file does not load. Builds from before the refusal, v0.12.0 and older, ignore
+  the migration and still erase the field, so state that must survive them lives
+  in its own table, as `seed_reminders` does.
 - Never edit or rename a merged migration. Never change the frozen legacy
   ladder, its migration definitions, or their reachable package-level helpers and types.
   `make check-migrations` compares all of these with `origin/main` and checks that

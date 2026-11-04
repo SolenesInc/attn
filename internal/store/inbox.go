@@ -272,26 +272,10 @@ func inboxAddressJSON(addresses []who.Address) string {
 	return string(data)
 }
 
-func (s *Store) CommitDocumentWritesWithEventsAndInbox(
-	commits []DocumentCommit, events []BusEvent, item inbox.Item, now time.Time,
-) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
-		return true, putInbox(tx, item, now)
-	})
-}
-
 type InboxKey struct {
 	To   who.Address
 	Kind inbox.Kind
 	Key  string
-}
-
-func (s *Store) CommitDocumentWritesWithEventsWithdrawingInbox(
-	commits []DocumentCommit, events []BusEvent, key InboxKey, now time.Time,
-) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, func(tx *sql.Tx) (bool, error) {
-		return true, withdrawInbox(tx, key)
-	})
 }
 
 func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
