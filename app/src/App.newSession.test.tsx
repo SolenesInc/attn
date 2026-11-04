@@ -76,6 +76,50 @@ describe('App new session', () => {
       expect(await openNewSession(settings)).toEqual(expected);
     });
 
+    it('keeps a harness selectable and labelled while the daemon checks, then disables it when it turns out missing', async () => {
+      const { daemon } = await renderApp({ initialState: { settings: { new_session_agent: 'claude', claude_available: 'checking', codex_available: 'true' } } });
+      await gesture(daemon, () => pressShortcut('session.new'));
+      const claude = () => screen.getByRole('radio', { name: /^Claude/ });
+      const codex = () => screen.getByRole('radio', { name: /^Codex/ });
+
+      expect(claude()).toBeEnabled();
+      expect(claude()).toHaveAttribute('aria-checked', 'true');
+      expect(claude()).toHaveAttribute('title', 'Checking for Claude on this machine');
+
+      await gesture(daemon, () => fireEvent.click(codex()));
+      await gesture(daemon, () => fireEvent.click(claude()));
+      expect(claude()).toHaveAttribute('aria-checked', 'true');
+
+      await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { claude_available: 'false' } }));
+      expect(claude()).toBeDisabled();
+      expect(claude()).toHaveAttribute('title', 'Claude is not available on this machine');
+      expect(codex()).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('does not say no agent was found while every harness is being checked', async () => {
+      const { daemon } = await renderApp({ initialState: { settings: { claude_available: 'checking', codex_available: 'checking' } } });
+      await gesture(daemon, () => pressShortcut('session.new'));
+
+      expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
+      expect(screen.getByRole('radio', { name: /^Claude/ })).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('shows a harness as checking in Settings until the daemon knows', async () => {
+      const daemon = await openSection('agents', { settings: { new_session_agent: 'claude', claude_available: 'checking', codex_available: 'checking' } });
+      const claudeSummary = () => document.querySelector('.settings-agent summary .settings-agent-summary');
+      const defaultClaude = () => within(screen.getByRole('group', { name: 'Default session agent' })).getByRole('button', { name: 'Claude' });
+
+      expect(claudeSummary()).toHaveTextContent('Checking');
+      expect(defaultClaude()).toBeEnabled();
+      expect(defaultClaude()).toHaveAttribute('aria-pressed', 'true');
+      expect(defaultClaude()).toHaveAttribute('title', 'Checking for Claude on this machine');
+      expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
+
+      await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { claude_available: 'true', codex_available: 'true' } }));
+      expect(claudeSummary()).toHaveTextContent('Available');
+      expect(defaultClaude()).not.toHaveAttribute('title');
+    });
+
     it('waits for reported harness order before assigning agent shortcuts', async () => {
       let held: CommandMessage<'delegation_preferences_get'> | undefined;
       const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] }, script: daemon => { daemon.on('delegation_preferences_get', request => { held = request; }); } });

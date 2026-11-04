@@ -1,6 +1,7 @@
 import { formatSessionAgentLabel, normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
 
-export type AgentAvailability = Record<SessionAgent, boolean>;
+export type HarnessAvailability = 'available' | 'unavailable' | 'checking';
+export type AgentAvailability = Record<SessionAgent, HarnessAvailability>;
 export type AgentCapabilities = Record<SessionAgent, Record<string, boolean>>;
 
 const BUILTIN_AGENT_ORDER: SessionAgent[] = ['codex', 'claude'];
@@ -29,8 +30,16 @@ const AGENT_CAPABILITY_LABELS: Record<string, string> = {
   headless_task: 'Headless task',
 };
 
-function parseAvailability(value?: string): boolean | null {
+function parseAvailability(value?: string): HarnessAvailability | null {
   if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return 'available';
+  if (normalized === 'false') return 'unavailable';
+  if (normalized === 'checking') return 'checking';
+  return null;
+}
+
+function parseCapability(value: string): boolean | null {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;
@@ -75,8 +84,8 @@ function parseAgentCapabilityKey(key: string): { agent: SessionAgent; capability
 // Backward compatible with older daemons that do not publish availability keys.
 export function getAgentAvailability(settings: Record<string, string>): AgentAvailability {
   const availability: AgentAvailability = {
-    codex: true,
-    claude: true,
+    codex: 'available',
+    claude: 'available',
   };
 
   for (const [key, value] of Object.entries(settings)) {
@@ -132,7 +141,7 @@ export function getAgentCapabilities(settings: Record<string, string>): AgentCap
   for (const [key, value] of Object.entries(settings)) {
     const parsed = parseAgentCapabilityKey(key);
     if (!parsed) continue;
-    const boolValue = parseAvailability(value);
+    const boolValue = parseCapability(value);
     if (boolValue == null) continue;
     if (!capabilities[parsed.agent]) {
       capabilities[parsed.agent] = {};
@@ -146,12 +155,20 @@ export function agentCapabilityLabel(capability: string): string {
   return AGENT_CAPABILITY_LABELS[capability] || capability.replace(/[_-]+/g, ' ');
 }
 
-export function isAgentAvailable(availability: AgentAvailability, agent: SessionAgent): boolean {
-  return Boolean(availability[agent]);
+export function harnessAvailability(availability: AgentAvailability, agent: SessionAgent): HarnessAvailability {
+  return availability[agent] ?? 'unavailable';
 }
 
-export function hasAnyAvailableAgents(availability: AgentAvailability): boolean {
-  return Object.values(availability).some(Boolean);
+export function isAgentSelectable(availability: AgentAvailability, agent: SessionAgent): boolean {
+  return harnessAvailability(availability, agent) !== 'unavailable';
+}
+
+export function hasAnySelectableAgents(availability: AgentAvailability): boolean {
+  return Object.keys(availability).some((agent) => isAgentSelectable(availability, agent));
+}
+
+export function checkingForHarnessLabel(label: string): string {
+  return `Checking for ${label} on this machine`;
 }
 
 function firstAvailableAgent(
@@ -159,7 +176,7 @@ function firstAvailableAgent(
   fallback: SessionAgent = 'codex',
 ): SessionAgent {
   const preferredOrder = orderedAgents(availability, undefined, fallback);
-  return preferredOrder.find((agent) => availability[agent]) ?? normalizeSessionAgent(fallback, 'codex');
+  return preferredOrder.find((agent) => isAgentSelectable(availability, agent)) ?? normalizeSessionAgent(fallback, 'codex');
 }
 
 export function resolvePreferredAgent(
@@ -168,7 +185,7 @@ export function resolvePreferredAgent(
   fallback: SessionAgent = 'codex',
 ): SessionAgent {
   const normalizedPreferred = preferred ? normalizeSessionAgent(preferred, fallback) : undefined;
-  if (normalizedPreferred && availability[normalizedPreferred]) {
+  if (normalizedPreferred && isAgentSelectable(availability, normalizedPreferred)) {
     return normalizedPreferred;
   }
   return firstAvailableAgent(availability, fallback);

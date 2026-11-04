@@ -5,7 +5,7 @@ import type { OutpostInfo } from '../types/generated';
 import type { SessionAgent } from '../types/sessionAgent';
 import { useSettings } from '../contexts/SettingsContext';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
-import { agentLabel } from '../utils/agentAvailability';
+import { agentLabel, isAgentSelectable, type HarnessAvailability } from '../utils/agentAvailability';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { PathInput } from './NewSessionDialog/PathInput';
 import {
@@ -149,19 +149,14 @@ export function NewSessionLauncher({
   outpostsAtOpen.current = outposts;
   const sendAgentCatalog = api?.sendAgentCatalog;
   const [catalogs, setCatalogs] = useState<Record<string, ReadonlySet<string>>>({});
-  const installedHere = useMemo(
-    () =>
-      new Set(
-        Object.entries(agentAvailability ?? {}).flatMap(([id, available]) =>
-          available ? [id] : [],
-        ),
-      ),
-    [agentAvailability],
-  );
+  const installedHere = useMemo(() => {
+    const availability = agentAvailability ?? {};
+    return new Set(Object.keys(availability).filter((id) => isAgentSelectable(availability, id)));
+  }, [agentAvailability]);
   const anyMachineAvailability = useMemo(() => {
     const remote = Object.values(catalogs).flatMap((installed) => [...installed]);
     if (!agentAvailability || !remote.length) return agentAvailability;
-    return { ...agentAvailability, ...Object.fromEntries(remote.map((id) => [id, true])) };
+    return { ...agentAvailability, ...Object.fromEntries(remote.map((id): [string, HarnessAvailability] => [id, 'available'])) };
   }, [agentAvailability, catalogs]);
   const controls = useSessionControls({
     isOpen,

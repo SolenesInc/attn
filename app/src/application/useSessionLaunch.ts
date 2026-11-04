@@ -8,7 +8,7 @@ import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent'
 import { type TerminalSplitDirection } from '../types/desktop';
 import {
   getAgentAvailability,
-  hasAnyAvailableAgents,
+  hasAnySelectableAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
 import { launchTarget } from '../utils/launchPlacement';
@@ -48,7 +48,7 @@ export function useSessionLaunch({
     (state) => state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null,
   );
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
-  const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
+  const hasAvailableAgents = hasAnySelectableAgents(agentAvailability);
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
   const sessionCreationJobIdRef = useRef(0);
   const worktreeSessionCreatingRef = useRef(false);

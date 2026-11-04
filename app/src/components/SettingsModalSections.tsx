@@ -5,7 +5,7 @@ import { routeFromStored } from '../hooks/useHarnessRoute';
 import { ModelTier } from '../types/generated';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
-import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
+import { agentCapabilityLabel, agentLabel, checkingForHarnessLabel, harnessAvailability, type HarnessAvailability } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
 import { ASKS_SETTING } from '../utils/asks';
 import { BackgroundTasksSettings } from './BackgroundTasksSettings';
@@ -19,6 +19,12 @@ import {
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
+
+const AVAILABILITY_SUMMARY: Record<HarnessAvailability, string> = {
+  available: 'Available',
+  unavailable: 'Unavailable',
+  checking: 'Checking',
+};
 
 const OWN_PR_COMMENTS_SETTING = 'pull_requests.own_comments';
 
@@ -1051,7 +1057,7 @@ export function AgentSettings({
           </div>
           <div className="settings-segmented" role="group" aria-label="Default session agent">
             {orderedAgentList.map((agent) => {
-              const available = isAgentAvailable(agentAvailability, agent);
+              const availability = harnessAvailability(agentAvailability, agent);
               return (
                 <button
                   key={agent}
@@ -1059,8 +1065,14 @@ export function AgentSettings({
                   className={`settings-segmented-option ${defaultAgent === agent ? 'active' : ''}`}
                   onClick={() => handleDefaultAgentChange(agent)}
                   aria-pressed={defaultAgent === agent}
-                  disabled={!available}
-                  title={!available ? `${agentLabel(agent)} CLI not found in PATH` : undefined}
+                  disabled={availability === 'unavailable'}
+                  title={
+                    availability === 'unavailable'
+                      ? `${agentLabel(agent)} CLI not found in PATH`
+                      : availability === 'checking'
+                        ? checkingForHarnessLabel(agentLabel(agent))
+                        : undefined
+                  }
                 >
                   {agentLabel(agent)}
                 </button>
@@ -1118,7 +1130,7 @@ export function AgentSettings({
       </section>
       <div className="settings-agent-list">
         {orderedAgentList.map((agent) => {
-          const available = isAgentAvailable(agentAvailability, agent);
+          const availability = harnessAvailability(agentAvailability, agent);
           const overrides = overrideAgents.has(agent);
           const caps = actualAgentCapabilities[agent] || {};
           const capabilityKeys = [
@@ -1132,7 +1144,7 @@ export function AgentSettings({
               <summary>
                 <span>{agentLabel(agent)}</span>
                 <span className="settings-agent-summary">
-                  <HarnessRouteBadge value={routeFromStored(agent, settings[`default_model_${agent}`] || '', settings[`default_effort_${agent}`] || '')} /> · {available ? 'Available' : 'Unavailable'}
+                  <HarnessRouteBadge value={routeFromStored(agent, settings[`default_model_${agent}`] || '', settings[`default_effort_${agent}`] || '')} /> · {AVAILABILITY_SUMMARY[availability]}
                 </span>
               </summary>
               <div className="settings-agent-content">

@@ -13,8 +13,8 @@ import {
   getAgentAvailability,
   getAgentCapabilities,
   getAgentExecutableSettings,
-  hasAnyAvailableAgents,
-  isAgentAvailable,
+  hasAnySelectableAgents,
+  isAgentSelectable,
   orderedAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
@@ -131,7 +131,7 @@ export function useSettingsModalState({
   const [settingsSearch, setSettingsSearch] = useState('');
   const pluginPanel = usePluginPanel(onListPlugins);
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
-  const hasAvailableAgents = useMemo(() => hasAnyAvailableAgents(agentAvailability), [agentAvailability]);
+  const hasAvailableAgents = useMemo(() => hasAnySelectableAgents(agentAvailability), [agentAvailability]);
 
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
@@ -165,7 +165,7 @@ export function useSettingsModalState({
   );
   const chiefOverrideAgentList = useMemo(() => {
     const list = orderedAgentList.filter(
-      (agent) => ['codex', 'claude'].includes(agent) && isAgentAvailable(agentAvailability, agent),
+      (agent) => ['codex', 'claude'].includes(agent) && isAgentSelectable(agentAvailability, agent),
     );
     for (const agent of ['claude', 'codex'] as const) {
       if (
@@ -194,7 +194,7 @@ export function useSettingsModalState({
   }, [settings, chiefOverrideAgentList]);
   const defaultOverrideAgentList = useMemo(() => {
     const list = orderedAgentList.filter(
-      (agent) => ['codex', 'claude'].includes(agent) && isAgentAvailable(agentAvailability, agent),
+      (agent) => ['codex', 'claude'].includes(agent) && isAgentSelectable(agentAvailability, agent),
     );
     for (const agent of ['claude', 'codex'] as const) {
       if (
@@ -233,7 +233,7 @@ export function useSettingsModalState({
     const eligible = orderedAgentList.filter(
       (agent) =>
         ['codex', 'claude'].includes(agent) &&
-        isAgentAvailable(agentAvailability, agent) &&
+        isAgentSelectable(agentAvailability, agent) &&
         actualAgentCapabilities[agent]?.headless_task === true,
     );
     const configured = parseActivityConfigSetting(settings['activity.config']).agent;
@@ -244,7 +244,7 @@ export function useSettingsModalState({
     const eligible = orderedAgentList.filter(
       (agent) =>
         ['codex', 'claude'].includes(agent) &&
-        isAgentAvailable(agentAvailability, agent) &&
+        isAgentSelectable(agentAvailability, agent) &&
         actualAgentCapabilities[agent]?.headless_task === true,
     );
     const configured = parseGardenAdvisorSetting(settings['garden.advisor']).agent;
@@ -408,7 +408,7 @@ export function useSettingsModalState({
   }, [autoApproveEnabled, onSetSetting]);
 
   const handleDefaultAgentChange = (agent: SessionAgent) => {
-    if (isAgentAvailable(agentAvailability, agent)) void defaultAgentDraft.apply(agent);
+    if (isAgentSelectable(agentAvailability, agent)) void defaultAgentDraft.apply(agent);
   };
 
   const worktreeSweepEnabled = settings['worktree_sweep_enabled'] !== 'false';

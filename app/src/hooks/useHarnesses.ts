@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
-import { agentLabel, getAgentAvailability, isBuiltinAgent } from '../utils/agentAvailability';
+import { agentLabel, getAgentAvailability, isAgentSelectable, isBuiltinAgent } from '../utils/agentAvailability';
 import type { RouteHarness } from './useHarnessRoute';
 import type { Harness } from '../types/generated';
 import type { DelegationSettingsState } from './daemonDelegationEvents';
@@ -62,7 +62,7 @@ export function useHarnessChoices(agents: string[], settings: Record<string, str
       const metadata = reported.find(harness => harness.id === id);
       return {
         ...metadata, id, name: metadata?.name || agentLabel(id),
-        available: Boolean(availability[id]) && metadata?.available !== false,
+        available: isAgentSelectable(availability, id) && metadata?.available !== false,
         model_pin: metadata?.model_pin, effort_pin: metadata?.effort_pin, discovery: metadata?.discovery,
       };
     });

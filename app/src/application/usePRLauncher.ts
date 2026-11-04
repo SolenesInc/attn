@@ -6,7 +6,7 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import {
   getAgentAvailability,
-  hasAnyAvailableAgents,
+  hasAnySelectableAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
 import { AppContentProps, OpenPRLauncherJob } from './appSupport';
@@ -20,7 +20,7 @@ export function usePRLauncher({ settings, launchAgent }: Options) {
   const { sendRefreshPRs, sendFetchPRDetails, sendEnsureRepo, sendCreateWorktreeFromBranch } =
     useDaemonApi();
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
-  const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
+  const hasAvailableAgents = hasAnySelectableAgents(agentAvailability);
   const [openPRLauncherJob, setOpenPRLauncherJob] = useState<OpenPRLauncherJob | null>(null);
   const openPRLauncherIdRef = useRef(0);
   const openPR = useOpenPR({

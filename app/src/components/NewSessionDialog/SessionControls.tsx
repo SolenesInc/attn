@@ -6,18 +6,20 @@ import type { SessionAgent } from '../../types/sessionAgent';
 import {
   agentLabel,
   type AgentAvailability,
+  checkingForHarnessLabel,
   getAgentCapabilities,
-  hasAnyAvailableAgents,
-  isAgentAvailable,
+  harnessAvailability,
+  hasAnySelectableAgents,
+  isAgentSelectable,
   resolvePreferredAgent,
 } from '../../utils/agentAvailability';
 import { keyCombo } from '../../shortcuts/formatShortcut';
 import { modifierGlyphs } from '../../shortcuts/platform';
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
-  shell: true,
-  codex: true,
-  claude: true,
+  shell: 'available',
+  codex: 'available',
+  claude: 'available',
 };
 
 const SESSION_AGENT_KEY = 'new_session_agent';
@@ -58,14 +60,14 @@ export function resolvePickerAgent(
   availability: AgentAvailability,
   fallback: SessionAgent = 'codex',
 ): SessionAgent {
-  if (preferred === TERMINAL_AGENT && availability[TERMINAL_AGENT]) {
+  if (preferred === TERMINAL_AGENT && isAgentSelectable(availability, TERMINAL_AGENT)) {
     return TERMINAL_AGENT;
   }
   const nonTerminalAvailability = withoutTerminalAgent(availability);
-  if (hasAnyAvailableAgents(nonTerminalAvailability)) {
+  if (hasAnySelectableAgents(nonTerminalAvailability)) {
     return resolvePreferredAgent(preferred, nonTerminalAvailability, fallback);
   }
-  return availability[TERMINAL_AGENT]
+  return isAgentSelectable(availability, TERMINAL_AGENT)
     ? TERMINAL_AGENT
     : resolvePreferredAgent(preferred, availability, fallback);
 }
@@ -90,10 +92,10 @@ export function useSessionControls({
   const previousInitialAgent = useRef<SessionAgent | undefined>(undefined);
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
   const effectiveAgentAvailability = useMemo<AgentAvailability>(
-    () => ({ ...(agentAvailability || DEFAULT_AGENT_AVAILABILITY), [TERMINAL_AGENT]: true }),
+    () => ({ ...(agentAvailability || DEFAULT_AGENT_AVAILABILITY), [TERMINAL_AGENT]: 'available' }),
     [agentAvailability],
   );
-  const hasAvailableAgents = hasAnyAvailableAgents(effectiveAgentAvailability);
+  const hasAvailableAgents = hasAnySelectableAgents(effectiveAgentAvailability);
   const savedYoloMode = useMemo(() => {
     for (const key of SESSION_YOLO_KEYS) {
       const parsed = parseBooleanSetting(settings[key]);
@@ -174,7 +176,7 @@ export function useSessionControls({
 
   const handleAgentChange = useCallback(
     (nextAgent: SessionAgent) => {
-      if (!isAgentAvailable(effectiveAgentAvailability, nextAgent)) {
+      if (!isAgentSelectable(effectiveAgentAvailability, nextAgent)) {
         return;
       }
       setAgent(nextAgent);
@@ -346,7 +348,8 @@ export function SessionControls({
           )}
           <div className="agent-toggle" role="radiogroup" aria-label="Session agent">
             {orderedAgentList.map((candidate) => {
-              const available = isAgentAvailable(effectiveAgentAvailability, candidate);
+              const availability = harnessAvailability(effectiveAgentAvailability, candidate);
+              const available = availability !== 'unavailable';
               const shortcutNumber = agentShortcutByName.get(candidate);
               const key =
                 candidate === TERMINAL_AGENT
@@ -372,7 +375,9 @@ export function SessionControls({
                       ? `${label} is not available on this machine`
                       : absent
                         ? `${label} is not installed on ${absent}`
-                        : undefined
+                        : availability === 'checking'
+                          ? checkingForHarnessLabel(label)
+                          : undefined
                   }
                 >
                   <span className="agent-option-name">{label}</span>
