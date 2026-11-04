@@ -63,22 +63,6 @@ func (d *Daemon) agentLocation(sessionID protocol.SessionID) (agentLocation, err
 	return location, nil
 }
 
-func (d *Daemon) refreshCurrentAgent() {
-	location, err := d.currentAgent("")
-	if err != nil {
-		d.logf("current agent: %v", err)
-	}
-	d.currentAgentMu.Lock()
-	d.currentAgentSessionID = location.sessionID
-	d.currentAgentMu.Unlock()
-}
-
-func (d *Daemon) currentAgentSession() string {
-	d.currentAgentMu.RLock()
-	defer d.currentAgentMu.RUnlock()
-	return string(d.currentAgentSessionID)
-}
-
 type agentTile struct {
 	tileID    string
 	tileKind  string

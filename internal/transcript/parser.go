@@ -166,18 +166,6 @@ func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
 	return lastAssistantContent, nil
 }
 
-func ExtractLastAssistantMessageAfterLastUser(path string, maxChars int) (string, error) {
-	return ExtractLastAssistantMessageAfterLastUserSince(path, maxChars, time.Time{})
-}
-
-func ExtractLastAssistantMessageAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (string, error) {
-	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, maxChars, minAssistantTimestamp)
-	if err != nil {
-		return "", err
-	}
-	return turn.Content, nil
-}
-
 // ExtractLastAssistantTurnAfterLastUserSince reads back from the end to the last user or assistant
 // entry: a user entry there means the latest turn has no reply yet.
 func ExtractLastAssistantTurnAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (AssistantTurn, error) {

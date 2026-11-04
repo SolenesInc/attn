@@ -258,9 +258,6 @@ type Daemon struct {
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
 
-	currentAgentMu        sync.RWMutex
-	currentAgentSessionID protocol.SessionID
-
 	openTileMu sync.Mutex
 
 	desktopTiles desktopTileDelivery
@@ -668,7 +665,6 @@ func (d *Daemon) Start() error {
 	d.importCrewHomes()
 	d.ensureChiefs()
 	d.removeEmptyDesktops()
-	d.refreshCurrentAgent()
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
 	if selectedBackend == "" {
 		selectedBackend = "migrating"

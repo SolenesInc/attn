@@ -57,18 +57,6 @@ type Client struct {
 	selfLimiter *rate.Limiter
 }
 
-func NewClient(baseURL, token string) (*Client, error) {
-	if baseURL == "" {
-		baseURL = "https://api.github.com"
-	}
-	if token == "" {
-		return nil, ErrNoToken
-	}
-
-	host := hostFromAPIURL(baseURL)
-	return newClientWithToken(host, baseURL, token)
-}
-
 func newClientWithToken(host, baseURL, token string) (*Client, error) {
 	if token == "" {
 		return nil, ErrNoToken
@@ -87,24 +75,6 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 		rateLimits:  make(map[string]*RateLimitInfo),
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
 	}, nil
-}
-
-func hostFromAPIURL(baseURL string) string {
-	if baseURL == "" {
-		return ""
-	}
-	if baseURL == "https://api.github.com" || baseURL == "http://api.github.com" {
-		return "github.com"
-	}
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return ""
-	}
-	host := parsed.Hostname()
-	if host == "api.github.com" {
-		return "github.com"
-	}
-	return host
 }
 
 func (c *Client) IsAvailable() bool {

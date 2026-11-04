@@ -23,13 +23,7 @@ type SettingsConfig struct {
 	Env   map[string]string      `json:"env,omitempty"`
 }
 
-func AgentGuidance() string { return prompts.RenderText("session", "agent-guidance", nil) }
-
 func GardenGuidance() string { return prompts.RenderText("session", "garden-guidance", nil) }
-
-func PullRequestSelfReportGuidance() string {
-	return prompts.RenderText("session", "pull-request-guidance", nil)
-}
 
 type Launch = prompts.Launch
 

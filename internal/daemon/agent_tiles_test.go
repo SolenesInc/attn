@@ -81,9 +81,8 @@ func TestAFocusedTileLeavesNoCurrentAgentAndOpensDockBesideIt(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	d.refreshCurrentAgent()
-	if current := d.currentAgentSession(); current != "" {
-		t.Fatalf("current agent with a tile focused is %q, want none", current)
+	if location, err := d.currentAgent(""); err != nil || location.sessionID != "" {
+		t.Fatalf("current agent with a tile focused is %q, %v, want none", location.sessionID, err)
 	}
 	file := filepath.Join(t.TempDir(), "beside.md")
 	if err := os.WriteFile(file, []byte("# Beside"), 0o644); err != nil {

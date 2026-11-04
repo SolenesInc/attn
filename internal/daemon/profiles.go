@@ -352,7 +352,6 @@ func (d *Daemon) publishArrangementChanged(profileID string) {
 func (d *Daemon) publishArrangement(profileID string, payload any) {
 	d.publishFact(FactProfileArrangementChanged, profileID, payload)
 	d.nudgeDesktopTileContent()
-	d.refreshCurrentAgent()
 }
 
 func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {

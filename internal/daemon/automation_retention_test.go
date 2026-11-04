@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +54,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	s := store.New()
 	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
+	def, err := d.automationApplyWithGuards(context.Background(), raw, "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	s := store.New()
 	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
+	def, err := d.automationApplyWithGuards(context.Background(), raw, "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +116,7 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
+	def, err := d.automationApplyWithGuards(context.Background(), raw, "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

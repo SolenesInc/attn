@@ -109,10 +109,6 @@ type sessionPullRequestGroup struct {
 	due      bool
 }
 
-func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int) {
-	return d.refreshSessionPullRequestsContext(context.Background(), now, "")
-}
-
 func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time.Time, forcePRID string) (fetched, changed int) {
 	d.sessionPRRefreshMu.Lock()
 	defer d.sessionPRRefreshMu.Unlock()

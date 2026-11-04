@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -38,7 +39,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				unwant  []string
 			}{
 				{launch: "agent", content: agent.Instructions.Content,
-					want: []string{hooks.AgentGuidance(), hooks.GardenGuidance(), askGuidanceLead}, unwant: []string{"shared context"}},
+					want: []string{prompts.RenderText("session", "agent-guidance", nil), hooks.GardenGuidance(), askGuidanceLead}, unwant: []string{"shared context"}},
 				{launch: "chief", content: chief.Instructions.Content,
 					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance(), askGuidanceLead}},
 			} {
@@ -52,7 +53,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 						t.Errorf("the %s guidance still says %q", row.launch, unwant)
 					}
 				}
-				if told := strings.Contains(row.content, hooks.PullRequestSelfReportGuidance()); told == reportsPullRequests {
+				if told := strings.Contains(row.content, prompts.RenderText("session", "pull-request-guidance", nil)); told == reportsPullRequests {
 					t.Errorf("the %s guidance tells the agent to record its own pull requests: %v, want %v", row.launch, told, !reportsPullRequests)
 				}
 			}

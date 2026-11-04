@@ -6,7 +6,15 @@ import (
 	"testing"
 )
 
-func TestParseResponse_Waiting(t *testing.T) {
+func assertVerdict(t *testing.T, response, want string) {
+	t.Helper()
+	got, ok := parseVerdictFromResponse(response)
+	if got != want || ok != (want != "") {
+		t.Errorf("parseVerdictFromResponse(%q) = %q, %v, want %q", response, got, ok, want)
+	}
+}
+
+func TestParseVerdictFromResponse_Waiting(t *testing.T) {
 	tests := []struct {
 		response string
 		want     string
@@ -18,14 +26,11 @@ func TestParseResponse_Waiting(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := ParseResponse(tt.response)
-		if got != tt.want {
-			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-		}
+		assertVerdict(t, tt.response, tt.want)
 	}
 }
 
-func TestParseResponse_Parked(t *testing.T) {
+func TestParseVerdictFromResponse_Parked(t *testing.T) {
 	tests := []struct {
 		response string
 		want     string
@@ -37,14 +42,11 @@ func TestParseResponse_Parked(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := ParseResponse(tt.response)
-		if got != tt.want {
-			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-		}
+		assertVerdict(t, tt.response, tt.want)
 	}
 }
 
-func TestParseResponse_Done(t *testing.T) {
+func TestParseVerdictFromResponse_Done(t *testing.T) {
 	tests := []struct {
 		response string
 		want     string
@@ -52,19 +54,16 @@ func TestParseResponse_Done(t *testing.T) {
 		{"DONE", "idle"},
 		{"done", "idle"},
 		{"DONE\n", "idle"},
-		{"anything else", "idle"},
-		{"", "idle"},
+		{"anything else", ""},
+		{"", ""},
 	}
 
 	for _, tt := range tests {
-		got := ParseResponse(tt.response)
-		if got != tt.want {
-			t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-		}
+		assertVerdict(t, tt.response, tt.want)
 	}
 }
 
-func TestParseResponse_SurroundingText(t *testing.T) {
+func TestParseVerdictFromResponse_SurroundingText(t *testing.T) {
 	tests := []struct {
 		name     string
 		response string
@@ -76,20 +75,17 @@ func TestParseResponse_SurroundingText(t *testing.T) {
 		{"verdict label with waiting", "verdict = waiting", "waiting_input"},
 		{"DONE line prefix", "DONE (completed)", "idle"},
 		{"multi-line with final verdict", "analysis...\nDONE", "idle"},
-		{"sentence without explicit verdict prefix", "The assistant is waiting for user input", "idle"},
+		{"sentence without explicit verdict prefix", "The assistant is waiting for user input", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseResponse(tt.response)
-			if got != tt.want {
-				t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-			}
+			assertVerdict(t, tt.response, tt.want)
 		})
 	}
 }
 
-func TestParseResponse_JSONStructured(t *testing.T) {
+func TestParseVerdictFromResponse_JSONStructured(t *testing.T) {
 	tests := []struct {
 		name     string
 		response string
@@ -102,15 +98,12 @@ func TestParseResponse_JSONStructured(t *testing.T) {
 		{"fenced json verdict waiting", "```json\n{\"verdict\":\"WAITING\"}\n```", "waiting_input"},
 		{"fenced json verdict done", "```json\n{\"verdict\":\"DONE\"}\n```", "idle"},
 		{"bulleted rubric line then verdict", "- WAITING means asks a question\nVerdict: DONE", "idle"},
-		{"invalid json no verdict", `{"foo":"bar"}`, "idle"},
+		{"invalid json no verdict", `{"foo":"bar"}`, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseResponse(tt.response)
-			if got != tt.want {
-				t.Errorf("ParseResponse(%q) = %q, want %q", tt.response, got, tt.want)
-			}
+			assertVerdict(t, tt.response, tt.want)
 		})
 	}
 }

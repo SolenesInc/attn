@@ -288,14 +288,6 @@ func runCodexClassifierAttempt(ctx context.Context, executable, model, reasoning
 	return lastMessage, stdout.String(), err
 }
 
-func ParseResponse(response string) string {
-	if result, ok := parseVerdictFromResponse(response); ok {
-		return result
-	}
-
-	return "idle"
-}
-
 type LogFunc func(format string, args ...interface{})
 
 var DefaultLogger LogFunc = func(format string, args ...interface{}) {}

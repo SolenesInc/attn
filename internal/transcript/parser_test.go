@@ -178,7 +178,7 @@ func TestExtractLastAssistantMessage_CodexResponseItemOutputText(t *testing.T) {
 	}
 }
 
-func TestExtractLastAssistantMessageAfterLastUser_Claude_StaleAssistantIgnored(t *testing.T) {
+func TestExtractLastAssistantTurnAfterLastUserSince_Claude_StaleAssistantIgnored(t *testing.T) {
 	content := `{"type":"user","message":{"content":"hello"}}
 {"type":"assistant","message":{"content":"Hi! How can I help?"}}
 {"type":"user","message":{"content":"show me what this bot does"}}
@@ -187,16 +187,16 @@ func TestExtractLastAssistantMessageAfterLastUser_Claude_StaleAssistantIgnored(t
 	path := filepath.Join(tmpDir, "transcript.jsonl")
 	os.WriteFile(path, []byte(content), 0644)
 
-	result, err := ExtractLastAssistantMessageAfterLastUser(path, 500)
+	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 500, time.Time{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "" {
-		t.Fatalf("expected empty result, got %q", result)
+	if turn.Content != "" {
+		t.Fatalf("expected empty result, got %q", turn.Content)
 	}
 }
 
-func TestExtractLastAssistantMessageAfterLastUser_Claude_AssistantAfterLatestUser(t *testing.T) {
+func TestExtractLastAssistantTurnAfterLastUserSince_Claude_AssistantAfterLatestUser(t *testing.T) {
 	content := `{"type":"user","message":{"content":"hello"}}
 {"type":"assistant","message":{"content":"Hi! How can I help?"}}
 {"type":"user","message":{"content":"show me what this bot does"}}
@@ -206,34 +206,34 @@ func TestExtractLastAssistantMessageAfterLastUser_Claude_AssistantAfterLatestUse
 	path := filepath.Join(tmpDir, "transcript.jsonl")
 	os.WriteFile(path, []byte(content), 0644)
 
-	result, err := ExtractLastAssistantMessageAfterLastUser(path, 500)
+	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 500, time.Time{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := "This bot tracks sessions and attention."
-	if result != expected {
-		t.Fatalf("got %q, want %q", result, expected)
+	if turn.Content != expected {
+		t.Fatalf("got %q, want %q", turn.Content, expected)
 	}
 }
 
-func TestExtractLastAssistantMessageAfterLastUser_Claude_NoUserStillReturnsLastAssistant(t *testing.T) {
+func TestExtractLastAssistantTurnAfterLastUserSince_Claude_NoUserStillReturnsLastAssistant(t *testing.T) {
 	content := `{"type":"assistant","message":{"content":"Hello! What can I help you with today?"}}
 `
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "transcript.jsonl")
 	os.WriteFile(path, []byte(content), 0644)
 
-	result, err := ExtractLastAssistantMessageAfterLastUser(path, 500)
+	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 500, time.Time{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := "Hello! What can I help you with today?"
-	if result != expected {
-		t.Fatalf("got %q, want %q", result, expected)
+	if turn.Content != expected {
+		t.Fatalf("got %q, want %q", turn.Content, expected)
 	}
 }
 
-func TestExtractLastAssistantMessageAfterLastUserSince_Claude_StaleByTimestampIgnored(t *testing.T) {
+func TestExtractLastAssistantTurnAfterLastUserSince_Claude_StaleByTimestampIgnored(t *testing.T) {
 	content := `{"type":"user","timestamp":"2026-02-11T23:57:15.222Z","message":{"role":"user","content":"hhello!"}}
 {"type":"assistant","timestamp":"2026-02-11T23:57:18.631Z","message":{"role":"assistant","content":[{"type":"text","text":"Hey! How can I help you today?"}]}}
 `
@@ -242,16 +242,16 @@ func TestExtractLastAssistantMessageAfterLastUserSince_Claude_StaleByTimestampIg
 	os.WriteFile(path, []byte(content), 0644)
 
 	minTS := time.Date(2026, 2, 11, 23, 57, 30, 0, time.UTC)
-	result, err := ExtractLastAssistantMessageAfterLastUserSince(path, 500, minTS)
+	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 500, minTS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "" {
-		t.Fatalf("expected empty result for stale assistant, got %q", result)
+	if turn.Content != "" {
+		t.Fatalf("expected empty result for stale assistant, got %q", turn.Content)
 	}
 }
 
-func TestExtractLastAssistantMessageAfterLastUserSince_Claude_FreshAssistantReturned(t *testing.T) {
+func TestExtractLastAssistantTurnAfterLastUserSince_Claude_FreshAssistantReturned(t *testing.T) {
 	content := `{"type":"user","timestamp":"2026-02-11T23:57:35.472Z","message":{"role":"user","content":"i don tknow"}}
 {"type":"assistant","timestamp":"2026-02-11T23:57:38.427Z","message":{"role":"assistant","content":[{"type":"text","text":"No worries! Whenever something comes up, I'm here."}]}}
 `
@@ -260,13 +260,13 @@ func TestExtractLastAssistantMessageAfterLastUserSince_Claude_FreshAssistantRetu
 	os.WriteFile(path, []byte(content), 0644)
 
 	minTS := time.Date(2026, 2, 11, 23, 57, 30, 0, time.UTC)
-	result, err := ExtractLastAssistantMessageAfterLastUserSince(path, 500, minTS)
+	turn, err := ExtractLastAssistantTurnAfterLastUserSince(path, 500, minTS)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := "No worries! Whenever something comes up, I'm here."
-	if result != expected {
-		t.Fatalf("got %q, want %q", result, expected)
+	if turn.Content != expected {
+		t.Fatalf("got %q, want %q", turn.Content, expected)
 	}
 }
 

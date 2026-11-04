@@ -54,10 +54,6 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 	return spec, canonical, nil
 }
 
-func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error) {
-	return d.automationApplyWithGuards(context.Background(), raw, "", "", nil, nil, nil)
-}
-
 func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID, scope string, expectedID *int, expectedRevision *int, launch *launchDesktopWrite) (*store.AutomationDefinition, error) {
 	spec, canonical, err := d.validateAutomationSpec(raw)
 	if err != nil {

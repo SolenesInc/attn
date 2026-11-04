@@ -150,10 +150,10 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	}
 	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
 	d.ptyBackend = &fakeSpawnBackend{}
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
+	if _, err := d.reconcileAutomationReviewRequestHeads(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	candidates, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
+	candidates, err := d.reconcileAutomationReviewRequestHeads(def.ID, "github.com", []store.AutomationReviewRequestObservation{{SubjectKey: subject}}, now.Add(2*time.Minute))
 	if err != nil || len(candidates) != 1 {
 		t.Fatalf("re-request candidates=%#v err=%v", candidates, err)
 	}

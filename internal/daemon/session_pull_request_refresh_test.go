@@ -86,7 +86,7 @@ func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T)
 		t.Fatal("could not put the session in the recoverable state")
 	}
 
-	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 1 {
+	if fetched, _ := d.refreshSessionPullRequestsContext(context.Background(), time.Now(), ""); fetched != 1 {
 		t.Fatalf("fetched = %d, want the durable watch to remain active", fetched)
 	}
 	if host.readinessCalls != 1 {
