@@ -303,13 +303,13 @@ func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
 		"typed text":                 {"unsent draft"},
 		"Shift+Enter after the text": {"unsent draft", "\n"},
 	} {
-		for returnName, returnIt := range map[string]func(w *world, app *testworld.Peer, run *fakeagent.Run, session string){
-			"when the mod is lost": func(w *world, app *testworld.Peer, run *fakeagent.Run, session string) {
+		for returnName, returnIt := range map[string]func(t *testing.T, w *world, app *testworld.Peer, run *fakeagent.Run, session string){
+			"when the mod is lost": func(t *testing.T, w *world, app *testworld.Peer, run *fakeagent.Run, session string) {
 				run.ModStopPolling()
 				keepPassingTheReachWindow(w)
 				run.Reply("Done. <!-- attn:state=waiting_input -->")
 			},
-			"at Esc": func(w *world, app *testworld.Peer, run *fakeagent.Run, session string) {
+			"at Esc": func(t *testing.T, w *world, app *testworld.Peer, run *fakeagent.Run, session string) {
 				stoppedByEsc(t, app, run, session)
 			},
 		} {
@@ -329,7 +329,7 @@ func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
 				app.AwaitTerminalScreen(terminal, "unsent draft")
 
 				waited := w.PauseAt(pausepoint.ClaudeModReturnWaitsForDraft)
-				returnIt(w, app, run, session)
+				returnIt(t, w, app, run, session)
 				waited.Await()
 				waited.Release()
 

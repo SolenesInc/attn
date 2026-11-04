@@ -340,11 +340,12 @@ func heldIDs(t *claudeModTerminal) []string {
 }
 
 type claudeModAck struct {
-	Terminal harness.TerminalID `json:"terminal"`
-	Instance string             `json:"instance"`
-	ID       string             `json:"id"`
-	Outcome  string             `json:"outcome"`
-	Reason   string             `json:"reason"`
+	Terminal      harness.TerminalID `json:"terminal"`
+	Instance      string             `json:"instance"`
+	ID            string             `json:"id"`
+	Outcome       string             `json:"outcome"`
+	Reason        string             `json:"reason"`
+	ComposerEmpty bool               `json:"composer_empty"`
 }
 
 func (m *claudeMod) serveAck(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +392,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 	case claudeModOutcomeAppended:
 		delete(t.held, ack.ID)
 	case claudeModOutcomeStopped:
-		answer(harness.Custody{Stopped: true})
+		answer(harness.Custody{Stopped: true, ComposerEmpty: ack.ComposerEmpty})
 	case claudeModOutcomeRefused:
 		answer(harness.Custody{Reason: "claude mod: Claude refused input " + ack.ID + ": " + ack.Reason})
 	}

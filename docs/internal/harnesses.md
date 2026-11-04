@@ -355,6 +355,9 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
 - `$.state` survives a reload that lands during a turn, and the new module's
   `tool.call` hooks fire for that turn. Module variables start over, so a mod
   that must know a turn is running keeps that in `$.state`.
+- `$.prompt.read()` from a stopped session returns the composer as it stands:
+  `''` after Left, Right, Home, End, PageUp, Shift+Tab or a draft erased with
+  Backspace, and the text of a typed draft or one recalled with Up.
 - A reload draws `attn: reloaded (5 hooks: ...)` in the transcript, named after
   the plugin. The model does not read it.
 - A save that does not parse keeps the old module running and polling. A save

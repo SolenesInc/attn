@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Message } from '../types'
 
 type Link = { terminal: string; socketPath: string }
-type Outcome = 'submitted' | 'held' | 'appended' | 'stopped' | 'refused'
+type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
 
 const POLL_RETRY_MS = 1000
 const RING_ID_PREFIX = 'inbox-ring/'
@@ -79,7 +79,8 @@ async function submit($: EngineInterface, text: string): Promise<string | undefi
 
 async function refuseStopped($: EngineInterface, message: Message): Promise<void> {
   await listWaiting($, [message])
-  await ack($, message.id, 'stopped')
+  const composer = await $.prompt.read()
+  await post($, '/claude/ack', { id: message.id, outcome: 'stopped', composer_empty: composer.text === '' })
 }
 
 async function place($: EngineInterface, message: Message): Promise<void> {

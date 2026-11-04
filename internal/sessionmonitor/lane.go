@@ -321,6 +321,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	}
 	if custody.Stopped {
 		if voice == harness.VoiceUser {
+			l.userDraft = !custody.ComposerEmpty
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
