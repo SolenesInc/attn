@@ -187,6 +187,7 @@ func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID stri
 	if own := d.profileNotebookRoot(profileID); own != "" {
 		settings[string(SettingNotebookRoot)] = own
 	}
+	settings[string(SettingPullRequestOwnComments)] = string(d.pullRequestOwnComments(profileID))
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[string(SettingNotebookRootEffective)] = root
 	}

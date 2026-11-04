@@ -31,6 +31,24 @@ func ParseMode(value string) (Mode, error) {
 	}
 }
 
+type OwnComments string
+
+const (
+	OwnCommentsQuiet OwnComments = "quiet"
+	OwnCommentsRing  OwnComments = "ring"
+)
+
+func ParseOwnComments(value string) (OwnComments, error) {
+	switch OwnComments(strings.TrimSpace(strings.ToLower(value))) {
+	case "", OwnCommentsQuiet:
+		return OwnCommentsQuiet, nil
+	case OwnCommentsRing:
+		return OwnCommentsRing, nil
+	default:
+		return "", fmt.Errorf("%q is not a choice for the pull request author's own comments; use quiet or ring", value)
+	}
+}
+
 func ValidateConfig(mode Mode, reviewer string) error {
 	if mode != ModeGreen && mode != ModeCodex && mode != ModeFormalReview {
 		return fmt.Errorf("mode %q is invalid; use green, codex, or formal-review", mode)
@@ -75,6 +93,7 @@ type Observation struct {
 	Number             int             `json:"number"`
 	URL                string          `json:"url"`
 	Title              string          `json:"title"`
+	Author             string          `json:"author,omitempty"`
 	State              string          `json:"state"`
 	Draft              bool            `json:"draft"`
 	Merged             bool            `json:"merged"`
@@ -248,7 +267,7 @@ type Transition struct {
 	Actions    []Action   `json:"actions"`
 }
 
-func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string, now time.Time) Transition {
+func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string, ownComments OwnComments, now time.Time) Transition {
 	evaluation, next := Evaluate(observation, mode, reviewer, cursor, now)
 	next.ThreadStates = cloneBoolMap(next.ThreadStates)
 	next.ThreadGenerations = cloneUintMap(next.ThreadGenerations)
@@ -261,9 +280,12 @@ func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string,
 	}
 	var actions []Action
 	feedbackBaselinePending := !cursor.Initialized || cursor.FeedbackBaselinePending
+	quiet := func(author string) bool {
+		return ownComments != OwnCommentsRing && observation.Author != "" && sameActor(author, observation.Author)
+	}
 	if !feedbackBaselinePending && observation.FeedbackComplete {
 		for _, feedback := range observation.Feedback {
-			if feedback.ID == "" || seen[feedback.ID] {
+			if feedback.ID == "" || seen[feedback.ID] || quiet(feedback.Author) {
 				continue
 			}
 			item := feedback
@@ -272,6 +294,9 @@ func Advance(cursor Cursor, observation Observation, mode Mode, reviewer string,
 		for _, thread := range observation.Threads {
 			if wasResolved, known := cursor.ThreadStates[thread.ID]; known && wasResolved && !thread.Resolved {
 				next.ThreadGenerations[thread.ID]++
+				if quiet(thread.Author) {
+					continue
+				}
 				actions = append(actions, Action{
 					Kind: "thread_reopened", ID: fmt.Sprintf("thread:%s:%d", thread.ID, next.ThreadGenerations[thread.ID]),
 					Details: compactDetails(thread.Author, thread.Location, thread.Body),

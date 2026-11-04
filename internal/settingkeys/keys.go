@@ -62,6 +62,7 @@ const (
 	SettingDefaultEffortPrefix           HomeSetting    = "default_effort_"
 	SettingNotebookRoot                  ProfileSetting = "notebook.root"
 	SettingNotebookRootEffective         MachineSetting = "notebook.root.effective"
+	SettingPullRequestOwnComments        ProfileSetting = "pull_requests.own_comments"
 	SettingActivityEnabled               HomeSetting    = "activity.enabled"
 	SettingActivityConfig                HomeSetting    = "activity.config"
 	SettingActivityIntervals             HomeSetting    = "activity.intervals"

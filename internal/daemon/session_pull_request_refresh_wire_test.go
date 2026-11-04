@@ -32,7 +32,9 @@ type refreshedPullRequest struct {
 	readinessFails             bool
 	readinessGate              <-chan struct{}
 	keepAlive                  bool
-	codexThumbsUp              bool
+	codexThumbsUp, checkFails  bool
+	author                     string
+	comments                   []map[string]any
 	limitedUntil               time.Time
 	inboxTitle                 string
 	snapshots, readinessReads  int
@@ -109,16 +111,23 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 			reactions = append(reactions, map[string]any{"content": "THUMBS_UP",
 				"user": map[string]any{"__typename": "Bot", "login": "chatgpt-codex-connector"}})
 		}
+		commits := []any{}
+		if gh.checkFails {
+			commits = append(commits, map[string]any{"commit": map[string]any{"statusCheckRollup": map[string]any{"contexts": map[string]any{"nodes": []any{
+				map[string]any{"__typename": "CheckRun", "id": "check-1", "name": "test", "status": "COMPLETED", "conclusion": "FAILURE"},
+			}}}}})
+		}
 		answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
 			"number": 71, "url": shopPull(71), "title": gh.title, "state": "OPEN", "merged": false,
+			"author":     map[string]any{"__typename": "User", "login": gh.author},
 			"headRefOid": "head-a", "headRefName": "status-refresh", "mergeStateStatus": "CLEAN",
 			"reactions": map[string]any{"nodes": reactions}, "latestOpinionatedReviews": map[string]any{"nodes": []any{}},
 			"reviews": map[string]any{"nodes": []any{}}, "reviewRequests": map[string]any{"nodes": []any{}},
-			"commits": map[string]any{"nodes": []any{}},
+			"commits": map[string]any{"nodes": commits},
 		}}}}
 	case strings.Contains(string(body), "PullRequestFeedback"):
 		answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
-			"comments": map[string]any{"nodes": []any{}}, "reviews": map[string]any{"nodes": []any{}}, "reviewThreads": map[string]any{"nodes": []any{}},
+			"comments": map[string]any{"nodes": append([]map[string]any{}, gh.comments...)}, "reviews": map[string]any{"nodes": []any{}}, "reviewThreads": map[string]any{"nodes": []any{}},
 		}}}}
 	case strings.Contains(r.URL.Query().Get("q"), "author:@me"):
 		items := []any{}
@@ -825,6 +834,55 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 		pr := onlyPullRequest(t, cli, next.id)
 		if protocol.Deref(pr.WatchMode) != protocol.PullRequestWatchModeCodex || pr.ReadinessState != nil || pr.WatchHealth != nil {
 			t.Fatalf("mode change retained old readiness: %+v", pr)
+		}
+	})
+}
+
+func (gh *refreshedPullRequest) comment(id, login, typeName, body string) {
+	gh.set(func(gh *refreshedPullRequest) {
+		gh.comments = append(gh.comments, map[string]any{
+			"id": id, "bodyText": body, "createdAt": "2026-11-04T10:00:00Z",
+			"author": map[string]any{"__typename": typeName, "login": login},
+		})
+	})
+}
+
+func TestAPullRequestAuthorsOwnCommentsRingItsWatchOnlyWhenTheProfileAsks(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.author = "victor" })
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "s1")
+		caller := client.SettingsCaller{SessionID: "s1"}
+		if shown, err := cli.Settings(caller, "pull_requests.own_comments", false); err != nil || len(shown.Entries) != 1 || protocol.Deref(shown.Entries[0].Value) != "" {
+			t.Fatalf("pull_requests.own_comments before any change = %+v (%v), want unset", shown, err)
+		}
+		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "ready") {
+			t.Fatalf("the watching agent's inbox = %q, want a note that the pull request is ready", inbox)
+		}
+
+		gh.comment("comment-author", "victor", "User", "I pushed the fix")
+		gh.comment("comment-reviewer", "alice", "User", "Please rename this")
+		gh.comment("comment-codex", "chatgpt-codex-connector", "Bot", "Possible nil dereference")
+		gh.set(func(gh *refreshedPullRequest) { gh.checkFails = true })
+		w.advance(protocol.HeatHotInterval)
+		inbox := inboxContents(readInbox(t, cli, "s1", 0).Items)
+		if strings.Contains(inbox, "I pushed the fix") || !strings.Contains(inbox, "alice: Please rename this") ||
+			!strings.Contains(inbox, "chatgpt-codex-connector[bot]: Possible nil dereference") || !strings.Contains(inbox, "checks failed") {
+			t.Errorf("under quiet the agent's inbox = %q, want alice's and Codex's comments and the failed checks, without the author's comment", inbox)
+		}
+
+		if _, err := cli.SetSetting(caller, "pull_requests.own_comments", "ring"); err != nil {
+			t.Fatalf("set pull_requests.own_comments to ring: %v", err)
+		}
+		gh.comment("comment-author-2", "victor", "User", "Address the review next")
+		gh.set(func(gh *refreshedPullRequest) { gh.checkFails = false })
+		w.advance(protocol.HeatHotInterval)
+		inbox = inboxContents(readInbox(t, cli, "s1", 0).Items)
+		if !strings.Contains(inbox, "victor: Address the review next") || strings.Contains(inbox, "I pushed the fix") || !strings.Contains(inbox, "ready") {
+			t.Errorf("under ring the agent's inbox = %q, want the author's new comment and the ready note, without replaying the earlier author comment", inbox)
 		}
 	})
 }

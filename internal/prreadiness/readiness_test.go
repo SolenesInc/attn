@@ -92,17 +92,17 @@ func TestAdvanceBaselinesFeedbackThenDeliversNewItemsAndReopenedThreads(t *testi
 	o := greenObservation()
 	o.Feedback = []FeedbackItem{{ID: "old", Kind: "comment", Author: "a"}}
 	o.Threads = []ThreadState{{ID: "thread", Resolved: true}}
-	first := Advance(Cursor{}, o, ModeGreen, "", now)
+	first := Advance(Cursor{}, o, ModeGreen, "", OwnCommentsQuiet, now)
 	if len(first.Actions) != 1 || first.Actions[0].Kind != "ready" {
 		t.Fatalf("first actions = %+v", first.Actions)
 	}
 	o.Feedback = append(o.Feedback, FeedbackItem{ID: "new", Kind: "reply", Author: "b"})
 	o.Threads[0].Resolved = false
-	second := Advance(first.Cursor, o, ModeGreen, "", now.Add(time.Minute))
+	second := Advance(first.Cursor, o, ModeGreen, "", OwnCommentsQuiet, now.Add(time.Minute))
 	if len(second.Actions) != 2 || second.Actions[0].Kind != "reply" || second.Actions[1].Kind != "thread_reopened" {
 		t.Fatalf("second actions = %+v", second.Actions)
 	}
-	third := Advance(second.Cursor, o, ModeGreen, "", now.Add(2*time.Minute))
+	third := Advance(second.Cursor, o, ModeGreen, "", OwnCommentsQuiet, now.Add(2*time.Minute))
 	if len(third.Actions) != 0 {
 		t.Fatalf("replayed actions = %+v", third.Actions)
 	}
@@ -112,7 +112,7 @@ func TestAdvanceRedeliversRecurringActionsAndThreadReopens(t *testing.T) {
 	now := time.Now()
 	ready := greenObservation()
 	ready.Threads = []ThreadState{{ID: "thread", Resolved: true}}
-	first := Advance(Cursor{}, ready, ModeGreen, "", now)
+	first := Advance(Cursor{}, ready, ModeGreen, "", OwnCommentsQuiet, now)
 	if len(first.Actions) != 1 || first.Actions[0].Kind != "ready" {
 		t.Fatalf("first actions = %+v", first.Actions)
 	}
@@ -120,15 +120,15 @@ func TestAdvanceRedeliversRecurringActionsAndThreadReopens(t *testing.T) {
 	blocked := ready
 	blocked.MergeStateStatus = "BLOCKED"
 	blocked.Threads[0].Resolved = false
-	second := Advance(first.Cursor, blocked, ModeGreen, "", now.Add(time.Minute))
+	second := Advance(first.Cursor, blocked, ModeGreen, "", OwnCommentsQuiet, now.Add(time.Minute))
 	if len(second.Actions) != 1 || second.Actions[0].Kind != "thread_reopened" {
 		t.Fatalf("blocked actions = %+v", second.Actions)
 	}
 
 	resolved := blocked
 	resolved.Threads[0].Resolved = true
-	third := Advance(second.Cursor, resolved, ModeGreen, "", now.Add(2*time.Minute))
-	fourth := Advance(third.Cursor, ready, ModeGreen, "", now.Add(3*time.Minute))
+	third := Advance(second.Cursor, resolved, ModeGreen, "", OwnCommentsQuiet, now.Add(2*time.Minute))
+	fourth := Advance(third.Cursor, ready, ModeGreen, "", OwnCommentsQuiet, now.Add(3*time.Minute))
 	if len(fourth.Actions) != 1 || fourth.Actions[0].Kind != "ready" || fourth.Actions[0].ID == first.Actions[0].ID {
 		t.Fatalf("recurring ready actions = first:%+v fourth:%+v", first.Actions, fourth.Actions)
 	}
@@ -136,7 +136,7 @@ func TestAdvanceRedeliversRecurringActionsAndThreadReopens(t *testing.T) {
 	reopened := ready
 	reopened.MergeStateStatus = "BLOCKED"
 	reopened.Threads[0].Resolved = false
-	fifth := Advance(fourth.Cursor, reopened, ModeGreen, "", now.Add(4*time.Minute))
+	fifth := Advance(fourth.Cursor, reopened, ModeGreen, "", OwnCommentsQuiet, now.Add(4*time.Minute))
 	if len(fifth.Actions) != 1 || fifth.Actions[0].Kind != "thread_reopened" || fifth.Actions[0].ID == second.Actions[0].ID {
 		t.Fatalf("recurring thread actions = second:%+v fifth:%+v", second.Actions, fifth.Actions)
 	}
@@ -144,10 +144,10 @@ func TestAdvanceRedeliversRecurringActionsAndThreadReopens(t *testing.T) {
 
 func TestAdvanceReevaluatesAReadyActionForANewHead(t *testing.T) {
 	now := time.Now()
-	first := Advance(Cursor{}, greenObservation(), ModeGreen, "", now)
+	first := Advance(Cursor{}, greenObservation(), ModeGreen, "", OwnCommentsQuiet, now)
 	nextHead := greenObservation()
 	nextHead.HeadSHA = "head-b"
-	second := Advance(first.Cursor, nextHead, ModeGreen, "", now.Add(time.Minute))
+	second := Advance(first.Cursor, nextHead, ModeGreen, "", OwnCommentsQuiet, now.Add(time.Minute))
 	if len(second.Actions) != 1 || second.Actions[0].Kind != "ready" || second.Actions[0].ID == first.Actions[0].ID {
 		t.Fatalf("head transition actions = first:%+v second:%+v", first.Actions, second.Actions)
 	}
@@ -157,20 +157,20 @@ func TestAdvanceBaselinesFeedbackAfterInitialFetchFailure(t *testing.T) {
 	now := time.Now()
 	initial := greenObservation()
 	initial.FeedbackComplete = false
-	first := Advance(Cursor{}, initial, ModeGreen, "", now)
+	first := Advance(Cursor{}, initial, ModeGreen, "", OwnCommentsQuiet, now)
 	if !first.Cursor.FeedbackBaselinePending {
 		t.Fatalf("first cursor = %+v", first.Cursor)
 	}
 
 	recovered := greenObservation()
 	recovered.Feedback = []FeedbackItem{{ID: "historical", Kind: "comment", Author: "a"}}
-	second := Advance(first.Cursor, recovered, ModeGreen, "", now.Add(time.Minute))
+	second := Advance(first.Cursor, recovered, ModeGreen, "", OwnCommentsQuiet, now.Add(time.Minute))
 	if len(second.Actions) != 0 || second.Cursor.FeedbackBaselinePending {
 		t.Fatalf("recovery transition = %+v", second)
 	}
 
 	recovered.Feedback = append(recovered.Feedback, FeedbackItem{ID: "new", Kind: "comment", Author: "b"})
-	third := Advance(second.Cursor, recovered, ModeGreen, "", now.Add(2*time.Minute))
+	third := Advance(second.Cursor, recovered, ModeGreen, "", OwnCommentsQuiet, now.Add(2*time.Minute))
 	if len(third.Actions) != 1 || third.Actions[0].ID != "feedback:new" {
 		t.Fatalf("new feedback actions = %+v", third.Actions)
 	}
@@ -180,7 +180,7 @@ func TestAdvanceIncludesChangesRequestedReviewBody(t *testing.T) {
 	observation := greenObservation()
 	observation.ReviewDecision = "CHANGES_REQUESTED"
 	observation.ReviewOpinions = []ReviewOpinion{{Actor: "victor", State: "CHANGES_REQUESTED", Body: "Please cover the restart path."}}
-	transition := Advance(Cursor{}, observation, ModeFormalReview, "", time.Now())
+	transition := Advance(Cursor{}, observation, ModeFormalReview, "", OwnCommentsQuiet, time.Now())
 	if len(transition.Actions) != 1 || transition.Actions[0].Kind != "changes_requested" {
 		t.Fatalf("actions = %+v", transition.Actions)
 	}
@@ -207,12 +207,12 @@ func TestModeChangeDoesNotBaselineFeedbackThatArrivedBeforeTheNextPoll(t *testin
 	now := time.Now()
 	initial := greenObservation()
 	initial.Feedback = []FeedbackItem{{ID: "old", Kind: "comment", Author: "a"}}
-	first := Advance(Cursor{}, initial, ModeGreen, "", now)
+	first := Advance(Cursor{}, initial, ModeGreen, "", OwnCommentsQuiet, now)
 
 	reconfigured := PreserveFeedbackCursor(first.Cursor)
 	current := greenObservation()
 	current.Feedback = append(initial.Feedback, FeedbackItem{ID: "new", Kind: "comment", Author: "b"})
-	second := Advance(reconfigured, current, ModeFormalReview, "", now.Add(time.Minute))
+	second := Advance(reconfigured, current, ModeFormalReview, "", OwnCommentsQuiet, now.Add(time.Minute))
 	if len(second.Actions) != 1 || second.Actions[0].ID != "feedback:new" {
 		t.Fatalf("actions after mode change = %+v", second.Actions)
 	}

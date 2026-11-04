@@ -533,7 +533,11 @@ func (d *Daemon) processPullRequestWatches(
 ) []string {
 	changed := make([]string, 0, len(group.watches))
 	for _, watch := range group.watches {
-		transition := prreadiness.Advance(watch.Cursor, observation, watch.Mode, watch.Reviewer, now)
+		profileID, err := d.store.SessionProfileID(watch.SessionID)
+		if err != nil {
+			d.logf("pull request watch: profile of %s: %v", watch.SessionID, err)
+		}
+		transition := prreadiness.Advance(watch.Cursor, observation, watch.Mode, watch.Reviewer, d.pullRequestOwnComments(profileID), now)
 		health := "current"
 		healthError := ""
 		feedbackError := ""
@@ -591,6 +595,14 @@ func (d *Daemon) processPullRequestWatches(
 		}
 	}
 	return changed
+}
+
+func (d *Daemon) pullRequestOwnComments(profileID string) prreadiness.OwnComments {
+	ownComments, err := prreadiness.ParseOwnComments(d.store.ProfileSetting(profileID, string(SettingPullRequestOwnComments)))
+	if err != nil {
+		return prreadiness.OwnCommentsQuiet
+	}
+	return ownComments
 }
 
 func (d *Daemon) deliverPullRequestMailbox(delivery store.InboxDelivery) {

@@ -73,6 +73,7 @@ type readinessPullRequest struct {
 	Number           int                                         `json:"number"`
 	URL              string                                      `json:"url"`
 	Title            string                                      `json:"title"`
+	Author           readinessActor                              `json:"author"`
 	State            string                                      `json:"state"`
 	IsDraft          bool                                        `json:"isDraft"`
 	Merged           bool                                        `json:"merged"`
@@ -98,7 +99,7 @@ type readinessPullRequest struct {
 const pullRequestReadinessQuery = `
 query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    number url title state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
+    number url title author{__typename login} state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
     reactions(first:100){nodes{id content user{__typename login}} pageInfo{hasNextPage endCursor}}
 	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
 	reviews(first:100){nodes{id state bodyText submittedAt author{__typename login}} pageInfo{hasNextPage endCursor}}
@@ -339,7 +340,7 @@ func checkContexts(pr *readinessPullRequest) *readinessConnection[readinessCheck
 
 func buildReadinessObservation(pr *readinessPullRequest) *prreadiness.Observation {
 	observation := &prreadiness.Observation{
-		Number: pr.Number, URL: pr.URL, Title: pr.Title,
+		Number: pr.Number, URL: pr.URL, Title: pr.Title, Author: canonicalActor(pr.Author),
 		State: strings.ToLower(pr.State), Draft: pr.IsDraft, Merged: pr.Merged,
 		HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName,
 		MergeStateStatus: strings.ToUpper(pr.MergeStateStatus),

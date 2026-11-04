@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/settingkeys"
 )
@@ -70,6 +71,7 @@ const (
 	SettingDefaultModelPrefix            = settingkeys.SettingDefaultModelPrefix
 	SettingDefaultEffortPrefix           = settingkeys.SettingDefaultEffortPrefix
 	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
+	SettingPullRequestOwnComments        = settingkeys.SettingPullRequestOwnComments
 	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
 	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
 	SettingActivityConfig                = settingkeys.SettingActivityConfig
@@ -281,6 +283,10 @@ var settingSpecs = classifiedSettings([]settingSpec{
 			return config.RequireWithinHarness(key, root)
 		}
 		return validateNotebookRoot(key, value)
+	}},
+	{key: string(SettingPullRequestOwnComments), scope: profileScope, description: "Whether comments, reviews and reopened threads by a watched pull request's own author ring its watch: quiet or ring. Agents post as you, so quiet keeps an agent's own comments from coming back to it; ring lets you steer agents with comments on your pull requests. State changes always ring. Empty means quiet, the default.", validate: func(d *Daemon, key, value string) error {
+		_, err := prreadiness.ParseOwnComments(value)
+		return err
 	}},
 	{key: string(SettingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {
 		return validateKeybindingsConfig(value)

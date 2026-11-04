@@ -187,6 +187,16 @@ and failed checks are feedback the agent hears about. None of them adds a
 condition for ready. A watch never changes anything on
 GitHub and never grants permission to merge.
 
+Agents post to GitHub with your login. So that an agent doesn't hear about its
+own `gh pr comment` as new feedback, a watch skips the comments, review
+comments, review bodies and reopened review threads that the pull request's
+author wrote. Changes of state, such as ready, changes requested, failed checks,
+merged and closed, always reach the agent. If you steer an agent by commenting
+on your own pull request, run `attn settings set pull_requests.own_comments ring`
+or turn on **Ring on my own PR comments** in **Settings → Agents and models**.
+The default is `quiet`. Comments that a watch skipped aren't replayed after you
+switch to `ring`.
+
 `attn pr status` lists the watches, and `attn pr unwatch <url>` stops a watch and
 clears the watch's unread notifications. Closing or merging the PR ends the
 watch. For a script or a terminal that should block until the PR is ready, use

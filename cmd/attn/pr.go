@@ -311,7 +311,7 @@ func observePR(ctx context.Context, source prSource, opts prWaitOptions, cursor 
 		}
 	}
 	beforeReadiness := cursor.Readiness
-	transition := prreadiness.Advance(cursor.Readiness, *observation, opts.Mode, opts.Reviewer, now)
+	transition := prreadiness.Advance(cursor.Readiness, *observation, opts.Mode, opts.Reviewer, prreadiness.OwnCommentsRing, now)
 	cursor.Readiness = transition.Cursor
 	before := cursor
 	before.Readiness = beforeReadiness
@@ -527,6 +527,9 @@ commands:
   unwatch <url> [--session <id>]                       stop a durable watch
   status [<url>] [--session <id>] [--json]             show recorded watch/readiness state
   wait-ready <number-or-url> [options]                 wait for the next actionable update
+
+watch skips comments the pull request's author wrote, since agents post as the user. State changes
+still arrive. To ring on them too, the user runs: attn settings set pull_requests.own_comments ring
 
 wait-ready options:
   --repo [host/]owner/repository  required when the target is a number

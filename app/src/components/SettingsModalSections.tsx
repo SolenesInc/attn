@@ -20,6 +20,8 @@ import {
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
 
+const OWN_PR_COMMENTS_SETTING = 'pull_requests.own_comments';
+
 export function SectionStatusPills({
   selectedSection,
   delegationPolicy,
@@ -1034,6 +1036,7 @@ export function AgentSettings({
   const overrideAgents = new Set(defaultOverrideAgentList);
   const capabilityOrder = new Set(agentCapabilityOrder);
   const executableAgents = new Set(executableAgentList);
+  const ringOnOwnPullRequestComments = settings[OWN_PR_COMMENTS_SETTING] === 'ring';
   return (
     <>
       <section className="settings-block settings-session-defaults">
@@ -1084,6 +1087,33 @@ export function AgentSettings({
           >
             {autoApproveEnabled ? 'Disable' : 'Enable'}
           </button>
+        </div>
+      </section>
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <h3>Seeds on standby</h3>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Ring on my own PR comments</p>
+              <p className="settings-row-copy" id="settings-own-pr-comments-description">
+                Enable if you want to give feedback to agents by writing comments on the PR
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Ring on my own PR comments"
+              aria-checked={ringOnOwnPullRequestComments}
+              aria-describedby="settings-own-pr-comments-description"
+              className="settings-action"
+              data-testid="settings-own-pr-comments-toggle"
+              onClick={() => onSetSetting(OWN_PR_COMMENTS_SETTING, ringOnOwnPullRequestComments ? 'quiet' : 'ring')}
+            >
+              {ringOnOwnPullRequestComments ? 'Disable' : 'Enable'}
+            </button>
+          </div>
         </div>
       </section>
       <div className="settings-agent-list">
