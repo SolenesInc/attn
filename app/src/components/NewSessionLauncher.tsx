@@ -154,7 +154,9 @@ export function NewSessionLauncher({
     return new Set(Object.keys(availability).filter((id) => isAgentSelectable(availability, id)));
   }, [agentAvailability]);
   const anyMachineAvailability = useMemo(() => {
-    const remote = Object.values(catalogs).flatMap((installed) => [...installed]);
+    const remote = Object.values(catalogs)
+      .flatMap((installed) => [...installed])
+      .filter((id) => agentAvailability?.[id] !== 'checking');
     if (!agentAvailability || !remote.length) return agentAvailability;
     return { ...agentAvailability, ...Object.fromEntries(remote.map((id): [string, HarnessAvailability] => [id, 'available'])) };
   }, [agentAvailability, catalogs]);
@@ -877,7 +879,7 @@ export function NewSessionLauncher({
       aria-busy={busy}
     >
       <div className="launcher-controls">
-        <SessionControls controls={controls} compact missing={missing} />
+        <SessionControls controls={controls} compact missing={missing} targetIsOutpost={Boolean(targetHost)} />
       </div>
       <div className="picker-header">
         <div className="picker-title" data-testid="location-picker-title">

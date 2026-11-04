@@ -247,10 +247,12 @@ export function SessionControls({
   controls,
   compact = false,
   missing,
+  targetIsOutpost = false,
 }: {
   controls: ReturnType<typeof useSessionControls>;
   compact?: boolean;
   missing?: MissingHarnesses;
+  targetIsOutpost?: boolean;
 }) {
   const {
     agent,
@@ -375,7 +377,7 @@ export function SessionControls({
                       ? `${label} is not available on this machine`
                       : absent
                         ? `${label} is not installed on ${absent}`
-                        : availability === 'checking'
+                        : availability === 'checking' && !targetIsOutpost
                           ? checkingForHarnessLabel(label)
                           : undefined
                   }

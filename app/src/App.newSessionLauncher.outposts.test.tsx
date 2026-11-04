@@ -258,6 +258,39 @@ describe('launcher with outposts attached', () => {
     expect(spawns(daemon)).toEqual([{ cwd: REPO, agent: 'codex', host: sandbox.id }]);
   });
 
+  it('says a harness is being checked only while This Mac is the target', async () => {
+    const { daemon } = await open({ claude_available: 'checking' });
+    const claude = screen.getByRole('radio', { name: /Claude/ });
+    const titleByTarget = [];
+    for (let row = 0; row < recents.length; row++) {
+      titleByTarget.push(claude.getAttribute('title'));
+      expect(claude).toBeEnabled();
+      expect(claude).toHaveAttribute('aria-checked', 'true');
+      if (row < recents.length - 1) await press(daemon, 'ArrowDown');
+    }
+    expect(titleByTarget).toEqual([
+      null,
+      'Checking for Claude on this machine',
+      null,
+      'Checking for Claude on this machine',
+    ]);
+    await press(daemon, 'Enter');
+    expect(spawns(daemon)).toEqual([{ cwd: NOTES, agent: 'claude', host: undefined }]);
+  });
+
+  it('says a harness is missing on an outpost that lacks it while This Mac is checking', async () => {
+    const { daemon } = await open({ claude_available: 'checking' }, [sandbox], ['codex']);
+    const claude = screen.getByRole('radio', { name: /Claude/ });
+    expect(claude).toHaveAttribute('title', 'Claude is not installed on ai-sandbox');
+    await highlight(daemon, 1);
+    expect(claude).toHaveAttribute('title', 'Checking for Claude on this machine');
+    await gesture(daemon, () =>
+      daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_available: 'false' } }),
+    );
+    expect(claude).toBeDisabled();
+    expect(claude).toHaveAttribute('title', 'Claude is not available on this machine');
+  });
+
   it('waits on a stalled machine and lets Esc finish the start in the background', async () => {
     const { daemon } = await open();
     answerInTurn(daemon, 'spawn_session', [HOLD]);
@@ -327,6 +360,26 @@ describe('launcher with outposts attached', () => {
 });
 
 describe('launcher without outposts', () => {
+  it.each([
+    ['no outpost attached', [], 'true'],
+    ['the Outposts switch off', [sandbox], 'false'],
+  ])('says a harness is being checked on This Mac with %s', async (_, outposts, enabled) => {
+    await openPicker(
+      { recent: [REPO] },
+      {
+        settings: {
+          ...settings,
+          outposts_enabled: enabled,
+          claude_available: 'checking',
+        },
+        outposts,
+      },
+    );
+    const claude = screen.getByRole('radio', { name: /Claude/ });
+    expect(claude).toBeEnabled();
+    expect(claude).toHaveAttribute('title', 'Checking for Claude on this machine');
+  });
+
   it.each([
     ['no outpost attached', [], 'true'],
     ['the Outposts switch off', [sandbox], 'false'],
