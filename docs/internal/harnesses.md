@@ -326,8 +326,11 @@ Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
   true, and `turn.complete` reports `reason: "aborted"`. An append made then is
   stored and reaches the model only with the next turn. Until the user sends
   input, `$.prompt.submit` resolves `{ drop: "the session was stopped and
-  nobody has sent input since" }` and starts no turn. A prompt typed into the
-  PTY during the turn is sent as its own turn as soon as Esc stops it.
+  nobody has sent input since" }` and starts no turn. The stop does not
+  expire: submits 5 s, 65 s and 185 s after Esc were dropped, and so was a
+  submit from the aborted turn's own `turn.complete` hook before `next(e)`. A
+  prompt typed into the PTY during the turn is sent as its own turn as soon as
+  Esc stops it, and typed input lifts the stop.
 - Denying a permission question also sets `next.signal.aborted`, but
   `turn.complete` reports `reason: "answer"`, and a `$.prompt.submit` right
   after starts a turn.
