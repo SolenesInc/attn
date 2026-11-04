@@ -73,7 +73,7 @@ func (s *Store) Read(p string) (content []byte, hash string, err error) {
 	content, err = os.ReadFile(abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, "", &NotFoundError{Path: p}
+			return nil, "", fmt.Errorf("notebook: %s not found", p)
 		}
 		return nil, "", err
 	}

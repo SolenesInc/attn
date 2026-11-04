@@ -270,26 +270,6 @@
           }
         },
         {
-          "id": "agent-guidance",
-          "delivery": "message_fragment",
-          "description": "Non-chief trust and delegation guidance.",
-          "body": {
-            "kind": "text",
-            "id": "session.agent",
-            "source": "content/agent.md",
-            "bindings": [
-              {
-                "name": "delegation_boundary",
-                "node": {
-                  "kind": "text",
-                  "id": "delegation.boundary",
-                  "source": "content/delegation-boundary.md"
-                }
-              }
-            ]
-          }
-        },
-        {
           "id": "garden-guidance",
           "delivery": "message_fragment",
           "description": "Garden instructions.",
@@ -297,16 +277,6 @@
             "kind": "text",
             "id": "session.garden",
             "source": "content/garden.md"
-          }
-        },
-        {
-          "id": "pull-request-guidance",
-          "delivery": "message_fragment",
-          "description": "Self-report instructions for harnesses without automatic PR reporting.",
-          "body": {
-            "kind": "text",
-            "id": "session.pull-request-guidance",
-            "source": "content/session/pull-request-guidance.md"
           }
         },
         {
@@ -6142,5 +6112,5 @@
       ]
     }
   ],
-  "definitions_hash": "0d8ddd579a6418fd91c9607b84c642d757f6a5b13f6091fdfae9f2b62c1bd1f4"
+  "definitions_hash": "de0b7b552202eb1d89dda099c936c2fd45a14bb7f62094d48c9c1f2bc5daa975"
 }

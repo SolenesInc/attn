@@ -41,10 +41,6 @@ type Conflict struct {
 	CurrentHash string
 }
 
-type NotFoundError struct{ Path string }
-
-func (e *NotFoundError) Error() string { return fmt.Sprintf("fsdoc: %s not found", e.Path) }
-
 func (s *Store) List(dir string) ([]Entry, error) {
 	rel, err := cleanRel(dir, true)
 	if err != nil {
@@ -60,7 +56,7 @@ func (s *Store) List(dir string) ([]Entry, error) {
 			if rel == "" {
 				return []Entry{}, nil
 			}
-			return nil, &NotFoundError{Path: dir}
+			return nil, fmt.Errorf("fsdoc: %s not found", dir)
 		}
 		return nil, statErr
 	}
@@ -121,7 +117,7 @@ func (s *Store) ReadWithLimit(p string, maxBytes int64) (content []byte, hash st
 	info, statErr := os.Lstat(abs)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
-			return nil, "", &NotFoundError{Path: p}
+			return nil, "", fmt.Errorf("fsdoc: %s not found", p)
 		}
 		return nil, "", statErr
 	}
@@ -134,7 +130,7 @@ func (s *Store) ReadWithLimit(p string, maxBytes int64) (content []byte, hash st
 	content, err = os.ReadFile(abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, "", &NotFoundError{Path: p}
+			return nil, "", fmt.Errorf("fsdoc: %s not found", p)
 		}
 		return nil, "", err
 	}
@@ -220,7 +216,7 @@ func (s *Store) Rename(from, to string) error {
 	defer s.mu.Unlock()
 	info, err := os.Lstat(fromAbs)
 	if os.IsNotExist(err) {
-		return &NotFoundError{Path: from}
+		return fmt.Errorf("fsdoc: %s not found", from)
 	}
 	if err != nil {
 		return err
@@ -255,7 +251,7 @@ func (s *Store) Delete(p string) error {
 	defer s.mu.Unlock()
 	info, err := os.Lstat(abs)
 	if os.IsNotExist(err) {
-		return &NotFoundError{Path: p}
+		return fmt.Errorf("fsdoc: %s not found", p)
 	}
 	if err != nil {
 		return err

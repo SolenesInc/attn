@@ -3,7 +3,6 @@ package notebook
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 )
 
 const TypeJournal = "journal"
@@ -26,10 +25,4 @@ type Entry struct {
 
 type Conflict struct {
 	CurrentHash string
-}
-
-type NotFoundError struct{ Path string }
-
-func (e *NotFoundError) Error() string {
-	return fmt.Sprintf("notebook: %s not found", e.Path)
 }
