@@ -122,7 +122,7 @@ func (m *fakeMod) place(instance string, message fakeModMessage) {
 	switch {
 	case m.stopped:
 		m.mu.Unlock()
-		m.ack(instance, message.ID, ModEventRefusedStop)
+		m.post("/claude/ack", map[string]any{"terminal": m.terminal, "instance": instance, "id": message.ID, "outcome": ModEventRefusedStop, "composer_empty": m.agent.term.composerEmpty()})
 		m.events <- ModEvent{Kind: ModEventRefusedStop, Text: message.Text}
 	case m.working:
 		m.held = append(m.held, message)
