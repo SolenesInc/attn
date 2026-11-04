@@ -22,14 +22,14 @@ func TestSSHBridgeDetachesTheOutpostFromItsSessionAndReconnectsThroughTheHomeAge
 	if got := home.Attn("daemon", "ensure"); got.Code != 0 || !strings.Contains(got.Stdout, `"started"`) {
 		t.Fatalf("attn daemon ensure: %+v", got)
 	}
-	t.Cleanup(func() {
-		for _, s := range []*testworld.Stack{home, remote} {
-			if result := s.Attn("daemon", "stop"); result.Code != 0 {
-				t.Errorf("stop daemon started by ensure: %+v", result)
-			}
+	stopDaemon := func(s *testworld.Stack) {
+		if result := s.Attn("daemon", "stop"); result.Code != 0 {
+			t.Errorf("stop daemon started by ensure: %+v", result)
 		}
-	})
+	}
+	t.Cleanup(func() { stopDaemon(home) })
 	pair.Connect()
+	t.Cleanup(func() { stopDaemon(remote) })
 	id := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
 	pair.App.TypeLine(id, "printf 'daemon-ssh-env-%s-%s\\n' \"${SSH_CONNECTION-unset}\" \"${SSH_AUTH_SOCK-unset}\"")
 	pair.App.AwaitScreen(id, "daemon-ssh-env-unset-unset")

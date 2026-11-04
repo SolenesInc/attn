@@ -20,7 +20,7 @@ func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	fdDir := filepath.Join("/proc", strconv.Itoa(pid), "fd")
 	entries, err := os.ReadDir(fdDir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if processGoneOrNotOurs(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("read %s: %w", fdDir, err)
@@ -39,4 +39,8 @@ func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func processGoneOrNotOurs(fdDirErr error) bool {
+	return os.IsNotExist(fdDirErr) || os.IsPermission(fdDirErr)
 }
