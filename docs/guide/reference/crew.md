@@ -108,11 +108,12 @@ The session starts on the member's launch desktop, in the member's home
 folder unless you set another one. Attn primes the session with the charter, the
 latest letter, the names of older letters and the seeds the member tends.
 The member then greets you: who it is, where things stand, and what it would
-do next. When mailbox items woke it, its first message names them instead, and
-its charter decides what it does next: act on them, record them, or go back to
-sleep. A member without a charter, one still onboarding, and the Chief greet
-you after naming the items. Waking an awake member does nothing and names its
-session.
+do next. When a seed update or another agent's message woke it, its first
+message names those items instead, and its charter decides what it does next:
+act on them, record them, or go back to sleep. A member without a charter, one
+still onboarding, and the Chief greet you after naming them. A wake for an
+answer to one of its asks, a quick capture or a notice keeps the plain
+greeting. Waking an awake member does nothing and names its session.
 
 ## Putting a member to sleep
 
@@ -182,7 +183,7 @@ Not by default. Members keep their rows in the Crew section and stay out of the 
 <details>
 <summary>Why did a member wake up on its own?</summary>
 
-An item arrived in the member's mailbox: another agent messaged the member, a seed the member tends or a seed under a plot it tends changed, or an ask the member sent got an answer. Attn wakes the member to read the new item, and the member's session opens with the items that woke it. These wakes are capped at 8 per member every 12 hours (`crew.wake_limit` and `crew.wake_limit_window_seconds`, set with `attn settings set`), and `0` turns them off. Your own wakes and wakes for your messages never count. When Attn refuses a wake because of the cap, the reply to the sender names the limit, and you can still wake the member yourself.
+An item arrived in the member's mailbox: another agent messaged the member, a seed the member tends or a seed under a plot it tends changed, or an ask the member sent got an answer. Attn wakes the member to read the new item. When the item is a seed update or an agent's message, the member's session opens with it. These wakes are capped at 8 per member every 12 hours (`crew.wake_limit` and `crew.wake_limit_window_seconds`, set with `attn settings set`), and `0` turns them off. Your own wakes and wakes for your messages never count. When Attn refuses a wake because of the cap, the reply to the sender names the limit, and you can still wake the member yourself.
 </details>
 
 <details>

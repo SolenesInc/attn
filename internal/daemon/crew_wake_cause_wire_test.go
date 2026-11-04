@@ -124,3 +124,17 @@ func TestWakesTheUserOrAnAgentAskForKeepTheGreeting(t *testing.T) {
 		}
 	})
 }
+
+func TestAWakeForTheUsersQuickCaptureKeepsTheGreeting(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		_, _, leaf := asleepPlotMember(t, w)
+		app := w.App()
+		setSetting(t, app, "crew.wake_limit", "0")
+		gardenNudgeNote(t, w.Client(), "planter", leaf, "waits beside the capture", true)
+		w.advance(0)
+		sendQuickCapture(t, w.TrustedApp(), protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}, "look at the plot")
+		if prompt := wakePrompt(t, w, wokenDay(t, w)); prompt != crewWakeGreeting {
+			t.Errorf("a wake for the user's capture opened with %q, want today's greeting", prompt)
+		}
+	})
+}
