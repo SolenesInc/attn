@@ -115,6 +115,15 @@ still onboarding, and the Chief greet you after naming them. A wake for an
 answer to one of its asks, a quick capture or a notice keeps the plain
 greeting. Waking an awake member does nothing and names its session.
 
+Only one session is the member at a time. You can also bring back one of the
+member's earlier sessions: open it after a restart left it stopped, or
+[resume](sessions.md#resume) it from the ledger or with
+`attn session reopen`. While the member is asleep, that session becomes the
+member again: it gets the member's mailbox and files the next letter, and a
+wake names it. While another session of the member is awake, Attn refuses and
+names the awake session. Attn also refuses to bring back a retired member's
+sessions.
+
 ## Putting a member to sleep
 
 The ☾ in the sidebar, Sleep in Manage crew, and `attn crew sleep <member>`

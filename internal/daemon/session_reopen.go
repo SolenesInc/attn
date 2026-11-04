@@ -301,10 +301,12 @@ func (d *Daemon) reopenSession(
 	sessionID protocol.SessionID, action protocol.SessionReopenAction,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var reopenErr error
-		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action)
-		return reopenErr
+	err := d.resumeAsMember(protocol.TrimID(sessionID), func() error {
+		return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+			var reopenErr error
+			outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action)
+			return reopenErr
+		})
 	})
 	if outcome != nil {
 		outcome.launch.finish()
@@ -552,10 +554,15 @@ func (d *Daemon) reopenSessionRuntimeWithProtection(
 	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
 ) (*sessionRuntimeReopened, error) {
-	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
-	lifecycleLock.Lock()
-	outcome, err := d.reopenSessionRuntimeProtected(protection, plan)
-	lifecycleLock.Unlock()
+	var outcome *sessionRuntimeReopened
+	err := d.resumeAsMember(plan.SessionID, func() error {
+		lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
+		lifecycleLock.Lock()
+		defer lifecycleLock.Unlock()
+		var reopenErr error
+		outcome, reopenErr = d.reopenSessionRuntimeProtected(protection, plan)
+		return reopenErr
+	})
 	if outcome != nil {
 		outcome.launch.finish()
 	}

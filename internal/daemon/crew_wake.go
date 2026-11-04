@@ -266,30 +266,23 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	if err != nil {
 		return nil, err
 	}
-	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.ID))
-	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
-		live, err := d.crewSessionActuallyLive(boundSessionID)
-		if err != nil {
-			return nil, fmt.Errorf("check %s's bound session %s: %w", member.Name, shortSessionID(boundSessionID), err)
-		}
-		if !live {
-			if _, err := d.releaseCrewBinding(member.ID, boundSessionID); err != nil {
-				return nil, fmt.Errorf("release %s's exited session %s: %w", member.Name, shortSessionID(boundSessionID), err)
-			}
-			releasedSessionID = boundSessionID
-		} else {
-			awake := &protocol.CrewWakeResult{
-				Member:       member.ID,
-				Name:         member.Name,
-				SessionID:    boundSessionID,
-				AlreadyAwake: true,
-			}
-			if session := d.store.Get(boundSessionID); session != nil {
-				awake.ProfileID = session.ProfileID
-			}
-			return awake, nil
-		}
+	boundSessionID, _, err := d.crewAwakeSession(member)
+	if err != nil {
+		return nil, err
 	}
+	if boundSessionID != "" {
+		awake := &protocol.CrewWakeResult{
+			Member:       member.ID,
+			Name:         member.Name,
+			SessionID:    boundSessionID,
+			AlreadyAwake: true,
+		}
+		if session := d.store.Get(boundSessionID); session != nil {
+			awake.ProfileID = session.ProfileID
+		}
+		return awake, nil
+	}
+	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.ID))
 	if member.Retired {
 		return nil, retiredMemberError(member)
 	}

@@ -397,13 +397,15 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 }
 
 func (d *Daemon) runStoredIntentSpawn(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) error {
-	if policy.command != nil {
-		return d.retryOutpostCommand(msg, policy)
-	}
-	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
-		return rejection.reason()
-	}
-	return nil
+	return d.resumeAsMember(msg.ID, func() error {
+		if policy.command != nil {
+			return d.retryOutpostCommand(msg, policy)
+		}
+		if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
+			return rejection.reason()
+		}
+		return nil
+	})
 }
 
 func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) error {

@@ -214,8 +214,10 @@ func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
 	if err != nil {
 		return err
 	}
-	if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
-		return fmt.Errorf("show session %s: %w", sessionID, rejection.reason())
-	}
-	return nil
+	return d.resumeAsMember(sessionID, func() error {
+		if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
+			return fmt.Errorf("show session %s: %w", sessionID, rejection.reason())
+		}
+		return nil
+	})
 }

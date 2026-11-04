@@ -328,6 +328,7 @@ func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 				if resumed := w.Launched(day.SessionID); !resumed.Resumed || resumed.ConversationID != day.ConversationID {
 					t.Fatalf("resume after the %s started %+v, want conversation %s", relocation, resumed, day.ConversationID)
 				}
+				crewHandoff(t, cli, day.SessionID, "Back to sleep.", false)
 			}
 		})
 	}
@@ -406,7 +407,9 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 	}
 
 	wake := wakeCrew(t, cli, "Keel", "")
-	w.Launched(string(wake.SessionID))
+	if !wake.AlreadyAwake || string(wake.SessionID) != day.SessionID {
+		t.Fatalf("wake after the resume = %+v, want Keel awake in the resumed session %s", wake, day.SessionID)
+	}
 	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != movedNotes {
 		t.Fatalf("launch directory after the repoint: %s", session.Directory)
 	}

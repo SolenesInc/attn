@@ -308,3 +308,15 @@ func recordMemberSessionTx(tx *sql.Tx, key string, id protocol.SessionID) error 
 	_, err := tx.Exec(`UPDATE crew_members SET latest_session = ? WHERE member_key = ?`, id, key)
 	return err
 }
+
+func (s *Store) SessionMemberKey(id protocol.SessionID) (string, error) {
+	if s.db == nil {
+		return "", nil
+	}
+	var key string
+	err := s.db.QueryRow(`SELECT member_key FROM sessions WHERE id = ?`, id).Scan(&key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return key, err
+}

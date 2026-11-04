@@ -1,0 +1,142 @@
+package daemon_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
+)
+
+func TestOpeningAMembersOldDayWhileItIsAwakeElsewhereIsRefused(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	old := crewDayLeftRecoverable(t, w, "alder")
+	app, cli := w.App(), w.Client()
+	current := wakeCrew(t, cli, "alder", "")
+	w.Launched(string(current.SessionID))
+
+	revived := attachRevive(app, string(old), 80, 24)
+	if revived.Success || !strings.Contains(protocol.Deref(revived.Error), string(current.SessionID)[:8]) {
+		t.Fatalf("opening alder's old day %s answered %+v, want a refusal naming the live day %s", old, revived, current.SessionID)
+	}
+	_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: old})
+	crewErrorContains(t, err, "Alder is awake in session "+string(current.SessionID)[:8])
+
+	if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != current.SessionID {
+		t.Fatalf("after the refusals alder is bound to %q, want %s", got, current.SessionID)
+	}
+	if running := crewRunningSessions(t, cli); len(running) != 1 || running[0] != current.SessionID {
+		t.Fatalf("running sessions = %v, want only alder's live day %s", running, current.SessionID)
+	}
+}
+
+func TestOpeningAMembersOldDayWhileItIsAsleepMakesThatDayTheMember(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	old := crewDayLeftRecoverable(t, w, "alder")
+	app, cli := w.App(), w.Client()
+
+	revived := attachRevive(app, string(old), 80, 24)
+	if !revived.Success || !protocol.Deref(revived.Revived) {
+		t.Fatalf("opening alder's old day answered %+v, want it revived", revived)
+	}
+	run := w.Launched(string(old))
+	if instructions := crewLaunchFlag(run.Argv, "--append-system-prompt"); !strings.Contains(instructions, "You are **Alder**") {
+		t.Errorf("the revived day launched without alder's priming:\n%s", instructions)
+	}
+	if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != old {
+		t.Fatalf("after the revive alder is bound to %q, want %s", got, old)
+	}
+	woken := wakeCrew(t, cli, "alder", "")
+	if !woken.AlreadyAwake || woken.SessionID != old {
+		t.Fatalf("wake after the revive = %+v, want alder already awake in %s", woken, old)
+	}
+}
+
+func TestAWakeDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	old := crewDayLeftRecoverable(t, w, "alder")
+	app, cli := w.App(), w.Client()
+
+	starting := w.PauseAt(pausepoint.TerminalStarting)
+	revived := make(chan protocol.AttachResultMessage, 1)
+	go func() { revived <- attachRevive(app, string(old), 80, 24) }()
+	starting.Await()
+	woke := make(chan *protocol.CrewWakeResult, 1)
+	failed := make(chan error, 1)
+	go func() {
+		woken, err := cli.CrewWake("alder", "", "")
+		if err != nil {
+			failed <- err
+			return
+		}
+		woke <- woken
+	}()
+	starting.Release()
+
+	if result := <-revived; !result.Success {
+		t.Fatalf("the revive answered %+v", result)
+	}
+	select {
+	case err := <-failed:
+		t.Fatalf("wake during the revive: %v", err)
+	case woken := <-woke:
+		if !woken.AlreadyAwake || woken.SessionID != old {
+			t.Fatalf("wake during the revive = %+v, want alder already awake in %s", woken, old)
+		}
+	}
+	w.Launched(string(old))
+	if running := crewRunningSessions(t, cli); len(running) != 1 || running[0] != old {
+		t.Fatalf("running sessions = %v, want only the revived day %s", running, old)
+	}
+}
+
+func TestARetiredMembersOldDayStaysClosed(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	old := crewDayLeftRecoverable(t, w, "alder")
+	app, cli := w.App(), w.Client()
+	retireCrew(t, cli, "alder")
+
+	revived := attachRevive(app, string(old), 80, 24)
+	if revived.Success || !strings.Contains(protocol.Deref(revived.Error), "Alder is retired") {
+		t.Fatalf("opening a retired member's day answered %+v, want the retirement refusal", revived)
+	}
+	if running := crewRunningSessions(t, cli); len(running) != 0 {
+		t.Fatalf("running sessions = %v, want none", running)
+	}
+}
+
+func crewDayLeftRecoverable(t *testing.T, w *world, member string) protocol.SessionID {
+	t.Helper()
+	app := w.App()
+	day := wakeCrew(t, w.Client(), member, "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Reply("Working. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	w.restart()
+	for _, s := range w.App().Initial.Sessions {
+		if s.ID == day.SessionID && s.State == protocol.SessionStateRecoverable {
+			return day.SessionID
+		}
+	}
+	t.Fatalf("after the restart %s's day %s is not recoverable", member, day.SessionID)
+	return ""
+}
+
+func crewRunningSessions(t *testing.T, cli *client.Client) []protocol.SessionID {
+	t.Helper()
+	list, err := cli.List("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var running []protocol.SessionID
+	for _, s := range list.Sessions {
+		if s.State != protocol.SessionStateRecoverable {
+			running = append(running, s.ID)
+		}
+	}
+	return running
+}
