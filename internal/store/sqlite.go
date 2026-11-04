@@ -1504,6 +1504,8 @@ func sqliteDSN(dbPath string) string {
 	// only a power loss can drop the last commits before a checkpoint.
 	query.Set("_journal_mode", "WAL")
 	query.Set("_synchronous", "NORMAL")
+	// A busy daemon prepared 182 distinct statements: 99.1% hit at 64, 99.4% from 128 (2026-11-04).
+	query.Set("_stmt_cache_size", "64")
 	u.RawQuery = query.Encode()
 	return u.String()
 }
