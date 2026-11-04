@@ -80,7 +80,6 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("POST /v1/installs", s.route("register", s.register))
 	mux.Handle("POST /v1/events", s.route("events", s.acceptEvents))
-	mux.Handle("GET /v1/installs/me", s.route("installs_me_get", s.holdings))
 	mux.Handle("DELETE /v1/installs/me", s.route("installs_me_delete", s.deleteInstall))
 	mux.HandleFunc("GET /metrics", s.metrics.serve)
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -90,8 +89,7 @@ func (s *Server) Handler() http.Handler {
 type handlerFunc func(w http.ResponseWriter, r *http.Request) error
 
 type install struct {
-	ID        string    `json:"install_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID string `json:"install_id"`
 }
 
 type unauthorizedError struct{}
@@ -322,46 +320,6 @@ func newEventRow(installID, ipHash string, receivedAt time.Time, build analytics
 	}
 }
 
-func (s *Server) holdings(w http.ResponseWriter, r *http.Request) error {
-	token, err := bearerTokenHash(r)
-	if err != nil {
-		return err
-	}
-	inst, err := s.authenticate(r.Context(), token)
-	if err != nil {
-		return err
-	}
-	holdings := analytics.InstallHoldings{InstallID: inst.ID, CreatedAt: inst.CreatedAt, Streams: map[analytics.Stream]int64{}}
-	err = s.db.rows(r.Context(),
-		"SELECT stream, count() AS events, min(at) AS first_at, max(at) AS last_at FROM events WHERE install_id = {install:String} GROUP BY stream",
-		map[string]string{"install": inst.ID},
-		func(row json.RawMessage) error {
-			var stream struct {
-				Stream  analytics.Stream `json:"stream"`
-				Events  int64            `json:"events"`
-				FirstAt time.Time        `json:"first_at"`
-				LastAt  time.Time        `json:"last_at"`
-			}
-			if err := json.Unmarshal(row, &stream); err != nil {
-				return err
-			}
-			holdings.Streams[stream.Stream] = stream.Events
-			holdings.Events += stream.Events
-			if holdings.FirstAt == nil || stream.FirstAt.Before(*holdings.FirstAt) {
-				holdings.FirstAt = &stream.FirstAt
-			}
-			if holdings.LastAt == nil || stream.LastAt.After(*holdings.LastAt) {
-				holdings.LastAt = &stream.LastAt
-			}
-			return nil
-		})
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, holdings)
-	return nil
-}
-
 func (s *Server) deleteInstall(w http.ResponseWriter, r *http.Request) error {
 	inst, release, err := s.holdInstall(r)
 	if err != nil {
@@ -413,7 +371,7 @@ func bearerTokenHash(r *http.Request) (string, error) {
 func (s *Server) authenticate(ctx context.Context, tokenSHA256 string) (install, error) {
 	var found *install
 	err := s.db.rows(ctx,
-		"SELECT install_id, created_at FROM installs WHERE token_sha256 = {token:String} LIMIT 1",
+		"SELECT install_id FROM installs WHERE token_sha256 = {token:String} LIMIT 1",
 		map[string]string{"token": tokenSHA256},
 		func(row json.RawMessage) error {
 			found = &install{}

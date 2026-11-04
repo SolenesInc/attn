@@ -13,7 +13,6 @@ The records are the ones the daemon writes to its outbox, and
 |---|---|
 | `POST /v1/installs` | `200 {install_id, token}` |
 | `POST /v1/events`, `Authorization: Bearer <token>`, a gzip NDJSON batch | `200 {accepted, duplicates}` |
-| `GET /v1/installs/me`, Bearer | `200 {install_id, created_at, events, streams, first_at, last_at}` |
 | `DELETE /v1/installs/me`, Bearer | `204`: the install and all its events are gone |
 | `GET /metrics` | Prometheus counters |
 | `GET /healthz` | `200` while ClickHouse answers |
@@ -23,7 +22,7 @@ the service answers `200`, duplicates included. The deployment has an alert on
 this volume.
 
 The token identifies an install, not a person. The service stores only the
-token's SHA-256. On every `/v1/installs/me` request, the service finds the
+token's SHA-256. On every request that carries a token, the service finds the
 install from the token, so no request can name another install. After a delete,
 the token no longer works.
 

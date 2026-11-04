@@ -22,9 +22,10 @@ func TestMain(m *testing.M) {
 }
 
 type client struct {
-	t     *testing.T
-	url   string
-	token string
+	t         *testing.T
+	url       string
+	token     string
+	installID string
 }
 
 func (c client) do(method, path string, body []byte) (int, []byte) {
@@ -57,6 +58,7 @@ func (c client) register() client {
 		c.t.Fatalf("register returned %s", body)
 	}
 	c.token = registration.Token
+	c.installID = registration.InstallID
 	return c
 }
 
@@ -69,15 +71,9 @@ func (c client) send(batch analytics.Batch) (int, []byte) {
 	return c.do(http.MethodPost, "/v1/events", body.Bytes())
 }
 
-func (c client) holdings() analytics.InstallHoldings {
+func (c client) storedEvents(clickHouse testworld.ClickHouse) string {
 	c.t.Helper()
-	status, body := c.do(http.MethodGet, "/v1/installs/me", nil)
-	if status != http.StatusOK {
-		c.t.Fatalf("GET /v1/installs/me: %d %s", status, body)
-	}
-	var holdings analytics.InstallHoldings
-	decode(c.t, body, &holdings)
-	return holdings
+	return clickHouse.Query(c.t, fmt.Sprintf("SELECT count() FROM events WHERE install_id = '%s'", c.installID))
 }
 
 func decode(t *testing.T, body []byte, into any) {
@@ -126,9 +122,8 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":0,"duplicates":100}` {
 		t.Fatalf("retried send: %d %s", status, body)
 	}
-	holdings := install.holdings()
-	if holdings.Events != 100 || holdings.Streams[analytics.StreamBus] != 99 || holdings.Streams[analytics.StreamApp] != 1 {
-		t.Fatalf("after a retry the server holds %+v, want 99 bus and 1 app event", holdings)
+	if streams := clickHouse.Query(t, "SELECT stream, count() FROM events GROUP BY stream ORDER BY stream"); streams != "app\t1\nbus\t99" {
+		t.Fatalf("after a retry ClickHouse holds %q, want 99 bus and 1 app event", streams)
 	}
 	stored := clickHouse.Query(t, "SELECT build_commit, build_channel, length(ip_hash), props FROM events WHERE stream = 'app'")
 	want := fmt.Sprintf("%s\t%s\t32\t{\"kind\":\"palette\",\"duration_ms\":18,\"path\":{\"s\":24}}", build.Commit, build.Channel)
@@ -145,8 +140,8 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	if refusal.Limit != "events_per_install_per_minute" || refusal.Value != 10_000 || refusal.Observed != 10_200 || refusal.RetryAfterS < 1 || refusal.RetryAfterS > 60 {
 		t.Fatalf("refusal %s, want events_per_install_per_minute at 10000 with 10200 observed and a retry within a minute", body)
 	}
-	if holdings := install.holdings(); holdings.Events != 100 {
-		t.Fatalf("a refused batch stored rows: the server holds %d events", holdings.Events)
+	if events := install.storedEvents(clickHouse); events != "100" {
+		t.Fatalf("a refused batch stored rows: ClickHouse holds %s events", events)
 	}
 
 	if status, body := install.do(http.MethodDelete, "/v1/installs/me", nil); status != http.StatusNoContent {
@@ -158,8 +153,8 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	if installs := clickHouse.Query(t, "SELECT count() FROM installs"); installs != "0" {
 		t.Fatalf("after delete ClickHouse holds %s installs", installs)
 	}
-	if status, _ := install.do(http.MethodGet, "/v1/installs/me", nil); status != http.StatusUnauthorized {
-		t.Fatalf("the deleted install's token still answers GET /v1/installs/me with %d", status)
+	if status, _ := install.send(batch); status != http.StatusUnauthorized {
+		t.Fatalf("the deleted install's token still answers POST /v1/events with %d", status)
 	}
 
 	var sent bytes.Buffer
@@ -244,7 +239,8 @@ func (c client) metrics() []byte {
 }
 
 func TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected(t *testing.T) {
-	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse)
 	anonymous := client{t: t, url: ingest.URL}
 	body, plainBytes := encodedBatch(t, paddedRecords(t, 270))
 	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
@@ -258,14 +254,15 @@ func TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected(t *testing.T) {
 
 	fresh := anonymous.register()
 	sender.accept(fresh)
-	if holdings := fresh.holdings(); holdings.Events != 270 {
-		t.Fatalf("a fresh install's first batch stored %d events, want 270", holdings.Events)
+	if events := fresh.storedEvents(clickHouse); events != "270" {
+		t.Fatalf("a fresh install's first batch stored %s events, want 270", events)
 	}
 }
 
 func TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay(t *testing.T) {
 	const budget = int64(64 << 10)
-	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t), fmt.Sprintf("ATTN_INGEST_BYTES_PER_DAY=%d", budget))
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse, fmt.Sprintf("ATTN_INGEST_BYTES_PER_DAY=%d", budget))
 	anonymous := client{t: t, url: ingest.URL}
 	body, plainBytes := encodedBatch(t, busRecords(1, 100))
 	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
@@ -275,8 +272,8 @@ func TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay(t *testing.T) {
 	}
 	late := anonymous.register()
 	sender.refused(late, "bytes_per_day", budget, (budget/plainBytes+1)*plainBytes)
-	if holdings := late.holdings(); holdings.Events != 0 {
-		t.Fatalf("a batch past the budget for all installs stored %d events", holdings.Events)
+	if events := late.storedEvents(clickHouse); events != "0" {
+		t.Fatalf("a batch past the budget for all installs stored %s events", events)
 	}
 }
 
@@ -295,7 +292,8 @@ func TestOneAddressRegistersAtMostTwentyInstallsAnHour(t *testing.T) {
 }
 
 func TestOversizedRequestsAreRefusedNamingTheLimit(t *testing.T) {
-	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse)
 	install := client{t: t, url: ingest.URL}.register()
 
 	noise := make([]byte, 4<<20+1)
@@ -320,8 +318,8 @@ func TestOversizedRequestsAreRefusedNamingTheLimit(t *testing.T) {
 	if status != http.StatusRequestEntityTooLarge || refusal.Limit != "build_line_bytes" || refusal.Value != 2<<10 || refusal.Observed <= 2<<10 {
 		t.Fatalf("a build line past 2 KiB: %d %s", status, body)
 	}
-	if holdings := install.holdings(); holdings.Events != 0 {
-		t.Fatalf("refused requests stored %d events", holdings.Events)
+	if events := install.storedEvents(clickHouse); events != "0" {
+		t.Fatalf("refused requests stored %s events", events)
 	}
 }
 
@@ -329,15 +327,14 @@ func TestAQuarantinedInstallIsRefusedWithTheReason(t *testing.T) {
 	clickHouse := testworld.NewClickHouse(t)
 	ingest := testworld.StartIngest(t, clickHouse)
 	install := client{t: t, url: ingest.URL}.register()
-	installID := install.holdings().InstallID
-	clickHouse.Query(t, fmt.Sprintf("INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('%s', '', 'flooded garbage names', now64())", installID))
+	clickHouse.Query(t, fmt.Sprintf("INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('%s', '', 'flooded garbage names', now64())", install.installID))
 
 	status, body := install.send(analytics.Batch{Build: analytics.CurrentBuild(), Records: busRecords(1, 1)})
 	if status != http.StatusForbidden || !bytes.Contains(body, []byte("flooded garbage names")) {
 		t.Fatalf("a quarantined install's batch: %d %s", status, body)
 	}
 
-	ipHash := clickHouse.Query(t, fmt.Sprintf("SELECT ip_hash FROM installs WHERE install_id = '%s'", installID))
+	ipHash := clickHouse.Query(t, fmt.Sprintf("SELECT ip_hash FROM installs WHERE install_id = '%s'", install.installID))
 	clickHouse.Query(t, fmt.Sprintf("INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('', '%s', 'minted installs in a loop', now64())", ipHash))
 	status, body = client{t: t, url: ingest.URL}.do(http.MethodPost, "/v1/installs", nil)
 	if status != http.StatusForbidden || !bytes.Contains(body, []byte("minted installs in a loop")) {
@@ -346,7 +343,8 @@ func TestAQuarantinedInstallIsRefusedWithTheReason(t *testing.T) {
 }
 
 func TestTheSameBatchSentConcurrentlyIsStoredOnce(t *testing.T) {
-	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse)
 	install := client{t: t, url: ingest.URL}.register()
 	batch := analytics.Batch{Build: analytics.CurrentBuild(), Records: busRecords(1, 2_000)}
 
@@ -374,13 +372,14 @@ func TestTheSameBatchSentConcurrentlyIsStoredOnce(t *testing.T) {
 	if total != (analytics.Accepted{Accepted: 2_000, Duplicates: 6_000}) {
 		t.Fatalf("four concurrent copies of a 2000-record batch answered %+v in total", total)
 	}
-	if holdings := install.holdings(); holdings.Events != 2_000 {
-		t.Fatalf("the server holds %d events, want 2000", holdings.Events)
+	if events := install.storedEvents(clickHouse); events != "2000" {
+		t.Fatalf("ClickHouse holds %s events, want 2000", events)
 	}
 }
 
 func TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes(t *testing.T) {
-	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse)
 	install := client{t: t, url: ingest.URL}.register()
 	streams := func(first, count int) []analytics.Record {
 		records := make([]analytics.Record, count)
@@ -404,7 +403,7 @@ func TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes(t *testing.T) {
 	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":2000,"duplicates":3000}` {
 		t.Fatalf("the 3000 stored streams resent with 2000 new ones: %d %s", status, body)
 	}
-	if holdings := install.holdings(); holdings.Events != 5_000 || len(holdings.Streams) != 5_000 {
-		t.Fatalf("the server holds %d events in %d streams, want 5000 in 5000", holdings.Events, len(holdings.Streams))
+	if stored := clickHouse.Query(t, "SELECT count(), uniqExact(stream) FROM events"); stored != "5000\t5000" {
+		t.Fatalf("ClickHouse holds %q events and streams, want 5000 in 5000", stored)
 	}
 }
