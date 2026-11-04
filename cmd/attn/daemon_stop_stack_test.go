@@ -116,6 +116,7 @@ func TestDaemonStopSignalsOnlyTheProcessThatHoldsTheDaemonLock(t *testing.T) {
 		says    string
 	}{
 		{name: "a daemon still starting while the file names an older pid", content: strconv.Itoa(bystander.Pid), says: "does not hold the daemon lock"},
+		{name: "a pid whose open files this user may not read", content: "1", says: "does not hold the daemon lock"},
 		{name: "a database restore", content: daemonctl.NonDaemonHolderSentinel, says: "held by another attn process"},
 		{name: "unreadable content", content: "not-a-pid", code: 1, says: "malformed pid file"},
 		{name: "the caller's own process", content: strconv.Itoa(os.Getpid()), code: 1, says: "own process tree"},
