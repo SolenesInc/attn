@@ -6,8 +6,8 @@ import { openSection, savedSettings } from '../test/settings';
 const ownPullRequestComments = () => screen.getByRole('switch', { name: 'Ring on my own PR comments' });
 
 describe('Settings Agents: Seeds on standby', () => {
-  it('rings on my own PR comments only after the switch is turned on', async () => {
-    const daemon = await openSection('agents');
+  it('rings on my own PR comments only after the switch is turned on, and can turn it off again', async () => {
+    const daemon = await openSection('agents', { settings: { 'pull_requests.own_comments': 'quiet' } });
 
     expect(screen.getByRole('heading', { name: 'Seeds on standby' })).toBeInTheDocument();
     expect(ownPullRequestComments()).toHaveAccessibleDescription(
@@ -19,6 +19,14 @@ describe('Settings Agents: Seeds on standby', () => {
 
     expect(savedSettings(daemon)).toEqual([['pull_requests.own_comments', 'ring']]);
     expect(ownPullRequestComments()).toHaveAttribute('aria-checked', 'true');
+
+    await gesture(daemon, () => fireEvent.click(ownPullRequestComments()));
+
+    expect(savedSettings(daemon)).toEqual([
+      ['pull_requests.own_comments', 'ring'],
+      ['pull_requests.own_comments', 'quiet'],
+    ]);
+    expect(ownPullRequestComments()).toHaveAttribute('aria-checked', 'false');
   });
 
   it('shows the switch on when the profile rings, and turning it off saves quiet', async () => {
@@ -29,12 +37,6 @@ describe('Settings Agents: Seeds on standby', () => {
     await gesture(daemon, () => fireEvent.click(ownPullRequestComments()));
 
     expect(savedSettings(daemon)).toEqual([['pull_requests.own_comments', 'quiet']]);
-    expect(ownPullRequestComments()).toHaveAttribute('aria-checked', 'false');
-  });
-
-  it('keeps the switch off when the profile is quiet', async () => {
-    await openSection('agents', { settings: { 'pull_requests.own_comments': 'quiet' } });
-
     expect(ownPullRequestComments()).toHaveAttribute('aria-checked', 'false');
   });
 });

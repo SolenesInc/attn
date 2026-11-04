@@ -121,7 +121,7 @@ func (gh fakeGitHub) calls() string {
 }
 
 func pullRequestJSON(state, mergeState string) string {
-	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":7,"url":"https://github.com/acme/widgets/pull/7","state":%q,"headRefOid":"abcdef012345","mergeStateStatus":%q,"reactions":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]},"commits":{"nodes":[]}}}}}`, state, mergeState)
+	return fmt.Sprintf(`{"data":{"repository":{"pullRequest":{"number":7,"url":"https://github.com/acme/widgets/pull/7","state":%q,"author":{"__typename":"User","login":"ben"},"headRefOid":"abcdef012345","mergeStateStatus":%q,"reactions":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]},"reviews":{"nodes":[]},"reviewRequests":{"nodes":[]},"commits":{"nodes":[]}}}}}`, state, mergeState)
 }
 
 type ghComment struct {

@@ -169,8 +169,8 @@ change with them.
 ## Watching pull requests
 
 An agent that opened or reviews a pull request runs `attn pr watch <url>` to
-hear about it in its inbox: readiness, failed checks, review findings, human
-comments and replies, reopened review threads, and monitoring outages. Watches
+hear about it in its inbox: readiness, failed checks, review findings, comments
+and replies by others, reopened review threads, and monitoring outages. Watches
 survive restarts, and Attn doesn't notify the agent again about an observation
 that hasn't changed. Feedback already on the PR at the first check is the
 baseline. Changing the mode keeps that baseline. If you unwatch and then watch
@@ -187,15 +187,16 @@ and failed checks are feedback the agent hears about. None of them adds a
 condition for ready. A watch never changes anything on
 GitHub and never grants permission to merge.
 
-Agents post to GitHub with your login. So that an agent doesn't hear about its
-own `gh pr comment` as new feedback, a watch skips the comments, review
-comments, review bodies and reopened review threads that the pull request's
-author wrote. Changes of state, such as ready, changes requested, failed checks,
-merged and closed, always reach the agent. If you steer an agent by commenting
-on your own pull request, run `attn settings set pull_requests.own_comments ring`
-or turn on **Ring on my own PR comments** in **Settings → Agents and models**.
-The default is `quiet`. Comments that a watch skipped aren't replayed after you
-switch to `ring`.
+Agents post to GitHub with your login, so the author of your pull request is you
+and your agents. So that an agent doesn't hear about its own `gh pr comment`, a
+watch skips the comments, review comments, review bodies and reopened review
+threads that the author started. Changes of state, such as ready, changes
+requested, failed checks, merged and closed, always reach the agent. If you
+steer an agent by commenting on your own pull request, turn on **Ring on my own
+PR comments** in **Settings → Agents and models**, or run
+`attn settings set pull_requests.own_comments ring`. The setting belongs to your
+profile and defaults to `quiet`. Attn doesn't replay the comments that a watch
+skipped before you switched to `ring`.
 
 `attn pr status` lists the watches, and `attn pr unwatch <url>` stops a watch and
 clears the watch's unread notifications. Closing or merging the PR ends the

@@ -34,7 +34,8 @@ type refreshedPullRequest struct {
 	keepAlive                  bool
 	codexThumbsUp, checkFails  bool
 	author                     string
-	comments                   []map[string]any
+	comments, reviewBodies     []map[string]any
+	threads                    []map[string]any
 	limitedUntil               time.Time
 	inboxTitle                 string
 	snapshots, readinessReads  int
@@ -127,7 +128,9 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		}}}}
 	case strings.Contains(string(body), "PullRequestFeedback"):
 		answer = map[string]any{"data": map[string]any{"repository": map[string]any{"pullRequest": map[string]any{
-			"comments": map[string]any{"nodes": append([]map[string]any{}, gh.comments...)}, "reviews": map[string]any{"nodes": []any{}}, "reviewThreads": map[string]any{"nodes": []any{}},
+			"comments":      map[string]any{"nodes": append([]map[string]any{}, gh.comments...)},
+			"reviews":       map[string]any{"nodes": append([]map[string]any{}, gh.reviewBodies...)},
+			"reviewThreads": map[string]any{"nodes": append([]map[string]any{}, gh.threads...)},
 		}}}}
 	case strings.Contains(r.URL.Query().Get("q"), "author:@me"):
 		items := []any{}
@@ -847,42 +850,100 @@ func (gh *refreshedPullRequest) comment(id, login, typeName, body string) {
 	})
 }
 
+func (gh *refreshedPullRequest) reviewBody(id, login, body string) {
+	gh.set(func(gh *refreshedPullRequest) {
+		gh.reviewBodies = append(gh.reviewBodies, map[string]any{
+			"id": id, "state": "COMMENTED", "bodyText": body, "submittedAt": "2026-11-04T10:00:00Z",
+			"author": map[string]any{"__typename": "User", "login": login},
+		})
+	})
+}
+
+func (gh *refreshedPullRequest) thread(id, login, body string) {
+	gh.set(func(gh *refreshedPullRequest) {
+		gh.threads = append(gh.threads, map[string]any{"id": id, "isResolved": false, "comments": map[string]any{"nodes": []any{
+			map[string]any{"id": id + "-comment", "bodyText": body, "createdAt": "2026-11-04T10:00:00Z", "path": "loop.go", "line": 12,
+				"author": map[string]any{"__typename": "User", "login": login}},
+		}}})
+	})
+}
+
+func (gh *refreshedPullRequest) resolveThread(id string, resolved bool) {
+	gh.set(func(gh *refreshedPullRequest) {
+		for _, thread := range gh.threads {
+			if thread["id"] == id {
+				thread["isResolved"] = resolved
+			}
+		}
+	})
+}
+
 func TestAPullRequestAuthorsOwnCommentsRingItsWatchOnlyWhenTheProfileAsks(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.author = "victor" })
 	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "s1")
-		caller := client.SettingsCaller{SessionID: "s1"}
-		if shown, err := cli.Settings(caller, "pull_requests.own_comments", false); err != nil || len(shown.Entries) != 1 || protocol.Deref(shown.Entries[0].Value) != "" {
-			t.Fatalf("pull_requests.own_comments before any change = %+v (%v), want unset", shown, err)
+		app, cli := w.App(), w.Client()
+		if got := app.Initial.Settings["pull_requests.own_comments"]; got != "quiet" {
+			t.Fatalf("the app starts with pull_requests.own_comments = %v, want quiet", got)
+		}
+		home, work := createProfile(app, "Home"), createProfile(app, "Work")
+		homeApp, workApp := w.AppOn(home.ID), w.AppOn(work.ID)
+		for session, profile := range map[string]string{"s1": home.ID, "s2": work.ID} {
+			if err := w.InjectSession(session, session, w.Path(session), protocol.SessionAgentClaude, profile); err != nil {
+				t.Fatalf("register %s: %v", session, err)
+			}
 		}
 		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		watchPullRequestOn(t, cli, "s2", protocol.PullRequestWatchModeGreen)
 		w.advance(protocol.HeatHotInterval)
-		if inbox := inboxContents(readInbox(t, cli, "s1", 0).Items); !strings.Contains(inbox, "ready") {
-			t.Fatalf("the watching agent's inbox = %q, want a note that the pull request is ready", inbox)
+		for _, session := range []string{"s1", "s2"} {
+			if inbox := inboxContents(readInbox(t, cli, session, 0).Items); !strings.Contains(inbox, "ready") {
+				t.Fatalf("%s's inbox = %q, want a note that the pull request is ready", session, inbox)
+			}
 		}
 
 		gh.comment("comment-author", "victor", "User", "I pushed the fix")
 		gh.comment("comment-reviewer", "alice", "User", "Please rename this")
 		gh.comment("comment-codex", "chatgpt-codex-connector", "Bot", "Possible nil dereference")
+		gh.reviewBody("review-author", "victor", "Self-review done")
+		gh.thread("thread-author", "victor", "Revisit this loop")
 		gh.set(func(gh *refreshedPullRequest) { gh.checkFails = true })
 		w.advance(protocol.HeatHotInterval)
-		inbox := inboxContents(readInbox(t, cli, "s1", 0).Items)
-		if strings.Contains(inbox, "I pushed the fix") || !strings.Contains(inbox, "alice: Please rename this") ||
-			!strings.Contains(inbox, "chatgpt-codex-connector[bot]: Possible nil dereference") || !strings.Contains(inbox, "checks failed") {
-			t.Errorf("under quiet the agent's inbox = %q, want alice's and Codex's comments and the failed checks, without the author's comment", inbox)
+		gh.resolveThread("thread-author", true)
+		w.advance(protocol.HeatHotInterval)
+		gh.resolveThread("thread-author", false)
+		w.advance(protocol.HeatHotInterval)
+		for _, session := range []string{"s1", "s2"} {
+			inbox := inboxContents(readInbox(t, cli, session, 0).Items)
+			if strings.Contains(inbox, "I pushed the fix") || strings.Contains(inbox, "Self-review done") || strings.Contains(inbox, "Revisit this loop") ||
+				!strings.Contains(inbox, "alice: Please rename this") || !strings.Contains(inbox, "chatgpt-codex-connector[bot]: Possible nil dereference") ||
+				!strings.Contains(inbox, "checks failed") {
+				t.Errorf("under quiet %s's inbox = %q, want alice's and Codex's comments and the failed checks, without the author's comment, review or reopened thread", session, inbox)
+			}
 		}
 
-		if _, err := cli.SetSetting(caller, "pull_requests.own_comments", "ring"); err != nil {
-			t.Fatalf("set pull_requests.own_comments to ring: %v", err)
+		gh.resolveThread("thread-author", true)
+		w.advance(protocol.HeatHotInterval)
+		if _, err := cli.SetSetting(client.SettingsCaller{SessionID: "s2"}, "pull_requests.own_comments", "ring"); err != nil {
+			t.Fatalf("set pull_requests.own_comments to ring for s2's profile: %v", err)
 		}
+		testworld.Await(workApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+			return m.Settings["pull_requests.own_comments"] == "ring"
+		})
+		testworld.Await(homeApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+			return protocol.Deref(m.ChangedKey) == "pull_requests.own_comments" && m.Settings["pull_requests.own_comments"] == "quiet"
+		})
 		gh.comment("comment-author-2", "victor", "User", "Address the review next")
+		gh.resolveThread("thread-author", false)
 		gh.set(func(gh *refreshedPullRequest) { gh.checkFails = false })
 		w.advance(protocol.HeatHotInterval)
-		inbox = inboxContents(readInbox(t, cli, "s1", 0).Items)
-		if !strings.Contains(inbox, "victor: Address the review next") || strings.Contains(inbox, "I pushed the fix") || !strings.Contains(inbox, "ready") {
-			t.Errorf("under ring the agent's inbox = %q, want the author's new comment and the ready note, without replaying the earlier author comment", inbox)
+		ringing := inboxContents(readInbox(t, cli, "s2", 0).Items)
+		if !strings.Contains(ringing, "victor: Address the review next") || strings.Count(ringing, "review thread reopened") != 1 ||
+			strings.Contains(ringing, "I pushed the fix") || strings.Contains(ringing, "Self-review done") || !strings.Contains(ringing, "ready") {
+			t.Errorf("under ring s2's inbox = %q, want the author's new comment, one reopened thread and the ready note, without replaying the author's earlier comment or review", ringing)
+		}
+		if quiet := inboxContents(readInbox(t, cli, "s1", 0).Items); strings.Contains(quiet, "Address the review next") || strings.Contains(quiet, "review thread reopened") {
+			t.Errorf("s1's profile stays quiet, but its inbox = %q", quiet)
 		}
 	})
 }

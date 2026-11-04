@@ -22,7 +22,7 @@ harness's logo.
 ### People
 
 - The new-agent picker's "Session agent" choice, ⌥1 to ⌥9 and ⌥T for a shell (`app/src/components/NewSessionDialog/SessionControls.tsx`). See [agent-launch.md](agent-launch.md) for the picker itself.
-- **Settings → Agents and models** (section `agents`, `app/src/components/SettingsModalSections.tsx`): "Default session agent", each harness's executable ("Empty uses the executable on PATH."), default model and effort, "Auto-approve", and what each harness supports.
+- **Settings → Agents and models** (section `agents`, `app/src/components/SettingsModalSections.tsx`): "Default session agent", each harness's executable ("Empty uses the executable on PATH."), default model and effort, "Auto-approve", what each harness supports, and the "Seeds on standby" block with the "Ring on my own PR comments" switch ([pull-requests.md](pull-requests.md)).
 - **Settings → Models** (section `models`, `app/src/components/ModelTierSettings.tsx`): the tiers mapped to each harness's models.
 - **Settings → Plugins** (section `plugins`): the "Plugin source" field with Browse and "Install Plugin", a card per plugin with its version, a Linked mark for a linked plugin, its runtime state and health, a Remove button, and a priority field.
 - Palette `toggle-harness-logos` ("Hide harness logos in the sidebar" or "Show harness logos in the sidebar", `app/src/application/useAppCommands.tsx`), the setting `sidebar_harness_logos_enabled`.

@@ -31,18 +31,20 @@ requests and review requests from GitHub, with approve, merge and mute.
 - The sidebar dock's "PRs" chip opens the same drawer (`app/src/components/SidebarChrome.tsx`). The recipe for the dock is in [shortcuts.md](shortcuts.md).
 - Home screen (`app/src/components/Dashboard.tsx`): the "Yours" and "Review requested" sections. Each card opens the pull request on GitHub and carries "New worktree session", Approve, Merge (with a confirmation), Mute and mute-author buttons (`app/src/components/PRActions.tsx`). A review group's ⊘ mutes the repository. The recipe for the home screen is in [home.md](home.md).
 - **Settings → Attention queue**: muted repositories and authors, each with Unmute (`app/src/components/SettingsModalSections.tsx`). **Settings → Files and locations**: the Projects Directory where "New worktree session" finds the repository.
+- **Settings → Agents and models**: the "Ring on my own PR comments" switch, `[data-testid="settings-own-pr-comments-toggle"]`, which saves `pull_requests.own_comments` as `ring` or `quiet` (`app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do: the agent's tile header shows `PR`, the repository's name and number with `↗` (`atlas#418 ↗`), and its status. A narrow tile shows only the `⎇` mark, which stays a button that opens the popover, then nothing. A click opens the pull request's popover with its state, checks, review and merge status, and every pull request the session recorded (`app/src/components/SessionProvenance.tsx`, `app/src/components/SessionPullRequestPopover.tsx`).
 - Their own shell: `attn pr` with `--session <id>`, below.
 
 ### Agents
 
 - `attn pr` (`cmd/attn/pr.go`, `cmd/attn/pr_session.go`): `record`, `forget`, `ls`, `watch` (`--mode green|codex|formal-review`, `--reviewer`), `unwatch`, `status`, and `wait-ready` (with `--repo`, `--mode`, `--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`). Inside a session, the session is implied. Outside a session, `--session <id>` names the session. `wait-ready` exits 0 ready, 1 checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error, merged or closed, and 124 timeout.
+- `attn settings get|set pull_requests.own_comments` (`quiet` or `ring`; unset reads empty and means quiet), a profile setting ([settings.md](settings.md)).
 - Prompts: the self-report guidance for harnesses without hooks, which tells the agent to run `attn pr record` (`internal/prompts/content/session/pull-request-guidance.md`). A watch's update reaches the agent as an inbox notice, "Pull request monitor: <what happened> for <pull request>." (`internal/daemon/session_pull_request_refresh.go`). See [inbox.md](inbox.md) for how the agent reads the notice.
 
 ### Triggers
 
 - When a Claude Code or Codex agent runs `gh pr create`, attn records the URL in the command's output on the agent's session (`internal/hooks/pullrequest.go`).
-- Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. When a watched pull request changes readiness or gets new feedback, attn creates an inbox notice, and the notice rings the agent. attn also checks a codex-mode watch again at the watch's settling deadline (`internal/daemon/session_pull_request_refresh.go`).
+- Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. When a watched pull request changes readiness or gets new feedback, attn creates an inbox notice, and the notice rings the agent. Feedback and reopened threads that the pull request's author wrote make no notice unless the watching session's profile sets `pull_requests.own_comments` to `ring`. State changes always make one. attn also checks a codex-mode watch again at the watch's settling deadline (`internal/daemon/session_pull_request_refresh.go`).
 - The daemon polls GitHub for the user's pull requests every 90 seconds, on a named instance only with the mock GitHub or `ATTN_GITHUB_POLLING=on` (`internal/daemon/daemon.go`, `internal/daemon/github_polling.go`).
 
 ## Driving it
@@ -94,8 +96,10 @@ Preconditions:
 - **From the person's shell.** `./attn pr record <url>` exits 2 with `pr record: no session — pass --session <id>, or run inside an attn session`. `./attn pr record <url> --session pr-agent` prints `recorded <url> for session pr-agent`. `./attn pr wait-ready 418` exits 2 with `pr wait-ready: --repo is required when the target is a number`.
 - **Guidance.** Run `./attn prompts render session pull-request-guidance`. It prints the text that asks an agent to run `attn pr record <url>` right after `gh pr create`.
 - **Open a pull request in a worktree session.** In **Settings → Files and locations**, set Projects Directory to a folder holding a clone of the pull request's repository, press ⌘⇧H (`session.goToDashboard`, `bridge native_key '{"key":"h","modifiers":["command","shift"]}'`) to return to the home screen, then click a home screen card's `[data-testid="open-button"]` ("New worktree session") natively. The launcher shows its steps, and a session starts in a new worktree on the pull request's branch. The recipe for the worktree is in [worktrees.md](worktrees.md). On the baseline this step fails, as Gotchas says. Wait for `.open-pr-launcher` to leave with `bridge dom_wait '{"selector":".open-pr-launcher","absent":true,"timeoutMs":30000}'`, then capture the native alert with `bridge capture_native_window_screenshot '{"path":"<P>/pr-worktree-alert.png"}'`. A web screenshot does not include that alert.
+- **Ring on my own PR comments.** Open Settings with ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`) and click `[data-testid="settings-nav-agents"]` natively. `bridge dom_text '{"selector":"[data-testid=\"settings-own-pr-comments-toggle\"]"}'` reads `Enable`, and `./attn settings get pull_requests.own_comments` prints an empty line while the setting is unset. Click the switch natively: the switch reads `Disable` and the setting prints `ring`. Click it again: the setting prints `quiet`. Run `./attn settings set pull_requests.own_comments ring`: the switch reads `Disable`. The mock GitHub answers no GraphQL, so the notices that the setting decides stay with the wire test, as Gotchas says for the other notices.
 - **Proof.** In `$P`, keep these:
   - each `./attn pr` command's output with its exit code
+  - `./attn settings get pull_requests.own_comments` after each click of the switch and after the shell's `set`
   - `bridge home_get_state` before and after the refresh, the approve, the merge and the mutes
   - `curl -s "$ATTN_MOCK_GH_URL/__control"` after approve and merge
   - `./attn agent peek pr-agent` after each agent turn and after the ring
@@ -109,7 +113,7 @@ Preconditions:
 - **Durability across restarts**: recorded pull requests, watches and what each watch already reported, and muted pull requests, repositories and authors are daemon records and come back after any restart. A watch made by a crew member or the chief belongs to the mailbox of the crew member or chief who made it, and outlives the session that made it. `wait-ready` keeps its cursor in the data folder's `pr-wait`, so a later run reports only what is new until `--reset` or `--since`.
 - **Linux**: `attn pr` works the same where the daemon and CLI run on Linux. `dock.attention` is Ctrl+Alt+P and `session.refreshPRs` is Ctrl+Shift+R there (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent on an outpost runs `attn pr` through its outpost daemon, and the agent's pull request links reach the home like the agent's state and cost.
-- **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen and in the drawer, and the muted repositories and authors, belong to the daemon: every profile shows the same list.
+- **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen and in the drawer, and the muted repositories and authors, belong to the daemon: every profile shows the same list. A watch reads `pull_requests.own_comments` from the profile of the session that recorded the pull request.
 - **Performance and idle cost**: two sessions on one pull request share one fetch, attn sends no request to a rate-limited host until the host's limit resets, and attn does not ask about a merged pull request again. The GitHub list polls every 90 seconds. Nothing measures the idle cost of the drawer or the header. When a change touches the rendering of either, check the rendering for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: Claude Code and Codex record a pull request from `gh pr create` on their own. Plugin harnesses read the self-report guidance and run `attn pr record`. Every harness gets watch notices in its own inbox.
 - **Keyboard and native input**: ⌘⇧P toggles the drawer and ⌘R polls. The tile header's popover takes ↑, ↓, Enter (open on GitHub) and `c` (copy the URL) only after a click. While the pointer only hovers, those keys reach the terminal. No macOS menu item claims ⌘⇧P or ⌘R.
@@ -119,7 +123,7 @@ Preconditions:
 - Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go`, `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attn/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `internal/hooks/pullrequest_test.go`.
-- App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`.
+- App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.
 
 ## Gotchas
 

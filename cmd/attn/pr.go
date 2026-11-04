@@ -528,8 +528,11 @@ commands:
   status [<url>] [--session <id>] [--json]             show recorded watch/readiness state
   wait-ready <number-or-url> [options]                 wait for the next actionable update
 
-watch skips comments the pull request's author wrote, since agents post as the user. State changes
-still arrive. To ring on them too, the user runs: attn settings set pull_requests.own_comments ring
+watch skips the comments the pull request's author wrote, because agents post as
+the user. State changes still reach the agent. To have watch deliver those
+comments too, the user runs:
+  attn settings set pull_requests.own_comments ring
+wait-ready does not skip them; --ignore-author skips a login.
 
 wait-ready options:
   --repo [host/]owner/repository  required when the target is a number

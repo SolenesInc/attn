@@ -145,10 +145,12 @@ item.
 
 A PR watch update tells the watching agent what happened on a pull request:
 ready, checks failed, changes requested, merged, closed, new review feedback, a
-reopened thread, or that monitoring is delayed. attn withdraws the pull
-request's unread updates when the watch stops. attn withdraws an unread status
-update when the pull request leaves that status, and an unread delay update
-when monitoring recovers.
+reopened thread, or that monitoring is delayed. Feedback and reopened threads
+that the pull request's author wrote make no update unless the profile sets
+`pull_requests.own_comments` to `ring`. attn withdraws the pull request's unread
+updates when the watch stops. attn withdraws an unread status update when the
+pull request leaves that status, and an unread delay update when monitoring
+recovers.
 
 ### Notices
 
