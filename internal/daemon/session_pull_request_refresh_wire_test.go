@@ -515,7 +515,7 @@ func TestTwoPullRequestsChangingInOnePassTellTheAppOnce(t *testing.T) {
 func watchPullRequestOn(t *testing.T, cli *client.Client, session string, mode protocol.PullRequestWatchMode) {
 	t.Helper()
 	recordPullRequest(t, cli, session, shopPull(71))
-	if err := cli.WatchSessionPullRequest(protocol.SessionID(session), shopPull(71), mode, ""); err != nil {
+	if err := cli.WatchSessionPullRequest(protocol.SessionID(session), "", shopPull(71), mode, ""); err != nil {
 		t.Fatalf("%s watches the pull request: %v", session, err)
 	}
 }
@@ -692,7 +692,7 @@ func TestAMembersPullRequestWatchSurvivesItsCreatingDayAndCanBeStoppedFromTheNex
 			}
 			return false
 		})
-		if err := cli.UnwatchSessionPullRequest(protocol.SessionID(next.id), shopPull(71)); err != nil {
+		if err := cli.UnwatchSessionPullRequest(protocol.SessionID(next.id), "", shopPull(71)); err != nil {
 			t.Fatal(err)
 		}
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
@@ -725,7 +725,7 @@ func TestAMemberCanForgetItsWatchFromTheNextDay(t *testing.T) {
 		if err := cli.ForgetSessionPullRequest(protocol.SessionID(next.id), shopPull(71)); err != nil {
 			t.Fatal(err)
 		}
-		if err := cli.UnwatchSessionPullRequest(protocol.SessionID(next.id), shopPull(71)); err == nil {
+		if err := cli.UnwatchSessionPullRequest(protocol.SessionID(next.id), "", shopPull(71)); err == nil {
 			t.Fatal("forgotten watch remains")
 		}
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
@@ -759,7 +759,7 @@ func TestAPullRequestWatchCreatedBeforeTheChiefRoleStaysVisibleAndStoppable(t *t
 		if len(items) != 1 || items[0].Address != "session:watcher" {
 			t.Fatalf("rewatch duplicated or rewrote the watch: %+v", items)
 		}
-		if err := cli.UnwatchSessionPullRequest("watcher", shopPull(71)); err != nil {
+		if err := cli.UnwatchSessionPullRequest("watcher", "", shopPull(71)); err != nil {
 			t.Fatal(err)
 		}
 		session = queriedSession(t, cli, "watcher")
@@ -831,7 +831,7 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 		gh.set(func(gh *refreshedPullRequest) { gh.readinessGate = gate })
 		defer close(gate)
-		if err := cli.WatchSessionPullRequest(protocol.SessionID(next.id), shopPull(71), protocol.PullRequestWatchModeCodex, ""); err != nil {
+		if err := cli.WatchSessionPullRequest(protocol.SessionID(next.id), "", shopPull(71), protocol.PullRequestWatchModeCodex, ""); err != nil {
 			t.Fatal(err)
 		}
 		pr := onlyPullRequest(t, cli, next.id)

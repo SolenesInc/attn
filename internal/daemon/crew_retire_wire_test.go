@@ -191,7 +191,7 @@ func TestRetiringAMemberRemovesItsGardenAndPullRequestWatches(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	wake := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(wake.SessionID)).Prompted()
-	watchPullRequestAs(t, cli, string(wake.SessionID), protocol.PullRequestWatchModeCodex, "")
+	watchPullRequestAs(t, cli, string(wake.SessionID), "", protocol.PullRequestWatchModeCodex, "")
 	awaitWatchedPullRequest(app, string(wake.SessionID), func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })
 	seed := plantSeedAs(t, cli, "", "Watch this work")
 	gardenNudgeWatch(t, cli, string(wake.SessionID), seed, false)

@@ -1036,6 +1036,9 @@ model PullRequestWatchMessage {
   url: string;
   mode: PullRequestWatchMode;
   reviewer?: string;
+  // Addresses the watch to this seed's tender instead of the session. The
+  // session still records the pull request.
+  seed_id?: string;
 }
 
 @extension("x-on", #{ home: true })
@@ -1043,6 +1046,16 @@ model PullRequestUnwatchMessage {
   cmd: "pull_request_unwatch";
   id: SessionID;
   url: string;
+  seed_id?: string;
+}
+
+// The pull requests watched for a seed's tender, in the reply's
+// seed_pull_requests. The seed must be in the session's profile.
+@extension("x-on", #{ home: true })
+model PullRequestWatchListMessage {
+  cmd: "pull_request_watch_list";
+  id: SessionID;
+  seed_id: string;
 }
 
 model DelegationSelection {
@@ -6856,6 +6869,7 @@ model Response {
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   caller_session_id?: SessionID;
+  seed_pull_requests?: SessionPullRequest[];
   profiles?: Profile[];
   prs?: PR[];
   repos?: RepoState[];

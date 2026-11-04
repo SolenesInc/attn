@@ -731,21 +731,35 @@ func (c *Client) ForgetSessionPullRequest(id protocol.SessionID, url string) err
 	return err
 }
 
-func (c *Client) WatchSessionPullRequest(id protocol.SessionID, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
+func (c *Client) WatchSessionPullRequest(id protocol.SessionID, seedID, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
 	msg := protocol.PullRequestWatchMessage{
 		Cmd: protocol.CmdPullRequestWatch, ID: id, URL: url, Mode: mode,
 	}
 	if strings.TrimSpace(reviewer) != "" {
 		msg.Reviewer = protocol.Ptr(strings.TrimSpace(reviewer))
 	}
+	if strings.TrimSpace(seedID) != "" {
+		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
+	}
 	_, err := c.send(msg)
 	return err
 }
 
-func (c *Client) UnwatchSessionPullRequest(id protocol.SessionID, url string) error {
+func (c *Client) UnwatchSessionPullRequest(id protocol.SessionID, seedID, url string) error {
 	msg := protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: id, URL: url}
+	if strings.TrimSpace(seedID) != "" {
+		msg.SeedID = protocol.Ptr(strings.TrimSpace(seedID))
+	}
 	_, err := c.send(msg)
 	return err
+}
+
+func (c *Client) SeedPullRequests(id protocol.SessionID, seedID string) ([]protocol.SessionPullRequest, error) {
+	resp, err := c.send(protocol.PullRequestWatchListMessage{Cmd: protocol.CmdPullRequestWatchList, ID: id, SeedID: strings.TrimSpace(seedID)})
+	if err != nil {
+		return nil, err
+	}
+	return resp.SeedPullRequests, nil
 }
 
 func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.DelegationOperation, error) {

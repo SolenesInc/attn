@@ -1883,6 +1883,10 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
 				d.closeAsksTo(who.ToTenderOf(next.ID))
+				if err := d.stopSeedPullRequestWatches(next.ID); err != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+						"%s succeeded, but its pull request watches could not be stopped: %w", verb, err)
+				}
 			}
 			if err := d.discardAllIneligibleGardenSeedBellsLocked(); err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(

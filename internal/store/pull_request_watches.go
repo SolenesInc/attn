@@ -181,6 +181,49 @@ func (s *Store) PullRequestWatch(to who.Address, prID string) (PullRequestWatch,
 	return watch, err == nil
 }
 
+type WatchedPullRequest struct {
+	Watch  PullRequestWatch
+	Record SessionPullRequestRecord
+}
+
+func (s *Store) PullRequestWatchesTo(to who.Address) ([]WatchedPullRequest, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, errors.New("store has no database")
+	}
+	watchRows, err := s.db.Query(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE address=? ORDER BY created_at, pr_id`, to.String())
+	if err != nil {
+		return nil, err
+	}
+	watches, err := scanPullRequestWatches(watchRows)
+	watchRows.Close()
+	if err != nil {
+		return nil, err
+	}
+	recordRows, err := s.db.Query(`
+		SELECT `+sessionPullRequestColumns+` FROM session_pull_requests pr
+		WHERE EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.address=? AND w.session_id=pr.session_id AND w.pr_id=pr.pr_id)`, to.String())
+	if err != nil {
+		return nil, err
+	}
+	records, err := scanSessionPullRequests(recordRows)
+	recordRows.Close()
+	if err != nil {
+		return nil, err
+	}
+	watched := make([]WatchedPullRequest, 0, len(watches))
+	for _, watch := range watches {
+		for _, rec := range records {
+			if rec.SessionID == watch.SessionID && rec.PRID == watch.PRID {
+				watched = append(watched, WatchedPullRequest{Watch: watch, Record: rec})
+				break
+			}
+		}
+	}
+	return watched, nil
+}
+
 func (s *Store) WatchedSessionPullRequests() []SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

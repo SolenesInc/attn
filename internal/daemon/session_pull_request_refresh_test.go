@@ -107,7 +107,7 @@ func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadine
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.watchSessionPullRequest(rec, mode, reviewer); err != nil {
+	if err := d.watchSessionPullRequest(rec, "", mode, reviewer); err != nil {
 		t.Fatal(err)
 	}
 }

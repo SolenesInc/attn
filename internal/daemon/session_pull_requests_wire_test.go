@@ -214,7 +214,7 @@ func TestAPullRequestTheNextChiefForgetsStaysForgottenForThePreviousChiefAfterAR
 		previous, next := w.bubbleClaude(t, app, "shop"), w.bubbleClaude(t, app, "cart")
 		setChiefOfStaff(app, previous.id, true)
 		recordPullRequest(t, cli, previous.id, shopPull(5))
-		if err := cli.WatchSessionPullRequest(protocol.SessionID(previous.id), shopPull(5), protocol.PullRequestWatchModeCodex, ""); err != nil {
+		if err := cli.WatchSessionPullRequest(protocol.SessionID(previous.id), "", shopPull(5), protocol.PullRequestWatchModeCodex, ""); err != nil {
 			t.Fatal(err)
 		}
 		setChiefOfStaff(app, next.id, true)

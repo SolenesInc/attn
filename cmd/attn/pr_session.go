@@ -21,6 +21,7 @@ func sessionPRClient() *client.Client {
 
 type sessionPRArgs struct {
 	sessionID protocol.SessionID
+	seedID    string
 	url       string
 	mode      prreadiness.Mode
 	reviewer  string
@@ -31,6 +32,7 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 	fs := flag.NewFlagSet("pr "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	session := fs.String("session", "", "session id (defaults to the current session)")
+	seed := fs.String("seed", "", "seed id whose tender the watch addresses")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
 	modeValue := fs.String("mode", string(prreadiness.ModeGreen), "green, codex, or formal-review")
 	reviewer := fs.String("reviewer", "", "reviewer login (formal-review only)")
@@ -52,7 +54,7 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 		return sessionPRArgs{}, err
 	}
 	parsed := sessionPRArgs{
-		sessionID: protocol.SessionID(strings.TrimSpace(*session)), asJSON: *asJSON,
+		sessionID: protocol.SessionID(strings.TrimSpace(*session)), seedID: strings.TrimSpace(*seed), asJSON: *asJSON,
 		mode: mode, reviewer: strings.TrimSpace(*reviewer),
 	}
 	if parsed.sessionID == "" {
@@ -91,11 +93,16 @@ func executeSessionPRCommand(command string, args []string, stdout, stderr io.Wr
 		fmt.Fprintf(stderr, "pr %s: %v\n", command, err)
 		return prWaitExitUsage
 	}
-	if command == "ls" {
-		return listSessionPRs(parsed.sessionID, "", false, parsed.asJSON, stdout, stderr)
+	if parsed.seedID != "" && command != "ls" && command != "status" && command != "watch" && command != "unwatch" {
+		fmt.Fprintf(stderr, "pr %s: --seed applies to watch, unwatch, ls and status\n", command)
+		return prWaitExitUsage
 	}
-	if command == "status" {
-		return listSessionPRs(parsed.sessionID, parsed.url, true, parsed.asJSON, stdout, stderr)
+	if command == "ls" || command == "status" {
+		entries, owner, code := sessionPRsToList(parsed, command, stderr)
+		if code != 0 {
+			return code
+		}
+		return printSessionPRs(entries, owner, parsed.url, command == "status", parsed.asJSON, stdout, stderr)
 	}
 	if command == "watch" || command == "unwatch" {
 		return watchOrUnwatchSessionPR(command, parsed, stdout, stderr)
@@ -108,16 +115,20 @@ func watchOrUnwatchSessionPR(command string, parsed sessionPRArgs, stdout, stder
 	var err error
 	if command == "watch" {
 		if err = prreadiness.ValidateConfig(parsed.mode, parsed.reviewer); err == nil {
-			err = c.WatchSessionPullRequest(parsed.sessionID, parsed.url, protocol.PullRequestWatchMode(parsed.mode), parsed.reviewer)
+			err = c.WatchSessionPullRequest(parsed.sessionID, parsed.seedID, parsed.url, protocol.PullRequestWatchMode(parsed.mode), parsed.reviewer)
 		}
 	} else {
-		err = c.UnwatchSessionPullRequest(parsed.sessionID, parsed.url)
+		err = c.UnwatchSessionPullRequest(parsed.sessionID, parsed.seedID, parsed.url)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "pr %s: %v\n", command, err)
 		return prWaitExitError
 	}
-	if command == "watch" {
+	if parsed.seedID != "" && command == "watch" {
+		fmt.Fprintf(stdout, "watching %s in %s mode for seed %s; updates reach the seed's tender\n", parsed.url, parsed.mode, parsed.seedID)
+	} else if parsed.seedID != "" {
+		fmt.Fprintf(stdout, "stopped watching %s for seed %s\n", parsed.url, parsed.seedID)
+	} else if command == "watch" {
 		fmt.Fprintf(stdout, "watching %s in %s mode for session %s; updates arrive in the agent inbox\n", parsed.url, parsed.mode, parsed.sessionID)
 	} else {
 		fmt.Fprintf(stdout, "stopped watching %s for session %s\n", parsed.url, parsed.sessionID)
@@ -139,27 +150,36 @@ func recordOrForgetSessionPR(command string, sessionID protocol.SessionID, url s
 	return 0
 }
 
-func listSessionPRs(sessionID protocol.SessionID, url string, watchesOnly, asJSON bool, stdout, stderr io.Writer) int {
+type prListOwner struct {
+	kind, id string
+}
+
+func sessionPRsToList(parsed sessionPRArgs, command string, stderr io.Writer) ([]protocol.SessionPullRequest, prListOwner, int) {
+	if parsed.seedID != "" {
+		entries, err := sessionPRClient().SeedPullRequests(parsed.sessionID, parsed.seedID)
+		if err != nil {
+			fmt.Fprintf(stderr, "pr %s: %v\n", command, err)
+			return nil, prListOwner{}, prWaitExitError
+		}
+		return entries, prListOwner{kind: "seed", id: parsed.seedID}, 0
+	}
 	sessions, err := sessionPRClient().Query("")
 	if err != nil {
-		fmt.Fprintf(stderr, "pr ls: %v\n", err)
-		return prWaitExitError
+		fmt.Fprintf(stderr, "pr %s: %v\n", command, err)
+		return nil, prListOwner{}, prWaitExitError
 	}
-	var found *protocol.Session
 	for i := range sessions {
-		if sessions[i].ID == sessionID {
-			found = &sessions[i]
-			break
+		if sessions[i].ID == parsed.sessionID {
+			return sessions[i].PullRequests, prListOwner{kind: "session", id: string(sessions[i].ID)}, 0
 		}
 	}
-	if found == nil {
-		fmt.Fprintf(stderr, "pr ls: unknown session %s\n", sessionID)
-		return prWaitExitError
-	}
-	sessionID = found.ID
+	fmt.Fprintf(stderr, "pr %s: unknown session %s\n", command, parsed.sessionID)
+	return nil, prListOwner{}, prWaitExitError
+}
 
-	entries := make([]protocol.SessionPullRequest, 0, len(found.PullRequests))
-	for _, pr := range found.PullRequests {
+func printSessionPRs(pullRequests []protocol.SessionPullRequest, owner prListOwner, url string, watchesOnly, asJSON bool, stdout, stderr io.Writer) int {
+	entries := make([]protocol.SessionPullRequest, 0, len(pullRequests))
+	for _, pr := range pullRequests {
 		if watchesOnly && !protocol.Deref(pr.Watching) {
 			continue
 		}
@@ -183,10 +203,10 @@ func listSessionPRs(sessionID protocol.SessionID, url string, watchesOnly, asJSO
 	}
 
 	if len(entries) == 0 {
-		if watchesOnly {
-			fmt.Fprintf(stdout, "session %s has no watched pull requests\n", sessionID)
+		if watchesOnly || owner.kind == "seed" {
+			fmt.Fprintf(stdout, "%s %s has no watched pull requests\n", owner.kind, owner.id)
 		} else {
-			fmt.Fprintf(stdout, "session %s has opened no pull requests\n", sessionID)
+			fmt.Fprintf(stdout, "session %s has opened no pull requests\n", owner.id)
 		}
 		return 0
 	}

@@ -169,23 +169,13 @@ change with them.
 ## Watching pull requests
 
 An agent that opened or reviews a pull request runs `attn pr watch <url>` to
-hear about it in its inbox: readiness, failed checks, review findings, comments
-and replies by others, reopened review threads, and monitoring outages. Watches
-survive restarts, and Attn doesn't notify the agent again about an observation
-that hasn't changed. Feedback already on the PR at the first check is the
-baseline. Changing the mode keeps that baseline. If you unwatch and then watch
-again, the new watch starts a new baseline.
+hear about it in its inbox. A watch sends:
 
-| Mode | Ready when |
-|---|---|
-| `green` (default) | The PR is open, not a draft, and GitHub reports it `CLEAN` or `HAS_HOOKS`. |
-| `codex` | `green`, plus the Codex app's 👍 and no 👀 after a 30-second settling window. Reactions are best effort, since GitHub doesn't tie them to a commit. |
-| `formal-review` | GitHub's overall approval. `--reviewer <login>` requires that reviewer's current verdict instead. |
-
-Apart from the conditions in the table, comments, threads, requested changes
-and failed checks are feedback the agent hears about. None of them adds a
-condition for ready. A watch never changes anything on
-GitHub and never grants permission to merge.
+- State changes: ready, changes requested, failed checks, merged and closed.
+  These always reach the agent.
+- Feedback: comments, review comments, review bodies and reopened review
+  threads. By default, a watch skips the feedback your own account wrote.
+- Monitoring outages.
 
 Agents post to GitHub with your account, so a comment from your account usually
 comes from an agent. So that an agent doesn't hear about its own `gh pr comment`,
@@ -194,19 +184,51 @@ for that GitHub host wrote, on any pull request. Everyone else's reach the agent
 including those from the author of a pull request you review. On your own pull
 request, a watch also skips reopened review threads that you started. GitHub
 doesn't say who reopened a thread, so on someone else's pull request every
-reopened thread reaches the agent. Changes of state, such as ready, changes
-requested, failed checks, merged and closed, always reach the agent. If you steer
-an agent by commenting from your own account, turn on **Ring on my own PR
-comments** in **Settings → Agents and models**, or run
-`attn settings set pull_requests.own_comments ring`. The setting belongs to your
-profile and defaults to `quiet`. Attn doesn't replay the comments that a watch
-skipped before you switched to `ring`.
+reopened thread reaches the agent. If you steer an agent by commenting from your
+own account, turn on **Ring on my own PR comments** in **Settings → Agents and
+models**, or run `attn settings set pull_requests.own_comments ring`. The setting
+belongs to your profile and defaults to `quiet`. Attn doesn't replay the comments
+that a watch skipped before you switched to `ring`.
+
+Watches survive restarts, and Attn doesn't notify the agent again about an
+observation that hasn't changed. Feedback already on the PR at the first check
+is the baseline. Changing the mode keeps that baseline. If you unwatch and then
+watch again, the new watch starts a new baseline.
+
+| Mode | Ready when |
+|---|---|
+| `green` (default) | The PR is open, not a draft, and GitHub reports it `CLEAN` or `HAS_HOOKS`. |
+| `codex` | `green`, plus the Codex app's 👍 and no 👀 after a 30-second settling window. Reactions are best effort, since GitHub doesn't tie them to a commit. |
+| `formal-review` | GitHub's overall approval. `--reviewer <login>` requires that reviewer's current verdict instead. |
+
+Apart from the conditions in the table, comments, threads, requested changes
+and failed checks are updates the agent hears about. None of them adds a
+condition for ready. A watch never changes anything on GitHub and never grants
+permission to merge.
 
 `attn pr status` lists the watches, and `attn pr unwatch <url>` stops a watch and
 clears the watch's unread notifications. Closing or merging the PR ends the
 watch. For a script or a terminal that should block until the PR is ready, use
 `attn pr wait-ready <pr> --repo <owner/repo> --mode <mode>`. The command's
 `--help` explains reviewers, baselines, resuming, and exit codes.
+
+### Watching a pull request on a seed
+
+To watch a pull request for a seed instead of for the session, run
+`attn pr watch <url> --seed <id>`. The watch belongs to the seed, so it outlives
+the session that created it. Each update goes to whoever tends the seed when the
+update arrives, the way [a message to a seed id](#agents-messaging-each-other)
+does. A handover therefore moves the watch to the new tender, and nobody has to
+watch again. `attn pr watch` refuses a seed that doesn't exist or is closed.
+
+`attn pr unwatch`, `attn pr ls` and `attn pr status` take `--seed <id>` too, and
+then act on the seed's watches. `attn seed watch` is a different watch: it
+follows the seed's own moves.
+
+Harvesting or withering the seed stops its watches and clears their unread
+updates. A seed whose work continues after the merge, such as following a
+deploy, must not use `attn seed harvest --when-merged`. That command harvests
+the seed at the merge, which stops its watches and ends its work.
 
 ## The garden
 

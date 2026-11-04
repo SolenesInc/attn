@@ -139,6 +139,7 @@ var Placements = map[string][]Placement{
 	"pull_request_link":                {Placement{LocatorSession, "session_id"}},
 	"pull_request_unwatch":             {Placement{LocatorHome, ""}},
 	"pull_request_watch":               {Placement{LocatorHome, ""}},
+	"pull_request_watch_list":          {Placement{LocatorHome, ""}},
 	"query":                            {Placement{LocatorHome, ""}},
 	"query_authors":                    {Placement{LocatorHome, ""}},
 	"query_prs":                        {Placement{LocatorHome, ""}},
@@ -1640,6 +1641,18 @@ func (m PullRequestWatchMessage) Placement() Placement {
 }
 
 func (m PullRequestWatchMessage) Locate() string {
+	return ""
+}
+
+func (PullRequestWatchListMessage) CommandName() string {
+	return "pull_request_watch_list"
+}
+
+func (m PullRequestWatchListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m PullRequestWatchListMessage) Locate() string {
 	return ""
 }
 

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
@@ -53,7 +55,7 @@ func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullReques
 func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
-		err = d.watchSessionPullRequest(rec, prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
+		err = d.watchSessionPullRequest(rec, protocol.Deref(msg.SeedID), prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
 	}
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -65,7 +67,11 @@ func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequest
 func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
-		err = d.unwatchSessionPullRequest(rec)
+		if seedID := protocol.Deref(msg.SeedID); seedID != "" {
+			err = d.unwatchSeedPullRequest(rec, seedID)
+		} else {
+			err = d.unwatchSessionPullRequest(rec)
+		}
 	}
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -74,16 +80,53 @@ func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullReque
 	d.sendOK(conn)
 }
 
-func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mode prreadiness.Mode, reviewer string) error {
+func (d *Daemon) handlePullRequestWatchList(conn net.Conn, msg *protocol.PullRequestWatchListMessage) {
+	seed, err := d.seedOfSessionProfile(protocol.TrimID(msg.ID), msg.SeedID)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	address := who.ToTenderOf(seed.ID)
+	watched, err := d.store.PullRequestWatchesTo(address)
+	if err != nil {
+		d.sendError(conn, fmt.Sprintf("pull requests watched for seed %s: %v", seed.ID, err))
+		return
+	}
+	records := make([]store.SessionPullRequestRecord, 0, len(watched))
+	byPR := make(map[string][]store.PullRequestWatch, len(watched))
+	for _, w := range watched {
+		records = append(records, w.Record)
+		byPR[w.Watch.PRID] = append(byPR[w.Watch.PRID], w.Watch)
+	}
+	pullRequests := d.sessionPullRequestsForBroadcast(records, []who.Address{address}, byPR)
+	if pullRequests == nil {
+		pullRequests = []protocol.SessionPullRequest{}
+	}
+	json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SeedPullRequests: pullRequests})
+}
+
+func (d *Daemon) seedOfSessionProfile(sessionID protocol.SessionID, seedID string) (garden.Seed, error) {
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return garden.Seed{}, fmt.Errorf("unknown session %s", sessionID)
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return garden.Seed{}, err
+	}
+	if seed.ProfileID != session.ProfileID {
+		return garden.Seed{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", seed.ID)
+	}
+	return seed, nil
+}
+
+func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, seedID string, mode prreadiness.Mode, reviewer string) error {
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return err
 	}
-	address := d.inboxAddressOf(rec.SessionID)
-	for _, held := range d.inboxRoleAddresses(rec.SessionID) {
-		if _, exists := d.store.PullRequestWatch(held, rec.PRID); exists {
-			address = held
-			break
-		}
+	address, err := d.pullRequestWatchAddress(rec, seedID)
+	if err != nil {
+		return err
 	}
 	recorded, changed, err := d.store.WatchPullRequest(rec, address, mode, reviewer, time.Now())
 	if err != nil {
@@ -97,6 +140,68 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 		d.publishFact(FactSessionPullRequestChanged, string(rec.SessionID), sessionPullRequestFact{PRID: rec.PRID})
 	}
 	return nil
+}
+
+func (d *Daemon) pullRequestWatchAddress(rec store.SessionPullRequestRecord, seedID string) (who.Address, error) {
+	if seedID != "" {
+		seed, err := d.seedOfSessionProfile(rec.SessionID, seedID)
+		if err != nil {
+			return who.Address{}, err
+		}
+		if garden.Closed(seed.Status) {
+			return who.Address{}, fmt.Errorf("seed %s is %s; a closed seed cannot watch a pull request", seed.ID, seed.Status)
+		}
+		return who.ToTenderOf(seed.ID), nil
+	}
+	for _, held := range d.inboxRoleAddresses(rec.SessionID) {
+		if _, exists := d.store.PullRequestWatch(held, rec.PRID); exists {
+			return held, nil
+		}
+	}
+	return d.inboxAddressOf(rec.SessionID), nil
+}
+
+func (d *Daemon) unwatchSeedPullRequest(rec store.SessionPullRequestRecord, seedID string) error {
+	seed, err := d.seedOfSessionProfile(rec.SessionID, seedID)
+	if err != nil {
+		return err
+	}
+	stopped, err := d.stopPullRequestWatch(who.ToTenderOf(seed.ID), rec.PRID)
+	if err != nil {
+		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
+	}
+	if !stopped {
+		return fmt.Errorf("seed %s is not watching pull request %s", seed.ID, rec.PRID)
+	}
+	return nil
+}
+
+func (d *Daemon) stopSeedPullRequestWatches(seedID string) error {
+	address := who.ToTenderOf(seedID)
+	watched, err := d.store.PullRequestWatchesTo(address)
+	if err != nil {
+		return err
+	}
+	for _, w := range watched {
+		if _, err := d.stopPullRequestWatch(address, w.Watch.PRID); err != nil {
+			return fmt.Errorf("stop watching pull request %s: %w", w.Watch.PRID, err)
+		}
+	}
+	return nil
+}
+
+func (d *Daemon) stopPullRequestWatch(address who.Address, prID string) (bool, error) {
+	watch, exists := d.store.PullRequestWatch(address, prID)
+	if !exists {
+		return false, nil
+	}
+	stopped, err := d.store.StopPullRequestWatch(address, prID)
+	if err != nil || !stopped {
+		return false, err
+	}
+	d.kickInboxAfterCommit(address)
+	d.publishSessionPullRequestMembershipChanged(prID, string(watch.SessionID))
+	return true, nil
 }
 
 func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {

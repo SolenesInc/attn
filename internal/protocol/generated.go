@@ -8224,8 +8224,22 @@ type PullRequestUnwatchMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
 
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
+
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
+}
+
+type PullRequestWatchListMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID SessionID `json:"id"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
 }
 
 type PullRequestWatchMessage struct {
@@ -8240,6 +8254,9 @@ type PullRequestWatchMessage struct {
 
 	// Reviewer corresponds to the JSON schema field "reviewer".
 	Reviewer *string `json:"reviewer,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
@@ -9194,6 +9211,9 @@ type Response struct {
 
 	// SeedPlotResult corresponds to the JSON schema field "seed_plot_result".
 	SeedPlotResult *SeedPlotResult `json:"seed_plot_result,omitempty,omitzero"`
+
+	// SeedPullRequests corresponds to the JSON schema field "seed_pull_requests".
+	SeedPullRequests []SessionPullRequest `json:"seed_pull_requests,omitempty,omitzero"`
 
 	// SeedReadyResult corresponds to the JSON schema field "seed_ready_result".
 	SeedReadyResult *SeedReadyResult `json:"seed_ready_result,omitempty,omitzero"`

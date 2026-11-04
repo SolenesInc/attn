@@ -78,7 +78,7 @@ func TestAWatchedPullRequestIsJudgedOnEveryPageOfItsReviewsAndChecks(t *testing.
 	app, cli := w.App(), w.Client()
 	s1 := spawnPanes(w, app, w.Path("s1"))[0].session
 
-	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeFormalReview, "victor")
+	watchPullRequestAs(t, cli, s1, "", protocol.PullRequestWatchModeFormalReview, "victor")
 	watched := awaitWatchedPullRequest(app, s1, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
 	if protocol.Deref(watched.ReadinessState) != "ready" || protocol.Deref(watched.ReadinessReason) != "selected_reviewer_approved" {
 		t.Errorf("the pull request reads %s (%s), want ready on victor's approval from the second page", protocol.Deref(watched.ReadinessState), protocol.Deref(watched.ReadinessReason))
@@ -94,7 +94,7 @@ func TestAWatchedPullRequestWhoseHeadMovesWhileBeingReadIsNotJudged(t *testing.T
 	app, cli := w.App(), w.Client()
 	s1 := spawnPanes(w, app, w.Path("s1"))[0].session
 
-	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeFormalReview, "victor")
+	watchPullRequestAs(t, cli, s1, "", protocol.PullRequestWatchModeFormalReview, "victor")
 	watched := awaitWatchedPullRequest(app, s1, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.WatchError) != "" })
 	if protocol.Deref(watched.ReadinessState) == "ready" || !strings.Contains(protocol.Deref(watched.WatchError), "head changed") {
 		t.Errorf("the pull request = %+v, want it unjudged with a watch error naming the moved head", watched)
@@ -113,7 +113,7 @@ func TestADismissedApprovalOnALaterPageKeepsThePullRequestWaiting(t *testing.T) 
 	app, cli := w.App(), w.Client()
 	s1 := spawnPanes(w, app, w.Path("s1"))[0].session
 
-	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeFormalReview, "victor")
+	watchPullRequestAs(t, cli, s1, "", protocol.PullRequestWatchModeFormalReview, "victor")
 	watched := awaitWatchedPullRequest(app, s1, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
 	if protocol.Deref(watched.ReadinessState) != "waiting" || protocol.Deref(watched.ReadinessReason) != "review_dismissed" {
 		t.Errorf("the pull request reads %s (%s), want waiting because victor's approval was dismissed", protocol.Deref(watched.ReadinessState), protocol.Deref(watched.ReadinessReason))

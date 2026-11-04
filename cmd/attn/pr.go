@@ -520,20 +520,28 @@ func writePRHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn pr <command>
 
 commands:
-  record <url> [--session <id>]                         record a pull request opened by a session
-  ls [--session <id>] [--json]                         list a session's pull requests and watch status
-  forget <url> [--session <id>]                        stop recording a pull request
-  watch <url> [--session <id>] [--mode <mode>]         durably watch readiness and feedback
-  unwatch <url> [--session <id>]                       stop a durable watch
-  status [<url>] [--session <id>] [--json]             show recorded watch/readiness state
-  wait-ready <number-or-url> [options]                 wait for the next actionable update
+  record <url> [--session <id>]                               record a pull request opened by a session
+  ls [--session <id>] [--seed <id>] [--json]                  list a session's pull requests or a seed's watches, with status
+  forget <url> [--session <id>]                               stop recording a pull request
+  watch <url> [--session <id>] [--seed <id>] [--mode <mode>]  durably watch readiness and feedback
+  unwatch <url> [--session <id>] [--seed <id>]                stop a durable watch
+  status [<url>] [--session <id>] [--seed <id>] [--json]      show recorded watch/readiness state
+  wait-ready <number-or-url> [options]                        wait for the next actionable update
 
-watch skips the comments the user's GitHub account wrote, because agents post as
-the user. Comments by others, including the author of a pull request under
-review, and state changes still reach the agent. To have watch deliver the
-user's comments too, the user runs:
+--seed <id> addresses a watch to a seed instead of the session. Updates go to
+whoever tends the seed when they arrive, so a handover moves the watch with no
+new watch. ls, status and unwatch with --seed act on the seed's watches. watch
+refuses an unknown or closed seed. Harvesting or withering the seed stops its
+watches and clears their unread updates.
+
+watch reports state changes (ready, changes requested, failed checks, merged,
+closed), feedback (comments, review comments, review bodies, reopened review
+threads) and monitoring outages. Because agents post as the user, it skips the
+feedback the user's GitHub account wrote. Feedback by others, including the
+author of a pull request under review, and state changes still reach the agent.
+To have watch deliver the user's feedback too, the user runs:
   attn settings set pull_requests.own_comments ring
-wait-ready does not skip them; --ignore-author skips a login.
+wait-ready does not skip the user's feedback; --ignore-author skips a login.
 
 wait-ready options:
   --repo [host/]owner/repository  required when the target is a number

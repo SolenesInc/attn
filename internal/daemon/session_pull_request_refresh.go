@@ -533,9 +533,9 @@ func (d *Daemon) processPullRequestWatches(
 ) []string {
 	changed := make([]string, 0, len(group.watches))
 	for _, watch := range group.watches {
-		profileID, err := d.store.SessionProfileID(watch.SessionID)
+		profileID, err := d.pullRequestWatchProfileID(watch)
 		if err != nil {
-			d.logf("pull request watch: profile of %s: %v", watch.SessionID, err)
+			d.logf("pull request watch: profile of %s: %v", watch.To, err)
 		}
 		transition := prreadiness.Advance(watch.Cursor, observation, watch.Mode, watch.Reviewer, d.pullRequestOwnComments(profileID), now)
 		health := "current"
@@ -595,6 +595,14 @@ func (d *Daemon) processPullRequestWatches(
 		}
 	}
 	return changed
+}
+
+func (d *Daemon) pullRequestWatchProfileID(watch store.PullRequestWatch) (string, error) {
+	if seedID, ok := watch.To.TenderOf(); ok {
+		seed, _, err := d.readSeed(seedID)
+		return seed.ProfileID, err
+	}
+	return d.store.SessionProfileID(watch.SessionID)
 }
 
 func (d *Daemon) pullRequestOwnComments(profileID string) prreadiness.OwnComments {

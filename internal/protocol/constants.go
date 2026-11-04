@@ -181,6 +181,7 @@ const (
 	CmdPullRequestForget             = "pull_request_forget"
 	CmdPullRequestWatch              = "pull_request_watch"
 	CmdPullRequestUnwatch            = "pull_request_unwatch"
+	CmdPullRequestWatchList          = "pull_request_watch_list"
 	CmdQuery                         = "query"
 	CmdCallerSession                 = "caller_session"
 	CmdSetSessionPriority            = "set_session_priority"
