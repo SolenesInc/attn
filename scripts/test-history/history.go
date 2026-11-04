@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/testhistory"
+	"golang.org/x/sync/errgroup"
 )
 
 const recipeList = "scripts/landing-tests"
@@ -37,8 +38,40 @@ func loadHistory(spool string) (history, error) {
 }
 
 func loadReceipts(dirs ...string) (history, error) {
+	paths, err := receiptPaths(dirs)
+	if err != nil {
+		return history{}, err
+	}
+	reads := make([]receiptRead, len(paths))
+	var group errgroup.Group
+	group.SetLimit(runtime.GOMAXPROCS(0))
+	for i, path := range paths {
+		group.Go(func() (err error) {
+			reads[i], err = readReceipt(path)
+			return err
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return history{}, err
+	}
 	loaded := history{skipped: map[string]int{}}
 	seen := map[string]bool{}
+	for _, read := range reads {
+		switch {
+		case read.unreadable:
+			loaded.skipped["unreadable"]++
+		case read.receipt.Schema != testhistory.Schema:
+			loaded.skipped["schema "+read.receipt.Schema]++
+		case !seen[read.receipt.InvocationID]:
+			seen[read.receipt.InvocationID] = true
+			loaded.receipts = append(loaded.receipts, read.receipt)
+		}
+	}
+	return loaded, nil
+}
+
+func receiptPaths(dirs []string) ([]string, error) {
+	var paths []string
 	for _, dir := range dirs {
 		err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) && path == dir {
@@ -47,34 +80,34 @@ func loadReceipts(dirs ...string) (history, error) {
 			if err != nil || entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 				return err
 			}
-			compressed := strings.HasSuffix(entry.Name(), testhistory.MirrorSuffix)
-			if !compressed && !strings.HasSuffix(entry.Name(), ".json") {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			if compressed {
-				data, err = testhistory.Decompress(data)
-			}
-			var receipt testhistory.Receipt
-			switch {
-			case err != nil || json.Unmarshal(data, &receipt) != nil:
-				loaded.skipped["unreadable"]++
-			case receipt.Schema != testhistory.Schema:
-				loaded.skipped["schema "+receipt.Schema]++
-			case !seen[receipt.InvocationID]:
-				seen[receipt.InvocationID] = true
-				loaded.receipts = append(loaded.receipts, receipt)
+			if strings.HasSuffix(entry.Name(), testhistory.MirrorSuffix) || strings.HasSuffix(entry.Name(), ".json") {
+				paths = append(paths, path)
 			}
 			return nil
 		})
 		if err != nil {
-			return history{}, err
+			return nil, err
 		}
 	}
-	return loaded, nil
+	return paths, nil
+}
+
+type receiptRead struct {
+	receipt    testhistory.Receipt
+	unreadable bool
+}
+
+func readReceipt(path string) (receiptRead, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return receiptRead{}, err
+	}
+	if strings.HasSuffix(path, testhistory.MirrorSuffix) {
+		data, err = testhistory.Decompress(data)
+	}
+	var read receiptRead
+	read.unreadable = err != nil || json.Unmarshal(data, &read.receipt) != nil
+	return read, nil
 }
 
 func (h history) availableAt(at time.Time) []testhistory.Receipt {
