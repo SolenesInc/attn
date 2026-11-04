@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { useDaemonStore } from '../store/daemonSessions';
 import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
 import { terminalSeedBodyExcerpt } from '../utils/terminalSeedPreviewText';
 import { SeedStateIcon } from './SeedStateIcon';
@@ -20,6 +21,7 @@ function useSeedContextDocument(seedId: string, seed?: Seed) {
   const [document, setDocument] = useState<SeedDocument | null>(null);
   const [failed, setFailed] = useState(false);
   const revision = seed?.rev;
+  const gardenSeeds = useDaemonStore((state) => state.seeds);
 
   useEffect(() => {
     if (!fetchDocument) return;
@@ -37,7 +39,7 @@ function useSeedContextDocument(seedId: string, seed?: Seed) {
     });
     return () => { cancelled = true; };
   // Notes arrive through Garden snapshots without advancing the seed revision.
-  }, [fetchDocument, seedId, revision, seed]);
+  }, [fetchDocument, seedId, revision, gardenSeeds]);
 
   return { document, unavailable: failed || !fetchDocument };
 }

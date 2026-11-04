@@ -1,6 +1,6 @@
 // Every steady-state figure is the minimum of three rounds after a long warmup.
 import type { Seed } from '../hooks/useDaemonSocket';
-import { buildIndex, parseQuery, searchGarden, type SearchEntry } from './gardenSearch.js';
+import { parseQuery, searchGarden, seedText, type SeedText } from './gardenSearch.js';
 import { tenderOf } from './gardenBoardModel.js';
 
 const WORDS = (
@@ -65,8 +65,8 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
   return seeds;
 }
 
-const ctx = {
-  tenderOf,
+const lookups = {
+  tenderOf: (seed: Seed) => tenderOf(seed),
   blockersOf: () => 0,
 };
 
@@ -83,31 +83,43 @@ function best(rounds: number, runs: number, once: () => void): number {
   return low;
 }
 
-function timeOne(pool: SearchEntry[], raw: string): number {
+function timeOne(pool: SeedText[], raw: string): number {
   const q = parseQuery(raw);
-  for (let i = 0; i < 300; i++) searchGarden(pool, q);
-  return best(3, 100, () => searchGarden(pool, parseQuery(raw)));
+  for (let i = 0; i < 300; i++) searchGarden(pool, q, lookups);
+  return best(3, 100, () => searchGarden(pool, parseQuery(raw), lookups));
 }
 
-function timeIndex(seeds: Seed[]): number {
-  for (let i = 0; i < 30; i++) buildIndex(seeds, ctx);
-  return best(3, 20, () => buildIndex(seeds, ctx));
+function timeNewObjects(seeds: Seed[]): number {
+  const derive = () => {
+    seeds.map((seed) => ({ ...seed })).map(seedText);
+  };
+  for (let i = 0; i < 30; i++) derive();
+  return best(3, 20, derive);
+}
+
+function timeOneChange(seeds: Seed[]): number {
+  const change = () => {
+    seeds.map((seed, i) => (i === 0 ? { ...seed } : seed)).map(seedText);
+  };
+  for (let i = 0; i < 300; i++) change();
+  return best(3, 100, change);
 }
 
 function report(label: string, seeds: Seed[]) {
   const bytes = seeds.reduce((n, s) => n + (s.body?.length ?? 0) + (s.title?.length ?? 0), 0);
   let at = performance.now();
-  const pool = buildIndex(seeds, ctx);
+  const pool = seeds.map(seedText);
   const coldIndex = performance.now() - at;
   at = performance.now();
-  searchGarden(pool, parseQuery(QUERIES[QUERIES.length - 3]));
+  searchGarden(pool, parseQuery(QUERIES[QUERIES.length - 3]), lookups);
   const coldQuery = performance.now() - at;
 
   const lines = QUERIES.map((raw) => {
     const ms = timeOne(pool, raw);
     return `    keystroke  ${raw.padEnd(20)} ${ms.toFixed(3)} ms`;
   });
-  lines.unshift(`    snapshot   ${'(rebuild the index)'.padEnd(20)} ${timeIndex(seeds).toFixed(3)} ms`);
+  lines.unshift(`    change     ${'(one seed changed)'.padEnd(20)} ${timeOneChange(seeds).toFixed(3)} ms`);
+  lines.unshift(`    snapshot   ${'(every seed new)'.padEnd(20)} ${timeNewObjects(seeds).toFixed(3)} ms`);
   lines.unshift(
     `    first      ${'(cold, index + scan)'.padEnd(20)} ${(coldIndex + coldQuery).toFixed(3)} ms`,
   );

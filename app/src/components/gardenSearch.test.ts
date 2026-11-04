@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Seed } from '../hooks/useDaemonSocket';
 import {
-  buildIndex,
-  matchEntry,
+  matchSeed,
   parseQuery,
   satisfiesLens,
   searchGarden,
+  seedText,
   splitRanges,
   toggleToken,
 } from './gardenSearch';
@@ -37,15 +37,17 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
 
 const blockers = new Map<string, number>();
 
+const lookups = {
+  tenderOf: (s: Seed) => tenderOf(s),
+  blockersOf: (s: Seed) => blockers.get(s.id) ?? 0,
+};
+
 function index(seeds: Seed[]) {
-  return buildIndex(seeds, {
-    tenderOf,
-    blockersOf: (s) => blockers.get(s.id) ?? 0,
-  });
+  return seeds.map(seedText);
 }
 
 function titles(seeds: Seed[], raw: string): string[] {
-  return searchGarden(index(seeds), parseQuery(raw)).map((match) => match.seed.title);
+  return searchGarden(index(seeds), parseQuery(raw), lookups).map((match) => match.seed.title);
 }
 
 describe('parseQuery', () => {
@@ -133,9 +135,9 @@ describe('the status lens', () => {
 
   it('is the same predicate the panel filters a plain list with', () => {
     const [entry] = index([done]);
-    expect(satisfiesLens(entry, [])).toBe(false);
-    expect(satisfiesLens(entry, ['any'])).toBe(true);
-    expect(satisfiesLens(entry, ['open'])).toBe(false);
+    expect(satisfiesLens(entry, [], lookups)).toBe(false);
+    expect(satisfiesLens(entry, ['any'], lookups)).toBe(true);
+    expect(satisfiesLens(entry, ['open'], lookups)).toBe(false);
   });
 });
 
@@ -184,8 +186,8 @@ describe('matching', () => {
 
   it('gives a snippet only to a row whose title does not explain itself', () => {
     const pool = index(seeds);
-    const bodyHit = matchEntry(pool[1], parseQuery('pushed'));
-    const titleHit = matchEntry(pool[1], parseQuery('garden'));
+    const bodyHit = matchSeed(pool[1], parseQuery('pushed'), lookups);
+    const titleHit = matchSeed(pool[1], parseQuery('garden'), lookups);
 
     expect(bodyHit?.snippet?.text).toContain('pushed');
     expect(titleHit?.snippet).toBeNull();
@@ -198,7 +200,7 @@ describe('matching', () => {
       title: 'nothing',
       body: `a paragraph\n\n    that wraps around the\n    word beacon and keeps going`,
     });
-    const match = matchEntry(index([wordy])[0], parseQuery('beacon'));
+    const match = matchSeed(index([wordy])[0], parseQuery('beacon'), lookups);
 
     expect(match?.snippet?.text).not.toMatch(/\s\s/);
     expect(match?.snippet?.text).toContain('word beacon and');
@@ -219,7 +221,7 @@ describe('splitRanges', () => {
   });
 
   it('merges overlapping hits so a highlight never doubles up', () => {
-    const match = matchEntry(index([seed({ id: 's-ovl001', title: 'searching search' })])[0], parseQuery('sea search'));
+    const match = matchSeed(index([seed({ id: 's-ovl001', title: 'searching search' })])[0], parseQuery('sea search'), lookups);
     expect(match?.titleRanges).toEqual([
       [0, 6],
       [10, 16],

@@ -7,14 +7,14 @@ import { isAccelKeyPressed } from '../shortcuts/platform';
 import { harvestWhenDisplay } from '../utils/harvestWhen';
 import {
   IS_VALUES,
-  buildIndex,
   parseQuery,
   satisfiesLens,
   searchGarden,
   splitRanges,
   toggleToken,
   type Range,
-  type SearchEntry,
+  seedText,
+  type SearchLookups,
   type SeedMatch,
 } from './gardenSearch';
 import { tenderOf, whoName } from './gardenBoardModel';
@@ -646,54 +646,44 @@ export function GardenPanel({
   const wide = searching && wideIn !== null && wideIn === plotId;
   const question = `${plotId ?? ''} ${query}`;
   const activeIndex = walk.of === question ? walk.index : 0;
-  // Lowercased once per snapshot: doing it per keystroke is what makes
-  // client-side search feel slow; receipts in gardenSearch.bench.ts.
-  const entries = useMemo(
-    () => buildIndex(seeds, {
-      tenderOf: (seed: Seed) => tenderOf(seed, tenderSessionLabels),
-      blockersOf: (seed: Seed) => index.blockers.get(seed.id) ?? 0,
-    }),
-    [seeds, index, tenderSessionLabels],
-  );
-  const entryByID = useMemo(() => {
-    const map = new Map<string, SearchEntry>();
-    for (const entry of entries) map.set(entry.seed.id, entry);
-    return map;
-  }, [entries]);
+  const texts = useMemo(() => seeds.map(seedText), [seeds]);
+  const lookups = useMemo<SearchLookups>(() => ({
+    tenderOf: (seed) => tenderOf(seed, tenderSessionLabels),
+    blockersOf: (seed) => index.blockers.get(seed.id) ?? 0,
+  }), [index, tenderSessionLabels]);
 
   const lens = useCallback(
-    (rows: Seed[]) =>
-      rows.filter((seed) => {
-        const entry = entryByID.get(seed.id);
-        return entry ? satisfiesLens(entry, parsed.is) : !isClosed(seed);
-      }),
-    [entryByID, parsed],
+    (rows: Seed[]) => rows.filter((seed) => satisfiesLens(seedText(seed), parsed.is, lookups)),
+    [parsed, lookups],
   );
 
   const plotPool = useMemo(() => {
-    if (!plotId) return entries;
+    if (!plotId) return texts;
     const wanted = subtreeOf(index, plotId);
-    return entries.filter((entry) => wanted.has(entry.seed.id));
-  }, [plotId, index, entries]);
-  const pool = wide ? entries : plotPool;
-  const results = useMemo(() => (searching ? searchGarden(pool, parsed) : []), [searching, pool, parsed]);
+    return texts.filter((text) => wanted.has(text.seed.id));
+  }, [plotId, index, texts]);
+  const pool = wide ? texts : plotPool;
+  const results = useMemo(
+    () => (searching ? searchGarden(pool, parsed, lookups) : []),
+    [searching, pool, parsed, lookups],
+  );
   const matchByID = useMemo(() => {
     const map = new Map<string, SeedMatch>();
     for (const match of results) map.set(match.seed.id, match);
     return map;
   }, [results]);
   const gardenWide = useMemo(
-    () => (searching && plotId && !wide ? searchGarden(entries, parsed).length : 0),
-    [searching, plotId, wide, entries, parsed],
+    () => (searching && plotId && !wide ? searchGarden(texts, parsed, lookups).length : 0),
+    [searching, plotId, wide, texts, parsed, lookups],
   );
   const inPlot = useMemo(
-    () => (searching && wide ? searchGarden(plotPool, parsed).length : 0),
-    [searching, wide, plotPool, parsed],
+    () => (searching && wide ? searchGarden(plotPool, parsed, lookups).length : 0),
+    [searching, wide, plotPool, parsed, lookups],
   );
   const withClosed = useMemo(() => {
     if (!searching || parsed.is.length > 0) return 0;
-    return searchGarden(pool, parseQuery(`${query} is:any`)).length;
-  }, [searching, parsed, pool, query]);
+    return searchGarden(pool, parseQuery(`${query} is:any`), lookups).length;
+  }, [searching, parsed, pool, query, lookups]);
   const outside = Math.max(0, gardenWide - results.length);
   const hiddenClosed = Math.max(0, withClosed - results.length);
 

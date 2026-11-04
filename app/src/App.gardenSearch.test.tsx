@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { gardenRegion, openGarden, openRow, partOf, planted, plot } from './test/garden';
-import { memberClaim } from './test/daemonFixtures';
+import { daemonSession, memberClaim, sessionClaim } from './test/daemonFixtures';
 import { gesture } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -45,6 +45,38 @@ describe('App garden search', () => {
     ask('line of type');
 
     expect(listed()).toContain('a line of type, not a box');
+  });
+
+  it('follows a tender session to its new label', async () => {
+    const tended = planted('s-tend01', 'tended by a session', sessionClaim('s1'));
+    const session = daemonSession('s1', { label: 'first name' });
+    const { daemon } = await openGarden([tended, elsewhere], { sessions: [session] });
+    ask('tender:second');
+    expect(listed()).not.toContain('tended by a session');
+
+    daemon.emit({ event: 'sessions_updated', sessions: [{ ...session, label: 'second name' }] });
+    await daemon.idle();
+
+    expect(listed()).toContain('tended by a session');
+    ask('tender:first');
+    expect(listed()).not.toContain('tended by a session');
+  });
+
+  it('finds a changed seed by its new text, and a seed the change did not include keeps its hit', async () => {
+    const opened = await openGarden(garden);
+    ask('field');
+    expect(listed()).toContain('wire the field');
+    expect(listed()).toContain('unrelated field work');
+
+    opened.push(garden.map((seed) => (seed.id === wiring.id ? { ...seed, title: 'wire the quartz', body: 'a quartz line', rev: 2 } : seed)));
+    await opened.daemon.idle();
+
+    expect(listed()).not.toContain('wire the');
+    expect(listed()).toContain('unrelated field work');
+    ask('quartz line');
+    expect(listed()).toContain('wire the quartz');
+    ask('line of type');
+    expect(listed()).not.toContain('wire the quartz');
   });
 
   it('names a filter it does not have rather than answering with an empty list', async () => {

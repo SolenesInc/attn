@@ -41,7 +41,7 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
   seedsTotal: 0,
   setSeeds: (seeds, total) => set({ seeds, seedsTotal: total }),
   applySeedChanges: (order, changed, total) => {
-    const snapshot = new Map(get().seeds.map((seed) => [seed.id, { ...seed }]));
+    const snapshot = new Map(get().seeds.map((seed) => [seed.id, seed]));
     for (const seed of changed) snapshot.set(seed.id, seed);
     const missing = order.filter((id) => !snapshot.has(id));
     if (missing.length > 0) console.error(`[Garden] change lists seeds this app never received: ${missing.join(', ')}`);

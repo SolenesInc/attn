@@ -203,7 +203,7 @@ describe('seed lifecycle and context', () => {
     expect(openedSeeds(daemon)).toEqual([{ seed_id: value.id, session_id: 's1' }]);
   });
 
-  it('refreshes a visible note when a Garden snapshot arrives at the same seed revision', async () => {
+  it('refreshes a visible note when a Garden change carries no seed, as a new note does', async () => {
     const value = daemonSeed('s-work11', { title: 'Garden icons', ...sessionClaim('s1') });
     const notes = ['First note.', 'A new observation.'];
     const daemon = await openAgent([value]);
@@ -211,7 +211,7 @@ describe('seed lifecycle and context', () => {
     await showSeeds(daemon);
     expect(screen.getByText('First note.')).toBeVisible();
 
-    pushSeeds(daemon, [{ ...value }]);
+    daemon.emit({ event: 'garden_seeds_changed', profile_id: 'profile-default', order: [value.id], seeds: [], total: 1 });
     await daemon.idle();
     expect(screen.getByText('A new observation.')).toBeVisible();
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);

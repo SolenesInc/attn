@@ -90,68 +90,60 @@ export interface SeedMatch {
   idHit: boolean;
 }
 
-/** Lowercased text is built once per snapshot, not per keystroke: over 1000
- * seeds lowercasing is 0.7ms and the scan 0.7ms. Receipts in gardenSearch.bench.ts. */
-export interface SearchEntry {
+/** Lowercased once per seed object, so a change re-derives only the seeds it
+ * changed. A seed object is never mutated after it enters the store. Receipts in
+ * gardenSearch.bench.ts. */
+export interface SeedText {
   seed: Seed;
-  title: string;
   titleLower: string;
   bodyLower: string;
   idLower: string;
-  tender: string;
-  tenderLower: string;
-  blockers: number;
   closed: boolean;
 }
 
-export interface IndexContext {
+const texts = new WeakMap<Seed, SeedText>();
+
+export function seedText(seed: Seed): SeedText {
+  const known = texts.get(seed);
+  if (known) return known;
+  const text: SeedText = {
+    seed,
+    titleLower: (seed.title ?? '').toLowerCase(),
+    bodyLower: (seed.body ?? '').toLowerCase(),
+    idLower: (seed.id ?? '').toLowerCase(),
+    closed: seed.status === 'harvested' || seed.status === 'withered',
+  };
+  texts.set(seed, text);
+  return text;
+}
+
+/** What a query reads from outside the seed, looked up when the query runs. */
+export interface SearchLookups {
   /** Whoever holds the seed, already resolved to a display name. */
   tenderOf: (seed: Seed) => string;
   /** How many open seeds block it. */
   blockersOf: (seed: Seed) => number;
 }
 
-function isClosed(seed: Seed): boolean {
-  return seed.status === 'harvested' || seed.status === 'withered';
+export function satisfiesLens(text: SeedText, is: IsValue[], lookups: SearchLookups): boolean {
+  if (is.length === 0) return !text.closed;
+  return is.some((value) => satisfies(value, text, lookups));
 }
 
-export function buildIndex(seeds: Seed[], ctx: IndexContext): SearchEntry[] {
-  return seeds.map((seed) => {
-    const tender = ctx.tenderOf(seed);
-    const title = seed.title ?? '';
-    return {
-      seed,
-      title,
-      titleLower: title.toLowerCase(),
-      bodyLower: (seed.body ?? '').toLowerCase(),
-      idLower: (seed.id ?? '').toLowerCase(),
-      tender,
-      tenderLower: tender.toLowerCase(),
-      blockers: ctx.blockersOf(seed),
-      closed: isClosed(seed),
-    };
-  });
-}
-
-export function satisfiesLens(entry: SearchEntry, is: IsValue[]): boolean {
-  if (is.length === 0) return !entry.closed;
-  return is.some((value) => satisfies(value, entry));
-}
-
-function satisfies(value: IsValue, entry: SearchEntry): boolean {
+function satisfies(value: IsValue, text: SeedText, lookups: SearchLookups): boolean {
   switch (value) {
     case 'any':
       return true;
     case 'open':
-      return !entry.closed;
+      return !text.closed;
     case 'closed':
-      return entry.closed;
+      return text.closed;
     case 'ready':
-      return Boolean(entry.seed.ready) && !entry.closed;
+      return Boolean(text.seed.ready) && !text.closed;
     case 'blocked':
-      return entry.blockers > 0 && !entry.closed;
+      return !text.closed && lookups.blockersOf(text.seed) > 0;
     case 'parked':
-      return entry.seed.status === 'parked';
+      return text.seed.status === 'parked';
   }
 }
 
@@ -195,51 +187,51 @@ function snippetOf(body: string, bodyLower: string, terms: string[]): { text: st
   return { text, ranges: rangesOf(text, terms) };
 }
 
-export function matchEntry(entry: SearchEntry, q: ParsedQuery): SeedMatch | null {
+export function matchSeed(text: SeedText, q: ParsedQuery, lookups: SearchLookups): SeedMatch | null {
   if (q.unknown.length > 0) return null;
-  if (!satisfiesLens(entry, q.is)) return null;
+  if (!satisfiesLens(text, q.is, lookups)) return null;
 
+  const tenderLower = lookups.tenderOf(text.seed).toLowerCase();
   if (q.tenders.length > 0) {
-    const lower = entry.tenderLower;
-    if (!lower || !q.tenders.some((name) => lower.includes(name))) return null;
+    if (!tenderLower || !q.tenders.some((name) => tenderLower.includes(name))) return null;
   }
 
   if (q.terms.length === 0) {
-    return { seed: entry.seed, rank: 20, titleRanges: [], snippet: null, idHit: false };
+    return { seed: text.seed, rank: 20, titleRanges: [], snippet: null, idHit: false };
   }
 
   for (const term of q.terms) {
     const hit =
-      entry.titleLower.includes(term) ||
-      entry.idLower.includes(term) ||
-      entry.tenderLower.includes(term) ||
-      entry.bodyLower.includes(term);
+      text.titleLower.includes(term) ||
+      text.idLower.includes(term) ||
+      tenderLower.includes(term) ||
+      text.bodyLower.includes(term);
     if (!hit) return null;
   }
 
-  const idHit = q.terms.every((term) => entry.idLower.includes(term));
-  const titleHit = q.terms.every((term) => entry.titleLower.includes(term));
-  const tenderHit = q.terms.every((term) => entry.tenderLower.includes(term));
+  const idHit = q.terms.every((term) => text.idLower.includes(term));
+  const titleHit = q.terms.every((term) => text.titleLower.includes(term));
+  const tenderHit = q.terms.every((term) => tenderLower.includes(term));
 
   let rank = 40;
   if (idHit) rank = 0;
-  else if (titleHit) rank = 10 + Math.min(...q.terms.map((term) => entry.titleLower.indexOf(term)));
+  else if (titleHit) rank = 10 + Math.min(...q.terms.map((term) => text.titleLower.indexOf(term)));
   else if (tenderHit) rank = 30;
 
   return {
-    seed: entry.seed,
+    seed: text.seed,
     rank,
-    titleRanges: titleHit || rank === 0 ? rangesOf(entry.title, q.terms) : [],
-    snippet: rank === 40 ? snippetOf(entry.seed.body ?? '', entry.bodyLower, q.terms) : null,
+    titleRanges: titleHit || rank === 0 ? rangesOf(text.seed.title ?? '', q.terms) : [],
+    snippet: rank === 40 ? snippetOf(text.seed.body ?? '', text.bodyLower, q.terms) : null,
     idHit,
   };
 }
 
-/** Every entry in `pool` that answers the query, best first; ties keep pool order. */
-export function searchGarden(pool: SearchEntry[], q: ParsedQuery): SeedMatch[] {
+/** Every seed in `pool` that answers the query, best first; ties keep pool order. */
+export function searchGarden(pool: SeedText[], q: ParsedQuery, lookups: SearchLookups): SeedMatch[] {
   const matches: Array<{ match: SeedMatch; i: number }> = [];
-  pool.forEach((entry, i) => {
-    const match = matchEntry(entry, q);
+  pool.forEach((text, i) => {
+    const match = matchSeed(text, q, lookups);
     if (match) matches.push({ match, i });
   });
   return matches
