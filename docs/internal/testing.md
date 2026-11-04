@@ -210,7 +210,7 @@ steps of landing.
 `--packages` passes the remaining arguments to `go test` without running the
 full suite. `scripts/test-go.sh` passes leading `--unit` and `--receipt-out` options to
 `go tool test-history capture`.
-A full run is twelve `go test` jobs run at once: `packages`, `race`,
+A full run is eleven `go test` jobs run at once: `packages`,
 `daemon-1` to `daemon-4` and `attn-1` to `attn-6`. Leading `--job <name>` options run only
 the jobs they name, as CI does to spread the suite across runners:
 `./scripts/test-go.sh --job daemon-3 --job attn-1`.

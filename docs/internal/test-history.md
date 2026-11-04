@@ -9,7 +9,7 @@ run. attn builds shared history and test selection from these receipts.
 These commands record a receipt:
 
 - `scripts/test-go.sh`: one receipt per `go test` invocation. A full run records
-  one per job (`packages`, `race`, `daemon-1`…, `attn-1`…), named as the
+  one per job (`packages`, `daemon-1`…, `attn-1`…), named as the
   receipt's shard.
 - `pnpm --dir app test`, `pnpm --dir app run e2e` and
   `pnpm --dir app run real-app:serial-matrix`.

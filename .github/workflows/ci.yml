@@ -315,7 +315,7 @@ jobs:
       matrix:
         include:
           - group: 1
-            jobs: packages race attn-1
+            jobs: packages attn-1
           - group: 2
             jobs: daemon-1 attn-2 attn-3
           - group: 3

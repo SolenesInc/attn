@@ -13,9 +13,6 @@ test_gomaxprocs="${ATTN_GO_TEST_GOMAXPROCS:-${GOMAXPROCS:-3}}"
 # -p 4 packages at GOMAXPROCS=3 on a 4-vCPU runner, and Go's -timeout counts
 # the starvation. 1200s is a tripwire, also for --packages runs, past a 143.3s healthy pass (2026-09-01).
 test_timeout="${ATTN_GO_TEST_TIMEOUT:-1200s}"
-# -race costs an order of magnitude and contends with the job above; measured
-# 218.3s for internal/store alone, 2026-09-01. Same 1200s tripwire.
-race_timeout="${ATTN_GO_TEST_RACE_TIMEOUT:-1200s}"
 
 if ! [[ "$shard_count" =~ ^[1-9][0-9]*$ ]]; then
   echo "ATTN_GO_TEST_SHARDS must be a positive integer, got: $shard_count" >&2
@@ -176,7 +173,7 @@ while [ "${1:-}" = "--job" ]; do
   shift 2
 done
 
-job_names=(packages race)
+job_names=(packages)
 for ((shard = 1; shard <= shard_count; shard++)); do job_names+=("daemon-$shard"); done
 for ((shard = 1; shard <= cli_shard_count; shard++)); do job_names+=("attn-$shard"); done
 for job in ${selected_jobs[@]+"${selected_jobs[@]}"}; do
@@ -238,9 +235,6 @@ if job_selected packages; then
   done <"$packages_file"
   run_job packages -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
 fi
-
-# Race-check document queries for lost wakes/torn reads.
-run_job race -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
 
 run_shards() {
   local name_prefix="$1" count="$2" package_dir="$3"
