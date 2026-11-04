@@ -1,5 +1,5 @@
 import type { ResizeDiagnostics } from './terminalDebug';
-import type { PaneSurface } from './terminalDiagnosticsLog';
+import type { PaneSurface } from '../components/GhosttyWebGlRenderer';
 
 export interface TerminalPerfElementMetrics {
   width: number;

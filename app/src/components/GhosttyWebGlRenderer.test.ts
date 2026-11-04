@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CellFlags, type GhosttyCell } from '../ghostty';
 import { TERMINAL_FLOATS_PER_QUAD } from './terminalVertexBuffer';
-import type { PaneSurface, SurfaceEvent } from '../utils/terminalDiagnosticsLog';
 import {
   INITIAL_ATLAS_SIZE,
   KITTY_Z_UNDER_BACKGROUND,
   MAX_ATLAS_SIZE,
   WebGlTerminalRenderer,
+  type PaneSurface,
+  type SurfaceEvent,
   type WebGlImageQuad,
 } from './GhosttyWebGlRenderer';
 
@@ -182,7 +183,7 @@ function makeRenderer(
   fontSize = 14,
   fontFamily = 'monospace',
   recorder?: GlRecorder,
-  onSurfaceEvent: (event: SurfaceEvent, surface: PaneSurface) => void = () => {},
+  onSurfaceEvent?: (event: SurfaceEvent, surface: PaneSurface) => void,
 ) {
   const created: ReturnType<typeof makeFakeCanvas>[] = [];
   const realCreate = document.createElement.bind(document);

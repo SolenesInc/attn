@@ -1,4 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core';
+import type { PaneSurface, SurfaceEvent } from '../components/GhosttyWebGlRenderer';
 import type { ModelFaultCapture } from './ghosttyModelOpRing';
 
 const DEBUG_DIR = 'debug';
@@ -40,21 +41,6 @@ export type DiagKind =
   | 'wake'
   | 'model_fault'
   | 'surface';
-
-export type SurfaceEvent =
-  | 'renderer_created'
-  | 'renderer_destroyed'
-  | 'canvas_resized'
-  | 'buffer_released'
-  | 'buffer_restored'
-  | 'atlas_grown';
-
-export interface PaneSurface {
-  canvasWidth: number;
-  canvasHeight: number;
-  bufferReleased: boolean;
-  atlasSize: number;
-}
 
 export interface DiagEvent {
   at: number;

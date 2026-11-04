@@ -8,7 +8,6 @@ import {
   isColorGlyphBitmap,
 } from './terminalGlyphProgram';
 import { terminalGlyphFont } from './terminalGlyphFont';
-import type { PaneSurface, SurfaceEvent } from '../utils/terminalDiagnosticsLog';
 import {
   KITTY_FORMAT_BYTES_PER_PIXEL,
   type KittyPixelFormat,
@@ -32,6 +31,21 @@ interface RendererTheme {
   background: string;
   foreground: string;
   cursor: string;
+}
+
+export type SurfaceEvent =
+  | 'renderer_created'
+  | 'renderer_destroyed'
+  | 'canvas_resized'
+  | 'buffer_released'
+  | 'buffer_restored'
+  | 'atlas_grown';
+
+export interface PaneSurface {
+  canvasWidth: number;
+  canvasHeight: number;
+  bufferReleased: boolean;
+  atlasSize: number;
 }
 
 // A rectangular range overlay in viewport coordinates: rows include endRow,
@@ -323,7 +337,7 @@ export class WebGlTerminalRenderer {
     fontSize: number,
     fontFamily: string,
     theme: RendererTheme,
-    private readonly onSurfaceEvent: (event: SurfaceEvent, surface: PaneSurface) => void,
+    private readonly onSurfaceEvent: (event: SurfaceEvent, surface: PaneSurface) => void = () => {},
   ) {
     this.canvas = canvas;
     this.fontSize = fontSize;
