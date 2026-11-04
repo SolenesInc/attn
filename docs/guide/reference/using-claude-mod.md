@@ -28,7 +28,7 @@ back to typing as soon as you turn the setting off.
   "attn adds this after the current tool call". Once Claude has it, the band
   clears and the transcript shows `attn: ❯ <message>`. If the turn ends with no
   further tool call, the message starts the next turn instead.
-- **You press Esc.** Attn stops delivering its own messages, so a session you
+- **You press Esc while Claude works.** Attn stops delivering its own messages, so a session you
   stopped stays stopped. The band lists them under "Waiting in attn — sent with
   your next prompt", and they go out after your next prompt. Your own words, such
   as annotations and phone prompts, are typed into the terminal, which counts as
@@ -38,8 +38,9 @@ back to typing as soon as you turn the setting off.
 - **Claude asks permission during a turn.** The mod takes the message. Claude
   draws no band while the question replaces the prompt, so nothing shows in the
   terminal until you answer. If you approve, the message follows the rules for a
-  working Claude. If you refuse, the session counts as stopped, so the message
-  follows the rules for Esc.
+  working Claude. If you refuse, with "No" or with Esc, the turn ends but the
+  session is not stopped, the same as in Claude itself: the message starts a new
+  turn, and so does any message that arrives later.
 - **Claude shows a question outside a turn, or the mod is not connected.** Nothing
   is delivered until you answer it. A ring waits, and an annotation stays unsent
   so you can send it again.

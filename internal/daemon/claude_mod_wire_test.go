@@ -599,6 +599,10 @@ func TestAMenuKeyInAQuestionDoesNotHoldBackAReturnedAnnotation(t *testing.T) {
 	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
 
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: "\x1b[B"})
+	if err := w.Client().UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	stoppedByEsc(t, app, run, session)
 
 	modEvent(t, run, fakeagent.ModEventRefusedStop, "check the rounding")

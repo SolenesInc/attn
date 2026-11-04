@@ -76,6 +76,73 @@ func TestAgentMessageReachesRealClaudeThroughTheMod(t *testing.T) {
 	t.Fatalf("Claude's transcript has no user row with %q; rows: %+v", ring, rows)
 }
 
+func TestRefusingAPermissionQuestionLeavesRealClaudeFreeToTakeMessages(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  string
+	}{
+		{"with No", "2"},
+		{"with Esc", "\x1b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			claude, err := exec.LookPath("claude")
+			if err != nil {
+				t.Skip("claude is not on PATH")
+			}
+			model := startMockModel(t)
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			work := s.Path("shop")
+			configDir := filepath.Join(s.Dir, "toolhome", ".claude")
+			writeClaudeConfig(t, claude, configDir, work)
+			settings := fmt.Sprintf(`{"permissions":{"ask":["Bash"]},"hooks":{"Notification":[{"matcher":"permission_prompt","hooks":[{"type":"command","command":"curl -s %s%s"}]}]}}`, model.URL, questionWaitingPath)
+			if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(settings), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			s.Vars = append(s.Vars,
+				"ATTN_CLAUDE_EXECUTABLE="+claude,
+				"CLAUDE_CONFIG_DIR="+configDir,
+				"ANTHROPIC_BASE_URL="+model.URL,
+				"ANTHROPIC_API_KEY="+mockModelAPIKey,
+				"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+				"DISABLE_AUTOUPDATER=1",
+			)
+			s.Start()
+			s.Attn("settings", "set", "claude_mod_enabled", "true")
+			const reviewer = "rev-1111-2222"
+			register(t, s, reviewer, "reviewer")
+
+			app := s.App()
+			recipient := s.Spawn(app, fakeagent.Claude, work)
+			t.Cleanup(func() {
+				if t.Failed() {
+					t.Logf("recipient screen:\n%s", s.Attn("agent", "peek", recipient).Stdout)
+				}
+			})
+			s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+
+			app.TypeLine(recipient, mockModelToolPrompt)
+			testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+			const held = "held through the question"
+			app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "held", SessionID: protocol.SessionID(recipient), Text: held})
+			if taken := testworld.Await(app, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
+				return r.RequestID == "held"
+			}); taken.Status != "delivered" {
+				t.Fatalf("the annotation was answered %+v, want it taken during the question", taken)
+			}
+			model.awaitPrompt(t, questionWaitingPath)
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: tc.key})
+			model.awaitPrompt(t, held)
+
+			const later = "the discount is applied after tax"
+			if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient, later}, Session: reviewer}); sent.Code != 0 {
+				t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+			}
+			model.awaitPrompt(t, "attn agent inbox")
+		})
+	}
+}
+
 type claudeUserRow struct {
 	Text   string
 	Origin struct {
@@ -158,6 +225,11 @@ func writeClaudeConfig(t *testing.T, claude, configDir, work string) {
 	}
 }
 
+const (
+	mockModelToolPrompt = "touch the marker file"
+	questionWaitingPath = "/question-waiting"
+)
+
 type mockModel struct {
 	*httptest.Server
 	mu      sync.Mutex
@@ -194,8 +266,18 @@ func (m *mockModel) awaitPrompt(t *testing.T, contains string) {
 	}
 }
 
+func (m *mockModel) record(prompt string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.prompts = append(m.prompts, prompt)
+	close(m.changed)
+	m.changed = make(chan struct{})
+}
+
 func (m *mockModel) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.URL.Path == questionWaitingPath:
+		m.record(questionWaitingPath)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/messages/count_tokens"):
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"input_tokens":1200}`))
@@ -219,15 +301,14 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	callsTool := false
 	for i := len(body.Messages) - 1; i >= 0; i-- {
 		if body.Messages[i].Role != "user" {
 			continue
 		}
-		m.mu.Lock()
-		m.prompts = append(m.prompts, contentText(body.Messages[i].Content))
-		close(m.changed)
-		m.changed = make(chan struct{})
-		m.mu.Unlock()
+		prompt := contentText(body.Messages[i].Content)
+		callsTool = strings.Contains(prompt, mockModelToolPrompt)
+		m.record(prompt)
 		break
 	}
 	const say = "Noted."
@@ -252,6 +333,14 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 		"id": "msg_mock", "type": "message", "role": "assistant", "model": body.Model, "content": []any{},
 		"stop_reason": nil, "stop_sequence": nil, "usage": usage,
 	}})
+	if callsTool {
+		send("content_block_start", map[string]any{"index": 0, "content_block": map[string]any{"type": "tool_use", "id": "toolu_mock", "name": "Bash", "input": map[string]any{}}})
+		send("content_block_delta", map[string]any{"index": 0, "delta": map[string]string{"type": "input_json_delta", "partial_json": `{"command":"touch marker","description":"Touching a file"}`}})
+		send("content_block_stop", map[string]any{"index": 0})
+		send("message_delta", map[string]any{"delta": map[string]any{"stop_reason": "tool_use", "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 2}})
+		send("message_stop", map[string]any{})
+		return
+	}
 	send("content_block_start", map[string]any{"index": 0, "content_block": map[string]string{"type": "text", "text": ""}})
 	send("content_block_delta", map[string]any{"index": 0, "delta": map[string]string{"type": "text_delta", "text": say}})
 	send("content_block_stop", map[string]any{"index": 0})

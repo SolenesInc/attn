@@ -236,9 +236,9 @@ usual while the mod is not connected, such as while Claude starts or waits on it
 folder trust question, and on an outpost, where the inbox lives on another
 daemon. With the mod connected:
 
-- After the user stops the session with Esc, the mod refuses every ring. Its
-  items stay unread, the refusal costs no attempt, and attn rings again at the
-  session's next state change after the user's next prompt.
+- After the user stops the session with Esc while Claude works, the mod refuses
+  every ring. Its items stay unread, the refusal costs no attempt, and attn rings
+  again at the session's next state change after the user's next prompt.
 - A ring the mod holds for the running turn counts as placed. When the mod gives
   it back instead of placing it, at Esc, on a reload, or when the mod stops
   polling, attn puts the ring's items back to unread, takes back the ring's
@@ -247,8 +247,10 @@ daemon. With the mod connected:
   holds in memory.
 - While a running turn waits on a permission question, the mod takes a ring it
   would take during that turn. It holds the ring until the question closes,
-  because the mod's delivery cannot answer the question. A question outside a
-  turn still holds every ring back.
+  because the mod's delivery cannot answer the question. Refusing the question,
+  with "No" or with Esc, does not stop the session: Claude reports both the same
+  way, and it takes the next prompt. A held ring then starts a new turn, and later
+  rings go out as usual. A question outside a turn still holds every ring back.
 
 ## Notification runs
 

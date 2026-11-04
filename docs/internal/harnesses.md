@@ -304,7 +304,16 @@ local mock API, launched with attn's environment, `--settings` hooks and
 - A permission question replaces the prompt, and the `AbovePrompt` band is not
   drawn until the question closes (2.1.318). Refusing the question, with Esc or
   with "No", leaves `next.signal.aborted` true in that `tool.call` hook and ends
-  the turn with `isAborted` false and `reason: "answer"`.
+  the turn with `isAborted` false and `reason: "answer"`. A mod cannot tell the
+  two keys apart: the hook events, the abort reason (`The operation was
+  aborted`) and the transcript's `toolDenialKind` (`user-rejected`) are the same.
+  Neither stops the session, so a `$.prompt.submit` afterwards starts a turn. Esc
+  during a running tool differs in all but `toolDenialKind`: the abort reason is
+  `user-cancel`. The question ignores keys for a moment after it draws, with no
+  signal for when it starts taking them: a key sent as soon as the screen shows
+  the question did nothing, on Esc and on the number for "No", and one second
+  later it worked. The `permission_prompt` Notification hook fires about 6 s after
+  the question draws, when keys work.
 - An append made inside a `turn.step` hook, before `next(e)`, misses that
   request: it reaches the model only on a later request.
 - A `turn.complete` hook that calls `$.prompt.submit` starts a new turn right
