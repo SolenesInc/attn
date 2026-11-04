@@ -33,8 +33,14 @@ back to typing as soon as you turn the setting off.
   your next prompt", and they go out after your next prompt. Your own words, such
   as annotations and phone prompts, are typed into the terminal, which counts as
   your next prompt.
-- **A permission question is open.** Nothing is delivered until you answer it. A
-  ring waits, and an annotation stays unsent so you can send it again.
+- **Claude asks permission during a turn.** The mod takes the message. Claude
+  draws no band while the question replaces the prompt, so nothing shows in the
+  terminal until you answer. If you approve, the message follows the rules for a
+  working Claude. If you refuse, the session counts as stopped, so the message
+  follows the rules for Esc.
+- **Claude shows a question outside a turn, or the mod is not connected.** Nothing
+  is delivered until you answer it. A ring waits, and an annotation stays unsent
+  so you can send it again.
 
 The band shows the first line of each message. A ring you read elsewhere stays
 listed in the band until your next prompt.

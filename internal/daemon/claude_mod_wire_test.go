@@ -510,3 +510,71 @@ func runEnv(run *fakeagent.Run, name string) string {
 	}
 	return ""
 }
+
+func permissionQuestion(t *testing.T, w *world, app *testworld.Peer, session string) {
+	t.Helper()
+	if err := w.Client().RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow edit?"); err != nil {
+		t.Fatalf("ask for approval: %v", err)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+}
+
+func TestAMessageDuringATurnsPermissionQuestionWaitsInTheMod(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	permissionQuestion(t, w, app, session)
+
+	delivered(t, app, session, "check the rounding")
+	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+	if appended := run.ModToolBoundary(); len(appended) != 1 || appended[0] != "check the rounding" {
+		t.Fatalf("the tool boundary appended %v, want the annotation", appended)
+	}
+}
+
+func TestAQuestionOutsideATurnKeepsAMessageFromTheMod(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	app.AwaitScreen(session, "? for shortcuts")
+	permissionQuestion(t, w, app, session)
+
+	if got := submitSessionAnnotationFeedback(app, session, "check the rounding"); got.status != "skipped_pending_approval" {
+		t.Fatalf("the annotation was answered %+v, want it kept for a retry", got)
+	}
+	if appended := run.ModToolBoundary(); len(appended) != 0 {
+		t.Fatalf("the mod took %v", appended)
+	}
+}
+
+func TestAMessageDuringATurnsQuestionIsNotTypedWithoutTheMod(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.advance(claudeModReachWindow)
+	permissionQuestion(t, w, app, session)
+
+	if got := submitSessionAnnotationFeedback(app, session, "check the rounding"); got.status != "skipped_pending_approval" {
+		t.Fatalf("the annotation was answered %+v, want it kept for a retry, never typed into the question", got)
+	}
+}
+
+func TestAMenuKeyInAQuestionDoesNotHoldBackAReturnedAnnotation(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	permissionQuestion(t, w, app, session)
+	delivered(t, app, session, "check the rounding")
+	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: "\x1b[B"})
+	stoppedByEsc(t, app, run, session)
+
+	modEvent(t, run, fakeagent.ModEventRefusedStop, "check the rounding")
+	typedOnce(t, app, run, session, "check the rounding")
+}

@@ -301,6 +301,10 @@ local mock API, launched with attn's environment, `--settings` hooks and
   during a tool call adds the text, bare, to the running turn's next model
   request, after the tool result. The transcript keeps it as an `isMeta` user
   row with the plugin's origin. The screen does not show it.
+- A permission question replaces the prompt, and the `AbovePrompt` band is not
+  drawn until the question closes (2.1.318). Refusing the question, with Esc or
+  with "No", leaves `next.signal.aborted` true in that `tool.call` hook and ends
+  the turn with `isAborted` false and `reason: "answer"`.
 - An append made inside a `turn.step` hook, before `next(e)`, misses that
   request: it reaches the model only on a later request.
 - A `turn.complete` hook that calls `$.prompt.submit` starts a new turn right

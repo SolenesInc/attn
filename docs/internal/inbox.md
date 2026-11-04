@@ -245,6 +245,10 @@ daemon. With the mod connected:
   attempt and outstanding ring, and rings again. A daemon restart while the mod
   holds a ring loses that ring's user input, because attn keeps what the mod
   holds in memory.
+- While a running turn waits on a permission question, the mod takes a ring it
+  would take during that turn. It holds the ring until the question closes,
+  because the mod's delivery cannot answer the question. A question outside a
+  turn still holds every ring back.
 
 ## Notification runs
 

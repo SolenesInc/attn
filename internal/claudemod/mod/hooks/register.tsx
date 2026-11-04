@@ -180,8 +180,11 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
-    if (e.agentId === undefined && next.signal.aborted !== true) {
-      await appendHeld($)
+    if (e.agentId === undefined) {
+      isStopped ||= next.signal.aborted === true
+      if (!isStopped) {
+        await appendHeld($)
+      }
     }
     return result
   })
@@ -192,9 +195,9 @@ export const register: Register = on => {
       return result
     }
     const leftOver = held
-    isStopped = e.isAborted
-    await Promise.all([setHeld($, []), setTurnRunning($, !e.isAborted && leftOver.length > 0)])
-    if (e.isAborted) {
+    isStopped ||= e.isAborted
+    await Promise.all([setHeld($, []), setTurnRunning($, !isStopped && leftOver.length > 0)])
+    if (isStopped) {
       await listWaiting($, leftOver)
       if (leftOver.length > 0) {
         await giveBack($, leftOver)

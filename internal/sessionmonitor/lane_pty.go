@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const (
@@ -53,6 +54,9 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 }
 
 func (l *lane) noteDraftLocked(data []byte) {
+	if l.phase == protocol.SessionStatePendingApproval {
+		return
+	}
 	switch string(data) {
 	case "\r", "\x1b", "\x03":
 	default:

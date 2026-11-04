@@ -143,6 +143,7 @@ type lane struct {
 	monitor *Monitor
 
 	run                      *runState
+	questionInTurn           bool
 	placing                  bool
 	placed                   map[string]Attempt
 	creditNextRun            bool
@@ -261,8 +262,10 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
 		return deferred(errInitialPrompt)
 	}
-	if err := allowedForPhase(delivery.Placement, m.state.State); err != nil {
-		return deferred(err)
+	phaseErr := allowedForPhase(delivery.Placement, m.state.State)
+	duringQuestion := errors.Is(phaseErr, ErrBlockedByApproval) && l.questionInTurn && allowedForPhase(delivery.Placement, protocol.SessionStateWorking) == nil
+	if phaseErr != nil && !duringQuestion {
+		return deferred(phaseErr)
 	}
 	if len(l.placed) >= MaxPlacedDeliveries {
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
@@ -271,8 +274,11 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	steering := l.run != nil
 	var attempt Attempt
 	handled := false
-	attempt, handled = l.placeOverLinkLocked(ctx, delivery)
+	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
 	if !handled {
+		if duringQuestion {
+			return deferred(ErrBlockedByApproval)
+		}
 		attempt = l.placePTYLocked(ctx, delivery)
 	}
 	if attempt.Stage != Placed {
@@ -288,12 +294,15 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	return attempt, l.tookLocked(delivery)
 }
 
-func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Attempt, bool) {
+func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
 	voice := delivery.origin.voice()
 	l.placing = true
 	l.mu.Unlock()
 	// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
 	link := l.monitor.registry.host.Link(l.monitor, voice)
+	if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
+		link = nil
+	}
 	var custody harness.Custody
 	if link != nil {
 		custody = link.Deliver(ctx, harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice})
@@ -410,6 +419,7 @@ func (l *lane) launchPromptTakenLocked() {
 func (l *lane) observePhaseLocked(phase protocol.SessionState) {
 	previous := l.phase
 	l.phase = phase
+	l.questionInTurn = phase == protocol.SessionStatePendingApproval && (previous == protocol.SessionStateWorking || l.questionInTurn)
 	if phase == protocol.SessionStateWorking {
 		if previous == protocol.SessionStatePendingApproval {
 			l.userSubmit = false

@@ -21,6 +21,8 @@ func (claudeModLink) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
+func (claudeModLink) SafeDuringQuestion() {}
+
 func (l claudeModLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	delivery := &claudeModDelivery{session: l.session, input: in, answer: make(chan harness.Custody, 1)}
 	if !l.mod.enqueue(l.terminal, delivery) {

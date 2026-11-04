@@ -39,3 +39,9 @@ type Link interface {
 	Voices() []Voice
 	Deliver(ctx context.Context, in Input) Custody
 }
+
+// QuestionSafeLink is a Link whose delivery cannot answer a permission question, so it may deliver while the running turn waits on one.
+type QuestionSafeLink interface {
+	Link
+	SafeDuringQuestion()
+}
