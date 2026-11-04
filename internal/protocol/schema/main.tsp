@@ -8763,7 +8763,7 @@ enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snoo
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
 enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }
 enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
-enum SessionPlaceErrorKind { LaneClosed: "lane_closed", PlacingAnother: "placing_another", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt" }
+enum SessionPlaceErrorKind { LaneClosed: "lane_closed", PlacingAnother: "placing_another", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped" }
 enum PullRequestLinkKind { Record: "record", Forget: "forget" }
 enum TranscriptActivityKind { Modified: "modified", Head: "head", Events: "events" }
 enum MonitorReadErrorKind { TranscriptUnavailable: "transcript_unavailable", InvalidCursor: "invalid_cursor", CursorMismatch: "cursor_mismatch", CursorPastEnd: "cursor_past_end", DeltaTooLarge: "delta_too_large" }

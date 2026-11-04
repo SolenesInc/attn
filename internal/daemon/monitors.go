@@ -318,6 +318,9 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 	if driver, ok := h.daemon.ensurePluginRegistry().driver(targetSession.Agent); ok && driver.Capabilities["message_delivery"] && target.Driver.Plugin == driver.PluginName && target.Driver.Run != "" {
 		return pluginLink{daemon: h.daemon, terminal: target.Terminal, plugin: target.Driver.Plugin, run: target.Driver.Run}
 	}
+	if h.daemon.claudeMod().reachable(target.Terminal) {
+		return claudeModLink{mod: h.daemon.claudeMod(), terminal: target.Terminal, session: target.Session}
+	}
 	return nil
 }
 

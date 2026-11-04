@@ -90,6 +90,9 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if strings.TrimSpace(opts.HookSettings) != "" {
 		args = append(args, "--settings", opts.HookSettings)
 	}
+	if opts.ClaudeMod.Dir != "" {
+		args = append(args, "--plugin-dir", opts.ClaudeMod.Dir)
+	}
 	if instructions := opts.launchGuidance(); instructions != "" {
 		args = append(args, "--append-system-prompt", instructions)
 	}
@@ -127,6 +130,9 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	env := []string{"CLAUDE_CODE_DISABLE_AGENT_VIEW=1"}
+	if opts.ClaudeMod.Socket != "" {
+		env = append(env, ClaudeModSocketEnv+"="+opts.ClaudeMod.Socket)
+	}
 	if opts.CrewV2Enabled {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}

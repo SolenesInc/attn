@@ -42,6 +42,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
 	if stateChanged && !state.Quiet {
 		d.kickSessionInbox(session, string(state.State))
+		d.claudeMod().placeReturned(session)
 		broadcast = broadcast || state.Broadcast
 	}
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {

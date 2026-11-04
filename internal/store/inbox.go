@@ -419,6 +419,29 @@ func (s *Store) RingInbox(to who.Address, finishingWake bool, typed []string, re
 	}
 	return stamp, tx.Commit()
 }
+func (s *Store) ReturnInboxRing(to who.Address, typed []string, notified bool, stamp string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range typed {
+		if _, err := tx.Exec(`UPDATE inbox_items SET read_at='',read_by='',notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE id=? AND address=? AND read_at=?`, stamp, id, to.String(), stamp); err != nil {
+			return fmt.Errorf("return typed inbox item %s: %w", id, err)
+		}
+	}
+	if notified {
+		if _, err := tx.Exec(`UPDATE inbox_items SET attempts=MAX(attempts-1,0),notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE address=? AND read_at='' AND attempted_at=?`, stamp, to.String(), stamp); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=? AND outstanding_at=?`, to.String(), stamp); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
 func setInboxOutstanding(tx *sql.Tx, to who.Address, at time.Time) error {
 	_, err := tx.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES(?,?) ON CONFLICT(address) DO UPDATE SET outstanding_at=excluded.outstanding_at`, to.String(), at.UTC().Format(sortableTimeFormat))
 	return err

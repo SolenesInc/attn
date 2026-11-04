@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/codexshared"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
@@ -457,6 +458,14 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 			return fmt.Errorf("remove shared Codex socket dir %s: %w", codexSockets, err)
 		}
 		fmt.Fprintf(w, "  codex    removed %s\n", codexSockets)
+	}
+
+	claudeModSockets := claudemod.SocketDir(r.DataDir)
+	if fileExists(claudeModSockets) {
+		if err := os.RemoveAll(claudeModSockets); err != nil {
+			return fmt.Errorf("remove Claude mod socket dir %s: %w", claudeModSockets, err)
+		}
+		fmt.Fprintf(w, "  claude   removed %s\n", claudeModSockets)
 	}
 
 	if fileExists(r.DataDir) {

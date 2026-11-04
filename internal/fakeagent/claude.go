@@ -25,7 +25,7 @@ var claudeComposer = composer{prompt: "❯ ", footer: "  ? for shortcuts"}
 var claudeFlags = flagSpec{
 	values: map[string]bool{
 		"--session-id": true, "--settings": true, "--append-system-prompt": true,
-		"--model": true, "--effort": true, "--permission-mode": true,
+		"--model": true, "--effort": true, "--permission-mode": true, "--plugin-dir": true,
 	},
 	variadic: map[string]bool{"--disallowed-tools": true, "--add-dir": true},
 	optional: map[string]bool{"-r": true, "--resume": true},
@@ -45,6 +45,7 @@ type claude struct {
 	streaming           string
 	picker              bool
 	terminalReadsStatus bool
+	mod                 *fakeMod
 }
 
 var claudePrintFlags = flagSpec{
@@ -158,6 +159,7 @@ func (c *claude) begin(term *terminal) error {
 	if c.resumed {
 		source = "resume"
 	}
+	c.mod = newFakeMod(args.value("--plugin-dir"))
 	c.terminalReadsStatus = term.probeProgramStatus()
 	term.title(claudeRestingTitle)
 	c.reportStatus("state=idle")
@@ -217,6 +219,7 @@ func (c *claude) submit(prompt string) error {
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
 		return c.resume(strings.TrimSpace(conversation))
 	}
+	c.mod.turnStarted()
 	c.term.title(claudeBusyTitle)
 	c.reportStatus("state=working")
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
@@ -329,7 +332,9 @@ func claudeMessageID() string {
 func (c *claude) stop() error {
 	c.term.title(claudeRestingTitle)
 	c.reportStatus("state=done")
-	return c.hooks.run("Stop", "", c.hookInput("Stop", map[string]any{"stop_hook_active": false}))
+	err := c.hooks.run("Stop", "", c.hookInput("Stop", map[string]any{"stop_hook_active": false}))
+	c.mod.turnCompleted()
+	return err
 }
 
 func (c *claude) reportStatus(fields string) {

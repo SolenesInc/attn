@@ -27,6 +27,18 @@ describe('Experimental settings for shared Codex', () => {
   });
 });
 
+describe('Experimental settings for the Claude mod', () => {
+  it('starts off and saves the setting in both directions', async () => {
+    const daemon = await openSection('experimental');
+    const toggle = () => screen.getByRole('switch', { name: 'Claude mod' });
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle()));
+    expect(toggle()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(toggle()));
+    expect(savedSettings(daemon)).toEqual([['claude_mod_enabled', 'true'], ['claude_mod_enabled', 'false']]);
+  });
+});
+
 describe('Experimental settings for direct agent launches', () => {
   it('starts off and saves the setting in both directions', async () => {
     const daemon = await openSection('experimental');

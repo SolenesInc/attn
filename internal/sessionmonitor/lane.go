@@ -151,6 +151,7 @@ var (
 	ErrComposerDirty     = errors.New("session input blocked by the user's composer")
 	errPlacingAnother    = errors.New("another session input is being placed")
 	ErrLaneClosed        = errors.New("the session's input lane is closed")
+	ErrSessionStopped    = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
 	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
 
@@ -182,7 +183,8 @@ func RetryDelay(err error) (time.Duration, bool) {
 func DeferredError(err error) bool {
 	return errors.Is(err, ErrBlockedByApproval) ||
 		errors.Is(err, ErrComposerDirty) ||
-		errors.Is(err, errInitialPrompt)
+		errors.Is(err, errInitialPrompt) ||
+		errors.Is(err, ErrSessionStopped)
 }
 
 func (m *Monitor) FenceInput() {
@@ -290,6 +292,12 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Atte
 	l.placing = false
 	if link == nil {
 		return Attempt{}, false
+	}
+	if custody.Stopped {
+		if voice == harness.VoiceUser {
+			return Attempt{}, false
+		}
+		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
 	}
 	if !custody.Taken {
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true

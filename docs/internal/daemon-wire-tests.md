@@ -77,6 +77,14 @@ On a `fakeagent.Run`:
   `DeleteSubagentTranscripts` removes those transcripts.
   A bare `-r` makes Claude open its resume picker. The picker starts a new
   conversation and sets `ResumePicker` on the `Run`.
+- Claude launched with `--plugin-dir` also runs a fake mod that polls the
+  daemon's mod socket, as a session with `claude_mod_enabled` on does. After
+  `Prompted`, `ThroughMod` says whether the prompt came through the mod.
+  `ModNext` returns what the mod did next with a message it could not submit:
+  held it, refused it as stopped, or lost its poll to a newer one.
+  `ModToolBoundary` appends what it holds, `ModEsc` stops the session and returns
+  what it held, `ModReload` draws a new instance id, and `ModStopPolling` stops
+  its polls. Wait for `daemon.ClaudeModPollHoldTimer` to know a poll is open.
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
   are off unless the test sets `ATTN_HEADLESS_TASKS=on`. When they are on,
   `w.HeadlessTask()` returns the next task. The task carries its `Harness`,

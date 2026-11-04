@@ -16,6 +16,7 @@ type Run struct {
 	Argv           []string
 	Env            []string
 	Yolo           bool
+	ThroughMod     bool
 	t              testing.TB
 	fake           *fake
 }
@@ -25,6 +26,7 @@ func (r *Run) Prompted() string {
 	var prompted promptedResult
 	r.call(methodPrompted, struct{}{}, &prompted)
 	r.ConversationID = prompted.ConversationID
+	r.ThroughMod = prompted.ThroughMod
 	return prompted.Text
 }
 
@@ -73,6 +75,37 @@ func (r *Run) DeleteSubagentTranscripts() {
 func (r *Run) Halt() {
 	r.t.Helper()
 	r.call(methodHalt, struct{}{}, nil)
+}
+
+func (r *Run) ModNext() ModEvent {
+	r.t.Helper()
+	var event ModEvent
+	r.call(methodModNext, struct{}{}, &event)
+	return event
+}
+
+func (r *Run) ModToolBoundary() []string {
+	r.t.Helper()
+	var appended []string
+	r.call(methodModTool, struct{}{}, &appended)
+	return appended
+}
+
+func (r *Run) ModEsc() []string {
+	r.t.Helper()
+	var returned []string
+	r.call(methodModEsc, struct{}{}, &returned)
+	return returned
+}
+
+func (r *Run) ModReload() {
+	r.t.Helper()
+	r.call(methodModReload, struct{}{}, nil)
+}
+
+func (r *Run) ModStopPolling() {
+	r.t.Helper()
+	r.call(methodModStop, struct{}{}, nil)
 }
 
 func (r *Run) Exit(code int) {

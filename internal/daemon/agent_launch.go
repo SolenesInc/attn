@@ -17,8 +17,12 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
+	claudeMod := d.claudeModForLaunch(driver.Name())
 	if !intent.Direct {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
+		if claudeMod != (agentdriver.ClaudeMod{}) {
+			opts.AgentEnv = append(opts.AgentEnv, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
+		}
 		if launch.CrewV2Enabled {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_V2_ENABLED=1")
 		}
@@ -45,6 +49,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		QuickCapture:           launch.QuickCapture,
 		CodexRemote:            opts.CodexRemote,
+		ClaudeMod:              claudeMod,
 	}
 	if unattended := opts.UnattendedLaunch; !unattended.IsZero() {
 		spawn.AutoApprove = true

@@ -11499,6 +11499,7 @@ export enum SessionPlaceErrorKind {
     InitialPrompt = "initial_prompt",
     LaneClosed = "lane_closed",
     PlacingAnother = "placing_another",
+    SessionStopped = "session_stopped",
 }
 
 export enum SessionPlaceStage {
@@ -29562,6 +29563,7 @@ const typeMap: any = {
         "initial_prompt",
         "lane_closed",
         "placing_another",
+        "session_stopped",
     ],
     "SessionPlaceStage": [
         "deferred",

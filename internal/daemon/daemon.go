@@ -199,6 +199,8 @@ type Daemon struct {
 	routerOnce               sync.Once
 	routes                   *Router
 	terminalState            *terminalRegistry
+	claudeModOnce            sync.Once
+	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
 	nisseOnce                sync.Once
@@ -856,6 +858,11 @@ func (d *Daemon) Start() error {
 		return err
 	}
 	d.startPermanentMaintenance()
+	if d.claudeModEnabled() {
+		if err := d.claudeMod().listen(); err != nil {
+			d.logf("claude mod: listen failed, live sessions are typed into: %v", err)
+		}
+	}
 
 	d.watchRecoveredLaunches()
 	d.life.Go("startupRecovery", func() {
@@ -1654,6 +1661,7 @@ func (d *Daemon) stop() {
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
 	}
+	d.claudeMod().close()
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)

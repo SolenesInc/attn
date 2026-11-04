@@ -194,6 +194,18 @@ type SpawnOpts struct {
 	SelfReportPullRequests bool
 
 	CodexRemote string
+
+	ClaudeMod ClaudeMod
+}
+
+const (
+	ClaudeModDirEnv    = "ATTN_CLAUDE_MOD_DIR"
+	ClaudeModSocketEnv = "ATTN_CLAUDE_MOD_SOCKET"
+)
+
+type ClaudeMod struct {
+	Dir    string
+	Socket string
 }
 
 func (o SpawnOpts) addDirArgs() []string {

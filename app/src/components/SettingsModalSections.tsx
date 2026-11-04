@@ -574,6 +574,7 @@ export function ExperimentalSettings({
   outpostsEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
+  claudeModEnabled,
   nisseEnabled,
   queueShowHiddenSessions,
   queueQuietNotifications,
@@ -592,6 +593,7 @@ export function ExperimentalSettings({
   | 'outpostsEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
+  | 'claudeModEnabled'
   | 'nisseEnabled'
   | 'queueShowHiddenSessions'
   | 'queueQuietNotifications'
@@ -704,6 +706,26 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
           >
             {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Claude mod</p>
+            <p className="settings-row-copy" id="claude-mod-description">
+              Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal. A session loads the mod when it next launches.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Claude mod"
+            aria-checked={claudeModEnabled}
+            aria-describedby="claude-mod-description"
+            className="settings-action"
+            data-testid="settings-claude-mod-toggle"
+            onClick={() => onSetSetting('claude_mod_enabled', claudeModEnabled ? 'false' : 'true')}
+          >
+            {claudeModEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">

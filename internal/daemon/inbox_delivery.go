@@ -305,6 +305,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			return receipt, err
 		}
 		state.pending = nil
+		if ring := (returnableInboxRing{address: a, typed: paste.typed, notified: paste.notified, stamp: readAt}); d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
+			d.returnInboxRing(ring)
+		}
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
@@ -339,6 +342,21 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		d.armInboxLocked(a, state, delay)
 	}
 	return receipt, nil
+}
+
+type returnableInboxRing struct {
+	address  who.Address
+	typed    []string
+	notified bool
+	stamp    string
+}
+
+func (d *Daemon) returnInboxRing(ring returnableInboxRing) {
+	if err := d.store.ReturnInboxRing(ring.address, ring.typed, ring.notified, ring.stamp); err != nil {
+		d.logf("inbox: return ring to %s: %v", ring.address, err)
+		return
+	}
+	d.kickInbox(ring.address)
 }
 
 type inboxPaste struct {

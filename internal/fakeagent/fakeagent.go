@@ -52,6 +52,11 @@ const (
 	methodExit       = "exit"
 	methodStopRead   = "stop_reading_terminal"
 	methodStatus     = "program_status"
+	methodModNext    = "mod_next"
+	methodModTool    = "mod_tool_boundary"
+	methodModEsc     = "mod_esc"
+	methodModReload  = "mod_reload"
+	methodModStop    = "mod_stop_polling"
 	methodCrashSrv   = "crash_app_server"
 	methodTranscript = "transcript_written"
 	signalExitBase   = 128
@@ -95,6 +100,7 @@ type textParams struct {
 type promptedResult struct {
 	Text           string `json:"text"`
 	ConversationID string `json:"conversation_id"`
+	ThroughMod     bool   `json:"through_mod"`
 }
 
 type exitParams struct {
@@ -200,6 +206,7 @@ type transcriptAuthor interface {
 type promptSubmission struct {
 	text         string
 	conversation string
+	throughMod   bool
 	err          error
 }
 
@@ -255,6 +262,9 @@ func serve(cfg config, style composer, conv conversation) int {
 		return 1
 	}
 	a.exitOnSignal()
+	if modded, ok := conv.(interface{ startMod(*agent) }); ok {
+		modded.startMod(a)
+	}
 	if prompt := conv.initialPrompt(); strings.TrimSpace(prompt) != "" {
 		a.term.echo(prompt)
 		a.submit(prompt)
@@ -265,11 +275,15 @@ func serve(cfg config, style composer, conv conversation) int {
 }
 
 func (a *agent) submit(prompt string) {
+	a.place(prompt, false)
+}
+
+func (a *agent) place(prompt string, throughMod bool) {
 	a.turn.Lock()
 	err := a.conv.submit(prompt)
 	conversation := a.conv.launch().ConversationID
 	a.turn.Unlock()
-	a.prompts <- promptSubmission{text: prompt, conversation: conversation, err: err}
+	a.prompts <- promptSubmission{text: prompt, conversation: conversation, throughMod: throughMod, err: err}
 }
 
 func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
@@ -284,7 +298,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodPrompted:
 		submitted := <-a.prompts
-		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation}, submitted.err
+		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation, ThroughMod: submitted.throughMod}, submitted.err
 	case methodReply, methodReplyLate:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -326,6 +340,12 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
+	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop:
+		modded, ok := a.conv.(*claude)
+		if !ok || modded.mod == nil {
+			return nil, fmt.Errorf("%T has no mod to script %s", a.conv, method)
+		}
+		return modded.mod.handle(a, method)
 	case methodAskApproval, methodDismiss, methodAnswered:
 		return a.handleModal(method)
 	case methodStopRead:

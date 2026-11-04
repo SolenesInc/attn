@@ -277,6 +277,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(SettingQueueShowHiddenSessions)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingQueueShowHiddenSessions)]))
 	settings[string(SettingQueueQuietNotifications)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueQuietNotifications)]))
 	settings[string(SettingCodexSharedEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCodexSharedEnabled)]))
+	settings[string(SettingClaudeModEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingClaudeModEnabled)]))
 	settings[string(SettingNisseEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingNisseEnabled)]))
 	settings[string(SettingCrewV2Enabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCrewV2Enabled)]))
 	settings[string(SettingSidebarHarnessLogosEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingSidebarHarnessLogosEnabled)]))

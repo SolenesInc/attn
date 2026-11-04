@@ -223,6 +223,22 @@ that input. A ring lost to an open menu in the harness stays lost.
   older items, but the ring counts as an attempt only for items that have
   attempts left.
 
+### With the Claude mod
+
+With the experimental `claude_mod_enabled` setting on, a Claude session's mod
+takes each ring instead of the terminal, except on an outpost, where the inbox
+lives on another daemon and attn types as usual:
+
+- After the user stops the session with Esc, the mod refuses every ring. Its
+  items stay unread, the refusal costs no attempt, and attn rings again at the
+  session's next state change after the user's next prompt.
+- A ring the mod holds for the running turn counts as placed. When the mod gives
+  it back instead of placing it, at Esc, on a reload, or when the mod stops
+  polling, attn puts the ring's items back to unread, takes back the ring's
+  attempt and outstanding ring, and rings again. A daemon restart while the mod
+  holds a ring loses that ring's user input, because attn keeps what the mod
+  holds in memory.
+
 ## Notification runs
 
 A notification run is a run that attn's own input started: a ring, or a crew

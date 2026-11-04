@@ -185,6 +185,9 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, sessionmonitor.ErrComposerDirty) {
 		return "queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)"
 	}
+	if errors.Is(err, sessionmonitor.ErrSessionStopped) {
+		return "queued (the user stopped the target; lands after the user's next prompt there)"
+	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 }
 

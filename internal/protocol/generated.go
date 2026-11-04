@@ -11873,6 +11873,7 @@ const SessionPlaceErrorKindComposerDirty SessionPlaceErrorKind = "composer_dirty
 const SessionPlaceErrorKindInitialPrompt SessionPlaceErrorKind = "initial_prompt"
 const SessionPlaceErrorKindLaneClosed SessionPlaceErrorKind = "lane_closed"
 const SessionPlaceErrorKindPlacingAnother SessionPlaceErrorKind = "placing_another"
+const SessionPlaceErrorKindSessionStopped SessionPlaceErrorKind = "session_stopped"
 
 type SessionPlaceMessage struct {
 	// AllowUserComposer corresponds to the JSON schema field "allow_user_composer".

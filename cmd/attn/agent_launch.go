@@ -146,6 +146,7 @@ func runAgentDirectly(requestedAgent string) {
 		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
 		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
 		CrewV2Enabled:   consumeOneShotBoolEnv("ATTN_CREW_V2_ENABLED"),
+		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
 	}
 
 	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {
