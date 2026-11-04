@@ -272,13 +272,17 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err != nil {
 		return err
 	}
+	loginEnv, err := r.d.launchEnv(ctx)
+	if err != nil {
+		return fmt.Errorf("start the shared Codex app-server: %w", err)
+	}
 	command := append([]string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), binary}, r.serverArgs(s.profile, s.socket)...)
 	opts := ptybackend.SpawnOptions{
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
 		Executable:    resolvedBinary(binary),
 		AgentArgv:     command,
 		AgentEnv:      codexServerAgentEnv,
-		LoginShellEnv: r.d.launchEnv(ctx),
+		LoginShellEnv: loginEnv,
 		DaemonEnv:     r.d.spawnRoutingEnv(),
 	}
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {

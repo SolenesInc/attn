@@ -31,6 +31,7 @@ const (
 	SettingNewSessionLauncherEnabled     HomeSetting    = "new_session_launcher_enabled"
 	SettingDirectAgentLaunchEnabled      HomeSetting    = "direct_agent_launch_enabled"
 	SettingSharedPTYHostEnabled          MachineSetting = "pty_shared_host_enabled"
+	SettingBackgroundLoginEnvEnabled     MachineSetting = "background_login_env_enabled"
 	SettingSharedPTYHostActive           MachineSetting = "pty_shared_host_active"
 	SettingTheme                         HomeSetting    = "theme"
 	SettingReviewerModel                 HomeSetting    = "reviewer_model"
@@ -104,7 +105,7 @@ func ClassOf(key string) Class {
 		}
 	}
 	switch key {
-	case string(SettingOutpostsEnabled), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
+	case string(SettingOutpostsEnabled), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingBackgroundLoginEnvEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
 		return Machine
 	}
 	if strings.HasSuffix(key, "_available") || strings.Contains(key, "_cap_") {

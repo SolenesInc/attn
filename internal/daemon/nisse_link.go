@@ -85,7 +85,7 @@ func (d *Daemon) agentOffered(agent string) bool {
 }
 
 func (l *nisseLink) home() string {
-	env := pty.MergeEnvironment(os.Environ(), l.d.launchEnv(l.d.life.Context()))
+	env := pty.MergeEnvironment(os.Environ(), l.d.launchEnvUntilStop())
 	lookup := func(key string) string {
 		for i := len(env) - 1; i >= 0; i-- {
 			if name, value, ok := strings.Cut(env[i], "="); ok && name == key {
@@ -292,12 +292,16 @@ func (l *nisseLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptio
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
+	loginEnv, err := l.d.launchEnv(ctx)
+	if err != nil {
+		return fmt.Errorf("start the Nisse server: %w", err)
+	}
 	spawn := ptybackend.SpawnOptions{
 		ID: nisseServerTerminal, Agent: nisseLinkKind, Label: "Nisse server", CWD: home, Cols: 80, Rows: 24,
 		Executable:    resolvedBinary(executable),
 		AgentArgv:     []string{executable, "serve"},
 		AgentEnv:      append(append([]string(nil), nisseServerEnv...), "NISSE_HOME="+home),
-		LoginShellEnv: l.d.launchEnv(ctx),
+		LoginShellEnv: loginEnv,
 		DaemonEnv:     l.d.spawnRoutingEnv(),
 	}
 	if err := l.d.ptyBackend.Spawn(ctx, withLifecycleID(spawn)); err != nil {
@@ -529,7 +533,14 @@ func (l *nisseLink) recoverProcesses(ctx context.Context) {
 	if len(l.sessions()) == 0 {
 		return
 	}
-	if _, err := l.ensureServer(ctx, nil); err != nil {
-		l.d.logf("nisse: reconnect to the Nisse server: %v", err)
+	reconnect := func() {
+		if _, err := l.ensureServer(ctx, nil); err != nil {
+			l.d.logf("nisse: reconnect to the Nisse server: %v", err)
+		}
 	}
+	if l.d.backgroundLoginEnv {
+		l.d.life.Go("nisseReconnect", reconnect)
+		return
+	}
+	reconnect()
 }

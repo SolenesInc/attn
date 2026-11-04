@@ -234,7 +234,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 			continue
 		}
 		available := d.harnessAvailability(driver)
-		settings[availabilitySettingKey(name)] = strconv.FormatBool(available)
+		settings[availabilitySettingKey(name)] = string(available)
 
 		caps := agentdriver.EffectiveCapabilities(driver)
 		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(caps.HasHooks)
@@ -342,9 +342,22 @@ func (d *Daemon) ptyBackendMode() string {
 	}
 }
 
-func (d *Daemon) harnessAvailability(driver agentdriver.Driver) bool {
-	_, err := d.machineAgentExecutable(driver, "")
-	return err == nil
+type harnessAvailability string
+
+const (
+	harnessAvailable harnessAvailability = "true"
+	harnessMissing   harnessAvailability = "false"
+	harnessChecking  harnessAvailability = "checking"
+)
+
+func (d *Daemon) harnessAvailability(driver agentdriver.Driver) harnessAvailability {
+	if d.capturingInBackground() {
+		return harnessChecking
+	}
+	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
+		return harnessMissing
+	}
+	return harnessAvailable
 }
 
 func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string, chief bool) string {

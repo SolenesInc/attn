@@ -41,7 +41,7 @@ func (d *Daemon) installCodexUpdate(profileID, desktopID string) error {
 	}
 	command := shellQuote(binary) + " update"
 	shell := pty.GetUserLoginShell()
-	if !pty.ShellIntegrationExpected(shell, pty.MergeEnvironment(os.Environ(), d.launchEnv(d.life.Context()))) {
+	if !pty.ShellIntegrationExpected(shell, pty.MergeEnvironment(os.Environ(), d.launchEnvUntilStop())) {
 		return fmt.Errorf("your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead", shell)
 	}
 	provider, err := d.terminalText()

@@ -298,7 +298,7 @@ func agentHealthCheck(agent agentdriver.Descriptor) Check {
 	case agentdriver.HealthUnhealthy:
 		return fail(name, fmt.Sprintf("daemon cannot launch %s: %s", agent.Name, agent.Detail), fmt.Sprintf("Install %s or configure its executable path, then rerun preflight.", agent.Name))
 	}
-	return warn(name, fmt.Sprintf("daemon has not confirmed %s is launchable yet: %s", agent.Name, agent.Detail), "Wait for the plugin health check and rerun preflight.")
+	return warn(name, fmt.Sprintf("daemon has not confirmed %s is launchable yet: %s", agent.Name, agent.Detail), "Wait for the check to finish and rerun preflight.")
 }
 
 func resolveLaunch(opts Options) Launch {

@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -73,7 +75,41 @@ func (e *loginEnv) Peek() (env []string, capturing bool) {
 	}
 }
 
-func (d *Daemon) launchEnv(ctx context.Context) []string {
-	env, _ := d.loginEnv.Wait(ctx)
+func (d *Daemon) launchEnv(ctx context.Context) ([]string, error) {
+	env, err := d.loginEnv.Wait(ctx)
+	if err != nil && ctx.Err() != nil {
+		return nil, fmt.Errorf("stopped waiting for the login environment: %w", err)
+	}
+	return env, nil
+}
+
+func (d *Daemon) launchEnvUntilStop() []string {
+	env, _ := d.launchEnv(d.life.Context())
 	return env
+}
+
+func (d *Daemon) capturingInBackground() bool {
+	if !d.backgroundLoginEnv {
+		return false
+	}
+	_, capturing := d.loginEnv.Peek()
+	return capturing
+}
+
+func (d *Daemon) finishLoginEnvCapture() {
+	_, _ = d.loginEnv.Wait(d.life.Context())
+	if d.stopping() {
+		return
+	}
+	d.publishHarnessAvailability()
+	d.ensureAvailableAgentSkills()
+	d.startDiscoveredPlugins()
+}
+
+func (d *Daemon) publishHarnessAvailability() {
+	d.coalesceSnapshots(func() {
+		for _, name := range agentdriver.List() {
+			d.publishFact(FactSettingChanged, availabilitySettingKey(name), nil)
+		}
+	})
 }

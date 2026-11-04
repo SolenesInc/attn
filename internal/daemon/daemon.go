@@ -255,6 +255,8 @@ type Daemon struct {
 
 	loginEnv *loginEnv
 
+	backgroundLoginEnv bool
+
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
 
@@ -595,6 +597,7 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	d.backgroundLoginEnv = parseBooleanSetting(d.machineSetting(SettingBackgroundLoginEnvEnabled))
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
@@ -615,8 +618,10 @@ func (d *Daemon) Start() error {
 	}
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
-	_, _ = d.loginEnv.Wait(d.life.Context())
-	d.ensureAvailableAgentSkills()
+	if !d.backgroundLoginEnv {
+		_, _ = d.loginEnv.Wait(d.life.Context())
+		d.ensureAvailableAgentSkills()
+	}
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	d.copyImagesOfAsksOpenedBeforeImagesTravelled()
 	if err := d.recoverQuickCaptureAssets(); err != nil {
@@ -766,7 +771,12 @@ func (d *Daemon) Start() error {
 	for _, session := range d.store.List("") {
 		d.startSessionMonitor(session.ID)
 	}
-	d.startInstalledPlugins()
+	d.reapStrandedPluginRuntimes()
+	if d.backgroundLoginEnv {
+		d.life.Go("finishLoginEnvCapture", d.finishLoginEnvCapture)
+	} else {
+		d.startDiscoveredPlugins()
+	}
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 

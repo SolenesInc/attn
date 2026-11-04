@@ -84,7 +84,11 @@ func (d *Daemon) observeDueSchedules(ctx context.Context, now time.Time) {
 			continue
 		}
 		if env == nil {
-			env = d.launchEnv(ctx)
+			var err error
+			if env, err = d.launchEnv(ctx); err != nil {
+				d.logf("automation guards not run: %v", err)
+				return
+			}
 		}
 		checks.Add(1)
 		if !d.life.Go("automationGuard", func() {

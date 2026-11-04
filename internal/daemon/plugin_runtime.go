@@ -120,8 +120,7 @@ func (d *Daemon) reapStrandedPluginRuntimes() {
 	)
 }
 
-func (d *Daemon) startInstalledPlugins() {
-	d.reapStrandedPluginRuntimes()
+func (d *Daemon) startDiscoveredPlugins() {
 	catalog, issues := discoverPluginManifests(d.pluginDir)
 	d.logf("plugin discovery user_dir=%s catalog=%d issues=%d", d.pluginDir, len(catalog), len(issues))
 	for _, issue := range issues {
@@ -141,7 +140,7 @@ func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {
 
 func (d *Daemon) pluginCommandEnv(extra ...string) []string {
 	env := append([]string(nil), os.Environ()...)
-	env = mergePluginEnvironment(env, d.launchEnv(d.life.Context()))
+	env = mergePluginEnvironment(env, d.launchEnvUntilStop())
 	env = mergePluginEnvironment(env, extra)
 	return env
 }

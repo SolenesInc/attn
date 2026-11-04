@@ -8,7 +8,7 @@ import (
 func (d *Daemon) ensureAvailableAgentSkills() {
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)
-		if driver == nil || !d.agentOffered(name) || !d.harnessAvailability(driver) {
+		if driver == nil || !d.agentOffered(name) || d.harnessAvailability(driver) != harnessAvailable {
 			continue
 		}
 		if synced, err := agentdriver.EnsureAttnSkillInstalled(name); err != nil {

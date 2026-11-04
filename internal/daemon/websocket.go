@@ -18,6 +18,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -536,6 +537,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
+	reportsChecking := d.capturingInBackground()
 	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
@@ -559,7 +561,11 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Outposts:               d.outpostsUpdatedMessage().Outposts,
 	}
 	d.fillInitialMigrationPhase(event)
+	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
+	if reportsChecking && !d.capturingInBackground() {
+		d.publishHarnessAvailability()
+	}
 	d.nudgeDesktopTileContent()
 
 	d.life.Go("fetchAllPRDetails", d.fetchAllPRDetails)

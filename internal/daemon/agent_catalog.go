@@ -22,6 +22,17 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 		}
 		driver := agentdriver.Get(name)
 		caps := agentdriver.EffectiveCapabilities(driver)
+		if d.harnessAvailability(driver) == harnessChecking {
+			agents = append(agents, agentdriver.Descriptor{
+				Name:       name,
+				Executable: driver.DefaultExecutable(),
+				ModelPin:   caps.HasModelPin,
+				EffortPin:  caps.HasEffortPin,
+				Health:     agentdriver.HealthUnknown,
+				Detail:     "checking the login environment for " + driver.DisplayName(),
+			})
+			continue
+		}
 		executable, err := d.machineAgentExecutable(driver, "")
 		entry := agentdriver.Descriptor{
 			Name:       name,

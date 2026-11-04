@@ -27,6 +27,8 @@ import (
 const (
 	defaultKillTimeout = 10 * time.Second
 	shellEnvTimeout    = 2 * time.Second
+	// Killing fish, zsh or bash closed its stdout within 3.6 ms over 50 kills each at load 22.
+	shellEnvStdoutCloseLimit = 500 * time.Millisecond
 )
 
 var ErrSessionNotFound = errors.New("session not found")
@@ -687,8 +689,9 @@ func ReadLoginShellEnv(parent context.Context, shellPath string) ([]string, erro
 		args = []string{"-l", "-i", "-c", "env -0"}
 	}
 	cmd := exec.CommandContext(ctx, shellPath, args...)
+	cmd.WaitDelay = shellEnvStdoutCloseLimit
 	output, err := cmd.Output()
-	if err != nil {
+	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("timeout after %s", shellEnvTimeout)
 		}

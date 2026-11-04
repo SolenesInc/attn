@@ -85,7 +85,10 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	if err != nil {
 		return struct{}{}, err
 	}
-	opts.LoginShellEnv = d.launchEnv(ctx)
+	opts.LoginShellEnv, err = d.launchEnv(ctx)
+	if err != nil {
+		return struct{}{}, err
+	}
 	startedAt := time.Now()
 	session := msg.Session
 	if len(msg.Copy) > 0 {
@@ -182,8 +185,12 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if plugin != nil {
 		defer plugin.abort()
 	}
+	loginEnv, err := d.launchEnv(ctx)
+	if err != nil {
+		return struct{}{}, err
+	}
+	opts.LoginShellEnv = loginEnv
 	d.monitors().registry.DropPendingConversations(msg.TerminalID)
-	opts.LoginShellEnv = d.launchEnv(ctx)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.syncMonitorConversation(sessionID)
@@ -359,7 +366,11 @@ func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeM
 
 func (d *Daemon) loginShell(ctx context.Context, _ protocol.TerminalShellMessage) (protocol.TerminalShellResult, error) {
 	shell := pty.GetUserLoginShell()
-	env := pty.MergeEnvironment(os.Environ(), d.launchEnv(ctx))
+	loginEnv, err := d.launchEnv(ctx)
+	if err != nil {
+		return protocol.TerminalShellResult{}, err
+	}
+	env := pty.MergeEnvironment(os.Environ(), loginEnv)
 	home, _ := os.UserHomeDir()
 	return protocol.TerminalShellResult{Shell: shell, IntegrationExpected: pty.ShellIntegrationExpected(shell, env), Home: home}, nil
 }

@@ -23,6 +23,7 @@ closes the session.
 - `session-title`: a background model names a new session from its first prompt.
 - `launch-launcher`: the experimental "Launcher 2.0" replaces the picker with one dialog for the path, the repository and its worktree. With an outpost attached it starts on the highlighted recent's machine ([outposts.md](outposts.md) `launcher-machines`).
 - `launch-mode`: the experimental "Direct agent launches" switch, described in Settings as launching agents using less memory.
+- `launch-before-login-env`: with the experimental machine setting `background_login_env_enabled`, the daemon answers while the login shell runs. Harnesses report `checking`, stay selectable, and every launch waits for the login environment.
 
 ## How to get to it
 
@@ -105,6 +106,7 @@ Preconditions:
   - Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-experimental"]` natively.
   - Click `[data-testid="settings-direct-agent-launch-toggle"]` natively: `./attn settings get direct_agent_launch_enabled` prints `true`. Click it again to put it back.
   - Click `[aria-label="Launcher 2.0"]` natively: `./attn settings get new_session_launcher_enabled` prints `true`. Press Escape to close Settings, press ⌘⇧H to go home, then press ⌘N. `bridge dom_wait '{"selector":"[data-launcher=\"one-screen\"]","timeoutMs":5000}'` matches the Launcher 2.0 dialog. Press Escape, reopen Settings on Experimental, and click the switch again to put it back.
+- **A launch during the login shell.** Run `./attn settings set background_login_env_enabled true`, stop the daemon by its captured PID, and start it again with a slow login shell. `shellmatrix.sh`, attached to the plot `s-1nsk45`, prints the environment for fish, zsh or bash. While the shell runs, `./attn settings get claude_available` prints `checking` and the picker's harness buttons carry the title "Checking for <Harness> on this machine". `wsctl add-session --place` returns after the shell ends, and the agent's `PATH` has the shell's marker. A later `settings_updated` carries `true` or `false`.
 - **Proof.** In `$P`, keep each `./attn` and `wsctl` command with its output and exit code, `bridge location_picker_get_state` with the picker open, `./attn agent list --json` after each launch and close, `./attn agent peek` after each reload and the stop, `./attn session show launch-agent`, and `bridge capture_screenshot '{"path":"<P>/launch-stopped.png"}'` with the stopped tile on screen. Name each file for its way in, such as `launch-deep-link-list.json`.
 
 ## Contexts

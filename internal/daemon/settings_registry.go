@@ -41,6 +41,7 @@ const (
 	SettingNewSessionLauncherEnabled     = settingkeys.SettingNewSessionLauncherEnabled
 	SettingDirectAgentLaunchEnabled      = settingkeys.SettingDirectAgentLaunchEnabled
 	SettingSharedPTYHostEnabled          = settingkeys.SettingSharedPTYHostEnabled
+	SettingBackgroundLoginEnvEnabled     = settingkeys.SettingBackgroundLoginEnvEnabled
 	SettingSharedPTYHostActive           = settingkeys.SettingSharedPTYHostActive
 	SettingTheme                         = settingkeys.SettingTheme
 	SettingReviewerModel                 = settingkeys.SettingReviewerModel
@@ -188,6 +189,9 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
+	{key: string(SettingBackgroundLoginEnvEnabled), scope: daemonScope, experimental: true, description: "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", validate: func(d *Daemon, key, value string) error {
+		return validateBooleanSetting(value)
+	}},
 	{key: string(SettingAutoApproveEnabled), scope: daemonScope, description: "Auto-approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
@@ -312,7 +316,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	}},
 	{key: "session_cost.billed_as.<model>", scope: daemonScope, description: "Billing model alias. Empty removes the alias.", validate: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) }},
 	{key: "notebook.root.effective", scope: profileScope, description: "The Notebook folder this profile uses.", readOnly: true},
-	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH.", readOnly: true},
+	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH: true, false, or checking while the daemon reads the login environment.", readOnly: true},
 	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},
 	{key: "pty_backend_mode", scope: daemonScope, description: "Active terminal backend.", readOnly: true},
 	{key: "pty_shared_host_active", scope: daemonScope, description: "Whether the shared terminal host is active.", readOnly: true},
