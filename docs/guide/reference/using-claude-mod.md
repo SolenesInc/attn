@@ -48,9 +48,10 @@ Sessions on an outpost are always typed.
 ## Upgrades and restarts
 
 Attn keeps the mod in a `claude-mod` folder in its data directory. When an Attn
-upgrade changes the mod, every running session reloads the mod and the transcript
-shows `attn: reloaded`. Messages waiting for the next tool call at that moment go
-back to Attn, and Attn delivers them again.
+upgrade changes the mod, the daemon writes the new version as it starts, every
+running session reloads the mod, and the transcript shows `attn: reloaded`. Attn
+types into a session until its mod has reloaded.
 
 If the Attn daemon restarts while the band shows a message waiting for the next
-tool call, that message is lost, and you need to send it again.
+tool call, Attn no longer knows about that message. After an upgrade that changes
+the mod, the message is gone and you need to send it again.

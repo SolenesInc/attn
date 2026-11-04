@@ -21,12 +21,18 @@ let link: Link = { terminal: '', socketPath: '' }
 let isTurnRunning = false
 let isStopped = false
 let held: Message[] = []
+let lastRequest: Promise<void> = Promise.resolve()
 
 function firstLine(text: string): string {
   return text.split('\n', 1)[0] ?? ''
 }
 
-async function post($: EngineInterface, path: string, body: object): Promise<void> {
+function post($: EngineInterface, path: string, body: object): Promise<void> {
+  lastRequest = lastRequest.then(() => send($, path, body))
+  return lastRequest
+}
+
+async function send($: EngineInterface, path: string, body: object): Promise<void> {
   try {
     await $.http.fetch(`http://attn${path}`, {
       method: 'POST',
@@ -129,7 +135,8 @@ async function appendHeld($: EngineInterface): Promise<void> {
       .append({ message: { type: 'user', content: [{ type: 'text', text: MID_TURN_HEAD + text + MID_TURN_TAIL }] } })
       .catch((err: unknown) => ({ deny: String(err) }))
     if (appended.deny !== undefined) {
-      $.ui.log(`could not send this to Claude (${appended.deny}): ${text}`)
+      $.ui.log(`attn takes this back, Claude refused it (${appended.deny}): ${text}`, { to: 'debug' })
+      await giveBack($, [{ id, text }])
       continue
     }
     $.ui.log(`❯ ${text}`)
@@ -140,8 +147,9 @@ async function appendHeld($: EngineInterface): Promise<void> {
 async function submitLeftOver($: EngineInterface, messages: Message[]): Promise<void> {
   const drop = await submit($, messages.map(message => message.text).join('\n\n'))
   if (drop !== undefined) {
-    await setTurnRunning($, false)
-    return giveBack($, messages)
+    const back = [...messages, ...held]
+    await Promise.all([setHeld($, []), setTurnRunning($, false)])
+    return giveBack($, back)
   }
   for (const { id } of messages) {
     await ack($, id, 'submitted')
@@ -184,18 +192,15 @@ export const register: Register = on => {
       return result
     }
     const leftOver = held
-    await setHeld($, [])
+    isStopped = e.isAborted
+    await Promise.all([setHeld($, []), setTurnRunning($, !e.isAborted && leftOver.length > 0)])
     if (e.isAborted) {
-      isStopped = true
-      await setTurnRunning($, false)
       await listWaiting($, leftOver)
       if (leftOver.length > 0) {
         await giveBack($, leftOver)
       }
     } else if (leftOver.length > 0) {
       void submitLeftOver($, leftOver)
-    } else {
-      await setTurnRunning($, false)
     }
     return result
   })

@@ -3,6 +3,7 @@ package daemon
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -96,16 +97,22 @@ func (d *Daemon) claudeModForLaunch(agent string) agentdriver.ClaudeMod {
 	if agent != string(protocol.SessionAgentClaude) || !d.claudeModEnabled() {
 		return agentdriver.ClaudeMod{}
 	}
-	dir := claudemod.Dir(d.dataRoot)
+	if err := d.claudeMod().serve(); err != nil {
+		d.logf("claude mod: this session is typed into: %v", err)
+		return agentdriver.ClaudeMod{}
+	}
+	return agentdriver.ClaudeMod{Dir: claudemod.Dir(d.dataRoot), Socket: claudemod.SocketPath(d.dataRoot)}
+}
+
+func (m *claudeMod) serve() error {
+	if err := m.listen(); err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	dir := claudemod.Dir(m.d.dataRoot)
 	if err := claudemod.Install(dir); err != nil {
-		d.logf("claude mod: install in %s failed, this session is typed into: %v", dir, err)
-		return agentdriver.ClaudeMod{}
+		return fmt.Errorf("install in %s: %w", dir, err)
 	}
-	if err := d.claudeMod().listen(); err != nil {
-		d.logf("claude mod: listen failed, this session is typed into: %v", err)
-		return agentdriver.ClaudeMod{}
-	}
-	return agentdriver.ClaudeMod{Dir: dir, Socket: claudemod.SocketPath(d.dataRoot)}
+	return nil
 }
 
 func (m *claudeMod) listen() error {

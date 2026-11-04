@@ -859,8 +859,8 @@ func (d *Daemon) Start() error {
 	}
 	d.startPermanentMaintenance()
 	if d.claudeModEnabled() {
-		if err := d.claudeMod().listen(); err != nil {
-			d.logf("claude mod: listen failed, live sessions are typed into: %v", err)
+		if err := d.claudeMod().serve(); err != nil {
+			d.logf("claude mod: live sessions are typed into: %v", err)
 		}
 	}
 
