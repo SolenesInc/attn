@@ -29,6 +29,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [telemetry](reference/telemetry.md) | What analytics records and shares |
 | [using-outposts](reference/using-outposts.md) | Experimental: connect computers, run remote terminals, and sync profile Notebooks |
 | [using-shared-codex](reference/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server |
+| [using-claude-mod](reference/using-claude-mod.md) | Experimental: delivering messages to Claude sessions through a Claude Code mod instead of typing |
 | [using-nisse](reference/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
 
 Keyboard shortcuts live in the app: Cmd+/ (Ctrl+Shift+/ on Linux) shows the

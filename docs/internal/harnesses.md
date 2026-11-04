@@ -345,6 +345,28 @@ Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
   When the subagent finishes, a main turn starts with empty text. The
   subagent's `turn.start`, `tool.call` and `turn.complete` carry its `agentId`.
 
+Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
+
+- The findings above hold, with these additions.
+- `$.state` survives a reload that lands during a turn, and the new module's
+  `tool.call` hooks fire for that turn. Module variables start over, so a mod
+  that must know a turn is running keeps that in `$.state`.
+- A reload draws `attn: reloaded (5 hooks: ...)` in the transcript, named after
+  the plugin. The model does not read it.
+- A save that does not parse keeps the old module running and polling. A save
+  of a valid module that does nothing ends its polls.
+- `/exit` ends the session in attn at once. A delivery to it then fails with
+  `unknown session`, so nothing is left to type into.
+- `/clear` keeps the module and its poll loop, and the terminal moves to a new
+  session id.
+- A tool result followed by several appended rows reaches the model as one user
+  message, each row a text block. Every block but the last gains a trailing
+  newline.
+- On a fresh config, the first launch asks "Make auto mode your default
+  permission mode?". attn reports the session as needing approval until the user
+  answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it
+  with `permissions.defaultMode` set to `default`.
+
 ## Codex
 
 Read in the source at openai/codex 60947e2341.

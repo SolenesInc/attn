@@ -480,7 +480,7 @@ func TestTheClaudeModSettingDecidesTheLaunchAndTheDelivery(t *testing.T) {
 				t.Fatalf("with the setting on the agent launched with %v, socket %q", on.Argv, runEnv(on, "ATTN_CLAUDE_MOD_SOCKET"))
 			}
 			folder := on.Argv[at+1]
-			module := filepath.Join(folder, "hooks", "register.ts")
+			module := filepath.Join(folder, "hooks", "register.tsx")
 			for _, file := range []string{filepath.Join(folder, ".claude-plugin", "plugin.json"), filepath.Join(folder, "hooks", "hooks.json"), module} {
 				if _, err := os.Stat(file); err != nil {
 					t.Errorf("the mod folder lacks %s: %v", file, err)

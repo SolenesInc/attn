@@ -21,6 +21,7 @@ does to the queue.
 - `mailbox`: address a crew member, the chief or a seed, so the item follows whoever holds that job.
 - `ring`: one prompt per address with unread items, with at most 3 attempts per item, 5 minutes apart.
 - `inbox-guidance`: what attn tells agents about messages and rings.
+- `claude-mod-delivery`: with `claude_mod_enabled` on, rings, annotations and returned user words reach a Claude session through the mod in `internal/claudemod/mod/`, and attn types only when the mod is not connected ([using-claude-mod](../../../../docs/guide/reference/using-claude-mod.md)).
 
 ## How to get to it
 
@@ -28,6 +29,7 @@ does to the queue.
 
 - No control of its own opens the inbox. People see a ring as the 📬 line in the agent's terminal, and the typed text of their own answers and quick captures there.
 - **Settings → Experimental**: "Quiet notifications in the queue" keeps a ring's run out of the queue. [queue-flow.md](queue-flow.md) has the recipe that drives it.
+- **Settings → Experimental**: "Claude mod" sets `claude_mod_enabled`, which delivers to Claude sessions through the mod from their next launch.
 - Items people put in come through other features: an answer to an ask ([asks.md](asks.md)), a quick capture ([quick-capture.md](quick-capture.md)) and a change to a seed's authorization ([delegation.md](delegation.md)).
 - Their own shell: `attn agent msg <target> "text" --source-session <id>` sends as that session, and `attn agent inbox --session <id>` reads as it.
 
@@ -77,6 +79,7 @@ Preconditions:
 - **A seed's mailbox.** Plant a seed: `./attn seed plant "Inbox drive"` prints `<seed>  <slug>  Inbox drive`. Run `wsctl input --id <a> --text "tell <seed>" --enter`: peek on inbox-a shows `queued: queued (seed has no reachable tender; waits for its next tender)`. Run `wsctl input --id <b> --text "tend <seed>" --enter`. Thirty seconds after that input, peek on inbox-b shows the 📨 line from inbox-a: the item followed the seed to its new tender.
 - **Typing holds the ring.** Type into inbox-b without submitting: `wsctl input --id <b> --text "hold on"`, then at once `./attn agent msg inbox-b "after typing" --source-session inbox-a`. The receipt is `queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)`. Thirty seconds after the input, peek on inbox-b shows the 📬 line typed after `hold on` on the same prompt, then the 📨 line.
 - **Read a few at a time.** Type into inbox-a without submitting, as above, so no ring prompts it to read. Run `./attn agent msg inbox-a "first" --source-session inbox-b --json`: the JSON has `status` `queued` and a `message_id`. Send `"second"` the same way without `--json`. `./attn agent inbox --session inbox-a --limit 1` prints the first 📨 item, then a line starting `1 more unread`. Every read marks what it returns as read, so `./attn agent inbox --session inbox-a --limit 1 --json` returns `second` in `items` with `remaining: 0`, and a plain `./attn agent inbox --session inbox-a` prints `inbox empty`. Submit inbox-a's prompt with `wsctl input --id <a> --text "" --enter`.
+- **Through the Claude mod.** The baseline mock agent has no mod, so this recipe needs the real `claude` and a mock Anthropic API. Run `attn seed show s-dtt8w1` for the artifact folder, then from the checkout root, after `make build`, run `uv run --with pyte python3 <folder>/c4-live.py <new output folder> [case ...]`. It starts instance `cmlive` with the setting on, wipes it before and after, and prints one PASS or FAIL per expectation. Its cases are `idle`, `steers`, `perm`, `esc`, `after`, `reload`, `gone`, `typed` and `clear`. The output folder gets `requests.jsonl`, what the mock received, and a PNG of each screen. Without the script, launch with `wsctl add-session`, send with `session_annotations_submit` through `wsctl request`, and read the result on the screen: an idle delivery shows "Prompt from the attn plugin" and a steer shows `attn: ❯ <text>`. A typed delivery shows neither.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `./attn agent peek inbox-a` after each send and `./attn agent peek inbox-b` after each ring, and `./attn agent msg-status <message> --session inbox-a --json`. Name each file for its way in, such as `inbox-seed-mailbox-peek.txt`.
 
 ## Contexts
@@ -86,6 +89,7 @@ Preconditions:
 - **Outposts**: an item for an agent on an outpost whose host is unreachable waits, and the receipt's detail reads `queued: <agent> is on <host>, which is unreachable; it rings when <host> is back`.
 - **Profiles**: a message reaches only sessions, members and seeds of the sender's profile. attn answers for a session or member in another profile as if it did not exist: `no session or crew member matches`. A seed of another profile is refused by name.
 - **Performance and idle cost**: limits a sender can hit, each named in its refusal: 32 KiB per message, the same text to one address once per 10 seconds, 8 messages from one sender to one address per 30 seconds, and 50 unread peer messages per address. `attn agent inbox` returns 20 items by default and 50 with `--limit`. The rest wait for the next read.
+- **Claude mod**: `claude_mod_enabled` changes how a message reaches Claude, not when attn sends it. A plain ring still waits for a prompt-ready session, and nothing is delivered while a permission question is open. On an outpost attn types.
 - **Harnesses**: every harness gets the same rings and reads with the same verbs. Plugin harnesses get them through their driver. A shell never gets a ring: the receipt says the message waits there for `attn agent inbox`.
 - **Compatibility across versions**: items written by an earlier version stay readable. The store's inbox and mailbox migrations carry them forward.
 - **Flow**: with queue flow and quiet notifications on, a run a ring started opens no turn when it stops, unless the agent needs approval or attn cannot tell its state ([queue-flow.md](queue-flow.md)). With queue flow off, quiet notifications change nothing.
@@ -93,6 +97,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/agent_msg_wire_test.go`, `internal/daemon/agent_mailbox_wire_test.go`, `internal/daemon/inbox_attempts_wire_test.go`, `internal/daemon/garden_nudges_wire_test.go`, `internal/daemon/garden_bells_wire_test.go`, `internal/daemon/automation_bells_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/plugin_inbox_wire_test.go`.
+- Wire, with a fake mod: `internal/daemon/claude_mod_wire_test.go`.
 - Stack: `cmd/attn/agent_stack_test.go`, `cmd/attn/mailbox_restart_stack_test.go`, `internal/daemon/conversation_drop_delivery_stack_test.go`.
 - Kernel: `internal/store/agent_mailbox_test.go`.
 
@@ -105,4 +110,5 @@ Preconditions:
 - A ring lands only at a safe prompt. An agent that has not settled after launch gets `queued (target is not taking input right now ...)`. The ring follows when the agent settles, at no cost in attempts.
 - After 3 unanswered rings attn stops ringing for an item and only the daemon log says so. A new item brings fresh attempts, and the ring for the new item covers the old items too.
 - `attn agent inbox` never returns answers, quick captures or authorization changes: a ring types them. Reading an empty inbox after a ring is not a lost item.
+- Claude mod: a ring holds only when it types something, such as an ask's answer. A plain 📬 ring waits for the prompt, so it never appears as a steer. `/clear` moves the terminal to a new session id, so look the id up by terminal before sending. A module that does not parse leaves the old module polling; to cut the mod off, save a valid module that does nothing.
 - Working but wrong: a receipt repeats its status, as in `queued: queued (seed has no reachable tender; waits for its next tender)` and `notified: notified inbox-b`. A `notified` receipt says the ring was placed, not that the agent read it. The proof is the 📬 line in that agent's terminal and `msg-status` reading `read`.
