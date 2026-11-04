@@ -10,9 +10,10 @@ import (
 )
 
 type Interpreted struct {
-	bellName string
-	cause    string
-	excluded []string
+	bellName        string
+	cause           string
+	excludedSession []string
+	notifiedParty   string
 }
 
 func (i Interpreted) Quiet() bool               { return i.bellName == "" }
@@ -52,9 +53,12 @@ func (m *Model) Interpret(name, seedID string, payload []byte) (Interpreted, err
 	for _, exclusion := range decision.bell.exclusions {
 		if value, exists := values[exclusionField(exclusion)]; exists {
 			if sessionID := strings.TrimSpace(value.(string)); sessionID != "" {
-				interpreted.excluded = append(interpreted.excluded, sessionID)
+				interpreted.excludedSession = append(interpreted.excludedSession, sessionID)
 			}
 		}
+	}
+	if party, exists := values["directly_notified"]; exists {
+		interpreted.notifiedParty = strings.TrimSpace(party.(string))
 	}
 	return interpreted, nil
 }
@@ -75,11 +79,8 @@ func (m *Model) Recipients(seedID string, decision Interpreted, resolver RoleRes
 	if err != nil {
 		return nil, err
 	}
-	if len(decision.excluded) == 0 {
-		return recipients, nil
-	}
-	excluded := map[string]bool{}
-	for _, sessionID := range decision.excluded {
+	excluded := map[string]bool{decision.notifiedParty: true}
+	for _, sessionID := range decision.excludedSession {
 		excluded[sessionID] = true
 		if addresses, ok := resolver.(interface {
 			AddressesOfSession(protocol.SessionID) []string

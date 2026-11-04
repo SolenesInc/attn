@@ -390,32 +390,38 @@ func TestDeletingAProfileRetiresItsChiefOnlyOnceItSleeps(t *testing.T) {
 }
 
 func TestSendingASeedToASleepingChiefMemberWakesIt(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	cli := w.Client()
-	turnOnCrewV2(t, w)
-	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-	planted, err := cli.SeedPlant("", "Choose where this runs", "Pick the working context.", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	shown, err := cli.SeedShow("", planted.Seed.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sent, err := cli.SeedSendToChief("", shown.Seed, "")
-	if err != nil {
-		t.Fatalf("sending a seed to a sleeping Chief: %v", err)
-	}
-	chief := chiefOfRoster(t, crewRoster(t, cli))
-	if sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+chief.ID) || chief.BindingSession == nil {
-		t.Fatalf("the seed went to %+v and the Chief is %+v; want the Chief member to tend it and wake", sent.Seed.Tender, chief)
-	}
-	if prompt := w.Launched(string(*chief.BindingSession)).Prompted(); prompt != crewV2WakeGreeting {
-		t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
-	}
-	if home := filepath.Dir(chief.CharterPath); home != chief.HomeDir {
-		t.Fatalf("charter %s is outside home %s", chief.CharterPath, chief.HomeDir)
-	}
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		turnOnCrewV2(t, w)
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		planted, err := cli.SeedPlant("", "Choose where this runs", "Pick the working context.", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		shown, err := cli.SeedShow("", planted.Seed.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sent, err := cli.SeedSendToChief("", shown.Seed, "")
+		if err != nil {
+			t.Fatalf("sending a seed to a sleeping Chief: %v", err)
+		}
+		chief := chiefOfRoster(t, crewRoster(t, cli))
+		if sent.Seed.Tender == nil || sent.Seed.Tender.Ref != protocol.PartyRef("member:"+chief.ID) || chief.BindingSession == nil {
+			t.Fatalf("the seed went to %+v and the Chief is %+v; want the Chief member to tend it and wake", sent.Seed.Tender, chief)
+		}
+		day := string(*chief.BindingSession)
+		if prompt := wakePrompt(t, w, day); prompt != crewV2WakeGreeting {
+			t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
+		}
+		w.advance(0)
+		if items := readInbox(t, cli, day, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+planted.Seed.ID) {
+			t.Errorf("the woken Chief's inbox holds %q, want only the assignment pointing at %s and no tended update", inboxContents(items), planted.Seed.ID)
+		}
+		if home := filepath.Dir(chief.CharterPath); home != chief.HomeDir {
+			t.Fatalf("charter %s is outside home %s", chief.CharterPath, chief.HomeDir)
+		}
+	})
 }
 
 func chiefSetupFromApp(app *testworld.Peer, requestID string, change protocol.CrewSetMessage) protocol.CrewSetResultMessage {
