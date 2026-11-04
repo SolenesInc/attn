@@ -2,6 +2,7 @@ package ptybackend
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -151,10 +152,11 @@ func TestSharedHost_ABuildThatFailsToAdoptHandsEveryTerminalBack(t *testing.T) {
 }
 
 type handoverWorld struct {
-	root string
+	root    string
+	running *WorkerBackend
 }
 
-func newHandoverWorld(t *testing.T) handoverWorld {
+func newHandoverWorld(t *testing.T) *handoverWorld {
 	t.Helper()
 	root, err := os.MkdirTemp("/tmp", "attn-handover-")
 	if err != nil {
@@ -163,18 +165,22 @@ func newHandoverWorld(t *testing.T) handoverWorld {
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	previous := buildinfo.SnapshotFormat
 	t.Cleanup(func() { buildinfo.SnapshotFormat = previous })
-	return handoverWorld{root: root}
+	return &handoverWorld{root: root}
 }
 
-func (w handoverWorld) backend(t *testing.T, format, binary string) *WorkerBackend {
+func (w *handoverWorld) backend(t *testing.T, format, binary string) *WorkerBackend {
 	t.Helper()
+	if w.running != nil {
+		_ = w.running.Shutdown(context.Background())
+	}
 	buildinfo.SnapshotFormat = format
 	backend, err := NewSharedHost(WorkerBackendConfig{
-		DataRoot: w.root, DaemonInstanceID: "d-handover", BinaryPath: binary, Logf: t.Logf,
+		DataRoot: w.root, DaemonInstanceID: "d-handover", BinaryPath: binary, Logf: log.Printf,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	w.running = backend
 	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err != nil {
 		t.Fatal(err)
@@ -182,7 +188,7 @@ func (w handoverWorld) backend(t *testing.T, format, binary string) *WorkerBacke
 	return backend
 }
 
-func (w handoverWorld) hostRegistry(t *testing.T, hostPID int) ptyhost.HostRegistry {
+func (w *handoverWorld) hostRegistry(t *testing.T, hostPID int) ptyhost.HostRegistry {
 	t.Helper()
 	paths, _ := filepath.Glob(filepath.Join(ptyhost.HostRegistryDir(w.root, "d-handover"), "*.json"))
 	for _, path := range paths {
