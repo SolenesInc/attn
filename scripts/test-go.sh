@@ -30,6 +30,9 @@ if ! [[ "$test_gomaxprocs" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 export GOMAXPROCS="$test_gomaxprocs"
+# GOGC=400 cut the Go suite from 756 to 716 CPU-s. The worst CI job group from a
+# cold build cache peaks at 3.03 GiB of its 16 GB runner, up from 2.55 (2026-11-04).
+export GOGC="${GOGC:-400}"
 
 go_bin="$(command -v go)"
 GOFLAGS="$("$go_bin" env GOFLAGS) -trimpath -ldflags=-w"
