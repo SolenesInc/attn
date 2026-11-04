@@ -251,18 +251,10 @@ func TestASleepingMemberKeepsItsLastDayInTheLedger(t *testing.T) {
 	}
 }
 
-func TestAResumedCrewConversationStaysInTheOpenLedgerAfterANewWake(t *testing.T) {
+func TestAnUnclosedCrewDayStaysInTheOpenLedgerAfterANewWake(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
+	day := crewDayLeftRecoverable(t, w, "Keel")
 	cli := w.Client()
-	day := wakeCrew(t, cli, "Keel", "")
-	run := w.Launched(string(day.SessionID))
-	run.Prompted()
-	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
-	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
-	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: day.SessionID}); err != nil {
-		t.Fatal(err)
-	}
-	w.Launched(string(day.SessionID))
 	next := wakeCrew(t, cli, "Keel", "")
 	w.Launched(string(next.SessionID))
 	page := ledger(t, cli, client.SessionListOptions{})
@@ -270,8 +262,8 @@ func TestAResumedCrewConversationStaysInTheOpenLedgerAfterANewWake(t *testing.T)
 	for _, entry := range page.Entries {
 		found[entry.ID] = true
 	}
-	if len(page.Entries) != 2 || !found[day.SessionID] || !found[next.SessionID] {
-		t.Fatalf("resumed conversation hidden: %+v", page.Entries)
+	if len(page.Entries) != 2 || !found[day] || !found[next.SessionID] {
+		t.Fatalf("unclosed day hidden: %+v", page.Entries)
 	}
 }
 

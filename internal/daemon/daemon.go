@@ -1751,6 +1751,10 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	if !bound {
+		d.endClosedSessionsRun(sessionID, owner, info)
+		return true
+	}
 	if session := d.store.Get(sessionID); session != nil {
 		driver := agentdriver.Get(session.Agent)
 		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
@@ -1805,10 +1809,33 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	return true
 }
 
+func (d *Daemon) endClosedSessionsRun(sessionID protocol.SessionID, owner endingTerminal, info ptybackend.ExitInfo) {
+	exit := d.exitOf(sessionID, info)
+	exit.Stopped = d.consumeTerminalExitIntent(info.ID, terminalExitStop)
+	if err := d.removePTYSession(info.ID); err != nil {
+		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
+	}
+	reopened := d.store.Get(sessionID) != nil
+	if reopened || owner.copied || d.copiedSession(sessionID) {
+		return
+	}
+	d.announceRunExit(sessionID, exit)
+}
+
 func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
-	d.noteLaunchExited(sessionID, exit)
 	d.releaseExitedCrewBinding(sessionID)
-	commandTerminal := d.finishCommandTerminal(sessionID, exit)
+	commandTerminal := d.announceRunExit(sessionID, exit)
+	if commandTerminal {
+		return
+	}
+	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
+		d.life.Go("closeNormallyExitedSession", func() { d.closeNormallyExitedSession(sessionID) })
+	}
+}
+
+func (d *Daemon) announceRunExit(sessionID protocol.SessionID, exit sessionmonitor.Exit) (commandTerminal bool) {
+	d.noteLaunchExited(sessionID, exit)
+	commandTerminal = d.finishCommandTerminal(sessionID, exit)
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
 		Terminal: string(exit.Terminal),
 		ExitCode: exit.Code,
@@ -1817,12 +1844,7 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 	d.sessionMonitor(sessionID).RecordExitPublished(exit)
 	pausepoint.At(pausepoint.SessionExitObserved)
 	d.broadcastSessionStateChanged(sessionID)
-	if commandTerminal {
-		return
-	}
-	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
-		d.life.Go("closeNormallyExitedSession", func() { d.closeNormallyExitedSession(sessionID) })
-	}
+	return commandTerminal
 }
 
 func (d *Daemon) closeNormallyExitedSession(sessionID protocol.SessionID) {

@@ -18,6 +18,7 @@
 
 group go \.go$|^go\.(mod|sum)$
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
+go ./internal/daemon TestAHomeMovedAwayIsRepointedAndWakesThere
 go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
 go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
 go ./internal/daemon TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts
