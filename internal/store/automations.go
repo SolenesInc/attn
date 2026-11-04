@@ -153,17 +153,8 @@ type automationReviewQueryer interface {
 	Query(query string, args ...any) (*sql.Rows, error)
 }
 
-func githubReviewOccurrenceBase(subjectKey string, cycle int) string {
-	return fmt.Sprintf("review_requested:%s:%d", subjectKey, cycle)
-}
-
-func githubReviewOccurrenceKey(subjectKey string, cycle int, headSHA string) string {
-	base := githubReviewOccurrenceBase(subjectKey, cycle)
-	headSHA = strings.ToLower(strings.TrimSpace(headSHA))
-	if headSHA == "" {
-		return base
-	}
-	return base + ":" + headSHA
+func githubReviewOccurrencePrefix(subjectKey string, cycle int) string {
+	return fmt.Sprintf("review_requested:%s:%d:", subjectKey, cycle)
 }
 
 func githubReviewPayloadHead(payloadJSON string) string {
@@ -177,34 +168,28 @@ func githubReviewPayloadHead(payloadJSON string) string {
 }
 
 func githubReviewCycleStatus(q automationReviewQueryer, definitionID int, subjectKey string, cycle int, headSHA string) (hasOccurrence, hasPending, matchesHead bool, err error) {
-	base := githubReviewOccurrenceBase(subjectKey, cycle)
-	prefix := base + ":"
+	prefix := githubReviewOccurrencePrefix(subjectKey, cycle)
 	headSHA = strings.ToLower(strings.TrimSpace(headSHA))
 	rows, err := q.Query(`
-		SELECT o.occurrence_key,o.payload_json,r.state
+		SELECT o.occurrence_key,r.state
 		FROM automation_occurrences o
 		JOIN automation_runs r ON r.occurrence_id=o.id
 		WHERE o.definition_id=? AND o.provider='github' AND o.subject_key=?
-		  AND (o.occurrence_key=? OR instr(o.occurrence_key,?)=1)
-	`, definitionID, subjectKey, base, prefix)
+		  AND instr(o.occurrence_key,?)=1
+	`, definitionID, subjectKey, prefix)
 	if err != nil {
 		return false, false, false, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var occurrenceKey, payloadJSON, state string
-		if err := rows.Scan(&occurrenceKey, &payloadJSON, &state); err != nil {
+		var occurrenceKey, state string
+		if err := rows.Scan(&occurrenceKey, &state); err != nil {
 			return false, false, false, err
 		}
 		hasOccurrence = true
 		hasPending = hasPending || state == AutomationRunStatePending
 		if headSHA == "" || occurrenceKey == prefix+headSHA {
 			matchesHead = true
-			continue
-		}
-		if occurrenceKey == base {
-			legacyHead := githubReviewPayloadHead(payloadJSON)
-			matchesHead = matchesHead || legacyHead == "" || legacyHead == headSHA
 		}
 	}
 	return hasOccurrence, hasPending, matchesHead, rows.Err()
@@ -947,10 +932,7 @@ func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID int, host 
 		WHERE r.definition_id=? AND e.host=? AND e.active=0
 		  AND (r.state=? OR (r.state=? AND r.cancel_reason=?))
 		  AND o.provider='github'
-		  AND (
-			o.occurrence_key=('review_requested:' || e.subject_key || ':' || CAST(e.cycle AS TEXT))
-			OR instr(o.occurrence_key,('review_requested:' || e.subject_key || ':' || CAST(e.cycle AS TEXT) || ':'))=1
-		  )
+		  AND instr(o.occurrence_key,('review_requested:' || e.subject_key || ':' || CAST(e.cycle AS TEXT) || ':'))=1
 		ORDER BY r.created_at
 	`, definitionID, host, AutomationRunStatePending, AutomationRunStateCancelled, AutomationCancelReasonReviewWithdrawn)
 	if err != nil {
@@ -986,19 +968,22 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey stri
 	if active == 0 || currentCycle != cycle || cycle <= baselineCycle {
 		return nil, false, errors.New("review-request edge changed before occurrence claim")
 	}
-	baseKey := githubReviewOccurrenceBase(subjectKey, cycle)
 	headSHA := githubReviewPayloadHead(payloadJSON)
-	occurrenceKey := githubReviewOccurrenceKey(subjectKey, cycle, headSHA)
+	if headSHA == "" {
+		return nil, false, fmt.Errorf("review occurrence payload for %s has no head_sha", subjectKey)
+	}
+	prefix := githubReviewOccurrencePrefix(subjectKey, cycle)
+	occurrenceKey := prefix + headSHA
 	var existingID string
 	err = tx.QueryRow(`
 		SELECT r.id
 		FROM automation_occurrences o
 		JOIN automation_runs r ON r.occurrence_id=o.id
 		WHERE o.definition_id=? AND o.provider='github' AND o.subject_key=? AND r.state=?
-		  AND (o.occurrence_key=? OR instr(o.occurrence_key,?)=1)
+		  AND instr(o.occurrence_key,?)=1
 		ORDER BY r.created_at
 		LIMIT 1
-	`, definitionID, subjectKey, AutomationRunStatePending, baseKey, baseKey+":").Scan(&existingID)
+	`, definitionID, subjectKey, AutomationRunStatePending, prefix).Scan(&existingID)
 	if err == nil {
 		tx.Rollback()
 		run, e := s.getAutomationRunUnlocked(existingID)
@@ -1015,25 +1000,6 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey stri
 	}
 	if err != sql.ErrNoRows {
 		return nil, false, err
-	}
-	if headSHA != "" {
-		var legacyID, legacyPayload string
-		err = tx.QueryRow(`
-			SELECT r.id,o.payload_json
-			FROM automation_occurrences o
-			JOIN automation_runs r ON r.occurrence_id=o.id
-			WHERE o.definition_id=? AND o.provider='github' AND o.occurrence_key=?
-		`, definitionID, baseKey).Scan(&legacyID, &legacyPayload)
-		if err == nil {
-			legacyHead := githubReviewPayloadHead(legacyPayload)
-			if legacyHead == "" || legacyHead == headSHA {
-				tx.Rollback()
-				run, e := s.getAutomationRunUnlocked(legacyID)
-				return run, false, e
-			}
-		} else if err != sql.ErrNoRows {
-			return nil, false, err
-		}
 	}
 	var revision, enabled int
 	var profileID string
