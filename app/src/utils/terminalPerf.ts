@@ -1,4 +1,5 @@
 import type { ResizeDiagnostics } from './terminalDebug';
+import type { PaneSurface } from './terminalDiagnosticsLog';
 
 export interface TerminalPerfElementMetrics {
   width: number;
@@ -70,6 +71,7 @@ export interface TerminalPerfSnapshot {
   ready: boolean;
   startup: TerminalPerfStartupSnapshot;
   lastResize: TerminalPerfResizeSnapshot | null;
+  gpuSurface: PaneSurface | null;
   dom: {
     container: TerminalPerfElementMetrics | null;
     surface: TerminalPerfElementMetrics | null;

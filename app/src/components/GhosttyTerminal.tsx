@@ -109,6 +109,7 @@ import {
   noteModelFault,
   noteRecovery,
   noteResize,
+  noteSurface,
   noteWake,
   registerRenderProbe,
   disposePaneDiagnostics,
@@ -2227,6 +2228,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           background: theme.background,
           foreground: theme.foreground,
           cursor: theme.cursor,
+        }, (event, surface) => {
+          noteSurface(diagKeyRef.current, runtimeMetaRef.current?.sessionId ?? undefined, event, surface);
         });
         terminalRef.current = terminal;
         rendererRef.current = renderer;
@@ -2400,6 +2403,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           ready: readyRef.current,
           startup: startupRef.current,
           lastResize: null,
+          gpuSurface: rendererRef.current?.surface() ?? null,
           dom: { container: null, surface: null, canvas: canvas ? { width: canvas.clientWidth, height: canvas.clientHeight } : null },
         };
       });

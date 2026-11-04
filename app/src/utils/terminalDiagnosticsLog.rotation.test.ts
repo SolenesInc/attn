@@ -74,6 +74,14 @@ const RECORDS = {
     marker: '"pane":"pane-boundary"',
     write: (diagnostics: Diagnostics) => diagnostics.recordDiag({ kind: 'resize', pane: 'pane-boundary' }),
   },
+  'surface event': {
+    path: LIFECYCLE_PATH,
+    writes: 1,
+    marker: '"event":"atlas_grown"',
+    write: (diagnostics: Diagnostics) => diagnostics.noteSurface('pane-surface', 's-1', 'atlas_grown', {
+      canvasWidth: 1600, canvasHeight: 900, bufferReleased: false, atlasSize: 2048,
+    }),
+  },
   'model fault': {
     path: LIFECYCLE_PATH,
     writes: 1,
@@ -116,6 +124,8 @@ describe('diagnostics file rotation', () => {
   it.each([
     { record: 'resize', existing: 'fills the cap exactly', overshoot: 0, rotates: false },
     { record: 'resize', existing: 'passes the cap by one byte', overshoot: 1, rotates: true },
+    { record: 'surface event', existing: 'fills the cap exactly', overshoot: 0, rotates: false },
+    { record: 'surface event', existing: 'passes the cap by one byte', overshoot: 1, rotates: true },
     { record: 'model fault', existing: 'fills the cap exactly', overshoot: 0, rotates: false },
     { record: 'model fault', existing: 'passes the cap by one byte', overshoot: 1, rotates: true },
     { record: 'incident', existing: 'fills the cap exactly', overshoot: 0, rotates: false },

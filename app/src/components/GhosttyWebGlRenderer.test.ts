@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CellFlags, type GhosttyCell } from '../ghostty';
 import { TERMINAL_FLOATS_PER_QUAD } from './terminalVertexBuffer';
+import type { PaneSurface, SurfaceEvent } from '../utils/terminalDiagnosticsLog';
 import {
   INITIAL_ATLAS_SIZE,
   KITTY_Z_UNDER_BACKGROUND,
@@ -177,7 +178,12 @@ function makeFakeCanvas(canvas: HTMLCanvasElement, recorder?: GlRecorder) {
   return Object.defineProperties(canvas, Object.getOwnPropertyDescriptors(properties)) as HTMLCanvasElement & typeof properties;
 }
 
-function makeRenderer(fontSize = 14, fontFamily = 'monospace', recorder?: GlRecorder) {
+function makeRenderer(
+  fontSize = 14,
+  fontFamily = 'monospace',
+  recorder?: GlRecorder,
+  onSurfaceEvent: (event: SurfaceEvent, surface: PaneSurface) => void = () => {},
+) {
   const created: ReturnType<typeof makeFakeCanvas>[] = [];
   const realCreate = document.createElement.bind(document);
   const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
@@ -196,7 +202,7 @@ function makeRenderer(fontSize = 14, fontFamily = 'monospace', recorder?: GlReco
       background: '#000000',
       foreground: '#ffffff',
       cursor: '#ffffff',
-    });
+    }, onSurfaceEvent);
   } finally {
     spy.mockRestore();
   }
@@ -659,6 +665,40 @@ describe('WebGlTerminalRenderer glyph cache invalidation', () => {
     renderer.invalidateGlyphCache();
     renderer.getGlyph('', 0);
     expect(atlasContext.fillTextCalls.length).toBe(afterFirst + 1);
+  });
+});
+
+describe('WebGlTerminalRenderer surface events', () => {
+  it('reports each change to the pane\'s GPU surface with the size it left behind', () => {
+    const events: Array<{ event: SurfaceEvent } & PaneSurface> = [];
+    const { renderer } = makeRenderer(14, 'monospace', undefined, (event, surface) => {
+      events.push({ event, ...surface });
+    });
+    const dpr = renderer.dpr;
+    const width = 80 * renderer.cellWidth * dpr;
+    const height = 24 * renderer.cellHeight * dpr;
+
+    renderer.resize(80, 24);
+    renderer.resize(80, 24);
+    renderer.releaseDrawingBuffer();
+    renderer.releaseDrawingBuffer();
+    renderer.restoreDrawingBuffer();
+    renderer.restoreDrawingBuffer();
+    renderer.atlasY = INITIAL_ATLAS_SIZE;
+    renderer.getGlyph('A', 0);
+    renderer.atlasY = MAX_ATLAS_SIZE;
+    renderer.getGlyph('B', 0);
+    renderer.dispose();
+
+    const live = { canvasWidth: width, canvasHeight: height, bufferReleased: false };
+    expect(events).toEqual([
+      { event: 'renderer_created', canvasWidth: 0, canvasHeight: 0, bufferReleased: false, atlasSize: INITIAL_ATLAS_SIZE },
+      { event: 'canvas_resized', ...live, atlasSize: INITIAL_ATLAS_SIZE },
+      { event: 'buffer_released', canvasWidth: 1, canvasHeight: 1, bufferReleased: true, atlasSize: INITIAL_ATLAS_SIZE },
+      { event: 'buffer_restored', ...live, atlasSize: INITIAL_ATLAS_SIZE },
+      { event: 'atlas_grown', ...live, atlasSize: MAX_ATLAS_SIZE },
+      { event: 'renderer_destroyed', ...live, atlasSize: MAX_ATLAS_SIZE },
+    ]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   isColorGlyphBitmap,
 } from './terminalGlyphProgram';
 import { terminalGlyphFont } from './terminalGlyphFont';
+import type { PaneSurface, SurfaceEvent } from '../utils/terminalDiagnosticsLog';
 import {
   KITTY_FORMAT_BYTES_PER_PIXEL,
   type KittyPixelFormat,
@@ -317,7 +318,13 @@ export class WebGlTerminalRenderer {
   private metricsDirty = false;
   private bufferReleased = false;
 
-  constructor(canvas: HTMLCanvasElement, fontSize: number, fontFamily: string, theme: RendererTheme) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    fontSize: number,
+    fontFamily: string,
+    theme: RendererTheme,
+    private readonly onSurfaceEvent: (event: SurfaceEvent, surface: PaneSurface) => void,
+  ) {
     this.canvas = canvas;
     this.fontSize = fontSize;
     this.fontFamily = fontFamily;
@@ -381,6 +388,16 @@ export class WebGlTerminalRenderer {
     this.uResolution = gl.getUniformLocation(this.program, 'u_resolution');
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    this.onSurfaceEvent('renderer_created', this.surface());
+  }
+
+  surface(): PaneSurface {
+    return {
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height,
+      bufferReleased: this.bufferReleased,
+      atlasSize: this.atlasSize,
+    };
   }
 
   fitDimensions(width: number, height: number): { cols: number; rows: number } {
@@ -402,6 +419,7 @@ export class WebGlTerminalRenderer {
       return;
     }
     this.applyCanvasGeometry();
+    this.onSurfaceEvent('canvas_resized', this.surface());
   }
 
   // A hidden pane keeps its drawing buffer, ~45MB per pane at 2x DPR. Shrinking the canvas
@@ -413,12 +431,14 @@ export class WebGlTerminalRenderer {
     this.canvas.height = 1;
     // CSS size is layout: the pane's container measures itself, not the canvas.
     this.resetRowCache(this.rows);
+    this.onSurfaceEvent('buffer_released', this.surface());
   }
 
   restoreDrawingBuffer(): void {
     if (!this.bufferReleased) return;
     this.bufferReleased = false;
     this.applyCanvasGeometry();
+    this.onSurfaceEvent('buffer_restored', this.surface());
   }
 
   private applyCanvasGeometry(): void {
@@ -702,6 +722,7 @@ export class WebGlTerminalRenderer {
   }
 
   dispose(): void {
+    this.onSurfaceEvent('renderer_destroyed', this.surface());
     this.gl.deleteBuffer(this.buffer);
     this.gl.deleteTexture(this.texture);
     for (const texture of this.imageTextures.values()) {
@@ -963,6 +984,7 @@ export class WebGlTerminalRenderer {
   private growAtlas(): void {
     this.atlasSize = nextAtlasSize(this.atlasSize, MAX_ATLAS_SIZE);
     this.reseedAtlas();
+    this.onSurfaceEvent('atlas_grown', this.surface());
   }
 
   private resetAtlas(): void {
