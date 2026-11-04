@@ -11457,15 +11457,16 @@ export enum SessionMessageWindowStatus {
 }
 
 export interface SessionPlaceMessage {
-    allow_user_composer?: boolean;
-    bypass_initial_gate?: boolean;
-    cmd:                  SessionPlaceMessageCmd;
-    delivery_id:          string;
-    origin:               SessionPlaceOrigin;
-    phase:                SessionPlacePhase;
-    session_id:           string;
-    source?:              string;
-    text:                 string;
+    allow_user_composer?:    boolean;
+    bypass_initial_gate?:    boolean;
+    cmd:                     SessionPlaceMessageCmd;
+    delivery_id:             string;
+    origin:                  SessionPlaceOrigin;
+    phase:                   SessionPlacePhase;
+    require_empty_composer?: boolean;
+    session_id:              string;
+    source?:                 string;
+    text:                    string;
     [property: string]: any;
 }
 
@@ -26935,6 +26936,7 @@ const typeMap: any = {
         { json: "delivery_id", js: "delivery_id", typ: "" },
         { json: "origin", js: "origin", typ: r("SessionPlaceOrigin") },
         { json: "phase", js: "phase", typ: r("SessionPlacePhase") },
+        { json: "require_empty_composer", js: "require_empty_composer", typ: u(undefined, true) },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "source", js: "source", typ: u(undefined, "") },
         { json: "text", js: "text", typ: "" },

@@ -20,7 +20,7 @@ const (
 	claudeDefaultModel = "claude-opus-5-5"
 )
 
-var claudeComposer = composer{prompt: "❯ ", footer: "  ? for shortcuts"}
+var claudeComposer = composer{prompt: "❯ ", footer: "  ? for shortcuts", lineFeedInserts: true}
 
 var claudeFlags = flagSpec{
 	values: map[string]bool{

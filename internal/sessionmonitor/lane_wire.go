@@ -14,7 +14,7 @@ func (delivery Delivery) Message(session protocol.SessionID) protocol.SessionPla
 	if delivery.origin.kind == originUserConversation {
 		origin = protocol.SessionPlaceOriginUserConversation
 	}
-	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer)}
+	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer), RequireEmptyComposer: protocol.Ptr(delivery.RequireEmptyComposer)}
 }
 
 func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
@@ -24,7 +24,7 @@ func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
 	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
 		origin.kind = originUserConversation
 	}
-	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer)}
+	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), RequireEmptyComposer: protocol.Deref(msg.RequireEmptyComposer)}
 }
 
 func (attempt Attempt) Result() protocol.SessionPlaceResult {

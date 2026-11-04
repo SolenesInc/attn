@@ -8793,6 +8793,7 @@ model SessionPlaceMessage {
   source?: string;
   bypass_initial_gate?: boolean;
   allow_user_composer?: boolean;
+  require_empty_composer?: boolean;
 }
 model SessionPlaceResult {
   stage: SessionPlaceStage;

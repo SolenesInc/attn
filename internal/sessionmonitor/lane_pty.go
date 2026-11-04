@@ -16,8 +16,11 @@ const (
 
 var SubmitDelay = 150 * time.Millisecond
 
-func (l *lane) ptySafetyLocked(allowUserComposer bool) error {
-	if allowUserComposer {
+func (l *lane) ptySafetyLocked(delivery Delivery) error {
+	if delivery.RequireEmptyComposer && l.userDraft {
+		return ErrComposerDirty
+	}
+	if delivery.AllowUserComposer {
 		return nil
 	}
 	if remaining := quietRemaining(l.monitor.registry.host.LastKey(l.monitor.primaryTerminalLocked()), QuietWindow); remaining > 0 {
@@ -39,11 +42,22 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 	if l.phase == "" {
 		l.phase = m.state.State
 	}
-	if m.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
-		m.runSteeredLocked()
-		l.userSubmit = true
+	if m.noteUserInputLocked(terminal, source, data) {
+		l.noteDraftLocked(data)
+		if bytes.ContainsAny(data, "\r\n") {
+			m.runSteeredLocked()
+			l.userSubmit = true
+		}
 	}
 	return m.registry.host.Input(ctx, terminal, data)
+}
+
+func (l *lane) noteDraftLocked(data []byte) {
+	switch string(data) {
+	case "\r", "\x1b", "\x03":
+	default:
+		l.userDraft = true
+	}
 }
 
 func (l *lane) clearUnstartedUserSubmitLocked() {
@@ -54,7 +68,7 @@ func (l *lane) clearUnstartedUserSubmitLocked() {
 
 func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	m := l.monitor
-	if err := l.ptySafetyLocked(delivery.AllowUserComposer); err != nil {
+	if err := l.ptySafetyLocked(delivery); err != nil {
 		return Attempt{Stage: Deferred, Err: err}
 	}
 	l.clearUnstartedUserSubmitLocked()

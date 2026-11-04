@@ -11894,6 +11894,10 @@ type SessionPlaceMessage struct {
 	// Phase corresponds to the JSON schema field "phase".
 	Phase SessionPlacePhase `json:"phase"`
 
+	// RequireEmptyComposer corresponds to the JSON schema field
+	// "require_empty_composer".
+	RequireEmptyComposer *bool `json:"require_empty_composer,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 

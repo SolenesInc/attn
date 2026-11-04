@@ -19,6 +19,7 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -247,26 +248,116 @@ func TestLosingTheModReturnsWhatItHeld(t *testing.T) {
 
 			tt.lose(w, run)
 
-			first := run.Prompted()
-			if run.ThroughMod != tt.throughMod {
-				t.Errorf("%q came back through the mod: %t, want %t", first, run.ThroughMod, tt.throughMod)
+			ring := run.Prompted()
+			if !strings.Contains(ring, cacheAnswerText) || run.ThroughMod != tt.throughMod {
+				t.Fatalf("the agent took %q (through the mod: %t), want the ask's answer (through the mod: %t)", ring, run.ThroughMod, tt.throughMod)
 			}
-			var second string
-			if tt.throughMod {
-				event := run.ModNext()
-				if event.Kind != fakeagent.ModEventHeld {
-					t.Fatalf("the mod reported %+v, want the second message held", event)
-				}
-				second = event.Text
-			} else {
-				second = run.Prompted()
-			}
-			both := first + "\n" + second
-			if !strings.Contains(both, "check the rounding") || !strings.Contains(both, cacheAnswerText) {
-				t.Fatalf("the agent got %q and %q, want the annotation and the ask's answer", first, second)
+			run.Reply("Done. <!-- attn:state=waiting_input -->")
+			if got := run.Prompted(); got != "check the rounding" || run.ThroughMod != tt.throughMod {
+				t.Fatalf("the agent took %q (through the mod: %t), want the annotation (through the mod: %t)", got, run.ThroughMod, tt.throughMod)
 			}
 			nothingElsePrompted(t, app, run, session)
 		})
+	}
+}
+
+func TestHeldAnnotationsReturnInTheOrderTheModAcceptedThem(t *testing.T) {
+	tests := []struct {
+		name string
+		lose func(w *world, run *fakeagent.Run)
+	}{
+		{"a reload", func(w *world, run *fakeagent.Run) { run.ModReload() }},
+		{"a mod that stops polling", func(w *world, run *fakeagent.Run) {
+			run.ModStopPolling()
+			keepPassingTheReachWindow(w)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			session, run := moddedClaude(t, w, app)
+			workingOn(t, app, run, session, "write the essay")
+			annotations := []string{"annotation-1", "annotation-2", "annotation-3", "annotation-4", "annotation-5", "annotation-6"}
+			for _, annotation := range annotations {
+				delivered(t, app, session, annotation)
+				modEvent(t, run, fakeagent.ModEventHeld, annotation)
+			}
+
+			tt.lose(w, run)
+
+			var took []string
+			for len(took) < len(annotations) {
+				run.Reply("Done. <!-- attn:state=waiting_input -->")
+				took = append(took, strings.Split(run.Prompted(), "\n\n")...)
+			}
+			if !slices.Equal(took, annotations) {
+				t.Fatalf("the agent took %v, want %v", took, annotations)
+			}
+		})
+	}
+}
+
+func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
+	for name, keys := range map[string][]string{
+		"typed text":                 {"unsent draft"},
+		"Shift+Enter after the text": {"unsent draft", "\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			session, run := moddedClaude(t, w, app)
+			workingOn(t, app, run, session, "write the essay")
+			delivered(t, app, session, "check the rounding")
+			modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+
+			terminal := app.Terminal(session)
+			app.Watch(session)
+			for _, key := range keys {
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: key})
+			}
+			app.AwaitTerminalScreen(terminal, "unsent draft")
+
+			run.ModStopPolling()
+			keepPassingTheReachWindow(w)
+			waited := w.PauseAt(pausepoint.ClaudeModReturnWaitsForDraft)
+			run.Reply("Done. <!-- attn:state=waiting_input -->")
+			waited.Await()
+			waited.Release()
+
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "\r"})
+			if got := strings.TrimSpace(run.Prompted()); got != "unsent draft" {
+				t.Fatalf("the agent took %q, want the user's draft alone when the user sent it", got)
+			}
+			run.Reply("Done. <!-- attn:state=waiting_input -->")
+			if got := run.Prompted(); got != "check the rounding" {
+				t.Fatalf("the agent took %q, want the returned annotation after the user's turn", got)
+			}
+		})
+	}
+}
+
+func TestAHeldAnnotationSurvivesClaudeExitingWhileItIsTyped(t *testing.T) {
+	daemon.UseShippedPasteGap(t)
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	workingOn(t, app, run, session, "write the essay")
+	delivered(t, app, session, "check the rounding")
+	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+
+	pasteGap := w.PauseAt(pausepoint.SessionInputPasteGap)
+	run.ModStopPolling()
+	keepPassingTheReachWindow(w)
+	run.Reply("Done. <!-- attn:state=waiting_input -->")
+	pasteGap.Await()
+	run.Exit(1)
+	pasteGap.Release()
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+
+	launchIntentReload(t, app, session)
+	if got := w.Launched(session).Prompted(); got != "check the rounding" {
+		t.Fatalf("the replacement took %q, want the annotation the mod had accepted", got)
 	}
 }
 

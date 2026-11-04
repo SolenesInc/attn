@@ -19,8 +19,9 @@ const (
 )
 
 type composer struct {
-	prompt string
-	footer string
+	prompt          string
+	footer          string
+	lineFeedInserts bool
 }
 
 type terminal struct {
@@ -191,7 +192,7 @@ func (t *terminal) consume(input []byte, submit func(string)) []byte {
 				t.pasting = false
 			}
 			input = input[size:]
-		case t.pasting && (input[0] == '\r' || input[0] == '\n'):
+		case input[0] == '\n' && t.style.lineFeedInserts, t.pasting && (input[0] == '\r' || input[0] == '\n'):
 			t.insert("\n")
 			input = input[1:]
 		case input[0] == '\r' || input[0] == '\n':

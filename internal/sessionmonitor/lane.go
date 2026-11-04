@@ -72,12 +72,13 @@ func (id AttemptID) String() string {
 }
 
 type Delivery struct {
-	ID                AttemptID
-	Text              string
-	origin            inputOrigin
-	Placement         Placement
-	AllowUserComposer bool
-	BypassInitialGate bool
+	ID                   AttemptID
+	Text                 string
+	origin               inputOrigin
+	Placement            Placement
+	AllowUserComposer    bool
+	BypassInitialGate    bool
+	RequireEmptyComposer bool
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -101,6 +102,14 @@ func UserConversationInput(key string, text string, placement Placement) Deliver
 func ComposedInput(key string, text string) Delivery {
 	delivery := UserConversationInput(key, text, AtTurnBoundary)
 	delivery.AllowUserComposer = true
+	return delivery
+}
+
+func ReturnedUserInput(key string, text string) Delivery {
+	delivery := UserConversationInput(key, text, WhenPromptReady)
+	delivery.ID = NewAttemptID("claude-return", key)
+	delivery.AllowUserComposer = true
+	delivery.RequireEmptyComposer = true
 	return delivery
 }
 
@@ -142,6 +151,7 @@ type lane struct {
 	stoppedAfterNotification bool
 	epoch                    uint64
 	userSubmit               bool
+	userDraft                bool
 	phase                    protocol.SessionState
 	stopped                  bool
 }
@@ -360,6 +370,9 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	l := m.input
 	typed = l.userSubmit
 	l.userSubmit = false
+	if typed {
+		l.userDraft = false
+	}
 	current := l.ensureRunLocked()
 	if l.claimNextLocked() || typed {
 		current.credited = true

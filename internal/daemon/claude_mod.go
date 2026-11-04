@@ -1,10 +1,12 @@
 package daemon
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,21 +20,20 @@ import (
 )
 
 const (
-	ClaudeModPollHoldTimer       stepclock.Name = "claude-mod-poll-hold"
-	ClaudeModReachTimer          stepclock.Name = "claude-mod-reach"
-	ClaudeModAckTimer            stepclock.Name = "claude-mod-ack"
-	claudeModPollHold                           = 25 * time.Second
-	claudeModReachWindow                        = 5 * time.Second
-	claudeModAckWait                            = 10 * time.Second
-	claudeModPollPath                           = "/claude/next"
-	claudeModAckPath                            = "/claude/ack"
-	claudeModReturnPath                         = "/claude/return"
-	claudeModOutcomeHeld                        = "held"
-	claudeModOutcomeAppended                    = "appended"
-	claudeModOutcomeSubmitted                   = "submitted"
-	claudeModOutcomeStopped                     = "stopped"
-	claudeModOutcomeRefused                     = "refused"
-	claudeModReturnAttemptDomain                = "claude-return"
+	ClaudeModPollHoldTimer    stepclock.Name = "claude-mod-poll-hold"
+	ClaudeModReachTimer       stepclock.Name = "claude-mod-reach"
+	ClaudeModAckTimer         stepclock.Name = "claude-mod-ack"
+	claudeModPollHold                        = 25 * time.Second
+	claudeModReachWindow                     = 5 * time.Second
+	claudeModAckWait                         = 10 * time.Second
+	claudeModPollPath                        = "/claude/next"
+	claudeModAckPath                         = "/claude/ack"
+	claudeModReturnPath                      = "/claude/return"
+	claudeModOutcomeHeld                     = "held"
+	claudeModOutcomeAppended                 = "appended"
+	claudeModOutcomeSubmitted                = "submitted"
+	claudeModOutcomeStopped                  = "stopped"
+	claudeModOutcomeRefused                  = "refused"
 )
 
 type claudeMod struct {
@@ -53,6 +54,7 @@ type claudeModTerminal struct {
 	queued   []*claudeModDelivery
 	handed   map[string]*claudeModDelivery
 	held     map[string]*claudeModHeld
+	accepted uint64
 }
 
 type claudeModPoll struct {
@@ -68,9 +70,10 @@ type claudeModDelivery struct {
 }
 
 type claudeModHeld struct {
-	session protocol.SessionID
-	input   harness.Input
-	ring    *returnableInboxRing
+	session  protocol.SessionID
+	input    harness.Input
+	ring     *returnableInboxRing
+	accepted uint64
 }
 
 func (d *Daemon) claudeMod() *claudeMod {
@@ -204,6 +207,9 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 			m.returnHeldLocked(t, heldIDs(t))
 		}
 		t.instance = instance
+		for session := range m.returned {
+			m.d.life.Go("claudeModPlaceReturned", func() { m.placeReturnedNow(session) })
+		}
 	}
 	if t.poll != nil {
 		close(t.poll.replaced)
@@ -334,7 +340,8 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 	switch ack.Outcome {
 	case claudeModOutcomeHeld:
 		if delivery != nil {
-			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input}
+			t.accepted++
+			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input, accepted: t.accepted}
 		}
 		answer(taken)
 	case claudeModOutcomeSubmitted:
@@ -372,44 +379,40 @@ func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
 func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
 	var back []*claudeModHeld
 	for _, id := range ids {
-		held := t.held[id]
-		if held == nil {
-			continue
+		if held := t.held[id]; held != nil {
+			delete(t.held, id)
+			back = append(back, held)
 		}
-		delete(t.held, id)
-		if held.ring == nil && strings.HasPrefix(id, string(sessionmonitor.InboxRing)+"/") {
-			m.ringsBackBeforeStamp[id] = true
-			continue
-		}
-		back = append(back, held)
 	}
-	if len(back) > 0 {
-		m.d.life.Go("claudeModReturn", func() { m.redeliver(back) })
+	slices.SortFunc(back, func(a, b *claudeModHeld) int { return cmp.Compare(a.accepted, b.accepted) })
+	sessions := map[protocol.SessionID]bool{}
+	var rest []*claudeModHeld
+	for _, held := range back {
+		switch {
+		case held.ring == nil && strings.HasPrefix(held.input.ID, string(sessionmonitor.InboxRing)+"/"):
+			m.ringsBackBeforeStamp[held.input.ID] = true
+		case held.ring == nil && held.input.Voice == harness.VoiceUser:
+			m.returned[held.session] = append(m.returned[held.session], sessionmonitor.ReturnedUserInput(held.input.ID, held.input.Text))
+			sessions[held.session] = true
+		default:
+			rest = append(rest, held)
+		}
+	}
+	if len(sessions) > 0 || len(rest) > 0 {
+		m.d.life.Go("claudeModReturn", func() { m.redeliver(sessions, rest) })
 	}
 }
 
-func (m *claudeMod) redeliver(back []*claudeModHeld) {
-	sessions := map[protocol.SessionID]bool{}
-	for _, held := range back {
-		if held.ring == nil && held.input.Voice == harness.VoiceUser {
-			delivery := sessionmonitor.ComposedInput(held.input.ID, held.input.Text)
-			delivery.ID = sessionmonitor.NewAttemptID(claudeModReturnAttemptDomain, held.input.ID)
-			m.mu.Lock()
-			m.returned[held.session] = append(m.returned[held.session], delivery)
-			m.mu.Unlock()
-			sessions[held.session] = true
-		}
-	}
+func (m *claudeMod) redeliver(sessions map[protocol.SessionID]bool, rest []*claudeModHeld) {
 	for session := range sessions {
 		m.placeReturnedNow(session)
 	}
-	for _, held := range back {
-		switch {
-		case held.ring != nil:
+	for _, held := range rest {
+		if held.ring != nil {
 			m.d.returnInboxRing(*held.ring)
-		case held.input.Voice != harness.VoiceUser:
-			m.d.logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
+			continue
 		}
+		m.d.logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
 	}
 }
 

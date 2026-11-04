@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
@@ -91,16 +93,16 @@ func (m *claudeMod) placeReturnedNow(session protocol.SessionID) {
 			return
 		}
 		attempt := m.d.placeDelivery(context.Background(), session, head)
-		if attempt.Stage == sessionmonitor.Deferred {
+		if attempt.Stage != sessionmonitor.Placed {
 			if delay, retry := sessionmonitor.RetryDelay(attempt.Err); retry {
 				m.d.life.AfterFunc("claudeModPlaceReturned", delay, func() { m.placeReturnedNow(session) })
 			} else {
 				m.d.logf("claude mod: returned input %s waits for session %s to change state: %v", head.ID, session, attempt.Err)
+				if errors.Is(attempt.Err, sessionmonitor.ErrComposerDirty) {
+					pausepoint.At(pausepoint.ClaudeModReturnWaitsForDraft)
+				}
 			}
 			return
-		}
-		if attempt.Stage == sessionmonitor.Failed {
-			m.d.logf("claude mod: returned input %s did not reach session %s: %v", head.ID, session, attempt.Err)
 		}
 		m.dropReturned(session, head)
 	}
