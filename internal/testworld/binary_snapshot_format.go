@@ -18,7 +18,7 @@ func AttnBinaryWithSnapshotFormat(t testing.TB, format string) string {
 		}
 		binary := filepath.Join(processDir, "bin", "attn-format-"+format)
 		cmd := exec.Command("go", "build", "-o", binary,
-			"-ldflags", "-X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat="+format,
+			"-ldflags", "-w -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat="+format,
 			"github.com/victorarias/attn/cmd/attn")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return "", fmt.Errorf("build attn with snapshot format %s: %w\n%s", format, err, output)

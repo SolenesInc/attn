@@ -32,7 +32,7 @@ fi
 export GOMAXPROCS="$test_gomaxprocs"
 
 go_bin="$(command -v go)"
-GOFLAGS="$("$go_bin" env GOFLAGS) -trimpath"
+GOFLAGS="$("$go_bin" env GOFLAGS) -trimpath -ldflags=-w"
 export GOFLAGS
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-go-test.XXXXXX")"
 # shellcheck disable=SC2329 # invoked indirectly by trap

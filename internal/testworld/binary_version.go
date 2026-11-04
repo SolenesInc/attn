@@ -30,7 +30,7 @@ func buildAttnAt(version, channel, releaseSource string) (string, error) {
 	if channel != "unknown" {
 		fingerprint = "git:" + version
 	}
-	build := exec.Command("go", "build", "-ldflags", "-X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint="+fingerprint+" -X github.com/victorarias/attn/internal/buildinfo.Version="+version+" -X github.com/victorarias/attn/internal/buildinfo.Channel="+channel+" -X github.com/victorarias/attn/internal/buildinfo.ReleaseSource="+releaseSource, "-o", binary, "github.com/victorarias/attn/cmd/attn")
+	build := exec.Command("go", "build", "-ldflags", "-w -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint="+fingerprint+" -X github.com/victorarias/attn/internal/buildinfo.Version="+version+" -X github.com/victorarias/attn/internal/buildinfo.Channel="+channel+" -X github.com/victorarias/attn/internal/buildinfo.ReleaseSource="+releaseSource, "-o", binary, "github.com/victorarias/attn/cmd/attn")
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build attn %s: %w\n%s", version, err, output)
 	}
