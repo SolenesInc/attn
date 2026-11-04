@@ -38,8 +38,6 @@ func (f Filter) Matches(name string) bool {
 	return false
 }
 
-func MatchPattern(pattern, name string) bool { return matchPattern(pattern, name) }
-
 func matchPattern(pattern, name string) bool {
 	switch {
 	case pattern == "*" || pattern == "":

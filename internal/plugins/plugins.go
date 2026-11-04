@@ -158,10 +158,6 @@ func Discover(pluginDir string) ([]Manifest, []ManifestIssue) {
 	return manifests, issues
 }
 
-func InstallPath(sourceDir, pluginDir string) (Manifest, error) {
-	return InstallPathWithOptions(sourceDir, pluginDir, InstallOptions{})
-}
-
 func InstallSourceWithOptions(source, pluginDir string, opts InstallOptions) (Manifest, error) {
 	return InstallSourceWithOptionsContext(context.Background(), source, pluginDir, opts)
 }

@@ -48,18 +48,6 @@ func OutpostCopyRoot(base, name, key string) string {
 	return base + "-" + name + "-" + key
 }
 
-func TicketsDir(root string) string {
-	return filepath.Join(root, machineDir, "tickets")
-}
-
-func TicketAttachmentsDir(root, ticketID string) string {
-	return filepath.Join(TicketsDir(root), ticketID)
-}
-
-func TicketArtifactsDir(root, ticketID string) string {
-	return filepath.Join(root, "tickets", ticketID)
-}
-
 func SeedArtifactsDir(root, seedID string) string {
 	return filepath.Join(root, "seeds", seedID)
 }
@@ -117,15 +105,6 @@ func scaffoldFiles() []scaffoldFile {
 		})
 	}
 	return files
-}
-
-func ScaffoldPaths() []string {
-	files := scaffoldFiles()
-	out := make([]string, len(files))
-	for i, f := range files {
-		out[i] = f.relPath
-	}
-	return out
 }
 
 const indexTemplate = `# Notebook

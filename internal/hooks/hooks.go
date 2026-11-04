@@ -23,15 +23,6 @@ type SettingsConfig struct {
 	Env   map[string]string      `json:"env,omitempty"`
 }
 
-type sessionStartHookSpecificOutput struct {
-	HookEventName     string `json:"hookEventName"`
-	AdditionalContext string `json:"additionalContext"`
-}
-
-type sessionStartHookOutput struct {
-	HookSpecificOutput sessionStartHookSpecificOutput `json:"hookSpecificOutput"`
-}
-
 func AgentGuidance() string { return prompts.RenderText("session", "agent-guidance", nil) }
 
 func GardenGuidance() string { return prompts.RenderText("session", "garden-guidance", nil) }
@@ -41,26 +32,6 @@ func PullRequestSelfReportGuidance() string {
 }
 
 type Launch = prompts.Launch
-
-func SessionStartOutput(contexts ...string) string {
-	blocks := make([]string, 0, len(contexts))
-	for _, context := range contexts {
-		if context = strings.TrimSpace(context); context != "" {
-			blocks = append(blocks, context)
-		}
-	}
-	if len(blocks) == 0 {
-		return ""
-	}
-	output := sessionStartHookOutput{
-		HookSpecificOutput: sessionStartHookSpecificOutput{
-			HookEventName:     "SessionStart",
-			AdditionalContext: strings.Join(blocks, "\n\n"),
-		},
-	}
-	data, _ := json.Marshal(output)
-	return string(data)
-}
 
 func ChiefGuidance(root string) string {
 	if strings.TrimSpace(root) == "" {
@@ -191,8 +162,4 @@ func shellQuote(value string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
-}
-
-func GenerateUnregisterCommand(sessionID, socketPath string) string {
-	return fmt.Sprintf(`echo '{"cmd":"unregister","id":"%s"}' | nc -U %s`, sessionID, socketPath)
 }

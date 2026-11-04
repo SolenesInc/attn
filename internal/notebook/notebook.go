@@ -3,7 +3,6 @@ package notebook
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 )
 
@@ -33,9 +32,4 @@ type NotFoundError struct{ Path string }
 
 func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("notebook: %s not found", e.Path)
-}
-
-func IsNotFound(err error) bool {
-	var nf *NotFoundError
-	return errors.As(err, &nf)
 }

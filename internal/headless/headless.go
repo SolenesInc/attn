@@ -25,13 +25,6 @@ func Enabled() bool {
 	return enabled
 }
 
-func Mode() string {
-	if Enabled() {
-		return "on"
-	}
-	return "off"
-}
-
 func Describe() string {
 	enabled, source := resolve()
 	if enabled {

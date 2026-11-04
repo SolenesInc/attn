@@ -66,19 +66,6 @@ func DerefOr[T any](p *T, def T) T {
 	return *p
 }
 
-func SessionsToValues(sessions []*Session) []Session {
-	if sessions == nil {
-		return nil
-	}
-	result := make([]Session, len(sessions))
-	for i, s := range sessions {
-		if s != nil {
-			result[i] = *s
-		}
-	}
-	return result
-}
-
 func PRsToValues(prs []*PR) []PR {
 	if prs == nil {
 		return nil

@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -542,8 +541,3 @@ type DeliveryResult struct {
 type Deliverer interface {
 	Deliver(context.Context, WorkRequest) (DeliveryResult, error)
 }
-
-type Clock interface{ Now() time.Time }
-type SystemClock struct{}
-
-func (SystemClock) Now() time.Time { return time.Now() }

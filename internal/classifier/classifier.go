@@ -304,23 +304,11 @@ func SetLogger(fn LogFunc) {
 	DefaultLogger = fn
 }
 
-func ClassifyWithCodex(text string, timeout time.Duration) (string, error) {
-	return ClassifyWithCodexExecutable(text, "", timeout)
-}
-
-func ClassifyWithCodexExecutable(text, configuredExecutable string, timeout time.Duration) (string, error) {
-	return ClassifyWithCodexExecutableInDir(text, configuredExecutable, "", timeout)
-}
-
 func CodexClassifierModel() string {
 	if model := strings.TrimSpace(os.Getenv("ATTN_CODEX_CLASSIFIER_MODEL")); model != "" {
 		return model
 	}
 	return defaultCodexClassifierModel
-}
-
-func ClassifyWithCodexExecutableInDir(text, configuredExecutable, workDir string, timeout time.Duration) (string, error) {
-	return ClassifyWithCodexModelInDir(context.Background(), text, configuredExecutable, workDir, CodexClassifierModel(), timeout)
 }
 
 func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {

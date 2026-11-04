@@ -21,14 +21,6 @@ func init() {
 	binaryName = filepath.Base(os.Args[0])
 }
 
-func BinaryName() string {
-	return binaryName
-}
-
-func SetBinaryName(name string) {
-	binaryName = name
-}
-
 type configFile struct {
 	DBPath     string `json:"db_path"`
 	SocketPath string `json:"socket_path"`
@@ -314,10 +306,6 @@ func PluginDir() string {
 		return envPath
 	}
 	return filepath.Join(attnDir(), "plugins")
-}
-
-func AppsDir() string {
-	return filepath.Join(attnDir(), "apps")
 }
 
 func DataDirForInstance(instance string) string {

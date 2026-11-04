@@ -1,7 +1,6 @@
 package fsdoc
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -45,11 +44,6 @@ type Conflict struct {
 type NotFoundError struct{ Path string }
 
 func (e *NotFoundError) Error() string { return fmt.Sprintf("fsdoc: %s not found", e.Path) }
-
-func IsNotFound(err error) bool {
-	var nf *NotFoundError
-	return errors.As(err, &nf)
-}
 
 func (s *Store) List(dir string) ([]Entry, error) {
 	rel, err := cleanRel(dir, true)

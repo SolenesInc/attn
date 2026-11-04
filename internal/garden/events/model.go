@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -418,30 +417,6 @@ func cloneDecision(decision Decision) Decision {
 		decision.no = &no
 	}
 	return decision
-}
-
-func (m *Model) EventNames() []string {
-	if m == nil || m.compiled == nil {
-		return nil
-	}
-	names := make([]string, 0, len(m.compiled.byName))
-	for name := range m.compiled.byName {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func (m *Model) BellNames() []string {
-	if m == nil || m.compiled == nil {
-		return nil
-	}
-	names := make([]string, 0, len(m.compiled.bells))
-	for name := range m.compiled.bells {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 func (m *Model) ValidatePendingBell(name string) error {

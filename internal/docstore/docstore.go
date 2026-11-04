@@ -40,8 +40,6 @@ const (
 
 var opSQL = map[Op]string{OpEq: "=", OpLt: "<", OpLte: "<=", OpGt: ">", OpGte: ">="}
 
-func FilterOps() []Op { return []Op{OpEq, OpLt, OpLte, OpGt, OpGte} }
-
 type FieldSpec struct {
 	Name string    `json:"name"`
 	Type FieldType `json:"type"`
