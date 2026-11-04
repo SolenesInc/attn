@@ -223,7 +223,7 @@ func attachReviveMakeRecoverable(t *testing.T, w *world, app *testworld.Peer, se
 	run.Prompted()
 	run.Reply("Done. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	for _, s := range app.Initial.Sessions {
 		if string(s.ID) == session && s.State == protocol.SessionStateRecoverable {

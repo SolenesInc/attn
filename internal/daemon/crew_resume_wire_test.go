@@ -116,7 +116,7 @@ func crewDayLeftRecoverable(t *testing.T, w *world, member string) protocol.Sess
 	run.Prompted()
 	run.Reply("Working. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	w.restart()
+	w.restartHoldingRevives()
 	for _, s := range w.App().Initial.Sessions {
 		if s.ID == day.SessionID && s.State == protocol.SessionStateRecoverable {
 			return day.SessionID

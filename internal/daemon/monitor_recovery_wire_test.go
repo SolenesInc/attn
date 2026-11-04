@@ -19,7 +19,7 @@ func TestRecoveryUsesTheDriversSavedHandleRatherThanItsResumeCapability(t *testi
 	}
 	driver.mustReport("session.report_metadata", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "seq": 1, "metadata": map[string]string{"native_id": "resume-me"}, "resume_session_id": "resume-me"})
 	driver.hangUp()
-	w.restart()
+	w.restartHoldingRevives()
 	initial := w.App().Initial
 	found := map[string]protocol.Session{}
 	for _, s := range initial.Sessions {

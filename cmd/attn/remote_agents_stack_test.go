@@ -1020,7 +1020,7 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	t.Logf("recovery kept resumed session %s in live terminal %s before its copy arrived; tokens=%d", first, terminal, ready.Usage.TotalTokens)
 }
 
-func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) {
+func TestAnOutpostConversationComesBackOnItsOwnAfterItsMachineReboots(t *testing.T) {
 	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(harness), func(t *testing.T) {
 			home := testworld.NewStack(t)
@@ -1047,10 +1047,6 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
 			stopRetries()
 			testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
-			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
-			if !reloaded.Success {
-				t.Fatalf("recover remote conversation: %s", protocol.Deref(reloaded.Error))
-			}
 			resumed := outpost.LaunchedCarrying(terminal)
 			if resumed.ConversationID != conversation {
 				t.Fatalf("recovered conversation %s, want %s", resumed.ConversationID, conversation)
@@ -1063,7 +1059,7 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 			ready := testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == 2*(len(first)+len(second))
 			})
-			t.Logf("%s remote-only conversation %s remains recoverable with its worker gone; reload keeps %d tokens", harness, conversation, ready.Usage.TotalTokens)
+			t.Logf("%s remote-only conversation %s came back on its own after the reboot and keeps %d tokens", harness, conversation, ready.Usage.TotalTokens)
 		})
 	}
 }

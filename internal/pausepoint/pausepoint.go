@@ -38,6 +38,7 @@ const (
 
 	DaemonEnrollmentLoaded       = "daemon-enrollment-loaded"
 	DaemonStartupRecovery        = "daemon-startup-recovery"
+	RecoverableAgentsReviving    = "recoverable-agents-reviving"
 	SessionInputPasteGap         = "session-input-paste-gap"
 	ClaudeModReturnWaitsForDraft = "claude-mod-return-waits-for-draft"
 	SessionInputLaneContended    = "session-input-lane-contended"

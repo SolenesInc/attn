@@ -184,7 +184,7 @@ func TestAnUnwatchedPullRequestPausesWhileItsAgentIsRecoverableAndResumesWithIt(
 		w.advance(protocol.HeatHotInterval)
 		w.stop()
 		agent.term.Exit(0)
-		w.start()
+		w.startHoldingRevives()
 		app, cli = w.App(), w.Client()
 		if session := queriedSession(t, cli, agent.id); session.State != protocol.SessionStateRecoverable {
 			t.Fatalf("restarted session = %+v, want recoverable", session)
@@ -287,7 +287,7 @@ func TestUnwatchedPullRequestPollingPausesUntilItsSessionIsRevived(t *testing.T)
 		}
 		w.stop()
 		agent.term.Exit(1)
-		w.start()
+		w.startHoldingRevives()
 		app = w.App()
 		if session := queriedSession(t, w.Client(), agent.id); session.State != protocol.SessionStateRecoverable {
 			t.Fatalf("session after restart is %s, want recoverable", session.State)

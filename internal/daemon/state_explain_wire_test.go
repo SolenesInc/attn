@@ -98,7 +98,7 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 	app.TypeLine(string(session), "yes, keep it")
 	run.Prompted()
 	testworld.AwaitSession(app, string(session), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	recovered := stateExplainOf(t, cli, string(session))
 	if recovered.State != string(protocol.SessionStateRecoverable) {

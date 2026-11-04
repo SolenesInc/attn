@@ -113,6 +113,13 @@ func (plan *spawnPlan) commit() {
 	plan.chiefAssignmentCommitted = true
 }
 
+func (d *Daemon) agentAvailable(agent string) bool {
+	if _, plugin := d.ensurePluginRegistry().driver(agent); plugin {
+		return true
+	}
+	return agentdriver.Get(agent) != nil && d.agentOffered(agent)
+}
+
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
 	requestedAgent := strings.TrimSpace(strings.ToLower(msg.Agent))
 	if host := protocol.Deref(msg.Host); host != "" && requestedAgent != "" && requestedAgent != protocol.AgentShellValue && requestedAgent != "claude" && requestedAgent != "codex" {
@@ -122,7 +129,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	agent := normalizeSpawnAgent(msg.Agent)
 	if hasPluginDriver {
 		agent = pluginDriver.Agent
-	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && (agentdriver.Get(requestedAgent) == nil || !d.agentOffered(requestedAgent)) {
+	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && !d.agentAvailable(requestedAgent) {
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue

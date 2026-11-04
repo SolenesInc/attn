@@ -227,7 +227,7 @@ func TestAMembersDayThatEndsIsReleasedAndTheNextWakeStartsFresh(t *testing.T) {
 	day.Reply("Picked up where I left off. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	cli = w.Client()
 	if !slices.ContainsFunc(app.Initial.Sessions, func(s protocol.Session) bool {

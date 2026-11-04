@@ -390,6 +390,7 @@ func (d *Daemon) syncOutpost(ctx context.Context, id string, conn *bridge.Conn) 
 		d.logf("outpost %s recovery: %v", id, err)
 		return
 	}
+	d.life.Go("reviveOutpostAgents:"+id, func() { d.reviveRecoverableAgents(id) })
 	theme := d.currentTerminalTheme()
 	if err := conn.Call(ctx, bridgeCall, protocol.TerminalThemeMessage{Cmd: protocol.CmdTerminalTheme, Host: id, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:]}, nil); err != nil {
 		d.logf("outpost %s theme: %v", id, err)

@@ -83,7 +83,7 @@ mark it.
 <details>
 <summary>Why is an idle agent in my queue?</summary>
 
-An agent is owed a turn as soon as its state becomes waiting, needs approval, idle or unknown. An idle agent has nothing left to do, so the next move is yours. An unknown agent may need you because Attn can't tell what it's doing. Becoming working, launching, scheduled or recoverable never opens a turn.
+An agent is owed a turn as soon as its state becomes waiting, needs approval, idle or unknown. An idle agent has nothing left to do, so the next move is yours. An unknown agent may need you because Attn can't tell what it's doing. Becoming working, launching, scheduled or recoverable never opens a turn. An agent that Attn brings back after a reboot becomes idle at its prompt, so it is owed a turn even if you had settled it. Only you can tell whether it should continue.
 </details>
 
 <details>

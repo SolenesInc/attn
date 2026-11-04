@@ -234,6 +234,22 @@ func (w *world) restart() {
 	w.start()
 }
 
+// restartHoldingRevives restarts the daemon and holds it before it brings back the agents it lost, so they stay
+// recoverable until the test releases the returned pause.
+func (w *world) restartHoldingRevives() *testworld.Pause {
+	w.T.Helper()
+	w.stop()
+	return w.startHoldingRevives()
+}
+
+func (w *world) startHoldingRevives() *testworld.Pause {
+	w.T.Helper()
+	held := w.PauseEvery(pausepoint.RecoverableAgentsReviving)
+	w.start()
+	held.Await()
+	return held
+}
+
 func (w *world) beginStop(t *testing.T) (finish func()) {
 	t.Helper()
 	observer := transportConnectRaw(t, w)

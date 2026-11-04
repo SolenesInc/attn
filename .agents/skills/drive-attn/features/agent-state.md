@@ -84,7 +84,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: after an app or daemon restart, each live agent's monitor reads the agent's state again on the machine where the agent runs. A machine restart leaves agents attn can bring back as `recoverable`. An agent on the embedded backend stops when the daemon restarts.
+- **Durability across restarts**: after an app or daemon restart, each live agent's monitor reads the agent's state again on the machine where the agent runs. A machine restart marks the agents attn can bring back `recoverable`, and attn restarts them at once; a shell stays `recoverable` until it is opened. An agent on the embedded backend stops when the daemon restarts.
 - **Outposts**: an agent on an outpost is watched by a monitor on that machine. While the agent's host is offline, the agent's row stays and attn marks it offline.
 - **Profiles**: `attn agent list` names every session on the daemon, across profiles, with a PROFILE column. The sidebar and home screen show the current profile's agents.
 - **Performance and idle cost**: the needs-approval dot flashes and the scheduled dot pulses, both opacity animations that run while an agent stays in that state. `internal/sessionmonitor/cost_bench_test.go` and `internal/transcript/parser_bench_test.go` measure reading transcripts. A change to the state indicator needs the repaint check in `docs/internal/perf-testing.md`.

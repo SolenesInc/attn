@@ -872,6 +872,7 @@ func (d *Daemon) Start() error {
 		}
 		d.setRecovering(false)
 		d.resumePendingDelegations()
+		d.reviveRecoverableAgents("")
 	})
 
 	d.signalStarted()
@@ -1574,6 +1575,7 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 		} else if reconcile.MarkedIdle > 0 || reconcile.MarkedRecoverable > 0 || reconcile.Reaped > 0 {
 			d.logf("deferred worker reconciliation: marked_idle=%d marked_recoverable=%d reaped=%d", reconcile.MarkedIdle, reconcile.MarkedRecoverable, reconcile.Reaped)
 		}
+		d.reviveRecoverableAgents("")
 		return
 	}
 }

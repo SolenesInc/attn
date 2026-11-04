@@ -21,7 +21,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	writeCrewCharter(t, w, "trellis")
 	app, cli := w.App(), w.Client()
 	tender := gardenReviewConversationTending(t, w, app, cli, "interrupted work")
-	w.restart()
+	w.restartHoldingRevives()
 	app, cli = w.App(), w.Client()
 	if state := queriedSession(t, cli, tender).State; state != protocol.SessionStateRecoverable {
 		t.Fatalf("the tender came back %q, want recoverable", state)

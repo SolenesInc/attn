@@ -220,7 +220,7 @@ func revivableSharedCodexAndClaudeSessions(t *testing.T) (w *world, app *testwor
 	claude = w.Spawn(app, fakeagent.Claude, w.Path("blog"))
 	takeTurn(app, w.Launched(claude), claude)
 	stopped := w.CodexServer()
-	w.restart()
+	w.restartHoldingRevives()
 	stopped.AwaitStopped()
 	app = w.App()
 	for _, session := range []string{codex, claude} {

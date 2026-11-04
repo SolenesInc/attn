@@ -40,7 +40,7 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 	untouched := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
 	w.Launched(untouched)
 
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	initial := app.Initial
 	states := map[string]protocol.SessionState{}

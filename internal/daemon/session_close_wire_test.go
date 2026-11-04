@@ -148,7 +148,7 @@ func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *t
 	resumed.Reply(reply)
 	awaitUsageTokens(app, kept, spent+claudeTokens(reply))
 
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	states := map[string]protocol.SessionState{}
 	for _, s := range app.Initial.Sessions {

@@ -213,7 +213,7 @@ func TestADelegationNeverSharesACheckoutWithoutConsent(t *testing.T) {
 		}
 	}
 
-	w.restart()
+	w.restartHoldingRevives()
 	afterRestart := delegateCheckoutAt(shared, reuse)
 	afterRestart.Label = protocol.Ptr("after-restart")
 	if result, err := w.Client().Delegate(afterRestart); err != nil || result.Directory != shared {

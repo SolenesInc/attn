@@ -409,20 +409,39 @@ func (d *Daemon) runStoredIntentSpawn(msg *protocol.SpawnSessionMessage, policy 
 }
 
 func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) error {
+	if msg.Cols == nil || msg.Rows == nil || *msg.Cols <= 0 || *msg.Rows <= 0 {
+		return errors.New("revive requires pty geometry")
+	}
 	sessionID, _ := d.shownIn(msg.ID)
+	return d.reviveSession(sessionID, int(*msg.Cols), int(*msg.Rows))
+}
+
+func (d *Daemon) reviveSession(sessionID protocol.SessionID, cols, rows int) error {
 	session := d.store.Get(sessionID)
 	if session == nil || session.State != protocol.SessionStateRecoverable {
 		return errors.New("session not recoverable")
-	}
-	if msg.Cols == nil || msg.Rows == nil || *msg.Cols <= 0 || *msg.Rows <= 0 {
-		return errors.New("revive requires pty geometry")
 	}
 	intent, ok := d.store.LaunchIntent(sessionID)
 	if !ok {
 		return errors.New("no stored launch intent")
 	}
-	spawnMsg, policy := buildStoredIntentSpawn(session, intent, int(*msg.Cols), int(*msg.Rows))
+	spawnMsg, policy := buildStoredIntentSpawn(session, intent, cols, rows)
 	return d.runStoredIntentSpawn(spawnMsg, policy)
+}
+
+func (d *Daemon) reviveRecoverableAgents(host string) {
+	pausepoint.At(pausepoint.RecoverableAgentsReviving)
+	for _, session := range d.store.List(string(protocol.SessionStateRecoverable)) {
+		if d.stopping() {
+			return
+		}
+		if protocol.Deref(session.Host) != host || session.Agent == protocol.AgentShellValue || !d.agentAvailable(string(session.Agent)) {
+			continue
+		}
+		if err := d.reviveSession(session.ID, 80, 24); err != nil {
+			d.logf("recovery: reviving session %s failed: %v", session.ID, err)
+		}
+	}
 }
 
 func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessionMessage) {

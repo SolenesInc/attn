@@ -52,16 +52,50 @@ func TestRecoveryKeepsEveryConversationThatCanResumeWithItsPaneAndReapsTheRest(t
 	untouched := w.Spawn(app, fakeagent.Claude, cwd)
 	w.Launched(untouched)
 
-	w.restart()
+	w.restartHoldingRevives()
 	sessionRecoveryExpect(t, w.App().Initial,
 		[]string{claudeWorking, claudeAsking, codexIdle, claudeWaiting, shell},
 		[]string{lost, untouched})
 
 	sessionRecoveryDeleteTranscript(t, codexIdleRun.ConversationID)
-	w.restart()
+	w.restartHoldingRevives()
 	sessionRecoveryExpect(t, w.App().Initial,
 		[]string{claudeWorking, claudeAsking, claudeWaiting, shell},
 		[]string{codexIdle, lost, untouched})
+}
+
+func TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	cwd := w.Path("shop")
+	converse := func(agent fakeagent.Harness) (string, *fakeagent.Run) {
+		t.Helper()
+		session := w.Spawn(app, agent, cwd)
+		run := w.Launched(session)
+		app.TypeLine(session, "add a discount field to checkout")
+		run.Prompted()
+		run.Reply("Done here. <!-- attn:state=idle -->")
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		return session, run
+	}
+	claude, claudeRun := converse(fakeagent.Claude)
+	codex, codexRun := converse(fakeagent.Codex)
+	shell := w.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), cwd)
+
+	w.restart()
+	app = w.App()
+	if opened := attachRevive(app, claude, 100, 30); !opened.Success {
+		t.Errorf("opening an agent while it comes back answered %+v", opened)
+	}
+	for session, before := range map[string]*fakeagent.Run{claude: claudeRun, codex: codexRun} {
+		if after := w.Launched(session); !after.Resumed || after.ConversationID != before.ConversationID {
+			t.Errorf("%s came back as %q, want it resuming conversation %s", session, after.Argv, before.ConversationID)
+		}
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	}
+	if state := queriedSession(t, w.Client(), shell).State; state != protocol.SessionStateRecoverable {
+		t.Errorf("the shell is %s, want it recoverable until it is opened", state)
+	}
 }
 
 func sessionRecoveryExpect(t *testing.T, initial protocol.InitialStateMessage, recoverable, reaped []string) {

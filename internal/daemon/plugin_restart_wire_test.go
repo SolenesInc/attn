@@ -16,7 +16,7 @@ func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.
 	first := w.Launched(session)
 	converse(t, app, session, first, "price the checkout")
 
-	w.restart()
+	w.restartHoldingRevives()
 	app = w.App()
 	came := protocol.Session{}
 	for _, s := range app.Initial.Sessions {
@@ -31,5 +31,19 @@ func TestAPluginSessionWhoseAgentDiedWithTheDaemonComesBackResumable(t *testing.
 	w.Spawn(app, fakeagent.Plug, cwd, func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(session) })
 	if resumed := w.Launched(session); !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("reopening the plug session resumed=%v conversation %s, want %s", resumed.Resumed, resumed.ConversationID, first.ConversationID)
+	}
+}
+
+func TestAPlugAgentComesBackOnItsOwnOnceItsDriverRegistersAfterARestart(t *testing.T) {
+	w := newWorld(t, fakeagent.Plug)
+	app := w.App()
+	pluginDriverSettings(app, "plug")
+	session := w.Spawn(app, fakeagent.Plug, w.Path("shop"))
+	first := w.Launched(session)
+	converse(t, app, session, first, "price the checkout")
+
+	w.restart()
+	if resumed := w.Launched(session); !resumed.Resumed || resumed.ConversationID != first.ConversationID {
+		t.Fatalf("the plug session came back resumed=%v conversation %s, want %s", resumed.Resumed, resumed.ConversationID, first.ConversationID)
 	}
 }

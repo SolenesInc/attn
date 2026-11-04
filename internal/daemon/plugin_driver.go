@@ -271,6 +271,11 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
 		d.pushMonitorPolicies()
 		d.publishFact(FactPluginDriverRegistered, plugin.name, nil)
+		d.life.Go("reviveAgentsOfRegisteredDriver", func() {
+			if !d.isRecovering() {
+				d.reviveRecoverableAgents("")
+			}
+		})
 		active := d.store.ListAgentDriverRuns(plugin.name)
 		runs := make([]activePluginRun, 0, len(active))
 		for _, run := range active {

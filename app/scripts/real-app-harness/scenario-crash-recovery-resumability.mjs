@@ -277,20 +277,20 @@ async function main() {
       runner.writeText('daemon-after-reboot.log', daemonLogTail(dataDir));
     });
 
-    await runner.step('assert_the_resumable_codex_session_survived', async () => {
+    await runner.step('assert_the_resumable_codex_session_came_back_on_its_own', async () => {
       const session = await waitFor(
-        'the codex session to settle on a recovery verdict',
+        'the codex session to come back live',
         async () => {
           const current = observer.getSession(codexSessionId);
-          return current && current.state === 'recoverable' ? current : null;
+          return current && current.state !== 'recoverable' ? current : null;
         },
         30_000,
       ).catch(() => observer.getSession(codexSessionId));
       if (!session) {
         throw new Error('the codex session was deleted by startup recovery despite having a rollout to resume');
       }
-      if (session.state !== 'recoverable') {
-        throw new Error(`codex session state = ${session.state}, want recoverable`);
+      if (session.state === 'recoverable') {
+        throw new Error('the codex session is still recoverable; want attn to have brought it back without opening it');
       }
       const recovery = reconciliationAfterReboot;
       runner.writeJson('after-crash-codex.json', { session, recovery });
@@ -310,7 +310,7 @@ async function main() {
       }
     });
 
-    await runner.step('revive_the_codex_pane_and_read_the_old_conversation_back', async () => {
+    await runner.step('open_the_codex_pane_and_read_the_old_conversation_back', async () => {
       await client.request('select_session', { sessionId: codexSessionId });
       const pane = await waitForFirstDesktopPane(client, codexSessionId, 'revived codex pane', 30_000);
       await waitForPaneVisible(client, codexSessionId, pane.paneId, 30_000);

@@ -62,7 +62,7 @@ func TestAFailedReopenKeepsItsAttemptAndRestoredWorktree(t *testing.T) {
 	if info, err := os.Stat(worktree); err != nil || !info.IsDir() {
 		t.Fatalf("restored worktree %s was removed: %v", worktree, err)
 	}
-	w.restart()
+	w.restartHoldingRevives()
 	app, cli = w.App(), w.Client()
 	awaitDriverAvailable(app, "plug")
 	allowLaunches()
