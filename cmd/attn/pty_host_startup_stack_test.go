@@ -26,13 +26,13 @@ func TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning(t *testing.T) {
 	}
 	const branchRequests = 8
 	for range branchRequests {
-		git.Send(protocol.GetDefaultBranchMessage{Cmd: protocol.CmdGetDefaultBranch, Repo: cwd})
+		git.Send(protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: cwd})
 	}
 	enableSharedHost(t, settings)
 	for range branchRequests {
-		result := testworld.Await(git, protocol.EventGetDefaultBranchResult, func(protocol.GetDefaultBranchResultMessage) bool { return true })
-		if !result.Success || result.Branch != "main" {
-			t.Fatalf("default branch: %+v", result)
+		result := testworld.Await(git, protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
+		if !result.Success || result.Info == nil || result.Info.CurrentBranch != "main" {
+			t.Fatalf("repo info: %+v", result)
 		}
 	}
 	shared := s.Spawn(settings, fakeagent.Harness(protocol.SessionAgentShell), cwd)

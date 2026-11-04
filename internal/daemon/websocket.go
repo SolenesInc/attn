@@ -1165,16 +1165,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleBrowseDirectoryWS(client, msg.(*protocol.BrowseDirectoryMessage))
 	case protocol.CmdInspectPath:
 		d.handleInspectPathWS(client, msg.(*protocol.InspectPathMessage))
-	case protocol.CmdListBranches:
-		d.handleListBranchesWS(client, msg.(*protocol.ListBranchesMessage))
 	case protocol.CmdCreateWorktreeFromBranch:
 		d.handleCreateWorktreeFromBranchWS(client, msg.(*protocol.CreateWorktreeFromBranchMessage))
-	case protocol.CmdGetDefaultBranch:
-		d.handleGetDefaultBranchWS(client, msg.(*protocol.GetDefaultBranchMessage))
 	case protocol.CmdFetchRemotes:
 		d.handleFetchRemotesWS(client, msg.(*protocol.FetchRemotesMessage))
-	case protocol.CmdListRemoteBranches:
-		d.handleListRemoteBranchesWS(client, msg.(*protocol.ListRemoteBranchesMessage))
 	case protocol.CmdEnsureRepo:
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:

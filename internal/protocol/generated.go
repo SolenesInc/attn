@@ -1407,34 +1407,6 @@ type BackgroundLaunchMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
-type Branch struct {
-	// CommitHash corresponds to the JSON schema field "commit_hash".
-	CommitHash *string `json:"commit_hash,omitempty,omitzero"`
-
-	// CommitTime corresponds to the JSON schema field "commit_time".
-	CommitTime *string `json:"commit_time,omitempty,omitzero"`
-
-	// IsCurrent corresponds to the JSON schema field "is_current".
-	IsCurrent *bool `json:"is_current,omitempty,omitzero"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-}
-
-type BranchesResultMessage struct {
-	// Branches corresponds to the JSON schema field "branches".
-	Branches []Branch `json:"branches"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type BrowseDirectoryMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5210,28 +5182,6 @@ type GetCommandUsageResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type GetDefaultBranchMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Repo corresponds to the JSON schema field "repo".
-	Repo string `json:"repo"`
-}
-
-type GetDefaultBranchResultMessage struct {
-	// Branch corresponds to the JSON schema field "branch".
-	Branch string `json:"branch"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type GetKittyImageMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6278,39 +6228,9 @@ type ListAnalyticsRecordsResultMessage struct {
 	Waiting int `json:"waiting"`
 }
 
-type ListBranchesMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// MainRepo corresponds to the JSON schema field "main_repo".
-	MainRepo string `json:"main_repo"`
-}
-
 type ListPluginsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
-}
-
-type ListRemoteBranchesMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Repo corresponds to the JSON schema field "repo".
-	Repo string `json:"repo"`
-}
-
-type ListRemoteBranchesResultMessage struct {
-	// Branches corresponds to the JSON schema field "branches".
-	Branches []Branch `json:"branches"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
 }
 
 type ListWorktreesMessage struct {
@@ -8986,9 +8906,6 @@ type RepairOutpostMessage struct {
 }
 
 type RepoInfo struct {
-	// Branches corresponds to the JSON schema field "branches".
-	Branches []Branch `json:"branches"`
-
 	// CurrentBranch corresponds to the JSON schema field "current_branch".
 	CurrentBranch string `json:"current_branch"`
 
@@ -9000,9 +8917,6 @@ type RepoInfo struct {
 
 	// DefaultBranch corresponds to the JSON schema field "default_branch".
 	DefaultBranch string `json:"default_branch"`
-
-	// FetchedAt corresponds to the JSON schema field "fetched_at".
-	FetchedAt *string `json:"fetched_at,omitempty,omitzero"`
 
 	// Repo corresponds to the JSON schema field "repo".
 	Repo string `json:"repo"`
@@ -13887,12 +13801,6 @@ type WebSocketEvent struct {
 
 	// BaseRef corresponds to the JSON schema field "base_ref".
 	BaseRef *string `json:"base_ref,omitempty,omitzero"`
-
-	// Branch corresponds to the JSON schema field "branch".
-	Branch *string `json:"branch,omitempty,omitzero"`
-
-	// Branches corresponds to the JSON schema field "branches".
-	Branches []Branch `json:"branches,omitempty,omitzero"`
 
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
 	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`

@@ -505,13 +505,6 @@ model PathInspection {
   repo_root?: string;
 }
 
-model Branch {
-  name: string;
-  commit_hash?: string;    // Short SHA (7 chars)
-  commit_time?: string;    // ISO timestamp
-  is_current?: boolean;    // True if this is the checked-out branch
-}
-
 // Why a profile, desktop or pane command was refused. stale_revision means the
 // command named a revision older than the stored one: re-read the broadcast
 // state and retry against its revision.
@@ -2046,11 +2039,6 @@ model InspectPathMessage {
   request_id?: string;
 }
 
-model ListBranchesMessage {
-  cmd: "list_branches";
-  main_repo: string;
-}
-
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model CreateWorktreeFromBranchMessage {
   cmd: "create_worktree_from_branch";
@@ -2072,18 +2060,8 @@ model WorktreeCreation {
   error?: string;
 }
 
-model GetDefaultBranchMessage {
-  cmd: "get_default_branch";
-  repo: string;
-}
-
 model FetchRemotesMessage {
   cmd: "fetch_remotes";
-  repo: string;
-}
-
-model ListRemoteBranchesMessage {
-  cmd: "list_remote_branches";
   repo: string;
 }
 
@@ -4590,29 +4568,8 @@ model InspectPathResultMessage {
   error?: string;
 }
 
-model BranchesResultMessage {
-  event: "branches_result";
-  branches: Branch[];
-  success: boolean;
-  error?: string;
-}
-
-model GetDefaultBranchResultMessage {
-  event: "get_default_branch_result";
-  branch: string;
-  success: boolean;
-  error?: string;
-}
-
 model FetchRemotesResultMessage {
   event: "fetch_remotes_result";
-  success: boolean;
-  error?: string;
-}
-
-model ListRemoteBranchesResultMessage {
-  event: "list_remote_branches_result";
-  branches: Branch[];
   success: boolean;
   error?: string;
 }
@@ -4632,8 +4589,6 @@ model RepoInfo {
   current_commit_time: string;
   default_branch: string;
   worktrees: Worktree[];
-  branches: Branch[];          // Available branches with commit info
-  fetched_at?: string;         // ISO timestamp, when branches were last fetched
 }
 
 model GetRepoInfoResultMessage {
@@ -8357,7 +8312,6 @@ model WebSocketEvent {
   plugin_issues?: PluginIssue[];
   operation?: GitOperation;
   session_ledger_entry?: SessionLedgerEntry;
-  branches?: Branch[];
   recent_locations?: RecentLocation[];
   settings?: Record<string>;
   warnings?: DaemonWarning[];
@@ -8371,7 +8325,6 @@ model WebSocketEvent {
 
   // PR/worktree/branch operations
   action?: string;
-  branch?: string;
   path?: string;
   name?: string;
   priority?: int32;
@@ -8688,10 +8641,7 @@ alias DaemonEvent =
   | OutpostsUpdatedMessage
   | PluginActionResultMessage
   | RecentLocationsResultMessage
-  | BranchesResultMessage
-  | GetDefaultBranchResultMessage
   | FetchRemotesResultMessage
-  | ListRemoteBranchesResultMessage
   | EnsureRepoResultMessage
   | GetRepoInfoResultMessage
   | AutomationApplyResultMessage

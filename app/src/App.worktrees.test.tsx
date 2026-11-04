@@ -32,7 +32,6 @@ describe('App worktrees', () => {
         current_commit_hash: 'abc123',
         current_commit_time: AT,
         default_branch: 'main',
-        branches: [],
         worktrees: [{ path: WORKTREE, branch: 'feature', main_repo: '/tmp/repo' }],
       },
     }));

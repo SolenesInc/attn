@@ -32,9 +32,7 @@ function settingsAgents() {
 const REPO = `${HOME}/projects/repo`;
 const FEATURE = `${REPO}--feature`;
 const MEMORY = destinationMemory(REPO);
-const WITH_FEATURE = repoInfo(REPO, [{ path: FEATURE, branch: 'feature' }], {
-  branches: [{ name: 'main' }, { name: 'feature' }, { name: 'spike' }],
-});
+const WITH_FEATURE = repoInfo(REPO, [{ path: FEATURE, branch: 'feature' }]);
 
 async function openChooser(path = REPO, settings: Record<string, string> = {}) {
   const view = await openPicker({ repos: [WITH_FEATURE] }, { settings });
@@ -122,7 +120,7 @@ describe('App new session', () => {
   });
 
   describe('in a repository', () => {
-    it('lands on the worktree a typed path names, listing the checkout and its worktrees but not its branches', async () => {
+    it('lands on the worktree a typed path names, listing the checkout and its worktrees', async () => {
       await openChooser(FEATURE);
 
       expect(rows()).toHaveLength(2);

@@ -8,25 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-type BranchWithCommit struct {
-	Name       string
-	CommitHash string
-	CommitTime string
-	IsCurrent  bool
-}
-
-func (b BranchWithCommit) ToProtocol() protocol.Branch {
-	return protocol.Branch{
-		Name:       b.Name,
-		CommitHash: &b.CommitHash,
-		CommitTime: &b.CommitTime,
-		IsCurrent:  &b.IsCurrent,
-	}
-}
 
 func ExpandPath(path string) string {
 	if strings.HasPrefix(path, "~/") {
@@ -36,52 +18,6 @@ func ExpandPath(path string) string {
 		}
 	}
 	return path
-}
-
-func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([]BranchWithCommit, error) {
-	currentBranch, _ := c.GetCurrentBranch(ctx, repoDir)
-
-	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)|%(committerdate:iso-strict)|%(objectname:short)")
-	if err != nil {
-		return nil, fmt.Errorf("git branch failed: %w", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return nil, nil
-	}
-
-	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
-	if err != nil {
-		return nil, fmt.Errorf("listing worktrees: %w", err)
-	}
-
-	checkedOut := make(map[string]bool)
-	for _, wt := range worktrees {
-		if wt.Branch != "" {
-			checkedOut[wt.Branch] = true
-		}
-	}
-
-	var result []BranchWithCommit
-	for _, line := range lines {
-		parts := strings.Split(line, "|")
-		if len(parts) < 3 {
-			continue
-		}
-		name := parts[0]
-		if checkedOut[name] {
-			continue
-		}
-		result = append(result, BranchWithCommit{
-			Name:       name,
-			CommitTime: parts[1],
-			CommitHash: parts[2],
-			IsCurrent:  name == currentBranch,
-		})
-	}
-
-	return result, nil
 }
 
 func (c *Client) DeleteBranch(ctx context.Context, repoDir, branch string, force bool) error {
@@ -221,43 +157,6 @@ func (c *Client) FetchRemotes(ctx context.Context, repoDir string) error {
 		return fmt.Errorf("git fetch failed: %s (%w)", outStr, err)
 	}
 	return nil
-}
-
-func (c *Client) ListRemoteBranches(ctx context.Context, repoDir string) ([]string, error) {
-	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "-r", "--format=%(refname:short)")
-	if err != nil {
-		return nil, fmt.Errorf("git branch -r failed: %w", err)
-	}
-
-	remoteBranches := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(remoteBranches) == 1 && remoteBranches[0] == "" {
-		return nil, nil
-	}
-
-	localOut, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)")
-	if err != nil {
-		return nil, fmt.Errorf("git branch failed: %w", err)
-	}
-
-	localBranches := make(map[string]bool)
-	for _, b := range strings.Split(strings.TrimSpace(string(localOut)), "\n") {
-		if b != "" {
-			localBranches[b] = true
-		}
-	}
-
-	var available []string
-	for _, remote := range remoteBranches {
-		if strings.Contains(remote, "HEAD") {
-			continue
-		}
-		name := strings.TrimPrefix(remote, "origin/")
-		if !localBranches[name] {
-			available = append(available, name)
-		}
-	}
-
-	return available, nil
 }
 
 func (c *Client) GetHeadCommitInfo(ctx context.Context, repoDir string) (hash string, time string) {

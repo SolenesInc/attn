@@ -91,27 +91,6 @@ func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protoco
 	})
 }
 
-func (d *Daemon) handleListBranchesWS(client *wsClient, msg *protocol.ListBranchesMessage) {
-	d.life.Go("handleListBranchesWS", func() {
-		branches, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.BranchWithCommit, error) {
-			return client.ListBranchesWithCommits(ctx, msg.MainRepo)
-		})
-		result := protocol.BranchesResultMessage{
-			Event:   protocol.EventBranchesResult,
-			Success: err == nil,
-		}
-		if err != nil {
-			result.Error = protocol.Ptr(err.Error())
-		} else {
-			result.Branches = make([]protocol.Branch, len(branches))
-			for i, b := range branches {
-				result.Branches[i] = b.ToProtocol()
-			}
-		}
-		d.sendToClient(client, result)
-	})
-}
-
 func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfoMessage) {
 	d.life.Go("handleGetRepoInfoWS", func() {
 		result, err := Call[protocol.GetRepoInfoResultMessage](context.Background(), d.router(), *msg)
@@ -181,24 +160,6 @@ func (d *Daemon) readRepoInfoHere(ctx context.Context, msg protocol.GetRepoInfoM
 	}, nil
 }
 
-func (d *Daemon) handleGetDefaultBranchWS(client *wsClient, msg *protocol.GetDefaultBranchMessage) {
-	d.life.Go("handleGetDefaultBranchWS", func() {
-		branch, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (string, error) {
-			return client.GetDefaultBranch(ctx, msg.Repo)
-		})
-		result := &protocol.WebSocketEvent{
-			Event:   protocol.EventGetDefaultBranchResult,
-			Success: protocol.Ptr(err == nil),
-		}
-		if err != nil {
-			result.Error = protocol.Ptr(err.Error())
-		} else {
-			result.Branch = protocol.Ptr(branch)
-		}
-		d.sendToClient(client, result)
-	})
-}
-
 func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemotesMessage) {
 	d.life.Go("handleFetchRemotesWS", func() {
 		err := d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
@@ -213,28 +174,6 @@ func (d *Daemon) handleFetchRemotesWS(client *wsClient, msg *protocol.FetchRemot
 			d.logf("FetchRemotes failed for %s: %v", msg.Repo, err)
 		} else {
 			d.logf("FetchRemotes succeeded for %s", msg.Repo)
-		}
-		d.sendToClient(client, result)
-	})
-}
-
-func (d *Daemon) handleListRemoteBranchesWS(client *wsClient, msg *protocol.ListRemoteBranchesMessage) {
-	d.life.Go("handleListRemoteBranchesWS", func() {
-		branches, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskBranch, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]string, error) {
-			return client.ListRemoteBranches(ctx, msg.Repo)
-		})
-		result := &protocol.WebSocketEvent{
-			Event:   protocol.EventListRemoteBranchesResult,
-			Success: protocol.Ptr(err == nil),
-		}
-		if err != nil {
-			result.Error = protocol.Ptr(err.Error())
-		} else {
-			branchList := make([]protocol.Branch, len(branches))
-			for i, b := range branches {
-				branchList[i] = protocol.Branch{Name: b}
-			}
-			result.Branches = branchList
 		}
 		d.sendToClient(client, result)
 	})

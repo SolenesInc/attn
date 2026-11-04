@@ -19,7 +19,6 @@ export function repoInfo(repo: string, worktrees: Array<{ path: string; branch: 
     current_commit_hash: 'abcdef1234567890',
     current_commit_time: AT,
     default_branch: 'main',
-    branches: [],
     worktrees: worktrees.map((worktree) => ({ ...worktree, main_repo: repo })),
     ...overrides,
   };
