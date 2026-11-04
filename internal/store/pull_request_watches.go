@@ -24,10 +24,29 @@ type PullRequestWatch struct {
 	LastError     string
 	FeedbackError string
 	OutageActive  bool
+
+	ReadinessState  string
+	ReadinessReason string
+	SettlingUntil   string
+	LastCheckedAt   string
+}
+
+func (w PullRequestWatch) Health() (health, healthError string) {
+	switch {
+	case w.LastError != "":
+		return "delayed", w.LastError
+	case w.FeedbackError != "":
+		return "delayed", "feedback: " + w.FeedbackError
+	case w.ReadinessState != "":
+		return "current", ""
+	default:
+		return "", ""
+	}
 }
 
 const pullRequestWatchColumns = `address, session_id, pr_id, mode, reviewer, created_at,
-	cursor_json, last_error, feedback_error, outage_active`
+	cursor_json, last_error, feedback_error, outage_active,
+	readiness_state, readiness_reason, settling_until, last_checked_at`
 
 func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
 
@@ -80,7 +99,8 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to who.Address, m
 		VALUES(?,?,?,?,?,?,?)
 		ON CONFLICT(address,pr_id) DO UPDATE SET
 			mode=excluded.mode, reviewer=excluded.reviewer, created_at=excluded.created_at,
-			cursor_json=excluded.cursor_json, last_error='', feedback_error='', outage_active=0
+			cursor_json=excluded.cursor_json, last_error='', feedback_error='', outage_active=0,
+			readiness_state='', readiness_reason='', settling_until='', last_checked_at=''
 	`, to.String(), rec.SessionID, rec.PRID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
 		return false, false, err
 	}
@@ -88,8 +108,7 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to who.Address, m
 		return false, false, err
 	}
 	if _, err := tx.Exec(`
-		UPDATE session_pull_requests SET readiness_state='', readiness_reason='', settling_until='',
-			watch_health='', watch_error='', watch_last_checked_at='', status_checked_at=''
+		UPDATE session_pull_requests SET status_checked_at=''
 		WHERE session_id=(SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?) AND pr_id=?
 	`, to.String(), rec.PRID, rec.PRID); err != nil {
 		return false, false, err
@@ -111,12 +130,6 @@ func (s *Store) StopPullRequestWatch(to who.Address, prID string) (bool, error) 
 		return false, err
 	}
 	defer tx.Rollback()
-	var sessionID protocol.SessionID
-	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&sessionID); errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
 	if err := clearUnreadPullRequestItems(tx, to, prID); err != nil {
 		return false, err
 	}
@@ -126,13 +139,6 @@ func (s *Store) StopPullRequestWatch(to who.Address, prID string) (bool, error) 
 	}
 	changed, err := result.RowsAffected()
 	if err != nil || changed == 0 {
-		return false, err
-	}
-	if _, err := tx.Exec(`
-		UPDATE session_pull_requests SET readiness_state='', readiness_reason='', settling_until='',
-			watch_health='', watch_error='', watch_last_checked_at=''
-		WHERE session_id=? AND pr_id=?
-	`, sessionID, prID); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -271,8 +277,6 @@ type PullRequestWatchReconcile struct {
 	Cursor        prreadiness.Cursor
 	Status        SessionPullRequestStatus
 	Evaluation    prreadiness.Evaluation
-	Health        string
-	HealthError   string
 	FeedbackError string
 	ClearAction   bool
 	Terminal      bool
@@ -292,8 +296,11 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 		return nil, false, err
 	}
 	defer tx.Rollback()
-	var mode, reviewer, createdAt string
-	if err := tx.QueryRow(`SELECT mode, reviewer, created_at FROM pull_request_watches WHERE address=? AND pr_id=?`, update.To.String(), update.PRID).Scan(&mode, &reviewer, &createdAt); err != nil {
+	var mode, reviewer, createdAt, previousReadinessState, previousReadinessReason, previousSettling, previousLastError, previousFeedbackError string
+	if err := tx.QueryRow(`
+		SELECT mode, reviewer, created_at, readiness_state, readiness_reason, settling_until, last_error, feedback_error
+		FROM pull_request_watches WHERE address=? AND pr_id=?
+	`, update.To.String(), update.PRID).Scan(&mode, &reviewer, &createdAt, &previousReadinessState, &previousReadinessReason, &previousSettling, &previousLastError, &previousFeedbackError); err != nil {
 		return nil, false, err
 	}
 	if mode != string(update.Mode) || !strings.EqualFold(reviewer, update.Reviewer) || createdAt != update.CreatedAt {
@@ -305,40 +312,34 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 		settling = update.Evaluation.SettlingUntil.UTC().Format(sortableTimeFormat)
 	}
 	var previousStatus SessionPullRequestStatus
-	var previousReadinessState, previousReadinessReason, previousSettling, previousHealth, previousHealthError string
 	if err := tx.QueryRow(`
-		SELECT title, draft, state, ci_status, review_status, mergeable_state, head_sha, head_branch,
-			readiness_state, readiness_reason, settling_until, watch_health, watch_error
+		SELECT title, draft, state, ci_status, review_status, mergeable_state, head_sha, head_branch
 		FROM session_pull_requests WHERE session_id=? AND pr_id=?
 	`, update.SessionID, update.PRID).Scan(
 		&previousStatus.Title, &previousStatus.Draft, &previousStatus.State, &previousStatus.CIStatus,
 		&previousStatus.ReviewStatus, &previousStatus.MergeableState, &previousStatus.HeadSHA, &previousStatus.HeadBranch,
-		&previousReadinessState, &previousReadinessReason, &previousSettling, &previousHealth, &previousHealthError,
 	); err != nil {
 		return nil, false, err
 	}
 	projectionChanged := previousStatus != update.Status ||
 		previousReadinessState != update.Evaluation.State || previousReadinessReason != update.Evaluation.Reason ||
-		previousSettling != settling || previousHealth != update.Health || previousHealthError != update.HealthError
-	recovered := update.Health == "current"
+		previousSettling != settling || previousLastError != "" || previousFeedbackError != update.FeedbackError
+	recovered := update.FeedbackError == ""
 	if _, err := tx.Exec(`
-		UPDATE pull_request_watches SET cursor_json=?,
-			last_error=CASE WHEN ? THEN '' ELSE last_error END,
-			feedback_error=?, outage_active=CASE WHEN ? THEN 0 ELSE outage_active END
+		UPDATE pull_request_watches SET cursor_json=?, last_error='', feedback_error=?,
+			outage_active=CASE WHEN ? THEN 0 ELSE outage_active END,
+			readiness_state=?, readiness_reason=?, settling_until=?, last_checked_at=?
 		WHERE address=? AND pr_id=?
-			AND (cursor_json IS NOT ? OR feedback_error IS NOT ? OR (? AND (last_error != '' OR outage_active != 0)))
-	`, string(encoded), recovered, update.FeedbackError, recovered, update.To.String(), update.PRID,
-		string(encoded), update.FeedbackError, recovered); err != nil {
+	`, string(encoded), update.FeedbackError, recovered,
+		update.Evaluation.State, update.Evaluation.Reason, settling, stamp, update.To.String(), update.PRID); err != nil {
 		return nil, false, err
 	}
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET title=?, draft=?, state=?, ci_status=?, review_status=?, mergeable_state=?,
-			head_sha=?, head_branch=?, status_fetched_at=?, status_checked_at=?, readiness_state=?, readiness_reason=?,
-			settling_until=?, watch_health=?, watch_error=?, watch_last_checked_at=?
+			head_sha=?, head_branch=?, status_fetched_at=?, status_checked_at=?
 		WHERE session_id=? AND pr_id=?
 	`, update.Status.Title, update.Status.Draft, update.Status.State, update.Status.CIStatus, update.Status.ReviewStatus,
 		update.Status.MergeableState, update.Status.HeadSHA, update.Status.HeadBranch, stamp, stamp,
-		update.Evaluation.State, update.Evaluation.Reason, settling, update.Health, update.HealthError, stamp,
 		update.SessionID, update.PRID); err != nil {
 		return nil, false, err
 	}
@@ -383,26 +384,19 @@ func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol
 		return nil, false, err
 	}
 	defer tx.Rollback()
-	var currentMode, currentReviewer, currentCreatedAt string
+	var currentMode, currentReviewer, currentCreatedAt, previousError string
 	var active bool
-	if err := tx.QueryRow(`SELECT mode, reviewer, created_at, outage_active FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&currentMode, &currentReviewer, &currentCreatedAt, &active); err != nil {
+	if err := tx.QueryRow(`SELECT mode, reviewer, created_at, outage_active, last_error FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&currentMode, &currentReviewer, &currentCreatedAt, &active, &previousError); err != nil {
 		return nil, false, err
 	}
 	if currentMode != string(mode) || !strings.EqualFold(currentReviewer, reviewer) || currentCreatedAt != createdAt {
 		return nil, false, sql.ErrNoRows
 	}
-	var previousHealth, previousError string
-	if err := tx.QueryRow(`SELECT watch_health, watch_error FROM session_pull_requests WHERE session_id=? AND pr_id=?`, sessionID, prID).Scan(&previousHealth, &previousError); err != nil {
-		return nil, false, err
-	}
 	stamp := at.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE address=? AND pr_id=? AND (last_error IS NOT ? OR outage_active != 1)`, message, to.String(), prID, message); err != nil {
+	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1, last_checked_at=? WHERE address=? AND pr_id=?`, message, stamp, to.String(), prID); err != nil {
 		return nil, false, err
 	}
-	if _, err := tx.Exec(`
-		UPDATE session_pull_requests SET watch_health='delayed', watch_error=?, watch_last_checked_at=?, status_checked_at=?
-		WHERE session_id=? AND pr_id=?
-	`, message, stamp, stamp, sessionID, prID); err != nil {
+	if _, err := tx.Exec(`UPDATE session_pull_requests SET status_checked_at=? WHERE session_id=? AND pr_id=?`, stamp, sessionID, prID); err != nil {
 		return nil, false, err
 	}
 	var delivery *InboxDelivery
@@ -416,7 +410,7 @@ func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol
 	if err := tx.Commit(); err != nil {
 		return nil, false, err
 	}
-	return delivery, previousHealth != "delayed" || previousError != message, nil
+	return delivery, previousError != message, nil
 }
 
 type pullRequestWatchScanner interface{ Scan(...any) error }
@@ -425,7 +419,8 @@ func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error)
 	var watch PullRequestWatch
 	var address, mode, cursorJSON string
 	if err := row.Scan(&address, &watch.SessionID, &watch.PRID, &mode, &watch.Reviewer, &watch.CreatedAt,
-		&cursorJSON, &watch.LastError, &watch.FeedbackError, &watch.OutageActive); err != nil {
+		&cursorJSON, &watch.LastError, &watch.FeedbackError, &watch.OutageActive,
+		&watch.ReadinessState, &watch.ReadinessReason, &watch.SettlingUntil, &watch.LastCheckedAt); err != nil {
 		return PullRequestWatch{}, err
 	}
 	var err error

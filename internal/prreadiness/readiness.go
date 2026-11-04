@@ -140,6 +140,9 @@ const (
 	StateMerged  = "merged"
 	StateClosed  = "closed"
 	StateUnknown = "unknown"
+
+	ReasonMerged = "pull_request_merged"
+	ReasonClosed = "pull_request_closed"
 )
 
 func Evaluate(observation Observation, mode Mode, reviewer string, cursor Cursor, now time.Time) (Evaluation, Cursor) {
@@ -155,10 +158,10 @@ func Evaluate(observation Observation, mode Mode, reviewer string, cursor Cursor
 
 	state := strings.ToLower(strings.TrimSpace(observation.State))
 	if observation.Merged || state == StateMerged {
-		return Evaluation{State: StateMerged, Reason: "pull_request_merged", Description: "pull request merged"}, cursor
+		return Evaluation{State: StateMerged, Reason: ReasonMerged, Description: "pull request merged"}, cursor
 	}
 	if state == StateClosed {
-		return Evaluation{State: StateClosed, Reason: "pull_request_closed", Description: "pull request closed"}, cursor
+		return Evaluation{State: StateClosed, Reason: ReasonClosed, Description: "pull request closed"}, cursor
 	}
 	if state != "open" {
 		return Evaluation{State: StateUnknown, Reason: "pull_request_state_unknown", Description: "GitHub returned an unknown pull request state"}, cursor

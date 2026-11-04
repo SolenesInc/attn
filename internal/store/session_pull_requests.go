@@ -13,29 +13,23 @@ import (
 )
 
 type SessionPullRequestRecord struct {
-	SessionID          protocol.SessionID
-	PRID               string
-	Repository         string
-	Number             int
-	URL                string
-	CreatedAt          string
-	Title              string
-	Draft              bool
-	State              string
-	CIStatus           string
-	ReviewStatus       string
-	MergeableState     string
-	HeadSHA            string
-	HeadBranch         string
-	StatusFetchedAt    string
-	LastActivityAt     string
-	StatusCheckedAt    string
-	ReadinessState     string
-	ReadinessReason    string
-	SettlingUntil      string
-	WatchHealth        string
-	WatchError         string
-	WatchLastCheckedAt string
+	SessionID       protocol.SessionID
+	PRID            string
+	Repository      string
+	Number          int
+	URL             string
+	CreatedAt       string
+	Title           string
+	Draft           bool
+	State           string
+	CIStatus        string
+	ReviewStatus    string
+	MergeableState  string
+	HeadSHA         string
+	HeadBranch      string
+	StatusFetchedAt string
+	LastActivityAt  string
+	StatusCheckedAt string
 }
 
 type SessionPullRequestStatus struct {
@@ -51,7 +45,7 @@ type SessionPullRequestStatus struct {
 
 const sessionPullRequestColumns = `session_id, pr_id, repository, number, url, created_at, title, draft,
 	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at,
-	status_checked_at, readiness_state, readiness_reason, settling_until, watch_health, watch_error, watch_last_checked_at`
+	status_checked_at`
 
 func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	s.mu.Lock()
@@ -364,8 +358,7 @@ func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error)
 			&rec.SessionID, &rec.PRID, &rec.Repository, &rec.Number, &rec.URL, &rec.CreatedAt,
 			&rec.Title, &rec.Draft, &rec.State, &rec.CIStatus, &rec.ReviewStatus,
 			&rec.MergeableState, &rec.HeadSHA, &rec.HeadBranch, &rec.StatusFetchedAt, &rec.LastActivityAt,
-			&rec.StatusCheckedAt, &rec.ReadinessState, &rec.ReadinessReason, &rec.SettlingUntil,
-			&rec.WatchHealth, &rec.WatchError, &rec.WatchLastCheckedAt,
+			&rec.StatusCheckedAt,
 		); err != nil {
 			return nil, err
 		}

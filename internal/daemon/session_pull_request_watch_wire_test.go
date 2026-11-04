@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -20,7 +21,7 @@ const watchedPullRequestURL = "https://github.com/victorarias/attn/pull/71"
 
 type watchedPullRequestGitHub struct {
 	state, reviewDecision, mergeStateStatus string
-	merged, feedbackFails                   bool
+	merged, feedbackFails, codexThumbsUp    bool
 	opinions, comments                      []map[string]any
 }
 
@@ -53,6 +54,10 @@ func serveWatchedPullRequest(t *testing.T, initial watchedPullRequestGitHub) *wa
 		if mergeStateStatus == "" {
 			mergeStateStatus = "CLEAN"
 		}
+		reactions := []any{}
+		if gh.codexThumbsUp {
+			reactions = append(reactions, map[string]any{"content": "THUMBS_UP", "user": map[string]any{"__typename": "Bot", "login": "chatgpt-codex-connector"}})
+		}
 		var answer any = map[string]any{"total_count": 0, "items": []any{}}
 		switch {
 		case strings.Contains(string(body), "PullRequestReadiness"):
@@ -60,7 +65,7 @@ func serveWatchedPullRequest(t *testing.T, initial watchedPullRequestGitHub) *wa
 				"number": 71, "url": watchedPullRequestURL, "title": "Ready to ship", "state": gh.state, "merged": gh.merged,
 				"author":     map[string]any{"__typename": "User", "login": "victor"},
 				"headRefOid": "head-a", "headRefName": "pr-readiness", "mergeStateStatus": mergeStateStatus, "reviewDecision": gh.reviewDecision,
-				"reactions": map[string]any{"nodes": []any{}}, "latestOpinionatedReviews": map[string]any{"nodes": gh.opinions},
+				"reactions": map[string]any{"nodes": reactions}, "latestOpinionatedReviews": map[string]any{"nodes": gh.opinions},
 				"reviews": map[string]any{"nodes": gh.opinions}, "reviewRequests": map[string]any{"nodes": []any{}},
 				"commits": map[string]any{"nodes": []any{}},
 			}}}}
@@ -86,6 +91,15 @@ func watchPullRequestAs(t *testing.T, cli *client.Client, session, seed string, 
 	if err := cli.WatchSessionPullRequest(protocol.SessionID(session), seed, watchedPullRequestURL, mode, reviewer); err != nil {
 		t.Fatalf("%s watches the pull request for seed %q: %v", session, seed, err)
 	}
+}
+
+func onlySeedPullRequest(t *testing.T, cli *client.Client, session, seed string) protocol.SessionPullRequest {
+	t.Helper()
+	watched, err := cli.SeedPullRequests(protocol.SessionID(session), seed)
+	if err != nil || len(watched) != 1 {
+		t.Fatalf("%s lists %+v for seed %s (%v), want exactly one", session, watched, seed, err)
+	}
+	return watched[0]
 }
 
 func awaitWatchedPullRequest(app *testworld.Peer, session string, match func(protocol.SessionPullRequest) bool) protocol.SessionPullRequest {
@@ -163,8 +177,8 @@ func TestAPullRequestWatchedOnASeedReportsToTheSeedsNextTender(t *testing.T) {
 
 		watchPullRequestAs(t, cli, first, seed, protocol.PullRequestWatchModeGreen, "")
 		w.advance(time.Second)
-		if pr := onlyPullRequest(t, cli, first); protocol.Deref(pr.ReadinessState) != "blocked" {
-			t.Fatalf("the pull request reads %+v, want it blocked before the handover", pr)
+		if pr := onlySeedPullRequest(t, cli, first, seed); protocol.Deref(pr.ReadinessState) != "blocked" {
+			t.Fatalf("the seed's pull request reads %+v, want it blocked before the handover", pr)
 		}
 		if _, err := cli.SeedTransition(protocol.SessionID(next), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s takes over %s: %v", next, seed, err)
@@ -211,7 +225,7 @@ func TestClosingASeedStopsItsPullRequestWatchesAndWithdrawsTheirUnreadNews(t *te
 			seed := plantSeedAs(t, cli, tender, "Ship the readiness check")
 			moveDelegationSeed(t, cli, tender, seed, "tend", "")
 			watchPullRequestAs(t, cli, tender, seed, protocol.PullRequestWatchModeGreen, "")
-			awaitWatchedPullRequest(app, tender, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) == "ready" })
+			awaitWatchedPullRequest(app, tender, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.StatusFetchedAt) != "" })
 
 			moveDelegationSeed(t, cli, tender, seed, close.verb, close.reason)
 			if watched, err := cli.SeedPullRequests(protocol.SessionID(tender), seed); err != nil || len(watched) != 0 {
@@ -225,6 +239,118 @@ func TestClosingASeedStopsItsPullRequestWatchesAndWithdrawsTheirUnreadNews(t *te
 			if inbox := inboxContents(readInbox(t, cli, tender, 0).Items); strings.Contains(inbox, "ready") {
 				t.Errorf("tending %s again after %s, the inbox = %q, want the unread pull request news withdrawn", seed, close.verb, inbox)
 			}
+		})
+	}
+}
+
+func TestEachWatchOfOnePullRequestReadsItsOwnReadiness(t *testing.T) {
+	const reviewer = "alice"
+	approvedByAlice := []map[string]any{{"id": "review-1", "state": "APPROVED", "bodyText": "Ship it", "submittedAt": "2026-11-04T10:00:00Z",
+		"author": map[string]any{"__typename": "User", "id": "u-1", "login": reviewer}}}
+	type watcher struct {
+		mode     protocol.PullRequestWatchMode
+		reviewer string
+		seed     string
+		tender   string
+	}
+	for _, order := range []struct {
+		name  string
+		first int
+	}{{"formal review first", 0}, {"green first", 1}} {
+		t.Run(order.name, func(t *testing.T) {
+			gh := serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN", mergeStateStatus: "CLEAN", codexThumbsUp: true})
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.App(), w.Client()
+				creator := w.Spawn(app, fakeagent.Claude, w.Path("creator"))
+				formal := &watcher{mode: protocol.PullRequestWatchModeFormalReview, reviewer: reviewer}
+				green := &watcher{mode: protocol.PullRequestWatchModeGreen}
+				for _, each := range []*watcher{formal, green} {
+					each.tender = w.Spawn(app, fakeagent.Claude, w.Path("tender-"+string(each.mode)))
+					each.seed = plantSeedAs(t, cli, each.tender, "Watch in "+string(each.mode))
+					moveDelegationSeed(t, cli, each.tender, each.seed, "tend", "")
+				}
+				for _, each := range []*watcher{[]*watcher{formal, green}[order.first], []*watcher{green, formal}[order.first]} {
+					watchPullRequestAs(t, cli, creator, each.seed, each.mode, each.reviewer)
+					w.advance(time.Second)
+				}
+				watchPullRequestAs(t, cli, creator, "", protocol.PullRequestWatchModeCodex, "")
+				w.advance(time.Second)
+
+				expect := func(when string, each *watcher, state, reason, health string) {
+					t.Helper()
+					pr := onlySeedPullRequest(t, cli, creator, each.seed)
+					if protocol.Deref(pr.WatchMode) != each.mode || protocol.Deref(pr.ReadinessState) != state || protocol.Deref(pr.ReadinessReason) != reason || protocol.Deref(pr.WatchHealth) != health {
+						t.Errorf("%s, the %s watch reads mode %q readiness %q (%q) health %q, want %q (%q) health %q", when, each.mode,
+							protocol.Deref(pr.WatchMode), protocol.Deref(pr.ReadinessState), protocol.Deref(pr.ReadinessReason), protocol.Deref(pr.WatchHealth), state, reason, health)
+					}
+				}
+				inboxOf := func(each *watcher) string {
+					t.Helper()
+					return inboxContents(readInbox(t, cli, each.tender, 0).Items)
+				}
+
+				expect("before alice approves", formal, prreadiness.StateWaiting, "selected_reviewer_approval_missing", "current")
+				expect("before alice approves", green, prreadiness.StateReady, "green", "current")
+				if own := onlyPullRequest(t, cli, creator); protocol.Deref(own.WatchMode) != protocol.PullRequestWatchModeCodex || protocol.Deref(own.ReadinessReason) != "codex_settling" || own.SettlingUntil == nil {
+					t.Errorf("the session's own codex watch reads %q (%q) until %q, want it settling", protocol.Deref(own.ReadinessState), protocol.Deref(own.ReadinessReason), protocol.Deref(own.SettlingUntil))
+				}
+				if pr := onlySeedPullRequest(t, cli, creator, green.seed); pr.SettlingUntil != nil {
+					t.Errorf("while the codex watch settles, the green watch reads settling until %q, want none", *pr.SettlingUntil)
+				}
+				if inbox := inboxOf(formal); strings.Contains(inbox, "ready") {
+					t.Errorf("before alice approves, the formal seed's tender was told %q, want no ready note", inbox)
+				}
+				if inbox := inboxOf(green); !strings.Contains(inbox, "ready") {
+					t.Errorf("the green seed's tender was told %q, want a ready note", inbox)
+				}
+
+				gh.set(func(gh *watchedPullRequestGitHub) { gh.feedbackFails = true })
+				w.advance(2 * protocol.HeatHotInterval)
+				expect("while feedback cannot be read", green, prreadiness.StateReady, "green", "delayed")
+				gh.set(func(gh *watchedPullRequestGitHub) { gh.feedbackFails = false })
+				w.advance(2 * protocol.HeatHotInterval)
+				expect("once feedback is readable again", formal, prreadiness.StateWaiting, "selected_reviewer_approval_missing", "current")
+
+				gh.set(func(gh *watchedPullRequestGitHub) { gh.opinions = approvedByAlice })
+				w.advance(2 * protocol.HeatHotInterval)
+				expect("after alice approves", formal, prreadiness.StateReady, "selected_reviewer_approved", "current")
+				expect("after alice approves", green, prreadiness.StateReady, "green", "current")
+				if inbox := inboxOf(formal); !strings.Contains(inbox, "ready") {
+					t.Errorf("after alice approves, the formal seed's tender was told %q, want a ready note", inbox)
+				}
+
+				if err := cli.WatchSessionPullRequest(protocol.SessionID(creator), green.seed, watchedPullRequestURL, protocol.PullRequestWatchModeFormalReview, reviewer); err != nil {
+					t.Fatal(err)
+				}
+				if changed := onlySeedPullRequest(t, cli, creator, green.seed); protocol.Deref(changed.WatchMode) != protocol.PullRequestWatchModeFormalReview {
+					t.Errorf("after its mode changed, the watch reads mode %q, want formal-review", protocol.Deref(changed.WatchMode))
+				}
+				expect("while another watch changes mode", formal, prreadiness.StateReady, "selected_reviewer_approved", "current")
+				if err := cli.WatchSessionPullRequest(protocol.SessionID(creator), green.seed, watchedPullRequestURL, protocol.PullRequestWatchModeGreen, ""); err != nil {
+					t.Fatal(err)
+				}
+				gh.set(func(gh *watchedPullRequestGitHub) { gh.opinions = nil })
+				w.advance(2 * protocol.HeatHotInterval)
+				expect("after alice's approval is gone", formal, prreadiness.StateWaiting, "selected_reviewer_approval_missing", "current")
+				expect("back in green mode", green, prreadiness.StateReady, "green", "current")
+
+				w.restart()
+				cli = w.Client()
+				expect("after a restart", formal, prreadiness.StateWaiting, "selected_reviewer_approval_missing", "current")
+				expect("after a restart", green, prreadiness.StateReady, "green", "current")
+
+				if err := cli.UnwatchSessionPullRequest(protocol.SessionID(creator), green.seed, watchedPullRequestURL); err != nil {
+					t.Fatal(err)
+				}
+				expect("after the green seed stops watching", formal, prreadiness.StateWaiting, "selected_reviewer_approval_missing", "current")
+				if own := onlyPullRequest(t, cli, creator); protocol.Deref(own.WatchMode) != protocol.PullRequestWatchModeCodex || own.ReadinessState == nil {
+					t.Errorf("after the green seed stops watching, the session's own watch reads %+v, want it kept", own)
+				}
+				moveDelegationSeed(t, cli, formal.tender, formal.seed, "wither", "")
+				if own := onlyPullRequest(t, cli, creator); protocol.Deref(own.WatchMode) != protocol.PullRequestWatchModeCodex || own.ReadinessState == nil {
+					t.Errorf("after the formal seed closes, the session's own watch reads %+v, want it kept", own)
+				}
+			})
 		})
 	}
 }

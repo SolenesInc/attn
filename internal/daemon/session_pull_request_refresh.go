@@ -538,12 +538,8 @@ func (d *Daemon) processPullRequestWatches(
 			d.logf("pull request watch: profile of %s: %v", watch.To, err)
 		}
 		transition := prreadiness.Advance(watch.Cursor, observation, watch.Mode, watch.Reviewer, d.pullRequestOwnComments(profileID), now)
-		health := "current"
-		healthError := ""
 		feedbackError := ""
 		if feedbackErr != nil {
-			health = "delayed"
-			healthError = "feedback: " + feedbackErr.Error()
 			feedbackError = feedbackErr.Error()
 		}
 		items := make([]inbox.Item, 0, len(transition.Actions))
@@ -570,9 +566,9 @@ func (d *Daemon) processPullRequestWatches(
 			To: watch.To, SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
 			Mode: watch.Mode, Reviewer: watch.Reviewer, Cursor: transition.Cursor,
 			Status: status, Evaluation: transition.Evaluation,
-			Health: health, HealthError: healthError, FeedbackError: feedbackError,
-			ClearAction: watch.Cursor.LastAction != "" && transition.Cursor.LastAction == "",
-			Terminal:    terminal, MailboxItems: items, At: now,
+			FeedbackError: feedbackError,
+			ClearAction:   watch.Cursor.LastAction != "" && transition.Cursor.LastAction == "",
+			Terminal:      terminal, MailboxItems: items, At: now,
 		})
 		if errors.Is(err, sql.ErrNoRows) {
 			continue

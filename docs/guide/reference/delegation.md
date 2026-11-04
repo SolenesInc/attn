@@ -222,8 +222,11 @@ does. A handover therefore moves the watch to the new tender, and nobody has to
 watch again. `attn pr watch` refuses a seed that doesn't exist or is closed.
 
 `attn pr unwatch`, `attn pr ls` and `attn pr status` take `--seed <id>` too, and
-then act on the seed's watches. `attn seed watch` is a different watch: it
-follows the seed's own moves.
+then act on the seed's watches. Without `--seed`, they act on the session's own
+watch, including one it holds as a crew member or the Chief. Each watch reports
+readiness and health in its own mode, so two seeds can watch one pull request in
+different modes. `attn seed watch` is a different watch: it follows the seed's
+own moves.
 
 Harvesting or withering the seed stops its watches and clears their unread
 updates. A seed whose work continues after the merge, such as following a

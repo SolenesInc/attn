@@ -329,25 +329,41 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		}
 		entry.MergeableState = pullRequestField(rec.MergeableState)
 		entry.StatusFetchedAt = pullRequestField(rec.StatusFetchedAt)
-		entry.ReadinessState = pullRequestField(rec.ReadinessState)
-		entry.ReadinessReason = pullRequestField(rec.ReadinessReason)
-		entry.SettlingUntil = pullRequestField(rec.SettlingUntil)
-		entry.WatchHealth = pullRequestField(rec.WatchHealth)
-		entry.WatchError = pullRequestField(rec.WatchError)
-		entry.WatchLastCheckedAt = pullRequestField(rec.WatchLastCheckedAt)
-		watches := watchesByPR[rec.PRID]
-		if len(watches) > 0 {
-			for _, watch := range watches {
-				if slices.Contains(addresses, watch.To) {
-					entry.Watching = protocol.Ptr(true)
-					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
-					entry.WatchReviewer = pullRequestField(watch.Reviewer)
-				}
+		for _, watch := range watchesByPR[rec.PRID] {
+			if slices.Contains(addresses, watch.To) {
+				applyPullRequestWatch(&entry, watch)
 			}
+		}
+		if entry.Watching == nil {
+			applyEndedPullRequestReadiness(&entry, rec.State)
 		}
 		out = append(out, entry)
 	}
 	return out
+}
+
+func applyPullRequestWatch(entry *protocol.SessionPullRequest, watch store.PullRequestWatch) {
+	health, healthError := watch.Health()
+	entry.Watching = protocol.Ptr(true)
+	entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
+	entry.WatchReviewer = pullRequestField(watch.Reviewer)
+	entry.ReadinessState = pullRequestField(watch.ReadinessState)
+	entry.ReadinessReason = pullRequestField(watch.ReadinessReason)
+	entry.SettlingUntil = pullRequestField(watch.SettlingUntil)
+	entry.WatchHealth = pullRequestField(health)
+	entry.WatchError = pullRequestField(healthError)
+	entry.WatchLastCheckedAt = pullRequestField(watch.LastCheckedAt)
+}
+
+func applyEndedPullRequestReadiness(entry *protocol.SessionPullRequest, state string) {
+	switch state {
+	case sessionPullRequestMerged:
+		entry.ReadinessState = protocol.Ptr(prreadiness.StateMerged)
+		entry.ReadinessReason = protocol.Ptr(prreadiness.ReasonMerged)
+	case sessionPullRequestClosed:
+		entry.ReadinessState = protocol.Ptr(prreadiness.StateClosed)
+		entry.ReadinessReason = protocol.Ptr(prreadiness.ReasonClosed)
+	}
 }
 
 func sessionPullRequestState(rec store.SessionPullRequestRecord) string {
