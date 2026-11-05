@@ -265,6 +265,7 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 			shop, shopCodex := spawn("shop")
 			app.TypeLine(shop, "write the release notes")
 			shopCodex.Prompted()
+			server := s.CodexServer()
 			s.InstallStandaloneCodex("standalone", "0.163.0")
 
 			s.Stop()
@@ -274,7 +275,7 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 			if _, cart := spawn("cart"); cart.Argv[0] != running {
 				t.Errorf("a terminal opened after the restart, while a turn held the app-server on its Codex, ran %s, want the app-server's %s", cart.Argv[0], running)
 			}
-			s.CodexServer().Reply(shopCodex.ConversationID, "Wrote the release notes.")
+			server.Reply(shopCodex.ConversationID, "Wrote the release notes.")
 			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
 				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
 			})
