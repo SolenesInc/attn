@@ -106,12 +106,6 @@ func (m *Monitor) runSteeredLocked() {
 	}
 }
 
-func (m *Monitor) runStartedDuringPlacementLocked() {
-	if open := m.runs.open; open != nil && m.input.run != nil {
-		open.StartedBy, open.startKnown = m.input.run.start(), true
-	}
-}
-
 func (m *Monitor) runPromptedLocked() {
 	open := m.runs.open
 	if open == nil || open.startKnown {

@@ -8902,6 +8902,7 @@ model SessionPlaceMessage {
   allow_user_composer?: boolean;
   require_empty_composer?: boolean;
   compact?: boolean;
+  ring?: InboxRingRecord;
 }
 model SessionPlaceResult {
   stage: SessionPlaceStage;
@@ -8909,6 +8910,46 @@ model SessionPlaceResult {
   error?: string;
   error_kind?: SessionPlaceErrorKind;
   retry_after_ms?: int32;
+  held?: boolean; // The Claude mod took the input and has not placed it yet, so it can still give it back.
+}
+
+// All the home needs to take back one inbox ring, carried by the placement so it survives a home restart.
+model InboxRingRecord {
+  address: string;
+  profile_id: string;
+  stamp: string;
+  typed?: string[];
+  notified: boolean;
+  captures?: string[];
+  authorized_seeds?: string[];
+}
+
+enum InboxRingOutcome { Placed: "placed", Returned: "returned" }
+
+// The daemon running a session's Claude mod says how a ring the mod held ended.
+@extension("x-on", #{ home: true })
+model InboxRingSettleMessage {
+  cmd: "inbox_ring_settle";
+  delivery_id: string;
+  outcome: InboxRingOutcome;
+  ring: InboxRingRecord;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model ClaudeModReachMessage {
+  cmd: "claude_mod_reach";
+  session_id: SessionID;
+}
+model ClaudeModReachResult { reachable: boolean; }
+
+enum ClaudeModReachChange { Changed: "changed", FirstPollMissed: "first_poll_missed" }
+
+// The daemon running a session's Claude mod tells the home its reach changed, so the home's inbox can act on it.
+@extension("x-on", #{ home: true })
+model ClaudeModReachReportMessage {
+  cmd: "claude_mod_reach_report";
+  session_id: SessionID;
+  change: ClaudeModReachChange;
 }
 
 @extension("x-on", #{ session: "session_id" })

@@ -328,7 +328,7 @@ func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
 				}
 				app.AwaitTerminalScreen(terminal, "unsent draft")
 
-				waited := w.PauseAt(pausepoint.ClaudeModReturnWaits)
+				waited := w.PauseAt(pausepoint.ClaudeModReturnWaitsForDraft)
 				returnIt(t, w, app, run, session)
 				waited.Await()
 				waited.Release()
@@ -481,12 +481,7 @@ func (m *modSocket) poll(instance string) <-chan modPollAnswer {
 
 func (m *modSocket) ackSubmitted(instance, id string) {
 	m.t.Helper()
-	m.ack(instance, id, "submitted")
-}
-
-func (m *modSocket) ack(instance, id, outcome string) {
-	m.t.Helper()
-	ack, _ := json.Marshal(map[string]string{"terminal": m.terminal, "instance": instance, "id": id, "outcome": outcome})
+	ack, _ := json.Marshal(map[string]string{"terminal": m.terminal, "instance": instance, "id": id, "outcome": "submitted"})
 	response, err := m.client.Post("http://attn/claude/ack", "application/json", bytes.NewReader(ack))
 	if err != nil {
 		m.t.Fatal(err)

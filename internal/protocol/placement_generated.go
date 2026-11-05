@@ -56,6 +56,8 @@ var Placements = map[string][]Placement{
 	"callout_anchors":                  {Placement{LocatorHome, ""}},
 	"callout_show":                     {Placement{LocatorHome, ""}},
 	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
+	"claude_mod_reach":                 {Placement{LocatorSession, "session_id"}},
+	"claude_mod_reach_report":          {Placement{LocatorHome, ""}},
 	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
@@ -106,6 +108,7 @@ var Placements = map[string][]Placement{
 	"hook_compaction":                  {Placement{LocatorHere, ""}},
 	"hook_notification":                {Placement{LocatorHere, ""}},
 	"hook_stop_failure":                {Placement{LocatorHere, ""}},
+	"inbox_ring_settle":                {Placement{LocatorHome, ""}},
 	"inject_test_pr":                   {Placement{LocatorHere, ""}},
 	"inject_test_session":              {Placement{LocatorHere, ""}},
 	"inspect_path":                     {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -605,6 +608,30 @@ func (m CheckoutInspectMessage) Placement() Placement {
 
 func (m CheckoutInspectMessage) Locate() string {
 	return string(m.Host)
+}
+
+func (ClaudeModReachMessage) CommandName() string {
+	return "claude_mod_reach"
+}
+
+func (m ClaudeModReachMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m ClaudeModReachMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (ClaudeModReachReportMessage) CommandName() string {
+	return "claude_mod_reach_report"
+}
+
+func (m ClaudeModReachReportMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ClaudeModReachReportMessage) Locate() string {
+	return ""
 }
 
 func (ClearSessionActivityMessage) CommandName() string {
@@ -1228,6 +1255,18 @@ func (m HookStopFailureMessage) Placement() Placement {
 }
 
 func (m HookStopFailureMessage) Locate() string {
+	return ""
+}
+
+func (InboxRingSettleMessage) CommandName() string {
+	return "inbox_ring_settle"
+}
+
+func (m InboxRingSettleMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m InboxRingSettleMessage) Locate() string {
 	return ""
 }
 

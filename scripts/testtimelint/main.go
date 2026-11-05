@@ -21,6 +21,7 @@ var allowed = map[string]string{
 	"internal/jobs/stores_test.go TestDueJobsRunByPriorityThenByScheduleWithinASecond":                               "runs in onTheJobDatabase's synctest bubble",
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",
 	"internal/fakeagent/codex_remote.go (*codexRemote).stayConnected":                                                "the fake Codex's own reconnect backoff, which the real Codex has too",
+	"internal/fakeagent/claude_mod.go (*fakeMod).pollLoop":                                                           "the fake Claude mod's own poll retry backoff, which the real mod has too",
 	"internal/fakeagent/nisse.go (*Kit).NisseServer":                                                                 "real-time poll for a launched Nisse server; replace with a signal",
 	"internal/fakeagent/nisse.go (*nisseTUI).begin":                                                                  "real-time poll for the Nisse server socket; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionIDs":                                          "real-time poll of the shared host; replace with a signal",

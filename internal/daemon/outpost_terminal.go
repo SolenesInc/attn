@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -11,6 +12,8 @@ import (
 )
 
 const bridgeCall = "call"
+
+var errOutpostBridgeReplaced = errors.New("outpost bridge was replaced")
 
 func (d *Daemon) callBridgeHandler(host string, order *terminalOrder) func(*bridge.Conn, ssh.NewChannel) {
 	return func(conn *bridge.Conn, incoming ssh.NewChannel) {
@@ -39,7 +42,7 @@ func (d *Daemon) callBridgeHandler(host string, order *terminalOrder) func(*brid
 				}
 				if host != "" {
 					if !d.isOutpostConn(host, conn) {
-						return nil, fmt.Errorf("outpost bridge was replaced")
+						return nil, errOutpostBridgeReplaced
 					}
 					row, err := d.resolveOutpost(host)
 					if err != nil {

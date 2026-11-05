@@ -23,25 +23,29 @@ let link: Link = { terminal: '', socketPath: '' }
 let isTurnRunning = false
 let isStopped = false
 let held: Message[] = []
+let givenBack: Message[] = []
 let lastRequest: Promise<void> = Promise.resolve()
 
 function firstLine(text: string): string {
   return text.split('\n', 1)[0] ?? ''
 }
 
-function post($: EngineInterface, path: string, body: object): Promise<void> {
-  lastRequest = lastRequest.then(() => send($, path, body))
+function post($: EngineInterface, path: string, body: object, answered?: (text: string) => void): Promise<void> {
+  lastRequest = lastRequest.then(() => send($, path, body, answered))
   return lastRequest
 }
 
-async function send($: EngineInterface, path: string, body: object): Promise<void> {
+async function send($: EngineInterface, path: string, body: object, answered?: (text: string) => void): Promise<void> {
   try {
-    await $.http.fetch(`http://attn${path}`, {
+    const answer = await $.http.fetch(`http://attn${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ terminal: link.terminal, instance, ...body }),
       socketPath: link.socketPath,
     })
+    if (answer.status === 200) {
+      answered?.(answer.text)
+    }
   } catch (err) {
     $.ui.log(`POST ${path} failed: ${String(err)}`, { to: 'debug' })
   }
@@ -51,8 +55,20 @@ function ack($: EngineInterface, id: string, outcome: Outcome, reason?: string):
   return post($, '/claude/ack', { id, outcome, reason })
 }
 
+function ackHeld($: EngineInterface, message: Message, outcome: Outcome): Promise<void> {
+  return post($, '/claude/ack', { id: message.id, outcome, ring: message.ring })
+}
+
+function sendGivenBack($: EngineInterface): Promise<void> {
+  return post($, '/claude/return', { returns: givenBack }, text => {
+    const { settled } = JSON.parse(text) as { settled: string[] | null }
+    givenBack = givenBack.filter(message => !settled?.includes(message.id))
+  })
+}
+
 function giveBack($: EngineInterface, messages: Message[]): Promise<void> {
-  return post($, '/claude/return', { ids: messages.map(message => message.id) })
+  givenBack = [...givenBack, ...messages]
+  return sendGivenBack($)
 }
 
 function setTurnRunning($: EngineInterface, value: boolean): Promise<unknown> {
@@ -118,6 +134,9 @@ function compact($: EngineInterface, id: string): void {
 async function pollForever($: EngineInterface): Promise<void> {
   const query = `terminal=${encodeURIComponent(link.terminal)}&instance=${encodeURIComponent(instance)}`
   for (;;) {
+    if (givenBack.length > 0) {
+      await sendGivenBack($)
+    }
     let status = 0
     let body = ''
     try {
@@ -149,17 +168,18 @@ async function appendHeld($: EngineInterface): Promise<void> {
     return
   }
   await setHeld($, [])
-  for (const { id, text } of messages) {
+  for (const message of messages) {
+    const { text } = message
     const appended = await $.session
       .append({ message: { type: 'user', content: [{ type: 'text', text: MID_TURN_HEAD + text + MID_TURN_TAIL }] } })
       .catch((err: unknown) => ({ deny: String(err) }))
     if (appended.deny !== undefined) {
       $.ui.log(`attn takes this back, Claude refused it (${appended.deny}): ${text}`, { to: 'debug' })
-      await giveBack($, [{ id, text }])
+      await giveBack($, [message])
       continue
     }
     $.ui.log(`❯ ${text}`)
-    await ack($, id, 'appended')
+    await ackHeld($, message, 'appended')
   }
 }
 
@@ -170,8 +190,8 @@ async function submitLeftOver($: EngineInterface, messages: Message[]): Promise<
     await Promise.all([setHeld($, []), setTurnRunning($, false)])
     return giveBack($, back)
   }
-  for (const { id } of messages) {
-    await ack($, id, 'submitted')
+  for (const message of messages) {
+    await ackHeld($, message, 'submitted')
   }
 }
 

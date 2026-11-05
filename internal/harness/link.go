@@ -24,6 +24,7 @@ type Input struct {
 	ID      string
 	Text    string
 	Voice   Voice
+	Ring    *protocol.InboxRingRecord
 }
 
 // Custody is a delivery's only result: whether the harness took the input, and when.

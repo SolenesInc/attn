@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -48,6 +49,7 @@ type inboxRing struct {
 	finishingWake      bool
 	bellWaitsForPrompt bool
 	heldUntil          time.Time
+	at                 time.Time
 }
 
 func (d *Daemon) inboxState(a who.Address) *inboxDeliveryState {
@@ -201,7 +203,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.wakeSession, state.tenderWake = "", nil
 	}
 	tenderWake := state.tenderWake
-	if finishingWake && tenderWake != nil && tenderWake.claude && !d.claudeMod().reachable(d.primaryTerminal(holder.ID)) {
+	if finishingWake && tenderWake != nil && tenderWake.claude && !d.claudeModReaches(holder.ID) {
 		receipt.Detail = fmt.Sprintf("queued: %s is reopening, and its mail waits for the Claude Code mod's first poll", sessionDisplayName(holder))
 		return receipt, nil
 	}
@@ -339,14 +341,16 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
-		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil}
+		at := time.Now()
+		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
+		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil, at: at}
 		state.pending = pending
 	}
 	paste := pending.paste
 	finishingWake, bellWaitsForPrompt, bellHeldUntil := pending.finishingWake, pending.bellWaitsForPrompt, pending.heldUntil
 	placement := d.placeDelivery(context.Background(), holder.ID, pending.input)
 	if placement.Stage == sessionmonitor.Placed {
-		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, time.Now())
+		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, pending.at)
 		if err != nil {
 			return receipt, err
 		}
@@ -359,11 +363,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		for _, seedID := range paste.authorizedSeeds {
 			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
 		}
-		ring := returnableInboxRing{address: a, profileID: holder.ProfileID, paste: paste, stamp: readAt}
-		switch d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
-		case ringReturned:
-			d.returnInboxRing(ring)
-		case ringTyped:
+		if !placement.Held {
 			d.endStandbyOnceMailRead(a)
 		}
 		if !bellWaitsForPrompt {
@@ -396,26 +396,32 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	return receipt, nil
 }
 
-type returnableInboxRing struct {
-	address   who.Address
-	profileID string
-	paste     inboxPaste
-	stamp     string
-}
-
 type inboxRingReturned struct {
 	ProfileID       string   `json:"profile_id"`
 	Captures        []string `json:"captures,omitempty"`
 	AuthorizedSeeds []string `json:"authorized_seeds,omitempty"`
 }
 
-func (d *Daemon) returnInboxRing(ring returnableInboxRing) {
-	if err := d.store.ReturnInboxRing(ring.address, ring.paste.typed, ring.paste.notified, ring.stamp); err != nil {
-		d.logf("inbox: return ring to %s: %v", ring.address, err)
-		return
+func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettleMessage) (struct{}, error) {
+	address, err := who.ParseAddress(msg.Ring.Address)
+	if err != nil {
+		return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
 	}
-	d.publishFact(FactInboxRingReturned, ring.address.String(), inboxRingReturned{ProfileID: ring.profileID, Captures: ring.paste.captures, AuthorizedSeeds: ring.paste.authorizedSeeds})
-	d.kickInbox(ring.address)
+	state := d.lockInboxState(address)
+	defer state.unlock()
+	if msg.Outcome == protocol.InboxRingOutcomePlaced {
+		d.endStandbyOnceMailRead(address)
+		return struct{}{}, nil
+	}
+	if state.pending != nil && state.pending.input.ID.String() == msg.DeliveryID {
+		state.pending = nil
+	}
+	if err := d.store.ReturnInboxRing(address, msg.Ring.Typed, msg.Ring.Notified, msg.Ring.Stamp); err != nil {
+		return struct{}{}, fmt.Errorf("return ring to %s: %w", address, err)
+	}
+	d.publishFact(FactInboxRingReturned, address.String(), inboxRingReturned{ProfileID: msg.Ring.ProfileID, Captures: msg.Ring.Captures, AuthorizedSeeds: msg.Ring.AuthorizedSeeds})
+	d.kickInbox(address)
+	return struct{}{}, nil
 }
 
 func (d *Daemon) projectReturnedRing(ev bus.Event) {

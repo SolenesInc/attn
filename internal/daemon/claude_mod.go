@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/claudemod"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -25,6 +28,7 @@ const (
 	ClaudeModReachTimer        stepclock.Name = "claude-mod-reach"
 	ClaudeModAckTimer          stepclock.Name = "claude-mod-ack"
 	ClaudeModFirstPollTimer    stepclock.Name = "claude-mod-first-poll"
+	ClaudeModReportRetryTimer  stepclock.Name = "claude-mod-report-retry"
 	claudeModPollHold                         = 25 * time.Second
 	claudeModFirstPollTripwire                = 30 * time.Second
 	claudeModReachWindow                      = 5 * time.Second
@@ -45,14 +49,16 @@ const (
 )
 
 type claudeMod struct {
-	d                    *Daemon
-	mu                   sync.Mutex
-	server               *http.Server
-	closed               bool
-	terminals            map[harness.TerminalID]*claudeModTerminal
-	firstPoll            map[harness.TerminalID]stepclock.Timer
-	ringsBackBeforeStamp map[string]bool
-	returned             map[protocol.SessionID][]sessionmonitor.Delivery
+	d         *Daemon
+	mu        sync.Mutex
+	server    *http.Server
+	closed    bool
+	terminals map[harness.TerminalID]*claudeModTerminal
+	firstPoll map[harness.TerminalID]stepclock.Timer
+	returned  map[protocol.SessionID][]sessionmonitor.Delivery
+	reports   []protocol.Placed
+	reporting bool
+	settling  map[string]bool
 }
 
 type claudeModTerminal struct {
@@ -81,35 +87,42 @@ type claudeModDelivery struct {
 	answer  chan harness.Custody
 }
 
-func (delivery *claudeModDelivery) wire() map[string]string {
+func (delivery *claudeModDelivery) wire() any {
 	if delivery.compact {
 		return map[string]string{"id": delivery.input.ID, "kind": "compact"}
 	}
-	return map[string]string{"id": delivery.input.ID, "kind": "input", "text": delivery.input.Text}
+	return claudeModMessage{ID: delivery.input.ID, Kind: "input", Text: delivery.input.Text, UserWords: delivery.input.Voice == harness.VoiceUser, Ring: delivery.input.Ring}
+}
+
+type claudeModMessage struct {
+	ID        string                    `json:"id"`
+	Kind      string                    `json:"kind,omitempty"`
+	Text      string                    `json:"text"`
+	UserWords bool                      `json:"user_words,omitempty"`
+	Ring      *protocol.InboxRingRecord `json:"ring,omitempty"`
 }
 
 type claudeModHeld struct {
 	session  protocol.SessionID
 	input    harness.Input
-	ring     *returnableInboxRing
 	accepted uint64
 }
 
 func (d *Daemon) claudeMod() *claudeMod {
 	d.claudeModOnce.Do(func() {
 		d.claudeModState = &claudeMod{
-			d:                    d,
-			terminals:            make(map[harness.TerminalID]*claudeModTerminal),
-			firstPoll:            make(map[harness.TerminalID]stepclock.Timer),
-			ringsBackBeforeStamp: make(map[string]bool),
-			returned:             make(map[protocol.SessionID][]sessionmonitor.Delivery),
+			d:         d,
+			terminals: make(map[harness.TerminalID]*claudeModTerminal),
+			firstPoll: make(map[harness.TerminalID]stepclock.Timer),
+			returned:  make(map[protocol.SessionID][]sessionmonitor.Delivery),
+			settling:  make(map[string]bool),
 		}
 	})
 	return d.claudeModState
 }
 
 func (d *Daemon) claudeModEnabled() bool {
-	return d.enrollmentStatus().IsHome() && parseBooleanSetting(d.homeSetting(SettingClaudeModEnabled))
+	return parseBooleanSetting(d.homeSetting(SettingClaudeModEnabled))
 }
 
 func (d *Daemon) claudeModForLaunch(terminal harness.TerminalID, agent string) agentdriver.ClaudeMod {
@@ -159,7 +172,7 @@ func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepcloc
 		return
 	}
 	if session, ok := m.d.shownIn(terminal); ok {
-		m.d.tenderWakeModMissed(session)
+		m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeFirstPollMissed})
 	}
 	if m.d.terminalLive(terminal) {
 		m.d.logf("claude mod: first_poll_tripwire=%s; Claude in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, terminal)
@@ -266,7 +279,7 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 		m.terminals[terminal] = t
 		m.d.life.Go("claudeModReachable", func() {
 			if session, ok := m.d.shownIn(terminal); ok {
-				m.d.kickSessionInboxAddresses(session)
+				m.reportReachChanged(session)
 			}
 		})
 	}
@@ -347,7 +360,7 @@ func (m *claudeMod) armReachLocked(t *claudeModTerminal) {
 
 func (m *claudeMod) reachLost(t *claudeModTerminal, timer *stepclock.Timer) {
 	for _, session := range m.dropUnreachable(t, timer) {
-		m.d.kickSessionInboxAddresses(session)
+		m.reportReachChanged(session)
 		m.placeReturned(session)
 	}
 }
@@ -383,12 +396,13 @@ func heldIDs(t *claudeModTerminal) []string {
 }
 
 type claudeModAck struct {
-	Terminal      harness.TerminalID `json:"terminal"`
-	Instance      string             `json:"instance"`
-	ID            string             `json:"id"`
-	Outcome       string             `json:"outcome"`
-	Reason        string             `json:"reason"`
-	ComposerEmpty bool               `json:"composer_empty"`
+	Terminal      harness.TerminalID        `json:"terminal"`
+	Instance      string                    `json:"instance"`
+	ID            string                    `json:"id"`
+	Outcome       string                    `json:"outcome"`
+	Reason        string                    `json:"reason"`
+	ComposerEmpty bool                      `json:"composer_empty"`
+	Ring          *protocol.InboxRingRecord `json:"ring"`
 }
 
 func (m *claudeMod) serveAck(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +425,13 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.terminals[ack.Terminal]
-	if t == nil || t.instance != ack.Instance {
+	if t != nil && t.instance != ack.Instance {
+		return
+	}
+	if ack.Ring != nil && (t == nil || t.held[ack.ID] == nil) {
+		m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: ack.ID, Outcome: protocol.InboxRingOutcomePlaced, Ring: *ack.Ring})
+	}
+	if t == nil {
 		return
 	}
 	delivery := t.handed[ack.ID]
@@ -444,7 +464,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 type claudeModReturn struct {
 	Terminal harness.TerminalID `json:"terminal"`
 	Instance string             `json:"instance"`
-	IDs      []string           `json:"ids"`
+	Returns  []claudeModMessage `json:"returns"`
 }
 
 func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
@@ -453,12 +473,57 @@ func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	session, shown := m.d.shownIn(ret.Terminal)
 	m.mu.Lock()
-	if t := m.terminals[ret.Terminal]; t != nil && t.instance == ret.Instance {
-		m.returnHeldLocked(t, ret.IDs)
-	}
+	settled := m.takeReturnsLocked(ret, session, shown)
 	m.mu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string][]string{"settled": settled})
+}
+
+func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.SessionID, shown bool) []string {
+	t := m.terminals[ret.Terminal]
+	if t != nil && t.instance != ret.Instance {
+		return nil
+	}
+	settled := []string{}
+	var known []string
+	placeUserWords := false
+	for _, back := range ret.Returns {
+		held := t != nil && t.held[back.ID] != nil
+		switch {
+		case back.Ring != nil:
+			done, settling := m.settling[back.ID]
+			if done {
+				delete(m.settling, back.ID)
+				settled = append(settled, back.ID)
+			} else if !settling {
+				m.settling[back.ID] = false
+				if held {
+					known = append(known, back.ID)
+				} else {
+					m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: back.ID, Outcome: protocol.InboxRingOutcomeReturned, Ring: *back.Ring})
+				}
+			}
+		case held:
+			known = append(known, back.ID)
+			settled = append(settled, back.ID)
+		case back.UserWords && shown:
+			m.returned[session] = append(m.returned[session], sessionmonitor.ReturnedUserInput(back.ID, back.Text))
+			placeUserWords = true
+			settled = append(settled, back.ID)
+		case !back.UserWords:
+			m.d.logf("claude mod: dropped returned input %s; the next one replaces it", back.ID)
+			settled = append(settled, back.ID)
+		}
+	}
+	if t != nil {
+		m.returnHeldLocked(t, known)
+	}
+	if placeUserWords {
+		m.d.life.Go("claudeModReturn", func() { m.placeReturnedNow(session) })
+	}
+	return settled
 }
 
 func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
@@ -471,68 +536,130 @@ func (m *claudeMod) returnHeldLocked(t *claudeModTerminal, ids []string) {
 	}
 	slices.SortFunc(back, func(a, b *claudeModHeld) int { return cmp.Compare(a.accepted, b.accepted) })
 	sessions := map[protocol.SessionID]bool{}
-	var rest []*claudeModHeld
 	for _, held := range back {
 		switch {
-		case held.ring == nil && strings.HasPrefix(held.input.ID, string(sessionmonitor.InboxRing)+"/"):
-			m.ringsBackBeforeStamp[held.input.ID] = true
-		case held.ring == nil && held.input.Voice == harness.VoiceUser:
+		case held.input.Ring != nil:
+			m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: held.input.ID, Outcome: protocol.InboxRingOutcomeReturned, Ring: *held.input.Ring})
+		case held.input.Voice == harness.VoiceUser:
 			m.returned[held.session] = append(m.returned[held.session], sessionmonitor.ReturnedUserInput(held.input.ID, held.input.Text))
 			sessions[held.session] = true
 		default:
-			rest = append(rest, held)
+			m.d.logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
 		}
 	}
-	if len(sessions) > 0 || len(rest) > 0 {
-		m.d.life.Go("claudeModReturn", func() { m.redeliver(sessions, rest) })
+	if len(sessions) > 0 {
+		m.d.life.Go("claudeModReturn", func() {
+			for session := range sessions {
+				m.placeReturnedNow(session)
+			}
+		})
 	}
-}
-
-func (m *claudeMod) redeliver(sessions map[protocol.SessionID]bool, rest []*claudeModHeld) {
-	for session := range sessions {
-		m.placeReturnedNow(session)
-	}
-	for _, held := range rest {
-		if held.ring != nil {
-			m.d.returnInboxRing(*held.ring)
-			continue
-		}
-		m.d.logf("claude mod: dropped returned input %s; the next one replaces it", held.input.ID)
-	}
-}
-
-type ringCustody int
-
-const (
-	ringTyped ringCustody = iota
-	ringHeld
-	ringReturned
-)
-
-func (m *claudeMod) rememberRing(id string, ring returnableInboxRing) ringCustody {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.ringsBackBeforeStamp[id] {
-		delete(m.ringsBackBeforeStamp, id)
-		return ringReturned
-	}
-	for _, t := range m.terminals {
-		if held := t.held[id]; held != nil {
-			held.ring = &ring
-			return ringHeld
-		}
-	}
-	return ringTyped
 }
 
 func (m *claudeMod) typedLocked(t *claudeModTerminal, id string) {
 	held := t.held[id]
 	delete(t.held, id)
-	if held == nil || held.ring == nil {
-		return
+	if held != nil && held.input.Ring != nil {
+		m.reportLocked(protocol.InboxRingSettleMessage{Cmd: protocol.CmdInboxRingSettle, DeliveryID: id, Outcome: protocol.InboxRingOutcomePlaced, Ring: *held.input.Ring})
 	}
-	address := held.ring.address
-	m.d.life.Go("claudeModRingTyped", func() { m.d.endStandbyOnceMailRead(address) })
+}
+
+func (m *claudeMod) holds(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.terminals {
+		if t.held[id] != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *claudeMod) reportReachChanged(session protocol.SessionID) {
+	m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeChanged})
+}
+
+func (m *claudeMod) report(msg protocol.Placed) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reportLocked(msg)
+}
+
+func (m *claudeMod) reportLocked(msg protocol.Placed) {
+	m.reports = append(m.reports, msg)
+	if !m.reporting {
+		m.reporting = m.d.life.Go("claudeModReports", m.sendReports)
+	}
+}
+
+func (m *claudeMod) sendReports() {
+	unreachable := false
+	for {
+		m.mu.Lock()
+		if len(m.reports) == 0 {
+			m.reporting = false
+			m.mu.Unlock()
+			return
+		}
+		next := m.reports[0]
+		m.mu.Unlock()
+		_, err := Call[struct{}](m.d.life.Context(), m.d.router(), next)
+		if err != nil && !m.d.homeAnswered(err) {
+			if !unreachable {
+				m.d.logf("claude mod: %s waits for the home, trying every %s: %v", next.CommandName(), bridge.ReconnectInterval, err)
+			}
+			unreachable = true
+			retry := m.d.clock.NewTimer(ClaudeModReportRetryTimer, bridge.ReconnectInterval)
+			select {
+			case <-retry.C():
+			case <-m.d.life.Done():
+				retry.Stop()
+				return
+			}
+			continue
+		}
+		if err != nil {
+			m.d.logf("claude mod: the home refused %s; dropped it: %v", next.CommandName(), err)
+		}
+		unreachable = false
+		m.mu.Lock()
+		m.reports = m.reports[1:]
+		if settle, ok := next.(protocol.InboxRingSettleMessage); ok {
+			if _, askedByMod := m.settling[settle.DeliveryID]; askedByMod {
+				m.settling[settle.DeliveryID] = true
+			}
+		}
+		m.mu.Unlock()
+	}
+}
+
+func (d *Daemon) homeAnswered(err error) bool {
+	if d.enrollmentStatus().IsHome() {
+		return true
+	}
+	var rejected *bridge.CallRejected
+	if !errors.As(err, &rejected) {
+		return false
+	}
+	return !strings.Contains(rejected.Reason, errOutpostBridgeReplaced.Error()) && !strings.Contains(rejected.Reason, "daemon is stopping")
+}
+
+func (d *Daemon) claudeModReaches(session protocol.SessionID) bool {
+	result, err := Call[protocol.ClaudeModReachResult](d.life.Context(), d.router(), protocol.ClaudeModReachMessage{Cmd: protocol.CmdClaudeModReach, SessionID: session})
+	return err == nil && result.Reachable
+}
+
+func (d *Daemon) readClaudeModReach(_ context.Context, msg protocol.ClaudeModReachMessage) (protocol.ClaudeModReachResult, error) {
+	return protocol.ClaudeModReachResult{Reachable: d.claudeMod().reachable(d.primaryTerminal(msg.SessionID))}, nil
+}
+
+func (d *Daemon) receiveClaudeModReachReport(_ context.Context, msg protocol.ClaudeModReachReportMessage) (struct{}, error) {
+	if msg.Change == protocol.ClaudeModReachChangeFirstPollMissed {
+		d.tenderWakeModMissed(msg.SessionID)
+	} else {
+		d.kickSessionInboxAddresses(msg.SessionID)
+	}
+	return struct{}{}, nil
 }
 
 type claudeModCompacted struct {

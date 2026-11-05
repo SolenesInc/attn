@@ -90,7 +90,7 @@ Preconditions:
 - **Outposts**: an item for an agent on an outpost whose host is unreachable waits, and the receipt's detail reads `queued: <agent> is on <host>, which is unreachable; it rings when <host> is back`.
 - **Profiles**: a message reaches only sessions, members and seeds of the sender's profile. attn answers for a session or member in another profile as if it did not exist: `no session or crew member matches`. A seed of another profile is refused by name.
 - **Performance and idle cost**: limits a sender can hit, each named in its refusal: 32 KiB per message, the same text to one address once per 10 seconds, 8 messages from one sender to one address per 30 seconds, and 50 unread peer messages per address. `attn agent inbox` returns 20 items by default and 50 with `--limit`. The rest wait for the next read.
-- **Claude mod**: `claude_mod_enabled` changes how a message reaches Claude, not when attn sends it. A plain ring still waits for a prompt-ready session. During a turn's permission question the mod holds what it takes, and the terminal shows nothing until the question closes; a question outside a turn delivers nothing. On an outpost attn types.
+- **Claude mod**: `claude_mod_enabled` changes how a message reaches Claude, not when attn sends it. A plain ring still waits for a prompt-ready session. During a turn's permission question the mod holds what it takes, and the terminal shows nothing until the question closes; a question outside a turn delivers nothing. On an outpost the mod delivers too, and what it gives back reaches the home through a queue that waits for the home link.
 - **Harnesses**: every harness gets the same rings and reads with the same verbs. Plugin harnesses get them through their driver. A shell never gets a ring: the receipt says the message waits there for `attn agent inbox`.
 - **Compatibility across versions**: items written by an earlier version stay readable. The store's inbox and mailbox migrations carry them forward.
 - **Flow**: with queue flow and quiet notifications on, a run a ring started opens no turn when it stops, unless the agent needs approval or attn cannot tell its state ([queue-flow.md](queue-flow.md)). With queue flow off, quiet notifications change nothing.
@@ -100,7 +100,8 @@ Preconditions:
 - Wire: `internal/daemon/agent_msg_wire_test.go`, `internal/daemon/agent_mailbox_wire_test.go`, `internal/daemon/inbox_attempts_wire_test.go`, `internal/daemon/garden_nudges_wire_test.go`, `internal/daemon/garden_bells_wire_test.go`, `internal/daemon/automation_bells_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/plugin_inbox_wire_test.go`.
 - Wire, with a fake mod: `internal/daemon/claude_mod_wire_test.go`.
 - Stack: `cmd/attn/agent_stack_test.go`, `cmd/attn/mailbox_restart_stack_test.go`, `internal/daemon/conversation_drop_delivery_stack_test.go`.
-- Stack, with the real mod in the real `claude` against a mock model API: `cmd/attn/claude_mod_stack_test.go`. It skips when `claude` is not on `PATH`.
+- Stack, with the real mod in the real `claude` against a mock model API: `cmd/attn/claude_mod_stack_test.go`, on the home and on an outpost. It skips when `claude` is not on `PATH`.
+- Stack, with a fake mod on an outpost: `cmd/attn/claude_mod_outpost_stack_test.go`.
 - Kernel: `internal/store/agent_mailbox_test.go`.
 
 ## Gotchas

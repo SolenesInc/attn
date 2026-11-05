@@ -495,7 +495,47 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 	return d.continuationForSeedWithResumeCheck(seed, d.conversationResumable)
 }
 
+func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
+	execution, _, _ := d.normalizedSeedContinuation(seed)
+	host := d.sessionHost(execution.SessionID)
+	if host == "" {
+		return d.continuationForSeedForeground(seed)
+	}
+	inspect := func(execution garden.Execution) string {
+		if strings.TrimSpace(execution.Cwd) == "" {
+			return directoryUnknown
+		}
+		checkout, err := Call[protocol.CheckoutInspection](context.Background(), d.router(), protocol.CheckoutInspectMessage{Cmd: protocol.CmdCheckoutInspect, Host: host, Cwd: execution.Cwd})
+		switch {
+		case err != nil || checkout.Exists && !checkout.IsDirectory:
+			return directoryUnavailable
+		case !checkout.Exists:
+			return directoryMissing
+		}
+		return directoryPresent
+	}
+	checkResume := func(agentName, resumeID, _ string) conversationAvailability {
+		profile := ""
+		if entry := d.store.SessionLedgerEntry(execution.SessionID); entry != nil {
+			profile = entry.ProfileID
+		}
+		readiness, err := d.placedConversationReadiness(execution.SessionID, host, agentName, profile, resumeID, false)
+		if err != nil {
+			return conversationAvailability{Reason: err.Error(), CheckFailed: true}
+		}
+		if !readiness.Known {
+			return conversationAvailability{Reason: fmt.Sprintf("conversation %s is no longer in %s's storage on outpost %q", resumeID, agentName, d.outpostName(host))}
+		}
+		return conversationAvailability{Available: true}
+	}
+	return d.continuationWithChecks(seed, inspect, checkResume)
+}
+
 func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
+	return d.continuationWithChecks(seed, inspectContinuationDirectory, checkResume)
+}
+
+func (d *Daemon) continuationWithChecks(seed garden.Seed, inspectDirectory func(garden.Execution) string, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
 	key, member := d.seedResumeMember(seed, execution.SessionID)
 	if !ok && !member {
@@ -507,7 +547,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		KeptConversation:  d.keptConversationForSession(execution.SessionID),
 		Source:            source,
 		LedgerAvailable:   entry != nil,
-		DirectoryState:    inspectContinuationDirectory(execution),
+		DirectoryState:    inspectDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
 	if entry != nil && entry.ProfileID == seed.ProfileID {

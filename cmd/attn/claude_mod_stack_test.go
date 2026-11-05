@@ -437,3 +437,160 @@ func contentText(content json.RawMessage) string {
 	}
 	return strings.Join(parts, "\n")
 }
+
+func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheModAndIsTypedOnceTheSettingIsOff(t *testing.T) {
+	t.Parallel()
+	claude, err := exec.LookPath("claude")
+	if err != nil {
+		t.Skip("claude is not on PATH")
+	}
+	model := startMockModel(t)
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	work := outpost.Path("shop")
+	configDir := filepath.Join(outpost.Dir, "toolhome", ".claude")
+	writeClaudeConfig(t, claude, configDir, work)
+	outpost.Vars = append(outpost.Vars,
+		"ATTN_CLAUDE_EXECUTABLE="+claude,
+		"CLAUDE_CONFIG_DIR="+configDir,
+		"ANTHROPIC_BASE_URL="+model.URL,
+		"ANTHROPIC_API_KEY="+mockModelAPIKey,
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+		"DISABLE_AUTOUPDATER=1",
+	)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
+	copied := outpost.App()
+	pair.Connect()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "true" })
+	const reviewer = "rev-1111-2222"
+	register(t, home, reviewer, "reviewer")
+
+	app := pair.App
+	recipient := home.Spawn(app, fakeagent.Claude, work, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("recipient screen:\n%s", home.Attn("agent", "peek", recipient).Stdout)
+		}
+	})
+	outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+
+	const ring = "attn agent inbox"
+	originOfRing := func(rings int, mail string) (string, string) {
+		t.Helper()
+		before := model.mark()
+		appMark := len(app.Log())
+		if sent := home.Run(testworld.Invocation{Args: []string{"agent", "msg", recipient, mail}, Session: reviewer}); sent.Code != 0 {
+			t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+		}
+		model.awaitPromptSince(t, before, ring)
+		worked := false
+		testworld.AwaitSessionSince(app, appMark, recipient, func(s protocol.Session) bool {
+			worked = worked || s.State == protocol.SessionStateWorking
+			return worked && s.State != protocol.SessionStateWorking
+		})
+		rows := claudeUserRows(t, configDir)
+		var matching []claudeUserRow
+		for _, row := range rows {
+			if strings.Contains(row.Text, ring) {
+				matching = append(matching, row)
+			}
+		}
+		if len(matching) != rings {
+			t.Fatalf("Claude's transcript has %d user rows with %q, want %d; rows: %+v", len(matching), ring, rings, rows)
+		}
+		last := matching[len(matching)-1]
+		return last.Origin.Kind, last.Origin.Name
+	}
+
+	if kind, name := originOfRing(1, "the discount is applied after tax"); kind != "plugin" || name != "attn" {
+		t.Fatalf("Claude recorded the ring with origin %s/%s, want the attn plugin's; it was typed, not handed to the mod", kind, name)
+	}
+	t.Log("with the setting on, Claude on the outpost recorded the ring with origin plugin/attn")
+
+	if read := home.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: recipient}); read.Code != 0 || !strings.Contains(read.Stdout, "the discount is applied after tax") {
+		t.Fatalf("attn agent inbox exited %d with %q%s", read.Code, read.Stdout, read.Stderr)
+	}
+	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "false"), "claude_mod_enabled = false")
+	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "false" })
+	if kind, name := originOfRing(2, "the total is rounded last"); kind == "plugin" {
+		t.Fatalf("Claude recorded the ring with origin %s/%s with the setting off, want it typed", kind, name)
+	}
+	t.Log("with the setting off, the same session was typed into")
+}
+
+func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtEsc(t *testing.T) {
+	t.Parallel()
+	claude, err := exec.LookPath("claude")
+	if err != nil {
+		t.Skip("claude is not on PATH")
+	}
+	model := startMockModel(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	work := s.Path("shop")
+	configDir := filepath.Join(s.Dir, "toolhome", ".claude")
+	writeClaudeConfig(t, claude, configDir, work)
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{"permissions":{"allow":["Bash(cat:*)"]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.Vars = append(s.Vars,
+		"ATTN_CLAUDE_EXECUTABLE="+claude,
+		"CLAUDE_CONFIG_DIR="+configDir,
+		"ANTHROPIC_BASE_URL="+model.URL,
+		"ANTHROPIC_API_KEY="+mockModelAPIKey,
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+		"DISABLE_AUTOUPDATER=1",
+	)
+	s.Start()
+	requireStdout(t, s.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
+	app := s.TrustedApp()
+	recipient := s.Spawn(app, fakeagent.Claude, work)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("recipient screen:\n%s", s.Attn("agent", "peek", recipient).Stdout)
+		}
+	})
+	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+
+	const longTask = "run the long task"
+	fifo := makeFifo(t, filepath.Join(work, "tool.fifo"))
+	model.runBashAfter(longTask, "cat "+fifo)
+	app.TypeLine(recipient, longTask)
+	opened := make(chan *os.File, 1)
+	go func() {
+		toolRunning, err := os.OpenFile(fifo, os.O_WRONLY, 0)
+		if err == nil {
+			opened <- toolRunning
+		}
+	}()
+	select {
+	case toolRunning := <-opened:
+		defer toolRunning.Close()
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatalf("Claude did not start the tool within %s", fakeagent.HangGuard)
+	}
+
+	capture := uuid.NewString()
+	const words = "check the rounding"
+	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{
+		Cmd: protocol.CmdQuickCaptureSend, CaptureID: capture, Content: words, AttachmentIds: []string{},
+		Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(recipient))},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
+
+	s.Stop()
+	s.Start()
+	app = s.TrustedApp()
+	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: "\x1b"})
+	testworld.Await(app, protocol.EventQuickCaptureUnread, func(m protocol.QuickCaptureUnreadMessage) bool { return m.CaptureID == capture })
+
+	mark := model.mark()
+	app.TypeLine(recipient, "carry on")
+	model.awaitPromptSince(t, mark, words)
+}

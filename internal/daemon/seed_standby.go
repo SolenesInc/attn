@@ -93,7 +93,7 @@ func (d *Daemon) standbyDeliveryRefusal(caller *protocol.Session, seed garden.Se
 	if _, session := seed.Tender.Session(); !session || caller.Agent != string(protocol.SessionAgentClaude) {
 		return nil
 	}
-	if d.claudeMod().reachable(d.primaryTerminal(caller.ID)) {
+	if d.claudeModReaches(caller.ID) {
 		return nil
 	}
 	return protocol.Refuse(protocol.RefusalWrongState,

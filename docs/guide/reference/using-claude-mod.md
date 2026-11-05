@@ -55,7 +55,7 @@ connected, for example while Claude is starting, while Claude waits for you to
 answer its trust question in a folder it has not trusted yet, or if the mod
 failed to load. A session whose mod has not connected 30 seconds after it
 launched gets a warning in the daemon log, including when you take longer than
-that to answer the trust question. Sessions on an outpost are always typed.
+that to answer the trust question.
 
 Attn never types the mail for a session it resumes because its seed is on
 standby. Attn waits for the mod's first connection and delivers through it, as
@@ -65,9 +65,18 @@ standby. Attn waits for the mod's first connection and delivers through it, as
 
 An agent can compact its conversation through the mod just before it closes
 itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. Claude
-compacts in its own way, as `/compact` does. A Claude session without the mod can't. If
-you type into the session while it compacts, Attn cancels the close and Claude
-runs your prompt after the compact.
+compacts in its own way, as `/compact` does. A Claude session without the mod
+can't, and neither can a Claude session on an outpost. If you type into the session
+while it compacts, Attn cancels the close and Claude runs your prompt after the
+compact.
+
+## Sessions on an outpost
+
+A Claude session on an outpost takes messages through its mod, the same as a
+session on your home machine. The outpost reads **Claude mod** from the home, so
+you turn it on in one place. If the mod gives a message back while the home is
+asleep or unreachable, the outpost keeps it and hands it to the home when the
+link returns.
 
 ## Upgrades and restarts
 
@@ -76,6 +85,7 @@ upgrade changes the mod, the daemon writes the new version as it starts, every
 running session reloads the mod, and the transcript shows `attn: reloaded`. Attn
 types into a session until its mod has reloaded.
 
-If the Attn daemon restarts while the band shows a message waiting for the next
-tool call, Attn no longer knows about that message. After an upgrade that changes
-the mod, the message is gone and you need to send it again.
+A daemon restart loses nothing while Claude keeps running, on your home machine or
+on an outpost: the mod keeps a message that waits for the next tool call, and hands
+it back if you press Esc. If the restart comes with an upgrade that changes the
+mod, the reload drops that message, and you need to send it again.

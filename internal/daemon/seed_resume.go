@@ -85,7 +85,7 @@ func blockedWake(err error) error { return tenderWakeBlocked{err: err} }
 func (d *Daemon) wakeSeedTender(protection foregroundCleanupProtection, seed garden.Seed, cause tenderWakeCause) (*seedResumeOutcome, error) {
 	seedID := seed.ID
 	tend, settle := cause.tend, cause.settle
-	continuation := d.continuationForSeedForeground(seed)
+	continuation := d.continuationOnItsMachine(seed)
 	var executed protocol.SessionID
 	if continuation != nil {
 		executed = continuation.Execution.SessionID

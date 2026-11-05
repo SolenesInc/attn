@@ -82,6 +82,7 @@ type Delivery struct {
 	BypassInitialGate    bool
 	RequireEmptyComposer bool
 	Compact              bool
+	Ring                 *protocol.InboxRingRecord
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -133,6 +134,7 @@ type Attempt struct {
 	Stage   Stage
 	At      time.Time
 	Err     error
+	Held    bool
 	steered bool
 }
 
@@ -333,16 +335,10 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if steering {
 		m.runSteeredLocked()
 	}
-	credited := l.tookLocked(delivery)
-	if !steering && !attempt.steered {
-		if delivery.origin.kind == originMaintenance {
-			l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
-		}
-		if l.epoch != epochAtPlacing {
-			m.runStartedDuringPlacementLocked()
-		}
+	if delivery.origin.kind == originMaintenance && !steering && !attempt.steered {
+		l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
 	}
-	return attempt, credited
+	return attempt, l.tookLocked(delivery)
 }
 
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
@@ -363,7 +359,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
 		link = nil
 	}
-	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice}
+	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring}
 	var custody harness.Custody
 	if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
 		custody = compactor.Compact(ctx, in)

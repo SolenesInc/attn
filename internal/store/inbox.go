@@ -370,10 +370,12 @@ func (s *Store) StampInboxAttempt(to who.Address, at time.Time) (bool, error) {
 	}
 	return true, tx.Commit()
 }
+func InboxRingStamp(at time.Time) string { return at.UTC().Format(sortableTimeFormat) }
+
 func (s *Store) RingInbox(to who.Address, finishingWake bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	stamp := at.UTC().Format(sortableTimeFormat)
+	stamp := InboxRingStamp(at)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return "", err
@@ -417,7 +419,7 @@ func (s *Store) ReturnInboxRing(to who.Address, typed []string, notified bool, s
 		}
 	}
 	if notified {
-		if _, err := tx.Exec(`UPDATE inbox_items SET attempts=MAX(attempts-1,0),notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE address=? AND read_at='' AND attempted_at=?`, stamp, to.String(), stamp); err != nil {
+		if _, err := tx.Exec(`UPDATE inbox_items SET attempts=MAX(attempts-1,0),attempted_at='',notified_at=CASE WHEN notified_at=? THEN '' ELSE notified_at END WHERE address=? AND read_at='' AND attempted_at=?`, stamp, to.String(), stamp); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=? AND outstanding_at=?`, to.String(), stamp); err != nil {

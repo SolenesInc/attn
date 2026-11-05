@@ -1,4 +1,4 @@
-export type Message = { id: string; text: string }
+export type Message = { id: string; text: string; user_words?: boolean; ring?: object }
 
 export type Request = { id: string; kind: 'compact' } | ({ kind?: 'input' } & Message)
 

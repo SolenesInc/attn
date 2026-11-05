@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/harness"
@@ -29,6 +31,7 @@ const (
 	fakeModOutcomeSubmit = "submitted"
 	fakeModKindCompact   = "compact"
 	fakeModTurnRunning   = "a turn is running"
+	fakeModPollRetry     = time.Second
 )
 
 const (
@@ -64,9 +67,11 @@ type ModEvent struct {
 }
 
 type fakeModMessage struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	Text string `json:"text"`
+	ID        string          `json:"id"`
+	Kind      string          `json:"kind,omitempty"`
+	Text      string          `json:"text"`
+	UserWords bool            `json:"user_words,omitempty"`
+	Ring      json.RawMessage `json:"ring,omitempty"`
 }
 
 type fakeMod struct {
@@ -85,6 +90,7 @@ type fakeMod struct {
 	working  bool
 	stopped  bool
 	held     []fakeModMessage
+	back     []fakeModMessage
 
 	nextCompact ModCompactReport
 	compactHold *fakeModCompactHold
@@ -130,13 +136,18 @@ func (m *fakeMod) load() {
 func (m *fakeMod) pollLoop(ctx context.Context, instance string) {
 	query := url.Values{"terminal": {m.terminal}, "instance": {instance}}.Encode()
 	for ctx.Err() == nil {
+		m.sendGivenBack(instance)
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://attn/claude/next?"+query, nil)
 		if err != nil {
 			return
 		}
 		response, err := m.client.Do(request)
 		if err != nil {
-			return
+			select {
+			case <-ctx.Done():
+			case <-time.After(fakeModPollRetry):
+			}
+			continue
 		}
 		body, err := io.ReadAll(response.Body)
 		response.Body.Close()
@@ -174,16 +185,47 @@ func (m *fakeMod) place(instance string, message fakeModMessage) {
 	default:
 		m.working = true
 		m.mu.Unlock()
-		m.submit(instance, message.Text, message.ID)
+		m.submit(instance, message.Text, fakeModMessage{ID: message.ID})
 	}
 }
 
-func (m *fakeMod) submit(instance, text string, ids ...string) {
+func (m *fakeMod) submit(instance, text string, messages ...fakeModMessage) {
 	m.agent.term.print(fakeModPromptMarker)
 	m.agent.place(text, true)
-	for _, id := range ids {
-		m.ack(instance, id, fakeModOutcomeSubmit)
+	for _, message := range messages {
+		m.ackHeld(instance, message, fakeModOutcomeSubmit)
 	}
+}
+
+func (m *fakeMod) ackHeld(instance string, message fakeModMessage, outcome string) {
+	m.post("/claude/ack", map[string]any{"terminal": m.terminal, "instance": instance, "id": message.ID, "outcome": outcome, "ring": message.Ring})
+}
+
+func (m *fakeMod) sendGivenBack(instance string) {
+	m.mu.Lock()
+	back := m.back
+	m.mu.Unlock()
+	if len(back) == 0 {
+		return
+	}
+	data, err := json.Marshal(map[string]any{"terminal": m.terminal, "instance": instance, "returns": back})
+	if err != nil {
+		return
+	}
+	response, err := m.client.Post("http://attn/claude/return", "application/json", bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	var answer struct {
+		Settled []string `json:"settled"`
+	}
+	if json.NewDecoder(response.Body).Decode(&answer) != nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.back = slices.DeleteFunc(m.back, func(message fakeModMessage) bool { return slices.Contains(answer.Settled, message.ID) })
 }
 
 func (m *fakeMod) post(path string, body any) {
@@ -225,11 +267,11 @@ func (m *fakeMod) turnCompleted() {
 	if len(held) == 0 {
 		return
 	}
-	texts, ids := make([]string, 0, len(held)), make([]string, 0, len(held))
+	texts := make([]string, 0, len(held))
 	for _, message := range held {
-		texts, ids = append(texts, message.Text), append(ids, message.ID)
+		texts = append(texts, message.Text)
 	}
-	go m.submit(instance, strings.Join(texts, "\n\n"), ids...)
+	go m.submit(instance, strings.Join(texts, "\n\n"), held...)
 }
 
 func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, error) {
@@ -356,7 +398,7 @@ func (m *fakeMod) toolBoundary() []string {
 	m.mu.Unlock()
 	appended := make([]string, 0, len(held))
 	for _, message := range held {
-		m.ack(instance, message.ID, fakeModOutcomeAppend)
+		m.ackHeld(instance, message, fakeModOutcomeAppend)
 		appended = append(appended, message.Text)
 	}
 	return appended
@@ -366,12 +408,13 @@ func (m *fakeMod) esc() []string {
 	m.mu.Lock()
 	held, instance := m.held, m.instance
 	m.held, m.working, m.stopped = nil, false, true
+	m.back = append(m.back, held...)
 	m.mu.Unlock()
-	ids, texts := make([]string, 0, len(held)), make([]string, 0, len(held))
+	texts := make([]string, 0, len(held))
 	for _, message := range held {
-		ids, texts = append(ids, message.ID), append(texts, message.Text)
+		texts = append(texts, message.Text)
 	}
-	m.post("/claude/return", map[string]any{"terminal": m.terminal, "instance": instance, "ids": ids})
+	m.sendGivenBack(instance)
 	return texts
 }
 
@@ -381,7 +424,7 @@ func (m *fakeMod) stopPolling() {
 	if m.cancel != nil {
 		m.cancel()
 	}
-	m.held, m.working = nil, false
+	m.held, m.back, m.working = nil, nil, false
 }
 
 func (m *fakeMod) reload() {

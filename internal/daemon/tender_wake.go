@@ -201,6 +201,11 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_wake=%s does not wake its tender for this mail", seed.ID, setting)
 		return receipt, nil
 	}
+	if host := d.unreachableSessionHost(sessionID); host != "" {
+		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and its tender's outpost %s is unreachable; attn tries again in %s", seed.ID, d.outpostName(host), inbox.AttemptDelay)
+		d.armInboxLocked(a, state, inbox.AttemptDelay)
+		return receipt, nil
+	}
 	claude := false
 	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
 		claude = true

@@ -239,10 +239,11 @@ wakes resumes a shorter conversation. End your turn right after the command.
 Mail you read before the compact ends the standby, and you stay open. Mail you
 leave unread does not cancel the close: the session closes and the mail wakes it
 again. Mail that arrives during the compact waits until the session has closed.
-Only a Claude session with the Claude mod and a Codex session on the shared
-Codex app server compact: attn refuses --compact for any other session and
-leaves standby unset, and the refusal names the setting to turn on,
-claude_mod_enabled or codex_shared_enabled.
+Only a Claude session on the home machine with the Claude mod and a Codex session
+on the shared Codex app server compact: attn refuses --compact for any other
+session and leaves standby unset. The refusal names the setting to turn on,
+claude_mod_enabled or codex_shared_enabled, except for a Claude session on an
+outpost, which attn cannot compact: run the command again without --compact.
 Only the seed's tender sets standby. A Claude session needs claude_mod_enabled
 when it launched. --clear ends standby.
 Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close`, []string{"m", "close", "compact", "clear", "json"}, false},

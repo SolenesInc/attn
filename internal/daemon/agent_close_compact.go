@@ -51,6 +51,9 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 			"this Codex session does not run on the shared Codex app server, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Codex sessions launched after that can close with --compact. Close without --compact instead",
 			SettingCodexSharedEnabled, SettingCodexSharedEnabled)}
 	case string(protocol.SessionAgentClaude):
+		if d.sessionHost(target.ID) != "" {
+			return &agentCloseRefusal{"compact_unavailable", "attn cannot compact a Claude session on an outpost yet, even with its mod connected. Close without --compact instead"}
+		}
 		if d.claudeMod().reachable(d.sessionMonitor(target.ID).LinkTarget().Terminal) {
 			return nil
 		}

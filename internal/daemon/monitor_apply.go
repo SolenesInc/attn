@@ -78,6 +78,9 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 			r.notifyViewsChanged()
 		}
 		r.applyMu.Unlock()
+		if view.State.V.Sequence != previous.State.V.Sequence {
+			d.claudeMod().placeReturned(session)
+		}
 		return true
 	}
 	if previous.Epoch.V == view.Epoch.V && previous.Revision.V >= view.Revision.V {

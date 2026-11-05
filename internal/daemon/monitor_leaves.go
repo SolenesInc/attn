@@ -20,6 +20,9 @@ func (d *Daemon) registerMonitorParts(parts map[string]machinePart) {
 	runs(parts, false, d.placeSessionInput)
 	runs(parts, false, d.changePullRequestLink)
 	runs(parts, false, d.saveSessionPullRequest)
+	runs(parts, false, d.settleInboxRing)
+	runs(parts, true, d.readClaudeModReach)
+	runs(parts, false, d.receiveClaudeModReachReport)
 	runs(parts, false, d.renameLink)
 	runs(parts, true, d.readTranscriptActivity)
 	runs(parts, true, d.readMonitorAssistantWindow)
@@ -88,7 +91,11 @@ func (d *Daemon) placeSessionInput(ctx context.Context, msg protocol.SessionPlac
 	if monitor == nil {
 		return protocol.SessionPlaceResult{}, fmt.Errorf("session %s: no monitor runs it", msg.SessionID)
 	}
-	return monitor.Place(ctx, sessionmonitor.DeliveryFromMessage(msg)).Result(), nil
+	result := monitor.Place(ctx, sessionmonitor.DeliveryFromMessage(msg)).Result()
+	if d.claudeMod().holds(msg.DeliveryID) {
+		result.Held = protocol.Ptr(true)
+	}
+	return result, nil
 }
 
 type placementCallError struct{ error }

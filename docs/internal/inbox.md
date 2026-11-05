@@ -239,12 +239,12 @@ that input. A ring lost to an open menu in the harness stays lost.
 ### With the Claude mod
 
 With the experimental `claude_mod_enabled` setting on, a Claude session's mod
-takes each ring instead of the terminal while the mod is connected. attn types as
-usual while the mod is not connected, such as while Claude starts or waits on its
-folder trust question, and on an outpost, where the inbox lives on another
-daemon. The exception is a Claude session that attn resumed for a standby seed's
-mail: attn waits for its mod and never types (see
-[A seed on standby](#a-seed-on-standby)). With the mod connected:
+takes each ring instead of the terminal while the mod is connected, on the home
+and on an outpost. attn types as usual while the mod is not connected, such as
+while Claude starts or waits on its folder trust question. The exception is a
+Claude session that attn resumed for a standby seed's mail: attn waits for its
+mod and never types (see [A seed on standby](#a-seed-on-standby)). With the mod
+connected:
 
 - After the user stops the session with Esc while Claude works, the mod refuses
   every ring. Its items stay unread, the refusal costs no attempt, and attn rings
@@ -255,8 +255,22 @@ mail: attn waits for its mod and never types (see
   attempt and outstanding ring, and rings again. The app shows a Quick Capture
   or a seed authorization change from that ring as read or typed while the mod
   holds it, then as waiting again once the mod gives it back, until the next
-  ring places it. A daemon restart while the mod holds a ring loses that ring's
-  user input, because attn keeps what the mod holds in memory.
+  ring places it.
+- The inbox lives on the home, and the daemon that runs the session reports each
+  placement and give-back to the home. A report made while the home is restarting
+  or its link is down waits on that daemon and reaches the home when the link comes
+  back. A report the home refuses, such as for a store error, is logged and dropped.
+- The mod keeps each ring it holds with the ring's record, and each message it gives
+  back until attn has settled the give-back at the home. So a restart of the daemon
+  that runs the session loses no ring while Claude and its mod keep running, and no
+  user's words the mod still holds. attn loses a held ring, or a give-back still
+  waiting, only when the daemon and the mod die together: the daemon restarts and
+  Claude exits or the mod reloads before the mod has handed it back, as an upgrade
+  that changes the mod does. The ring's user input is then lost and its attempt
+  stays spent. A restart also loses the user's words the mod gave back that wait
+  for an empty composer or a prompt, because the daemon keeps those in memory. A
+  "placed" report waiting at a restart is lost too, so a seed on standby stays on
+  standby until the tender next reads its mail.
 - While a running turn waits on a permission question, the mod takes a ring it
   would take during that turn. It holds the ring until the question closes,
   because the mod's delivery cannot answer the question. Refusing the question,
@@ -393,7 +407,7 @@ the session tends is on standby and has unread seed mail. The refusal names
 
 With `--compact`, the close waits for the turn to end and then places the
 compact in the session's input lane, through the Claude mod or the shared Codex
-app server. A ring placed before the compact makes the compact wait for the next
+app server. attn refuses `--compact` for a Claude session on an outpost. A ring placed before the compact makes the compact wait for the next
 idle. Once the compact is placed, the lane holds every later item until the
 session has closed, and seed mail that arrives then wakes the closed tender as
 above. A compact that meets a running turn opens the lane again and retries at

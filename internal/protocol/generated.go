@@ -1941,6 +1941,35 @@ type ChiefOfStaffResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ClaudeModReachChange string
+
+const ClaudeModReachChangeChanged ClaudeModReachChange = "changed"
+const ClaudeModReachChangeFirstPollMissed ClaudeModReachChange = "first_poll_missed"
+
+type ClaudeModReachMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type ClaudeModReachReportMessage struct {
+	// Change corresponds to the JSON schema field "change".
+	Change ClaudeModReachChange `json:"change"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type ClaudeModReachResult struct {
+	// Reachable corresponds to the JSON schema field "reachable".
+	Reachable bool `json:"reachable"`
+}
+
 type ClearAnalyticsRecordsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5531,6 +5560,48 @@ type HookStopFailureMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
+}
+
+type InboxRingOutcome string
+
+const InboxRingOutcomePlaced InboxRingOutcome = "placed"
+const InboxRingOutcomeReturned InboxRingOutcome = "returned"
+
+type InboxRingRecord struct {
+	// Address corresponds to the JSON schema field "address".
+	Address string `json:"address"`
+
+	// AuthorizedSeeds corresponds to the JSON schema field "authorized_seeds".
+	AuthorizedSeeds []string `json:"authorized_seeds,omitempty,omitzero"`
+
+	// Captures corresponds to the JSON schema field "captures".
+	Captures []string `json:"captures,omitempty,omitzero"`
+
+	// Notified corresponds to the JSON schema field "notified".
+	Notified bool `json:"notified"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Stamp corresponds to the JSON schema field "stamp".
+	Stamp string `json:"stamp"`
+
+	// Typed corresponds to the JSON schema field "typed".
+	Typed []string `json:"typed,omitempty,omitzero"`
+}
+
+type InboxRingSettleMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DeliveryID corresponds to the JSON schema field "delivery_id".
+	DeliveryID string `json:"delivery_id"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome InboxRingOutcome `json:"outcome"`
+
+	// Ring corresponds to the JSON schema field "ring".
+	Ring InboxRingRecord `json:"ring"`
 }
 
 type InitialStateMessage struct {
@@ -12075,6 +12146,9 @@ type SessionPlaceMessage struct {
 	// "require_empty_composer".
 	RequireEmptyComposer *bool `json:"require_empty_composer,omitempty,omitzero"`
 
+	// Ring corresponds to the JSON schema field "ring".
+	Ring *InboxRingRecord `json:"ring,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 
@@ -12105,6 +12179,9 @@ type SessionPlaceResult struct {
 
 	// ErrorKind corresponds to the JSON schema field "error_kind".
 	ErrorKind *SessionPlaceErrorKind `json:"error_kind,omitempty,omitzero"`
+
+	// Held corresponds to the JSON schema field "held".
+	Held *bool `json:"held,omitempty,omitzero"`
 
 	// RetryAfterMs corresponds to the JSON schema field "retry_after_ms".
 	RetryAfterMs *int `json:"retry_after_ms,omitempty,omitzero"`
