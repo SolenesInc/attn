@@ -10172,6 +10172,9 @@ type SeedListMessage struct {
 
 	// StaleWindowSeconds corresponds to the JSON schema field "stale_window_seconds".
 	StaleWindowSeconds *int `json:"stale_window_seconds,omitempty,omitzero"`
+
+	// Standby corresponds to the JSON schema field "standby".
+	Standby *bool `json:"standby,omitempty,omitzero"`
 }
 
 type SeedListResult struct {
@@ -11074,6 +11077,9 @@ type SeedStandbyView struct {
 	// Note corresponds to the JSON schema field "note".
 	Note string `json:"note"`
 
+	// PullRequests corresponds to the JSON schema field "pull_requests".
+	PullRequests []SeedWatchedPullRequest `json:"pull_requests"`
+
 	// SetAt corresponds to the JSON schema field "set_at".
 	SetAt string `json:"set_at"`
 
@@ -11217,6 +11223,20 @@ type SeedWatchResult struct {
 
 	// WatchingVia corresponds to the JSON schema field "watching_via".
 	WatchingVia []string `json:"watching_via"`
+}
+
+type SeedWatchedPullRequest struct {
+	// PRID corresponds to the JSON schema field "pr_id".
+	PRID string `json:"pr_id"`
+
+	// ReadinessState corresponds to the JSON schema field "readiness_state".
+	ReadinessState string `json:"readiness_state"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
 }
 
 type SenderListMessage struct {

@@ -5541,9 +5541,20 @@ model SeedStandbyView {
   "note": string;
   "set_at": string;
   "set_by": ActorView;
+  // The pull requests the seed's mailbox watches.
+  "pull_requests": SeedWatchedPullRequest[];
   // Why the last tender wake could not happen and will not retry by itself.
   // Absent while nothing blocks a wake.
   "wake_blocked"?: string;
+}
+
+// A pull request a seed's mailbox watches. `state` is the pull request's own
+// state (open, merged, closed); `readiness_state` is the watch's verdict.
+model SeedWatchedPullRequest {
+  "pr_id": string;
+  "url": string;
+  "state": string;
+  "readiness_state": string;
 }
 
 // What a seed waits on before it harvests itself. The daemon settles it when the
@@ -5944,6 +5955,8 @@ model SeedListMessage {
   "stale_window_seconds"?: int32;
   // Only the direct children of this plot, closed ones included.
   "plot"?: string;
+  // Only seeds on standby.
+  "standby"?: boolean;
 }
 
 model SeedListResult {

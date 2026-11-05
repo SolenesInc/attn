@@ -297,6 +297,10 @@ yourself wakes the same way while its seed is on standby. A closed session
 whose seed isn't on standby stays closed, and its mail waits for the next
 tender. To keep an agent closed, park or wither its seed.
 
+`attn seed ls --standby` lists the seeds on standby. Each row shows the pull
+requests the seed watches with their readiness, the seed's reminder, and why
+Attn can't wake the agent when a wake is blocked.
+
 A woken agent ends its turn by going on standby again, by harvesting the seed,
 by asking you with `attn ask`, or by reporting. Like any agent that stops, it is
 owed a turn in your queue.

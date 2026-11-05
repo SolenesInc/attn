@@ -694,3 +694,85 @@ func TestTheSessionAboveAClosedTenderOnStandbyMovesItsSeedWithoutForce(t *testin
 		t.Fatalf("the parent parked %s into %q", delegated.SeedID, parked.Status)
 	}
 }
+
+func standbyPullRequests(m protocol.GardenSeedsChangedMessage, seed string, want func([]protocol.SeedWatchedPullRequest) bool) bool {
+	for _, s := range m.Seeds {
+		if s.ID == seed && s.Standby != nil && want(s.Standby.PullRequests) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestSeedsOnStandbyListWithTheirPullRequestWatchesAndTheGardenFollowsTheWatch(t *testing.T) {
+	gh := serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN", mergeStateStatus: "BLOCKED"})
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "garden.tender_wake", "off")
+		watcher := w.Spawn(app, fakeagent.Codex, w.Path("watcher"))
+		tender := w.Spawn(app, fakeagent.Codex, w.Path("tender"))
+		onStandby := plantSeedAs(t, cli, tender, "Merge the readiness check once approved")
+		moveDelegationSeed(t, cli, tender, onStandby, "tend", "")
+		growing := plantSeedAs(t, cli, watcher, "Ship the readiness check")
+		moveDelegationSeed(t, cli, watcher, growing, "tend", "")
+		asTender := cli.WithGardenProfile("", protocol.SessionID(tender))
+		if _, err := asTender.SeedReminder(onStandby, client.SeedReminderOptions{In: "20m", Message: "Check the canary"}); err != nil {
+			t.Fatalf("seed remind %s: %v", onStandby, err)
+		}
+		if _, err := asTender.SeedStandby(onStandby, client.SeedStandbyOptions{Note: standbyNote, Close: true}); err != nil {
+			t.Fatalf("seed standby --close %s: %v", onStandby, err)
+		}
+		watchPullRequestAs(t, cli, watcher, growing, protocol.PullRequestWatchModeGreen, "")
+		readiness := func() string { return protocol.Deref(onlySeedPullRequest(t, cli, watcher, onStandby).ReadinessState) }
+
+		mark := len(app.Log())
+		watchPullRequestAs(t, cli, watcher, onStandby, protocol.PullRequestWatchModeGreen, "")
+		testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+			return standbyPullRequests(m, onStandby, func(prs []protocol.SeedWatchedPullRequest) bool {
+				return len(prs) == 1 && prs[0].URL == watchedPullRequestURL
+			})
+		})
+		w.advance(time.Second)
+		if got := readiness(); got != "blocked" {
+			t.Fatalf("the watch of %s reads %q, want the pull request blocked", onStandby, got)
+		}
+
+		mark = len(app.Log())
+		gh.set(func(gh *watchedPullRequestGitHub) { gh.mergeStateStatus = "CLEAN" })
+		w.advance(protocol.HeatHotInterval)
+		if got := readiness(); got != "ready" {
+			t.Fatalf("the watch of %s reads %q after the pull request cleared, want it ready", onStandby, got)
+		}
+		testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+			return standbyPullRequests(m, onStandby, func(prs []protocol.SeedWatchedPullRequest) bool {
+				return len(prs) == 1 && prs[0].ReadinessState == "ready"
+			})
+		})
+
+		listed, err := cli.SeedListStandby(protocol.SessionID(watcher))
+		if err != nil {
+			t.Fatalf("seed ls --standby: %v", err)
+		}
+		if len(listed.Seeds) != 1 || listed.Total != 1 || listed.Seeds[0].ID != onStandby {
+			t.Fatalf("seed ls --standby = %+v, want only %s and not %s, whose pull request watch does not put it on standby", listed.Seeds, onStandby, growing)
+		}
+		row := listed.Seeds[0]
+		if row.Standby == nil || row.Standby.Note != standbyNote {
+			t.Fatalf("the standby row of %s = %+v, want its note", row.ID, row.Standby)
+		}
+		if prs := row.Standby.PullRequests; len(prs) != 1 || prs[0].PRID == "" || prs[0].URL != watchedPullRequestURL || prs[0].State != "open" || prs[0].ReadinessState != "ready" {
+			t.Fatalf("the standby row of %s watches %+v, want the open pull request read ready", row.ID, prs)
+		}
+		if row.Reminder == nil || row.Reminder.Message != "Check the canary" {
+			t.Fatalf("the standby row of %s carries reminder %+v, want its reminder", row.ID, row.Reminder)
+		}
+
+		mark = len(app.Log())
+		if err := cli.UnwatchSessionPullRequest(protocol.SessionID(watcher), onStandby, watchedPullRequestURL); err != nil {
+			t.Fatalf("unwatch the pull request for %s: %v", onStandby, err)
+		}
+		testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+			return standbyPullRequests(m, onStandby, func(prs []protocol.SeedWatchedPullRequest) bool { return len(prs) == 0 })
+		})
+	})
+}

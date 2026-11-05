@@ -75,6 +75,14 @@ func (c *Client) SeedListPlot(sessionID protocol.SessionID, plotID string) (*pro
 	return c.seedList(msg)
 }
 
+func (c *Client) SeedListStandby(sessionID protocol.SessionID) (*protocol.SeedListResult, error) {
+	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList, Standby: protocol.Ptr(true)}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	return c.seedList(msg)
+}
+
 func (c *Client) seedList(msg protocol.SeedListMessage) (*protocol.SeedListResult, error) {
 	resp, err := c.send(msg)
 	if err != nil {

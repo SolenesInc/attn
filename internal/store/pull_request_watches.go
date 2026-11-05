@@ -193,41 +193,52 @@ type WatchedPullRequest struct {
 }
 
 func (s *Store) PullRequestWatchesTo(to who.Address) ([]WatchedPullRequest, error) {
+	return s.watchedPullRequests(`w.address=?`, to.String())
+}
+
+func (s *Store) PullRequestWatchesToSeedsOnStandby() (map[string][]WatchedPullRequest, error) {
+	watched, err := s.watchedPullRequests(`w.address IN (SELECT 'seed:' || seed_id FROM seed_standby)`)
+	if err != nil {
+		return nil, err
+	}
+	bySeed := map[string][]WatchedPullRequest{}
+	for _, w := range watched {
+		seedID, _ := w.Watch.To.TenderOf()
+		bySeed[seedID] = append(bySeed[seedID], w)
+	}
+	return bySeed, nil
+}
+
+func (s *Store) watchedPullRequests(where string, args ...any) ([]WatchedPullRequest, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return nil, errors.New("store has no database")
 	}
-	watchRows, err := s.db.Query(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE address=? ORDER BY created_at, pr_id`, to.String())
+	rows, err := s.db.Query(`
+		SELECT `+qualifiedColumns("w", pullRequestWatchColumns)+`, `+qualifiedColumns("pr", sessionPullRequestColumns)+`
+		FROM pull_request_watches w
+		JOIN session_pull_requests pr ON pr.session_id=w.session_id AND pr.pr_id=w.pr_id
+		WHERE `+where+`
+		ORDER BY w.created_at, w.pr_id`, args...)
 	if err != nil {
 		return nil, err
 	}
-	watches, err := scanPullRequestWatches(watchRows)
-	watchRows.Close()
-	if err != nil {
-		return nil, err
-	}
-	recordRows, err := s.db.Query(`
-		SELECT `+sessionPullRequestColumns+` FROM session_pull_requests pr
-		WHERE EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.address=? AND w.session_id=pr.session_id AND w.pr_id=pr.pr_id)`, to.String())
-	if err != nil {
-		return nil, err
-	}
-	records, err := scanSessionPullRequests(recordRows)
-	recordRows.Close()
-	if err != nil {
-		return nil, err
-	}
-	watched := make([]WatchedPullRequest, 0, len(watches))
-	for _, watch := range watches {
-		for _, rec := range records {
-			if rec.SessionID == watch.SessionID && rec.PRID == watch.PRID {
-				watched = append(watched, WatchedPullRequest{Watch: watch, Record: rec})
-				break
-			}
+	defer rows.Close()
+	var watched []WatchedPullRequest
+	for rows.Next() {
+		var w WatchedPullRequest
+		var address, mode, cursorJSON string
+		targets := append(w.Watch.scanTargets(&address, &mode, &cursorJSON), w.Record.scanTargets()...)
+		if err := rows.Scan(targets...); err != nil {
+			return nil, err
 		}
+		if err := w.Watch.decode(address, mode, cursorJSON); err != nil {
+			return nil, err
+		}
+		watched = append(watched, w)
 	}
-	return watched, nil
+	return watched, rows.Err()
 }
 
 func (s *Store) WatchedSessionPullRequests() []SessionPullRequestRecord {
@@ -413,26 +424,42 @@ func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol
 	return delivery, previousError != message, nil
 }
 
+func qualifiedColumns(table, columns string) string {
+	names := strings.Split(columns, ",")
+	for i, name := range names {
+		names[i] = table + "." + strings.TrimSpace(name)
+	}
+	return strings.Join(names, ", ")
+}
+
 type pullRequestWatchScanner interface{ Scan(...any) error }
 
 func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
 	var address, mode, cursorJSON string
-	if err := row.Scan(&address, &watch.SessionID, &watch.PRID, &mode, &watch.Reviewer, &watch.CreatedAt,
-		&cursorJSON, &watch.LastError, &watch.FeedbackError, &watch.OutageActive,
-		&watch.ReadinessState, &watch.ReadinessReason, &watch.SettlingUntil, &watch.LastCheckedAt); err != nil {
+	if err := row.Scan(watch.scanTargets(&address, &mode, &cursorJSON)...); err != nil {
 		return PullRequestWatch{}, err
 	}
-	var err error
-	watch.To, err = who.ParseAddress(address)
-	if err != nil {
-		return PullRequestWatch{}, err
-	}
-	watch.Mode = prreadiness.Mode(mode)
-	if err := json.Unmarshal([]byte(cursorJSON), &watch.Cursor); err != nil {
+	if err := watch.decode(address, mode, cursorJSON); err != nil {
 		return PullRequestWatch{}, err
 	}
 	return watch, nil
+}
+
+func (w *PullRequestWatch) scanTargets(address, mode, cursorJSON *string) []any {
+	return []any{address, &w.SessionID, &w.PRID, mode, &w.Reviewer, &w.CreatedAt,
+		cursorJSON, &w.LastError, &w.FeedbackError, &w.OutageActive,
+		&w.ReadinessState, &w.ReadinessReason, &w.SettlingUntil, &w.LastCheckedAt}
+}
+
+func (w *PullRequestWatch) decode(address, mode, cursorJSON string) error {
+	to, err := who.ParseAddress(address)
+	if err != nil {
+		return err
+	}
+	w.To = to
+	w.Mode = prreadiness.Mode(mode)
+	return json.Unmarshal([]byte(cursorJSON), &w.Cursor)
 }
 
 func scanPullRequestWatches(rows *sql.Rows) ([]PullRequestWatch, error) {

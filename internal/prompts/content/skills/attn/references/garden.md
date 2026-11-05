@@ -217,6 +217,13 @@ seed gets a new tender. A new standby replaces the note. Write down anything
 the user approved up front, such as "merge once approved". The session that
 wakes may have compacted its conversation, and the note is what it reads first.
 
+`attn seed ls --standby` lists the seeds on standby. Each row names the pull
+requests the seed's mailbox watches with their readiness, the seed's reminder,
+and why attn cannot wake the tender when a wake is blocked:
+
+    s-7k3f9m  origin-check  growing  …  Enforce delivery origin  [standby: owner/repo#123 ready, reminder 2026-11-05 14:20]
+    s-2b8n4q  zip-retry     growing  …  Retry zip unpack         [standby: owner/repo#118 open · wake blocked: worktree removed]
+
 `--close` closes your session in the same move, as `attn agent close --self`
 does. attn refuses it while the seed has unread mail and names
 `attn agent inbox`. Read the mail, then run the command again.

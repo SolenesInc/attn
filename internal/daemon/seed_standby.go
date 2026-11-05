@@ -198,14 +198,41 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 		return nil
 	}
 	view := &protocol.SeedStandbyView{
-		Note:  standby.Note,
-		SetAt: formatGardenTime(standby.SetAt),
-		SetBy: g.parties.actor(standby.SetBy),
+		Note:         standby.Note,
+		SetAt:        formatGardenTime(standby.SetAt),
+		SetBy:        g.parties.actor(standby.SetBy),
+		PullRequests: make([]protocol.SeedWatchedPullRequest, 0, len(g.watches[seed.ID])),
+	}
+	for _, w := range g.watches[seed.ID] {
+		view.PullRequests = append(view.PullRequests, protocol.SeedWatchedPullRequest{
+			PRID: w.Watch.PRID, URL: w.Record.URL, State: w.Record.State, ReadinessState: w.Watch.ReadinessState,
+		})
 	}
 	if blocked := g.daemon.tenderWakes.blockedReason(seed.ID); blocked != "" {
 		view.WakeBlocked = protocol.Ptr(blocked)
 	}
 	return view
+}
+
+func (d *Daemon) projectGardenWhileSeedsOnStandby() {
+	onStandby, err := d.store.SeedsOnStandby()
+	if err != nil {
+		d.logf("standby: list seeds on standby for a pull request change: %v", err)
+		return
+	}
+	if len(onStandby) > 0 {
+		d.projectGardenSeeds()
+	}
+}
+
+func (g gardenRead) onStandby(seeds []garden.Seed) []garden.Seed {
+	var out []garden.Seed
+	for _, seed := range seeds {
+		if row, found := g.parties.standby[seed.ID]; found && standbyOf(seed, &row) != nil {
+			out = append(out, seed)
+		}
+	}
+	return out
 }
 
 func standbyOf(seed garden.Seed, row *store.SeedStandby) *garden.Standby {

@@ -201,7 +201,10 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactSessionPullRequestChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
+			apply: func(d *Daemon, ev bus.Event) {
+				d.projectSessionStateChanged(protocol.SessionID(ev.Subject))
+				d.projectGardenWhileSeedsOnStandby()
+			},
 		},
 		{
 			filter: bus.Filter{FactSessionReregistered, FactSessionRenamed},

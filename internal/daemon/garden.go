@@ -201,6 +201,7 @@ type gardenRead struct {
 	ready     map[string]bool
 	plots     garden.PlotTree
 	reminders map[string]garden.Reminder
+	watches   map[string][]store.WatchedPullRequest
 }
 
 type gardenSeeds struct {
@@ -228,8 +229,14 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	if err != nil {
 		return gardenRead{}, err
 	}
+	var watches map[string][]store.WatchedPullRequest
+	if len(parties.standby) > 0 {
+		if watches, err = d.store.PullRequestWatchesToSeedsOnStandby(); err != nil {
+			return gardenRead{}, err
+		}
+	}
 	seeds := all.inProfile(firstProfile(profileID))
-	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders}
+	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders, watches: watches}
 	for _, seed := range garden.Ready(out.seeds, parties.claimHolds) {
 		out.ready[seed.ID] = true
 	}
@@ -884,6 +891,10 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 		}
 		result.Total = len(seeds)
 		result.StaleWindowSeconds = protocol.Ptr(int(window / time.Second))
+	}
+	if protocol.Deref(msg.Standby) {
+		seeds = read.onStandby(seeds)
+		result.Total = len(seeds)
 	}
 	result.Seeds = read.rows(seeds[:min(len(seeds), gardenSnapshotLimit)])
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedListResult: result})

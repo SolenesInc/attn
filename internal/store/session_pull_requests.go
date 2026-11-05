@@ -354,15 +354,19 @@ func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error)
 	var records []SessionPullRequestRecord
 	for rows.Next() {
 		var rec SessionPullRequestRecord
-		if err := rows.Scan(
-			&rec.SessionID, &rec.PRID, &rec.Repository, &rec.Number, &rec.URL, &rec.CreatedAt,
-			&rec.Title, &rec.Draft, &rec.State, &rec.CIStatus, &rec.ReviewStatus,
-			&rec.MergeableState, &rec.HeadSHA, &rec.HeadBranch, &rec.StatusFetchedAt, &rec.LastActivityAt,
-			&rec.StatusCheckedAt,
-		); err != nil {
+		if err := rows.Scan(rec.scanTargets()...); err != nil {
 			return nil, err
 		}
 		records = append(records, rec)
 	}
 	return records, rows.Err()
+}
+
+func (rec *SessionPullRequestRecord) scanTargets() []any {
+	return []any{
+		&rec.SessionID, &rec.PRID, &rec.Repository, &rec.Number, &rec.URL, &rec.CreatedAt,
+		&rec.Title, &rec.Draft, &rec.State, &rec.CIStatus, &rec.ReviewStatus,
+		&rec.MergeableState, &rec.HeadSHA, &rec.HeadBranch, &rec.StatusFetchedAt, &rec.LastActivityAt,
+		&rec.StatusCheckedAt,
+	}
 }

@@ -64,6 +64,7 @@ When attn sends an update notification, run the read that the notification names
     attn seed watch <id>             watch this seed and its descendants. `unwatch` removes the subscription
     attn seed remind <id> --in 20m -m "…"    post the message to the seed's mailbox at that time, for whoever tends the seed then. A new reminder replaces the old one. `--clear` removes it
     attn seed standby <id> -m "…" [--close]    wait for mail on the seed, with a note for whoever wakes. `--close` also closes you. `--clear` ends it
+    attn seed ls --standby           the seeds on standby, with the pull requests each watches, its reminder, and a blocked wake
     attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership, replacing a file of the same name. Prefer Move
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere

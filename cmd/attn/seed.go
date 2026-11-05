@@ -142,12 +142,15 @@ up to 3 similar open seeds across all planted titles, each naming the
 new seed it resembles. Planting always proceeds; wither a new seed if a
 suggestion is the same work.
 --json prints the whole result, including similar seeds.`, []string{"f", "json"}, false},
-	{`ls`, `ls [--plot <plot> | --stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
+	{`ls`, `ls [--plot <plot> | --stale [--window <duration>] | --standby] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
 --flat prints one list. --plot lists every child of one plot, oldest
 first, harvested and withered included. --stale narrows to open seeds
 whose log has not moved for the window (default %s) — a query for
-your judgment, never a reaper. --json prints the table's rows,
-without bodies or checks; attn seed show <id> reads one seed whole.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
+your judgment, never a reaper. --standby narrows to seeds on standby,
+each with the pull requests it watches and their readiness, its
+reminder, and why a wake is blocked when one is. --json prints the
+table's rows, without bodies or checks; attn seed show <id> reads one
+seed whole.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "standby", "flat", "json"}, true},
 	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by words across your profile's garden, harvested and withered
 included: titles, bodies and log entries. Words match as stemmed prefixes;
 identifier parts match too. Seeds carrying some words also appear.
@@ -338,6 +341,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`flat`, ``, `print a listing without nesting`, func(f *seedFlags) { f.fs.BoolVar(&f.flat, "flat", false, "") }},
 	{`stale`, ``, `only open seeds whose log has not moved`, func(f *seedFlags) { f.fs.BoolVar(&f.stale, "stale", false, "") }},
 	{`window`, `<d>`, `the stale window, like 72h or 14d (with --stale)`, func(f *seedFlags) { f.fs.StringVar(&f.window, "window", "", "") }},
+	{`standby`, ``, `only seeds on standby`, func(f *seedFlags) { f.fs.BoolVar(&f.standby, "standby", false, "") }},
 	{`f`, `<path>`, `the plot payload to read; - or omitted reads stdin`, func(f *seedFlags) { f.fs.StringVar(&f.file, "f", "", "") }},
 	{`handoff`, ``, `write a note to whoever tends the seed next`, func(f *seedFlags) { f.fs.BoolVar(&f.handoff, "handoff", false, "") }},
 	{`ring`, ``, `give the current tender and watchers a seed update after this note or check move lands, and print who gets it`, func(f *seedFlags) { f.fs.BoolVar(&f.ring, "ring", false, "") }},
@@ -511,6 +515,7 @@ type seedFlags struct {
 	all            bool
 	flat           bool
 	stale          bool
+	standby        bool
 	window         string
 	plot           string
 	partOf         string
@@ -787,11 +792,17 @@ func runSeedList(args []string) {
 	if plotID != "" && f.stale {
 		seedUsageError("ls", fmt.Errorf("--plot lists every child of the plot and --stale narrows the whole garden; pass one of them"))
 	}
+	if f.standby && (plotID != "" || f.stale) {
+		seedUsageError("ls", fmt.Errorf("--standby narrows the whole garden to seeds on standby; pass it without --plot or --stale"))
+	}
 	var result *protocol.SeedListResult
 	var err error
-	if plotID != "" {
+	switch {
+	case plotID != "":
 		result, err = f.client().SeedListPlot(f.sessionID(), plotID)
-	} else {
+	case f.standby:
+		result, err = f.client().SeedListStandby(f.sessionID())
+	default:
 		result, err = f.client().SeedList(f.sessionID(), f.stale, f.staleWindowSeconds())
 	}
 	if err != nil {
@@ -812,6 +823,10 @@ func runSeedList(args []string) {
 	if len(result.Seeds) == 0 {
 		if f.stale {
 			fmt.Println("none — every open seed has moved inside the window")
+			return
+		}
+		if f.standby {
+			fmt.Println("no seed is on standby — its tender puts one there with `attn seed standby <id> -m \"<what to do next>\"`")
 			return
 		}
 		fmt.Println("the garden is empty — `attn seed plant \"what this is\"` puts something in it")
@@ -973,7 +988,35 @@ func staleWindowLabel(seconds *int) string {
 }
 
 func seedRowSuffix(row protocol.SeedRow) string {
-	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen) + reminderSuffix(row.Reminder) + standbySuffix(row.Standby)
+	return plotProgressSuffix(row.PlotProgress) + checkTallyShort(seedRowCheckTally(row)) + harvestWhenSuffix(row.HarvestWhen) + standbyOrReminderSuffix(row.Standby, row.Reminder)
+}
+
+func standbyOrReminderSuffix(standby *protocol.SeedStandbyView, reminder *protocol.SeedReminder) string {
+	if standby == nil {
+		return reminderSuffix(reminder)
+	}
+	var waits []string
+	for _, pr := range standby.PullRequests {
+		waits = append(waits, strings.TrimSpace(pullRequestLabel(pr.PRID)+" "+watchedPullRequestState(pr)))
+	}
+	if reminder != nil {
+		waits = append(waits, "reminder "+shortStamp(reminder.At))
+	}
+	line := "standby"
+	if len(waits) > 0 {
+		line += ": " + strings.Join(waits, ", ")
+	}
+	if blocked := protocol.Deref(standby.WakeBlocked); blocked != "" {
+		line += " · wake blocked: " + blocked
+	}
+	return "  [" + line + "]"
+}
+
+func watchedPullRequestState(pr protocol.SeedWatchedPullRequest) string {
+	if pr.State == "open" && pr.ReadinessState != "" {
+		return pr.ReadinessState
+	}
+	return pr.State
 }
 
 func reminderSuffix(reminder *protocol.SeedReminder) string {
@@ -1381,16 +1424,6 @@ func runSeedStandby(args []string) {
 	if result.Close != nil {
 		printAgentClose(os.Stdout, result.Close)
 	}
-}
-
-func standbySuffix(standby *protocol.SeedStandbyView) string {
-	if standby == nil {
-		return ""
-	}
-	if blocked := protocol.Deref(standby.WakeBlocked); blocked != "" {
-		return "  [standby · wake blocked: " + blocked + "]"
-	}
-	return "  [standby]"
 }
 
 func reminderLine(r protocol.SeedReminder) string {
