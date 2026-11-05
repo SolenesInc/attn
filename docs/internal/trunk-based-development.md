@@ -56,6 +56,12 @@ process, while it chooses the landing tests. Both then read that one build. It
 waits for both and prints both outcomes, and a failure in either stops the
 push. The other checks run before them, because some rewrite tracked files.
 
+`land.sh` also warns, without stopping the push, when the landing undoes an
+earlier commit. It compares the landing with the last 30 commits on `main` that
+share a file with it, and names each commit whose whole change could be applied
+again on top of the landing. It misses a commit that the landing only partly
+undoes, and one whose lines a later commit changed.
+
 One land runs at a time per clone. `land.sh` takes the clone's land queue, a
 lock that every worktree of the clone shares, before its first fetch, and holds
 it until it exits. A land that finds the queue taken prints the holder's PID,

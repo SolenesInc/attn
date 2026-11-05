@@ -107,6 +107,34 @@ expect_checks() {
   diff -u <(go_checks_last "$work/expected") <(go_checks_last "$LAND_CHECK_LOG")
 }
 
+printf 'kept\n' >kept.txt
+land 'Add the kept file'
+if grep -qF 'WARNING' "$work/output"; then
+  echo 'a landing that undoes nothing warned' >&2
+  cat "$work/output" >&2
+  exit 1
+fi
+kept_commit="$(git log -1 --format='%h Add the kept file')"
+git rm -q kept.txt
+land 'Drop the kept file'
+expect_output 'WARNING: this landing undoes earlier commits on main'
+expect_output "$kept_commit"
+[ "$(tail -1 "$work/output" | cut -c1-5)" = 'land:' ] || { echo 'the warning is not the end of the output' >&2; cat "$work/output" >&2; exit 1; }
+seq 1 20 >counted.txt
+land 'Add the counted file'
+{ seq 1 3; echo kept; seq 4 20; } >counted.txt
+land 'Keep a line'
+seq 1 20 >counted.txt
+land 'Drop the line'
+expect_output 'Keep a line'
+{ seq 1 20; echo later; } >counted.txt
+land 'Add a later line'
+if grep -qF 'WARNING' "$work/output"; then
+  echo 'a landing warned about a commit an earlier landing undid' >&2
+  cat "$work/output" >&2
+  exit 1
+fi
+
 printf '\n' >>internal/example/example.go
 land 'Go change'
 expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync

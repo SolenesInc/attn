@@ -124,6 +124,11 @@ for the changed paths, and pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.
 
+The last lines of the output warn when the landing undid earlier commits on
+`main`, and name them. The push has already happened. If you did not mean to
+undo a commit, restore it right away in a new landing with `git cherry-pick`,
+and say so in your report.
+
 One land runs at a time per clone. When a land from another worktree of the
 clone holds the land queue, `scripts/land.sh` prints `land: waiting for the
 land queue: held by pid <pid> (<worktree>) since <time>` and waits. Waiting is normal: leave the land

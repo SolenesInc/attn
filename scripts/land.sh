@@ -15,6 +15,10 @@ CGO_CFLAGS="$(cat go-cgo-cflags)"
 export CGO_CFLAGS
 
 max_attempts=5
+# Over main's last 400 landings, comparing each with the 30 commits before it
+# flagged one accident and two deliberate reversals, in about 0.1 s a landing
+# (2026-11-05).
+undo_window=30
 protocol_outputs=(
   internal/protocol/generated.go
   internal/protocol/protocol_version.go
@@ -305,15 +309,46 @@ take_land_queue() {
   echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
 }
 
+patch_applies_on() {
+  local commit="$1" tree="$2" index="$3"
+  GIT_INDEX_FILE="$index" git read-tree "$tree" &&
+    git show --format= --binary "$commit" | GIT_INDEX_FILE="$index" git apply --cached --check >/dev/null 2>&1
+}
+
+commits_this_landing_undoes() {
+  local changed commit dir
+  changed="$(git diff --name-only origin/main HEAD | sort -u)"
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/attn-land-undo.XXXXXX")"
+  while IFS= read -r commit; do
+    [ -n "$(comm -12 <(git show --name-only --format= "$commit" | sort -u) <(printf '%s\n' "$changed"))" ] || continue
+    if patch_applies_on "$commit" HEAD "$dir/index" && ! patch_applies_on "$commit" origin/main "$dir/index"; then
+      git log -1 --format='  %h %s' "$commit"
+    fi
+  done < <(git rev-list --first-parent --no-merges "-$undo_window" origin/main)
+  rm -rf "$dir"
+}
+
+warn_about_undone_commits() {
+  [ -n "$1" ] || return 0
+  cat >&2 <<EOF
+land: WARNING: this landing undoes earlier commits on main. Their whole change is gone from what landed:
+$1
+land: if that was not on purpose, restore each one in a new landing with git cherry-pick.
+EOF
+}
+
 land() {
+  local undone
   for _ in $(seq "$max_attempts"); do
     git fetch --quiet origin main
     [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
     rebase_onto_main
     run_checks
+    undone="$(commits_this_landing_undoes || true)"
     if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
       echo "land: main is at $(git rev-parse --short HEAD)"
       sync_history "this landing's test receipts upload at the next sync"
+      warn_about_undone_commits "$undone"
       exit 0
     fi
     git fetch --quiet origin main
