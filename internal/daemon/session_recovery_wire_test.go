@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -85,7 +86,7 @@ func TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened(t *testing.
 	w.restart()
 	app = w.App()
 	if opened := attachRevive(app, claude, 100, 30); !opened.Success {
-		t.Errorf("opening an agent while it comes back answered %+v", opened)
+		t.Errorf("opening an agent while it comes back answered %q", protocol.Deref(opened.Error))
 	}
 	for session, before := range map[string]*fakeagent.Run{claude: claudeRun, codex: codexRun} {
 		if after := w.Launched(session); !after.Resumed || after.ConversationID != before.ConversationID {
@@ -139,5 +140,36 @@ func sessionRecoveryDeleteTranscript(t *testing.T, conversationID string) {
 	})
 	if err != nil || removed == 0 {
 		t.Fatalf("delete the transcript of conversation %s: removed %d files (%v)", conversationID, removed, err)
+	}
+}
+
+func TestOpeningAnAgentJustAsTheDaemonRevivesItAttachesToTheRevivedAgent(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	before := w.Launched(session)
+	app.TypeLine(session, "add a discount field to checkout")
+	before.Prompted()
+	before.Reply("Done here. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	w.stop()
+	opening := w.PauseAt(pausepoint.AttachRevivePending)
+	reviving := w.startHoldingRevives()
+	app = w.App()
+	terminal := app.Terminal(session)
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal),
+		AttachPolicy: protocol.Ptr(protocol.AttachPolicyRevive), Cols: protocol.Ptr(100), Rows: protocol.Ptr(30)})
+	opening.Await()
+	reviving.Release()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateRecoverable })
+	opening.Release()
+
+	opened := testworld.Await(app, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if !opened.Success {
+		t.Errorf("opening the agent the daemon was reviving answered %q", protocol.Deref(opened.Error))
+	}
+	if after := w.Launched(session); !after.Resumed || after.ConversationID != before.ConversationID {
+		t.Errorf("%s came back as %q, want it resuming conversation %s", session, after.Argv, before.ConversationID)
 	}
 }

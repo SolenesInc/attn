@@ -412,6 +412,7 @@ func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) erro
 	if msg.Cols == nil || msg.Rows == nil || *msg.Cols <= 0 || *msg.Rows <= 0 {
 		return errors.New("revive requires pty geometry")
 	}
+	pausepoint.At(pausepoint.AttachRevivePending)
 	sessionID, _ := d.shownIn(msg.ID)
 	return d.reviveSession(sessionID, int(*msg.Cols), int(*msg.Rows))
 }
