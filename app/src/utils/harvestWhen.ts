@@ -1,4 +1,5 @@
 import type { HarvestWhen } from '../types/generated';
+import { pullRequestRef } from './pullRequestRef';
 
 export interface HarvestWhenDisplay {
   /** owner/repo#n — the session pull request id without its host. */
@@ -13,10 +14,7 @@ export interface HarvestWhenDisplay {
 export function harvestWhenDisplay(condition?: HarvestWhen): HarvestWhenDisplay | null {
   const id = condition?.pull_request?.trim() ?? '';
   if (!id) return null;
-  const host = id.indexOf(':');
-  const pullRequest = host === -1 ? id : id.slice(host + 1);
-  const hash = pullRequest.lastIndexOf('#');
-  const number = hash === -1 ? pullRequest : pullRequest.slice(hash);
+  const { pullRequest, number } = pullRequestRef(id);
   return {
     pullRequest,
     sentence: `harvests when ${pullRequest} merges`,

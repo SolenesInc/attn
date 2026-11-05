@@ -13,6 +13,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { harvestWhenDisplay, type HarvestWhenDisplay } from '../utils/harvestWhen';
+import { standbyDisplay } from '../utils/standbyDisplay';
 import {
   columnOf,
   heldByOther,
@@ -651,6 +652,7 @@ function Card({
         }}
       >
         <span className="garden-card__title">{seed.title}</span>
+        <StandbyMarker seed={seed} />
         <span className="garden-card__meta">
           <CardMeta seed={seed} column={column} blockers={blockers} tender={tender} tenderLive={tenderLive} plot={plot} armed={armed} />
           <CheckTally seed={seed} />
@@ -699,6 +701,28 @@ function Card({
         </button>
       )}
     </div>
+  );
+}
+
+function StandbyMarker({ seed }: { seed: Seed }) {
+  const standby = standbyDisplay(seed, Date.now());
+  if (!standby) return null;
+  return (
+    <span className="garden-card__standby">
+      <span className="garden-card__standby-line">
+        <span className="garden-card__standby-word">standby</span>
+        {standby.pullRequests.map((pr) => (
+          <span key={pr.id} className={`garden-card__standby-pr is-${pr.word}`} title={pr.title}>
+            {pr.label} {pr.word}
+          </span>
+        ))}
+        {standby.reminderAt && <span>reminder {standby.reminderAt}</span>}
+      </span>
+      {standby.note && <span className="garden-card__standby-note" title={standby.note}>{standby.note}</span>}
+      {standby.wakeBlocked && (
+        <span className="garden-card__standby-blocked" title={standby.wakeBlocked}>wake blocked: {standby.wakeBlocked}</span>
+      )}
+    </span>
   );
 }
 

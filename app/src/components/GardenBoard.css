@@ -466,6 +466,45 @@
   color: var(--color-text-tertiary);
 }
 
+.garden-card__standby {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-sm);
+  gap: 2px;
+  min-width: 0;
+}
+
+.garden-card__standby-line {
+  color: var(--color-text-tertiary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.garden-card__standby-word {
+  color: var(--garden-board-progress);
+  font-weight: 600;
+}
+
+.garden-card__standby-pr.is-ready {
+  color: var(--garden-board-ready);
+  font-weight: 600;
+}
+
+.garden-card__standby-note {
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.garden-card__standby-blocked {
+  color: var(--garden-board-attention);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A tender whose session is gone is the one thing on this board somebody has
    to act on: the seed reads as claimed and nobody is holding it. */
 .garden-card__tender.is-gone {
@@ -497,7 +536,7 @@
   color: var(--garden-board-progress);
 }
 
-.garden-card:has(.garden-card__tender.is-gone) .garden-card__body {
+.garden-card:has(.garden-card__tender.is-gone, .garden-card__standby-blocked) .garden-card__body {
   border-color: color-mix(in srgb, var(--garden-board-attention) 48%, var(--garden-board-card-border));
   box-shadow: inset 3px 0 0 var(--garden-board-attention), 0 1px 2px rgba(0, 0, 0, 0.14);
 }
