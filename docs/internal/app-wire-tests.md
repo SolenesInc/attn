@@ -53,6 +53,34 @@ time.
 - `await act(() => vi.advanceTimersByTimeAsync(ms))` moves time for the
   app's own timers.
 
+## Shared modules
+
+`app/vite.config.ts` puts each test file in one of two Vitest projects by
+reading the file:
+
+- A file that calls `vi.mock`, `vi.doMock`, `vi.hoisted`, or `vi.resetModules`
+  runs in the `isolated` project, with a fresh set of modules.
+- Every other file runs in the `shared` project. One worker loads the app's
+  modules once and runs many files, so a file costs its tests and not the load.
+
+No list needs editing, because adding `vi.mock` to a test file moves that file.
+Keep `vi.mock` in test files. The scan does not read helpers, so a mock in a
+helper reaches every later file in a shared worker.
+
+`test/setup.ts` resets what shared files have in common before and after each
+test: the DOM, the clipboard, `localStorage`, the app's stores, the Tauri fakes,
+timers, stubbed globals and environment variables, and mocks. When a new kind of
+state outlives a test, add it to that reset.
+
+CI runs the full suite with `--sequence.shuffle.files`, so a dependence on file
+order fails there. If a file passes alone with `vitest run <file>` and fails in
+the suite, the cause is order. To rerun an order, pass the seed that the run
+printed. Use one worker, because parallel workers can hide a leak:
+
+```bash
+pnpm --dir app exec vitest run --maxWorkers=1 --sequence.shuffle.files --sequence.seed=<seed>
+```
+
 ## What to assert
 
 - Assert what renders, through Testing Library's `screen` queries.

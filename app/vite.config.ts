@@ -2,7 +2,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { execFileSync } from "child_process";
-import { readFileSync } from "fs";
+import { globSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { resolve } from "path";
 
@@ -36,6 +36,20 @@ function clientTokenFromInstance(): string {
     return "";
   }
 }
+
+const testFilePatterns = [
+  "src/**/*.test.{ts,tsx}",
+  // Plain-JS tests, for guards that must read source files off disk: the app tsconfig has no
+  // node types, and vitest stubs CSS imports to empty.
+  "src/**/*.test.mjs",
+  "scripts/real-app-harness/**/*.test.{ts,mjs}",
+  "lint/**/*.test.ts",
+];
+
+const replacesModules = /vi\.(mock|doMock|hoisted|resetModules)\(/;
+const filesNeedingOwnModules = globSync(testFilePatterns, { cwd: __dirname }).filter((file) =>
+  replacesModules.test(readFileSync(resolve(__dirname, file), "utf8")),
+);
 
 // https://vite.dev/config/
 export default defineConfig(async ({ command }) => ({
@@ -82,8 +96,7 @@ export default defineConfig(async ({ command }) => ({
   test: {
     globals: true,
     environment: "happy-dom",
-    pool: "vmThreads",
-    vmMemoryLimit: "512MB",
+    pool: "threads",
     env: { VITE_ATTN_BUILD_INSTANCE: "", VITE_CLIENT_TOKEN: "" },
     globalSetup: ["./scripts/vitest-ghostty-vt.mjs"],
     setupFiles: ["./src/test/setup.ts"],
@@ -94,17 +107,25 @@ export default defineConfig(async ({ command }) => ({
         "./scripts/vitest-results-reporter.mjs",
       ],
     }),
-    include: [
-      "src/**/*.test.{ts,tsx}",
-      // Plain-JS tests, for guards that must read source files off disk: the app tsconfig has no
-      // node types, and vitest stubs CSS imports to empty.
-      "src/**/*.test.mjs",
-      "scripts/real-app-harness/**/*.test.{ts,mjs}",
-      "lint/**/*.test.ts",
-    ],
-    environmentMatchGlobs: [
-      ["scripts/real-app-harness/**/*.test.{ts,mjs}", "node"],
-      ["lint/**/*.test.ts", "node"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "shared",
+          sequence: { groupOrder: 1 },
+          isolate: false,
+          include: testFilePatterns,
+          exclude: filesNeedingOwnModules,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "isolated",
+          sequence: { groupOrder: 0 },
+          include: filesNeedingOwnModules,
+        },
+      },
     ],
   },
 }));

@@ -125,7 +125,9 @@ Wire tests are the default, and come in two forms:
   what the app sends back. It runs in a simulated browser with the Tauri host
   stubbed. Everything else attn ships in the frontend is real, apart from the
   fakes [App wire tests](app-wire-tests.md) lists. `pnpm --dir app run lint`
-  fails a test that mocks one of attn's own modules.
+  fails a test that mocks one of attn's own modules. A test file that replaces
+  a module runs isolated, and every other file
+  [shares modules](app-wire-tests.md#shared-modules).
 
 Both use the generated protocol types, so a protocol change breaks both at
 once.

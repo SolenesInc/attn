@@ -186,7 +186,7 @@ runs:
 - the tests the change touches:
   - top-level Go tests whose function overlaps a changed line in a `_test.go`
     file outside `testdata`
-  - changed Vitest files that `app/vite.config.ts` lists under `include`
+  - changed Vitest files that match `testFilePatterns` in `app/vite.config.ts`
   - changed Playwright files (`app/e2e/**/*.spec.ts`)
 - every test that failed on `main` and has since passed there, on at least one
   and fewer than 30 later main revisions in the lane where it failed, whatever
