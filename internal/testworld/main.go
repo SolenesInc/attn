@@ -15,6 +15,10 @@ import (
 
 var processDir string
 
+func shellWithNoProfile() string {
+	return filepath.Join(processDir, "login-shell")
+}
+
 func Main(m *testing.M, env ...string) int {
 	fakessh.Main()
 	fakeagent.Main()
@@ -25,6 +29,9 @@ func Main(m *testing.M, env ...string) int {
 	}
 	defer os.RemoveAll(dir)
 	processDir = dir
+	if err := os.WriteFile(shellWithNoProfile(), []byte("#!/bin/sh\n[ \"$1\" = -l ] && shift\nexec /bin/sh \"$@\"\n"), 0o755); err != nil {
+		panic("testworld.Main: " + err.Error())
+	}
 	config.ScopeTestEnvironment(filepath.Join(dir, "data"))
 	toolHome := filepath.Join(dir, "toolhome")
 	_ = os.Setenv(toolhome.EnvVar, toolHome)
