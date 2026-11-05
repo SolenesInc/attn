@@ -141,6 +141,10 @@ garden                  a profile's issue tracker
    ├─ reminder (at most 1)  a time and a message. At that time attn posts
    │                    the message to the seed's mailbox; like a calendar
    │                    reminder
+   ├─ standby (at most 1)  the tender waits for items in the seed's mailbox
+   │  │                 and keeps the claim; like a ticket in a Waiting status
+   │  └─ standby note (1)  what the tender says to do next; like a note you
+   │                       leave yourself before a break
    ├─ watcher (0..n)    a session or crew member that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ log entry (0..n)  a line in the ticket's log: a note, move, link, edit,
@@ -153,6 +157,9 @@ garden                  a profile's issue tracker
    │  └─ verdict (at most 1)  confirmed or rejected
    └─ edge (0..n)       blocks or discovered-from
 tend                    claim a seed; like assigning a ticket to yourself
+tender wake             attn resumes the closed session that tends a seed on
+                        standby, or wakes the crew member that tends it, to read
+                        the seed's items; like paging whoever is on call
 seed bookmark           where a seed read stopped; a read --since a seed
                         bookmark returns only what was saved after it
 plot                    an epic: a seed with child seeds
