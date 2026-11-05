@@ -304,6 +304,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopDockTile:               decodeInto[DesktopDockTileMessage],
 	CmdDesktopUpdateTile:             decodeInto[DesktopUpdateTileMessage],
 	CmdDesktopSetSplitRatio:          decodeInto[DesktopSetSplitRatioMessage],
+	CmdDesktopSetWantedCols:          decodeInto[DesktopSetWantedColsMessage],
 	CmdSetChiefOfStaff:               decodeInto[SetChiefOfStaffMessage],
 	CmdSetSessionContextWindowCap:    decodeInto[SetSessionContextWindowCapMessage],
 }

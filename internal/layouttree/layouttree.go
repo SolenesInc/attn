@@ -42,6 +42,7 @@ type Node struct {
 	TileKind      string             `json:"tile_kind,omitempty"`
 	TileParams    string             `json:"tile_params,omitempty"`
 	TileSessionID protocol.SessionID `json:"tile_session_id,omitempty"`
+	WantedCols    int                `json:"wanted_cols,omitempty"`
 	SplitID       string             `json:"split_id,omitempty"`
 	Direction     Direction          `json:"direction,omitempty"`
 	Ratio         float64            `json:"ratio,omitempty"`
@@ -390,26 +391,49 @@ func TileLeaves(node Node) []TileLeaf {
 }
 
 func DockTile(node Node, anchorID string, direction Direction, before bool, splitID string, tileID string, tileKind string, tileParams string, tileSessionID protocol.SessionID, ratio float64) (Node, bool) {
+	cleaned, tile, ok := tileToDock(node, anchorID, tileID, tileKind, tileParams, tileSessionID)
+	if !ok {
+		return node, false
+	}
+	next, ok := insertBesideLeaf(cleaned, strings.TrimSpace(anchorID), newPlacement(direction, before, splitID, ratio), tile)
+	if !ok {
+		return node, false
+	}
+	return next, true
+}
+
+func DockTileBesideColumn(node Node, anchorID string, before bool, newSplitID func() string, tileID string, tileKind string, tileParams string, tileSessionID protocol.SessionID) (Node, bool) {
+	cleaned, tile, ok := tileToDock(node, anchorID, tileID, tileKind, tileParams, tileSessionID)
+	if !ok {
+		return node, false
+	}
+	next, ok := PlaceColumn(cleaned, strings.TrimSpace(anchorID), before, tile, newSplitID)
+	if !ok {
+		return node, false
+	}
+	return next, true
+}
+
+func tileToDock(node Node, anchorID, tileID, tileKind, tileParams string, tileSessionID protocol.SessionID) (cleaned, tile Node, ok bool) {
 	tileID = strings.TrimSpace(tileID)
 	tileKind = strings.TrimSpace(tileKind)
 	anchorID = strings.TrimSpace(anchorID)
 	tileSessionID = protocol.TrimID(tileSessionID)
 	if tileID == "" || tileKind == "" || anchorID == "" || anchorID == tileID || HasPane(node, tileID) {
-		return node, false
+		return node, Node{}, false
 	}
-	if existing, ok := findLeaf(node, tileID); ok && tileSessionID == "" {
-		tileSessionID = existing.TileSessionID
+	wantedCols := 0
+	if existing, found := findLeaf(node, tileID); found {
+		wantedCols = existing.WantedCols
+		if tileSessionID == "" {
+			tileSessionID = existing.TileSessionID
+		}
 	}
-	cleaned := node
+	cleaned = node
 	if next, removed := Remove(node, tileID); removed {
 		cleaned = next
 	}
-	tile := Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID}
-	next, ok := insertBesideLeaf(cleaned, anchorID, newPlacement(direction, before, splitID, ratio), tile)
-	if !ok {
-		return node, false
-	}
-	return next, true
+	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, WantedCols: wantedCols}, true
 }
 
 type placement struct {

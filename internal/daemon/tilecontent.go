@@ -97,7 +97,7 @@ func refreshTileContentHash(path string, sig tileContentSig, now time.Time) tile
 	return sig
 }
 
-func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionID) (desktopID, tileID string, err error) {
+func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
@@ -120,7 +120,7 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 		tileKind:  string(layouttree.TileKindMarkdown),
 		params:    path,
 		sessionID: location.sessionID,
-	})
+	}, focus)
 	if err != nil {
 		return "", "", err
 	}
@@ -128,7 +128,7 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone bool, selectedProfile ...string) (desktopID, tileID string, err error) {
+func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone, focus bool, selectedProfile ...string) (desktopID, tileID string, err error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return "", "", err
@@ -165,7 +165,7 @@ func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID,
 		tileKind:  string(layouttree.TileKindSeed),
 		params:    seed.ID,
 		sessionID: d.seedTileSession(seed.Tender, location),
-	})
+	}, focus)
 	if err != nil {
 		return "", "", err
 	}
@@ -184,7 +184,7 @@ func (d *Daemon) seedTileSession(tenderParty who.Party, location agentLocation) 
 }
 
 func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID), false)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
@@ -194,7 +194,7 @@ func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMes
 }
 
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
-	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), false, protocol.Deref(msg.ProfileID))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
@@ -253,7 +253,7 @@ func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
 		return
 	}
 	if d.openSentFilesEnabled() {
-		desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
+		desktopID, tileID, err := d.openMarkdownTile(path, sessionID, false)
 		if err == nil {
 			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 			return
@@ -277,7 +277,7 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	}
 	client.holdArrangements()
 	defer d.releaseArrangements(client)
-	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID), true)
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
@@ -300,7 +300,7 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 	}
 	client.holdArrangements()
 	defer d.releaseArrangements(client)
-	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), protocol.Deref(msg.ProfileID), client.selectedProfile())
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone), true, protocol.Deref(msg.ProfileID), client.selectedProfile())
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())

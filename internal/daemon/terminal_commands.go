@@ -302,7 +302,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		}
 	}
 	sort.Slice(previous, func(i, j int) bool { return previous[i].at.After(previous[j].at) })
-	if len(previous) > 0 {
+	if len(previous) > 0 && (direction == layouttree.DirectionHorizontal || !d.store.ShelfLayoutOn()) {
 		anchor = previous[0].pane
 		direction = layouttree.DirectionHorizontal
 	}

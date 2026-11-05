@@ -20,7 +20,9 @@ func writeArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop,
 		return err
 	}
 	desktop.FocusHistory = profiles.Focus(previous, previous.ActivePaneID).FocusHistory
-	*desktop = settleForWrite(*desktop, previous.Tree)
+	if *desktop, err = settleForWrite(tx, *desktop, previous.Tree); err != nil {
+		return err
+	}
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}

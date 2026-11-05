@@ -125,7 +125,7 @@ func (d *Daemon) handleOpenBrowser(conn net.Conn, msg *protocol.OpenBrowserMessa
 		tileID:   browserTileID,
 		tileKind: string(layouttree.TileKindBrowser),
 		params:   targetURL,
-	}); err != nil {
+	}, false); err != nil {
 		d.sendError(conn, fmt.Sprintf("open_browser: %v", err))
 		return
 	}

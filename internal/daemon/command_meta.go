@@ -223,6 +223,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopRemoveLeaf:             commandMetadata(false, true),
 	protocol.CmdDesktopCloseTile:              commandMetadata(true, true),
 	protocol.CmdDesktopSetSplitRatio:          commandMetadata(false, true),
+	protocol.CmdDesktopSetWantedCols:          commandMetadata(false, true),
 	protocol.CmdDesktopDockTile:               commandMetadata(false, true),
 	protocol.CmdDesktopUpdateTile:             commandMetadata(false, true),
 	protocol.CmdOpenMarkdown:                  commandMetadata(true, true),

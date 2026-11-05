@@ -341,6 +341,7 @@ const (
 	CmdDesktopRemoveLeaf    = "desktop_remove_leaf"
 	CmdDesktopCloseTile     = "desktop_close_tile"
 	CmdDesktopSetSplitRatio = "desktop_set_split_ratio"
+	CmdDesktopSetWantedCols = "desktop_set_wanted_cols"
 	CmdDesktopDockTile      = "desktop_dock_tile"
 	CmdDesktopUpdateTile    = "desktop_update_tile"
 )

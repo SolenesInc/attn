@@ -86,6 +86,7 @@ type layoutNode struct {
 	TileKind      string       `json:"tile_kind"`
 	TileParams    string       `json:"tile_params"`
 	TileSessionID string       `json:"tile_session_id"`
+	WantedCols    int          `json:"wanted_cols"`
 	SplitID       string       `json:"split_id"`
 	Direction     string       `json:"direction"`
 	Ratio         float64      `json:"ratio"`

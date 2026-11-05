@@ -665,7 +665,8 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 			Direction:          direction,
 			Before:             before,
 			LeafShare:          protocol.Deref(msg.LeafShare),
-			Activate:           true,
+			Activate:           msg.Activate == nil || *msg.Activate,
+			WholeColumn:        protocol.Deref(msg.WholeColumn),
 		}, dispatchers)
 		changed := []profiles.Desktop{move.Source}
 		if move.Target.ID != move.Source.ID {
@@ -748,6 +749,13 @@ func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 func (d *Daemon) handleDesktopSetSplitRatio(client *wsClient, msg *protocol.DesktopSetSplitRatioMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		desktop, err := d.store.SetDesktopSplitRatio(msg.DesktopID, msg.SplitID, msg.Ratio)
+		return d.desktopChanged(desktop), err
+	})
+}
+
+func (d *Daemon) handleDesktopSetWantedCols(client *wsClient, msg *protocol.DesktopSetWantedColsMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.SetDesktopWantedCols(msg.DesktopID, msg.LeafID, msg.Cols)
 		return d.desktopChanged(desktop), err
 	})
 }

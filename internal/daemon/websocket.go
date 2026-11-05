@@ -830,6 +830,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopCloseTile(client, msg.(*protocol.DesktopCloseTileMessage))
 	case protocol.CmdDesktopSetSplitRatio:
 		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
+	case protocol.CmdDesktopSetWantedCols:
+		d.handleDesktopSetWantedCols(client, msg.(*protocol.DesktopSetWantedColsMessage))
 	case protocol.CmdDesktopDockTile:
 		d.handleDesktopDockTile(client, msg.(*protocol.DesktopDockTileMessage))
 	case protocol.CmdDesktopUpdateTile:

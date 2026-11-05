@@ -232,10 +232,19 @@ func CheckDesktop(desktop Desktop) error {
 }
 
 func Settle(desktop Desktop) Desktop {
-	return SettleAfter(desktop, layouttree.Node{})
+	return SettleAfter(desktop, layouttree.Node{}, RecentThenLeft)
 }
 
-func SettleAfter(desktop Desktop, previousTree layouttree.Node) Desktop {
+type CloseFocus func(previousTree layouttree.Node, closedLeafID string, live map[string]bool, history []string) string
+
+func RecentThenLeft(previousTree layouttree.Node, closedLeafID string, live map[string]bool, history []string) string {
+	if len(history) > 0 {
+		return history[0]
+	}
+	return layouttree.LeftNeighbour(previousTree, closedLeafID, live)
+}
+
+func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
 	leaves := layouttree.LeafIDs(desktop.Tree)
 	live := make(map[string]bool, len(leaves))
@@ -249,13 +258,9 @@ func SettleAfter(desktop Desktop, previousTree layouttree.Node) Desktop {
 		}
 	}
 	if !live[desktop.ActivePaneID] {
-		if len(history) > 0 {
-			desktop.ActivePaneID = history[0]
-		} else {
-			desktop.ActivePaneID = layouttree.LeftNeighbour(previousTree, desktop.ActivePaneID, live)
-			if desktop.ActivePaneID == "" && len(leaves) > 0 {
-				desktop.ActivePaneID = leaves[0]
-			}
+		desktop.ActivePaneID = closeFocus(previousTree, desktop.ActivePaneID, live, history)
+		if desktop.ActivePaneID == "" && len(leaves) > 0 {
+			desktop.ActivePaneID = leaves[0]
 		}
 	}
 	desktop.FocusHistory = history

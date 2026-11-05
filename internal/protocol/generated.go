@@ -3769,6 +3769,9 @@ type DesktopDockTileMessage struct {
 }
 
 type DesktopMoveLeafMessage struct {
+	// Activate corresponds to the JSON schema field "activate".
+	Activate *bool `json:"activate,omitempty,omitzero"`
+
 	// AnchorID corresponds to the JSON schema field "anchor_id".
 	AnchorID *string `json:"anchor_id,omitempty,omitzero"`
 
@@ -3795,6 +3798,9 @@ type DesktopMoveLeafMessage struct {
 
 	// TargetShortcutSlot corresponds to the JSON schema field "target_shortcut_slot".
 	TargetShortcutSlot *int `json:"target_shortcut_slot,omitempty,omitzero"`
+
+	// WholeColumn corresponds to the JSON schema field "whole_column".
+	WholeColumn *bool `json:"whole_column,omitempty,omitzero"`
 
 	// WithDelegates corresponds to the JSON schema field "with_delegates".
 	WithDelegates *bool `json:"with_delegates,omitempty,omitzero"`
@@ -3951,6 +3957,23 @@ type DesktopSetSplitRatioMessage struct {
 
 	// SplitID corresponds to the JSON schema field "split_id".
 	SplitID string `json:"split_id"`
+}
+
+type DesktopSetWantedColsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cols corresponds to the JSON schema field "cols".
+	Cols int `json:"cols"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// LeafID corresponds to the JSON schema field "leaf_id".
+	LeafID string `json:"leaf_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type DesktopShowLeafMessage struct {

@@ -70,7 +70,7 @@ type agentTile struct {
 	sessionID protocol.SessionID
 }
 
-func (d *Daemon) openAgentTile(location agentLocation, tile agentTile) (profiles.Desktop, string, error) {
+func (d *Daemon) openAgentTile(location agentLocation, tile agentTile, focus bool) (profiles.Desktop, string, error) {
 	if location.desktopID == "" {
 		return profiles.Desktop{}, "", profiles.Errorf(profiles.CodeNotFound, "profile %s has no current desktop to open a %s tile on", location.profileID, tile.tileKind)
 	}
@@ -84,7 +84,7 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile) (profiles
 		return desktop, "", err
 	}
 	tileID := openTileID(desktop, tile)
-	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID)
+	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID, focus || !d.store.ShelfLayoutOn())
 	if err != nil {
 		return desktop, "", err
 	}
@@ -107,7 +107,7 @@ func openTileID(desktop profiles.Desktop, tile agentTile) string {
 	return tile.tileID
 }
 
-func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, tile agentTile, tileID string) (func(profiles.Desktop) (profiles.Desktop, error), error) {
+func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, tile agentTile, tileID string, takesFocus bool) (func(profiles.Desktop) (profiles.Desktop, error), error) {
 	if _, docked := tileLeafByID(desktop.Tree, tileID); docked {
 		update, err := d.checkedDesktopTileUpdate(desktop.ID, desktopTileUpdate{tileID: tileID, params: tile.params, hasParams: tile.params != "", sessionID: tile.sessionID})
 		return func(desktop profiles.Desktop) (profiles.Desktop, error) {
@@ -116,7 +116,9 @@ func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, ti
 				return updated, err
 			}
 			updated.Tree, _ = layouttree.UpdateTileSessionID(updated.Tree, tileID, tile.sessionID)
-			updated.ActivePaneID = tileID
+			if takesFocus {
+				updated.ActivePaneID = tileID
+			}
 			return updated, nil
 		}, err
 	}
@@ -128,6 +130,7 @@ func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, ti
 		anchorID:  anchorPaneID,
 		edge:      protocol.LayoutDockEdgeRight,
 	})
+	dock.keepActive = !takesFocus
 	return func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		return dockTileOnDesktop(desktop, dock)
 	}, err

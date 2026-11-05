@@ -89,7 +89,7 @@ func TestAFocusedTileLeavesNoCurrentAgentAndOpensDockBesideIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, _, err := d.openMarkdownTile(file, ""); err != nil {
+	if _, _, err := d.openMarkdownTile(file, "", true); err != nil {
 		t.Fatal(err)
 	}
 

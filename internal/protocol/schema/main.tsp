@@ -3556,6 +3556,8 @@ model DesktopMoveLeafMessage {
   anchor_id?: string;
   edge?: LayoutDockEdge;
   leaf_share?: float64;         // The moved leaf's share of the new split, in (0,1)
+  whole_column?: boolean;       // Moves leaf_id's column. Needs shelf_layout_enabled
+  activate?: boolean;           // Absent means true, as today
 }
 
 // Removes a placement or a tile. It never closes an agent.
@@ -3581,6 +3583,15 @@ model DesktopSetSplitRatioMessage {
   desktop_id: string;
   split_id: string;
   ratio: float64;
+}
+
+// Sets the wanted width of leaf_id's column. Needs shelf_layout_enabled.
+model DesktopSetWantedColsMessage {
+  cmd: "desktop_set_wanted_cols";
+  request_id: string;
+  desktop_id: string;
+  leaf_id: string;
+  cols: int32;                  // 0 clears
 }
 
 // Docks a tile beside anchor_id or, absent, beside the active leaf. The tile
