@@ -191,8 +191,8 @@ func TestARingThatWinsTheTurnsEndIsReadBeforeTheCompactingCloseCompactsAtTheNext
 	session, codex := sharedCodexInATurn(t, w, app)
 	conversation := codex.ConversationID
 
-	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
 	closeCompacting(t, cli, session)
+	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
 	sent := sendAgentMessage(t, cli, "sender", session, "the review is in")
 	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
 	placing.Await()
@@ -239,4 +239,63 @@ func TestUserInputDuringTheCompactKeepsTheSharedCodexSessionOpen(t *testing.T) {
 		t.Errorf("the conversation compacted %d times, want once", got)
 	}
 	stillOpen(t, cli, session, "after the user typed during the compact")
+}
+
+func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	session, codex := sharedCodexInATurn(t, w, app)
+	conversation := codex.ConversationID
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("blog")))
+
+	arrived, release := w.CodexServer().HoldNextCompaction()
+	closeCompacting(t, cli, session)
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	arrived()
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("the user closes the session during its compact = %+v", closed)
+	}
+	awaitClosed(app, session)
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	reopened := w.Launched(session)
+	app.TypeLine(session, "finish the checkout fix")
+	if got := reopened.Prompted(); got != "finish the checkout fix" {
+		t.Fatalf("the reopened session received %q", got)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	closeCompacting(t, cli, session)
+	release()
+	reopened.Reply("Finished and closing. <!-- attn:state=idle -->")
+	closed := awaitClosed(app, session)
+	if protocol.Deref(closed.CloseReason) != compactReason || protocol.Deref(closed.ClosedBy) != session {
+		t.Errorf("ledger entry = %+v, want it closed by itself for %q", closed, compactReason)
+	}
+	if got := w.CodexServer().Compactions(conversation); got != 2 {
+		t.Errorf("the conversation compacted %d times by the second close, want twice", got)
+	}
+}
+
+func TestInputTheUserSendsThroughAttnDuringTheCompactIsRefusedAndKeepsTheSessionOpen(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "sender")
+	session, codex := sharedCodexInATurn(t, w, app)
+	arrived, release := w.CodexServer().HoldNextCompaction()
+
+	closeCompacting(t, cli, session)
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	arrived()
+	sent := submitSessionAnnotationFeedback(app, session, "wait, one more thing")
+	if sent.success || !strings.Contains(sent.err, "send it again") {
+		t.Fatalf("the user's notes during the compact = %+v, want them refused, asking to send them again", sent)
+	}
+	sendAgentMessage(t, cli, "sender", session, "the review is in")
+	release()
+	if rang := w.CodexServer().Prompted(codex.ConversationID); rang == "" {
+		t.Fatal("mail held during the compact reached no turn after the close was cancelled")
+	}
+	stillOpen(t, cli, session, "after the user sent notes during the compact")
 }

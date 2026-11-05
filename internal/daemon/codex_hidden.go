@@ -240,8 +240,8 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	if json.Unmarshal(m.Params, &p) != nil || p.ThreadID == "" {
 		return
 	}
-	if compacted, done := s.compactionStepLocked(p.ThreadID, p.Status.Type); done {
-		r.d.compactions.report(r.d, compacted, compactOutcome{})
+	if compacted := s.compactionStepLocked(p.ThreadID, p.Status.Type); compacted != nil {
+		r.d.compactions.report(r.d, compacted.session, compacted.delivery, compactOutcome{})
 	}
 	status, ok := p.Status.programStatus()
 	if !ok {

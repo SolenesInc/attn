@@ -325,7 +325,8 @@ seed that reaches the session before the compact ends the standby, so the agent
 reads it and the session stays open. Mail that arrives during the compact
 waits until the session has closed. If you
 type into the session before it closes, Attn cancels the close and the
-session stays open. If the compact fails, the session still closes, and its
+session stays open. Notes you send from the app or a phone while the compact
+runs are not delivered: Attn cancels the close and asks you to send them again. If the compact fails, the session still closes, and its
 reason says the compact did not run. Restarting the daemon drops a close that
 still waits for its compact, and the session stays open.
 

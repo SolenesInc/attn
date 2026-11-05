@@ -10,15 +10,16 @@ import (
 )
 
 type codexCompaction struct {
-	session protocol.SessionID
-	active  bool
+	session  protocol.SessionID
+	delivery string
+	active   bool
 }
 
-func (l codexMonitorLink) Compact(_ context.Context, _ harness.Input) harness.Custody {
+func (l codexMonitorLink) Compact(_ context.Context, in harness.Input) harness.Custody {
 	r, target := l.shared, l.target
 	conversation := target.Conversation.NativeID
 	failed := func(err error) harness.Custody {
-		r.d.compactions.report(r.d, target.Session, compactOutcome{failed: err.Error()})
+		r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: err.Error()})
 		return harness.Custody{Taken: true, At: time.Now()}
 	}
 	if conversation == "" {
@@ -36,10 +37,10 @@ func (l codexMonitorLink) Compact(_ context.Context, _ harness.Input) harness.Cu
 			busy = true
 			return nil
 		}
-		s.armCompaction(conversation, target.Session)
+		s.armCompaction(conversation, target.Session, in.ID)
 		if err := call("thread/compact/start", map[string]any{"threadId": conversation}, nil); err != nil {
 			s.disarmCompaction(conversation)
-			r.d.compactions.report(r.d, target.Session, compactOutcome{failed: fmt.Sprintf("thread/compact/start: %v", err)})
+			r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: fmt.Sprintf("thread/compact/start: %v", err)})
 		}
 		return nil
 	})
@@ -52,13 +53,13 @@ func (l codexMonitorLink) Compact(_ context.Context, _ harness.Input) harness.Cu
 	return harness.Custody{Taken: true, At: time.Now()}
 }
 
-func (s *codexServer) armCompaction(conversation string, session protocol.SessionID) {
+func (s *codexServer) armCompaction(conversation string, session protocol.SessionID, delivery string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.compacting == nil {
 		s.compacting = make(map[string]*codexCompaction)
 	}
-	s.compacting[conversation] = &codexCompaction{session: session}
+	s.compacting[conversation] = &codexCompaction{session: session, delivery: delivery}
 }
 
 func (s *codexServer) disarmCompaction(conversation string) {
@@ -67,17 +68,16 @@ func (s *codexServer) disarmCompaction(conversation string) {
 	delete(s.compacting, conversation)
 }
 
-func (s *codexServer) compactionStepLocked(conversation, status string) (protocol.SessionID, bool) {
+func (s *codexServer) compactionStepLocked(conversation, status string) *codexCompaction {
 	compaction := s.compacting[conversation]
 	switch {
 	case compaction == nil:
-		return "", false
+		return nil
 	case status == "active":
 		compaction.active = true
-		return "", false
 	case status == "idle" && compaction.active:
 		delete(s.compacting, conversation)
-		return compaction.session, true
+		return compaction
 	}
-	return "", false
+	return nil
 }

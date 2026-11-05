@@ -228,6 +228,7 @@ func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonito
 }
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
+	d.compactions.forget(sessionID)
 	r := d.monitors()
 	monitor := r.monitor(sessionID)
 	if monitor != nil {

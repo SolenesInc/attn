@@ -175,6 +175,7 @@ var (
 	ErrLaneClosed        = errors.New("the session's input lane is closed")
 	ErrSessionStopped    = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
 	ErrSessionClosing    = errors.New("the session is compacting before it closes; attn's input waits until it has closed")
+	ErrInputCancelsClose = errors.New("not sent: the session was compacting before it closed; the close is cancelled, so send it again once it is idle")
 	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
 
@@ -281,6 +282,10 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	if l.stopped {
 		return deferred(ErrLaneClosed)
+	}
+	if l.closing && delivery.origin.kind == originUserConversation {
+		m.userInputs++
+		return Attempt{Stage: Failed, Err: ErrInputCancelsClose}, runRef{}
 	}
 	if l.closing {
 		return deferred(ErrSessionClosing)

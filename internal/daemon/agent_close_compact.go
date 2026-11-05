@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -16,8 +15,6 @@ import (
 )
 
 var compactOutcomeTripwire = 10 * time.Minute
-
-var errCompactWaitsForPrompt = errors.New("the session is not at a prompt")
 
 type compactOutcome struct {
 	failed string
@@ -74,15 +71,24 @@ func (d *Daemon) registerCompactingClose(target *protocol.Session, reason string
 	if l.pending == nil {
 		l.pending = make(map[protocol.SessionID]*pendingCompactClose)
 	}
-	if current := l.pending[target.ID]; current != nil {
+	if current := l.pending[target.ID]; current != nil && current.monitor == monitor {
 		l.mu.Unlock()
 		d.logf("compacting close: session %s already closes after its compact", target.ID)
 		return
 	}
 	l.pending[target.ID] = p
+	p.placing = true
 	l.mu.Unlock()
 	d.logf("compacting close: session %s closes after this turn, once its conversation is compacted: %s", target.ID, reason)
-	d.kickCompactingClose(target.ID)
+	d.placeCompactingClose(p)
+}
+
+func (l *compactionLedger) forget(session protocol.SessionID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if p := l.pending[session]; p != nil {
+		l.takeLocked(p)
+	}
 }
 
 func (d *Daemon) kickCompactingClose(session protocol.SessionID) {
@@ -117,11 +123,8 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 			d.logf("compacting close: session %s stays open: %s", p.session, why)
 			return
 		}
-		attempt := sessionmonitor.Attempt{Stage: sessionmonitor.Deferred, Err: errCompactWaitsForPrompt}
-		if session := d.store.Get(p.session); session != nil && sessionmonitor.PromptReady(session.State, d.stateReason(p.session)) {
-			pausepoint.At(pausepoint.CompactingClosePlacing)
-			attempt = d.placeDelivery(context.Background(), p.session, sessionmonitor.CompactInput(p.key))
-		}
+		pausepoint.At(pausepoint.CompactingClosePlacing)
+		attempt := d.placeDelivery(context.Background(), p.session, sessionmonitor.CompactInput(p.key))
 		l.mu.Lock()
 		if l.pending[p.session] != p {
 			l.mu.Unlock()
@@ -158,10 +161,10 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 	}
 }
 
-func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, outcome compactOutcome) {
+func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, delivery string, outcome compactOutcome) {
 	l.mu.Lock()
 	p := l.pending[session]
-	if p == nil || p.outcome != nil {
+	if p == nil || p.outcome != nil || sessionmonitor.CompactInput(p.key).ID.String() != delivery {
 		l.mu.Unlock()
 		return
 	}
