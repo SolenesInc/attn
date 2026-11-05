@@ -181,8 +181,12 @@ func (w *transcriptWatcher) discover() string {
 	return path
 }
 
+func (w *transcriptWatcher) expectsExactPath() bool {
+	return strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.monitor.boundConversation().TranscriptPath) != ""
+}
+
 func (w *transcriptWatcher) discoveryDeadline(now time.Time) time.Time {
-	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.monitor.boundConversation().TranscriptPath) != "" {
+	if w.expectsExactPath() {
 		return now.Add(TranscriptDiscoveryGrace)
 	}
 	return now
@@ -531,6 +535,9 @@ func (w *transcriptWatcher) run() {
 			if transcriptPath == "" && !fallbackAttempted {
 				fallbackAttempted = true
 				transcriptPath = w.discover()
+			}
+			if transcriptPath == "" && w.expectsExactPath() {
+				continue
 			}
 			if transcriptPath == "" {
 				if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript is bound to this live session") {

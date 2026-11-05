@@ -546,22 +546,6 @@ func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t
 			outpost.SetCodexFolderTrust(outpost.Path("agent"), "trusted")
 			id := home.Spawn(pair.App, harness, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 			agent := outpost.LaunchedCarrying(pair.App.Terminal(id))
-			if scenario.beforeTranscriptCopy {
-				outpost.AwaitTimer(sessionmonitor.TranscriptPoll)
-				outpost.Advance(sessionmonitor.TranscriptDiscoveryGrace)
-				for {
-					window := testworld.Request(pair.App, protocol.SessionMessagesGetMessage{
-						Cmd: protocol.CmdSessionMessagesGet, RequestID: "before-first-prompt", SessionID: protocol.SessionID(id),
-					}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == "before-first-prompt" })
-					if window.Status != protocol.SessionMessageWindowStatusDiscovering {
-						if window.Status != protocol.SessionMessageWindowStatusUnavailable {
-							t.Fatalf("message window before first prompt: %+v", window)
-						}
-						break
-					}
-					testworld.Await(pair.App, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == id })
-				}
-			}
 			pair.App.TypeLine(id, "final work")
 			agent.Prompted()
 			reply := "Final remote answer. <!-- attn:state=waiting_input -->"
