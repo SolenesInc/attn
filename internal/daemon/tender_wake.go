@@ -110,10 +110,12 @@ func (l *tenderWakeLedger) block(seedID, reason string) bool {
 	return true
 }
 
-func (l *tenderWakeLedger) unblock(seedID string) {
+func (l *tenderWakeLedger) unblock(seedID string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	_, blocked := l.blocked[seedID]
 	delete(l.blocked, seedID)
+	return blocked
 }
 
 func (l *tenderWakeLedger) blockedReason(seedID string) string {
@@ -238,7 +240,7 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		return receipt, nil
 	}
-	d.tenderWakes.unblock(seed.ID)
+	d.unblockTenderWake(seed.ID)
 	d.logf("tender wake: seed %s reopened session %s for %s (wake %d of %d in %s)", seed.ID, outcome.SessionID, d.seedMailCause(a), count, tenderWakeLimit, tenderWakeWindow)
 	if outcome.AlreadyRunning {
 		d.kickInbox(a)
@@ -278,6 +280,7 @@ func (d *Daemon) blockTenderWake(a who.Address, seed garden.Seed, reason string)
 	if !d.tenderWakes.block(seed.ID, reason) {
 		return detail
 	}
+	d.publishStandbyViewChanged(who.ToTenderOf(seed.ID))
 	item := d.seedMailCause(a)
 	d.logf("tender wake: seed %s blocked for %s: %s", seed.ID, item, reason)
 	body := fmt.Sprintf("attn could not wake this seed's tender for %s: %s. The mail waits in the seed's mailbox, and attn does not retry this wake by itself.", item, reason)
@@ -303,6 +306,12 @@ func (d *Daemon) blockTenderWake(a who.Address, seed garden.Seed, reason string)
 	}
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 	return detail
+}
+
+func (d *Daemon) unblockTenderWake(seedID string) {
+	if d.tenderWakes.unblock(seedID) {
+		d.publishStandbyViewChanged(who.ToTenderOf(seedID))
+	}
 }
 
 func (d *Daemon) tenderWakeText(wake *tenderWakeDelivery) string {

@@ -260,7 +260,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					d.logInboxExhaustion(a)
 					if seedMail {
 						count := d.tenderWakes.charge(seedID, d.clock.Now())
-						d.tenderWakes.unblock(seedID)
+						d.unblockTenderWake(seedID)
 						d.logf("tender wake: seed %s woke %s for %s (wake %d of %d in %s)", seedID, d.crewMemberName(member), d.seedMailCause(a), count, tenderWakeLimit, tenderWakeWindow)
 					}
 					return nil

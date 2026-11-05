@@ -105,6 +105,8 @@ const (
 
 	FactGardenReviewChanged = "garden.review.changed"
 
+	FactSeedStandbyViewChanged = "seed.standby_view.changed"
+
 	FactCrewRegistered         = "crew.registered"
 	FactCrewBound              = "crew.bound"
 	FactCrewReleased           = "crew.released"
@@ -203,7 +205,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSessionPullRequestChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionStateChanged(protocol.SessionID(ev.Subject))
-				d.projectGardenWhileSeedsOnStandby()
 			},
 		},
 		{
@@ -393,8 +394,8 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
 		},
 		{
-			filter: bus.Filter{FactNotificationCreated},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenWhileSeedsOnStandby() },
+			filter: bus.Filter{FactSeedStandbyViewChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectStandbyViewChanged(ev.Subject) },
 		},
 		{
 			filter: bus.Filter{FactDelegationPreferencesChanged},

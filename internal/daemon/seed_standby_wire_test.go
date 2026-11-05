@@ -863,5 +863,28 @@ func TestSeedsOnStandbyListWithTheirPullRequestWatchesAndTheGardenFollowsTheWatc
 		testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 			return standbyPullRequests(m, onStandby, func(prs []protocol.SeedWatchedPullRequest) bool { return len(prs) == 0 })
 		})
+
+		synctest.Wait()
+		mark = len(app.Log())
+		gh.set(func(gh *watchedPullRequestGitHub) { gh.mergeStateStatus = "BLOCKED" })
+		w.advance(protocol.HeatHotInterval)
+		if got := protocol.Deref(onlySeedPullRequest(t, cli, watcher, growing).ReadinessState); got != "blocked" {
+			t.Fatalf("the watch of %s reads %q after the pull request was blocked again, want it blocked", growing, got)
+		}
+		synctest.Wait()
+		if pushes := gardenPushesSince(app, mark); pushes != 0 {
+			t.Fatalf("a pull request watched only by %s, which is not on standby, pushed the Garden %d times while %s is on standby", growing, pushes, onStandby)
+		}
 	})
+}
+
+func gardenPushesSince(app *testworld.Peer, mark int) int {
+	pushes := 0
+	for _, raw := range app.Log()[mark:] {
+		var event protocol.WebSocketEvent
+		if json.Unmarshal(raw, &event) == nil && event.Event == protocol.EventGardenSeedsChanged {
+			pushes++
+		}
+	}
+	return pushes
 }

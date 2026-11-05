@@ -584,6 +584,7 @@ func (d *Daemon) processPullRequestWatches(
 			d.schedulePullRequestSettle(watch, *transition.Evaluation.SettlingUntil, now)
 		}
 		if projectionChanged {
+			d.publishStandbyViewChanged(watch.To)
 			changed = append(changed, string(watch.SessionID))
 			if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {
 				changed = append(changed, string(holder.ID))

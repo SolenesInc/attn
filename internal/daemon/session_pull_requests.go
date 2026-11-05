@@ -135,6 +135,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, see
 	if changed {
 		d.kickInboxAfterCommit(address)
 		d.publishSessionPullRequestMembershipChanged(rec.PRID, string(rec.SessionID))
+		d.publishStandbyViewChanged(address)
 		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
 	} else if recorded {
 		d.publishFact(FactSessionPullRequestChanged, string(rec.SessionID), sessionPullRequestFact{PRID: rec.PRID})
@@ -201,6 +202,7 @@ func (d *Daemon) stopPullRequestWatch(address who.Address, prID string) (bool, e
 	}
 	d.kickInboxAfterCommit(address)
 	d.publishSessionPullRequestMembershipChanged(prID, string(watch.SessionID))
+	d.publishStandbyViewChanged(address)
 	return true, nil
 }
 

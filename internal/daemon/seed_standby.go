@@ -146,7 +146,7 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 		if err != nil {
 			return nil, err
 		}
-		d.tenderWakes.unblock(seed.ID)
+		d.unblockTenderWake(seed.ID)
 		return &protocol.SeedStandbyResult{Seed: d.seedWire(seed, written), Changed: true}, nil
 	}
 	return nil, protocol.Refuse(protocol.RefusalConflict,
@@ -243,13 +243,21 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 	return view
 }
 
-func (d *Daemon) projectGardenWhileSeedsOnStandby() {
-	onStandby, err := d.store.SeedsOnStandby()
+func (d *Daemon) publishStandbyViewChanged(addresses ...who.Address) {
+	for _, a := range addresses {
+		if seedID, seedMail := a.TenderOf(); seedMail {
+			d.publishFact(FactSeedStandbyViewChanged, seedID, nil)
+		}
+	}
+}
+
+func (d *Daemon) projectStandbyViewChanged(seedID string) {
+	row, err := d.store.SeedStandby(seedID)
 	if err != nil {
-		d.logf("standby: list seeds on standby to refresh the garden: %v", err)
+		d.logf("standby: read the standby of %s to refresh the garden: %v", seedID, err)
 		return
 	}
-	if len(onStandby) > 0 {
+	if row != nil {
 		d.projectGardenSeeds()
 	}
 }
