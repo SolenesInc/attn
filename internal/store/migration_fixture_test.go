@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"github.com/victorarias/attn/internal/docstore"
 	"path/filepath"
 	"testing"
@@ -29,8 +30,57 @@ func withMigrationsThrough(version int, run func() error) error {
 	return run()
 }
 
+func creatingDBThrough(version int, create func() error) error {
+	return withMigrationsThrough(version, func() error {
+		if err := upgradeClosestSchemaImage(); err != nil {
+			return err
+		}
+		return create()
+	})
+}
+
+func upgradeClosestSchemaImage() error {
+	version := LatestSchemaVersion()
+	if _, built := replayedImages.Load(version); built {
+		return nil
+	}
+	closest := 0
+	replayedImages.Range(func(key, _ any) bool {
+		if lower := key.(int); lower < version && lower > closest {
+			closest = lower
+		}
+		return true
+	})
+	if closest == 0 {
+		return nil
+	}
+	build, _ := replayedImages.Load(closest)
+	lower, err := build.(func() ([]byte, error))()
+	if err != nil {
+		return err
+	}
+	image, err := upgradedSchemaImage(lower)
+	if err != nil {
+		return fmt.Errorf("upgrading the schema image of %d to %d: %w", closest, version, err)
+	}
+	replayedImages.Store(version, func() ([]byte, error) { return image, nil })
+	return nil
+}
+
+func upgradedSchemaImage(lower []byte) ([]byte, error) {
+	db, _ := connectSQLite(":memory:")
+	defer db.Close()
+	if err := withImage(lower, func(fixedSize *sql.DB) error { return backup(fixedSize, db) }); err != nil {
+		return nil, err
+	}
+	if _, err := upgradeSchema(db, ":memory:"); err != nil {
+		return nil, err
+	}
+	return serialize(db)
+}
+
 func openDBAtVersion(path string, version int) (db *sql.DB, err error) {
-	err = withMigrationsThrough(version, func() error {
+	err = creatingDBThrough(version, func() error {
 		var e error
 		db, e = OpenDB(path)
 		return e
@@ -39,7 +89,7 @@ func openDBAtVersion(path string, version int) (db *sql.DB, err error) {
 }
 
 func newStoreAtVersion(path string, version int) (s *Store, err error) {
-	err = withMigrationsThrough(version, func() error {
+	err = creatingDBThrough(version, func() error {
 		var e error
 		s, e = NewWithDB(path)
 		return e
