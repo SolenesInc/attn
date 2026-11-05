@@ -435,37 +435,66 @@ func TestAMessageWaitingWhenTheModIsLostFailsLoudlyAndTheNextIsTyped(t *testing.
 	typedOnce(t, app, run, session, "check it again")
 }
 
-func TestASecondPollForATerminalReplacesTheFirst(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	session, run := moddedClaude(t, w, app)
-	socket, terminal := runEnv(run, "ATTN_CLAUDE_MOD_SOCKET"), runEnv(run, "ATTN_TERMINAL_ID")
-	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
-	}}}
+type modSocket struct {
+	t        *testing.T
+	ctx      context.Context
+	client   *http.Client
+	terminal string
+}
+
+type modPollAnswer struct {
+	status int
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+}
+
+func modSocketOf(t *testing.T, run *fakeagent.Run) *modSocket {
+	t.Helper()
+	socket := runEnv(run, "ATTN_CLAUDE_MOD_SOCKET")
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	type message struct {
-		ID   string `json:"id"`
-		Text string `json:"text"`
-	}
-	taken := make(chan message, 1)
+	t.Cleanup(cancel)
+	return &modSocket{t: t, ctx: ctx, terminal: runEnv(run, "ATTN_TERMINAL_ID"), client: &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	}}}}
+}
+
+func (m *modSocket) poll(instance string) <-chan modPollAnswer {
+	answered := make(chan modPollAnswer, 1)
 	go func() {
-		query := url.Values{"terminal": {terminal}, "instance": {"second"}}.Encode()
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://attn/claude/next?"+query, nil)
+		query := url.Values{"terminal": {m.terminal}, "instance": {instance}}.Encode()
+		request, err := http.NewRequestWithContext(m.ctx, http.MethodGet, "http://attn/claude/next?"+query, nil)
 		if err != nil {
 			return
 		}
-		response, err := client.Do(request)
+		response, err := m.client.Do(request)
 		if err != nil {
 			return
 		}
 		defer response.Body.Close()
 		body, _ := io.ReadAll(response.Body)
-		var got message
-		_ = json.Unmarshal(body, &got)
-		taken <- got
+		answer := modPollAnswer{status: response.StatusCode}
+		_ = json.Unmarshal(body, &answer)
+		answered <- answer
 	}()
+	return answered
+}
+
+func (m *modSocket) ackSubmitted(instance, id string) {
+	m.t.Helper()
+	ack, _ := json.Marshal(map[string]string{"terminal": m.terminal, "instance": instance, "id": id, "outcome": "submitted"})
+	response, err := m.client.Post("http://attn/claude/ack", "application/json", bytes.NewReader(ack))
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	response.Body.Close()
+}
+
+func TestASecondPollForATerminalReplacesTheFirst(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	mod := modSocketOf(t, run)
+	taken := mod.poll("second")
 
 	if event := run.ModNext(); event.Kind != fakeagent.ModEventReplaced {
 		t.Fatalf("the first poll reported %+v, want it replaced", event)
@@ -475,12 +504,41 @@ func TestASecondPollForATerminalReplacesTheFirst(t *testing.T) {
 	if got.Text != "check the rounding" {
 		t.Fatalf("the newer poll took %+v, want the annotation", got)
 	}
-	ack, _ := json.Marshal(map[string]string{"terminal": terminal, "instance": "second", "id": got.ID, "outcome": "submitted"})
-	response, err := client.Post("http://attn/claude/ack", "application/json", bytes.NewReader(ack))
-	if err != nil {
-		t.Fatal(err)
+	mod.ackSubmitted("second", got.ID)
+	if result := feedbackResult(app, submitted); !result.Success || result.Status != "delivered" {
+		t.Fatalf("the feedback was answered %+v, want it delivered", result)
 	}
-	response.Body.Close()
+}
+
+func TestAReplacedModCannotTakeItsTerminalBackWithALatePoll(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session, run := moddedClaude(t, w, app)
+	mod := modSocketOf(t, run)
+	before := mod.poll("before-the-reload")
+	if event := run.ModNext(); event.Kind != fakeagent.ModEventReplaced {
+		t.Fatalf("the fake mod's poll reported %+v, want it replaced", event)
+	}
+	reloaded := mod.poll("after-the-reload")
+	if answer := <-before; answer.status != http.StatusConflict {
+		t.Fatalf("the poll from before the reload was answered %+v, want it replaced", answer)
+	}
+
+	select {
+	case answer := <-mod.poll("before-the-reload"):
+		if answer.status != http.StatusConflict {
+			t.Fatalf("the late poll was answered %+v, want it refused", answer)
+		}
+	case answer := <-reloaded:
+		t.Fatalf("the late poll took the terminal: the reloaded mod's poll was answered %+v", answer)
+	}
+
+	submitted := sendFeedback(app, session, "check the rounding")
+	got := <-reloaded
+	if got.Text != "check the rounding" {
+		t.Fatalf("the reloaded mod took %+v, want the annotation", got)
+	}
+	mod.ackSubmitted("after-the-reload", got.ID)
 	if result := feedbackResult(app, submitted); !result.Success || result.Status != "delivered" {
 		t.Fatalf("the feedback was answered %+v, want it delivered", result)
 	}
