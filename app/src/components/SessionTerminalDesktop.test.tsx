@@ -22,6 +22,7 @@ const testSurfaceValue: NotebookSurfaceContextValue = {
   sendFsWatch: vi.fn(),
   sendFsUnwatch: vi.fn(),
   connectionGeneration: 0,
+  unmountedDrafts: new Map(),
 };
 function NotebookSurfaceTestWrapper({ children }: { children: ReactNode }) {
   return <NotebookSurfaceProvider value={testSurfaceValue}>{children}</NotebookSurfaceProvider>;

@@ -8,6 +8,7 @@ import type {
   FsWriteResult,
   NotebookEntry,
 } from '../hooks/useDaemonSocket';
+import type { UnmountedDrafts } from '../components/NotebookSurface';
 
 export interface NotebookSurfaceDaemon {
   listDir: (path: string) => Promise<FsEntry[]>;
@@ -34,6 +35,7 @@ export interface NotebookSurfaceContextValue {
   // Bumps on every fresh connect. The daemon drops fs_watch refs on disconnect,
   // so a root-bound tile must re-issue fs_watch per generation or go blind.
   connectionGeneration: number;
+  unmountedDrafts: UnmountedDrafts;
 }
 
 const NotebookSurfaceContext = createContext<NotebookSurfaceContextValue | null>(null);

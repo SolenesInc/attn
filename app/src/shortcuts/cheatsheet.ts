@@ -17,7 +17,7 @@ function fromId(id: ShortcutId): string[] {
   return shortcutTokens(id);
 }
 
-export function buildCheatsheet(): CheatsheetCategory[] {
+export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): CheatsheetCategory[] {
   return [
     {
       title: 'Desktops & Sessions',
@@ -83,6 +83,12 @@ export function buildCheatsheet(): CheatsheetCategory[] {
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
         { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },
         { label: 'Focus utility terminal', combos: [fromId('terminal.open')] },
+        ...(shelfLayoutEnabled
+          ? [{
+              label: 'Fewer, wider / more, narrower tiles',
+              combos: [fromId('shelf.fewerTiles'), fromId('shelf.moreTiles')],
+            }]
+          : []),
       ],
     },
     {

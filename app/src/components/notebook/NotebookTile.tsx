@@ -5,15 +5,17 @@ import { NotebookSurface, type NotebookSurfaceHandle } from '../NotebookSurface'
 // The daemon watches the notebook root unconditionally and nothing else, so a
 // `root`-bound tile owns its own fs_watch subscription.
 export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
+  tileId: string;
   initialPath: string | null;
   root?: string;
   onOpenFile: (path: string) => void;
 }>(function NotebookTile({
+  tileId,
   initialPath,
   root,
   onOpenFile,
 }, ref) {
-  const { makeDaemon, changeSignalFor, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration } = useNotebookSurfaceContext();
+  const { makeDaemon, changeSignalFor, effectiveNotebookRoot, sendFsWatch, sendFsUnwatch, connectionGeneration, unmountedDrafts } = useNotebookSurfaceContext();
 
   const offRoot = !!root && root !== effectiveNotebookRoot;
 
@@ -80,6 +82,7 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
       backlinksNotebook={offRoot ? undefined : daemon.backlinksNotebook}
       changeSignal={changeSignalFor(effectiveRoot)}
       listFiles={daemon.listFiles}
+      draftHome={{ drafts: unmountedDrafts, key: `${tileId}\0${root ?? ''}` }}
     />
   );
 });

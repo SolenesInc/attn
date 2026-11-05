@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { serveSettings } from './test/settings';
 
 async function openCheatsheet(platform?: string) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
@@ -55,6 +56,19 @@ describe('App shortcut cheatsheet', () => {
       expect(combosOf(cheatsheet, label), label).toEqual(combos);
     }
     if (platform !== 'MacIntel') expect(cheatsheet).not.toHaveTextContent('⌘');
+  });
+
+  it.each([
+    ['lists', { shelf_layout_enabled: 'true' }, [['⌘', '⌥', '-'], ['⌘', '⌥', '=']]],
+    ['leaves out', {}, undefined],
+  ])('%s the shelf width keys by the shelf layout setting', async (_, settings, combos) => {
+    const { daemon } = await renderApp({
+      initialState: { settings },
+      script: (scripted) => serveSettings(scripted, settings),
+    });
+    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
+
+    expect(combosOf(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' }), 'Fewer, wider / more, narrower tiles')).toEqual(combos);
   });
 
   it('closes from its close button', async () => {

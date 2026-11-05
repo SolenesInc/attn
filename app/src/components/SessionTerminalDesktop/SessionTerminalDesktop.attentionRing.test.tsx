@@ -34,6 +34,7 @@ const notebookSurface: NotebookSurfaceContextValue = {
   sendFsWatch: vi.fn(),
   sendFsUnwatch: vi.fn(),
   connectionGeneration: 0,
+  unmountedDrafts: new Map(),
 };
 
 function Wrapper({ children }: { children: ReactNode }) {

@@ -57,6 +57,7 @@ const testSurfaceValue: NotebookSurfaceContextValue = {
   sendFsWatch: vi.fn().mockResolvedValue({ root: '' }),
   sendFsUnwatch: vi.fn().mockResolvedValue({ root: '' }),
   connectionGeneration: 0,
+  unmountedDrafts: new Map(),
 };
 
 const defaultDaemonApi = createMockDaemonApi({});

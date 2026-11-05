@@ -28,6 +28,7 @@ import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 interface ShortcutEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  shelfLayoutEnabled: boolean;
 }
 
 type BindingChange = Binding | 'default';
@@ -41,11 +42,12 @@ interface PendingReassign {
 
 const REGISTRY_ORDER = Object.keys(SHORTCUTS) as ShortcutId[];
 
-function groupedByCategory(): Record<ShortcutCategory, ShortcutId[]> {
+function groupedByCategory(shelfLayoutEnabled: boolean): Record<ShortcutCategory, ShortcutId[]> {
   const groups = {
     sessions: [], panes: [], markdown: [], review: [], app: [],
   } as Record<ShortcutCategory, ShortcutId[]>;
   for (const id of REGISTRY_ORDER) {
+    if (SHORTCUT_META[id].requiresShelfLayout && !shelfLayoutEnabled) continue;
     groups[SHORTCUT_META[id].category].push(id);
   }
   return groups;
@@ -63,10 +65,10 @@ function overrideValue(id: ShortcutId, change: BindingChange): Binding | undefin
   return bindingsConflict(change, defaultShortcut(id)) ? undefined : change;
 }
 
-export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProps) {
+export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: ShortcutEditorModalProps) {
   const capture = useCaptureShortcut();
   const kb = useKeybindings();
-  const groups = useMemo(groupedByCategory, []);
+  const groups = useMemo(() => groupedByCategory(shelfLayoutEnabled), [shelfLayoutEnabled]);
 
   const [recordingId, setRecordingId] = useState<ShortcutId | 'quickCapture' | null>(null);
   const [recordingMode, setRecordingMode] = useState<'combo' | 'chord'>('combo');

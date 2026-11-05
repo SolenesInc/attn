@@ -14,6 +14,7 @@ writers never collide. The chief treats the notebook as its home.
 - `notebook-fullscreen`: the notebook over the whole window: its files, the open document, an outline and backlinks.
 - `editor-tile`: an editor docked beside the terminals, opened on the notebook or any other folder.
 - `live-editor`: markdown edited in place and saved to disk, with frontmatter shown as a card and links to missing notes marked.
+- `editor-tile-drafts`: an editor tile that leaves the screen, to the shelf or to a sliver, saves its unsaved edit on the way out. If that save fails or conflicts, the tile brings back the edit and the message when it returns.
 - `note-finder`: ⌘P inside the notebook or an editor tile finds a note by name.
 - `notebook-links`: root-absolute links between notes, followed in place, and the backlinks that point at a note.
 - `editor-undo`: native ⌘Z and ⇧⌘Z undo and redo in the editor.
@@ -75,6 +76,7 @@ Preconditions:
   - Close it the same way.
   - Click nb-agent's sidebar row, `[data-session-id="nb-agent"]`, natively and press ⌥⌘N again: with the agent on screen the tile opens on its folder, and the "Editor root" value reads `$A` written out.
   - Click inside the tile natively (point from `bridge dom_native_point '{"selector":"[data-tile-kind=\"notebook\"] .notebook-surface-tile"}'`), then run ⌘P: `bridge dom_wait '{"selector":"[placeholder=\"Find a note…\"]","focused":true,"timeoutMs":5000}'` matches, and `bridge markdown_opener_get_state` shows `open: false`.
+- **Drafts leave the screen with the tile.** With `shelf_layout_enabled` on and `narrowest_tile_cols` at 150, so only one tile fits, type in the editor tile and click another tile's `[data-testid^="shelf-chip-"]` natively within 700 ms: `cat` shows the edit on disk, and clicking the tile's chip brings it back. Append to the file from a shell between typing and clicking: the tile returns with the edit and `.notebook-browser-editor-conflict`, and "Overwrite anyway" saves it. Run `chmod 555` on the folder before typing: the tile returns with the edit and `.notebook-browser-editor-error`, and after `chmod 755` the status reads `Saved`. With the setting off and a window that folds tiles, the same edit followed by a click on a sliver's button saves it too.
 - **Change the editor root.** Click `[aria-label="Editor root"]` natively (its point comes from `bridge dom_native_point`). The click focuses the select without opening its menu. Then run `bridge native_text '{"text":"Notebook"}'` to select Notebook. Press Home and Enter: the value stays unchanged. `bridge dom_value '{"selector":"[aria-label=\"Editor root\"]"}'` reads an empty value, and `wsctl list` shows the editor tile updated from its agent-folder root.
 - **The chief's status.**
   - Click `[data-testid="session-actions-nb-agent"]` natively, then `[data-testid="chief-of-staff-session-action"]` ("Make chief of staff").
@@ -98,7 +100,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: the notebook is files on disk and does not depend on attn running. An edit that the app had not saved yet is the only thing a crash can lose, and the save status shows when an edit is unsaved. The open editor tile comes back with its desktop.
+- **Durability across restarts**: the notebook is files on disk and does not depend on attn running. An edit that the app had not saved yet is the only thing a crash can lose, and the save status shows when an edit is unsaved. That includes an editor tile's edit whose save failed or conflicted while the tile was off screen, which the app holds in memory until the tile returns. The open editor tile comes back with its desktop.
 - **Linux**: `attn journal append` and the files work the same where the daemon and CLI run on Linux. The editor tile is Ctrl+Shift+Alt+N and fullscreen Ctrl+Shift+Alt+F there (`LINUX_SHORTCUTS`).
 - **Outposts**: an outpost keeps a copy of each Notebook folder at `~/attn-notebook-<name>-<key>`, synced with the home's, and conflict copies appear on the outpost's row in Settings. An agent there works in the copy of its profile's folder, its `notebook.root.effective`, and `attn seed attach`, `detach` and `check report --evidence` for that profile's seeds land in the profile's folder at the home. Agents on an outpost append to the journal with `attn journal append`, which writes at the home. While the outpost is offline its copies wait for the next sync.
 - **Profiles**: each profile has its own `notebook.root`, and profiles that leave it blank use the default folder. The app's notebook, editor tiles, the chief's launch guidance, `attn journal append` and seed artifacts all follow the profile: the window's profile for the app, the session's profile for agents, the seed's profile for its files. After switching the window's profile, the notebook opens on that profile's folder. Repointing a profile never moves files. An editor tile rooted at another profile's folder keeps following the disk when that profile repoints or clears its folder from a shell (`attn settings set notebook.root "" --profile <name>`). To open the tile on that folder, place a terminal there first, since Browse opens a native dialog.
@@ -114,7 +116,7 @@ Preconditions:
 - Stack: `cmd/attn/notebook_sync_stack_test.go`, `cmd/attn/agent_commands_stack_test.go`, `app/e2e/notebook-tile.spec.ts`, `app/e2e/notebook-tile-finder.spec.ts`, `app/e2e/notebook-browser.spec.ts`, `app/e2e/live-markdown-editor.spec.ts`, `app/e2e/broken-links.spec.ts`, `app/e2e/frontmatter-card.spec.ts`.
 - Scenario: `notebook-editor-undo`, `notebook-sync`, and outside the catalog, `app/scripts/real-app-harness/scenario-notebook-link-nav.mjs` and `scenario-notebook-tile-close.mjs`.
 - Kernel: `internal/notebook/*_test.go`.
-- App: `app/src/App.notebook.test.tsx`, `app/src/App.notebookTile.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/components/notebook/*.test.ts`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
+- App: `app/src/App.notebook.test.tsx`, `app/src/App.notebookTile.test.tsx`, `app/src/App.editorTileDrafts.test.tsx`, `app/src/App.outpostsNotebook.test.tsx`, `app/src/components/notebook/*.test.ts`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
 
 ## Gotchas
 

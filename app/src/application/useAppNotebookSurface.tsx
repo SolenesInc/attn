@@ -1,4 +1,5 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import type { UnmountedDrafts } from '../components/NotebookSurface';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { fsChangeSignalKey, fsIndexToNotebookEntries } from '../utils/fsChangeSignals';
 import { AppContentProps } from './appSupport';
@@ -57,6 +58,8 @@ export function useAppNotebookSurface({
     [fsChangeSignals, effectiveNotebookRoot],
   );
 
+  const unmountedDrafts = useRef<UnmountedDrafts>(new Map()).current;
+
   const notebookSurfaceContextValue = useMemo(
     () => ({
       makeDaemon: makeNotebookSurfaceDaemon,
@@ -65,6 +68,7 @@ export function useAppNotebookSurface({
       sendFsWatch,
       sendFsUnwatch,
       connectionGeneration,
+      unmountedDrafts,
     }),
     [
       makeNotebookSurfaceDaemon,
@@ -73,6 +77,7 @@ export function useAppNotebookSurface({
       sendFsWatch,
       sendFsUnwatch,
       connectionGeneration,
+      unmountedDrafts,
     ],
   );
 

@@ -18,6 +18,7 @@ export interface ShortcutMeta {
   /** A native menu item in `app_menu` (src-tauri/src/lib.rs) delivers the keystroke
    * because AppKit consumes it first, so a rebind here would never fire. */
   nativeDelivery?: boolean;
+  requiresShelfLayout?: boolean;
 }
 
 export const SHORTCUT_CATEGORY_LABELS: Record<ShortcutCategory, string> = {
@@ -97,8 +98,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'terminal.focusRight': { label: 'Move focus right', category: 'panes', requiresTerminal: true },
   'terminal.focusUp': { label: 'Move focus up', category: 'panes', requiresTerminal: true },
   'terminal.focusDown': { label: 'Move focus down', category: 'panes', requiresTerminal: true },
-  'shelf.fewerTiles': { label: 'Fewer, wider tiles (Shelf layout)', category: 'panes' },
-  'shelf.moreTiles': { label: 'More, narrower tiles (Shelf layout)', category: 'panes' },
+  'shelf.fewerTiles': { label: 'Fewer, wider tiles', category: 'panes', requiresShelfLayout: true },
+  'shelf.moreTiles': { label: 'More, narrower tiles', category: 'panes', requiresShelfLayout: true },
   'terminal.find': { label: 'Find in terminal', category: 'panes', requiresTerminal: true },
 
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },

@@ -33,7 +33,16 @@ export interface NotebookSurfaceProps {
   changeSignal?: number;
   listFiles?: () => Promise<NotebookEntry[]>;
   chiefActive?: boolean;
+  draftHome?: { drafts: UnmountedDrafts; key: string };
 }
+
+export interface UnmountedDraft {
+  note: FsReadResult;
+  draft: string;
+  write: Promise<FsWriteResult>;
+}
+
+export type UnmountedDrafts = Map<string, UnmountedDraft>;
 
 const PREFERRED_FIRST = ['knowledge/index.md', 'index.md'];
 
@@ -62,9 +71,11 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   changeSignal = 0,
   listFiles,
   chiefActive,
+  draftHome,
 }: NotebookSurfaceProps, ref) {
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [note, setNote] = useState<FsReadResult | null>(null);
+  const unmountedDraftRef = useRef(draftHome?.drafts.get(draftHome.key) ?? null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(unmountedDraftRef.current?.note.path ?? null);
+  const [note, setNote] = useState<FsReadResult | null>(unmountedDraftRef.current?.note ?? null);
   const [noteError, setNoteError] = useState<string | null>(null);
   const [noteLoading, setNoteLoading] = useState(false);
   const [backlinks, setBacklinks] = useState<NotebookEntry[]>([]);
@@ -142,6 +153,22 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   useEscapeStack(handleEscape, variant === 'modal' && active);
   useEscapeStack(() => { editorRef.current?.closeSearchPanel(); }, active && searchOpen);
 
+  const loadBacklinks = useCallback((path: string, seq: number) => {
+    if (!isMarkdownPath(path) || !backlinksNotebook) return;
+    setBacklinksLoading(true);
+    void backlinksNotebook(path)
+      .then((entries) => {
+        if (loadSeqRef.current !== seq) return;
+        setBacklinks(entries);
+        setBacklinksLoading(false);
+      })
+      .catch(() => {
+        if (loadSeqRef.current !== seq) return;
+        setBacklinks([]);
+        setBacklinksLoading(false);
+      });
+  }, [backlinksNotebook]);
+
   const loadFile = useCallback(async (path: string, prefetched?: FsReadResult) => {
     if (dirtyRef.current && selectedPathRef.current && selectedPathRef.current !== path) {
       const outcome = await persistRef.current();
@@ -183,21 +210,8 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
           setNoteLoading(false);
         });
     }
-    if (isMarkdownPath(path) && backlinksNotebook) {
-      setBacklinksLoading(true);
-      void backlinksNotebook(path)
-        .then((entries) => {
-          if (loadSeqRef.current !== seq) return;
-          setBacklinks(entries);
-          setBacklinksLoading(false);
-        })
-        .catch(() => {
-          if (loadSeqRef.current !== seq) return;
-          setBacklinks([]);
-          setBacklinksLoading(false);
-        });
-    }
-  }, [readFile, backlinksNotebook, onOpenFile]);
+    loadBacklinks(path, seq);
+  }, [readFile, loadBacklinks, onOpenFile]);
 
   const clearSelection = useCallback(() => {
     loadSeqRef.current += 1;
@@ -210,7 +224,7 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     setBacklinksLoading(false);
   }, []);
 
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(unmountedDraftRef.current?.draft ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentHash?: string } | null>(null);
@@ -223,15 +237,17 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
 
-  const writeBuffer = useCallback(async (baseHash: string, content: string): Promise<PersistOutcome> => {
-    const path = selectedPathRef.current;
-    if (!path) return 'noop';
+  const inFlightWriteRef = useRef<{ content: string; write: Promise<FsWriteResult> } | null>(null);
+
+  const settleWrite = useCallback(async (path: string, content: string, write: Promise<FsWriteResult>): Promise<PersistOutcome> => {
     // Freeze (never bump) the load token: the bytes still reach disk, they just aren't stamped onto the file now shown.
     const seq = loadSeqRef.current;
+    const inFlight = { content, write };
+    inFlightWriteRef.current = inFlight;
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await writeFile(path, content, baseHash || undefined);
+      const res = await write;
       const superseded = loadSeqRef.current !== seq || selectedPathRef.current !== path;
       if (res.conflict) {
         if (!superseded) setConflict({ currentHash: res.currentHash });
@@ -249,9 +265,16 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
       }
       return 'error';
     } finally {
+      if (inFlightWriteRef.current === inFlight) inFlightWriteRef.current = null;
       setSaving(false);
     }
-  }, [writeFile]);
+  }, []);
+
+  const writeBuffer = useCallback(async (baseHash: string, content: string): Promise<PersistOutcome> => {
+    const path = selectedPathRef.current;
+    if (!path) return 'noop';
+    return settleWrite(path, content, writeFile(path, content, baseHash || undefined));
+  }, [settleWrite, writeFile]);
 
   const persist = useCallback(async (): Promise<PersistOutcome> => {
     const current = noteRef.current;
@@ -261,6 +284,28 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     return writeBuffer(current.hash, content);
   }, [writeBuffer]);
   persistRef.current = persist;
+
+  const keepDraftAfterUnmountRef = useRef(() => {});
+  keepDraftAfterUnmountRef.current = () => {
+    const current = noteRef.current;
+    if (!draftHome || !current) return;
+    const { drafts, key } = draftHome;
+    const content = draftRef.current;
+    const inFlight = inFlightWriteRef.current;
+    if (!inFlight && content === current.content) return;
+    const write = inFlight
+      ? content === inFlight.content
+        ? inFlight.write
+        : inFlight.write.then((res) => (res.conflict ? res : writeFile(current.path, content, res.hash || undefined)))
+      : writeFile(current.path, content, current.hash || undefined);
+    const unmounted = { note: current, draft: content, write };
+    drafts.set(key, unmounted);
+    const forgetUnlessReturned = (res: FsWriteResult) => {
+      if (!res.conflict && drafts.get(key) === unmounted) drafts.delete(key);
+    };
+    write.then(forgetUnlessReturned, () => {});
+  };
+  useEffect(() => () => keepDraftAfterUnmountRef.current(), []);
 
   useImperativeHandle(ref, () => ({
     flushPendingSave: () => persistRef.current?.() ?? Promise.resolve('noop'),
@@ -309,21 +354,8 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     setNote(fresh);
     setDraft(fresh.content);
     setNoteError(null);
-    if (isMarkdownPath(path) && backlinksNotebook) {
-      setBacklinksLoading(true);
-      void backlinksNotebook(path)
-        .then((entries) => {
-          if (loadSeqRef.current !== seq || selectedPathRef.current !== path) return;
-          setBacklinks(entries);
-          setBacklinksLoading(false);
-        })
-        .catch(() => {
-          if (loadSeqRef.current !== seq || selectedPathRef.current !== path) return;
-          setBacklinks([]);
-          setBacklinksLoading(false);
-        });
-    }
-  }, [readFile, backlinksNotebook]);
+    loadBacklinks(path, seq);
+  }, [readFile, loadBacklinks]);
 
   useEffect(() => {
     if (!active) return;
@@ -331,6 +363,14 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
     let cancelled = false;
     void (async () => {
       if (variant === 'tile') {
+        const unmounted = unmountedDraftRef.current;
+        if (unmounted && draftHome) {
+          unmountedDraftRef.current = null;
+          draftHome.drafts.delete(draftHome.key);
+          loadBacklinks(unmounted.note.path, loadSeqRef.current);
+          void settleWrite(unmounted.note.path, unmounted.draft, unmounted.write);
+          return;
+        }
         const seed = initialPath ?? null;
         if (!seed) {
           if (!cancelled) {

@@ -456,6 +456,7 @@ function DesktopTileContent({
     return (
       <NotebookTile
         ref={notebookSurfaceRef}
+        tileId={tile.tileId}
         initialPath={openPath || null}
         root={root}
         onOpenFile={(openedPath) => {

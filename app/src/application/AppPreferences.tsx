@@ -53,6 +53,7 @@ export function AppPreferences() {
   } = useDaemonApi();
   const { handleSelectSession } = useNavigationContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
+  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
   return (
     <>
       <ShortcutsModal
@@ -62,10 +63,12 @@ export function AppPreferences() {
           setShortcutsOpen(false);
           setShortcutEditorOpen(true);
         }}
+        shelfLayoutEnabled={shelfLayoutEnabled}
       />
       <ShortcutEditorModal
         isOpen={shortcutEditorOpen}
         onClose={() => setShortcutEditorOpen(false)}
+        shelfLayoutEnabled={shelfLayoutEnabled}
       />
       <WhatsNewModal
         isOpen={whatsNew.isOpen}

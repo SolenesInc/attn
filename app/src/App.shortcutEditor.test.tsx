@@ -19,12 +19,14 @@ interface Launch {
   config?: Config;
   withSession?: boolean;
   quickCapture?: boolean;
+  shelfLayout?: boolean;
 }
 
-async function renderKeybindings({ platform, config, withSession = false, quickCapture = false }: Launch = {}) {
+async function renderKeybindings({ platform, config, withSession = false, quickCapture = false, shelfLayout = false }: Launch = {}) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
   const settings: Record<string, string> = config ? { [KEY]: JSON.stringify({ version: 1, overrides: {}, ...config }) } : {};
   if (quickCapture) settings.quick_capture_enabled = 'true';
+  if (shelfLayout) settings.shelf_layout_enabled = 'true';
   const view = await renderApp({
     initialState: {
       settings,
@@ -103,6 +105,18 @@ describe('App shortcut editor', () => {
     await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByTitle('Reset to Ctrl+Shift+N')));
 
     expect(saved(daemon).overrides).toEqual({});
+  });
+
+  it('lists the shelf width keys only while the shelf layout is on', async () => {
+    await renderEditor({ shelfLayout: true });
+    expect(row('Fewer, wider tiles')).toHaveTextContent('⌘⌥-');
+    expect(row('More, narrower tiles')).toHaveTextContent('⌘⌥=');
+  });
+
+  it('leaves out the shelf width keys while the shelf layout is off', async () => {
+    const { editor } = await renderEditor();
+    expect(within(editor).queryByText('Fewer, wider tiles')).toBeNull();
+    expect(within(editor).queryByText('More, narrower tiles')).toBeNull();
   });
 
   it('marks a rebound shortcut as customized and offers a reset to its default', async () => {
