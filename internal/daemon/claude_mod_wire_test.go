@@ -739,3 +739,64 @@ func TestARingThroughTheModToAWaitingAgentSettlesItsTurnAndStaysOutOfTheQueue(t 
 		t.Fatal("a run the ring started opened a turn with quiet notifications on")
 	}
 }
+
+func TestTheAppSeesWhatAReturnedRingCarriedAsWaitingUntilTheNextRingPlacesIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.TrustedApp()
+	session, run := moddedClaude(t, w, app)
+	cli := w.Client()
+	seed := plantDelegationSeed(t, cli, session, "Search endpoint")
+	moveDelegationSeed(t, cli, session, seed, "tend", "")
+	workingOn(t, app, run, session, "write the essay")
+
+	capture := uuid.NewString()
+	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{
+		Cmd: protocol.CmdQuickCaptureSend, CaptureID: capture, Content: "check the rounding", AttachmentIds: []string{},
+		Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
+
+	testworld.Request(app, protocol.SeedAuthorizationMessage{
+		Cmd: protocol.CmdSeedAuthorization, RequestID: protocol.Ptr("set"), SeedID: seed, Text: protocol.Ptr("You may land on main."),
+	}, protocol.EventSeedAuthorizationResult, func(m protocol.SeedAuthorizationResultMessage) bool { return m.RequestID == "set" })
+	modEvent(t, run, fakeagent.ModEventHeld, "You may land on main.")
+	typedAt := func(m protocol.GardenSeedsChangedMessage) (typed, waiting bool) {
+		for _, changed := range m.Seeds {
+			if changed.ID == seed && changed.Authorization != nil && changed.Authorization.Update != nil {
+				typed = changed.Authorization.Update.TypedAt != nil
+				return typed, !typed
+			}
+		}
+		return false, false
+	}
+	testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		typed, _ := typedAt(m)
+		return typed
+	})
+
+	mark := len(app.Log())
+	stoppedByEsc(t, app, run, session)
+	testworld.AwaitSince(app, mark, protocol.EventQuickCaptureUnread, func(m protocol.QuickCaptureUnreadMessage) bool { return m.CaptureID == capture })
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		_, waiting := typedAt(m)
+		return waiting
+	})
+	if r := quickCaptureRecord(t, app, capture); r.ReadAt != nil {
+		t.Fatalf("the history lists the returned capture as read at %s", *r.ReadAt)
+	}
+
+	mark = len(app.Log())
+	run.Input("carry on")
+	if got := run.Prompted(); got != "carry on" {
+		t.Fatalf("the agent took %q, want the user's prompt", got)
+	}
+	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
+	testworld.AwaitSince(app, mark, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		typed, _ := typedAt(m)
+		return typed
+	})
+}

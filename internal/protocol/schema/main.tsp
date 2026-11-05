@@ -956,6 +956,11 @@ model QuickCaptureReadMessage {
   capture_id: string;
   read_at: string;
 }
+model QuickCaptureUnreadMessage {
+  profile_id: string;
+  event: "quick_capture_unread";
+  capture_id: string;
+}
 
 @extension("x-on", #{ home: true })
 model AgentInboxMessage {

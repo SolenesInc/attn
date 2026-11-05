@@ -111,6 +111,7 @@ const (
 	FactCrewUpdated            = "crew.updated"
 	FactQuickCaptureRead       = "quick_capture.read"
 	FactSeedAuthorizationTyped = "seed_authorization.typed"
+	FactInboxRingReturned      = "inbox.ring_returned"
 	FactBackgroundLaunch       = "session.background.launch"
 )
 
@@ -151,6 +152,7 @@ func buildWireProjections() []projection {
 				}
 			})
 		}},
+		{filter: bus.Filter{FactInboxRingReturned}, apply: func(d *Daemon, ev bus.Event) { d.projectReturnedRing(ev) }},
 		{
 			filter: bus.Filter{FactSessionStateChanged, FactSessionTitleChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },

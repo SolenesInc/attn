@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { QuickCaptureDeliveryClient, QuickCaptureItem, QuickCaptureReadReceipt } from './client';
+import type { QuickCaptureDeliveryClient, QuickCaptureItem, QuickCaptureReadState } from './client';
 
 export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | undefined, open: boolean, connected: boolean) {
   const [history, setHistory] = useState<QuickCaptureItem[]>([]);
@@ -11,7 +11,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
   const opened = useRef(false);
   const generation = useRef(0);
   const pending = useRef<Promise<void> | null>(null);
-  const pendingReads = useRef(new Map<string, string>());
+  const pendingReadStates = useRef(new Map<string, string | undefined>());
   const refreshWanted = useRef(false);
 
   function refresh(cursor?: string): Promise<void> {
@@ -33,10 +33,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
         }
         if (epoch !== generation.current) return;
         const previous = current.current.history;
-        items = items.map(item => {
-          const readAt = pendingReads.current.get(item.id) ?? item.readAt ?? previous.find(saved => saved.id === item.id)?.readAt;
-          return readAt ? { ...item, readAt } : item;
-        });
+        items = items.map(item => pendingReadStates.current.has(item.id) ? { ...item, readAt: pendingReadStates.current.get(item.id) } : item);
         const updated = cursor ? [...previous, ...items.filter(item => !previous.some(saved => saved.id === item.id))] : items;
         current.current.history = updated; setHistory(updated);
         setNextCursor(page.nextCursor); setError('');
@@ -47,7 +44,7 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     return operation.finally(() => {
       if (pending.current === operation) {
         pending.current = null;
-        pendingReads.current.clear();
+        pendingReadStates.current.clear();
       }
       if (refreshWanted.current && current.current.open && current.current.connected) {
         refreshWanted.current = false;
@@ -68,12 +65,12 @@ export function useQuickCaptureHistory(client: QuickCaptureDeliveryClient | unde
     }
     if (client && connected) void refresh();
   }, [client, open, connected]);
-  function markRead(receipt: QuickCaptureReadReceipt) {
-    if (pending.current) pendingReads.current.set(receipt.captureId, receipt.readAt);
-    const updated = current.current.history.map(item => item.id === receipt.captureId ? { ...item, readAt: receipt.readAt } : item);
+  function applyReadState(state: QuickCaptureReadState) {
+    if (pending.current) pendingReadStates.current.set(state.captureId, state.readAt);
+    const updated = current.current.history.map(item => item.id === state.captureId ? { ...item, readAt: state.readAt } : item);
     current.current.history = updated;
     setHistory(updated);
   }
   useEffect(() => () => { generation.current++; }, []);
-  return { history, nextCursor, loading, error, refresh, markRead };
+  return { history, nextCursor, loading, error, refresh, applyReadState };
 }

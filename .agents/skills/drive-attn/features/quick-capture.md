@@ -17,7 +17,7 @@ paired program sends with `attn send` without the panel or the setting.
 - `capture-mailbox`: send to the chief, one of the profile's crew members, or (with `attn send`) any agent session; a shell is refused.
 - `capture-files`: attach files and images by paste or drop. The agent saves each file with `attn agent attachment`.
 - `capture-draft`: the unsent text and files survive hiding the panel and restarting the app.
-- `capture-history`: recent messages, each marked "Read" once its agent retrieved the message from its inbox, and "Sent" before.
+- `capture-history`: recent messages, each marked "Read" once its agent retrieved the message from its inbox, and "Sent" before and again if a Claude mod gives back the ring that carried it.
 - `capture-delivery`: the message lands as user input in the mailbox's session, waking an asleep member.
 - `capture-guidance`: what attn tells agents about messages from quick capture.
 - `capture-send`: a paired program sends files and a message to any running session, local or on an outpost, with `attn send`. It lands like a panel capture, as user input.

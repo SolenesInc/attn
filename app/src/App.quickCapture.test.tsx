@@ -814,6 +814,12 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(daemon.sentOf('quick_capture_list')).toHaveLength(1);
     expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);
+    await act(async () => { daemon.emit({ event: 'quick_capture_unread', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId }); });
+    await daemon.idle();
+    expect(within(recent).getByText(/^Sent$/)).toBeInTheDocument();
+    await act(async () => { daemon.emit({ event: 'quick_capture_read', profile_id: DEFAULT_PROFILE_ID, capture_id: firstId, read_at: '2026-10-01T12:02:30Z' }); });
+    await daemon.idle();
+    expect(within(recent).getAllByText(/^Read$/)).toHaveLength(2);
     daemon.on('quick_capture_list', () => undefined);
     await daemon.reconnect();
     const refreshRequests = daemon.sentOf('quick_capture_list');
@@ -828,7 +834,35 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(within(recent).getByText(/^Read$/)).toBeInTheDocument();
     expect(within(recent).queryByText(/^Sent$/)).toBeNull();
+  });
 
+  it.each([
+    { name: 'a returned ring that overtakes a list answered before it', unreadEvent: true, listedReadAt: '2026-10-01T12:03:00Z' },
+    { name: 'a returned ring missed while disconnected', unreadEvent: false, listedReadAt: undefined },
+  ])('Recent shows Sent again after $name', async ({ unreadEvent, listedReadAt }) => {
+    const captureId = crypto.randomUUID();
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [
+        { ...record({ capture_id: captureId, content: 'Returned message' }), read_at: '2026-10-01T12:01:00Z' },
+      ], draft_assets: [] } } }));
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Recent messages' })));
+    const recent = screen.getByRole('region', { name: 'Recent messages' });
+    expect(within(recent).getByText(/^Read$/)).toBeInTheDocument();
+
+    daemon.on('quick_capture_list', () => undefined);
+    await daemon.reconnect();
+    const lists = daemon.sentOf('quick_capture_list');
+    const refresh = lists[lists.length - 1];
+    await act(async () => {
+      if (unreadEvent) daemon.emit({ event: 'quick_capture_unread', profile_id: DEFAULT_PROFILE_ID, capture_id: captureId });
+      daemon.replyTo(refresh, { event: 'quick_capture_result', request_id: refresh.request_id, profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: {
+        items: [{ ...record({ capture_id: captureId, content: 'Returned message' }), ...(listedReadAt ? { read_at: listedReadAt } : {}) }], draft_assets: [],
+      } } });
+    });
+    await daemon.idle();
+    expect(within(recent).getByText(/^Sent$/)).toBeInTheDocument();
+    expect(within(recent).queryByText(/^Read$/)).toBeNull();
   });
 
   it('refreshes only the newest history page after sending from a closed Recent view', async () => {

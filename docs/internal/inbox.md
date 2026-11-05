@@ -137,7 +137,8 @@ item.
   while the claim holds, in the same write as the words and their log entry.
   A successor after a handover reads the current words in its opening instead.
   The seed page in the app says whether the change waits for the tender or was
-  typed, and changes as soon as a ring types it.
+  typed, and changes as soon as a ring types it or the Claude mod gives the ring
+  back (see [With the Claude mod](#with-the-claude-mod)).
   attn does not check where the words came from. The agent that set them
   answers for them.
 
@@ -242,9 +243,11 @@ daemon. With the mod connected:
 - A ring the mod holds for the running turn counts as placed. When the mod gives
   it back instead of placing it, at Esc, on a reload, or when the mod stops
   polling, attn puts the ring's items back to unread, takes back the ring's
-  attempt and outstanding ring, and rings again. A daemon restart while the mod
-  holds a ring loses that ring's user input, because attn keeps what the mod
-  holds in memory.
+  attempt and outstanding ring, and rings again. The app shows a Quick Capture
+  or a seed authorization change from that ring as read or typed while the mod
+  holds it, then as waiting again once the mod gives it back, until the next
+  ring places it. A daemon restart while the mod holds a ring loses that ring's
+  user input, because attn keeps what the mod holds in memory.
 - While a running turn waits on a permission question, the mod takes a ring it
   would take during that turn. It holds the ring until the question closes,
   because the mod's delivery cannot answer the question. Refusing the question,

@@ -8586,6 +8586,17 @@ type QuickCaptureSendMessage struct {
 	SenderToken *string `json:"sender_token,omitempty,omitzero"`
 }
 
+type QuickCaptureUnreadMessage struct {
+	// CaptureID corresponds to the JSON schema field "capture_id".
+	CaptureID string `json:"capture_id"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+}
+
 type RateLimitedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

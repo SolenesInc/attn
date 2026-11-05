@@ -1,7 +1,7 @@
 import { Toast } from './components/Toast';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { emitTo } from '@tauri-apps/api/event';
-import { QUICK_CAPTURE_READ } from './quickCapture/client';
+import { QUICK_CAPTURE_READ_STATE } from './quickCapture/client';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
 import { useQuickCaptureHost } from './application/useQuickCaptureHost';
@@ -98,7 +98,7 @@ function App() {
   }, []);
 
   const daemon = useDaemonSocket({
-    onQuickCaptureRead: receipt => { if (isTauri()) void emitTo('capture', QUICK_CAPTURE_READ, receipt); },
+    onQuickCaptureReadState: state => { if (isTauri()) void emitTo('capture', QUICK_CAPTURE_READ_STATE, state); },
     onSessionsUpdate: (sessions) => {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);

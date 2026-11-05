@@ -6,7 +6,7 @@ import { hideBootSplash } from '../utils/bootSplash';
 import { QuickCaptureAttachmentPreview, type QuickCaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './QuickCaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ, type QuickCaptureReadReceipt, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft, type StoredDraftFile } from '../quickCapture/client';
+import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ_STATE, type QuickCaptureReadState, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft, type StoredDraftFile } from '../quickCapture/client';
 import { QuickCaptureWorkQueue } from '../quickCapture/workQueue';
 import { useQuickCaptureHistory } from '../quickCapture/useQuickCaptureHistory';
 import { quickCaptureDraftCache, newQuickCaptureDraft } from '../quickCapture/draft';
@@ -61,10 +61,10 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const [mailbox, setMailbox] = useState('chief');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [error, setError] = useState('');
-  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent, markRead } = useQuickCaptureHistory(client.current, recent, host.connected);
+  const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent, applyReadState } = useQuickCaptureHistory(client.current, recent, host.connected);
   useEffect(() => {
-    const listener = listen<QuickCaptureReadReceipt>(QUICK_CAPTURE_READ, ({ payload }) => {
-      if (payload.profileId === host.profileId) markRead(payload);
+    const listener = listen<QuickCaptureReadState>(QUICK_CAPTURE_READ_STATE, ({ payload }) => {
+      if (payload.profileId === host.profileId) applyReadState(payload);
     });
     return () => { void listener.then(unlisten => unlisten()); };
   }, [host.profileId]);

@@ -383,6 +383,7 @@ const EventAutomationsChanged = "automations_changed"
 const (
 	EventQuickCaptureResult              = "quick_capture_result"
 	EventQuickCaptureRead                = "quick_capture_read"
+	EventQuickCaptureUnread              = "quick_capture_unread"
 	EventSessionRegistered               = "session_registered"
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"

@@ -309,14 +309,14 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			return receipt, err
 		}
 		state.pending = nil
-		if ring := (returnableInboxRing{address: a, typed: paste.typed, notified: paste.notified, stamp: readAt}); d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
-			d.returnInboxRing(ring)
-		}
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
 		for _, seedID := range paste.authorizedSeeds {
 			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
+		}
+		if ring := (returnableInboxRing{address: a, profileID: holder.ProfileID, paste: paste, stamp: readAt}); d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
+			d.returnInboxRing(ring)
 		}
 		if !bellWaitsForPrompt {
 			state.wakeSession = ""
@@ -349,18 +349,51 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 }
 
 type returnableInboxRing struct {
-	address  who.Address
-	typed    []string
-	notified bool
-	stamp    string
+	address   who.Address
+	profileID string
+	paste     inboxPaste
+	stamp     string
+}
+
+type inboxRingReturned struct {
+	ProfileID       string   `json:"profile_id"`
+	Captures        []string `json:"captures,omitempty"`
+	AuthorizedSeeds []string `json:"authorized_seeds,omitempty"`
 }
 
 func (d *Daemon) returnInboxRing(ring returnableInboxRing) {
-	if err := d.store.ReturnInboxRing(ring.address, ring.typed, ring.notified, ring.stamp); err != nil {
+	if err := d.store.ReturnInboxRing(ring.address, ring.paste.typed, ring.paste.notified, ring.stamp); err != nil {
 		d.logf("inbox: return ring to %s: %v", ring.address, err)
 		return
 	}
+	d.publishFact(FactInboxRingReturned, ring.address.String(), inboxRingReturned{ProfileID: ring.profileID, Captures: ring.paste.captures, AuthorizedSeeds: ring.paste.authorizedSeeds})
 	d.kickInbox(ring.address)
+}
+
+func (d *Daemon) projectReturnedRing(ev bus.Event) {
+	returned, ok := decodeFact[inboxRingReturned](d, ev)
+	if !ok {
+		return
+	}
+	if len(returned.AuthorizedSeeds) > 0 {
+		d.projectGardenSeeds()
+	}
+	for _, captureID := range returned.Captures {
+		record, err := d.store.QuickCapture(returned.ProfileID, captureID)
+		if err != nil {
+			d.logf("returned ring projection: quick capture %s: %v", captureID, err)
+			continue
+		}
+		if record.ReadAt != nil {
+			continue
+		}
+		message := protocol.QuickCaptureUnreadMessage{ProfileID: returned.ProfileID, Event: protocol.EventQuickCaptureUnread, CaptureID: captureID}
+		d.wsHub.ForEachClient(func(client *wsClient) {
+			if client.isTrustedAppClient() && client.selectedProfile() == returned.ProfileID {
+				d.sendToClient(client, message)
+			}
+		})
+	}
 }
 
 type inboxPaste struct {

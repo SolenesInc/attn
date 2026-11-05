@@ -513,7 +513,7 @@ interface UseDaemonSocketOptions {
   onReposUpdate: (repos: RepoState[]) => void;
   onAuthorsUpdate: (authors: AuthorState[]) => void;
   onWorktreesUpdate?: (worktrees: DaemonWorktree[]) => void;
-  onQuickCaptureRead?: (receipt: { profileId: string; captureId: string; readAt: string }) => void;
+  onQuickCaptureReadState?: (state: { profileId: string; captureId: string; readAt?: string }) => void;
   onSettingsUpdate?: (settings: DaemonSettings) => void;
   onSettingError?: (message: string) => void;
   endpoint?: DaemonEndpointInstance;
@@ -658,7 +658,7 @@ export function useDaemonSocket({
   onReposUpdate,
   onAuthorsUpdate,
   onWorktreesUpdate,
-  onQuickCaptureRead,
+  onQuickCaptureReadState,
   onSettingsUpdate,
   onSettingError,
   endpoint,
@@ -686,7 +686,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onQuickCaptureRead,
+    onQuickCaptureReadState,
     onSettingsUpdate,
     onSettingError,
   });
@@ -704,7 +704,7 @@ export function useDaemonSocket({
     onReposUpdate,
     onAuthorsUpdate,
     onWorktreesUpdate,
-    onQuickCaptureRead,
+    onQuickCaptureReadState,
     onSettingsUpdate,
     onSettingError,
   };
@@ -2333,7 +2333,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
-            if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
+            if (handleQuickCaptureDaemonEvent(data, pending, state => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureReadState?.(state); })) break;
             if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;

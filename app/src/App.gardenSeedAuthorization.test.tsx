@@ -42,7 +42,7 @@ describe('App garden seed authorization', () => {
     expect(section.getByText('waiting for builder-a, which needs approval')).toBeInTheDocument();
   });
 
-  it('moves from waiting to typed when the garden pushes the delivered update', async () => {
+  it('moves between waiting and typed as the garden pushes the update delivered, then returned', async () => {
     const waiting = {
       ...tended,
       authorization: { text: 'You may land on main.', set_by: USER_ACTOR, set_at: '2026-11-01T10:42:00Z', update: { recipient: BUILDER, needs_approval: true } },
@@ -54,6 +54,11 @@ describe('App garden seed authorization', () => {
 
     expect(authorizationSection().getByText(/^typed into builder-a at /)).toBeInTheDocument();
     expect(authorizationSection().queryByText(/waiting for/)).not.toBeInTheDocument();
+
+    await gesture(garden.daemon, () => garden.push([{ ...waiting, authorization: { ...waiting.authorization, update: { recipient: BUILDER } } }]));
+
+    expect(authorizationSection().getByText('waiting for builder-a to take input')).toBeInTheDocument();
+    expect(authorizationSection().queryByText(/^typed into/)).not.toBeInTheDocument();
   });
 
   it('sets the words from the keyboard as the user and shows them typed into the tender', async () => {
