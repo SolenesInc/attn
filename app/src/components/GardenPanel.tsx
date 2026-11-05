@@ -5,6 +5,7 @@ import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { isAccelKeyPressed } from '../shortcuts/platform';
 import { harvestWhenDisplay } from '../utils/harvestWhen';
+import { standbyDisplay, type StandbyDisplay } from '../utils/standbyDisplay';
 import {
   IS_VALUES,
   parseQuery,
@@ -366,6 +367,7 @@ function SeedRow({
   const signal = signalOf(seed, blockers);
   const armed = harvestWhenDisplay(seed.harvest_when);
   const tender = tenderOf(seed, tenderSessionLabels);
+  const standby = standbyDisplay(seed, Date.now());
   return (
     <li
       className={`garden-row ${statusClass(seed.status)}${isClosed(seed) ? ' is-closed' : ''}${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
@@ -384,8 +386,12 @@ function SeedRow({
             <span className="garden-row__title">
               <Marked text={seed.title} ranges={match?.titleRanges ?? []} />
             </span>
-            {signal && !(armed && signal.text === 'parked') && (
-              <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
+            {standby ? (
+              <StandbyRowMarker standby={standby} />
+            ) : (
+              signal && !(armed && signal.text === 'parked') && (
+                <span className={`garden-row__signal is-${signal.tone}`}>{signal.text}</span>
+              )
             )}
             {armed && (
               <span className="garden-row__armed" title={armed.sentence}>{armed.marker}</span>
@@ -416,6 +422,20 @@ function SeedRow({
         </p>
       )}
     </li>
+  );
+}
+
+function StandbyRowMarker({ standby }: { standby: StandbyDisplay }) {
+  const details = [
+    standby.note,
+    ...standby.pullRequests.map((pr) => pr.title),
+    standby.reminderAt && `reminder ${standby.reminderAt}`,
+    standby.wakeBlocked && `wake blocked: ${standby.wakeBlocked}`,
+  ].filter(Boolean);
+  return (
+    <span className={`garden-row__standby${standby.wakeBlocked ? ' is-blocked' : ''}`} title={details.join('\n')}>
+      {standby.wakeBlocked ? 'standby · wake blocked' : 'standby'}
+    </span>
   );
 }
 

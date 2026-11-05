@@ -326,6 +326,15 @@
 .garden-row__signal.is-parked { color: var(--color-warning); }
 .garden-row__signal.is-closed { color: var(--color-text-muted); }
 
+.garden-row__standby {
+  color: var(--accent);
+  flex: none;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.garden-row__standby.is-blocked { color: var(--color-warning); }
+
 .garden-row__armed {
   color: var(--color-text-tertiary);
   flex: none;

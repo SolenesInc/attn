@@ -107,6 +107,31 @@ describe('App garden standby', () => {
     expect(card('merge the readiness check')).not.toHaveTextContent('wake blocked');
   });
 
+  it('marks a standby row in the list, with its note, pull request and blocked wake in the tooltip', async () => {
+    const standing = onStandby();
+    const opened = await openGarden([standing, growing]);
+    const row = (title: string) => within(gardenRegion()).getByRole('button', { name: new RegExp(`^${title}`) });
+
+    const marker = within(row('merge the readiness check')).getByText('standby');
+    expect(marker.getAttribute('title')).toContain('Merge once approved');
+    expect(marker.getAttribute('title')).toContain('#123 blocked');
+    expect(marker.getAttribute('title')).toMatch(/reminder 23:30/);
+    expect(row('ship the other thing')).not.toHaveTextContent('standby');
+    expect(row('ship the other thing')).toHaveTextContent('growing');
+
+    const blocked = onStandby({ wake_blocked: 'worktree removed' });
+    await replace(opened, standing, blocked);
+
+    const blockedMarker = within(row('merge the readiness check')).getByText('standby · wake blocked');
+    expect(blockedMarker.getAttribute('title')).toContain('wake blocked: worktree removed');
+
+    const { standby: _ended, ...woken } = blocked;
+    await replace(opened, blocked, { ...woken, rev: 2 });
+
+    expect(row('merge the readiness check')).not.toHaveTextContent('standby');
+    expect(row('merge the readiness check')).toHaveTextContent('growing');
+  });
+
   it('keeps only the seeds on standby under the is:standby lens', async () => {
     const standing = onStandby();
     const opened = await openGarden([standing, growing, waiting]);
