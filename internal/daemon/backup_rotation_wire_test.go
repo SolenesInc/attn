@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -51,6 +52,19 @@ func TestTheDaemonBacksUpOnStartKeepingTheNewestRotationAndPreMigrationSnapshots
 	})
 }
 
+func TestTheDaemonBacksUpInADataDirectoryWhosePathHoldsURICharacters(t *testing.T) {
+	prepared := setWorldEnv(t, testworld.PrepareInDataDirNamed(t, "my data #1?100%25", ""))
+	preparedBackupStart(t, prepared, func(t *testing.T, w *world) {
+		w.advance(0)
+		backups := filepath.Join(prepared.Dir, "backups")
+		taken := backupsNamed(t, backups, "attn-2000")
+		if len(taken) != 1 {
+			t.Fatalf("after starting in %s, the daemon has taken backups %v, want one", prepared.Dir, taken)
+		}
+		assertUsableDatabase(t, filepath.Join(backups, taken[0]))
+	})
+}
+
 func plantBackup(t *testing.T, dir, name string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -79,7 +93,7 @@ func backupsNamed(t *testing.T, dir, prefix string) []string {
 
 func assertUsableDatabase(t *testing.T, path string) {
 	t.Helper()
-	db, err := sql.Open("sqlite3", "file:"+path+"?mode=ro")
+	db, err := sql.Open("sqlite3", (&url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}).String())
 	if err != nil {
 		t.Fatal(err)
 	}

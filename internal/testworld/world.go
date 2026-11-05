@@ -56,6 +56,15 @@ func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagen
 	return prepareIn(t, dir, wrapper, harnesses, true)
 }
 
+func PrepareInDataDirNamed(t testing.TB, name, wrapper string, harnesses ...fakeagent.Harness) *World {
+	t.Helper()
+	dir := filepath.Join(worldDir(t), name)
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return prepareIn(t, dir, wrapper, harnesses, true)
+}
+
 func worldDir(t testing.TB) string {
 	t.Helper()
 	created, err := os.MkdirTemp("/tmp", "attn-w-")

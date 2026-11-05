@@ -3,11 +3,13 @@ package main_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -56,6 +58,57 @@ func restoredLines(t *testing.T, r testworld.Result) (from, preserved string) {
 		t.Fatalf("attn db restore did not say what it restored from:\n%s", r.Stdout)
 	}
 	return from, preserved
+}
+
+func TestACrashDuringABackupLeavesNothingForDBRestoreToPick(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	backups := filepath.Join(s.Dir, "backups")
+	backupsTaken := func() []string {
+		t.Helper()
+		entries, err := os.ReadDir(backups)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), "attn-premigration-") {
+				names = append(names, entry.Name())
+			}
+		}
+		return names
+	}
+	starting := s.PauseAt(pausepoint.DatabaseBackupStarting)
+	copied := s.PauseAt(pausepoint.DatabaseBackupCopied)
+	startAndBackUp := func() {
+		t.Helper()
+		s.Start()
+		starting.Await()
+		starting.Release()
+		copied.Await()
+		copied.Release()
+		s.Stop()
+	}
+
+	startAndBackUp()
+	complete := backupsTaken()
+	if len(complete) != 1 {
+		t.Fatalf("after one start the backups directory holds %v, want one backup", complete)
+	}
+
+	s.StartCrashingAt("database-backup-copied-unnamed")
+	starting.Await()
+	starting.Release()
+	s.AwaitCrash()
+	from, _ := restoredLines(t, s.Attn("db", "restore"))
+	if want := filepath.Join(backups, complete[0]); from != want {
+		t.Errorf("after a crash during a backup, attn db restore restored from %s, want the last complete backup %s", from, want)
+	}
+
+	startAndBackUp()
+	if names := backupsTaken(); len(names) != 2 || !slices.Contains(names, complete[0]) {
+		t.Errorf("after starting on the restored database the backups directory holds %v, want %s and one new backup", names, complete[0])
+	}
 }
 
 func TestDBRestoreSwapsInTheNewestBackupAndKeepsEveryDatabaseItReplaces(t *testing.T) {

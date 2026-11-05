@@ -172,15 +172,7 @@ func backup(src, dst *sql.DB) error {
 	defer dstConn.Close()
 	return srcConn.Raw(func(srcDriver any) error {
 		return dstConn.Raw(func(dstDriver any) error {
-			backup, err := dstDriver.(*sqliteConnection).Backup("main", srcDriver.(*sqliteConnection).SQLiteConn, "main")
-			if err != nil {
-				return err
-			}
-			if _, err := backup.Step(-1); err != nil {
-				backup.Finish()
-				return err
-			}
-			return backup.Finish()
+			return copyDatabase(dstDriver.(*sqliteConnection).SQLiteConn, srcDriver.(*sqliteConnection).SQLiteConn)
 		})
 	})
 }

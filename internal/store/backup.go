@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-sqlite3"
+	"github.com/victorarias/attn/internal/crashpoint"
 )
 
 const (
@@ -25,6 +29,10 @@ const backupPremigrationKeep = 5
 const premigrationNamePrefix = "attn-premigration-"
 
 const premigrationTimestampLen = len(backupNameLayout)
+
+const backupUnfinishedName = "unfinished-backup"
+
+const allRemainingPages = -1
 
 func (s *Store) BackupNow(ctx context.Context, dir string) (string, error) {
 	if s == nil || s.db == nil {
@@ -49,12 +57,52 @@ func (s *Store) BackupNow(ctx context.Context, dir string) (string, error) {
 	}
 	target := filepath.Join(dir, next.name())
 
-	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", target); err != nil {
-		_ = os.Remove(target)
-		return "", fmt.Errorf("backup: vacuum into %s: %w", target, err)
+	unfinished := filepath.Join(dir, backupUnfinishedName)
+	removeUnfinishedBackup(unfinished)
+	if err := copyDatabaseToFile(ctx, s.db, unfinished); err != nil {
+		removeUnfinishedBackup(unfinished)
+		return "", fmt.Errorf("backup: copy into %s: %w", unfinished, err)
+	}
+	crashpoint.At("database-backup-copied-unnamed")
+	if err := os.Rename(unfinished, target); err != nil {
+		removeUnfinishedBackup(unfinished)
+		return "", fmt.Errorf("backup: %w", err)
 	}
 
 	return target, nil
+}
+
+func removeUnfinishedBackup(path string) {
+	_ = os.Remove(path)
+	_ = os.Remove(path + "-journal")
+}
+
+func copyDatabaseToFile(ctx context.Context, source *sql.DB, target string) error {
+	conn, err := source.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	destination, err := (&sqlite3.SQLiteDriver{}).Open((&url.URL{Scheme: "file", Path: target}).String())
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+	return conn.Raw(func(driverConn any) error {
+		return copyDatabase(destination.(*sqlite3.SQLiteConn), driverConn.(*sqliteConnection).SQLiteConn)
+	})
+}
+
+func copyDatabase(destination, source *sqlite3.SQLiteConn) error {
+	backup, err := destination.Backup("main", source, "main")
+	if err != nil {
+		return err
+	}
+	if _, err := backup.Step(allRemainingPages); err != nil {
+		backup.Finish()
+		return err
+	}
+	return backup.Finish()
 }
 
 func PruneBackups(dir string, keep int, protected map[string]struct{}) error {
