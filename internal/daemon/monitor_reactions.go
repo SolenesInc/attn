@@ -39,8 +39,11 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if turn.OpenedAt.After(previous.Turn.V.OpenedAt) || (stateChanged && attention.OpensTurn(state.State) && turn.SnoozedUntil.IsZero()) {
 		d.enqueueSessionActivity(session)
 	}
-	if stateChanged {
+	becamePromptReady := !stateChanged && !sessionmonitor.PromptReady(previous.State.V.State, previous.State.V.Reason) && sessionmonitor.PromptReady(state.State, state.Reason)
+	if stateChanged || becamePromptReady {
 		d.claudeMod().placeReturned(session)
+	}
+	if stateChanged {
 		d.kickCompactingClose(session)
 	}
 	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
@@ -51,7 +54,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		broadcast = true
 	}
-	if !stateChanged && !sessionmonitor.PromptReady(previous.State.V.State, previous.State.V.Reason) && sessionmonitor.PromptReady(state.State, state.Reason) {
+	if becamePromptReady {
 		d.kickSessionInboxAddresses(session)
 	}
 	if broadcast {
