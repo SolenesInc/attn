@@ -7,19 +7,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 const stopNoteFile = "daemon-stop.json"
 
 type StopNote struct {
-	PID    int       `json:"pid"`
-	Reason string    `json:"reason"`
-	At     time.Time `json:"at"`
+	PID    int    `json:"pid"`
+	Reason string `json:"reason"`
 }
 
 func WriteStopNote(pidPath string, pid int, reason string) error {
-	encoded, err := json.Marshal(StopNote{PID: pid, Reason: reason, At: time.Now().UTC()})
+	encoded, err := json.Marshal(StopNote{PID: pid, Reason: reason})
 	if err != nil {
 		return fmt.Errorf("encode stop note: %w", err)
 	}

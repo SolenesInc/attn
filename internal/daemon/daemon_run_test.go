@@ -12,8 +12,8 @@ func TestClassifyPreviousEnd(t *testing.T) {
 	prev := &daemonRun{ID: "run-a", PID: 4242, StartedAt: started}
 	bootedBefore := started.Add(-time.Hour)
 	bootedAfter := started.Add(time.Hour)
-	matching := &daemonctl.StopNote{PID: 4242, Reason: "source_fingerprint_mismatch", At: started.Add(time.Minute)}
-	stale := &daemonctl.StopNote{PID: 1717, Reason: "stop", At: started.Add(-time.Minute)}
+	matching := &daemonctl.StopNote{PID: 4242, Reason: "source_fingerprint_mismatch"}
+	stale := &daemonctl.StopNote{PID: 1717, Reason: "stop"}
 	for _, tc := range []struct {
 		name string
 		prev *daemonRun

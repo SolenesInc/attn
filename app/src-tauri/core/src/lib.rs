@@ -199,6 +199,21 @@ fn wait_for_daemon_health(socket_path: &Path, timeout: Duration) -> bool {
     }
 }
 
+fn write_recovery_stop_note(pid: u32) {
+    let Some(pid_path) = daemon_pid_path() else {
+        eprintln!("[Daemon] no stop note for pid {pid}: cannot resolve daemon pid path");
+        return;
+    };
+    let note_path = pid_path.with_file_name("daemon-stop.json");
+    let note = serde_json::json!({ "pid": pid, "reason": "app_recovery" });
+    if let Err(err) = std::fs::write(&note_path, note.to_string()) {
+        eprintln!(
+            "[Daemon] no stop note for pid {pid} at {}: {err}",
+            note_path.display()
+        );
+    }
+}
+
 fn stop_running_daemon(socket_path: &Path) -> Result<(), String> {
     let pid_path = daemon_pid_path().ok_or("Cannot resolve daemon pid path")?;
     let pid = read_daemon_pid(&pid_path)?;
@@ -210,6 +225,7 @@ fn stop_running_daemon(socket_path: &Path) -> Result<(), String> {
         ));
     }
 
+    write_recovery_stop_note(pid);
     terminate_process(pid)?;
     if !wait_for_daemon_shutdown(socket_path, Duration::from_secs(5)) {
         return Err("Timed out waiting for daemon to stop".into());
@@ -419,6 +435,7 @@ fn force_stop_running_daemon(socket_path: &Path) -> Result<(), String> {
     }
 
     for pid in &attn_daemon_pids {
+        write_recovery_stop_note(*pid);
         let _ = terminate_process(*pid);
     }
 

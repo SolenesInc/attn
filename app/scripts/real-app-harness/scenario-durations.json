@@ -37,6 +37,7 @@
     "crash-recovery": 31.6,
     "crew-management": 43.9,
     "crew-seed-header": 18.9,
+    "daemon-fallback-recovery": 18.3,
     "delegation-chain": 30.3,
     "delegation-preferences": 45.7,
     "desktop-close-one-session-keeps-selection": 64.0,

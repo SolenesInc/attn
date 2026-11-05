@@ -464,6 +464,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-tr401'],
   },
   {
+    id: 'daemon-fallback-recovery',
+    runnerId: 'DAEMON-FALLBACK-RECOVERY',
+    label: 'A daemon the app stops after a failed ensure reads as stopped by app_recovery on both stop paths',
+    command: ['node', 'scripts/real-app-harness/scenario-daemon-fallback-recovery.mjs'],
+  },
+  {
     id: 'crash-recovery',
     runnerId: 'CRASH-REC',
     label: 'A machine crash keeps every session it can bring back and reaps the rest',
