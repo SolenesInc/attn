@@ -16,7 +16,7 @@ cat >"$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [ "${2:-}" != compile-go ] || exit 0
-printf '%s\n' "$@" >>"$LAND_CHECK_LOG"
+printf '%s\n' "$*" >>"$LAND_CHECK_LOG"
 echo "make ran: $*"
 if [ -e "$LAND_MOVE_MAIN" ]; then
   rm "$LAND_MOVE_MAIN"
@@ -35,11 +35,13 @@ cat >"$work/bin/go" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [ "$1 $2" = "tool test-history" ] || { echo "unexpected go $*" >&2; exit 2; }
-printf '%s\n' "$3" >>"$LAND_CHECK_LOG"
 case "$3" in
-  sync) exit "${LAND_SYNC_EXIT:-0}" ;;
+  sync)
+    printf 'sync\n' >>"$LAND_CHECK_LOG"
+    exit "${LAND_SYNC_EXIT:-0}"
+    ;;
   land)
-    printf '%s\n' "${@:6}" >>"$LAND_CHECK_LOG"
+    printf '%s\n' "land ${*:6}" >>"$LAND_CHECK_LOG"
     [ "${LAND_SELECT_EXIT:-0}" -eq 0 ] || exit "$LAND_SELECT_EXIT"
     [ "$4" = --units-out ] || exit 2
     printf '%s' "${LAND_SELECTED-$selected}" >"$5"
@@ -50,8 +52,8 @@ chmod +x "$work/bin/go"
 export PATH="$work/bin:$PATH"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
-selected_tests=(landing-tests --unit 'go ./internal/example TestExample' --unit 'vitest src/example.test.ts')
-go_choice=(land --group go --group prompts landing-tests --no-go-vet "${selected_tests[@]:1}")
+selected_units="--unit go ./internal/example TestExample --unit vitest src/example.test.ts"
+go_choice=('land --group go --group prompts' "landing-tests --no-go-vet $selected_units")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
 cd "$work/repo"
@@ -69,7 +71,7 @@ printf 'baseline\n' >README.md
 cp "$root/scripts/landing-tests" scripts/landing-tests
 cat >scripts/landing-tests.sh <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' landing-tests "$@" >>"$LAND_CHECK_LOG"
+printf '%s\n' "landing-tests $*" >>"$LAND_CHECK_LOG"
 exit "${LAND_TESTS_EXIT:-0}"
 EOF
 chmod +x scripts/landing-tests.sh
@@ -96,7 +98,7 @@ expect_output() {
 }
 
 go_checks_last() {
-  awk '$0 == "check-go" { getline packages; last = last $0 "\n" packages "\n"; next } { print } END { printf "%s", last }' "$1"
+  awk '/^check-go / { last = last $0 "\n"; next } { print } END { printf "%s", last }' "$1"
 }
 
 expect_checks() {
@@ -106,20 +108,20 @@ expect_checks() {
 
 printf '\n' >>internal/example/example.go
 land 'Go change'
-expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 git rm -q internal/example/other.go internal/removed/removed.go
 land 'Go deletions'
-expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
 land 'Module change'
-expect_checks check-go 'GO_PACKAGES=./...' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
 land 'App change'
-expect_checks check-frontend check-mobile land --group app "${selected_tests[@]}" sync
+expect_checks 'check-frontend check-mobile' 'land --group app' "landing-tests $selected_units" sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
@@ -131,12 +133,12 @@ printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks check-types check-prompts land --group prompts "${selected_tests[@]}" sync
+expect_checks 'check-types check-prompts' 'land --group prompts' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
 printf 'gateway\n' >internal/protocol/schema/gateway.tsp
 land 'Gateway API change'
-expect_checks check-types check-gateway-compat sync
+expect_checks 'check-types check-gateway-compat' sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh
@@ -144,48 +146,48 @@ printf 'bash scripts/example.sh\nsource scripts/lib/shared.sh\n' >scripts/exampl
 printf 'source scripts/lib/shared.sh\n' >scripts/other_test.sh
 printf 'true\n' >scripts/unrelated_test.sh
 land 'Script tests arrive'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh scripts/unrelated_test.sh' sync
 
 printf '\n' >>scripts/example.sh
 land 'Script change'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh' sync
 expect_output 'script test scripts/example_test.sh, for scripts/example.sh'
 
 printf '\n' >>scripts/lib/shared.sh
 land 'Shared script change'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/other_test.sh' sync
 
 mkdir -p .github/workflows fixtures
 printf 'on: push\n' >.github/workflows/example.yml
 printf 'one\n' >fixtures/one.txt
 printf 'grep -q push "$root/.github/workflows/example.yml"\ncp -R "$root/fixtures" "$work"\n' >scripts/reads_test.sh
 land 'Script test that reads checkout files arrives'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/reads_test.sh' sync
 
 printf '\n' >>scripts/example.sh
 printf '\n' >>.github/workflows/example.yml
 land 'Script and workflow change'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/example_test.sh scripts/reads_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/example_test.sh scripts/reads_test.sh' sync
 expect_output 'script test scripts/reads_test.sh, for .github/workflows/example.yml'
 
 printf 'two\n' >fixtures/two.txt
 land 'Change inside a directory a script test reads'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/reads_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/reads_test.sh' sync
 
 printf 'source scripts/lib/deep.sh\n' >scripts/chain.sh
 printf 'true\n' >scripts/lib/deep.sh
 printf 'bash scripts/chain.sh\n' >scripts/chain_test.sh
 land 'Chained script test arrives'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh' sync
 
 printf '\n' >>scripts/lib/deep.sh
 land 'Change to a script a tested script sources'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh' sync
 expect_output 'script test scripts/chain_test.sh, for scripts/lib/deep.sh'
 
 printf 'true\n' >scripts/lonely.sh
 land 'Script no test names'
-expect_checks test-scripts 'SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/reads_test.sh scripts/unrelated_test.sh' sync
+expect_checks 'test-scripts SCRIPT_TESTS=scripts/chain_test.sh scripts/example_test.sh scripts/other_test.sh scripts/reads_test.sh scripts/unrelated_test.sh' sync
 expect_output 'no script test names scripts/lonely.sh; running every script test'
 
 printf '\n' >>README.md
@@ -195,27 +197,27 @@ expect_checks sync
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
 land 'Go change while main moves'
-expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" \
-  check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" \
+  'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>internal/example/example.go
 LAND_FLAGS=--baseline land 'Go change landed on the baseline'
-expect_checks check-go 'GO_PACKAGES=./internal/example' landing-tests --no-go-vet go prompts
+expect_checks 'check-go GO_PACKAGES=./internal/example' 'landing-tests --no-go-vet go prompts'
 expect_output 'running the baseline landing tests (--baseline)'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing fails' LAND_SELECT_EXIT=1
-expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests --no-go-vet go prompts sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' 'land --group go --group prompts' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when sync fails' LAND_SYNC_EXIT=1
-expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing writes nothing' LAND_SELECTED=
-expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests --no-go-vet go prompts sync
+expect_checks 'check-go GO_PACKAGES=./internal/example' 'land --group go --group prompts' 'landing-tests --no-go-vet go prompts' sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
