@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,12 +29,15 @@ func sessionReadsInboxDoorbells(session *protocol.Session) bool {
 }
 
 type inboxDeliveryState struct {
-	mu          sync.Mutex
+	gate        chan struct{}
 	timer       *time.Timer
 	stopped     bool
 	wakeSession protocol.SessionID
 	pending     *inboxRing
 }
+
+func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
+func (s *inboxDeliveryState) unlock() { <-s.gate }
 
 type inboxRing struct {
 	session            protocol.SessionID
@@ -54,7 +56,7 @@ func (d *Daemon) inboxState(a who.Address) *inboxDeliveryState {
 	}
 	state := d.inboxStates[a]
 	if state == nil {
-		state = &inboxDeliveryState{}
+		state = &inboxDeliveryState{gate: make(chan struct{}, 1)}
 		d.inboxStates[a] = state
 	}
 	return state
@@ -126,14 +128,14 @@ func (d *Daemon) inboxHolder(a who.Address) *protocol.Session {
 func (d *Daemon) lockInboxState(a who.Address) *inboxDeliveryState {
 	for {
 		state := d.inboxState(a)
-		state.mu.Lock()
+		state.lock()
 		d.inboxMu.Lock()
 		current := d.inboxStates[a] == state
 		d.inboxMu.Unlock()
 		if current {
 			return state
 		}
-		state.mu.Unlock()
+		state.unlock()
 	}
 }
 func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
@@ -142,7 +144,7 @@ func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
 		return inbox.Receipt{Detail: "queued until daemon recovery completes"}, nil
 	}
 	state := d.lockInboxState(a)
-	defer state.mu.Unlock()
+	defer state.unlock()
 	return d.deliverInboxLocked(a, state)
 }
 func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
@@ -450,8 +452,8 @@ func (d *Daemon) armInboxLocked(a who.Address, state *inboxDeliveryState, delay 
 	}
 	var timer *time.Timer
 	timer = d.life.AfterFunc("inbox", delay, func() {
-		state.mu.Lock()
-		defer state.mu.Unlock()
+		state.lock()
+		defer state.unlock()
 		if state.timer != timer || state.stopped {
 			return
 		}
@@ -534,12 +536,12 @@ func (d *Daemon) stopInbox() {
 	}
 	d.inboxMu.Unlock()
 	for _, state := range states {
-		state.mu.Lock()
+		state.lock()
 		state.stopped = true
 		if state.timer != nil {
 			state.timer.Stop()
 			state.timer = nil
 		}
-		state.mu.Unlock()
+		state.unlock()
 	}
 }

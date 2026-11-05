@@ -110,6 +110,12 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 - Retrying a flaky test, or giving the test a longer timeout. Find the step
   the test races, usually a wait with no signal behind it, and give that step
   a signal or a stepped clock.
+- A bubble test that hangs until the test alarm, with a daemon goroutine in
+  `sync.Mutex.Lock` in the dump. `synctest.Wait` does not count a mutex wait as
+  durably blocked, so it never returns while the mutex's holder waits for the
+  test. When the daemon holds a lock across a call the test answers, such as a
+  plugin's `driver.deliver_message`, make that lock a channel, as
+  `inboxDeliveryState.lock` does. Never add a timeout to the test.
 
 ## Finish
 
