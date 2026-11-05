@@ -328,7 +328,7 @@ func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
 				}
 				app.AwaitTerminalScreen(terminal, "unsent draft")
 
-				waited := w.PauseAt(pausepoint.ClaudeModReturnWaitsForDraft)
+				waited := w.PauseAt(pausepoint.ClaudeModReturnWaits)
 				returnIt(t, w, app, run, session)
 				waited.Await()
 				waited.Release()

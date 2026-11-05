@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -108,9 +107,7 @@ func (m *claudeMod) placeReturnedNow(session protocol.SessionID) {
 				m.d.life.AfterFunc("claudeModPlaceReturned", delay, func() { m.placeReturnedNow(session) })
 			} else {
 				m.d.logf("claude mod: returned input %s waits for session %s to change state: %v", head.ID, session, attempt.Err)
-				if errors.Is(attempt.Err, sessionmonitor.ErrComposerDirty) {
-					pausepoint.At(pausepoint.ClaudeModReturnWaitsForDraft)
-				}
+				pausepoint.At(pausepoint.ClaudeModReturnWaits)
 			}
 			return
 		}
