@@ -5,7 +5,12 @@ cd "$(git rev-parse --show-toplevel)"
 
 list=scripts/landing-tests
 groups="$(awk '$1 == "group" { print $2 }' "$list")"
-usage="usage: scripts/landing-tests.sh <group>... | --unit '<unit>'...; groups: $(paste -sd' ' - <<<"$groups")"
+usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'...; groups: $(paste -sd' ' - <<<"$groups")"
+go_vet_options=()
+if [ "${1:-}" = --no-go-vet ]; then
+  go_vet_options=(-vet=off)
+  shift
+fi
 [ "$#" -gt 0 ] || { echo "$usage" >&2; exit 2; }
 requested="$*"
 
@@ -70,19 +75,23 @@ go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes"
 # ./cmd/attn's stack tests wait on real processes, one after another in one test
 # binary: 20s of a go test step that used 19 CPU-s (2026-11-04). Each shard links
 # its own binary, under 1.9 CPU-s. Five keep today's two slowest tests apart.
+# Go shares no vet in flight. Vetting in the first shard alone, which has tests
+# whenever any shard does, cost a prompt-only land 7 CPU-s; in all five, 16
+# (2026-11-05).
 stack_test_package=./cmd/attn
 stack_test_shards=5
 
 run_go_units() {
   local name="$1" go_entries="$2" status=0 package unit
   shift 2
-  local packages=() unit_options=() run_regex
+  local packages=() unit_options=() run_regex vet_options=(${go_vet_options[@]+"${go_vet_options[@]}"})
+  case "$name" in go-stack-[!0]*) vet_options=(-vet=off) ;; esac
   while IFS= read -r package; do packages+=("$package"); done < <(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
   while IFS= read -r unit; do unit_options+=(--unit "$unit"); done <<<"$go_entries"
   run_regex="^($(awk '!seen[$3]++ { print $3 }' <<<"$go_entries" | paste -sd'|' -))\$"
   echo "landing tests: go test${*:+ $*} -run '$run_regex' ${packages[*]}"
   ATTN_TEST_REQUIRE_CLICKHOUSE=1 ./scripts/test-go.sh --packages "${unit_options[@]}" --receipt-out "$work/$name.json" \
-    -vet=off "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
+    ${vet_options[@]+"${vet_options[@]}"} "$@" -run "$run_regex" "${packages[@]}" >"$work/$name.log" 2>&1 || status=$?
   echo "$status" >"$work/$name.status"
 }
 
@@ -108,7 +117,7 @@ add_go_run() {
 }
 add_go_run go "$(awk '$2 != "'"$stack_test_package"'"' <<<"$cached_go_entries")"
 for ((shard = 0; shard < stack_test_shards; shard++)); do
-  add_go_run "go-stack-$shard" "$(awk -v shards="$stack_test_shards" -v shard="$shard" '$2 == "'"$stack_test_package"'" && ++seen % shards == shard' <<<"$cached_go_entries")"
+  add_go_run "go-stack-$shard" "$(awk -v shards="$stack_test_shards" -v shard="$shard" '$2 == "'"$stack_test_package"'" && seen++ % shards == shard' <<<"$cached_go_entries")"
 done
 run_all_go_units() {
   local name

@@ -51,7 +51,7 @@ export PATH="$work/bin:$PATH"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
 selected_tests=(landing-tests --unit 'go ./internal/example TestExample' --unit 'vitest src/example.test.ts')
-go_choice=(land --group go --group prompts "${selected_tests[@]}")
+go_choice=(land --group go --group prompts landing-tests --no-go-vet "${selected_tests[@]:1}")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
 cd "$work/repo"
@@ -200,12 +200,12 @@ expect_checks check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" \
 
 printf '\n' >>internal/example/example.go
 LAND_FLAGS=--baseline land 'Go change landed on the baseline'
-expect_checks check-go 'GO_PACKAGES=./internal/example' landing-tests go prompts
+expect_checks check-go 'GO_PACKAGES=./internal/example' landing-tests --no-go-vet go prompts
 expect_output 'running the baseline landing tests (--baseline)'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing fails' LAND_SELECT_EXIT=1
-expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests --no-go-vet go prompts sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
@@ -215,7 +215,7 @@ expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing writes nothing' LAND_SELECTED=
-expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
+expect_checks check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests --no-go-vet go prompts sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
@@ -294,5 +294,33 @@ case "$first_line" in
 esac
 finish_second
 git reset -q --hard origin/main
+
+mkdir -p "$work/tests-repo/scripts"
+cd "$work/tests-repo"
+git init -q
+cp "$root/scripts/landing-tests" "$root/scripts/landing-tests.sh" scripts/
+cat >scripts/test-go.sh <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = --provide-e2e-binary ]; then
+  echo fake-attn >"$2"
+  exit 0
+fi
+printf '%s\n' "$*" >>"$LAND_CHECK_LOG"
+while [ "$#" -gt 0 ]; do
+  [ "$1" != --receipt-out ] || : >"$2"
+  shift
+done
+EOF
+chmod +x scripts/test-go.sh
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --unit 'go ./internal/example TestExample' --unit 'go ./cmd/attn TestOne' --unit 'go ./cmd/attn TestTwo' >/dev/null
+if grep -F -- ./internal/example "$LAND_CHECK_LOG" | grep -qF -- '-vet=off'; then
+  echo 'landing tests run by hand left out the vet of go test' >&2
+  exit 1
+fi
+[ "$(grep -F -- ./cmd/attn "$LAND_CHECK_LOG" | grep -cvF -- '-vet=off')" = 1 ] || { echo 'expected exactly one ./cmd/attn run to keep the vet of go test' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --no-go-vet --unit 'go ./internal/example TestExample' >/dev/null
+grep -qF -- '-vet=off' "$LAND_CHECK_LOG" || { echo '--no-go-vet kept the vet of go test' >&2; exit 1; }
 
 echo 'landing fast gate: OK'

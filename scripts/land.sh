@@ -251,12 +251,20 @@ choose_landing_tests() {
   go tool test-history land --units-out "$1" "${group_options[@]}" || : >"$1"
 }
 
+landing_tests_vetting_go_unless_check_go_runs() {
+  if [ "${#go_checks[@]}" -gt 0 ]; then
+    scripts/landing-tests.sh --no-go-vet "$@"
+  else
+    scripts/landing-tests.sh "$@"
+  fi
+}
+
 run_landing_tests() {
   local units_file="$1" unit units=()
   shift
   if [ "$landing_tests" = baseline ]; then
     echo "land: running the baseline landing tests (--baseline)"
-    scripts/landing-tests.sh "$@"
+    landing_tests_vetting_go_unless_check_go_runs "$@"
     return
   fi
   while IFS= read -r unit || [ -n "$unit" ]; do
@@ -264,10 +272,10 @@ run_landing_tests() {
   done <"$units_file"
   if [ "${#units[@]}" -eq 0 ]; then
     echo "land: choosing landing tests failed; running the baseline groups $*" >&2
-    scripts/landing-tests.sh "$@"
+    landing_tests_vetting_go_unless_check_go_runs "$@"
     return
   fi
-  scripts/landing-tests.sh "${units[@]}"
+  landing_tests_vetting_go_unless_check_go_runs "${units[@]}"
 }
 
 git diff --quiet && git diff --cached --quiet || fail "commit or stash your changes first"
