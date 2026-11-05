@@ -248,6 +248,8 @@ func (d *Daemon) compactingCloseCanceled(p *pendingCompactClose) string {
 		return "the session it was asked in is gone"
 	case p.monitor.UserInputs() != p.userInputs:
 		return "the user gave it input after the close was asked"
+	case p.monitor.HasUserDraft():
+		return "the user has an unsent draft in its terminal"
 	}
 	for _, seedID := range p.onStandby {
 		if standby, err := d.store.SeedStandby(seedID); err != nil || standby == nil || standby.Tender != who.Session(p.session) {

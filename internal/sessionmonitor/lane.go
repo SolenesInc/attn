@@ -539,6 +539,15 @@ func (m *Monitor) UserInputs() uint64 {
 	return m.userInputs
 }
 
+func (m *Monitor) HasUserDraft() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.input.userDraft
+}
+
 func (m *Monitor) LatestRun() uint64 {
 	if m == nil {
 		return 0

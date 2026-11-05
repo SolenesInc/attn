@@ -48,6 +48,7 @@ type Peer struct {
 	panes     map[string]protocol.Desktop
 	closeErr  error
 	closing   bool
+	typed     int
 }
 
 func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
@@ -340,6 +341,19 @@ func (p *Peer) TypeLine(sessionID, text string) {
 	terminal := p.Terminal(sessionID)
 	p.attach(terminal)
 	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r"})
+}
+
+func (p *Peer) Type(sessionID, keys, source string) {
+	p.T.Helper()
+	terminal := p.Terminal(sessionID)
+	p.attach(terminal)
+	p.typed++
+	probe := "type-" + strconv.Itoa(p.typed)
+	written := Request(p, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: keys, Source: protocol.Ptr(source), ProbeID: protocol.Ptr(probe)},
+		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == probe })
+	if !written.Success {
+		p.T.Fatalf("typing %q into session %s: %s", keys, sessionID, protocol.Deref(written.Error))
+	}
 }
 
 func (p *Peer) Watch(sessionID string) {

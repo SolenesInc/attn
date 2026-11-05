@@ -3,6 +3,7 @@ package sessionmonitor
 import (
 	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
@@ -58,11 +59,29 @@ func (l *lane) noteDraftLocked(data []byte) {
 	if l.phase == protocol.SessionStatePendingApproval {
 		return
 	}
-	switch string(data) {
-	case "\r", "\x1b", "\x03":
-	default:
+	if !leavesComposerAsItIs(data) {
 		l.userDraft = true
 	}
+}
+
+func leavesComposerAsItIs(data []byte) bool {
+	const left, right, home, end, pageUp, shiftTab = "\x1b[D", "\x1b[C", "\x1b[H", "\x1b[F", "\x1b[5~", "\x1b[Z"
+	rest := string(data)
+	switch rest {
+	case "\r", "\x1b", "\x03":
+		return true
+	}
+	for rest != "" {
+		trimmed := rest
+		for _, key := range []string{left, right, home, end, pageUp, shiftTab} {
+			trimmed = strings.TrimPrefix(trimmed, key)
+		}
+		if trimmed == rest {
+			return false
+		}
+		rest = trimmed
+	}
+	return true
 }
 
 func (l *lane) clearUnstartedUserSubmitLocked() {

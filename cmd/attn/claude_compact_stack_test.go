@@ -17,8 +17,10 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughTheModAndThenCloses(t *testing.T) {
-	t.Parallel()
+const closingReviewer = "rev-1111-2222"
+
+func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *mockModel, string) {
+	t.Helper()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
 		t.Skip("claude is not on PATH")
@@ -41,8 +43,7 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 	)
 	s.Start()
 	s.Attn("settings", "set", "claude_mod_enabled", "true")
-	const reviewer = "rev-1111-2222"
-	register(t, s, reviewer, "reviewer")
+	register(t, s, closingReviewer, "reviewer")
 
 	app := s.App()
 	worker := s.Spawn(app, fakeagent.Claude, work)
@@ -52,6 +53,13 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 		}
 	})
 	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	return s, app, worker, model, configDir
+}
+
+func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughTheModAndThenCloses(t *testing.T) {
+	t.Parallel()
+	s, app, worker, model, configDir := realModdedClaude(t)
+	const reviewer = closingReviewer
 
 	const reason = "the checkout fix landed"
 	const ring = "attn agent inbox"
@@ -96,6 +104,54 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 	}
 	if opening := model.awaitPromptSince(t, mark, ring); !strings.Contains(opening, mockModelCompactSummary) {
 		t.Fatalf("the reopened conversation's first request opens with %q, want Claude's compact summary", opening)
+	}
+}
+
+func TestARealClaudeDraftTypedBeforeACompactingCloseKeepsTheSessionAndTheDraft(t *testing.T) {
+	t.Parallel()
+	s, app, worker, model, _ := realModdedClaude(t)
+	const ring = "attn agent inbox"
+	const asked = "wrap up the checkout fix"
+	const draft = "please keep this draft"
+	model.runBashAfter(ring, ring)
+	model.runBashAfter(asked, `attn agent close --self --compact -m "the checkout fix landed"`)
+
+	app.Type(worker, draft, "keyboard")
+	mark := model.mark()
+	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, asked}, Session: closingReviewer}); sent.Code != 0 {
+		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+	}
+	model.awaitPromptSince(t, mark, "once its conversation is compacted")
+	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	mark = model.mark()
+	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, "the review is in"}, Session: closingReviewer}); sent.Code != 0 {
+		t.Fatalf("attn agent msg to the session with the draft exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+	}
+	model.awaitPromptSince(t, mark, ring)
+	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	if peek := s.Attn("agent", "peek", worker).Stdout; !strings.Contains(peek, draft) {
+		t.Fatalf("the composer lost the draft; the screen shows:\n%s", peek)
+	}
+	mark = model.mark()
+	app.Type(worker, "\r", "keyboard")
+	model.awaitPromptSince(t, mark, draft)
+}
+
+func TestARealClaudePromptTheUserTypedBeforeACompactingCloseDoesNotKeepTheSessionOpen(t *testing.T) {
+	t.Parallel()
+	_, app, worker, model, _ := realModdedClaude(t)
+	const asked = "wrap up the checkout fix"
+	const reason = "the checkout fix landed"
+	model.runBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
+
+	app.Type(worker, asked, "keyboard")
+	app.Type(worker, "\r", "keyboard")
+	closed := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == worker
+	})
+	if got := protocol.Deref(closed.SessionLedgerEntry.CloseReason); got != reason {
+		t.Errorf("the session closed with reason %q, want %q", got, reason)
 	}
 }
 
