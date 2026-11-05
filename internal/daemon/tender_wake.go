@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -58,7 +59,7 @@ type tenderWakeLedger struct {
 func (l *tenderWakeLedger) reopensAt(seedID string, now time.Time) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	kept := l.keptLocked(seedID, now)
+	kept := l.pruneLocked(seedID, now)
 	if len(kept) < tenderWakeLimit {
 		return time.Time{}, false
 	}
@@ -71,22 +72,29 @@ func (l *tenderWakeLedger) charge(seedID string, now time.Time) int {
 	if l.stamps == nil {
 		l.stamps = make(map[string][]time.Time)
 	}
-	l.stamps[seedID] = append(l.keptLocked(seedID, now), now)
+	for id := range l.stamps {
+		l.pruneLocked(id, now)
+	}
+	l.stamps[seedID] = append(l.stamps[seedID], now)
 	return len(l.stamps[seedID])
 }
 
-func (l *tenderWakeLedger) keptLocked(seedID string, now time.Time) []time.Time {
+func (l *tenderWakeLedger) pruneLocked(seedID string, now time.Time) []time.Time {
 	cutoff := now.Add(-tenderWakeWindow)
-	var kept []time.Time
-	for _, at := range l.stamps[seedID] {
-		if at.After(cutoff) {
-			kept = append(kept, at)
-		}
+	kept := slices.DeleteFunc(l.stamps[seedID], func(at time.Time) bool { return !at.After(cutoff) })
+	if len(kept) == 0 {
+		delete(l.stamps, seedID)
+		return nil
 	}
-	if l.stamps != nil {
-		l.stamps[seedID] = kept
-	}
+	l.stamps[seedID] = kept
 	return kept
+}
+
+func (l *tenderWakeLedger) forget(seedID string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.stamps, seedID)
+	delete(l.blocked, seedID)
 }
 
 func (l *tenderWakeLedger) block(seedID, reason string) bool {
