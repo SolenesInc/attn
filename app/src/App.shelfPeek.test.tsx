@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { daemonSession, soloDesktop } from './test/daemonFixtures';
@@ -6,6 +6,7 @@ import { laidOutDesktop, pane, split } from './test/desktopLayouts';
 import { fakeRects, sizeTerminals } from './test/layout';
 import { serveSettings } from './test/settings';
 import { gesture, renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const PANES_WIDTH = 2000;
 const PANES_HEIGHT = 900;
@@ -18,7 +19,19 @@ function rightChain(nodes: unknown[], depth = 0): unknown {
   return rest.length === 0 ? first : split(`split-${depth}`, 'vertical', [first, rightChain(rest, depth + 1)]);
 }
 
-async function renderRow(settings: Record<string, string>, { screens = (id: string) => `screen of ${id}\n\n`, tiles = [] as Record<string, string>[] } = {}) {
+const OUTPOST = { id: 'outpost-1', name: 'studio', destination: 'studio:2200', state_since: '2026-10-18T18:00:00Z' };
+const CONNECTED = { ...OUTPOST, state: 'connected', reach: 'reachable' } as const;
+const CONNECTING = { ...OUTPOST, state: 'connecting', reach: 'connecting' } as const;
+
+function answerInput(daemon: ScriptedDaemon, refuse: (data: string) => string | null = () => null) {
+  daemon.on('pty_input', ({ id, data, probe_id }) => {
+    if (!probe_id) return undefined;
+    const error = refuse(data);
+    return { event: 'pty_input_probe_result', id, probe_id, write_duration_us: 1, success: error === null, ...(error === null ? {} : { error }) };
+  });
+}
+
+async function renderRow(settings: Record<string, string>, { screens = (id: string) => `screen of ${id}\n\n`, tiles = [] as Record<string, string>[], targetFields = {} as Record<string, unknown>, outposts = [] as (typeof CONNECTED | typeof CONNECTING)[] } = {}) {
   sizeTerminals((terminal) => ({
     clientWidth: (PANES_WIDTH * parseFloat(terminal.closest<HTMLElement>('[data-pane-id]')?.style.width || '100')) / 100,
     clientHeight: PANES_HEIGHT,
@@ -33,12 +46,14 @@ async function renderRow(settings: Record<string, string>, { screens = (id: stri
   const { daemon } = await renderApp({
     initialState: {
       settings,
-      sessions: IDS.map((id) => daemonSession(id, { state: 'waiting_input' })),
+      sessions: IDS.map((id) => daemonSession(id, { state: 'waiting_input', ...(id === 's5' ? targetFields : {}) })),
+      outposts,
       desktops: [desktop, soloDesktop('other')],
     },
     script: (scripted) => {
       serveSettings(scripted, settings);
       scripted.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
+      answerInput(scripted);
       scripted.on('terminal_read_text', ({ terminal_id }) => ({ event: 'terminal_read_text_result', success: true, text: screens(terminal_id) }));
     },
   });
@@ -50,6 +65,7 @@ async function renderRow(settings: Record<string, string>, { screens = (id: stri
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 const chip = (id: string) => screen.getByTestId(`shelf-chip-pane-${id}`);
 const paneIds = () => Array.from(document.querySelectorAll<HTMLElement>('.desktop-pane[data-pane-id]')).map((element) => element.dataset.paneId);
+const repliesTo = (daemon: ScriptedDaemon, id: string) => daemon.sentOf('pty_input').filter((input) => input.id === id).map(({ data }) => data);
 const layoutTraffic = (daemon: Awaited<ReturnType<typeof renderRow>>) => daemon.sent.filter((command) => LAYOUT_COMMANDS.includes(command.cmd));
 
 async function peekAt(daemon: Awaited<ReturnType<typeof renderRow>>, id: string) {
@@ -185,6 +201,126 @@ describe('Shelf peek', () => {
     await peekAt(daemon, 's5');
 
     expect(screen.getByTestId('shelf-peek-screen')).toHaveTextContent('Could not read this terminal: host unreachable');
+  });
+
+  describe.each([
+    ['an outpost still connecting', { host: 'outpost-1' }, [CONNECTING], 'Connecting to studio · typing is not sent'],
+    ['a stopped agent', { state: 'idle', terminal_exit: { code: 143, at: '2026-10-07T00:20:04+02:00' } }, [], 'Agent stopped'],
+  ])('with %s', (_name, targetFields, outposts, notice) => {
+    it('keeps the reply, sends nothing, and says why', async () => {
+      const daemon = await renderRow(SHELF_ON, { targetFields, outposts });
+      await peekAt(daemon, 's5');
+      expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent(notice);
+
+      const input = screen.getByTestId('shelf-peek-input');
+      fireEvent.change(input, { target: { value: 'ship it' } });
+      await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+
+      expect(repliesTo(daemon, 's5')).toEqual([]);
+      expect(input).toHaveValue('ship it');
+      expect(screen.getByTestId('shelf-peek')).toBeInTheDocument();
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      await peekAt(daemon, 's5');
+      expect(screen.getByTestId('shelf-peek-input')).toHaveValue('ship it');
+    });
+
+    it('shows the unsent reply on the tile after Open, where Discard ends it', async () => {
+      const daemon = await renderRow(SHELF_ON, { targetFields, outposts });
+      await peekAt(daemon, 's5');
+      fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
+
+      await gesture(daemon, () => fireEvent.click(within(screen.getByTestId('shelf-peek')).getByRole('button', { name: /Open/ })));
+
+      const strip = within(document.querySelector<HTMLElement>('[data-pane-id="pane-s5"]')!).getByTestId('unsent-peek-reply');
+      expect(strip).toHaveTextContent('Unsent reply: ship it');
+      await gesture(daemon, () => fireEvent.click(within(strip).getByRole('button', { name: 'Discard' })));
+      expect(screen.queryByTestId('unsent-peek-reply')).toBeNull();
+    });
+  });
+
+  it('sends a kept reply once the outpost connects', async () => {
+    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTING] });
+    await peekAt(daemon, 's5');
+    const input = screen.getByTestId('shelf-peek-input');
+    fireEvent.change(input, { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [CONNECTED] }));
+    expect(repliesTo(daemon, 's5')).toEqual([]);
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r']);
+    expect(screen.queryByTestId('shelf-peek')).toBeNull();
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-input')).toHaveValue('');
+  });
+
+  it('keeps a refused reply, reports it at once, and sends it whole on retry', async () => {
+    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    answerInput(daemon, () => 'studio is unreachable; this needs it now');
+    await peekAt(daemon, 's5');
+    const input = screen.getByTestId('shelf-peek-input');
+    fireEvent.change(input, { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it']);
+    expect(screen.getByRole('alert')).toHaveTextContent('may not have arrived');
+    expect(screen.getByRole('alert')).toHaveTextContent('studio is unreachable');
+
+    answerInput(daemon);
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('studio is unreachable');
+    const reopened = screen.getByTestId('shelf-peek-input');
+    expect(reopened).toHaveValue('ship it');
+    await gesture(daemon, () => fireEvent.keyDown(reopened, { key: 'Enter' }));
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it', 'ship it', '\r']);
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-input')).toHaveValue('');
+  });
+
+  it('after the text lands and Return fails, a retry sends only Return', async () => {
+    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    answerInput(daemon, (data) => (data === '\r' ? 'the bridge ended before the answer' : null));
+    await peekAt(daemon, 's5');
+    const input = screen.getByTestId('shelf-peek-input');
+    fireEvent.change(input, { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('typed but not submitted');
+
+    answerInput(daemon);
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('↵ sends Return');
+    const reopened = screen.getByTestId('shelf-peek-input');
+    expect(reopened).toHaveAttribute('readonly');
+    await gesture(daemon, () => fireEvent.keyDown(reopened, { key: 'Enter' }));
+
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r', '\r']);
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-input')).toHaveValue('');
+  });
+
+  it('does not send twice while the first send is unanswered, or resend by itself after the daemon drops', async () => {
+    const daemon = await renderRow(SHELF_ON);
+    daemon.on('pty_input', () => undefined);
+    await peekAt(daemon, 's5');
+    const input = screen.getByTestId('shelf-peek-input');
+    fireEvent.change(input, { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+    expect(screen.queryByTestId('shelf-peek')).toBeNull();
+
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('Sending');
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('shelf-peek-input'), { key: 'Enter' }));
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it']);
+
+    await gesture(daemon, () => daemon.disconnect());
+    expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('The daemon disconnected before answering');
+    expect(screen.getByTestId('shelf-peek-input')).toHaveValue('ship it');
+    await daemon.reconnect();
+    await advance(10_000);
+    await daemon.idle();
+    expect(daemon.connection.sent.filter((command) => command.cmd === 'pty_input' && command.id === 's5')).toEqual([]);
   });
 
   it('with the setting off, sidebar rows open nothing', async () => {

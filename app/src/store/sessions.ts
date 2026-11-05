@@ -99,6 +99,10 @@ export function sessionIsOffline(session: { host?: string }, outposts: readonly 
   return Boolean(session.host && (outposts.find((row) => row.id === session.host)?.reach ?? 'unreachable') === 'unreachable');
 }
 
+export function sessionHasStopped(session: { terminalExit?: unknown; state_reason?: string }): boolean {
+  return Boolean(session.terminalExit) || session.state_reason === 'process_exited';
+}
+
 export function sessionOutpostNotice(host: string | undefined, outpost: OutpostInfo | undefined): string | undefined {
   if (!host) return undefined;
   const name = outpost?.name ?? host;

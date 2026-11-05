@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useDesktopShelfStore, type ShelfPeekAnchor, type ShelfTile } from '../../store/desktopShelf';
-import { useSessionStore } from '../../store/sessions';
+import { deliverPeekReply, usePeekReplies, type PeekReply } from '../../store/peekReplies';
+import { sessionHasStopped, useSessionStore } from '../../store/sessions';
 import { tileKindLabel } from '../../utils/tilePresentation';
 import { StateIndicator } from '../StateIndicator';
 import { DesktopAgentSubline } from './DesktopAgentSubline';
@@ -61,10 +62,14 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor |
     setPlace({ ...placeWithin(bounds, anchor, width, height), ...(terminalId ? { height } : {}) });
   }, [anchor, terminalId]);
 
-  const close = () => {
+  const dismiss = () => {
     const replying = panel.current?.contains(document.activeElement) ?? false;
     closeShelfPeek();
     if (replying) focusActiveLeaf();
+  };
+  const close = () => {
+    if (terminalId && usePeekReplies.getState().byTerminal.get(terminalId)?.status === 'draft') usePeekReplies.getState().forget(terminalId);
+    dismiss();
   };
   useEscapeStack(close, true);
   useLayoutEffect(() => {
@@ -76,11 +81,15 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor |
   }, []);
 
   const open = () => {
+    if (terminalId) keepReplyAcrossOpening(terminalId);
     closeShelfPeek();
     useSessionStore.getState().selectLeaf(desktopId, tile.leafId);
   };
   const agentPane = agentPaneById.get(tile.leafId);
   const session = agentPane ? sessionById.get(agentPane.sessionId) : undefined;
+  const blockedReason = session && sessionHasStopped(session)
+    ? 'Agent stopped. Open its tile to resume it; your reply stays there.'
+    : session && session.reach !== 'reachable' ? session.outpostNotice : undefined;
 
   return (
     <div className="shelf-peek-layer" ref={layer}>
@@ -113,11 +122,18 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor |
           )}
         </div>
         {terminalId ? (
-          <PeekTerminal terminalId={terminalId} offline={tile.offline} onOpen={open} onClose={close} />
+          <PeekTerminal terminalId={terminalId} title={tile.title} blockedReason={blockedReason} onOpen={open} onSent={dismiss} onClose={close} />
         ) : null}
       </div>
     </div>
   );
+}
+
+function keepReplyAcrossOpening(terminalId: string) {
+  const { byTerminal, put, forget } = usePeekReplies.getState();
+  const reply = byTerminal.get(terminalId);
+  if (reply?.status === 'typed') forget(terminalId);
+  if (reply?.status === 'draft') put(terminalId, { status: 'not_sent', text: reply.text, reason: null });
 }
 
 function usePeekText(terminalId: string) {
@@ -150,10 +166,22 @@ function usePeekText(terminalId: string) {
   return { text, failure };
 }
 
-function PeekTerminal({ terminalId, offline, onOpen, onClose }: { terminalId: string; offline?: boolean; onOpen: () => void; onClose: () => void }) {
-  const { sendRuntimeInput } = useDaemonApi();
+function replyNotice(reply: PeekReply | undefined, blockedReason: string | undefined) {
+  if (reply?.status === 'sending') return 'Sending…';
+  if (blockedReason) return blockedReason;
+  if (reply?.status === 'typed') return `The text reached the terminal, but Return did not: ${reply.reason}. ↵ sends Return.`;
+  if (reply?.status === 'not_sent' && reply.reason === null) return 'This reply was not sent. ↵ sends it.';
+  if (reply?.status === 'not_sent') return `This reply may not have arrived: ${reply.reason}. Check the screen; ↵ sends it again.`;
+  return null;
+}
+
+function PeekTerminal({ terminalId, title, blockedReason, onOpen, onSent, onClose }: { terminalId: string; title: string; blockedReason?: string; onOpen: () => void; onSent: () => void; onClose: () => void }) {
+  const { writeConfirmedTerminalInput } = useDaemonApi();
   const { text, failure } = usePeekText(terminalId);
-  const [reply, setReply] = useState('');
+  const reply = usePeekReplies((state) => state.byTerminal.get(terminalId));
+  const draft = reply?.text ?? '';
+  const editable = reply?.status !== 'sending' && reply?.status !== 'typed';
+  const notice = replyNotice(reply, blockedReason);
   const screen = useRef<HTMLPreElement>(null);
   const pinnedToEnd = useRef(true);
 
@@ -164,14 +192,25 @@ function PeekTerminal({ terminalId, offline, onOpen, onClose }: { terminalId: st
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    const line = reply.trim();
+    if (reply?.status === 'sending') return;
+    const line = draft.trim();
     if (!line) {
       onOpen();
       return;
     }
-    sendRuntimeInput(terminalId, line, 'user');
-    sendRuntimeInput(terminalId, '\r', 'user');
-    onClose();
+    const { put } = usePeekReplies.getState();
+    if (blockedReason) {
+      if (reply?.status === 'draft') put(terminalId, { status: 'not_sent', text: draft, reason: null });
+      return;
+    }
+    void deliverPeekReply(terminalId, title, reply?.status === 'typed' ? reply : { status: 'draft', text: line }, writeConfirmedTerminalInput);
+    onSent();
+  };
+
+  const edit = (next: string) => {
+    const { put, forget } = usePeekReplies.getState();
+    if (!next) forget(terminalId);
+    else put(terminalId, reply?.status === 'not_sent' ? { ...reply, text: next } : { status: 'draft', text: next });
   };
 
   return (
@@ -187,17 +226,18 @@ function PeekTerminal({ terminalId, offline, onOpen, onClose }: { terminalId: st
       >
         {failure && text === null ? `Could not read this terminal: ${failure}` : text}
       </pre>
+      {notice ? <div className="shelf-peek-notice" role="status" data-testid="shelf-peek-notice">{notice}</div> : null}
       <div className="shelf-peek-reply">
         <span aria-hidden="true">❯</span>
         <input
           aria-label="Reply"
           data-testid="shelf-peek-input"
-          placeholder={offline ? 'Offline: a reply cannot be sent' : 'Reply without changing the layout'}
+          placeholder={blockedReason ? 'A reply cannot be sent now' : 'Reply without changing the layout'}
           autoComplete="off"
           spellCheck={false}
-          disabled={offline}
-          value={reply}
-          onChange={(event) => setReply(event.target.value)}
+          readOnly={!editable}
+          value={draft}
+          onChange={(event) => edit(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={onOpen}>Open<kbd>↵</kbd></button>

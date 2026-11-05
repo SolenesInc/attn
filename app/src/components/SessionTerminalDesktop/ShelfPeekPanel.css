@@ -30,6 +30,15 @@
   white-space: pre;
 }
 
+.shelf-peek-notice {
+  flex: none;
+  padding: 5px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--color-error) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-panel));
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .shelf-peek-reply {
   display: flex;
   flex: none;

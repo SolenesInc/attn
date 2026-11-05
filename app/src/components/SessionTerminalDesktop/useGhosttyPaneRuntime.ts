@@ -8,6 +8,7 @@ import type { BlockStateSnapshot, GhosttyTerminalHandle, PlacementStateSnapshot 
 import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
 import type { OutpostReach } from '../../types/generated';
+import { sessionHasStopped } from '../../store/sessions';
 import { isTypedInput, useTerminalRefusals } from '../../store/terminalRefusals';
 
 interface TerminalResizeOptions {
@@ -205,7 +206,7 @@ export function useGhosttyPaneRuntime(
     }
     const modelSize = terminal.getSize();
     if (!modelSize || !terminalIsCurrent()) return;
-    const stopped = Boolean(pane.terminalExit) || pane.state_reason === 'process_exited';
+    const stopped = sessionHasStopped(pane);
     const attachPolicy = restoring
       ? 'relaunch_restore'
       : stopped

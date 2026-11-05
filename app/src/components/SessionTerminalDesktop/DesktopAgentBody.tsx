@@ -6,7 +6,7 @@ import { useDesktopContext } from './DesktopContext';
 import { paneNotice } from './paneNotice';
 import { DesktopOfflineNotice } from './DesktopOfflineNotice';
 import type { DesktopAgentProps } from './desktopTypes';
-import { useSessionStore } from '../../store/sessions';
+import { sessionHasStopped, useSessionStore } from '../../store/sessions';
 
 export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSent }: DesktopAgentProps & { keysNotSent: number }) {
   const [resuming, setResuming] = useState(false);
@@ -37,7 +37,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
     handleClosePane,
   } = useDesktopContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
-  const stopped = Boolean(paneSession?.terminalExit) || paneSession?.state_reason === 'process_exited';
+  const stopped = Boolean(paneSession && sessionHasStopped(paneSession));
   const resume = async () => {
     if (paneSession?.offline) {
       setResumeError(`${paneSession.hostName} is unreachable; this needs it now`);
@@ -56,7 +56,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
 
   return (
     <div className="desktop-pane-body">
-      <DesktopOfflineNotice paneSession={paneSession} keysNotSent={keysNotSent} />
+      <DesktopOfflineNotice paneSession={paneSession} keysNotSent={keysNotSent} terminalId={agentPane.runtimeId} />
       {stopped ? (
         <div className="desktop-agent-stopped" role="status">
           <div>

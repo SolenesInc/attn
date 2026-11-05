@@ -19,7 +19,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-PEEK',
   tier: 'tier1-local-shell',
   prefix: 'shelf-peek',
-  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, and a browser tile hides and returns' },
+  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, a browser tile hides and returns, and a stopped terminal keeps the reply' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -47,6 +47,7 @@ const server = http.createServer((incoming, response) => {
 const PEEK = '[data-testid="shelf-peek"]';
 const INPUT = '[data-testid="shelf-peek-input"]';
 const SCREEN = '[data-testid="shelf-peek-screen"]';
+const NOTICE = '[data-testid="shelf-peek-notice"]';
 const leavesOf = (node) => (node.type === 'split' ? node.children.flatMap(leavesOf) : [node.paneId ?? node.tileId]);
 const readRow = async () => leavesOf((await request('get_desktop', { sessionId: firstSession })).desktop.layoutTree);
 const shownLeaves = async () => (await request('get_desktop_ui_state', { desktopId: desktop })).shownLeafIds;
@@ -222,6 +223,42 @@ try {
     await pageClick;
     runner.log('the page saw a click after the panel closed');
     await shot('browser-after-peek');
+  });
+
+  await runner.step('a_stopped_terminal_keeps_the_reply_and_the_tile_offers_it', async () => {
+    await focusLeaf(row[0]);
+    await waitDom(chip(target));
+    await driver.hover(chip(target));
+    await waitDom(PEEK);
+    await driver.typeInto(INPUT, 'exit 1');
+    await driver.hover('[data-testid="shelf-live-dots"]');
+    await driver.pressEnter();
+    await waitDom(PEEK, { absent: true });
+    await hoverAway();
+    await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.some((pane) => pane.paneId === target), 'the stopped tile stays', 15_000);
+
+    await driver.hover(chip(target));
+    await waitDom(NOTICE, { textIncludes: 'Agent stopped', timeoutMs: 30_000 });
+    await driver.typeInto(INPUT, 'keep this reply');
+    await driver.hover('[data-testid="shelf-live-dots"]');
+    await driver.pressEnter();
+    await waitDom(`${PEEK} ${INPUT}`);
+    runner.assert((await request('dom_value', { selector: INPUT })).value === 'keep this reply', 'Enter keeps the reply when the agent stopped');
+    await shot('peek-stopped-reply-kept');
+    await driver.pressKey('Escape');
+    await waitDom(PEEK, { absent: true });
+    await hoverAway();
+
+    await driver.hover(chip(target));
+    await waitDom(PEEK);
+    runner.assert((await request('dom_value', { selector: INPUT })).value === 'keep this reply', 'reopening the panel shows the kept reply');
+    await driver.click(`${PEEK} .shelf-peek-reply button:nth-of-type(1)`);
+    await waitDom(PEEK, { absent: true });
+    await waitDom(`.desktop-pane[data-pane-id="${target}"] .desktop-agent-stopped`);
+    await waitDom('[data-testid="unsent-peek-reply"]', { textIncludes: 'keep this reply' });
+    await shot('tile-offers-unsent-reply');
+    await driver.click('[data-testid="unsent-peek-reply"] button:nth-of-type(2)');
+    await waitDom('[data-testid="unsent-peek-reply"]', { absent: true });
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

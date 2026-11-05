@@ -147,6 +147,13 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 		t.Fatalf("Outposts off row: %+v", off)
 	}
 	typeRefused(t, app, terminal, "echo off\r")
+	offProbe := "while-off"
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "echo off\r", ProbeID: &offProbe})
+	awaitInputRefusals(t, app, terminal, 1)
+	offResult := testworld.Await(app, protocol.EventPtyInputProbeResult, func(m protocol.PtyInputProbeResultMessage) bool { return m.ProbeID == offProbe })
+	if offResult.Success || !strings.Contains(protocol.Deref(offResult.Error), "outpost is unreachable") {
+		t.Fatalf("probed input with Outposts off: %+v", offResult)
+	}
 	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(id)})
 	if refused := testworld.Refused(app); !strings.Contains(protocol.Deref(refused.Error), "outpost is unreachable") {
 		t.Fatalf("close with Outposts off: %+v", refused)

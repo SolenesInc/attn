@@ -567,7 +567,9 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
   .filter(([key]) => key.endsWith('_available') || /_cap_(initial_prompt|model_pin|effort_pin|model_discovery)$/.test(key))
   .map(([key, value]) => [key, key.endsWith('_available') ? '' : value])
   .sort(([a], [b]) => a.localeCompare(b)));
+const BRIDGE_LOST_AFTER_MS = 60_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const CONFIRMED_INPUT_TIMEOUT_MS = BRIDGE_LOST_AFTER_MS + 30_000;
 // The home answers once its relay applied the pairing window, which it waits up to 15 s for (cloudlink connectWithin).
 const PHONE_PAIR_BEGIN_TIMEOUT_MS = 20_000;
 const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
@@ -1868,6 +1870,7 @@ export function useDaemonSocket({
           }
 
           case 'pty_input_probe_result': {
+            settlePendingRequest(pendingActionsRef.current, 'pty_input', { ...data, request_id: data.probe_id }, () => true, 'The terminal refused the input');
             if (data.id && data.probe_id && typeof data.write_duration_us === 'number') {
               completeTerminalInputProbe({
                 id: data.id,
@@ -2381,6 +2384,7 @@ export function useDaemonSocket({
       setIsReady(false);
       const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
+      rejectPendingByPredicate((key) => key.startsWith('pty_input:'), new Error('The daemon disconnected before answering'));
       rejectPendingByPredicate(key => key.startsWith(`${INSTALL_CODEX_UPDATE}:`), new CodexInstallUntracked());
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
@@ -2595,6 +2599,17 @@ export function useDaemonSocket({
       ...(traceId ? { trace_id: traceId } : {}),
     });
   }, [sendOrQueueCommand]);
+
+  const writeConfirmedTerminalInput = useCallback((terminalId: string, data: string) => {
+    const probeId = nextRequestID('pty_input');
+    recordPtyCommand('pty_input', terminalId, data.length, 'user');
+    return sendKeyedRequest<void>(
+      pendingRequestKey('pty_input', probeId),
+      { cmd: 'pty_input', id: terminalId, data, source: 'user', probe_id: probeId },
+      'The terminal did not answer',
+      CONFIRMED_INPUT_TIMEOUT_MS,
+    );
+  }, [nextRequestID, sendKeyedRequest]);
 
   const readTerminalScreen = useCallback((terminalId: string) =>
     sendRequest<string>('terminal_read_text', { terminal_id: terminalId, mode: 'screen', lines: 0 }, 'Reading the terminal timed out'), [sendRequest]);
@@ -4389,6 +4404,7 @@ export function useDaemonSocket({
     sendSeedAuthorization,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
+    writeConfirmedTerminalInput,
     readTerminalScreen,
     sendTerminalPointerActivity,
     sendTerminalFocus,

@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -43,5 +44,21 @@ func TestOnlyProbedPtyInputIsAcknowledged(t *testing.T) {
 		if string(result.ID) != terminal || !result.Success || result.WriteDurationUs < 0 {
 			t.Errorf("probe result %+v, want a successful write to %s with its duration", result, terminal)
 		}
+	}
+}
+
+func TestProbedInputToAStoppedAgentAnswersThatItFailed(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	terminal := protocol.TerminalID(app.Terminal(session))
+	w.Launched(session).Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+
+	result := testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "ship it", Source: protocol.Ptr("user"), ProbeID: protocol.Ptr("after-exit")},
+		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "after-exit" })
+
+	if result.Success || protocol.Deref(result.Error) == "" {
+		t.Fatalf("input to a stopped agent answered %+v, want a failure naming why", result)
 	}
 }
