@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -301,5 +303,152 @@ func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
 				fmt.Sprintf("started_by=agent ended=idle opened_turn=true approvals=0 usage=known tokens=%d harness=claude", claudeTokens(reply)),
 			})
 		})
+	}
+}
+
+func modAboutToBeAnswered(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run, *modSocket, <-chan modPollAnswer, protocol.Session) {
+	t.Helper()
+	session, agent := moddedClaude(t, w, app)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	socket := modSocketOf(t, agent)
+	taken := socket.poll("late-custody")
+	if event := agent.ModNext(); event.Kind != fakeagent.ModEventReplaced {
+		t.Fatalf("the agent's own mod reported %+v, want replaced", event)
+	}
+	return session, agent, socket, taken, idle
+}
+
+func oneRunStartedBy(t *testing.T, w *world, app *testworld.Peer, session, want string) {
+	t.Helper()
+	runs := runRecords(t, w, app, session)
+	if len(runs) != 1 || runs[0].StartedBy != want {
+		t.Fatalf("run records %v, want one with started_by=%s", runs, want)
+	}
+}
+
+func TestInputThatStartsARunThroughTheModNamesItWhenCustodyComesLast(t *testing.T) {
+	inputs := map[string]struct {
+		send func(t *testing.T, app *testworld.Peer, cli *client.Client, session string)
+		want string
+	}{
+		"ring": {
+			send: func(t *testing.T, _ *testworld.Peer, cli *client.Client, session string) {
+				sendAgentMessage(t, cli, "reviewer", session, "the review is in")
+			},
+			want: "ring",
+		},
+		"annotation": {
+			send: func(t *testing.T, app *testworld.Peer, _ *client.Client, session string) {
+				requestID := uuid.NewString()
+				answer := testworld.Request(app, protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: requestID, SessionID: protocol.SessionID(session), Text: "also run the linter"},
+					protocol.EventSessionAnnotationsSubmitResult, func(m protocol.SessionAnnotationsSubmitResultMessage) bool { return m.RequestID == requestID })
+				if !answer.Success {
+					t.Errorf("annotation refused: %s %s", answer.Status, protocol.Deref(answer.Error))
+				}
+			},
+			want: "user",
+		},
+	}
+	for name, input := range inputs {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			setAnalyticsEnabled(app, "true")
+			registerSessions(t, w, cli, "reviewer")
+			session, agent, mod, taken, idle := modAboutToBeAnswered(t, w, app)
+
+			sent := make(chan struct{})
+			go func() {
+				defer close(sent)
+				input.send(t, app, cli, session)
+			}()
+			handed := <-taken
+			agent.Input(handed.Text)
+			agent.Prompted()
+			working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			mod.ackSubmitted("late-custody", handed.ID)
+			<-sent
+			runEnds(w, app, agent, working, "Read it. <!-- attn:state=idle -->")
+
+			oneRunStartedBy(t, w, app, session, input.want)
+		})
+	}
+}
+
+func TestARingTheModHeldOrRefusedLeavesARunThatStartedMeanwhileTheAgents(t *testing.T) {
+	for _, outcome := range []string{"held", "refused"} {
+		t.Run(outcome, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			setAnalyticsEnabled(app, "true")
+			registerSessions(t, w, cli, "reviewer")
+			session, agent, mod, taken, idle := modAboutToBeAnswered(t, w, app)
+
+			sent := make(chan struct{})
+			go func() {
+				defer close(sent)
+				sendAgentMessage(t, cli, "reviewer", session, "the review is in")
+			}()
+			handed := <-taken
+			agent.ProgramStatus("state=working:app=claude-code")
+			working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			mod.ack("late-custody", handed.ID, outcome)
+			<-sent
+			runEnds(w, app, agent, working, "The background build passed. <!-- attn:state=idle -->")
+
+			oneRunStartedBy(t, w, app, session, "agent")
+		})
+	}
+}
+
+func TestARingTakenWhileAUsersRunStartsLeavesThatRunTheUsers(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setAnalyticsEnabled(app, "true")
+	registerSessions(t, w, cli, "reviewer")
+	session, agent, mod, taken, idle := modAboutToBeAnswered(t, w, app)
+
+	sent := make(chan struct{})
+	go func() {
+		defer close(sent)
+		sendAgentMessage(t, cli, "reviewer", session, "the review is in")
+	}()
+	handed := <-taken
+	app.TypeLine(session, "add a refund button")
+	agent.Prompted()
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	mod.ackSubmitted("late-custody", handed.ID)
+	<-sent
+	runEnds(w, app, agent, working, "Added it. <!-- attn:state=idle -->")
+
+	oneRunStartedBy(t, w, app, session, "user")
+}
+
+func TestACrewHeartbeatThroughTheModRecordsAHeartbeatRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	writeCrewCharter(t, w, "trellis")
+	w.restart()
+	app, cli := w.App(), w.Client()
+	setAnalyticsEnabled(app, "true")
+	setSetting(t, app, claudeModSetting, "true")
+	session := string(wakeCrew(t, cli, "trellis", "").SessionID)
+	agent := w.Launched(session)
+	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	w.readTranscripts()
+
+	setSetting(t, app, "crew.heartbeat_lead_seconds", "3600")
+	w.advance(2 * time.Minute)
+	if got := agent.Prompted(); !strings.Contains(got, crewHeartbeat) || !agent.ThroughMod {
+		t.Fatalf("the day took %q through the mod=%t, want the heartbeat through the mod", got, agent.ThroughMod)
+	}
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	runEnds(w, app, agent, working, "Still here. <!-- attn:state=idle -->")
+
+	runs := runRecords(t, w, app, session)
+	if len(runs) == 0 || runs[len(runs)-1].StartedBy != "heartbeat" {
+		t.Fatalf("run records %v, want the last with started_by=heartbeat", runs)
 	}
 }
