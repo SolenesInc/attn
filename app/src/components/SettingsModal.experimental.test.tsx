@@ -118,3 +118,31 @@ describe('Experimental settings for Nisse', () => {
     ]);
   });
 });
+
+describe('Experimental settings for the shelf layout', () => {
+  const shelfLayout = () => screen.getByRole('switch', { name: 'Shelf layout' });
+  const narrowestWidth = () => screen.queryByLabelText('Narrowest tile width (columns)');
+
+  it('starts off with no width control, and turning it on saves the setting and shows the control', async () => {
+    const daemon = await openSection('experimental', { settings: { narrowest_tile_cols: '66' } });
+    expect(shelfLayout()).toHaveAttribute('aria-checked', 'false');
+    expect(narrowestWidth()).not.toBeInTheDocument();
+
+    await gesture(daemon, () => fireEvent.click(shelfLayout()));
+    expect(savedSettings(daemon)).toEqual([['shelf_layout_enabled', 'true']]);
+    expect(shelfLayout()).toHaveAttribute('aria-checked', 'true');
+    expect(narrowestWidth()).toHaveValue(66);
+
+    await gesture(daemon, () => fireEvent.click(shelfLayout()));
+    expect(narrowestWidth()).not.toBeInTheDocument();
+  });
+
+  it('saves the narrowest width when focus leaves the field', async () => {
+    const daemon = await openSection('experimental', { settings: { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' } });
+    const field = narrowestWidth()!;
+    fireEvent.change(field, { target: { value: '86' } });
+    await gesture(daemon, () => fireEvent.blur(field));
+    expect(savedSettings(daemon)).toEqual([['narrowest_tile_cols', '86']]);
+    expect(field).toHaveValue(86);
+  });
+});

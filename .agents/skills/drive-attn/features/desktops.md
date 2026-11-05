@@ -23,6 +23,7 @@ sessions on a launch desktop.
 - `tile-move`: send the active tile to another desktop and follow or stay. Drag a tile. Agents move terminals. Move an agent with its delegates.
 - `tile-history`: walk back and forward through the tiles this window showed.
 - `tile-close`: close the active tile.
+- `shelf-layout-setting`: the experimental "Shelf layout" switch and, while it is on, the narrowest tile width in columns.
 - `launch-desktop`: the desktop where a crew member's or an automation's sessions start.
 
 ## How to get to it
@@ -101,6 +102,7 @@ Preconditions:
 - **The Desktop field.** Open the palette's "Show automations", click `[data-testid="automation-edit-<id>"]` natively, then click the field's label, `.launch-desktop-field > span`, natively: the `select` takes focus without opening its menu. Run `bridge native_text '{"text":"1"}'`: `bridge dom_value '{"selector":".launch-desktop-field select"}'` moves to `<desktop>`. Click `[data-testid="automation-form-save"]` natively: `./attn automation show <id>` prints `# Launch desktop: 1 · <name>`. The crew panel's "Launch settings" tab has the same field: with a member from `./attn crew create probe`, open the palette's "Manage crew" and do the same, and `./attn crew list` shows the new launch desktop at once. Retire `probe` afterwards. Set a crew member's launch desktop with `./attn crew set <member> --launch-desktop own` ([crew.md](crew.md)). A run that lands there is driven in [automations.md](automations.md).
 - **What agents are told.** `./attn skill --reference terminal` covers moving terminals between desktops, with `attn terminal move <id> 8`.
 - **The shell has no session.** Run `./attn terminal move <agent> 4` from the instance shell. It exits 1 with `terminal: caller rule: attn terminal requires a live calling agent; run it inside an attn agent session`.
+- **The shelf layout settings.** Run `./attn settings set narrowest_tile_cols wide`: it exits 1 with `settings: daemon error: narrowest_tile_cols must be a positive whole number, got "wide"`. Press ⌘, and click `[data-testid="settings-nav-experimental"]` natively. `[data-testid="settings-narrowest-tile-cols"]` is absent. Click `[data-testid="settings-shelf-layout-toggle"]` natively: `./attn settings get shelf_layout_enabled` prints `true`, and the field appears with 66. Click the switch again before moving on: the field leaves, and `./attn settings get shelf_layout_enabled` prints `false`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `wsctl list` before and after each move, `bridge get_state` after each switch, `bridge get_session_ui_state '{"sessionId":"desk-shell"}'` after split, zoom and focus, and `./attn agent peek desk-agent` after each agent move. Capture `bridge capture_screenshot '{"path":"<P>/desktops-split.png"}'` with the splits and `<P>/desktops-overview.png` with the overview open, `<P>` written out. Name each file for its way in, such as `desktops-send-stay-state.json`.
 
 ## Contexts

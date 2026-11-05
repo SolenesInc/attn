@@ -262,6 +262,7 @@ export function useSettingsModalState({
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
+  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
@@ -283,6 +284,12 @@ export function useSettingsModalState({
     ...draftDeps,
     actual: actualChiefContextCap,
     settingKey: 'chief_context_window_cap',
+    trim: true,
+  });
+  const narrowestTileColsDraft = useSettingDraft({
+    ...draftDeps,
+    actual: settings.narrowest_tile_cols ?? '',
+    settingKey: 'narrowest_tile_cols',
     trim: true,
   });
   const headlessContextCapDraft = useSettingDraft({
@@ -585,7 +592,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
+            keywords: 'experimental launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',
@@ -678,6 +685,8 @@ export function useSettingsModalState({
     commitPluginPriority,
     ptyBackendMode,
     sharedPtyHostEnabled,
+    shelfLayoutEnabled,
+    narrowestTileColsDraft,
     newSessionLauncherEnabled,
     codexSharedEnabled,
     claudeModEnabled,

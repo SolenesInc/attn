@@ -251,6 +251,9 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           analyticsEnabled={state.analyticsEnabled}
           ptyBackendMode={state.ptyBackendMode}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
+          shelfLayoutEnabled={state.shelfLayoutEnabled}
+          narrowestTileColsDraft={state.narrowestTileColsDraft}
+          savedFlash={state.savedFlash}
           onSetSetting={state.onSetSetting}
         />
       );

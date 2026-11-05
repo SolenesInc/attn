@@ -595,6 +595,9 @@ export function ExperimentalSettings({
   analyticsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
+  shelfLayoutEnabled,
+  narrowestTileColsDraft,
+  savedFlash,
   onSetSetting,
 }: Pick<
   SettingsModalState,
@@ -614,6 +617,9 @@ export function ExperimentalSettings({
   | 'analyticsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
+  | 'shelfLayoutEnabled'
+  | 'narrowestTileColsDraft'
+  | 'savedFlash'
   | 'onSetSetting'
 >) {
   const shortcutModifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
@@ -697,6 +703,48 @@ export function ExperimentalSettings({
             {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Shelf layout</p>
+            <p className="settings-row-copy" id="shelf-layout-description">
+              Lay out each desktop as one row of tiles that slides sideways, with the rest waiting on a shelf, instead of splits.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shelf layout"
+            aria-checked={shelfLayoutEnabled}
+            aria-describedby="shelf-layout-description"
+            className="settings-action"
+            data-testid="settings-shelf-layout-toggle"
+            onClick={() => onSetSetting('shelf_layout_enabled', shelfLayoutEnabled ? 'false' : 'true')}
+          >
+            {shelfLayoutEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        {shelfLayoutEnabled && (
+          <div className="settings-row-card">
+            <div>
+              <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
+              <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
+            </div>
+            <div>
+              <input
+                id="settings-narrowest-tile-cols"
+                data-testid="settings-narrowest-tile-cols"
+                type="number"
+                min={1}
+                value={narrowestTileColsDraft.value}
+                onChange={narrowestTileColsDraft.onChange}
+                onBlur={narrowestTileColsDraft.commit}
+                onKeyDown={narrowestTileColsDraft.onKeyDown}
+                className="settings-input"
+              />
+              <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+            </div>
+          </div>
+        )}
         <div className="settings-row-card">
           <div>
             <p className="settings-row-title">Shared Codex</p>

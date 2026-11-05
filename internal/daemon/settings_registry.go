@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -42,6 +43,8 @@ const (
 	SettingDirectAgentLaunchEnabled      = settingkeys.SettingDirectAgentLaunchEnabled
 	SettingSharedPTYHostEnabled          = settingkeys.SettingSharedPTYHostEnabled
 	SettingBackgroundLoginEnvEnabled     = settingkeys.SettingBackgroundLoginEnvEnabled
+	SettingShelfLayoutEnabled            = settingkeys.SettingShelfLayoutEnabled
+	SettingNarrowestTileCols             = settingkeys.SettingNarrowestTileCols
 	SettingSharedPTYHostActive           = settingkeys.SettingSharedPTYHostActive
 	SettingTheme                         = settingkeys.SettingTheme
 	SettingReviewerModel                 = settingkeys.SettingReviewerModel
@@ -190,6 +193,8 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
+	{key: string(SettingShelfLayoutEnabled), scope: daemonScope, experimental: true, description: "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingNarrowestTileCols), scope: daemonScope, description: "Narrowest width of a tile in the shelf layout, in terminal columns: a positive whole number. Empty uses the default of 66.", validate: func(d *Daemon, key, value string) error { return validateNarrowestTileCols(value) }},
 	{key: string(SettingBackgroundLoginEnvEnabled), scope: daemonScope, experimental: true, description: "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
@@ -426,6 +431,23 @@ func validateBoundedIntSetting(label, value string, min, max int) error {
 		return fmt.Errorf("%s must be between %d and %d", label, min, max)
 	}
 	return nil
+}
+
+const defaultNarrowestTileCols = 66
+
+func validateNarrowestTileCols(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if n, err := strconv.Atoi(trimmed); err != nil || n < 1 {
+		return fmt.Errorf("%s must be a positive whole number, got %q", SettingNarrowestTileCols, value)
+	}
+	return nil
+}
+
+func resolveNarrowestTileCols(value string) int {
+	return resolveBoundedIntSetting(value, defaultNarrowestTileCols, 1, math.MaxInt)
 }
 
 func (d *Daemon) settingValues() map[string]string {
