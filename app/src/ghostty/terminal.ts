@@ -1,8 +1,4 @@
 import {
-  CELL_DATA_CODEPOINT,
-  CELL_DATA_HAS_HYPERLINK,
-  CELL_DATA_HAS_STYLING,
-  CELL_DATA_WIDE,
   CELL_WIDE_WIDTH,
   CELLS_DATA_BG_COLOR,
   CELLS_DATA_FG_COLOR,
@@ -41,9 +37,7 @@ import {
   ROW_DATA_CELLS,
   ROW_DATA_CELLS_RAW,
   ROW_DATA_DIRTY,
-  ROW_DATA_RAW,
   ROW_OPT_DIRTY,
-  ROW_RAW_DATA_GRAPHEME,
   ROW_RAW_DATA_WRAP,
   SCREEN_TYPE_ALTERNATE,
   SNAPSHOT_DATA_HISTORY_ROWS_PRIMARY,
@@ -78,6 +72,11 @@ import {
   TERMINAL_OPT_COLOR_PALETTE,
   TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
   TERMINAL_OPT_WRITE_PTY,
+  cellCodepoint,
+  cellHasGrapheme,
+  cellHasHyperlink,
+  cellHasStyling,
+  cellWide,
   packMode,
   type GhosttyExports,
 } from './abi';
@@ -155,6 +154,7 @@ const HYPERLINK_URI_CAP = 2048;
 // Codepoints per cluster; longer clusters are truncated, not grown for.
 const GRAPHEME_CAP = 64;
 const SCRATCH_CAP = 1024;
+const CELL_WORD_SIZE = 8;
 
 function newCell(): GhosttyCell {
   return {
@@ -543,24 +543,11 @@ export class GhosttyTerminal {
     const len = Math.min(this.dv().getUint32(this.pScratch + 4, true), this._cols);
     const cells = this.rowCells(it);
 
-    e.ghostty_render_state_row_get(it, ROW_DATA_RAW, this.pScratch);
-    const rawRow = this.dv().getBigUint64(this.pScratch, true);
-    const hasGraphemes = this.rowFlag(rawRow, ROW_RAW_DATA_GRAPHEME);
-
-    const raw = new BigUint64Array(this.e.memory.buffer, ptr, len);
     for (let x = 0; x < len; x += 1) {
       const cell = pool[base + x];
-      const value = raw[x];
       this.blank(cell, defaults);
-
-      e.ghostty_cell_get(value, CELL_DATA_CODEPOINT, this.pScratch);
-      cell.codepoint = this.dv().getUint32(this.pScratch, true);
-      e.ghostty_cell_get(value, CELL_DATA_WIDE, this.pScratch);
-      cell.width = CELL_WIDE_WIDTH[this.dv().getUint32(this.pScratch, true)] ?? 1;
-      e.ghostty_cell_get(value, CELL_DATA_HAS_HYPERLINK, this.pScratch);
-      cell.hyperlink_id = this.dv().getUint8(this.pScratch) ? 1 : 0;
-      e.ghostty_cell_get(value, CELL_DATA_HAS_STYLING, this.pScratch);
-      const styled = this.dv().getUint8(this.pScratch) !== 0;
+      const styled = this.readCellWord(cell, ptr + x * CELL_WORD_SIZE);
+      const hasGrapheme = cellHasGrapheme(this.dv().getUint32(ptr + x * CELL_WORD_SIZE, true));
 
       e.ghostty_render_state_row_cells_select(cells, x);
       if (styled) {
@@ -570,19 +557,29 @@ export class GhosttyTerminal {
         }
       }
       if (e.ghostty_render_state_row_cells_get(cells, CELLS_DATA_FG_COLOR, this.pScratch) === GHOSTTY_SUCCESS) {
-        const rgb = new Uint8Array(this.e.memory.buffer, this.pScratch, 3);
-        cell.fg_r = rgb[0]; cell.fg_g = rgb[1]; cell.fg_b = rgb[2];
+        const dv = this.dv();
+        cell.fg_r = dv.getUint8(this.pScratch); cell.fg_g = dv.getUint8(this.pScratch + 1); cell.fg_b = dv.getUint8(this.pScratch + 2);
       }
       if (e.ghostty_render_state_row_cells_get(cells, CELLS_DATA_BG_COLOR, this.pScratch) === GHOSTTY_SUCCESS) {
-        const rgb = new Uint8Array(this.e.memory.buffer, this.pScratch, 3);
-        cell.bg_r = rgb[0]; cell.bg_g = rgb[1]; cell.bg_b = rgb[2];
+        const dv = this.dv();
+        cell.bg_r = dv.getUint8(this.pScratch); cell.bg_g = dv.getUint8(this.pScratch + 1); cell.bg_b = dv.getUint8(this.pScratch + 2);
       }
-      if (hasGraphemes) {
+      if (hasGrapheme) {
         e.ghostty_render_state_row_cells_get(cells, CELLS_DATA_GRAPHEMES_LEN, this.pScratch);
         cell.grapheme_len = Math.max(0, this.dv().getUint32(this.pScratch, true) - 1);
       }
     }
     for (let x = len; x < this._cols; x += 1) this.blank(pool[base + x], defaults);
+  }
+
+  private readCellWord(cell: GhosttyCell, ptr: number): boolean {
+    const dv = this.dv();
+    const lo = dv.getUint32(ptr, true);
+    const hi = dv.getUint32(ptr + 4, true);
+    cell.codepoint = cellCodepoint(lo);
+    cell.width = CELL_WIDE_WIDTH[cellWide(hi)];
+    cell.hyperlink_id = cellHasHyperlink(hi) ? 1 : 0;
+    return cellHasStyling(lo, hi);
   }
 
   private rowFlag(row: bigint, data: number): boolean {
@@ -602,13 +599,16 @@ export class GhosttyTerminal {
       | (this.dv().getInt32(ptr + STYLE_OFF_UNDERLINE, true) !== 0 ? CellFlags.UNDERLINE : 0);
   }
 
+  private scratchRgb(): RGB {
+    const dv = this.dv();
+    return { r: dv.getUint8(this.pScratch), g: dv.getUint8(this.pScratch + 1), b: dv.getUint8(this.pScratch + 2) };
+  }
+
   private defaultColors(): { fg: RGB; bg: RGB } {
     this.e.ghostty_terminal_get(this.handle, TERMINAL_DATA_COLOR_FOREGROUND, this.pScratch);
-    const fgBytes = new Uint8Array(this.e.memory.buffer, this.pScratch, 3);
-    const fg = { r: fgBytes[0], g: fgBytes[1], b: fgBytes[2] };
+    const fg = this.scratchRgb();
     this.e.ghostty_terminal_get(this.handle, TERMINAL_DATA_COLOR_BACKGROUND, this.pScratch);
-    const bgBytes = new Uint8Array(this.e.memory.buffer, this.pScratch, 3);
-    return { fg, bg: { r: bgBytes[0], g: bgBytes[1], b: bgBytes[2] } };
+    return { fg, bg: this.scratchRgb() };
   }
 
   // The returned view aliases wasm memory: invalid after any growing call.
@@ -746,15 +746,7 @@ export class GhosttyTerminal {
       this.blank(cell, defaults);
       if (!this.ref(POINT_TAG_HISTORY, x, offset)) return cell;
       this.e.ghostty_grid_ref_cell(this.pRef, this.pScratch);
-      const value = this.dv().getBigUint64(this.pScratch, true);
-      this.e.ghostty_cell_get(value, CELL_DATA_CODEPOINT, this.pScratch);
-      cell.codepoint = this.dv().getUint32(this.pScratch, true);
-      this.e.ghostty_cell_get(value, CELL_DATA_WIDE, this.pScratch);
-      cell.width = CELL_WIDE_WIDTH[this.dv().getUint32(this.pScratch, true)] ?? 1;
-      this.e.ghostty_cell_get(value, CELL_DATA_HAS_HYPERLINK, this.pScratch);
-      cell.hyperlink_id = this.dv().getUint8(this.pScratch) ? 1 : 0;
-      this.e.ghostty_cell_get(value, CELL_DATA_HAS_STYLING, this.pScratch);
-      if (this.dv().getUint8(this.pScratch)) {
+      if (this.readCellWord(cell, this.pScratch)) {
         this.dv().setUint32(this.pStyle, STYLE_SIZE, true);
         if (this.e.ghostty_grid_ref_style(this.pRef, this.pStyle) === GHOSTTY_SUCCESS) {
           cell.flags = this.styleFlags(this.pStyle);

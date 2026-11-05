@@ -31,6 +31,11 @@ import {
   STYLE_OFF_STRIKETHROUGH,
   STYLE_OFF_UNDERLINE,
   STYLE_SIZE,
+  cellCodepoint,
+  cellHasGrapheme,
+  cellHasHyperlink,
+  cellHasStyling,
+  cellWide,
 } from './abi';
 
 const wasmPath = fileURLToPath(new URL('../../vendor/ghostty-vt/ghostty-vt.wasm', import.meta.url));
@@ -48,6 +53,11 @@ interface TypeInfo {
 
 let types: Record<string, TypeInfo>;
 let abi: { pointer_size: number; usize_size: number };
+let cellExports: {
+  memory: WebAssembly.Memory;
+  ghostty_cell_get(cell: bigint, data: number, out: number): number;
+  ghostty_wasm_alloc(size: number): number;
+};
 
 beforeAll(async () => {
   const mod = await WebAssembly.compile(readFileSync(wasmPath));
@@ -65,6 +75,11 @@ beforeAll(async () => {
   while (bytes[end] !== 0) end += 1;
   const doc = JSON.parse(new TextDecoder().decode(bytes.subarray(ptr, end)));
   types = doc.types;
+  cellExports = {
+    memory: instance.exports.memory as WebAssembly.Memory,
+    ghostty_cell_get: instance.exports.ghostty_cell_get as typeof cellExports.ghostty_cell_get,
+    ghostty_wasm_alloc: instance.exports.ghostty_wasm_alloc as typeof cellExports.ghostty_wasm_alloc,
+  };
   abi = doc.abi;
 });
 
@@ -109,6 +124,42 @@ describe('the ABI abi.ts transcribes', () => {
     expect(fg + slot.fields.value.offset).toBe(STYLE_OFF_FG);
     expect(bg + slot.fields.tag.offset).toBe(STYLE_OFF_BG_KIND);
     expect(bg + slot.fields.value.offset).toBe(STYLE_OFF_BG);
+  });
+
+  it('decodes a cell word as ghostty_cell_get reads it', () => {
+    const CELL_DATA = { codepoint: 1, contentTag: 2, wide: 3, hasStyling: 5, hasHyperlink: 7 };
+    const GRAPHEME_TAG = 1;
+    const out = cellExports.ghostty_wasm_alloc(8);
+    const view = new DataView(cellExports.memory.buffer);
+    const read = (word: bigint, data: number, width: 'u8' | 'u32'): number => {
+      view.setBigUint64(out, 0n, true);
+      if (cellExports.ghostty_cell_get(BigInt.asIntN(64, word), data, out) !== 0) throw new Error(`ghostty_cell_get(${data}) failed`);
+      return width === 'u8' ? view.getUint8(out) : view.getUint32(out, true);
+    };
+    let state = 0x9e3779b97f4a7c15n;
+    const next = (): bigint => {
+      state ^= (state << 13n) & 0xffffffffffffffffn;
+      state ^= state >> 7n;
+      state ^= (state << 17n) & 0xffffffffffffffffn;
+      return state;
+    };
+    const STYLE_ID_MASK = 0xffffn << 26n;
+    for (let i = 0; i < 20_000; i += 1) {
+      const word = i % 4 === 0 ? next() & ~STYLE_ID_MASK : i % 4 === 1 ? next() & next() & next() : next();
+      const lo = Number(word & 0xffffffffn);
+      const hi = Number(word >> 32n);
+      const decoded = [cellCodepoint(lo), cellHasGrapheme(lo), cellWide(hi), cellHasStyling(lo, hi), cellHasHyperlink(hi)];
+      const expected = [
+        read(word, CELL_DATA.codepoint, 'u32'),
+        read(word, CELL_DATA.contentTag, 'u32') === GRAPHEME_TAG,
+        read(word, CELL_DATA.wide, 'u32'),
+        read(word, CELL_DATA.hasStyling, 'u8') !== 0,
+        read(word, CELL_DATA.hasHyperlink, 'u8') !== 0,
+      ];
+      if (decoded.some((value, field) => value !== expected[field])) {
+        expect({ word: word.toString(16), decoded }).toEqual({ word: word.toString(16), decoded: expected });
+      }
+    }
   });
 
   it('sizes GhosttyGridRef as the scratch buffer assumes', () => {

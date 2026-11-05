@@ -54,7 +54,6 @@ export const CURSOR_STYLE_UNDERLINE = 2;
 export const CURSOR_STYLE_BLOCK_HOLLOW = 3;
 
 export const ROW_DATA_DIRTY = 1;
-export const ROW_DATA_RAW = 2;
 export const ROW_DATA_CELLS = 3;
 export const ROW_DATA_CELLS_RAW = 5;
 
@@ -65,16 +64,17 @@ export const CELLS_DATA_GRAPHEMES_LEN = 3;
 export const CELLS_DATA_BG_COLOR = 5;
 export const CELLS_DATA_FG_COLOR = 6;
 
-export const CELL_DATA_CODEPOINT = 1;
-export const CELL_DATA_WIDE = 3;
-export const CELL_DATA_HAS_STYLING = 5;
-export const CELL_DATA_HAS_HYPERLINK = 7;
 
 export const CELL_WIDE_WIDTH = [1, 2, 0, 0] as const;
 
+export const cellCodepoint = (lo: number): number => (lo & 2) !== 0 ? 0 : (lo >>> 2) & 0x1fffff;
+export const cellHasGrapheme = (lo: number): boolean => (lo & 3) === 1;
+export const cellHasStyling = (lo: number, hi: number): boolean => (lo >>> 26) !== 0 || (hi & 0x3ff) !== 0;
+export const cellWide = (hi: number): 0 | 1 | 2 | 3 => ((hi >>> 10) & 3) as 0 | 1 | 2 | 3;
+export const cellHasHyperlink = (hi: number): boolean => ((hi >>> 13) & 1) !== 0;
+
 /** A raw GhosttyRow, not the render-state row. */
 export const ROW_RAW_DATA_WRAP = 1;
-export const ROW_RAW_DATA_GRAPHEME = 3;
 
 /** GhosttyPointTag. */
 export const POINT_TAG_ACTIVE = 0;
@@ -178,7 +178,6 @@ export interface GhosttyExports extends WebAssembly.Exports {
   ghostty_grid_ref_graphemes(ref: number, buf: number, bufLen: number, outLen: number): number;
   ghostty_grid_ref_hyperlink_uri(ref: number, buf: number, bufLen: number, outLen: number): number;
 
-  ghostty_cell_get(cellLo: bigint, data: number, out: number): number;
   ghostty_row_get(row: bigint, data: number, out: number): number;
 
   ghostty_render_state_new(allocator: number, out: number): number;
