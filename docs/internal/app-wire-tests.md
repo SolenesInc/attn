@@ -14,9 +14,9 @@ in `app/src/test/`. Paths below are relative to `app/src`.
 - `restartApp(running)` unmounts the app, resets the app's in-memory stores, and
   renders the app again, as a relaunch does.
 - Besides the daemon, the app sees only these fakes. `test/setup.ts` mocks the
-  modules of the Tauri host. Fakes also stand in for the pieces the simulated
-  browser lacks, such as canvas and WebGL contexts, `ResizeObserver`, and
-  `matchMedia`. `renderApp.tsx` stubs the terminal's WebAssembly.
+  modules of the Tauri host and loads the terminal's WebAssembly from disk.
+  Fakes also stand in for the pieces the simulated browser lacks, such as canvas
+  and WebGL contexts, `ResizeObserver`, and `matchMedia`.
   `installScriptedDaemon` replaces `WebSocket` and `fetch`. `fetch` rejects,
   because app wire tests reach no network.
 - Domain helpers in `test/` script whole features, such as

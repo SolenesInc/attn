@@ -256,9 +256,11 @@ describe('useDaemonSocket profiles', () => {
   it('sends an empty tile_params to clear a tile, and a move carries its drop share', async () => {
     const { ws, result } = await connect();
 
+    let update!: Promise<unknown>;
+    let move!: Promise<unknown>;
     act(() => {
-      void result.current.sendDesktopUpdateTile({ desktopId: 'd1', tileId: 'nb', tileParams: '' });
-      void result.current.sendDesktopMoveLeaf({
+      update = result.current.sendDesktopUpdateTile({ desktopId: 'd1', tileId: 'nb', tileParams: '' });
+      move = result.current.sendDesktopMoveLeaf({
         sourceDesktopId: 'd1',
         targetDesktopId: 'd1',
         leafId: 'pane-1',
@@ -268,8 +270,15 @@ describe('useDaemonSocket profiles', () => {
       });
     });
 
-    expect(ws.commands('desktop_update_tile')[0]).toMatchObject({ tile_id: 'nb', tile_params: '' });
-    expect(ws.commands('desktop_move_leaf')[0]).toMatchObject({ leaf_id: 'pane-1', leaf_share: 0.3 });
+    const [updateCommand] = ws.commands('desktop_update_tile');
+    const [moveCommand] = ws.commands('desktop_move_leaf');
+    expect(updateCommand).toMatchObject({ tile_id: 'nb', tile_params: '' });
+    expect(moveCommand).toMatchObject({ leaf_id: 'pane-1', leaf_share: 0.3 });
+    act(() => {
+      ws.emit({ event: 'profile_action_result', request_id: updateCommand.request_id, action: 'desktop_update_tile', success: true });
+      ws.emit({ event: 'profile_action_result', request_id: moveCommand.request_id, action: 'desktop_move_leaf', success: true });
+    });
+    await Promise.all([update, move]);
   });
 
   it('docks a tile and follows its content on a desktop', async () => {

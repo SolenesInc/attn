@@ -375,6 +375,31 @@ describe('App desktop layout', () => {
     ]);
   });
 
+  it('persists the browser tile’s location again after the daemon never answered', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { daemon } = await openDesktop(
+      split('split-a', 'vertical', [pane('s1'), { type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: 'https://start.example' }]),
+      ['s1'],
+    );
+    holdAnswers(daemon, 'desktop_update_tile');
+    const navigate = async () => {
+      act(() => {
+        window.dispatchEvent(new CustomEvent('attn:browser-location', { detail: { label: 'browser-ws-tile-browser', url: 'https://first.example' } }));
+      });
+      await daemon.idle();
+    };
+
+    await navigate();
+    await navigate();
+    expect(daemon.sentOf('desktop_update_tile')).toHaveLength(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('browser location'), expect.objectContaining({ message: 'The daemon did not answer desktop_update_tile' }));
+
+    await navigate();
+    expect(daemon.sentOf('desktop_update_tile')).toHaveLength(2);
+  });
+
   it('waits for a document tile’s content again when the tile returns, instead of showing what it held before', async () => {
     const withTileRoot = split('split-a', 'vertical', [pane('s1'), { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }]);
     const { daemon } = await openDesktop(withTileRoot, ['s1']);

@@ -1,9 +1,12 @@
+// @ts-expect-error -- @types/node is not an app dependency
+import { readFileSync } from 'node:fs';
 import '@testing-library/jest-dom/vitest';
-import { beforeEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
 import type * as Zustand from 'zustand';
-import { invoke, isTauri } from '@tauri-apps/api/core';
 import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
 import { forgetAppMemory } from './appMemory';
+import { resetTauriFakes } from './tauriFakes';
 
 if (typeof HTMLElement !== 'undefined') {
   HTMLElement.prototype.showPopover = function showPopover(this: HTMLElement) {
@@ -12,59 +15,26 @@ if (typeof HTMLElement !== 'undefined') {
   HTMLElement.prototype.hidePopover = function hidePopover() {};
 }
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async () => undefined),
-  isTauri: vi.fn(() => false),
-  convertFileSrc: vi.fn((filePath: string) => `asset://localhost/${filePath}`),
-}));
+vi.mock('@tauri-apps/api/core', async () => (await import('./tauriFakes')).tauriFakes.core);
+vi.mock('@tauri-apps/api/app', async () => (await import('./tauriFakes')).tauriFakes.app);
+vi.mock('@tauri-apps/api/event', async () => (await import('./tauriFakes')).tauriFakes.event);
+vi.mock('@tauri-apps/api/window', async () => (await import('./tauriFakes')).tauriFakes.window);
+vi.mock('@tauri-apps/api/path', async () => (await import('./tauriFakes')).tauriFakes.path);
+vi.mock('@tauri-apps/plugin-deep-link', async () => (await import('./tauriFakes')).tauriFakes.deepLink);
+vi.mock('@tauri-apps/plugin-opener', async () => (await import('./tauriFakes')).tauriFakes.opener);
+vi.mock('@tauri-apps/plugin-dialog', async () => (await import('./tauriFakes')).tauriFakes.dialog);
+vi.mock('@tauri-apps/plugin-fs', async () => (await import('./tauriFakes')).tauriFakes.fs);
 
-vi.mock('@tauri-apps/api/app', () => ({
-  getVersion: vi.fn(async () => '0.0.0'),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  emitTo: vi.fn().mockResolvedValue(undefined),
-  emit: vi.fn(async () => {}),
-  listen: vi.fn(async () => () => {}),
-}));
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(() => ({
-    hide: vi.fn(async () => {}),
-    isVisible: vi.fn(async () => true),
-  })),
-}));
-
-vi.mock('@tauri-apps/api/path', () => ({
-  downloadDir: vi.fn(async () => '/Users/me/Downloads'),
-  homeDir: vi.fn(async () => '/Users/me'),
-  join: vi.fn(async (...parts: string[]) => parts.join('/')),
-}));
-
-vi.mock('@tauri-apps/plugin-deep-link', () => ({
-  onOpenUrl: vi.fn(async () => () => {}),
-  getCurrent: vi.fn(async () => []),
-}));
-
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn(async () => {}),
-  openPath: vi.fn(async () => {}),
-  revealItemInDir: vi.fn(async () => {}),
-}));
-
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(async () => null),
-  save: vi.fn(async () => null),
-}));
-
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  BaseDirectory: { AppLocalData: 'AppLocalData' },
-  exists: vi.fn(async () => false),
-  mkdir: vi.fn(async () => {}),
-  readTextFile: vi.fn(async () => ''),
-  stat: vi.fn(async () => ({ size: 0 })),
-  writeTextFile: vi.fn(async () => {}),
-}));
+vi.mock('../ghostty/wasm', async () => {
+  const { Ghostty } = await import('../ghostty');
+  let compiled: WebAssembly.Module | null = null;
+  return {
+    loadGhostty: async () => {
+      compiled ??= new WebAssembly.Module(readFileSync('vendor/ghostty-vt/ghostty-vt.wasm'));
+      return new Ghostty(new WebAssembly.Instance(compiled, { env: { log: () => {} } }));
+    },
+  };
+});
 
 vi.mock('zustand', async (importOriginal) => {
   const actual = await importOriginal<typeof Zustand>();
@@ -80,6 +50,32 @@ vi.mock('zustand', async (importOriginal) => {
   }) as typeof Zustand.create;
   return { ...actual, create };
 });
+
+function inertContext(overrides: Record<string, unknown>): unknown {
+  const context: unknown = new Proxy(overrides, {
+    get: (target, key) => {
+      if (key in target) return target[key as string];
+      if (typeof key === 'string' && /^[A-Z]/.test(key)) return 0;
+      return () => context;
+    },
+    set: () => true,
+  });
+  return context;
+}
+
+const webgl2 = inertContext({ isContextLost: () => false });
+const canvas2d = inertContext({
+  measureText: (text: string) => ({ width: text.length * 8 }),
+  getImageData: (_x: number, _y: number, width: number, height: number) =>
+    ({ width, height, data: new Uint8ClampedArray(width * height * 4) }),
+});
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = function getContext(kind: string) {
+    if (kind === 'webgl2') return webgl2;
+    if (kind === '2d') return canvas2d;
+    return null;
+  } as typeof HTMLCanvasElement.prototype.getContext;
+}
 
 // happy-dom derives navigator.platform from an X11 user agent. attn ships as a macOS app, so
 // the suite defaults to Mac glyphs and Cmd matching; non-mac tests override this per test.
@@ -140,13 +136,23 @@ if (typeof window !== 'undefined') {
   ensureLocalStorage();
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   if (typeof window !== 'undefined') {
+    Reflect.deleteProperty(navigator, 'clipboard');
+    await navigator.clipboard.write([]);
     window.localStorage.clear();
     window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     window.localStorage.setItem(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
   }
   forgetAppMemory();
-  vi.mocked(isTauri).mockReset();
-  vi.mocked(invoke).mockReset();
+  resetTauriFakes();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
 });

@@ -102,7 +102,7 @@
               "app/src/components/SessionTerminalDesktop/useGhosttyPaneRuntime.test.ts": "mocks attn's own pty/bridge; use the real module",
               "app/src/components/Toast.lifecycle.test.tsx": "mocks attn's own contexts/DaemonApiContext; use the real module",
               "app/src/store/sessions.test.ts": "mocks attn's own pty/bridge; use the real module",
-              "app/src/test/renderApp.tsx": "stubs the terminal's WebAssembly, which jsdom cannot run"
+              "app/src/test/setup.ts": "stubs the terminal's WebAssembly, which jsdom cannot run"
             }
           }
         ]
