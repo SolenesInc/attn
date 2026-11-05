@@ -2662,16 +2662,20 @@ func (d *Daemon) acquirePIDLock() error {
 		return fmt.Errorf("open PID file: %w", err)
 	}
 
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-	if err != nil {
-		existingPID := "unknown"
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		namedPID := "unknown"
 		if data, readErr := os.ReadFile(d.pidPath); readErr == nil {
 			if pid := strings.TrimSpace(string(data)); pid != "" {
-				existingPID = pid
+				namedPID = pid
 			}
 		}
-		f.Close()
-		return fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, existingPID)
+		if !namesGoneProcess(namedPID) {
+			f.Close()
+			return fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, namedPID)
+		}
+		if err := d.awaitPIDLockRelease(f); err != nil {
+			return fmt.Errorf("%w: pid %s is gone, but something else held %s for %s: %v", ErrAlreadyRunning, namedPID, d.pidPath, PIDLockReleaseTripwire, err)
+		}
 	}
 
 	f.Truncate(0)
@@ -2687,6 +2691,34 @@ func (d *Daemon) acquirePIDLock() error {
 	d.logf("Acquired PID lock (PID %d, file %s)", pid, d.pidPath)
 
 	return nil
+}
+
+func namesGoneProcess(namedPID string) bool {
+	pid, err := strconv.Atoi(namedPID)
+	return err == nil && pid > 0 && errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+}
+
+func (d *Daemon) awaitPIDLockRelease(f *os.File) error {
+	began := time.Now()
+	released := make(chan error, 1)
+	d.life.Go("awaitPIDLockRelease", func() {
+		for {
+			err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+			if !errors.Is(err, syscall.EINTR) {
+				released <- err
+				return
+			}
+		}
+	})
+	deadline := stepclock.NewTimer(PIDLockReleaseTimer, PIDLockReleaseTripwire)
+	defer deadline.Stop()
+	select {
+	case err := <-released:
+		d.logf("PID lock came free %s after its daemon was gone", time.Since(began))
+		return err
+	case <-deadline.C():
+		return errors.New("the lock never came free")
+	}
 }
 
 func (d *Daemon) releasePIDLock() {
