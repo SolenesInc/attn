@@ -81,6 +81,37 @@ func TestAnAnnotationSentWhileARingIsBeingPlacedArrivesAfterIt(t *testing.T) {
 	})
 }
 
+func TestAMessageSentWhileARingIsBeingPlacedIsAnsweredOnceTheRingIsPlaced(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		w.finishStartupWork()
+		app := w.App()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true, "message_delivery": true})
+		awaitDriverAvailable(app, "snipe")
+		author, _ := spawnDriven(w, app, driver, w.Path("author"))
+		recipient, run := spawnDriven(w, app, driver, w.Path("recipient"))
+		awaitingInput(t, app, driver, recipient, run)
+		sent := make(chan error, 2)
+		send := func(text string) {
+			cli := w.Client()
+			go func() { _, err := cli.AgentMsg(recipient, protocol.SessionID(author), text); sent <- err }()
+		}
+		send("take a look")
+		heldRing := driver.asked("driver.deliver_message", nil)
+
+		send("and this too")
+		synctest.Wait()
+		driver.answer(heldRing, map[string]bool{"ok": true})
+		for range 2 {
+			if err := <-sent; err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := len(readInbox(t, w.Client(), recipient, 0).Items); got != 2 {
+			t.Fatalf("inbox has %d items, want both messages", got)
+		}
+	})
+}
+
 func TestARingWhileAnAnnotationIsBeingPlacedArrivesAfterIt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		w.finishStartupWork()
