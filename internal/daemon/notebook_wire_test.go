@@ -272,3 +272,31 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 		}
 	}
 }
+
+func TestNotebookListsReadableNotesBesideAnUnparseableOrUnreadableOne(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	root := fsNotebookRoot(t, w)
+	fsWriteFile(t, filepath.Join(root, "fine.md"), []byte(notebookNote("fine")))
+	selfReferencing := "---\na: &a [*a]\n---\nstill readable\n"
+	fsWriteFile(t, filepath.Join(root, "loop.md"), []byte(selfReferencing))
+	locked := filepath.Join(root, "locked")
+	fsWriteFile(t, filepath.Join(locked, "hidden.md"), []byte(notebookNote("hidden")))
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	want := []string{"fine.md", "loop.md"}
+	if f, err := os.Open(locked); err == nil {
+		f.Close()
+		want = []string{"fine.md", "locked/hidden.md", "loop.md"}
+	}
+
+	all := notebookAskList(app, "")
+	if !all.Success || !slices.Equal(notebookEntryPaths(all.Entries), want) {
+		t.Fatalf("listing = %v (%s), want %v", notebookEntryPaths(all.Entries), protocol.Deref(all.Error), want)
+	}
+	if read := notebookAskRead(app, "/loop.md"); !read.Success || read.Result == nil || read.Result.Content != selfReferencing {
+		t.Fatalf("reading loop.md = %+v, want its content intact", read.Result)
+	}
+}
