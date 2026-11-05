@@ -517,7 +517,7 @@ jobs:
         run: pnpm run lint
 
       - name: Test
-        run: pnpm test --sequence.shuffle.files
+        run: pnpm run test --sequence.shuffle.files
 
       - name: Upload test receipts
         if: always()
