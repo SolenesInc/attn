@@ -534,11 +534,17 @@ func TestATenderWakeRefusedForARemovedWorktreeNotesAndNotifiesTheReason(t *testi
 	}
 
 	reason := "the original directory no longer exists"
+	mark := len(app.Log())
 	if sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved"); !strings.Contains(sent.Detail, reason) {
 		t.Fatalf("mail for a tender whose worktree is gone = %+v, want it queued naming %q", sent, reason)
 	}
 	stillClosed(t, cli, delegated, "mail for a removed worktree")
 	wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return slices.ContainsFunc(m.Seeds, func(s protocol.Seed) bool {
+			return s.ID == delegated.SeedID && s.Standby != nil && strings.Contains(protocol.Deref(s.Standby.WakeBlocked), reason)
+		})
+	})
 	if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
 		t.Errorf("the seed's standby is %+v, want wake_blocked naming %q", standby, reason)
 	}

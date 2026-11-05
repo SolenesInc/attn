@@ -393,6 +393,10 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectNotificationsUpdated() },
 		},
 		{
+			filter: bus.Filter{FactNotificationCreated},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenWhileSeedsOnStandby() },
+		},
+		{
 			filter: bus.Filter{FactDelegationPreferencesChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectDelegationPreferencesChanged() },
 		},

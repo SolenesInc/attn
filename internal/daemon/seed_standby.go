@@ -217,7 +217,7 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 func (d *Daemon) projectGardenWhileSeedsOnStandby() {
 	onStandby, err := d.store.SeedsOnStandby()
 	if err != nil {
-		d.logf("standby: list seeds on standby for a pull request change: %v", err)
+		d.logf("standby: list seeds on standby to refresh the garden: %v", err)
 		return
 	}
 	if len(onStandby) > 0 {
