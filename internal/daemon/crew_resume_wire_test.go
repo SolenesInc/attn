@@ -108,6 +108,64 @@ func TestARetiredMembersOldDayStaysClosed(t *testing.T) {
 	}
 }
 
+func TestMailForAMemberResumesItsInterruptedDayRatherThanAFreshOne(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
+	day := wakeCrew(t, cli, "alder", "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Reply("Morning. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.TypeLine(string(day.SessionID), "reprice the catalog")
+	run.Prompted()
+	testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	sent := sendAgentMessage(t, cli, sender, "alder", "the catalog changed")
+	if sent.Status != protocol.AgentMsgStatusQueued {
+		t.Fatalf("mail mid-turn = %+v, want queued", sent)
+	}
+
+	w.restartHoldingRevives()
+	cli = w.Client()
+	resumed := w.Launched(string(day.SessionID))
+	if !resumed.Resumed || resumed.ConversationID != run.ConversationID {
+		t.Fatalf("alder's mail launched %q, want it resuming conversation %s", resumed.Argv, run.ConversationID)
+	}
+	if got := resumed.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Errorf("the resumed day was prompted with %q, want the inbox doorbell", got)
+	}
+	if got := inboxContents(readInbox(t, cli, string(day.SessionID), 0).Items); got != "the catalog changed" {
+		t.Errorf("the resumed day reads %q, want the mail queued before the restart", got)
+	}
+	if bound := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); bound != day.SessionID {
+		t.Errorf("alder is bound to %q, want its interrupted day %s", bound, day.SessionID)
+	}
+}
+
+func TestMailForAMemberWhoseLatestDayEndedStartsFreshAndLeavesAnOlderDayAlone(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	old := crewDayLeftRecoverable(t, w, "alder")
+	app, cli := w.App(), w.Client()
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
+	current := wakeCrew(t, cli, "alder", "")
+	run := w.Launched(string(current.SessionID))
+	run.Prompted()
+	run.Exit(0)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == current.SessionID })
+
+	sendAgentMessage(t, cli, sender, "alder", "the catalog changed")
+	bound := crewRosterMember(t, cli, "alder").BindingSession
+	if bound == nil || *bound == old || *bound == current.SessionID {
+		t.Fatalf("after the mail alder is bound to %v, want a fresh day, not %s or %s", bound, old, current.SessionID)
+	}
+	if fresh := w.Launched(string(*bound)); fresh.Resumed {
+		t.Errorf("the fresh day launched as %q, want no resumed conversation", fresh.Argv)
+	}
+	if state := queriedSession(t, cli, string(old)).State; state != protocol.SessionStateRecoverable {
+		t.Errorf("alder's older day is %s, want it still recoverable", state)
+	}
+}
+
 func crewDayLeftRecoverable(t *testing.T, w *world, member string) protocol.SessionID {
 	t.Helper()
 	app := w.App()

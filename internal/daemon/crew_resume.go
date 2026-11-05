@@ -7,6 +7,23 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+func (d *Daemon) reviveMembersInterruptedSession(memberID string) bool {
+	latest, err := d.store.MemberLatestSession(memberID)
+	if err != nil {
+		d.logf("crew: reading %s's latest session: %v", memberID, err)
+		return false
+	}
+	session := d.store.Get(latest)
+	if session == nil || session.State != protocol.SessionStateRecoverable || !d.agentAvailable(string(session.Agent)) {
+		return false
+	}
+	if err := d.reviveSession(latest, 80, 24); err != nil {
+		d.logf("crew: reviving %s's interrupted session %s failed: %v", memberID, latest, err)
+		return false
+	}
+	return true
+}
+
 func (d *Daemon) resumeAsMember(sessionID protocol.SessionID, resume func() error) error {
 	if d.store == nil {
 		return resume()

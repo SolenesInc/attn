@@ -281,7 +281,8 @@ change nothing.
 ## Wakes
 
 When a crew member's address has unread items and the member is asleep, attn
-wakes the member before it rings.
+wakes the member before it rings. When a restart interrupted the member's latest
+session, attn resumes that session and rings it instead of starting a new one.
 
 - The wake is one attempt for every unread item. The new session gets the ring
   when the session first reaches a safe prompt, and gets the user input as

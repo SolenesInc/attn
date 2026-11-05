@@ -288,6 +288,18 @@ func renameCrewMember(tx *sql.Tx, key, name string) (previous string, err error)
 	return previous, err
 }
 
+func (s *Store) MemberLatestSession(key string) (protocol.SessionID, error) {
+	if s.db == nil {
+		return "", nil
+	}
+	var id protocol.SessionID
+	err := s.db.QueryRow(`SELECT latest_session FROM crew_members WHERE member_key = ?`, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 func (s *Store) RecordMemberSession(key string, id protocol.SessionID) error {
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
 		return recordMemberSessionTx(tx, key, id)

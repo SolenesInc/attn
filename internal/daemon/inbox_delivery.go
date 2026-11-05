@@ -222,6 +222,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		if holder == nil {
 			if member := memberID; member != "" {
+				if d.reviveMembersInterruptedSession(member) {
+					d.kickInbox(a)
+					return receipt, nil
+				}
 				cause, err := d.inboxWakeCause(a)
 				if err != nil {
 					return receipt, err
