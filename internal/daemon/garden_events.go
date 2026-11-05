@@ -328,7 +328,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 				return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
 			}
 			seen[at] = true
-			if !r.subscriptions.seeds[at].ClaimHolds(r.parties.holds) {
+			if !r.parties.claimHolds(r.subscriptions.seeds[at]) {
 				continue
 			}
 			tenders, err := r.ResolveSeedRole(at, events.CurrentTender)

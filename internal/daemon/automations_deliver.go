@@ -548,7 +548,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: who.Attn(), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		})
 		automation := who.Session(req.IDs.SessionID)
-		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: automation.Actor(), Claimant: automation}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
+		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: automation.Actor(), Claimant: automation}, gardenStanding{daemon: d, profileID: seed.ProfileID, releasesSessions: true}, nil)
 		if err != nil {
 			return false, nil, err
 		}
@@ -592,7 +592,7 @@ func (d *Daemon) activateAutomationContinuationSeed(definitionID int, seedID str
 		return restore, nil
 	}
 	tend := quietAsk("")
-	if previous, ok := seed.Tender.Session(); ok && previous != sessionID && d.sessionActive(previous) {
+	if previous, ok := seed.Tender.Session(); ok && previous != sessionID && d.seedClaimHolds(seed) {
 		handover, err := d.store.AutomationSessionAwaitsRotatedSeed(definitionID, seedID, sessionID, previous)
 		if err != nil {
 			return nil, err

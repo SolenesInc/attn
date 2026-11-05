@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -14,6 +15,10 @@ func (d *Daemon) actorOfSession(id protocol.SessionID) who.Actor {
 
 func (d *Daemon) partyHolds(p who.Party) bool {
 	return d.partiesNow().holds(p)
+}
+
+func (d *Daemon) seedClaimHolds(seed garden.Seed) bool {
+	return d.partiesNow().claimHolds(seed)
 }
 
 func (d *Daemon) partyView(p who.Party) protocol.PartyView {

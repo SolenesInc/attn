@@ -5,6 +5,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -14,6 +15,7 @@ import (
 type parties struct {
 	sessions map[protocol.SessionID]sessionParty
 	members  map[string]memberParty
+	standby  map[string]store.SeedStandby
 }
 
 type sessionParty struct {
@@ -68,40 +70,9 @@ func (d *Daemon) readParties() (parties, error) {
 		}
 		out.sessions[claim.ID] = party
 	}
-	d.holdStandbyClaims(out.sessions)
 	out.members = d.readMemberParties(out.sessions)
-	return out, nil
-}
-
-func (d *Daemon) holdStandbyClaims(sessions map[protocol.SessionID]sessionParty) {
-	rows, err := d.store.SeedsOnStandby()
-	if err != nil {
-		d.logf("parties: reading seeds on standby: %v", err)
-		return
-	}
-	for seedID, row := range rows {
-		id, isSession := row.Tender.Session()
-		if !isSession || sessions[id].holds {
-			continue
-		}
-		seed, _, err := d.readSeed(seedID)
-		if refusal := protocol.RefusalOf(err); refusal != nil && *refusal == protocol.RefusalNotFound {
-			continue
-		}
-		if err != nil {
-			d.logf("parties: reading standby seed %s: %v", seedID, err)
-			continue
-		}
-		if standbyOf(seed, &row) == nil {
-			continue
-		}
-		party, known := sessions[id]
-		if !known {
-			party.name = shortSessionID(id)
-		}
-		party.holds = true
-		sessions[id] = party
-	}
+	out.standby, err = d.store.SeedsOnStandby()
+	return out, err
 }
 
 func (d *Daemon) readMemberParties(sessions map[protocol.SessionID]sessionParty) map[string]memberParty {
@@ -147,6 +118,14 @@ func (p parties) holds(party who.Party) bool {
 	}
 	_, member := party.Member()
 	return member
+}
+
+func (p parties) claimHolds(seed garden.Seed) bool {
+	if seed.Tender.IsZero() {
+		return false
+	}
+	row, found := p.standby[seed.ID]
+	return p.holds(seed.Tender) || found && standbyOf(seed, &row) != nil
 }
 
 func (p parties) view(party who.Party) protocol.PartyView {

@@ -58,7 +58,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	return d.wakeSeedTender(protection, seed, tenderWakeCause{
 		tend: func(claimant who.Party, actor who.Actor) error {
 			_, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
-				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", d.sessionActive, expectedRev)
+				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", expectedRev)
 			return err
 		},
 		settle: func() {

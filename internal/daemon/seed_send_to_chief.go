@@ -114,7 +114,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID
 	unclaimed.Tender = who.Party{}
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: chief.Actor(), Claimant: chief,
-	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
+	}, gardenStanding{daemon: d, profileID: seed.ProfileID}, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -146,11 +145,11 @@ func reaches(seeds []Seed, start, kind, target string) []string {
 	return walk(start)
 }
 
-func Ready(seeds []Seed, holds func(who.Party) bool) []Seed {
+func Ready(seeds []Seed, claimHolds func(Seed) bool) []Seed {
 	graph := readiness(seeds)
 	ready := make([]Seed, 0, len(seeds))
 	for _, seed := range seeds {
-		if !graph.open(seed) || seed.ClaimHolds(holds) {
+		if !graph.open(seed) || claimHolds(seed) {
 			continue
 		}
 		ready = append(ready, seed)

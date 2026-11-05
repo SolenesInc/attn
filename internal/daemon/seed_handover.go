@@ -120,7 +120,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 	delegate := who.Session(sessionID)
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: delegate.Actor(), Claimant: delegate,
-	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
+	}, gardenStanding{daemon: d, profileID: seed.ProfileID, releasesSessions: true}, nil)
 	if err != nil {
 		return nil, err
 	}

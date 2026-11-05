@@ -201,7 +201,6 @@ type gardenRead struct {
 	ready     map[string]bool
 	plots     garden.PlotTree
 	reminders map[string]garden.Reminder
-	standby   map[string]store.SeedStandby
 }
 
 type gardenSeeds struct {
@@ -229,13 +228,9 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	if err != nil {
 		return gardenRead{}, err
 	}
-	standby, err := d.store.SeedsOnStandby()
-	if err != nil {
-		return gardenRead{}, err
-	}
 	seeds := all.inProfile(firstProfile(profileID))
-	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders, standby: standby}
-	for _, seed := range garden.Ready(out.seeds, parties.holds) {
+	out := gardenRead{daemon: d, parties: parties, seeds: seeds.seeds, docs: seeds.docs, plots: seeds.plots, ready: map[string]bool{}, reminders: reminders}
+	for _, seed := range garden.Ready(out.seeds, parties.claimHolds) {
 		out.ready[seed.ID] = true
 	}
 	return out, nil
@@ -358,7 +353,7 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 		Title:        seed.Title,
 		Status:       seed.Status,
 		StepSlug:     seed.StepSlug,
-		Claimed:      seed.ClaimHolds(g.parties.holds),
+		Claimed:      g.parties.claimHolds(seed),
 		Ready:        g.ready[seed.ID],
 		Edges:        make([]protocol.SeedEdge, 0, len(seed.Edges)),
 		PlotProgress: g.progress(seed.ID),
@@ -430,7 +425,7 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 		Status:              seed.Status,
 		StepSlug:            seed.StepSlug,
 		Planter:             g.parties.actor(seed.Planter),
-		Claimed:             seed.ClaimHolds(g.parties.holds),
+		Claimed:             g.parties.claimHolds(seed),
 		LastExecutionID:     protocol.Ptr(protocol.TrimID(seed.LastExecutionID)),
 		StateChangedAt:      stateChangedAt,
 		StateChangedAtExact: stateChangedAtExact,
@@ -1367,7 +1362,7 @@ func (d *Daemon) validateDispatchCrown(crown string, sourceSessionID protocol.Se
 			"%s is %s, so there is no open work to dispatch at; reopen it first with `attn seed replant %s`",
 			crown, seed.Status, crown)
 	}
-	if seed.ClaimHolds(d.partyHolds) && seed.Tender != d.partyOfSession(sourceSessionID) {
+	if d.seedClaimHolds(seed) && seed.Tender != d.partyOfSession(sourceSessionID) {
 		tender := d.partyName(seed.Tender)
 		return protocol.Refuse(protocol.RefusalNotTender,
 			"%s is being tended by %s, and a seed has one tender at a time; dispatching here would hand it to a new agent.\n"+
@@ -1659,7 +1654,7 @@ func (d *Daemon) seedTransitionAsk(msg *protocol.SeedTransitionMessage, verb gar
 }
 
 func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask) (garden.Seed, docstore.Document, error) {
-	seed, doc, _, err := d.applySeedTransitionDetailedAs(id, verb, ask, "", d.sessionActive)
+	seed, doc, _, err := d.applySeedTransitionDetailed(id, verb, ask, "")
 	return seed, doc, err
 }
 
@@ -1681,26 +1676,20 @@ func (d *Daemon) applySeedTransitionDetailed(
 func (d *Daemon) applySeedTransitionDetailedAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
-	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionActive, expectedRev)
-}
-
-func (d *Daemon) applySeedTransitionDetailedAs(
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool,
-) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
-	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
+	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, expectedRev)
 }
 
 var errSeedRevisionMoved = errors.New("")
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
+	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	var seed garden.Seed
 	var doc docstore.Document
 	var notes seedTransitionDetails
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionProtected(protection, id, verb, ask, comment, sessionLive, expectedRev)
+		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionProtected(protection, id, verb, ask, comment, expectedRev)
 		return err
 	})
 	return seed, doc, notes, err
@@ -1708,7 +1697,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	protection foregroundCleanupProtection,
-	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
+	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	if verb == garden.VerbTend {
 		key, _ := ask.Claimant.Member()
@@ -1757,7 +1746,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			children = garden.OpenChildren(read.seeds, seed.ID)
 		}
-		outcome, err := garden.Transition(seed, verb, ask, gardenStanding{daemon: d, profileID: seed.ProfileID, live: sessionLive}, children)
+		outcome, err := garden.Transition(seed, verb, ask, gardenStanding{daemon: d, profileID: seed.ProfileID}, children)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}

@@ -616,23 +616,37 @@ func TestStandbyEndsWhenTheSeedMovesAndOutlivesAnOlderBuildRewritingTheSeed(t *t
 	}
 }
 
-func TestASeedOnStandbyKeepsItsClosedTendersClaim(t *testing.T) {
+func TestAClosedTenderHoldsOnlyItsSeedOnStandby(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	registerSessions(t, w, cli, "sender")
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	w.Launched(string(delegated.SessionID)).Prompted()
-	onStandbyAndClosed(t, w, cli, delegated)
 	seed, tender := delegated.SeedID, string(delegated.SessionID)
+	planted, err := cli.SeedPlant(delegated.SessionID, "Follow-up the tender also tends", "", "", "")
+	if err != nil {
+		t.Fatalf("the tender plants a second seed: %v", err)
+	}
+	other := planted.Seed.ID
+	lifeMove(t, cli, tender, other, "tend", "", "")
+	onStandbyAndClosed(t, w, cli, delegated)
 
 	ready, err := cli.SeedReady("sender", "", true)
 	if err != nil {
 		t.Fatalf("seed ready: %v", err)
 	}
+	listed := map[string]bool{}
 	for _, row := range slices.Concat(ready.Seeds, ready.Plots) {
-		if row.ID == seed {
-			t.Fatalf("seed ready lists %s while it is on standby for its closed tender", seed)
-		}
+		listed[row.ID] = true
+	}
+	if listed[seed] {
+		t.Fatalf("seed ready lists %s while it is on standby for its closed tender", seed)
+	}
+	if !listed[other] {
+		t.Fatalf("seed ready leaves out %s, which its closed tender tends without standby", other)
+	}
+	if tended := lifeMove(t, cli, "sender", other, "tend", "", ""); tended.Tender == nil || !strings.Contains(string(tended.Tender.Ref), "sender") {
+		t.Fatalf("after sender tends %s without --force it is tended by %+v, want sender", other, tended.Tender)
 	}
 	if _, err := cli.SeedTransition("sender", seed, "tend", "", false, client.SeedTransitionOptions{}); err == nil || !strings.Contains(err.Error(), tender) {
 		t.Fatalf("an unrelated session tending %s got %v, want a refusal naming its tender %s", seed, err, tender)

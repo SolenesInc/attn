@@ -126,7 +126,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		change := seedChange{author: ask.Actor, cause: sessionID}
 		var outcome garden.Outcome
 		if seed.Status == garden.StatusGrowing {
-			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
+			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID}, nil)
 			if err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 			}
@@ -262,7 +262,7 @@ func (d *Daemon) fulfilHarvestWhen(
 			ask.Reason = current.HarvestWhen.Reason
 		}
 		harvested, doc, details, err = d.applySeedTransitionDetailedAsAtRevision(
-			current.ID, garden.VerbHarvest, ask, "", d.sessionActive, read.Rev)
+			current.ID, garden.VerbHarvest, ask, "", read.Rev)
 		var openChildren *garden.OpenChildrenError
 		if errors.As(err, &openChildren) {
 			cleared, written, clearErr := d.clearHarvestWhen(current.ID, current.HarvestWhen,

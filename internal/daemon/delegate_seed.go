@@ -62,7 +62,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if garden.Closed(seed.Status) {
 			return "", fmt.Errorf("%s is %s; replant it before delegating", seed.ID, seed.Status)
 		}
-		if seed.ClaimHolds(d.partyHolds) {
+		if d.seedClaimHolds(seed) {
 			return "", fmt.Errorf("seed %s is claimed by %s; use --handover to transfer it", seed.ID, d.partyName(seed.Tender))
 		}
 		seedExpected = doc.Rev
@@ -73,7 +73,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", profileErr
 	}
 	before := seed
-	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: who.Session(sessionID).Actor(), Claimant: who.Session(sessionID)}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
+	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: who.Session(sessionID).Actor(), Claimant: who.Session(sessionID)}, gardenStanding{daemon: d, profileID: seed.ProfileID, releasesSessions: true}, nil)
 	if err != nil {
 		return "", err
 	}

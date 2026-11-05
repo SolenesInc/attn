@@ -44,8 +44,8 @@ func memberKey(key string) who.MemberKey {
 	return k
 }
 
-func holdsWhile(live func(protocol.SessionID) bool) func(who.Party) bool {
-	return testStanding{live}.Holds
+func holdsWhile(live func(protocol.SessionID) bool) func(Seed) bool {
+	return testStanding{live}.ClaimHolds
 }
 
 func TestUnblocks(t *testing.T) {

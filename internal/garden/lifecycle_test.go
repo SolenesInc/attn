@@ -19,11 +19,11 @@ func alive(protocol.SessionID) bool { return true }
 
 type testStanding struct{ live func(protocol.SessionID) bool }
 
-func (s testStanding) Holds(p who.Party) bool {
-	if id, ok := p.Session(); ok {
+func (s testStanding) ClaimHolds(seed Seed) bool {
+	if id, ok := seed.Tender.Session(); ok {
 		return s.live(id)
 	}
-	return true
+	return !seed.Tender.IsZero()
 }
 func (testStanding) Oversees(who.Actor, who.Party) bool { return false }
 func (testStanding) Name(p who.Party) string            { return p.String() }

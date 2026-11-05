@@ -86,7 +86,7 @@ func ParseVerb(raw string) (Verb, error) {
 }
 
 type Standing interface {
-	Holds(who.Party) bool
+	ClaimHolds(Seed) bool
 	Oversees(actor who.Actor, held who.Party) bool
 	Name(who.Party) string
 }
@@ -127,7 +127,7 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 	}
 	by := MeansTender
 	var displaced *who.Party
-	if held := seed.Tender; seed.ClaimHolds(standing.Holds) && held != ask.Claimant && held.Actor() != ask.Actor {
+	if held := seed.Tender; standing.ClaimHolds(seed) && held != ask.Claimant && held.Actor() != ask.Actor {
 		switch {
 		case ask.Force:
 			by = MeansForce
@@ -171,10 +171,6 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren [
 		next.HarvestWhen = nil
 	}
 	return Outcome{Seed: next, Moved: true, Displaced: displaced, By: by}, nil
-}
-
-func (s Seed) ClaimHolds(holds func(who.Party) bool) bool {
-	return !s.Tender.IsZero() && holds(s.Tender)
 }
 
 func refuseTakeover(seed Seed, tender string) error {

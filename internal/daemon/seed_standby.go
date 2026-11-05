@@ -189,7 +189,7 @@ func (d *Daemon) unreadStandbyMailRefusal(session *protocol.Session, goingOnStan
 }
 
 func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
-	row, found := g.standby[seed.ID]
+	row, found := g.parties.standby[seed.ID]
 	if !found {
 		return nil
 	}

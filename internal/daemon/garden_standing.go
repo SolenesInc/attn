@@ -4,21 +4,20 @@ import (
 	"fmt"
 
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
 
 type gardenStanding struct {
-	daemon    *Daemon
-	profileID string
-	live      func(protocol.SessionID) bool
+	daemon           *Daemon
+	profileID        string
+	releasesSessions bool
 }
 
-func (s gardenStanding) Holds(p who.Party) bool {
-	if id, ok := p.Session(); ok {
-		return s.live(id)
+func (s gardenStanding) ClaimHolds(seed garden.Seed) bool {
+	if _, session := seed.Tender.Session(); session && s.releasesSessions {
+		return false
 	}
-	return s.daemon.partyHolds(p)
+	return s.daemon.seedClaimHolds(seed)
 }
 
 func (s gardenStanding) Name(p who.Party) string { return s.daemon.partyName(p) }

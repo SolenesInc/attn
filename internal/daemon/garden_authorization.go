@@ -125,10 +125,10 @@ func (d *Daemon) writeSeedAuthorization(seedID, text string, setter who.Actor, c
 			if err := d.checkSeedStanding(seed, setter, "set its authorization"); err != nil {
 				return authorizationChange{}, err
 			}
-			standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
+			standing := gardenStanding{daemon: d, profileID: seed.ProfileID}
 			tender := seed.Tender
 			switch {
-			case !seed.ClaimHolds(standing.Holds):
+			case !standing.ClaimHolds(seed):
 			case tender.Actor() == setter:
 				change.callerTends = true
 				change.withdrawn = &store.InboxKey{To: tender.Address(), Kind: inbox.Authorization, Key: seed.ID}
@@ -234,9 +234,9 @@ func (d *Daemon) checkSeedStanding(seed garden.Seed, setter who.Actor, action st
 	if _, isParty := setter.Party(); !isParty {
 		return nil
 	}
-	standing := gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}
+	standing := gardenStanding{daemon: d, profileID: seed.ProfileID}
 	held := seed.Tender
-	if !seed.ClaimHolds(standing.Holds) || held.Actor() == setter || standing.Oversees(setter, held) {
+	if !standing.ClaimHolds(seed) || held.Actor() == setter || standing.Oversees(setter, held) {
 		return nil
 	}
 	tender := standing.Name(held)
