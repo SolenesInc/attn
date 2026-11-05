@@ -185,6 +185,12 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 				}
 				return nil
 			}
+			if os.IsPermission(err) && p != walkRoot {
+				if dirent != nil && dirent.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 			return err
 		}
 		if dirent.IsDir() {
