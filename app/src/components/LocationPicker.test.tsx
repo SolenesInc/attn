@@ -20,25 +20,6 @@ function buildRecentLocation() {
   };
 }
 
-function buildRepoInfo(overrides?: Partial<{
-  repo: string;
-  current_branch: string;
-  current_commit_hash: string;
-  current_commit_time: string;
-  default_branch: string;
-  worktrees: Array<{ path: string; branch: string }>;
-}>) {
-  return {
-    repo: '/home/dev/projects/exsin',
-    current_branch: 'main',
-    current_commit_hash: 'abcdef1234567890',
-    current_commit_time: '2026-04-03T18:00:00Z',
-    default_branch: 'main',
-    worktrees: [{ path: '/home/dev/projects/exsin--feat-images', branch: 'feat-images' }],
-    ...overrides,
-  };
-}
-
 function renderPicker(props?: Partial<LocationPickerProps>) {
   const onSelect = vi.fn();
   render(
@@ -142,54 +123,6 @@ describe('LocationPicker', () => {
       expect(screen.getByTestId('location-picker-item-0')).toBeInTheDocument();
       expect(screen.getByTestId('location-picker-item-0')).not.toHaveClass('selected');
       expect(input.value).toBe('/home/dev/projects/recent-repo');
-    });
-  });
-
-  it('keeps adjacent worktree selection after deletion', async () => {
-    const onInspectPath = vi.fn(async () => ({
-      success: true,
-      inspection: {
-        input_path: '~/projects/exsin--feat-b',
-        resolved_path: '/home/dev/projects/exsin--feat-b',
-        home_path: '/home/dev',
-        exists: true,
-        is_directory: true,
-        repo_root: '/home/dev/projects/exsin',
-      },
-    }));
-    const onGetRepoInfo = vi.fn()
-      .mockResolvedValueOnce({
-        success: true,
-        info: buildRepoInfo({
-          worktrees: [
-            { path: '/home/dev/projects/exsin--feat-a', branch: 'feat-a' },
-            { path: '/home/dev/projects/exsin--feat-b', branch: 'feat-b' },
-          ],
-        }),
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        info: buildRepoInfo({
-          worktrees: [{ path: '/home/dev/projects/exsin--feat-a', branch: 'feat-a' }],
-        }),
-      });
-    const onDeleteWorktree = vi.fn(async () => ({ success: true }));
-    renderPicker({ onInspectPath, onGetRepoInfo, onDeleteWorktree });
-
-    const input = screen.getByTestId('location-picker-path-input');
-    fireEvent.change(input, { target: { value: '~/projects/exsin--feat-b' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('repo-option-2')).toHaveClass('selected');
-    });
-
-    fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'D' });
-    fireEvent.keyDown(screen.getByTestId('repo-options'), { key: 'y' });
-
-    await waitFor(() => {
-      expect(onDeleteWorktree).toHaveBeenCalledWith('/home/dev/projects/exsin--feat-b');
-      expect(screen.getByTestId('repo-option-1')).toHaveClass('selected');
     });
   });
 

@@ -336,6 +336,45 @@ describe('App new session', () => {
       expect(rows()).toHaveLength(2);
     });
 
+    it('moves to the neighbouring worktree after deleting one', async () => {
+      const FEAT_A = `${REPO}--feat-a`;
+      const FEAT_B = `${REPO}--feat-b`;
+      const { daemon } = await openPicker({ repos: [repoInfo(REPO, [{ path: FEAT_A, branch: 'feat-a' }, { path: FEAT_B, branch: 'feat-b' }])] });
+      await submitPath(daemon, FEAT_B);
+      expect(chosenRow()).toBe(2);
+      daemon.on('delete_worktree', ({ path }) => ({ event: 'delete_worktree_result', path, success: true }));
+      daemon.on('get_repo_info', () => ({ event: 'get_repo_info_result', success: true, info: repoInfo(REPO, [{ path: FEAT_A, branch: 'feat-a' }]) }));
+
+      await inChooser(daemon, 'D');
+      await inChooser(daemon, 'y');
+
+      expect(daemon.sentOf('delete_worktree')).toMatchObject([{ path: FEAT_B }]);
+      expect(rows()).toHaveLength(2);
+      expect(chosenRow()).toBe(1);
+    });
+
+    it('keeps a delete pressed the moment the destinations appear', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { daemon } = await openPicker({ repos: [WITH_FEATURE] });
+      daemon.on('get_repo_info', () => undefined);
+      await submitPath(daemon, FEATURE);
+      const appeared = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (screen.queryByTestId('repo-options')) {
+            observer.disconnect();
+            resolve();
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+
+      daemon.replyTo(daemon.sentOf('get_repo_info')[0], { event: 'get_repo_info_result', success: true, info: WITH_FEATURE });
+      await appeared;
+      fireEvent.keyDown(chooser(), { key: 'd' });
+
+      expect(deletePrompt()).not.toBeNull();
+    });
+
     it('shows which worktree is being deleted until the daemon answers', async () => {
       const { daemon } = await openChooser(FEATURE);
       daemon.on('delete_worktree', () => undefined);
