@@ -59,10 +59,7 @@ func (d *Daemon) moveTerminalToDesktop(target *selectedTerminal, ref string) (*p
 		result.Unchanged = protocol.Ptr(true)
 	default:
 		result.FromDesktopID = protocol.Ptr(moved.Move.Source.ID)
-		d.publishArrangement(profile.ID, &protocol.LeafMoved{
-			FromDesktopID: moved.Move.Source.ID, FromLeafID: moved.FromLeafID,
-			ToDesktopID: moved.Move.Target.ID, ToLeafID: moved.Move.FinalLeafID,
-		})
+		d.publishArrangement(profile.ID, leavesMoved(moved.Move))
 	}
 	return result, nil
 }

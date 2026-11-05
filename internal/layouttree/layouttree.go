@@ -423,15 +423,13 @@ func tileToDock(node Node, anchorID, tileID, tileKind, tileParams string, tileSe
 		return node, Node{}, false
 	}
 	wantedCols := 0
-	if existing, found := findLeaf(node, tileID); found {
+	cleaned = node
+	if rest, existing, found := takeLeafFromColumn(node, tileID); found {
+		cleaned = rest
 		wantedCols = existing.WantedCols
 		if tileSessionID == "" {
 			tileSessionID = existing.TileSessionID
 		}
-	}
-	cleaned = node
-	if next, removed := Remove(node, tileID); removed {
-		cleaned = next
 	}
 	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, WantedCols: wantedCols}, true
 }
@@ -453,13 +451,18 @@ func newPlacement(direction Direction, before bool, splitID string, ratio float6
 }
 
 func insertBesideLeaf(node Node, anchorID string, at placement, incoming Node) (Node, bool) {
+	wantedCols := columnWantedCols(node, anchorID)
 	anchor := isLeafWithID(anchorID)
-	return rewriteFirst(node, func(candidate Node) (Node, bool) {
+	next, ok := rewriteFirst(node, func(candidate Node) (Node, bool) {
 		if !anchor(candidate) {
 			return candidate, false
 		}
 		return lockedSplit(candidate, incoming, at), true
 	})
+	if !ok || at.direction != DirectionHorizontal {
+		return next, ok
+	}
+	return SetWantedCols(next, anchorID, wantedCols)
 }
 
 func placeLeaf(layout Node, anchorID string, at placement, incoming Node) (Node, bool) {

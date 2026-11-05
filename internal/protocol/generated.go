@@ -8050,8 +8050,8 @@ type ProfileArrangementChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// MovedLeaf corresponds to the JSON schema field "moved_leaf".
-	MovedLeaf *LeafMoved `json:"moved_leaf,omitempty,omitzero"`
+	// MovedLeaves corresponds to the JSON schema field "moved_leaves".
+	MovedLeaves []LeafMoved `json:"moved_leaves,omitempty,omitzero"`
 
 	// Profile corresponds to the JSON schema field "profile".
 	Profile Profile `json:"profile"`

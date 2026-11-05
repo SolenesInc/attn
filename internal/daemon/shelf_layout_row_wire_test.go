@@ -181,24 +181,25 @@ func TestAnAgentExitFocusesByPositionLikeClosingItsTile(t *testing.T) {
 	}
 }
 
+func openTerminal(t *testing.T, w *world, caller string, direction *protocol.TerminalDirection) protocol.SessionID {
+	t.Helper()
+	answer, err := w.Client().TerminalCommand(context.Background(), protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: protocol.SessionID(caller), Direction: direction})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return answer.TerminalOpenResult.SessionID
+}
+
 func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
+	app := w.App()
 	turnOnShelfLayout(t, app)
 	first := w.Spawn(app, fakeagent.Claude, w.Path("first"))
 	second := w.Spawn(app, fakeagent.Claude, w.Path("second"))
 	requestShowSession(app, second)
 	profileID := app.SelectedProfile()
 	desktop, activePane := viewProfile(t, w, profileID).paneOf(t, second)
-	open := func(caller string, direction *protocol.TerminalDirection) protocol.SessionID {
-		t.Helper()
-		answer, err := cli.TerminalCommand(context.Background(), protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: protocol.SessionID(caller), Direction: direction})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return answer.TerminalOpenResult.SessionID
-	}
-	beside := open(first, nil)
+	beside := openTerminal(t, w, first, nil)
 	view := viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s %s", first, second, beside); got != want {
 		t.Fatalf("the terminal opened into row %q, want %q", got, want)
@@ -206,12 +207,12 @@ func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) 
 	if view.ActivePaneID != activePane {
 		t.Fatalf("an agent's terminal took focus: %s, want %s", view.ActivePaneID, activePane)
 	}
-	another := open(first, nil)
+	another := openTerminal(t, w, first, nil)
 	view = viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s %s %s", first, second, beside, another); got != want {
 		t.Fatalf("a caller's second terminal made row %q, want %q", got, want)
 	}
-	below := open(second, protocol.Ptr(protocol.TerminalDirectionDown))
+	below := openTerminal(t, w, second, protocol.Ptr(protocol.TerminalDirectionDown))
 	view = viewProfile(t, w, profileID).desktops[desktop.ID]
 	if got, want := rowOf(t, view), fmt.Sprintf("%s %s/%s %s %s", first, second, below, beside, another); got != want {
 		t.Fatalf("--direction down made row %q, want %q", got, want)
@@ -220,6 +221,55 @@ func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) 
 		t.Fatalf("a stacked terminal took focus: %s, want %s", view.ActivePaneID, activePane)
 	}
 	exitShells(app, string(beside), string(another), string(below))
+}
+
+func TestDirectionDownStacksUnderTheCallerAfterATerminalAtTheRowsEnd(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	turnOnShelfLayout(t, app)
+	caller := w.Spawn(app, fakeagent.Claude, w.Path("caller"))
+	other := w.Spawn(app, fakeagent.Claude, w.Path("other"))
+	requestShowSession(app, other)
+	profileID := app.SelectedProfile()
+	desktop, activePane := viewProfile(t, w, profileID).paneOf(t, other)
+	row := func(want string) {
+		t.Helper()
+		view := viewProfile(t, w, profileID).desktops[desktop.ID]
+		if got := rowOf(t, view); got != want {
+			t.Fatalf("the row is %q, want %q", got, want)
+		}
+		if view.ActivePaneID != activePane {
+			t.Fatalf("a terminal took focus: %s, want %s", view.ActivePaneID, activePane)
+		}
+	}
+	down := protocol.Ptr(protocol.TerminalDirectionDown)
+
+	atEnd := openTerminal(t, w, caller, nil)
+	row(fmt.Sprintf("%s %s %s", caller, other, atEnd))
+	under := openTerminal(t, w, caller, down)
+	row(fmt.Sprintf("%s/%s %s %s", caller, under, other, atEnd))
+	underThat := openTerminal(t, w, caller, down)
+	row(fmt.Sprintf("%s/%s/%s %s %s", caller, under, underThat, other, atEnd))
+	alsoAtEnd := openTerminal(t, w, caller, nil)
+	row(fmt.Sprintf("%s/%s/%s %s %s %s", caller, under, underThat, other, atEnd, alsoAtEnd))
+	exitShells(app, string(atEnd), string(under), string(underThat), string(alsoAtEnd))
+}
+
+func TestWithTheShelfLayoutOffACallersTerminalsStackUnderItsNewestTerminal(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	caller := w.Spawn(app, fakeagent.Claude, w.Path("caller"))
+	profileID := app.SelectedProfile()
+	desktop, _ := viewProfile(t, w, profileID).paneOf(t, caller)
+
+	first := openTerminal(t, w, caller, nil)
+	down := openTerminal(t, w, caller, protocol.Ptr(protocol.TerminalDirectionDown))
+	again := openTerminal(t, w, caller, nil)
+	view := viewProfile(t, w, profileID).desktops[desktop.ID]
+	if got, want := rowOf(t, view), fmt.Sprintf("%s %s/%s/%s", caller, first, down, again); got != want {
+		t.Fatalf("the layout is %q, want %q", got, want)
+	}
+	exitShells(app, string(first), string(down), string(again))
 }
 
 func TestATileOpenedFromTheCLILandsBesideItsAgentWithoutFocus(t *testing.T) {
@@ -416,6 +466,7 @@ func TestWholeColumnWithDelegatesMovesEachDelegateOnce(t *testing.T) {
 	desktop.stack(string(stacked), string(root.ID))
 	desktop.requireRow(fmt.Sprintf("%s/%s %s %s", root.ID, stacked, bystander.ID, nested))
 
+	watcher := w.AppOn(profileID)
 	other := createDesktop(app, profileID)
 	moved := desktop.move(protocol.DesktopMoveLeafMessage{
 		LeafID: desktop.pane(string(root.ID)), TargetDesktopID: protocol.Ptr(other.ID), Edge: protocol.Ptr(protocol.LayoutDockEdgeRight),
@@ -427,6 +478,10 @@ func TestWholeColumnWithDelegatesMovesEachDelegateOnce(t *testing.T) {
 	desktop.requireRow(string(bystander.ID))
 	desktop.desktopID = other.ID
 	desktop.requireRow(fmt.Sprintf("%s/%s %s", root.ID, stacked, nested))
+	reported := testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool { return e.MovedLeaves != nil }).MovedLeaves
+	if len(reported) != 3 {
+		t.Fatalf("the move reported %+v, want the column's two leaves and the delegate", reported)
+	}
 }
 
 func TestAMoveBetweenDesktopsWithActivateFalseLeavesTheTargetsActiveTile(t *testing.T) {
@@ -471,8 +526,7 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 		desktop.requireRow("a b/c")
 		wanted := func(leaf string, cols int) protocol.ProfileActionResultMessage {
 			t.Helper()
-			id := uuid.NewString()
-			return profileRequest(desktop.app, protocol.DesktopSetWantedColsMessage{Cmd: protocol.CmdDesktopSetWantedCols, RequestID: id, DesktopID: desktop.desktopID, LeafID: leaf, Cols: cols}, id)
+			return desktop.wanted(leaf, cols)
 		}
 		firstTileCols := func(column int) int {
 			t.Helper()
@@ -532,6 +586,205 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 		desktop.requireRow("b/c")
 		if got := firstTileCols(0); got != 0 {
 			t.Fatalf("a cleared width came back as %d cols when the tile above left", got)
+		}
+	})
+}
+
+func (r rowDesktop) wanted(leaf string, cols int) protocol.ProfileActionResultMessage {
+	r.t.Helper()
+	id := uuid.NewString()
+	return profileRequest(r.app, protocol.DesktopSetWantedColsMessage{Cmd: protocol.CmdDesktopSetWantedCols, RequestID: id, DesktopID: r.desktopID, LeafID: leaf, Cols: cols}, id)
+}
+
+func (r rowDesktop) dockBrowser(id, anchor string, edge protocol.LayoutDockEdge) {
+	r.t.Helper()
+	dock := protocol.DesktopDockTileMessage{TileID: id, TileKind: "browser", TileParams: protocol.Ptr("https://example.com/" + id), Edge: edge}
+	if anchor != "" {
+		dock.AnchorID = protocol.Ptr(anchor)
+	}
+	if docked := dockOnDesktop(r.app, r.desktop(), dock); !docked.Success {
+		r.t.Fatalf("docking %s: %s", id, protocol.Deref(docked.Error))
+	}
+}
+
+func (r rowDesktop) moveOK(message protocol.DesktopMoveLeafMessage) {
+	r.t.Helper()
+	if moved := r.move(message); !moved.Success {
+		r.t.Fatalf("moving %s: %s", message.LeafID, protocol.Deref(moved.Error))
+	}
+}
+
+func (r rowDesktop) widths() string {
+	r.t.Helper()
+	var columns []string
+	for _, column := range columnsOf(desktopTree(r.t, r.desktop())) {
+		tiles := column.tiles()
+		var stack []string
+		for _, id := range column.leafIDs() {
+			if cols := tiles[id].WantedCols; cols != 0 {
+				id = fmt.Sprintf("%s=%d", id, cols)
+			}
+			stack = append(stack, id)
+		}
+		columns = append(columns, strings.Join(stack, "/"))
+	}
+	return strings.Join(columns, " ")
+}
+
+func TestAColumnKeepsItsWantedWidthOnItsFirstTile(t *testing.T) {
+	top, bottom, right := protocol.LayoutDockEdgeTop, protocol.LayoutDockEdgeBottom, protocol.LayoutDockEdgeRight
+	for _, change := range []struct {
+		name  string
+		start func(row rowDesktop)
+		act   func(row rowDesktop)
+		want  string
+	}{
+		{
+			name: "a new tile docked on top",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.wanted("a", 100)
+			},
+			act:  func(row rowDesktop) { row.dockBrowser("above", "a", top) },
+			want: "above=100/a",
+		},
+		{
+			name: "a stacked tile docked again on top",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", bottom)
+				row.wanted("a", 100)
+			},
+			act:  func(row rowDesktop) { row.dockBrowser("b", "a", top) },
+			want: "b=100/a",
+		},
+		{
+			name: "a tile moved on top keeps the destination's width over its own",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", right)
+				row.wanted("a", 100)
+				row.wanted("b", 80)
+			},
+			act: func(row rowDesktop) {
+				row.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "b", AnchorID: protocol.Ptr("a"), Edge: protocol.Ptr(top)})
+			},
+			want: "b=100/a",
+		},
+		{
+			name: "a tile moved on top from another desktop",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.wanted("a", 100)
+			},
+			act: func(row rowDesktop) {
+				elsewhere := row
+				elsewhere.desktopID = createDesktop(row.app, row.profileID).ID
+				elsewhere.dockBrowser("x", "", right)
+				elsewhere.wanted("x", 70)
+				elsewhere.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "x", TargetDesktopID: protocol.Ptr(row.desktopID), AnchorID: protocol.Ptr("a"), Edge: protocol.Ptr(top)})
+			},
+			want: "x=100/a",
+		},
+		{
+			name: "a whole column moved on top",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", right)
+				row.dockBrowser("c", "b", bottom)
+				row.wanted("a", 100)
+				row.wanted("b", 80)
+			},
+			act: func(row rowDesktop) {
+				row.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "c", AnchorID: protocol.Ptr("a"), Edge: protocol.Ptr(top), WholeColumn: protocol.Ptr(true)})
+			},
+			want: "b=100/c/a",
+		},
+		{
+			name: "the first tile moved lower in its own stack",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", bottom)
+				row.wanted("a", 100)
+			},
+			act: func(row rowDesktop) {
+				row.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "a", AnchorID: protocol.Ptr("b"), Edge: protocol.Ptr(bottom)})
+			},
+			want: "b=100/a",
+		},
+		{
+			name: "the first tile leaving its stack leaves the width with the stack",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", bottom)
+				row.wanted("a", 100)
+			},
+			act: func(row rowDesktop) {
+				row.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "a", AnchorID: protocol.Ptr("b"), Edge: protocol.Ptr(right)})
+			},
+			want: "b=100 a",
+		},
+		{
+			name: "a column stacked below gives up its width, which does not come back",
+			start: func(row rowDesktop) {
+				row.dockBrowser("a", "", right)
+				row.dockBrowser("b", "a", right)
+				row.wanted("a", 100)
+				row.wanted("b", 80)
+				row.moveOK(protocol.DesktopMoveLeafMessage{LeafID: "b", AnchorID: protocol.Ptr("a"), Edge: protocol.Ptr(bottom)})
+			},
+			act: func(row rowDesktop) {
+				removed := desktopAction(row.app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, DesktopID: row.desktopID, LeafID: "a"})
+				if !removed.Success {
+					row.t.Fatal(protocol.Deref(removed.Error))
+				}
+			},
+			want: "b",
+		},
+	} {
+		t.Run(change.name, func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				app := w.App()
+				turnOnShelfLayout(t, app)
+				profileID := app.SelectedProfile()
+				row := rowDesktop{t: t, w: w, app: app, profileID: profileID, desktopID: viewProfile(t, w, profileID).profile.CurrentDesktopID}
+				change.start(row)
+				change.act(row)
+				if got := row.widths(); got != change.want {
+					t.Fatalf("the row with its widths is %q, want %q", got, change.want)
+				}
+			})
+		})
+	}
+}
+
+func TestAWholeColumnMovedBetweenDesktopsReportsEveryLeafWhenIDsCollide(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		source := injectedRow(t, w, "a")
+		source.dockBrowser("tile-browser", source.pane("a"), protocol.LayoutDockEdgeBottom)
+		paneA := source.pane("a")
+		source.requireRow("a/tile-browser")
+		target := source
+		target.desktopID = createDesktop(source.app, source.profileID).ID
+		target.dockBrowser("tile-browser", "", protocol.LayoutDockEdgeRight)
+		watcher := w.AppOn(source.profileID)
+
+		source.moveOK(protocol.DesktopMoveLeafMessage{LeafID: paneA, TargetDesktopID: protocol.Ptr(target.desktopID), Edge: protocol.Ptr(protocol.LayoutDockEdgeRight), WholeColumn: protocol.Ptr(true)})
+		moved := testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool { return e.MovedLeaves != nil }).MovedLeaves
+
+		if len(moved) != 2 {
+			t.Fatalf("the move reported %+v, want both leaves", moved)
+		}
+		if want := (protocol.LeafMoved{FromDesktopID: source.desktopID, FromLeafID: paneA, ToDesktopID: target.desktopID, ToLeafID: paneA}); moved[0] != want {
+			t.Fatalf("the requested leaf arrived as %+v, want %+v", moved[0], want)
+		}
+		browser := moved[1]
+		if browser.FromDesktopID != source.desktopID || browser.FromLeafID != "tile-browser" || browser.ToDesktopID != target.desktopID || browser.ToLeafID == "tile-browser" {
+			t.Fatalf("the colliding browser arrived as %+v, want a renamed leaf on %s", browser, target.desktopID)
+		}
+		leaves := desktopTree(t, target.desktop()).leafIDs()
+		if !reflect.DeepEqual(leaves, []string{"tile-browser", paneA, browser.ToLeafID}) {
+			t.Fatalf("the target holds %v, want its browser and the moved column with %s", leaves, browser.ToLeafID)
 		}
 	})
 }

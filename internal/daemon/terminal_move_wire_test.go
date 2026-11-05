@@ -70,8 +70,8 @@ func TestTerminalMovePreservesPlacementAndDelegationAuthority(t *testing.T) {
 		t.Errorf("by digit, the move reports %+v; want from %s to Ops %s", moved, home, ops.ID)
 	}
 	event, desktops := arrangement("a session moving itself onto an empty desktop", func(d map[string]protocol.Desktop) bool { return holding(d[ops.ID], string(s.ID)) })
-	if event.MovedLeaf == nil {
-		event = testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool { return e.MovedLeaf != nil })
+	if event.MovedLeaves == nil {
+		event = testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool { return e.MovedLeaves != nil })
 	}
 	if desktops[ops.ID].ActivePaneID != moved.PaneID {
 		t.Errorf("the empty desktop's active pane is %q; want its first pane %s", desktops[ops.ID].ActivePaneID, moved.PaneID)
@@ -79,8 +79,8 @@ func TestTerminalMovePreservesPlacementAndDelegationAuthority(t *testing.T) {
 	if desktops[home].ActivePaneID != tPane {
 		t.Errorf("the desktop the user sees now shows %q; want %s, unchanged", desktops[home].ActivePaneID, tPane)
 	}
-	if m := event.MovedLeaf; m == nil || m.FromDesktopID != home || m.ToDesktopID != ops.ID || m.ToLeafID != moved.PaneID {
-		t.Errorf("the broadcast names the moved leaf %+v; want %s to %s as %s", m, home, ops.ID, moved.PaneID)
+	if m := event.MovedLeaves; len(m) != 1 || m[0].FromDesktopID != home || m[0].ToDesktopID != ops.ID || m[0].ToLeafID != moved.PaneID {
+		t.Errorf("the broadcast names the moved leaves %+v; want one from %s to %s as %s", m, home, ops.ID, moved.PaneID)
 	}
 
 	moved = move(string(tt.ID), string(tt.ID), "oPs")

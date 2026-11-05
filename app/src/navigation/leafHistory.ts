@@ -40,12 +40,13 @@ export function recordLeafVisit(state: LeafHistoryState, ref: LeafRef): LeafHist
   };
 }
 
-export function remapLeafHistory(state: LeafHistoryState, moved: LeafMoved): LeafHistoryState {
+export function remapLeafHistory(state: LeafHistoryState, moved: LeafMoved[]): LeafHistoryState {
   let changed = false;
   const entries = state.entries.map((entry) => {
-    if (entry.leafId !== moved.from_leaf_id || entry.lastKnownDesktopId !== moved.from_desktop_id) return entry;
+    const leaf = moved.find((candidate) => entry.leafId === candidate.from_leaf_id && entry.lastKnownDesktopId === candidate.from_desktop_id);
+    if (!leaf) return entry;
     changed = true;
-    return { leafId: moved.to_leaf_id, lastKnownDesktopId: moved.to_desktop_id };
+    return { leafId: leaf.to_leaf_id, lastKnownDesktopId: leaf.to_desktop_id };
   });
   return changed ? { entries, cursor: state.cursor } : state;
 }

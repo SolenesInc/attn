@@ -39,6 +39,12 @@ func ColumnOf(tree Node, leafID string) (index int, ok bool) {
 	return 0, false
 }
 
+func SameColumn(tree Node, leafID, otherLeafID string) bool {
+	at, ok := ColumnOf(tree, leafID)
+	otherAt, otherOK := ColumnOf(tree, otherLeafID)
+	return ok && otherOK && at == otherAt
+}
+
 func NextInPosition(previous Node, leafID string, live map[string]bool, history []string) string {
 	at, ok := ColumnOf(previous, leafID)
 	if !ok {
@@ -106,6 +112,32 @@ func SetWantedCols(tree Node, leafID string, cols int) (Node, bool) {
 	return tree, true
 }
 
+func columnWantedCols(tree Node, leafID string) int {
+	at, ok := ColumnOf(tree, leafID)
+	if !ok {
+		return 0
+	}
+	first, _ := findLeaf(tree, LeafIDs(Columns(tree)[at])[0])
+	return first.WantedCols
+}
+
+func takeLeafFromColumn(tree Node, leafID string) (rest, leaf Node, ok bool) {
+	leaf, ok = findLeaf(tree, leafID)
+	if !ok {
+		return tree, Node{}, false
+	}
+	wantedCols := columnWantedCols(tree, leafID)
+	at, _ := ColumnOf(tree, leafID)
+	stayers := slices.DeleteFunc(LeafIDs(Columns(tree)[at]), func(id string) bool { return id == leafID })
+	rest, _ = Remove(tree, leafID)
+	if len(stayers) == 0 {
+		return rest, leaf, true
+	}
+	leaf.WantedCols = 0
+	rest, _ = SetWantedCols(rest, stayers[0], wantedCols)
+	return rest, leaf, true
+}
+
 func PlaceColumn(tree Node, anchorLeafID string, before bool, column Node, newSplitID func() string) (Node, bool) {
 	columns := Columns(tree)
 	at := len(columns)
@@ -137,12 +169,7 @@ type RowMove struct {
 
 func (m RowMove) take(tree Node) (rest, moved Node, ok bool) {
 	if !m.WholeColumn {
-		moved, ok = findLeaf(tree, m.LeafID)
-		if !ok {
-			return tree, Node{}, false
-		}
-		rest, _ = Remove(tree, m.LeafID)
-		return rest, moved, true
+		return takeLeafFromColumn(tree, m.LeafID)
 	}
 	at, ok := ColumnOf(tree, m.LeafID)
 	if !ok {

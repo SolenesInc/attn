@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -302,7 +303,13 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		}
 	}
 	sort.Slice(previous, func(i, j int) bool { return previous[i].at.After(previous[j].at) })
-	if len(previous) > 0 && (direction == layouttree.DirectionHorizontal || !d.store.ShelfLayoutOn()) {
+	if d.store.ShelfLayoutOn() {
+		if direction == layouttree.DirectionHorizontal {
+			if newest := slices.IndexFunc(previous, func(earlier opened) bool { return layouttree.SameColumn(desktop.Tree, anchor, earlier.pane) }); newest >= 0 {
+				anchor = previous[newest].pane
+			}
+		}
+	} else if len(previous) > 0 {
 		anchor = previous[0].pane
 		direction = layouttree.DirectionHorizontal
 	}

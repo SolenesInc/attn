@@ -16,7 +16,7 @@ import {
   focusIntent,
   historyLanded,
   intentFailed,
-  leafMoved,
+  leavesMoved,
   navigateHistory,
   navigationQueue,
   reconcileArrangement,
@@ -47,7 +47,7 @@ export interface SessionNavigationActions {
   historyLanded: (profileId: string, cursor: number, leaf: LeafRef) => void;
   focusClaimDelivered: (id: number) => void;
   transferFocus: (leaf: ActiveLeaf) => void;
-  leafMoved: (profileId: string, moved: LeafMoved) => void;
+  leavesMoved: (profileId: string, moved: LeafMoved[]) => void;
   navigateLeafHistory: (direction: LeafHistoryDirection, resumeCurrent?: boolean) => boolean;
   setView: (view: StateUpdate<AppView>) => void;
   setFollowNextTurn: (follow: StateUpdate<boolean>) => void;
@@ -149,7 +149,7 @@ export function createSessionNavigationActions(
     historyLanded: (profileId, cursor, leaf) => set((state) => historyLanded(state, profileId, cursor, leaf)),
     focusClaimDelivered: (id) => set((state) => focusClaimDelivered(state, id)),
     transferFocus: (leaf) => set((state) => claimFocus(state, leaf, focusOwner(), false)),
-    leafMoved: (profileId, moved) => set((state) => leafMoved(state, profileId, moved)),
+    leavesMoved: (profileId, moved) => set((state) => leavesMoved(state, profileId, moved)),
     navigateLeafHistory: (direction, resumeCurrent = false) => {
       set((state) => navigateHistory(state, arrangementOf(state), direction, resumeCurrent, focusOwner()));
       return get().intent !== null;

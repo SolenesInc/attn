@@ -21,7 +21,7 @@ type profileActionOutcome struct {
 	profile  *profiles.Profile
 	desktops []profiles.Desktop
 	paneID   string
-	moved    *protocol.LeafMoved
+	moved    []protocol.LeafMoved
 	// The action may change what the requester shows, so it gets its own answer.
 	arranges bool
 	publish  func()
@@ -292,7 +292,7 @@ func (d *Daemon) releaseArrangements(client *wsClient) {
 }
 
 // sendArrangement sends the client its selected profile's arrangement now; a request id marks it as that request's answer.
-func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved *protocol.LeafMoved) {
+func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved []protocol.LeafMoved) {
 	profileID := client.selectedProfile()
 	if profileID == "" {
 		return
@@ -320,7 +320,7 @@ func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved *prot
 }
 
 // arrangementMessage reads a profile's arrangement once and encodes it once for every client it goes to.
-func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved) (protocol.ProfileArrangementChangedMessage, []byte, *arrangementDelivery, bool) {
+func (d *Daemon) arrangementMessage(profileID string, moved []protocol.LeafMoved) (protocol.ProfileArrangementChangedMessage, []byte, *arrangementDelivery, bool) {
 	profile, desktops, seq, err := d.store.ProfileArrangementSeq(profileID)
 	if err != nil {
 		d.logf("arrangement: reading profile %s: %v", profileID, err)
@@ -332,10 +332,10 @@ func (d *Daemon) arrangementMessage(profileID string, moved *protocol.LeafMoved)
 		return protocol.ProfileArrangementChangedMessage{}, nil, nil, false
 	}
 	message := protocol.ProfileArrangementChangedMessage{
-		Event:     protocol.EventProfileArrangementChanged,
-		Profile:   protocolProfile(profile),
-		Desktops:  wire,
-		MovedLeaf: moved,
+		Event:       protocol.EventProfileArrangementChanged,
+		Profile:     protocolProfile(profile),
+		Desktops:    wire,
+		MovedLeaves: moved,
 	}
 	data, err := json.Marshal(message)
 	if err != nil {
@@ -349,7 +349,11 @@ func (d *Daemon) publishArrangementChanged(profileID string) {
 	d.publishArrangement(profileID, nil)
 }
 
-func (d *Daemon) publishArrangement(profileID string, payload any) {
+func (d *Daemon) publishArrangement(profileID string, moved []protocol.LeafMoved) {
+	var payload any
+	if len(moved) > 0 {
+		payload = moved
+	}
 	d.publishFact(FactProfileArrangementChanged, profileID, payload)
 	d.nudgeDesktopTileContent()
 }
@@ -672,11 +676,19 @@ func (d *Daemon) handleDesktopMoveLeaf(client *wsClient, msg *protocol.DesktopMo
 		if move.Target.ID != move.Source.ID {
 			changed = append(changed, move.Target)
 		}
-		moved := &protocol.LeafMoved{FromDesktopID: move.Source.ID, FromLeafID: msg.LeafID, ToDesktopID: move.Target.ID, ToLeafID: move.FinalLeafID}
+		moved := leavesMoved(move)
 		return profileActionOutcome{desktops: changed, paneID: move.FinalLeafID, moved: moved, arranges: true, publish: func() {
 			d.publishArrangement(move.Source.ProfileID, moved)
 		}}, err
 	})
+}
+
+func leavesMoved(move store.LeafMove) []protocol.LeafMoved {
+	var moved []protocol.LeafMoved
+	for _, leaf := range move.Moved {
+		moved = append(moved, protocol.LeafMoved{FromDesktopID: move.Source.ID, FromLeafID: leaf.From, ToDesktopID: move.Target.ID, ToLeafID: leaf.To})
+	}
+	return moved
 }
 
 func layoutDockEdge(edge protocol.LayoutDockEdge) (layouttree.Direction, bool) {
@@ -772,14 +784,9 @@ func (d *Daemon) projectProfilesChanged() {
 }
 
 func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
-	var moved *protocol.LeafMoved
-	if len(ev.Payload) > 0 {
-		var decoded protocol.LeafMoved
-		if err := ev.Decode(&decoded); err != nil {
-			d.logf("arrangement projection: decoding the moved leaf of profile %s: %v", ev.Subject, err)
-		} else {
-			moved = &decoded
-		}
+	var moved []protocol.LeafMoved
+	if err := ev.Decode(&moved); err != nil {
+		d.logf("arrangement projection: decoding the moved leaves of profile %s: %v", ev.Subject, err)
 	}
 	_, data, delivery, ok := d.arrangementMessage(ev.Subject, moved)
 	if !ok {

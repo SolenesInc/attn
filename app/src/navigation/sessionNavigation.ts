@@ -282,7 +282,7 @@ export function navigateHistory(
   return requestShow(next, arrangement.profileId, target, focusOwner, move.cursor);
 }
 
-export function leafMoved(state: SessionNavigationState, profileId: string, moved: LeafMoved): SessionNavigationState {
+export function leavesMoved(state: SessionNavigationState, profileId: string, moved: LeafMoved[]): SessionNavigationState {
   return withHistory(state, profileId, remapLeafHistory(historyOf(state, profileId), moved));
 }
 

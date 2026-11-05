@@ -78,7 +78,7 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
         const layout = collectDesktopLayoutDiagnostics(parseLayoutJSON(desktop.tree_json));
         recordLayout(desktop.id, layout.panes.map((pane) => pane.paneId), layout.splitCount);
       }
-      if (message.moved_leaf) useSessionStore.getState().leafMoved(message.profile.id, message.moved_leaf);
+      if (message.moved_leaves) useSessionStore.getState().leavesMoved(message.profile.id, message.moved_leaves);
       useSessionStore.getState().syncFromArrangement(message.profile.id, message.profile.current_desktop_id || null, message.desktops ?? [], message.request_id ? { kind: 'own', requestId: message.request_id } : { kind: 'broadcast' });
       const navigation = useSessionStore.getState();
       const display = displayedArrangement(arrangementOf(navigation), navigation.intent);

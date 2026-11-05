@@ -23,6 +23,7 @@ type LeafMove struct {
 	Source      profiles.Desktop
 	Target      profiles.Desktop
 	FinalLeafID string
+	Moved       []layouttree.MovedLeaf
 }
 
 type LeafMoveRequest struct {
@@ -1618,6 +1619,7 @@ func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profile
 	}
 	arrivals := map[string]string{}
 	movedIDs := map[string]string{}
+	var carried []layouttree.MovedLeaf
 	arrange := func(source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
 		move, moved, err := arrangeLeafBetweenDesktops(source, target, request, shelf)
 		if err != nil {
@@ -1628,6 +1630,7 @@ func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profile
 				return LeafMove{}, err
 			}
 			movedIDs[leaf.From] = leaf.To
+			carried = append(carried, leaf)
 		}
 		return move, nil
 	}
@@ -1668,6 +1671,7 @@ func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profile
 	if err := writeCurrentArrivingArrangement(tx, now, &result.Target, arrivals); err != nil {
 		return LeafMove{}, err
 	}
+	result.Moved = carried
 	return result, nil
 }
 
@@ -1702,10 +1706,9 @@ func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMov
 }
 
 type SessionDesktopMove struct {
-	Move       LeafMove
-	FromLeafID string
-	Placed     bool
-	Created    bool
+	Move    LeafMove
+	Placed  bool
+	Created bool
 }
 
 func (s *Store) MoveTerminalToDesktop(terminal protocol.TerminalID, sessionID protocol.SessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
@@ -1755,7 +1758,7 @@ func (s *Store) MoveTerminalToDesktop(terminal protocol.TerminalID, sessionID pr
 			LeafID: tile.tileID, AnchorID: target.ActivePaneID, Direction: layouttree.DirectionVertical,
 			Activate: source.ActivePaneID == tile.tileID && target.ID != profile.CurrentDesktopID,
 		}, nil)
-		result = SessionDesktopMove{Move: move, FromLeafID: tile.tileID, Created: created}
+		result = SessionDesktopMove{Move: move, Created: created}
 		return err
 	})
 	return result, err

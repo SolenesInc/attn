@@ -3646,8 +3646,8 @@ model ProfilesChangedMessage {
   profiles: Profile[];
 }
 
-// A leaf that desktop_move_leaf moved. A move between desktops renames the
-// leaf when the target already holds its id; the to_ ids are authoritative.
+// A leaf that a move between desktops carried. The move renames the leaf when
+// the target already holds its id; the to_ ids are authoritative.
 model LeafMoved {
   from_desktop_id: string;
   from_leaf_id: string;
@@ -3659,7 +3659,7 @@ model ProfileArrangementChangedMessage {
   event: "profile_arrangement_changed";
   profile: Profile;
   desktops: Desktop[];
-  moved_leaf?: LeafMoved;       // Present only on the arrangement a move produced
+  moved_leaves?: LeafMoved[];   // Every leaf a move between desktops carried, only on the arrangement that move produced
   request_id?: string;          // Only on the copy answering the receiving client's own request (a spawn's session id), sent before its result
 }
 

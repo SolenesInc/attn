@@ -8119,11 +8119,11 @@ export enum ProfileActionResultMessageEvent {
 }
 
 export interface ProfileArrangementChangedMessage {
-    desktops:    DesktopElement[];
-    event:       ProfileArrangementChangedMessageEvent;
-    moved_leaf?: MovedLeaf;
-    profile:     ProfileElement;
-    request_id?: string;
+    desktops:      DesktopElement[];
+    event:         ProfileArrangementChangedMessageEvent;
+    moved_leaves?: MovedLeafElement[];
+    profile:       ProfileElement;
+    request_id?:   string;
     [property: string]: any;
 }
 
@@ -8131,7 +8131,7 @@ export enum ProfileArrangementChangedMessageEvent {
     ProfileArrangementChanged = "profile_arrangement_changed",
 }
 
-export interface MovedLeaf {
+export interface MovedLeafElement {
     from_desktop_id: string;
     from_leaf_id:    string;
     to_desktop_id:   string;
@@ -25072,11 +25072,11 @@ const typeMap: any = {
     "ProfileArrangementChangedMessage": o([
         { json: "desktops", js: "desktops", typ: a(r("DesktopElement")) },
         { json: "event", js: "event", typ: r("ProfileArrangementChangedMessageEvent") },
-        { json: "moved_leaf", js: "moved_leaf", typ: u(undefined, r("MovedLeaf")) },
+        { json: "moved_leaves", js: "moved_leaves", typ: u(undefined, a(r("MovedLeafElement"))) },
         { json: "profile", js: "profile", typ: r("ProfileElement") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
     ], "any"),
-    "MovedLeaf": o([
+    "MovedLeafElement": o([
         { json: "from_desktop_id", js: "from_desktop_id", typ: "" },
         { json: "from_leaf_id", js: "from_leaf_id", typ: "" },
         { json: "to_desktop_id", js: "to_desktop_id", typ: "" },

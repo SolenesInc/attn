@@ -421,10 +421,10 @@ func TestAMoveTellsClientsWhereTheLeafWentEvenWhenItIsRenamed(t *testing.T) {
 				Edge: protocol.Ptr(protocol.LayoutDockEdgeRight),
 			}, id)
 			change := testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
-				return e.MovedLeaf != nil && e.MovedLeaf.FromLeafID == leafID
+				return len(e.MovedLeaves) == 1 && e.MovedLeaves[0].FromLeafID == leafID
 			})
 			counter.want(t, "moving "+leafID, 1)
-			return protocol.Deref(moved.PaneID), *change.MovedLeaf
+			return protocol.Deref(moved.PaneID), change.MovedLeaves[0]
 		}
 
 		final, moved := move("tile-notes")
@@ -446,8 +446,8 @@ func TestAMoveTellsClientsWhereTheLeafWentEvenWhenItIsRenamed(t *testing.T) {
 
 		shownIn(t, requestShowLeaf(app, target.ID, "tile-notes"), target.ID, "tile-notes")
 		plain := awaitShown(watcher, profileID, target.ID, "tile-notes")
-		if plain.MovedLeaf != nil {
-			t.Fatalf("an arrangement no move produced carries moved_leaf %+v", plain.MovedLeaf)
+		if plain.MovedLeaves != nil {
+			t.Fatalf("an arrangement no move produced carries moved_leaves %+v", plain.MovedLeaves)
 		}
 	})
 }

@@ -833,12 +833,48 @@ describe('leaf history', () => {
       daemon.emit({
         ...daemon.arrangement.changed(),
         desktops: daemon.arrangement.desktops,
-        moved_leaf: { from_desktop_id: 'd1', from_leaf_id: 'tile-notes', to_desktop_id: 'd2', to_leaf_id: 'tile-notes-moved' },
+        moved_leaves: [{ from_desktop_id: 'd1', from_leaf_id: 'tile-notes', to_desktop_id: 'd2', to_leaf_id: 'tile-notes-moved' }],
       } as Reply);
     });
     await gesture(daemon, keys.back);
 
     expect(shows(daemon).pop()).toBe('leaf:d2/tile-notes-moved');
+  });
+
+  it('follows every leaf of a column moved onto a desktop that holds the same id', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      sessions: [daemonSession('s1'), daemonSession('s2')],
+      profiles: [defaultProfile('d1')],
+      desktops: [agentBesideNotes('s1'), soloDesktop('s2'), notesDesktop('d2')],
+    } });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.mouseDown(tileEl()));
+    await open(daemon, 's2');
+
+    await gesture(daemon, () => {
+      daemon.arrangement.desktops = daemon.arrangement.desktops
+        .filter((desktop) => desktop.id !== 'd1')
+        .map((desktop) => desktop.id !== 'd2' ? desktop : daemonDesktop('d2', {
+          root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [
+            { tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' },
+            { tile_id: 'tile-notes-moved', tile_kind: 'markdown', tile_params: '/tmp/notes.md' },
+          ]),
+          panes: [agentPane('s1', 'd2')],
+        }, { name: 'd2', active_pane_id: 'tile-notes-moved' }));
+      daemon.emit({
+        ...daemon.arrangement.changed(),
+        desktops: daemon.arrangement.desktops,
+        moved_leaves: [
+          { from_desktop_id: 'd1', from_leaf_id: 'pane-s1', to_desktop_id: 'd2', to_leaf_id: 'pane-s1' },
+          { from_desktop_id: 'd1', from_leaf_id: 'tile-notes', to_desktop_id: 'd2', to_leaf_id: 'tile-notes-moved' },
+        ],
+      } as Reply);
+    });
+    await gesture(daemon, keys.back);
+    expect(shows(daemon).pop()).toBe('leaf:d2/tile-notes-moved');
+
+    await gesture(daemon, keys.back);
+    expect(shows(daemon).pop()).toBe('leaf:d2/pane-s1');
   });
 
   it('follows a leaf moved to another desktop when its id is still unique', async () => {

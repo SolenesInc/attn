@@ -219,7 +219,7 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     arrangement.replace({ ...arrangement.withTree(target, tree, panes), active_pane_id: finalId });
     const moved = { from_desktop_id: source.id, from_leaf_id: command.leaf_id, to_desktop_id: target.id, to_leaf_id: finalId };
     const [changed, result] = accepted(command, arrangement, finalId);
-    return [{ ...(changed as object), moved_leaf: moved } as Reply, { ...(result as object), desktops: [arrangement.desktop(source.id)!, arrangement.desktop(target.id)!] } as Reply];
+    return [{ ...(changed as object), moved_leaves: [moved] } as Reply, { ...(result as object), desktops: [arrangement.desktop(source.id)!, arrangement.desktop(target.id)!] } as Reply];
   });
   daemon.on('desktop_remove_leaf', (command) => {
     const desktop = arrangement.desktop(command.desktop_id);
