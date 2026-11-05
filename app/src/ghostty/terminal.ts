@@ -156,6 +156,13 @@ const GRAPHEME_CAP = 64;
 const SCRATCH_CAP = 1024;
 const CELL_WORD_SIZE = 8;
 
+function isAsciiWordCodepoint(codepoint: number): boolean {
+  return (codepoint >= 0x30 && codepoint <= 0x39)
+    || (codepoint >= 0x41 && codepoint <= 0x5a)
+    || (codepoint >= 0x61 && codepoint <= 0x7a)
+    || codepoint === 0x5f;
+}
+
 function newCell(): GhosttyCell {
   return {
     codepoint: 0,
@@ -194,6 +201,7 @@ export class GhosttyTerminal {
   private cellPool: GhosttyCell[] = [];
   private rowPool: GhosttyCell[] = [];
   private rowDirty = new Uint8Array(0);
+  private wordPrefixMarks = new Uint8Array(0);
   private dirty = DIRTY_FALSE;
   private stale = true;
 
@@ -324,7 +332,10 @@ export class GhosttyTerminal {
     const wanted = this._cols * this._rows;
     while (this.cellPool.length < wanted) this.cellPool.push(newCell());
     if (this.cellPool.length > wanted) this.cellPool.length = wanted;
-    if (this.rowDirty.length !== this._rows) this.rowDirty = new Uint8Array(this._rows);
+    if (this.rowDirty.length !== this._rows) {
+      this.rowDirty = new Uint8Array(this._rows);
+      this.wordPrefixMarks = new Uint8Array(this._rows);
+    }
   }
 
   write(data: string | Uint8Array): void {
@@ -523,6 +534,31 @@ export class GhosttyTerminal {
     if (y < 0 || y >= this._rows) return null;
     const start = y * this._cols;
     return this.getViewport().slice(start, start + this._cols).map((cell) => ({ ...cell }));
+  }
+
+  // Returns a reused array: consume it before the next call.
+  rowsWithWordPrefix(first: number, second: number): Uint8Array {
+    this.sync();
+    const marks = this.wordPrefixMarks;
+    marks.fill(0);
+    const it = this.rowIterator();
+    let firstSeen = false;
+    for (let y = 0; y < this._rows && this.e.ghostty_render_state_row_iterator_next(it); y += 1) {
+      this.e.ghostty_render_state_row_get(it, ROW_DATA_CELLS_RAW, this.pScratch);
+      const dv = this.dv();
+      const ptr = dv.getUint32(this.pScratch, true);
+      const len = Math.min(dv.getUint32(this.pScratch + 4, true), this._cols);
+      let previous = 0;
+      for (let x = 0; x < len; x += 1) {
+        const lo = dv.getUint32(ptr + x * CELL_WORD_SIZE, true);
+        const codepoint = cellCodepoint(lo);
+        if (firstSeen && codepoint === second) marks[y] = 1;
+        firstSeen = codepoint === first && !isAsciiWordCodepoint(previous);
+        const clusterEndsInMark = cellHasGrapheme(lo);
+        previous = clusterEndsInMark ? 0 : codepoint;
+      }
+    }
+    return marks;
   }
 
   private blank(cell: GhosttyCell, defaults: { fg: RGB; bg: RGB }): void {

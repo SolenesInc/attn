@@ -184,6 +184,32 @@ export const MAX_WRAP_JOIN_ROWS = 6;
 
 // isContinuationRow(r) answers "does row r continue the line started on row r-1"
 // — the opposite direction from ghostty's own wrap flag.
+export function logicalLineExtent(
+  isContinuationRow: (viewportRow: number) => boolean,
+  row: number,
+  rowCount: number,
+): { firstRow: number; lastRow: number } {
+  let firstRow = row;
+  while (firstRow > 0 && row - firstRow < MAX_WRAP_JOIN_ROWS - 1 && isContinuationRow(firstRow)) firstRow -= 1;
+  let lastRow = row;
+  while (lastRow + 1 < rowCount && lastRow - firstRow < MAX_WRAP_JOIN_ROWS - 1 && isContinuationRow(lastRow + 1)) lastRow += 1;
+  return { firstRow, lastRow };
+}
+
+export function logicalLineOverRows(
+  rowTextAt: (viewportRow: number) => string,
+  firstRow: number,
+  lastRow: number,
+  cols: number,
+): LogicalLine {
+  const parts: string[] = [];
+  for (let current = firstRow; current <= lastRow; current += 1) {
+    const text = rowTextAt(current);
+    parts.push(current < lastRow ? text.padEnd(cols, ' ') : text);
+  }
+  return { text: parts.join(''), firstRow, rowCount: lastRow - firstRow + 1, cols };
+}
+
 export function logicalLineAt(
   rowTextAt: (viewportRow: number) => string,
   isContinuationRow: (viewportRow: number) => boolean,
@@ -191,16 +217,8 @@ export function logicalLineAt(
   cols: number,
   rowCount: number,
 ): LogicalLine {
-  let first = row;
-  while (first > 0 && row - first < MAX_WRAP_JOIN_ROWS - 1 && isContinuationRow(first)) first -= 1;
-  let last = row;
-  while (last + 1 < rowCount && last - first < MAX_WRAP_JOIN_ROWS - 1 && isContinuationRow(last + 1)) last += 1;
-  const parts: string[] = [];
-  for (let current = first; current <= last; current += 1) {
-    const text = rowTextAt(current);
-    parts.push(current < last ? text.padEnd(cols, ' ') : text);
-  }
-  return { text: parts.join(''), firstRow: first, rowCount: last - first + 1, cols };
+  const { firstRow, lastRow } = logicalLineExtent(isContinuationRow, row, rowCount);
+  return logicalLineOverRows(rowTextAt, firstRow, lastRow, cols);
 }
 
 export function logicalIndexForCell(line: LogicalLine, row: number, col: number): number | null {

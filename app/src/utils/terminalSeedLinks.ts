@@ -8,6 +8,8 @@ import { SEED_ID_BODY } from './seedId';
 
 const SEED_ID_RE = new RegExp(`\\bs-${SEED_ID_BODY}\\b`, 'g');
 
+export const SEED_ID_PREFIX_CODEPOINTS = [0x73, 0x2d] as const;
+
 export interface TerminalSeedOccurrence {
   seedId: string;
   line: LogicalLine;

@@ -26,6 +26,8 @@ import {
   hyperlinkRangeAt,
   logicalIndexForCell,
   logicalLineAt,
+  logicalLineExtent,
+  logicalLineOverRows,
   pathCandidatesForFragment,
   resolveDetectedPath,
   spanFromLogicalRange,
@@ -163,6 +165,7 @@ import {
 import {
   seedOccurrenceAtCell,
   seedOccurrenceSegments,
+  SEED_ID_PREFIX_CODEPOINTS,
   seedOccurrencesInLine,
   type TerminalSeedOccurrence,
   type TerminalSeedSegment,
@@ -558,6 +561,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const refreshHoverLinkRef = useRef<(() => void) | null>(null);
     const visibleSeedOccurrencesRef = useRef<VisibleSeedOccurrences | null>(null);
     const refreshSeedOccurrencesRef = useRef<(() => void) | null>(null);
+    const knownSeedIdsRef = useRef<{ seeds: readonly unknown[]; ids: Set<string> } | null>(null);
     const syncSeedPreviewAfterRefreshRef = useRef<(() => void) | null>(null);
     const gardenSeedsRef = useRef(gardenSeeds);
     const onOpenSeedRef = useRef(onOpenSeed);
@@ -2686,17 +2690,26 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
       const occurrences: TerminalSeedOccurrence[] = [];
       if (seeds.length > 0) {
-        const knownSeedIds = new Set(seeds.map((seed) => seed.id));
-        for (let row = 0; row < terminal.rows;) {
-          const logical = logicalLineAt(
-            lineAtVisibleRow,
-            isContinuationRow,
-            row,
-            terminal.cols,
-            terminal.rows,
-          );
-          occurrences.push(...seedOccurrencesInLine(logical, knownSeedIds));
-          row = logical.firstRow + Math.max(1, logical.rowCount);
+        const candidateRows = viewportOffsetRef.current === 0
+          ? terminal.rowsWithWordPrefix(...SEED_ID_PREFIX_CODEPOINTS)
+          : null;
+        if (!candidateRows || candidateRows.includes(1)) {
+          const known = knownSeedIdsRef.current?.seeds === seeds
+            ? knownSeedIdsRef.current
+            : { seeds, ids: new Set(seeds.map((seed) => seed.id)) };
+          knownSeedIdsRef.current = known;
+          for (let row = 0; row < terminal.rows;) {
+            const { firstRow, lastRow } = logicalLineExtent(isContinuationRow, row, terminal.rows);
+            let candidate = !candidateRows;
+            for (let current = firstRow; !candidate && current <= lastRow; current += 1) {
+              candidate = candidateRows?.[current] === 1;
+            }
+            if (candidate) {
+              const logical = logicalLineOverRows(lineAtVisibleRow, firstRow, lastRow, terminal.cols);
+              occurrences.push(...seedOccurrencesInLine(logical, known.ids));
+            }
+            row = lastRow + 1;
+          }
         }
       }
       visibleSeedOccurrencesRef.current = { generation, seeds, occurrences };

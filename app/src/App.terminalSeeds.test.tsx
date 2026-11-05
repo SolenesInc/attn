@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, createEvent, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
 import { soloDesktop, daemonSeed, daemonSession, dockTiles, memberClaim, sessionClaim } from './test/daemonFixtures';
@@ -64,7 +64,105 @@ async function goesToAgent(seed: Partial<DaemonSeed>, agent: Partial<DaemonSessi
   expect(screen.queryByRole('dialog')).toBeNull();
 }
 
+const OTHER_SEED = daemonSeed('s-2m8q4v', { title: 'Another seed' });
+
+async function openWritingTerminal() {
+  const view = await openAttachedTerminals({
+    sessions: [daemonSession('s1', { state: 'idle' })],
+    desktops: [soloDesktop('s1')],
+    initialState: { seeds: [SEED, OTHER_SEED] },
+    output: { s1: '' },
+  });
+  await act(() => vi.advanceTimersToNextFrame());
+  let seq = 1;
+  const write = async (text: string) => {
+    seq += 1;
+    view.daemon.emit({ event: 'pty_output', id: 's1', seq, data: btoa(String.fromCharCode(...new TextEncoder().encode(text))) });
+    await view.daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+  };
+  return { ...view, write };
+}
+
+const blankLines = (count: number) => '\r\n'.repeat(count);
+
 describe('App terminal seed ids', () => {
+  it('follows the ids a writing terminal scrolls into and out of view, and hover opens the one under the pointer', async () => {
+    const { write } = await openWritingTerminal();
+
+    await write('first s-7k3f9m\r\n');
+    expect(seedMarks()).toEqual([['s-7k3f9m', '48px', '0px', '64px']]);
+
+    await write(`${blankLines(10)}second s-2m8q4v\r\n`);
+    expect(seedMarks()).toEqual([
+      ['s-7k3f9m', '48px', '0px', '64px'],
+      ['s-2m8q4v', '56px', '231px', '64px'],
+    ]);
+
+    await write(blankLines(13));
+    expect(seedMarks()).toEqual([['s-2m8q4v', '56px', '189px', '64px']]);
+
+    await write(blankLines(10));
+    expect(seedMarks()).toEqual([]);
+
+    await write('third s-7k3f9m');
+    expect(seedMarks()).toEqual([['s-7k3f9m', '48px', '483px', '64px']]);
+    await act(() => vi.advanceTimersToNextFrame());
+    expect(seedMarks()).toEqual([['s-7k3f9m', '48px', '483px', '64px']]);
+
+    fireEvent.mouseMove(document.querySelector('[data-pane-id="pane-s1"] canvas')!, { clientX: 70, clientY: 490 });
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    expect(within(screen.getByRole('dialog')).getByRole('heading')).toHaveTextContent('Make seed IDs navigable');
+  });
+
+  it('marks an id that wraps between its s and its dash', async () => {
+    const { write } = await openWritingTerminal();
+
+    await write(`${' '.repeat(79)}s-7k3f9m`);
+
+    expect(seedMarks()).toEqual([
+      ['s-7k3f9m', '632px', '0px', '8px'],
+      ['s-7k3f9m', '0px', '21px', '56px'],
+    ]);
+  });
+
+  it('marks an id glued to a letter with a combining mark, where the mark ends the word', async () => {
+    const { write } = await openWritingTerminal();
+
+    await write('e\u0301s-7k3f9m');
+
+    expect(seedMarks().map(([id]) => id)).toEqual(['s-7k3f9m']);
+  });
+
+  it('marks an id deep in a line that wraps past the logical line cap', async () => {
+    const { write } = await openWritingTerminal();
+
+    await write(`${' '.repeat(80 * 7 - 3)}s-7k3f9m`);
+
+    expect(seedMarks()).toContainEqual(['s-7k3f9m', '616px', '126px', '24px']);
+    expect(seedMarks()).toContainEqual(['s-7k3f9m', '0px', '147px', '40px']);
+  });
+
+  it('marks ids in history while the user reads it and the terminal keeps writing', async () => {
+    const { write } = await openWritingTerminal();
+    await write(`old s-7k3f9m\r\n${blankLines(30)}`);
+    expect(seedMarks()).toEqual([]);
+
+    const surface = document.querySelector('[data-pane-id="pane-s1"] .terminal-container')!;
+    await act(async () => {
+      for (let turn = 0; turn < 10; turn += 1) {
+        const wheel = createEvent.wheel(surface, { deltaY: -1, deltaMode: 1 });
+        Object.defineProperties(wheel, { clientX: { value: 20 }, clientY: { value: 20 } });
+        fireEvent(surface, wheel);
+      }
+    });
+    await act(() => vi.advanceTimersToNextFrame());
+    expect(seedMarks().map(([id]) => id)).toEqual(['s-7k3f9m']);
+
+    await write('more output\r\n');
+    expect(seedMarks().map(([id]) => id)).toEqual(['s-7k3f9m']);
+  });
+
   it('marks the seed ids the garden knows as whole words, on every row a wrapped one spans', async () => {
     await openTerminalShowing(`known s-7k3f9m; unknown s-2m8q4v; xs-7k3f9m s-7k3f9mx\r\n${' '.repeat(76)}s-7k3f9m`);
 
