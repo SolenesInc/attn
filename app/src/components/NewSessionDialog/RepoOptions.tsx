@@ -141,7 +141,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
   const [focusZone, setFocusZone] = useState<FocusZone>(
     committedDestinationIndex > 0 || preferredDestination === 'main_repo' ? 'destinations' : 'create',
   );
-  const [focusIndex, setFocusIndex] = useState(committedDestinationIndex);
   const [generatedName, setGeneratedName] = useState(() => generateWorktreeName(takenBranchNames));
   const [newWorktreeName, setNewWorktreeName] = useState(generatedName);
   const [startingBranch, setStartingBranch] = useState<'current' | 'default'>('default');
@@ -158,12 +157,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     setDeleteFailure(null);
   }, []);
   useEscapeStack(cancelPendingDelete, globalEscape && (pendingDeletePath !== null || deleteFailure !== null));
-
-  useEffect(() => {
-    setPendingDeletePath(null);
-    setDeleteFailure(null);
-    setFocusIndex(committedDestinationIndex);
-  }, [committedDestinationIndex]);
 
   // Move focus before paint so the first chooser key cannot reach the body
   // after the path input unmounts.
@@ -200,9 +193,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
       ?.scrollIntoView({ block: 'nearest' });
   }, [committedDestinationIndex, deleteFailure, destinationItems, pendingDeletePath]);
 
-  const focusedDestination = focusZone === 'destinations' && focusIndex >= 0 && focusIndex < destinationItems.length
-    ? destinationItems[focusIndex]
-    : null;
+  const focusedDestination = focusZone === 'destinations' ? selectedDestination : null;
   const canDeleteSelectedItem = Boolean(
     onDeleteWorktree &&
     focusedDestination &&
@@ -213,7 +204,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     const clamped = Math.max(0, Math.min(index, destinationItems.length - 1));
     const item = destinationItems[clamped];
     setFocusZone('destinations');
-    setFocusIndex(clamped);
     if (item) {
       onSelectedPathChange(item.path);
     }
@@ -304,8 +294,9 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     if (!item) {
       return;
     }
+    setPendingDeletePath(null);
+    setDeleteFailure(null);
     setFocusZone('destinations');
-    setFocusIndex(index);
     onSelectedPathChange(item.path);
     if (item.kind === 'main-repo') {
       onSelectMainRepo();
@@ -331,7 +322,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
       setDeleteFailure(null);
       await onDeleteWorktree(pathToDelete, force ? { force: true } : undefined);
       onSelectedPathChange(nextSelectedPath);
-      setFocusIndex(Math.min(deletedIndex, survivingItems.length - 1));
     } catch (err) {
       console.error('Delete failed:', err);
       const message = err instanceof Error ? err.message : 'Delete failed';
@@ -409,21 +399,21 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     switch (e.key) {
       case 'ArrowUp':
         e.stopPropagation();
-        if (focusIndex <= 0) {
+        if (committedDestinationIndex <= 0) {
           focusCreateForm();
         } else {
-          commitDestination(focusIndex - 1);
+          commitDestination(committedDestinationIndex - 1);
         }
         e.preventDefault();
         break;
       case 'ArrowDown':
         e.stopPropagation();
-        commitDestination(Math.min(destinationItems.length - 1, focusIndex + 1));
+        commitDestination(committedDestinationIndex + 1);
         e.preventDefault();
         break;
       case 'Enter':
         e.stopPropagation();
-        handleActivate(focusIndex);
+        handleActivate(committedDestinationIndex);
         e.preventDefault();
         break;
       case 'd':
@@ -465,7 +455,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     destinationItems,
     executeDelete,
     focusCreateForm,
-    focusIndex,
     focusZone,
     focusedDestination,
     handleActivate,
