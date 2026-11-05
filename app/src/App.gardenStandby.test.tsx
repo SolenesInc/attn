@@ -132,6 +132,34 @@ describe('App garden standby', () => {
     expect(row('merge the readiness check')).toHaveTextContent('growing');
   });
 
+  it('keeps a standby row\'s dependency blockers beside its marker until the blocker closes', async () => {
+    const standing = onStandby();
+    const blocker = planted('s-block1', 'the prerequisite', { edges: [{ kind: 'blocks', to: standing.id }] });
+    const blockedOther = planted('s-other1', 'waits its turn');
+    const blockerOfOther = planted('s-block2', 'the other prerequisite', { edges: [{ kind: 'blocks', to: blockedOther.id }] });
+    const quiet = { ...standing, id: 's-stand2', title: 'wait for the rollout' };
+    const opened = await openGarden([blocker, standing, blockerOfOther, blockedOther, quiet]);
+    const row = (title: string) => within(gardenRegion()).getByRole('button', { name: new RegExp(`^${title}`) });
+
+    expect(within(row('merge the readiness check')).getByText('standby')).toBeVisible();
+    expect(row('merge the readiness check')).toHaveTextContent('blocked by 1');
+    expect(row('wait for the rollout')).toHaveTextContent('standby');
+    expect(row('wait for the rollout')).not.toHaveTextContent('blocked by');
+    expect(row('waits its turn')).toHaveTextContent('blocked by 1');
+    expect(row('waits its turn')).not.toHaveTextContent('standby');
+
+    const wakeBlocked = onStandby({ wake_blocked: 'worktree removed' });
+    await replace(opened, standing, wakeBlocked);
+
+    expect(within(row('merge the readiness check')).getByText('standby · wake blocked')).toBeVisible();
+    expect(row('merge the readiness check')).toHaveTextContent('blocked by 1');
+
+    await replace(opened, blocker, { ...blocker, status: 'harvested', rev: 2 });
+
+    expect(row('merge the readiness check')).toHaveTextContent('standby · wake blocked');
+    expect(row('merge the readiness check')).not.toHaveTextContent('blocked by');
+  });
+
   it('keeps only the seeds on standby under the is:standby lens', async () => {
     const standing = onStandby();
     const opened = await openGarden([standing, growing, waiting]);

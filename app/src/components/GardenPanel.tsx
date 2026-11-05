@@ -399,6 +399,9 @@ function SeedRow({
           </span>
           <span className="garden-row__meta">
             <span className={`garden-row__id${match?.idHit ? ' garden-hit' : ''}`}>{seed.id}</span>
+            {standby && blockers > 0 && (
+              <span className="garden-row__standby-blockers">blocked by {blockers}</span>
+            )}
             {tender && (
               <span className="garden-row__tender" title={seed.tender?.ref}>
                 tended by {tender}

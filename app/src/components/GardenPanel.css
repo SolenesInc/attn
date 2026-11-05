@@ -335,6 +335,11 @@
 
 .garden-row__standby.is-blocked { color: var(--color-warning); }
 
+.garden-row__standby-blockers {
+  flex: none;
+  white-space: nowrap;
+}
+
 .garden-row__armed {
   color: var(--color-text-tertiary);
   flex: none;
