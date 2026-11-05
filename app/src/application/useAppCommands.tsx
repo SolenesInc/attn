@@ -323,6 +323,30 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
               shortcut: keys('shelf.moreTiles'),
               run: () => void triggerShortcut('shelf.moreTiles'),
             },
+            {
+              id: 'shelf-carry-left',
+              title: 'Carry tile left along the row',
+              keywords: ['shelf', 'row', 'move', 'reorder'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('shelf.carryLeft'),
+              run: () => void triggerShortcut('shelf.carryLeft'),
+            },
+            {
+              id: 'shelf-carry-right',
+              title: 'Carry tile right along the row',
+              keywords: ['shelf', 'row', 'move', 'reorder'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('shelf.carryRight'),
+              run: () => void triggerShortcut('shelf.carryRight'),
+            },
+            {
+              id: 'shelf-send-to-shelf',
+              title: 'Send tile to the shelf',
+              keywords: ['shelf', 'row', 'hide', 'hold'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('shelf.sendToShelf'),
+              run: () => void triggerShortcut('shelf.sendToShelf'),
+            },
           ]
         : []),
       {

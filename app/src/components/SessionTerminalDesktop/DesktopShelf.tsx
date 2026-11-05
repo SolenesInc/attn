@@ -15,8 +15,24 @@ const CHIP_PX = 112;
 const LIVE_DOT_PX = 28;
 const CAPS_PX = 104;
 
-function needsYou(tile: ShelfTile): boolean {
-  return tile.state === 'waiting_input' || tile.state === 'pending_approval';
+const NOTHING: readonly string[] = [];
+
+function needsYou(tile: ShelfTile, unseen: readonly string[]): boolean {
+  return tile.state === 'waiting_input' || tile.state === 'pending_approval' || unseen.includes(tile.leafId);
+}
+
+function useChipMarks(desktopId: string) {
+  const unseen = useDesktopShelfStore((state) => state.unseenByDesktop[desktopId] ?? NOTHING);
+  const flashing = useDesktopShelfStore((state) => state.flashingByDesktop[desktopId] ?? NOTHING);
+  return (columns: readonly ShelfColumn[]) => {
+    const tiles = columns.flatMap((column) => column.tiles);
+    const needs = tiles.some((tile) => needsYou(tile, unseen)) ? ' is-needs' : '';
+    const flash = tiles.some((tile) => flashing.includes(tile.leafId)) ? ' is-arrival' : '';
+    return {
+      className: needs + flash,
+      onAnimationEnd: () => useDesktopShelfStore.getState().flashEnded(desktopId, tiles.map((tile) => tile.leafId)),
+    };
+  };
 }
 
 function TileMark({ tile }: { tile: ShelfTile }) {
@@ -32,10 +48,12 @@ function AskMark({ session }: { session: AskHolderSession }) {
 
 function ColumnChip({ column, desktopId, onGo }: { column: ShelfColumn; desktopId: string; onGo?: () => void }) {
   const peekHover = useShelfPeekHover(desktopId, column.goLeafId);
+  const marks = useChipMarks(desktopId)([column]);
   return (
     <button
       type="button"
-      className={`desktop-shelf-chip${column.tiles.some(needsYou) ? ' is-needs' : ''}`}
+      className={`desktop-shelf-chip${marks.className}`}
+      onAnimationEnd={marks.onAnimationEnd}
       data-testid={`shelf-chip-${column.key}`}
       title={column.label}
       {...peekHover}
@@ -56,6 +74,7 @@ function ColumnChip({ column, desktopId, onGo }: { column: ShelfColumn; desktopI
 function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'before' | 'after'; desktopId: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
+  const marks = useChipMarks(desktopId)(columns);
   useEscapeStack(() => setOpen(false), open);
   useLayoutEffect(() => {
     if (!open) return;
@@ -70,7 +89,8 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
     <span className="desktop-shelf-cap-anchor" ref={root}>
       <button
         type="button"
-        className={`desktop-shelf-chip desktop-shelf-cap${columns.some((column) => column.tiles.some(needsYou)) ? ' is-needs' : ''}`}
+        className={`desktop-shelf-chip desktop-shelf-cap${marks.className}`}
+        onAnimationEnd={marks.onAnimationEnd}
         data-testid={`shelf-cap-${side}`}
         aria-expanded={open}
         title={`${columns.length} more this way`}

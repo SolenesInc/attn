@@ -46,6 +46,15 @@ export interface Intent {
   focusOwner: Element | null;
   previousView: AppView;
   focusRequested: boolean;
+  slides: boolean;
+  bring: LeafBring | null;
+}
+
+export interface LeafBring {
+  desktopId: string;
+  leafId: string;
+  anchorId: string;
+  sessionId: string | null;
 }
 
 export type Arrival =
@@ -99,13 +108,13 @@ export function beginIntent(
   profileId: string,
   target: IntentTarget,
   focusOwner: Element | null,
-  { sendsShow = false, announce = false, historyCursor = null }: { sendsShow?: boolean; announce?: boolean; historyCursor?: number | null } = {},
+  { sendsShow = false, announce = false, historyCursor = null, slides = false }: { sendsShow?: boolean; announce?: boolean; historyCursor?: number | null; slides?: boolean } = {},
 ): SessionNavigationState {
   const id = state.intentSequence + 1;
   return {
     ...state,
     followNextTurn: false,
-    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner, previousView: state.intent?.previousView ?? state.view, focusRequested: false },
+    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner, previousView: state.intent?.previousView ?? state.view, focusRequested: false, slides, bring: null },
     focusRequest: null,
     intentSequence: id,
   };
@@ -118,8 +127,9 @@ export function requestShow(
   focusOwner: Element | null,
   historyCursor: number | null = null,
   announce = true,
+  slides = historyCursor !== null,
 ): SessionNavigationState {
-  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, announce, historyCursor });
+  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, announce, historyCursor, slides });
 }
 
 export function selectAgent(
@@ -138,7 +148,9 @@ const LAYOUT_ONLY_COMMANDS = new Set([
   'desktop_update_tile', 'profile_create', 'profile_rename',
 ]);
 
-function commandServes(target: IntentTarget, cmd: string, body: Record<string, unknown>): boolean {
+function commandServes(intent: Intent, cmd: string, body: Record<string, unknown>): boolean {
+  const target = intent.target;
+  if (intent.bring && cmd === 'desktop_move_leaf') return body.leaf_id === intent.bring.leafId;
   switch (target.kind) {
     case 'session':
       return cmd === 'desktop_show_session' && body.session_id === target.sessionId;
@@ -175,7 +187,8 @@ export function commandSent(
   requestId: string,
   focusOwner: Element | null,
 ): SessionNavigationState {
-  if (LAYOUT_ONLY_COMMANDS.has(cmd) || (state.intent && commandServes(state.intent.target, cmd, body))) return state;
+  const keepsWhatIsShown = LAYOUT_ONLY_COMMANDS.has(cmd) || (cmd === 'desktop_move_leaf' && body.activate === false);
+  if (keepsWhatIsShown || (state.intent && commandServes(state.intent, cmd, body))) return state;
   const target = switchTarget(cmd, body) ?? { kind: 'answer', requestId };
   return beginIntent(state, target.kind === 'profile' ? target.profileId : profileId, target, focusOwner);
 }
@@ -213,6 +226,7 @@ function intentLeaf(arrangement: Arrangement, intent: Intent | null): ActiveLeaf
 }
 
 export function displayedArrangement(arrangement: Arrangement, intent: Intent | null): Arrangement {
+  if (intent?.bring) return arrangement;
   const leaf = intentLeaf(arrangement, intent);
   const desktopId = leaf?.desktopId ?? (intent?.profileId === arrangement.profileId && intent.target.kind === 'desktop' ? intent.target.desktopId : null);
   if (!desktopId || !arrangement.desktops.some((desktop) => desktop.id === desktopId)) return arrangement;
@@ -225,12 +239,18 @@ export function displayedArrangement(arrangement: Arrangement, intent: Intent | 
   };
 }
 
-export function focusIntent(state: SessionNavigationState, arrangement: Arrangement): SessionNavigationState {
+export function focusIntent(
+  state: SessionNavigationState,
+  arrangement: Arrangement,
+  anchorOfBring: (leaf: ActiveLeaf) => string | null,
+): SessionNavigationState {
   const intent = state.intent;
   if (!intent || intent.focusRequested) return state;
   const leaf = intentLeaf(arrangement, intent);
   if (!leaf) return state;
-  return claimFocus({ ...state, view: 'session', intent: { ...intent, focusRequested: true } }, leaf, intent.focusOwner, intent.announce);
+  const anchorId = intent.sendsShow && !intent.slides ? anchorOfBring(leaf) : null;
+  const bring = anchorId ? { desktopId: leaf.desktopId, leafId: leaf.leafId, anchorId, sessionId: leaf.kind === 'agent' ? leaf.sessionId : null } : null;
+  return claimFocus({ ...state, view: 'session', intent: { ...intent, focusRequested: true, bring } }, leaf, intent.focusOwner, intent.announce);
 }
 
 // A history step that landed moves the cursor even when a later step superseded it.

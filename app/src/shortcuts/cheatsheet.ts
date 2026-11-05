@@ -80,6 +80,12 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
           combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
           note: 'Steps to the next desktop at an edge.',
         },
+        ...(shelfLayoutEnabled
+          ? [
+              { label: 'Carry tile along the row', combos: [fromId('shelf.carryLeft'), fromId('shelf.carryRight')] },
+              { label: 'Send tile to the shelf', combos: [fromId('shelf.sendToShelf')], note: 'A held tile returns with a chip, ⌘J or a restart.' },
+            ]
+          : []),
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
         { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },
         { label: 'Focus utility terminal', combos: [fromId('terminal.open')] },

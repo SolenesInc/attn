@@ -155,6 +155,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-peek'],
   },
   {
+    id: 'shelf-moves',
+    runnerId: 'SHELF-MOVES',
+    label: 'Opening, closing, carrying and bringing tiles on the row through native keys',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-moves'],
+  },
+  {
     id: 'desktop-close-one-session-keeps-selection',
     runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Closing one session on a desktop keeps the selection',

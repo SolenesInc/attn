@@ -45,6 +45,7 @@
     "real-app:scenario-desktop-splits": "node scripts/real-app-harness/scenario-desktop-splits.mjs",
     "real-app:scenario-shelf-layout": "node scripts/real-app-harness/scenario-shelf-layout.mjs",
     "real-app:scenario-shelf-peek": "node scripts/real-app-harness/scenario-shelf-peek.mjs",
+    "real-app:scenario-shelf-moves": "node scripts/real-app-harness/scenario-shelf-moves.mjs",
     "real-app:scenario-desktop-switching": "node scripts/real-app-harness/scenario-desktop-switching.mjs",
     "real-app:scenario-desktop-migration": "node scripts/real-app-harness/scenario-desktop-migration.mjs",
     "real-app:scenario-desktop-close-one-session-keeps-selection": "node scripts/real-app-harness/scenario-desktop-close-one-session-keeps-selection.mjs",

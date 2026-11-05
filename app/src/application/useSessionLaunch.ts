@@ -2,10 +2,13 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { ptySpawn } from '../pty/bridge';
+import { stackLimitMessage } from '../components/SessionTerminalDesktop/rowLayout';
+import { stackRoomPx } from '../store/desktopShelf';
 import { currentDesktopIn, useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
-import { type TerminalSplitDirection } from '../types/desktop';
+import { parseLayoutJSON, type TerminalSplitDirection } from '../types/desktop';
+import type { Desktop } from '../types/generated';
 import {
   getAgentAvailability,
   hasAnySelectableAgents,
@@ -25,6 +28,22 @@ interface Options {
   shownAgentId: string | null;
   selectCreatedSession: (id: string, focusOwner?: Element | null) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
+}
+
+function besideWhenStackIsFull(
+  desktop: Desktop,
+  direction: TerminalSplitDirection,
+  anchorPaneId: string | undefined,
+  report: (message: string) => void,
+): TerminalSplitDirection {
+  const tileHeightPx = stackRoomPx(desktop.id);
+  const tree = parseLayoutJSON(desktop.tree_json);
+  const anchor = anchorPaneId ?? desktop.active_pane_id;
+  if (direction !== 'horizontal' || tileHeightPx === null || !tree || !anchor) return direction;
+  const message = stackLimitMessage(tree, anchor, tileHeightPx);
+  if (!message) return direction;
+  report(message);
+  return 'vertical';
 }
 
 function currentDesktopForLaunch() {
@@ -114,7 +133,7 @@ export function useSessionLaunch({
       const desktop =
         useProfilesStore.getState().desktops.find((entry) => entry.id === spawn.desktopId) ??
         current;
-      const target = launchTarget(desktop, spawn.direction, spawn.anchorPaneId);
+      const target = launchTarget(desktop, besideWhenStackIsFull(desktop, spawn.direction, spawn.anchorPaneId, showError), spawn.anchorPaneId);
       const launch =
         desktop.id === current.id
           ? useSessionStore.getState().beginIntent({ kind: 'session', sessionId: spawn.sessionId })

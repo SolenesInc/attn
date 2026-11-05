@@ -3,6 +3,7 @@ import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { oldestUnseenDocument } from '../store/desktopShelf';
 import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
@@ -67,11 +68,17 @@ export function useAppNavigation({
   const { wantsAttention, queueBands, queueSessions } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
+    const unseenDesktopId = useProfilesStore.getState().currentDesktopId;
+    const unseenDocument = oldestUnseenDocument(unseenDesktopId);
+    if (unseenDesktopId && unseenDocument) {
+      selectLeaf(unseenDesktopId, unseenDocument);
+      return;
+    }
     const waiting = oldestWantedTurn(queueSessions, wantsAttention);
     if (waiting) {
       handleSelectSession(waiting.id);
     }
-  }, [queueSessions, handleSelectSession, wantsAttention]);
+  }, [queueSessions, handleSelectSession, selectLeaf, wantsAttention]);
 
   const agentOnScreenId = useAgentOnScreen();
   const handleNextRun = useCallback(() => {

@@ -57,6 +57,22 @@ function findLeaf(node: Node | null, leaf: string): Node | null {
   return null;
 }
 
+function rowColumns(node: Node | null): Node[] {
+  if (!node) return [];
+  if (node.type === 'split' && node.direction === 'vertical' && node.children) return node.children.flatMap(rowColumns);
+  return [node];
+}
+
+function fromRowColumns(columns: Node[]): Node {
+  const [first, ...rest] = columns;
+  return rest.length === 0 ? first : { type: 'split', split_id: `row-${leafIds(first)[0]}`, direction: 'vertical', ratio: 1 / columns.length, children: [first, fromRowColumns(rest)] };
+}
+
+function leafIds(node: Node): string[] {
+  const id = leafId(node);
+  return id ? [id] : (node.children ?? []).flatMap(leafIds);
+}
+
 function hasLeaf(node: Node | null, leaf: string): boolean {
   if (!node) return false;
   if (leafId(node) === leaf) return true;
@@ -101,6 +117,21 @@ export class Arrangement {
       { pane_id: paneId, session_id: sessionId, runtime_id: sessionId, desktop_id: desktop.id, kind: 'agent', status: 'ready', title: sessionId } as DaemonDesktop['panes'][number],
     ]);
     this.replace({ ...placed, active_pane_id: paneId });
+  }
+
+  // Places as the daemon does with the shelf layout on: beside the anchor's column, or under the anchor.
+  placeInRow(desktopId: string, leaf: Node, anchorId: string, { below = false, focus = true, pane }: { below?: boolean; focus?: boolean; pane?: DaemonDesktop['panes'][number] } = {}) {
+    const desktop = this.desktop(desktopId)!;
+    const columns = rowColumns(parse(desktop));
+    const at = columns.findIndex((column) => leafIds(column).includes(anchorId));
+    const stacked = (node: Node): Node => {
+      if (leafId(node) === anchorId) return { type: 'split', split_id: `stack-${leafId(leaf)}`, direction: 'horizontal', ratio: 0.5, children: [node, leaf] };
+      return node.children ? { ...node, children: node.children.map(stacked) } : node;
+    };
+    if (below) columns[at] = stacked(columns[at]);
+    else columns.splice(at + 1, 0, leaf);
+    const placed = this.withTree(desktop, fromRowColumns(columns), pane ? [...desktop.panes, pane] : desktop.panes);
+    this.replace(focus ? { ...placed, active_pane_id: leafId(leaf)! } : placed);
   }
 
   show(desktopId: string, leafId: string): boolean {
@@ -193,6 +224,18 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
   // Like the daemon, a leaf whose id the target already holds lands under a new id.
   daemon.on('desktop_move_leaf', (command) => {
     const source = arrangement.desktop(command.source_desktop_id);
+    if (source && command.target_desktop_id === source.id && command.anchor_id && (command.edge === 'left' || command.edge === 'right')) {
+      const tree = parse(source);
+      const moved = command.whole_column ? rowColumns(tree).find((column) => leafIds(column).includes(command.leaf_id)) : findLeaf(tree, command.leaf_id);
+      if (!moved) return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${source.id}`);
+      const rest = rowColumns(leafIds(moved).reduce((node, id) => without(node, id), tree));
+      const anchorAt = rest.findIndex((column) => leafIds(column).includes(command.anchor_id!));
+      if (anchorAt < 0) return refused(command, 'invalid', `leaf ${command.leaf_id} could not move beside ${command.anchor_id}`);
+      rest.splice(command.edge === 'left' ? anchorAt : anchorAt + 1, 0, moved);
+      const placed = arrangement.withTree(source, fromRowColumns(rest));
+      arrangement.replace(command.activate === false ? placed : { ...placed, active_pane_id: command.leaf_id });
+      return accepted(command, arrangement, command.leaf_id);
+    }
     const leaf = source ? findLeaf(parse(source), command.leaf_id) : null;
     let target = command.target_desktop_id ? arrangement.desktop(command.target_desktop_id) : undefined;
     if (source && leaf && !command.target_desktop_id) {

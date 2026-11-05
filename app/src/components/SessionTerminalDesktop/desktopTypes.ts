@@ -121,6 +121,7 @@ export interface SessionTerminalDesktopProps {
   shelfInQueueBar?: boolean;
   onSetNarrowestCols?: (cols: number) => void;
   onShelfLimit?: (message: string) => void;
+  onMoveRowLeaf?: (move: { leafId: string; anchorId: string; edge: 'left' | 'right'; wholeColumn: boolean; activate: boolean }) => Promise<unknown>;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;

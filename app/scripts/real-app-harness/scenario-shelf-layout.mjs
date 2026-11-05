@@ -56,9 +56,12 @@ async function waitForActive(leafId) {
 }
 
 async function focusLeaf(leafId) {
-  await request('dom_click', { selector: `${surface()} [data-testid="shelf-chip-${leafId}"]` }).catch(() => {});
-  await request('focus_pane', { sessionId: firstSession, paneId: leafId }).catch(() => {});
-  await waitForActive(leafId);
+  const row = await readRow();
+  const activeAt = async () => row.indexOf((await request('get_state')).activeLeaf.leafId);
+  for (let at = await activeAt(); row[at] !== leafId; at = await activeAt()) {
+    await press(at < row.indexOf(leafId) ? 'terminal.focusRight' : 'terminal.focusLeft');
+    await waitForActive(row[at + (at < row.indexOf(leafId) ? 1 : -1)]);
+  }
 }
 
 async function setWindowWidth(width) {

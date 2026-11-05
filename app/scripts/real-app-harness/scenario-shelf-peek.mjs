@@ -54,7 +54,13 @@ const surface = () => `[data-session-terminal-desktop="${desktop}"]`;
 const chip = (leafId) => `[data-testid="shelf-chip-${leafId}"]`;
 
 async function focusLeaf(leafId) {
-  await request('focus_pane', { sessionId: firstSession, paneId: leafId }).catch(() => {});
+  const leaves = await readRow();
+  const activeAt = async () => leaves.indexOf((await request('get_state')).activeLeaf.leafId);
+  for (let at = await activeAt(); leaves[at] !== leafId; at = await activeAt()) {
+    const forward = at < leaves.indexOf(leafId);
+    await request('dispatch_shortcut', { shortcutId: forward ? 'terminal.focusRight' : 'terminal.focusLeft' });
+    await waitDom(`${surface()}[data-active-leaf-id="${leaves[at + (forward ? 1 : -1)]}"]`);
+  }
   await waitDom(`${surface()}[data-active-leaf-id="${leafId}"] .desktop-pane[data-pane-id="${leafId}"]`);
 }
 
@@ -159,6 +165,9 @@ try {
     await waitDom(PEEK, { absent: true });
     await waitDom(`${surface()}[data-active-leaf-id="${target}"] .desktop-pane[data-pane-id="${target}"]`);
     await waitForPaneInputFocus(client, firstSession, target);
+    row = await readRow();
+    target = row.at(-1);
+    targetSession = (await request('get_desktop', { sessionId: firstSession })).panes.find((pane) => pane.paneId === target).sessionId;
     await focusLeaf(row[0]);
     await waitDom(chip(target));
   });

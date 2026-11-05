@@ -84,8 +84,13 @@ function focusBelongsTo(leaf: ActiveLeaf | null): boolean {
   return pane?.getAttribute('data-pane-id') === leaf.leafId && pane.closest(`[data-desktop-id="${leaf.desktopId}"]`) !== null;
 }
 
+function focusIsNowhere(): boolean {
+  const focused = document.activeElement;
+  return !focused || focused === document.body;
+}
+
 export function useDesktopSelectionBridge(reportFailure: (message: string) => void) {
-  const { sendDesktopShowSession, sendDesktopShowLeaf } = useDaemonApi();
+  const { sendDesktopShowSession, sendDesktopShowLeaf, sendDesktopMoveLeaf } = useDaemonApi();
   const intent = useSessionStore((state) => state.intent);
   const sent = useRef(0);
   const reportFailureRef = useRef(reportFailure);
@@ -108,7 +113,8 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         && claim.desktopId === leaf.desktopId && claim.leafId === leaf.leafId
         && (!focused || focused === document.body || focused === claim.focusOwner
           || focused.matches('.app') || terminal);
-      const sessionId = intent?.target.kind === 'session' && !intent.focusRequested
+      const sessionId = intent?.bring?.sessionId ? intent.bring.sessionId
+        : intent?.target.kind === 'session' && !intent.focusRequested
         ? intent.target.sessionId
         : terminal?.dataset.terminalInputReady === '0' ? terminal.dataset.terminalSessionId
           : awaitingFocus ? leaf.sessionId : null;
@@ -139,12 +145,22 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
 
   useEffect(() => {
     if (!intent?.sendsShow || intent.id === sent.current) return;
-    const { id, target, profileId, historyCursor } = intent;
+    const { id, target, profileId, historyCursor, bring } = intent;
     if (target.kind !== 'session' && target.kind !== 'leaf') return;
     sent.current = id;
-    const request = target.kind === 'session'
+    const show = () => target.kind === 'session'
       ? sendDesktopShowSession(target.sessionId)
       : sendDesktopShowLeaf(target.desktopId, target.leafId);
+    const request: Promise<unknown> = bring
+      ? sendDesktopMoveLeaf({
+        sourceDesktopId: bring.desktopId,
+        targetDesktopId: bring.desktopId,
+        leafId: bring.leafId,
+        anchorId: bring.anchorId,
+        edge: 'right',
+        wholeColumn: true,
+      })
+      : show();
     request.then(
       () => {
         if (historyCursor === null || target.kind !== 'leaf') return;
@@ -159,7 +175,7 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         reportFailureRef.current(`Could not show that ${target.kind === 'session' ? 'agent' : 'leaf'}: ${reason}`);
       },
     );
-  }, [intent, sendDesktopShowSession, sendDesktopShowLeaf]);
+  }, [intent, sendDesktopMoveLeaf, sendDesktopShowSession, sendDesktopShowLeaf]);
 
   useEffect(
     () =>
@@ -169,7 +185,8 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         if (!leaf || sameLeaf(leaf, before)) return;
         const sessions = useSessionStore.getState();
         if (sessions.view !== 'session' || sessions.intent) return;
-        if (focusBelongsTo(before)) sessions.transferFocus(leaf);
+        const closedPaneDroppedFocus = sessions.navigationSettings.shelf_layout_enabled === 'true' && focusIsNowhere();
+        if (focusBelongsTo(before) || closedPaneDroppedFocus) sessions.transferFocus(leaf);
       }),
     [],
   );

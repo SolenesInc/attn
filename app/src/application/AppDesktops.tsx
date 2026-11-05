@@ -71,6 +71,7 @@ export function AppDesktops() {
     sendTerminalFocus,
     sendOpenMarkdown,
     sendRenameSession,
+    sendDesktopMoveLeaf,
     sendDesktopSetSplitRatio,
     sendDesktopUpdateTile,
     sendSetSetting,
@@ -188,6 +189,7 @@ export function AppDesktops() {
           shelfInQueueBar={queueModeEnabled && sidebarCollapsed}
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}
+          onMoveRowLeaf={(move) => sendDesktopMoveLeaf({ sourceDesktopId: desktop.id, targetDesktopId: desktop.id, ...move })}
           connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {
@@ -203,7 +205,7 @@ export function AppDesktops() {
             sendDesktopSetSplitRatio(desktop.id, splitId, ratio)
           }
           onFocusPane={(paneId) => {
-            if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId);
+            if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId, undefined, true);
           }}
           zoomActive={Boolean(zoomModeBySessionId[desktop.id])}
           onSetZoomActive={(active) => {

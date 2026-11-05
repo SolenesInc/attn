@@ -2,16 +2,22 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { useShortcut } from '../../shortcuts/useShortcut';
 import { useDesktopShelfStore, type PublishedShelf, type ShelfColumn, type ShelfTile } from '../../store/desktopShelf';
-import { tileContentKey, type TerminalLayoutNode, type TileContentState, type TileLeaf, type AgentTerminal } from '../../types/desktop';
+import { useSessionStore } from '../../store/sessions';
+import { tileContentKey, type TileContentState, type TileLeaf, type AgentTerminal } from '../../types/desktop';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { deriveTileTitle } from '../../utils/tilePresentation';
 import type { SessionTerminalDesktopProps } from './desktopTypes';
 import {
   DEFAULT_NARROWEST_COLS,
   lastUsedLeaf,
+  columnIndexOf,
+  firstColumnStillShows,
+  readRow,
+  resolveRowLayout,
+  revealFirstColumn,
   stepNarrowestCols,
-  type FirstColumn,
   type RowColumn,
+  type RowLayoutInput,
   type RowLayoutPlan,
 } from './rowLayout';
 
@@ -24,6 +30,7 @@ interface ShelfPublisherInput {
   rowPlan: RowLayoutPlan | null;
   showShelf: boolean;
   narrowestCols?: number;
+  tileHeightPx: number;
   activeLeafId: string;
   focusOrder: readonly string[];
   agentPaneById: ReadonlyMap<string, AgentTerminal>;
@@ -43,6 +50,7 @@ export function useShelfPublisher({
   rowPlan,
   showShelf,
   narrowestCols,
+  tileHeightPx,
   activeLeafId,
   focusOrder,
   agentPaneById,
@@ -97,8 +105,9 @@ export function useShelfPublisher({
       after: rowPlan.after.map(shelfColumn),
       activeLeafId,
       narrowestCols: narrowestCols ?? DEFAULT_NARROWEST_COLS,
+      tileHeightPx,
     };
-  }, [activeLeafId, agentPaneById, desktopId, focusOrder, gardenSeeds, narrowestCols, rowPlan, sessionById, showShelf, tileContents, tileLeafById]);
+  }, [activeLeafId, agentPaneById, desktopId, focusOrder, gardenSeeds, narrowestCols, rowPlan, sessionById, showShelf, tileContents, tileHeightPx, tileLeafById]);
 
   useLayoutEffect(() => {
     useDesktopShelfStore.getState().publishShelf(desktopId, shelf);
@@ -106,13 +115,96 @@ export function useShelfPublisher({
   useEffect(() => () => useDesktopShelfStore.getState().publishShelf(desktopId, null), [desktopId]);
 }
 
+interface RowSettlingInput {
+  desktopId: string;
+  rowPlan: RowLayoutPlan | null;
+  rowInput: Omit<RowLayoutInput, 'view'> | null;
+  measured: boolean;
+  visible: boolean;
+  activeLeafId: string;
+  agentPaneById: ReadonlyMap<string, AgentTerminal>;
+  tileLeafById: ReadonlyMap<string, TileLeaf>;
+}
+
+const leavesOf = (columns: readonly RowColumn[]) => columns.flatMap((column) => column.leafIds);
+
+export function useRowSettling(input: RowSettlingInput) {
+  const latest = useRef(input);
+  useLayoutEffect(() => {
+    latest.current = input;
+  });
+  const seen = useRef<{ row: Set<string>; screen: Set<string>; firstColumn: RowLayoutPlan['firstColumn']; activeLeafId: string; orderKey: string } | null>(null);
+  const { desktopId, rowPlan, measured, activeLeafId } = input;
+  const orderKey = rowPlan ? [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|') : '';
+
+  useLayoutEffect(() => {
+    const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById } = latest.current;
+    if (!measured || !plan || !rowInput) return;
+    const shelf = useDesktopShelfStore.getState();
+    const previous = seen.current;
+    const row = new Set(leavesOf([...plan.before, ...plan.screen, ...plan.after]));
+    let firstColumn = plan.firstColumn;
+
+    if (previous) {
+      const returns = shelf.documentReturnsByDesktop[desktopId] ?? {};
+      for (const leafId of previous.row) {
+        const documentReturn = returns[leafId];
+        if (row.has(leafId) || !documentReturn || previous.firstColumn.leafId !== documentReturn.shownAtLeafId) continue;
+        if (columnIndexOf(readRow(rowInput.tree), documentReturn.firstColumn.leafId) < 0) continue;
+        firstColumn = documentReturn.firstColumn;
+        if (previous.activeLeafId === leafId && row.has(documentReturn.activeLeafId) && !firstColumnStillShows(rowInput, firstColumn)) {
+          useSessionStore.getState().selectLeaf(desktopId, documentReturn.activeLeafId, undefined, true);
+        }
+      }
+
+      const onScreen = new Set(leavesOf(plan.screen));
+      for (const leafId of row) {
+        if (previous.row.has(leafId) || leafId === activeLeafId) continue;
+        const tile = tileLeafById.get(leafId);
+        if (!tile) continue;
+        const owner = [...agentPaneById.values()].find((pane) => pane.sessionId === tile.tileSessionId);
+        const ownerWasShown = owner !== undefined && previous.screen.has(owner.id);
+        const revealed = !ownerWasShown ? null : onScreen.has(leafId) ? plan.firstColumn : revealFirstColumn(rowInput, leafId, plan.firstColumn.index);
+        if (revealed) firstColumn = revealed;
+        else if (!onScreen.has(leafId)) shelf.markUnseen(desktopId, leafId);
+        shelf.saveDocumentReturn(desktopId, leafId, {
+          firstColumn: previous.firstColumn,
+          shownAtLeafId: (revealed ?? plan.firstColumn).leafId,
+          activeLeafId: previous.activeLeafId,
+        });
+      }
+
+      if (activeLeafId !== previous.activeLeafId && shelf.unseenByDesktop[desktopId]?.includes(activeLeafId)) {
+        shelf.saveDocumentReturn(desktopId, activeLeafId, {
+          firstColumn: previous.firstColumn,
+          shownAtLeafId: plan.firstColumn.leafId,
+          activeLeafId: previous.activeLeafId,
+        });
+      }
+    }
+
+    const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, firstColumn }).screen;
+    const screen = new Set(leavesOf(settledScreen));
+    if (previous && visible && previous.orderKey !== orderKey) {
+      shelf.flash(desktopId, [...row].filter((leafId) => !screen.has(leafId) && (previous.screen.has(leafId) || !previous.row.has(leafId))));
+    }
+    shelf.settleLeaves(desktopId, row, screen, activeLeafId);
+    shelf.setFirstColumn(desktopId, firstColumn);
+    seen.current = { row, screen, firstColumn, activeLeafId, orderKey };
+  }, [activeLeafId, desktopId, measured, orderKey]);
+
+  const screenKey = rowPlan ? leavesOf(rowPlan.screen).join('|') : '';
+  useLayoutEffect(() => {
+    const { rowPlan: plan } = latest.current;
+    if (!plan) return;
+    const row = new Set(leavesOf([...plan.before, ...plan.screen, ...plan.after]));
+    useDesktopShelfStore.getState().settleLeaves(desktopId, row, new Set(leavesOf(plan.screen)), activeLeafId);
+  }, [activeLeafId, desktopId, screenKey]);
+}
+
 interface ShelfControlsInput {
   active: boolean;
-  tree: TerminalLayoutNode | null;
-  activeLeafId: string;
-  firstColumn: FirstColumn | null;
-  areaPx: number;
-  pxPerCol: number;
+  rowInput: Omit<RowLayoutInput, 'view'> | null;
   narrowestCols?: number;
   onSetNarrowestCols?: (cols: number) => void;
   onShelfLimit?: (message: string) => void;
@@ -120,11 +212,7 @@ interface ShelfControlsInput {
 
 export function useShelfControls({
   active,
-  tree,
-  activeLeafId,
-  firstColumn,
-  areaPx,
-  pxPerCol,
+  rowInput,
   narrowestCols,
   onSetNarrowestCols,
   onShelfLimit,
@@ -136,8 +224,9 @@ export function useShelfControls({
   }, []);
 
   const step = (direction: 'fewer' | 'more') => {
-    if (!tree || narrowestCols === undefined) return;
-    const result = stepNarrowestCols({ tree, activeLeafId, firstColumn, areaPx, pxPerCol }, narrowestCols, direction, window.innerWidth);
+    if (!rowInput || narrowestCols === undefined) return;
+    const { narrowestPx: _narrowestPx, ...input } = rowInput;
+    const result = stepNarrowestCols(input, narrowestCols, direction, window.innerWidth);
     if (result.kind === 'limit') {
       onShelfLimit?.(result.message);
       return;

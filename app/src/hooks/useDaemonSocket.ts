@@ -4081,6 +4081,8 @@ export function useDaemonSocket({
       edge?: 'left' | 'right' | 'top' | 'bottom';
       leafShare?: number;
       withDelegates?: boolean;
+      wholeColumn?: boolean;
+      activate?: boolean;
     }) =>
       sendProfileCommand('desktop_move_leaf', {
         source_desktop_id: move.sourceDesktopId,
@@ -4091,6 +4093,8 @@ export function useDaemonSocket({
         ...(move.edge ? { edge: move.edge } : {}),
         ...(move.withDelegates ? { with_delegates: true } : {}),
         ...(move.leafShare ? { leaf_share: move.leafShare } : {}),
+        ...(move.wholeColumn ? { whole_column: true } : {}),
+        ...(move.activate === false ? { activate: false } : {}),
       }),
     [sendProfileCommand],
   );

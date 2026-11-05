@@ -35,10 +35,11 @@ import type { LeafRef } from '../navigation/leafHistory';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import { recordAppAction, type AppActionProps } from '../analytics/appActions';
 import { usePendingTerminalInput } from './pendingTerminalInput';
+import { bringAnchor } from './desktopShelf';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
-  selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
+  selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null, slides?: boolean) => void;
   beginIntent: (target: IntentTarget) => number;
   commandSent: (cmd: string, body: Record<string, unknown>, requestId: string) => number | null;
   commandSettled: (requestId: string) => void;
@@ -111,7 +112,7 @@ export function reconcileSessionNavigation(
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
   const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue);
-  return { ...next, ...focusIntent(advanced, arrangement) };
+  return { ...next, ...focusIntent(advanced, arrangement, bringAnchor) };
 }
 
 export function createSessionNavigationActions(
@@ -120,15 +121,15 @@ export function createSessionNavigationActions(
 ): SessionNavigationActions {
   const set: SetState = (update) => write((state) => {
     const next = { ...state, ...(typeof update === 'function' ? update(state) : update) };
-    return focusIntent(next, arrangementOf(next));
+    return focusIntent(next, arrangementOf(next), bringAnchor);
   });
   return {
     selectAgent: (sessionId, owner = focusOwner(), announce = true) => {
       set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner, announce));
       return true;
     },
-    selectLeaf: (desktopId, leafId, owner = focusOwner()) =>
-      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner)),
+    selectLeaf: (desktopId, leafId, owner = focusOwner(), slides = false) =>
+      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner, null, true, slides)),
     beginIntent: (target) => {
       set((state) => beginIntent(state, target.kind === 'profile' ? target.profileId : state.navigationProfileId, target, focusOwner()));
       return get().intentSequence;

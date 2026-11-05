@@ -11,7 +11,7 @@ closes the session.
 
 ## Sub-features
 
-- `launch-picker`: ⌘N opens the location picker. Pick a folder and a harness, and the agent starts beside the active tile. ⌘⇧N splits sideways instead.
+- `launch-picker`: ⌘N opens the location picker. Pick a folder and a harness, and the agent starts beside the active tile. ⌘⇧N opens it below the active tile instead.
 - `launch-inline`: an empty desktop shows the picker on the desktop itself, and ⌘N puts focus there.
 - `launch-options`: the picker's harness choice and the YOLO switch. See [worktrees.md](worktrees.md) for the worktrees the picker offers for a repository.
 - `launch-deep-link`: `attn` with no verb, run in a folder, opens the app on a spawn link for that folder. If a session already runs in that folder, the app selects that session instead.
@@ -83,7 +83,7 @@ Preconditions:
 
 - **New agent with ⌘N.** Run `bridge native_key '{"key":"n","modifiers":["command"]}'` and `bridge dom_wait '{"selector":"[data-testid=\"location-picker-overlay\"]","timeoutMs":5000}'`. `bridge location_picker_get_state` shows `open: true`, `title: "New Session Location"` and the harness in `selectedAgent`. Run `bridge native_text '{"text":"<P>/picked/"}'` and `bridge native_key '{"key":"Enter"}'`. `bridge dom_wait '{"selector":"[data-testid=\"location-picker-overlay\"]","absent":true,"timeoutMs":10000}'` matches, and `./attn agent list` shows a row named `picked` with that harness. `./attn agent list --json` gives its `directory` as `<P>/picked`.
 - **Picker switches.** Press ⌘N again. Run `bridge native_key '{"key":"q","modifiers":["option"]}'`: `bridge dom_wait '{"selector":"[data-testid=\"location-picker-yolo-toggle\"][aria-checked=\"true\"]","timeoutMs":5000}'` matches. Press ⌥Q again and wait for `[data-testid=\"location-picker-yolo-toggle\"][aria-checked=\"false\"]`. The saved choice is off again. Press Escape. [harnesses.md](harnesses.md) lists the harness keys ⌥1 to ⌥9.
-- **Split sideways with ⌘⇧N.** With `picked` on screen, run `bridge native_key '{"key":"n","modifiers":["command","shift"]}'`, wait for the overlay, type `<P>/picked/` again and press Enter. `wsctl list` shows two sessions in `<P>/picked` on the current desktop, and the desktop's `tree_json` names a split with direction `horizontal`. The new session is `<picked2>`.
+- **Open below with ⌘⇧N.** With `picked` on screen, run `bridge native_key '{"key":"n","modifiers":["command","shift"]}'`, wait for the overlay, type `<P>/picked/` again and press Enter. `wsctl list` shows two sessions in `<P>/picked` on the current desktop, and the desktop's `tree_json` names a split with direction `horizontal`. The new session is `<picked2>`.
 - **From the palette and the sidebar.**
   - Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"New agent"}'` and `bridge native_key '{"key":"Enter"}'`: the overlay opens. Press Escape.
   - Resolve `bridge dom_native_point '{"selector":"[aria-label=\"New agent\"]"}'` and click its `x` and `y` with `bridge native_mouse`: the overlay opens again. Press Escape.

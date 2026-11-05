@@ -45,6 +45,23 @@
   color: var(--color-text-primary);
 }
 
+.desktop-shelf-chip.is-arrival {
+  animation: desktop-shelf-chip-arrival 900ms ease-out 1;
+}
+
+@keyframes desktop-shelf-chip-arrival {
+  0%, 60% {
+    border-color: var(--color-accent, #ff6b35);
+    color: var(--color-text-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-shelf-chip.is-arrival {
+    animation: none;
+  }
+}
+
 .desktop-shelf-chip-label {
   flex: 1;
   min-width: 0;

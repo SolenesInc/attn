@@ -35,6 +35,7 @@ export interface RowLayoutInput {
   tree: TerminalLayoutNode;
   activeLeafId: string;
   firstColumn: FirstColumn | null;
+  heldLeafIds?: readonly string[];
   areaPx: number;
   narrowestPx: number;
   pxPerCol: number;
@@ -64,34 +65,49 @@ export function columnIndexOf(row: readonly RowColumn[], leafId: string): number
   return row.findIndex((column) => column.leafIds.includes(leafId));
 }
 
-function placeScreen(row: readonly RowColumn[], input: RowLayoutInput): { start: number; end: number } {
-  const need = (index: number) =>
-    Math.max(input.narrowestPx, (row[index].wantedCols ?? 0) * input.pxPerCol);
-  const fits = (px: number) => px <= input.areaPx + FIT_TOLERANCE_PX;
-  const fill = (start: number) => {
-    let end = start + 1;
-    let sum = need(start);
-    while (end < row.length && fits(sum + need(end))) {
-      sum += need(end);
-      end += 1;
-    }
-    return { end, sum };
-  };
+export function shownRow(row: readonly RowColumn[], heldLeafIds: readonly string[] | undefined, activeLeafId: string): RowColumn[] {
+  if (!heldLeafIds?.length) return [...row];
+  return row.filter((column) => column.leafIds.includes(activeLeafId) || !column.leafIds.some((id) => heldLeafIds.includes(id)));
+}
 
+type RowMeasures = Pick<RowLayoutInput, 'areaPx' | 'narrowestPx' | 'pxPerCol'>;
+
+function columnNeedPx(column: RowColumn, measures: RowMeasures): number {
+  return Math.max(measures.narrowestPx, (column.wantedCols ?? 0) * measures.pxPerCol);
+}
+
+function fitsArea(px: number, measures: RowMeasures): boolean {
+  return px <= measures.areaPx + FIT_TOLERANCE_PX;
+}
+
+function fillFrom(row: readonly RowColumn[], start: number, measures: RowMeasures): { end: number; sum: number } {
+  let end = start + 1;
+  let sum = columnNeedPx(row[start], measures);
+  while (end < row.length && fitsArea(sum + columnNeedPx(row[end], measures), measures)) {
+    sum += columnNeedPx(row[end], measures);
+    end += 1;
+  }
+  return { end, sum };
+}
+
+function placeScreen(
+  row: readonly RowColumn[],
+  input: RowMeasures & Pick<RowLayoutInput, 'activeLeafId' | 'firstColumn'>,
+): { start: number; end: number; sum: number } {
   const activeIndex = columnIndexOf(row, input.activeLeafId);
   const remembered = input.firstColumn ? columnIndexOf(row, input.firstColumn.leafId) : 0;
   const from = remembered >= 0 ? remembered : input.firstColumn!.index;
   let start = Math.max(0, Math.min(from, activeIndex >= 0 ? activeIndex : row.length - 1));
-  let filled = fill(start);
+  let filled = fillFrom(row, start, input);
   while (filled.end <= activeIndex) {
     start += 1;
-    filled = fill(start);
+    filled = fillFrom(row, start, input);
   }
-  while (start > 0 && fits(filled.sum + need(start - 1))) {
+  while (start > 0 && fitsArea(filled.sum + columnNeedPx(row[start - 1], input), input)) {
     start -= 1;
-    filled = fill(start);
+    filled = fillFrom(row, start, input);
   }
-  return { start, end: filled.end };
+  return { start, ...filled };
 }
 
 function columnWidths(screen: readonly RowColumn[], input: RowLayoutInput): number[] {
@@ -129,12 +145,14 @@ function screenTree(screen: readonly RowColumn[], widths: readonly number[]): Te
 
 export function resolveRowLayout(input: RowLayoutInput): RowLayoutPlan {
   const row = readRow(input.tree);
-  const { start, end } = placeScreen(row, input);
-  const screen = row.slice(start, end);
+  const shown = shownRow(row, input.heldLeafIds, input.activeLeafId);
+  const { start, end } = placeScreen(shown, input);
+  const screen = shown.slice(start, end);
+  const firstAt = row.indexOf(screen[0]);
   const placed = {
     screen,
-    before: row.slice(0, start),
-    after: row.slice(end),
+    before: row.slice(0, firstAt),
+    after: row.slice(firstAt).filter((column) => !screen.includes(column)),
     firstColumn: { leafId: screen[0].leafIds[0], index: start },
     suspendedLeafIds: NOTHING_SUSPENDED,
   };
@@ -169,7 +187,7 @@ export function stepNarrowestCols(
   const shownAt = (cols: number) =>
     resolveRowLayout({ ...input, narrowestPx: narrowestWidthPx(cols, input.pxPerCol) }).screen.length;
   const shown = shownAt(currentCols);
-  const total = readRow(input.tree).length;
+  const total = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId).length;
   const candidates = direction === 'fewer'
     ? NARROWEST_STEPS.filter((cols) => cols > currentCols)
     : NARROWEST_STEPS.filter((cols) => cols < currentCols).reverse();
@@ -203,4 +221,79 @@ export function rowDragRatioBounds(direction: TerminalSplitDirection, spanPx: nu
 
 export function lastUsedLeaf(column: RowColumn, focusOrder: readonly string[]): string {
   return focusOrder.find((leafId) => column.leafIds.includes(leafId)) ?? column.leafIds[0];
+}
+
+export type ShelfSend =
+  | { kind: 'alone' }
+  | { kind: 'unstack'; leafId: string; anchorId: string; nextLeafId: string }
+  | { kind: 'hold'; leafId: string; nextLeafId: string }
+  | { kind: 'move'; leafId: string; anchorId: string; edge: 'left' | 'right'; nextLeafId: string };
+
+export function planSendToShelf(
+  input: Omit<RowLayoutInput, 'view'>,
+  screen: readonly RowColumn[],
+  focusOrder: readonly string[],
+): ShelfSend {
+  const leafId = input.activeLeafId;
+  const row = readRow(input.tree);
+  const column = row[columnIndexOf(row, leafId)];
+  if (column.leafIds.length > 1) {
+    const rest = column.leafIds.filter((id) => id !== leafId);
+    const lastColumn = row[row.length - 1].leafIds.filter((id) => id !== leafId);
+    return {
+      kind: 'unstack',
+      leafId,
+      anchorId: lastColumn[lastColumn.length - 1],
+      nextLeafId: rest[Math.min(column.leafIds.indexOf(leafId), rest.length - 1)],
+    };
+  }
+
+  const shown = shownRow(row, input.heldLeafIds, leafId);
+  const shownAt = shown.indexOf(column);
+  const slot = columnIndexOf(screen, leafId);
+  const inSlot = screen[slot + 1] ?? screen[slot - 1] ?? shown[shownAt + 1] ?? shown[shownAt - 1];
+  if (!inSlot) return { kind: 'alone' };
+
+  const rest = shown.filter((candidate) => candidate !== column);
+  const placed = placeScreen(rest, { ...input, activeLeafId: inSlot.leafIds[0] });
+  const nextColumn = rest[Math.min(placed.start + slot, placed.end - 1)];
+  const nextLeafId = lastUsedLeaf(nextColumn, focusOrder);
+  if (fitsArea(placed.sum + columnNeedPx(column, input), input)) return { kind: 'hold', leafId, nextLeafId };
+
+  const others = row.filter((candidate) => candidate !== column);
+  const restRight = screen[screen.length - 1].leafIds[0] !== shown[shown.length - 1].leafIds[0];
+  return restRight
+    ? { kind: 'move', leafId, anchorId: others[others.length - 1].leafIds[0], edge: 'right', nextLeafId }
+    : { kind: 'move', leafId, anchorId: others[0].leafIds[0], edge: 'left', nextLeafId };
+}
+
+export function revealFirstColumn(input: Omit<RowLayoutInput, 'view'>, leafId: string, currentStart: number): FirstColumn | null {
+  const shown = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId);
+  const leafAt = columnIndexOf(shown, leafId);
+  const activeAt = columnIndexOf(shown, input.activeLeafId);
+  if (leafAt < 0 || activeAt < 0) return null;
+  let best: number | null = null;
+  for (let start = 0; start <= Math.min(leafAt, activeAt); start += 1) {
+    const { end } = fillFrom(shown, start, input);
+    const holdsBoth = leafAt < end && activeAt < end;
+    if (holdsBoth && (best === null || Math.abs(start - currentStart) < Math.abs(best - currentStart))) best = start;
+  }
+  return best === null ? null : { leafId: shown[best].leafIds[0], index: best };
+}
+
+export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, firstColumn: FirstColumn): boolean {
+  const shown = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId);
+  const start = columnIndexOf(shown, firstColumn.leafId);
+  const activeAt = columnIndexOf(shown, input.activeLeafId);
+  return start >= 0 && activeAt >= start && activeAt < fillFrom(shown, start, input).end;
+}
+
+export function stackLimitMessage(tree: TerminalLayoutNode, anchorLeafId: string, tileHeightPx: number): string | null {
+  const row = readRow(tree);
+  const column = row[columnIndexOf(row, anchorLeafId)];
+  if (!column) return null;
+  const asked = column.leafIds.length + 1;
+  const neededPx = asked * ATTENTION_MIN_HEIGHT;
+  if (neededPx <= tileHeightPx) return null;
+  return `${asked} stacked tiles at the ${ATTENTION_MIN_HEIGHT}px minimum need ${neededPx}px. Tiles have ${tileHeightPx}px here, so it opened beside instead.`;
 }
