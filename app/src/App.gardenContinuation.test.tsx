@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { agentPane, soloDesktop, crewMember, daemonDesktop, daemonSeed, daemonSession, dockTiles, memberActor, sessionClaim } from './test/daemonFixtures';
 import { openRow, renderGarden } from './test/garden';
 import type { CommandMessage } from './test/protocol';
+import { OutpostReach, OutpostState, type OutpostInfo } from './types/generated';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { Reply, ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -25,6 +26,15 @@ const PARSER = daemonSeed('s-1', {
 });
 
 const KEEL = crewMember('keel');
+
+const STUDIO: OutpostInfo = {
+  id: 'studio-id',
+  name: 'studio',
+  destination: 'studio:2200',
+  state: OutpostState.Connected,
+  reach: OutpostReach.Reachable,
+  state_since: '2026-10-27T10:00:00Z',
+};
 
 type Seed = typeof PARSER;
 
@@ -141,6 +151,27 @@ describe('App garden continuation', () => {
 
     expect(screen.getByText('seed has no agent session to reopen')).toBeInTheDocument();
     expect(selectedSessions(daemon)).not.toContain('tender');
+  });
+
+  it('offers Resume of an outpost session, naming the outpost, and re-reads the seed when the outpost’s reach changes', async () => {
+    const unreachable = continued({
+      outpost: 'studio', directory_state: 'unreachable', resume_available: false, handover_placement: 'placement_required',
+      resume_reason: 'outpost "studio" is unreachable, so attn cannot check its directory and conversation; Resume returns when the outpost is back',
+    });
+    const garden = await renderGarden([unreachable], { sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('tender', { state: 'idle' })] });
+    const { daemon } = garden;
+    fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
+    await gesture(daemon, () => pressShortcut('board.open'));
+    await openRow(daemon, unreachable.title);
+    expect(screen.queryByRole('button', { name: 'Resume' })).not.toBeInTheDocument();
+    expect(screen.getByText(/outpost "studio" is unreachable/)).toBeInTheDocument();
+
+    garden.documents[unreachable.id] = { seed: continued({ outpost: 'studio', directory_state: 'unchecked', resume_available: true, handover_placement: 'placement_required' }) };
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [STUDIO] }));
+
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+    expect(screen.getByText(/on outpost studio; attn checks its folder and conversation there/)).toBeInTheDocument();
+    expect(screen.queryByText(/is unreachable/)).not.toBeInTheDocument();
   });
 
   it('hands a seed over to a new agent with the user’s note and goes to it', async () => {

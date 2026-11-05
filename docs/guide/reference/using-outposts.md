@@ -159,6 +159,15 @@ deleted, the ledger can offer to recreate the worktree on that outpost, fetching
 the branch first when needed. Attn refuses to resume a session whose outpost is
 unreachable or removed, and names the host.
 
+A seed whose closed session ran on an outpost offers **Resume** on the seed's
+page and in Garden review, and `attn seed show` prints a `resume` line that
+names the outpost. Reading a seed never asks the outpost, so Attn checks the
+directory and conversation there when you resume. If either is gone, Resume
+refuses, says which and where, and leaves the seed as it was. While the outpost
+is unreachable, the seed says so instead of offering Resume, and the offer
+returns when the outpost does. **Handover** asks where the new agent should work
+and starts it on the home.
+
 The chief and crew run only at the home. Attn refuses to start, wake or hand off
 a crew member on an outpost, and refuses to make an outpost agent the chief. The
 refusal names that limit. Plugin harnesses also run only at the home.

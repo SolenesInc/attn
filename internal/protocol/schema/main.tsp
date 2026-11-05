@@ -5703,10 +5703,14 @@ model SeedContinuation {
   "native_conversation_id"?: string;
   "agent": string;
   "cwd": string;
+  // The outpost's name when the session ran on an outpost.
+  "outpost"?: string;
   "repository_root"?: string;
   "repository_subdir"?: string;
   "branch"?: string;
-  // present | missing | unavailable | unknown
+  // present | missing | unavailable | unknown | unchecked | unreachable.
+  // A read never asks an outpost: its directory is unchecked, or unreachable
+  // while its bridge is down. Resume checks on the outpost and refuses with the reason.
   "directory_state": string;
   "resume_available": boolean;
   "resume_reason"?: string;

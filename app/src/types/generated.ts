@@ -5426,6 +5426,7 @@ export interface Continuation {
     handover_placement:      string;
     kept_conversation?:      Kept;
     native_conversation_id?: string;
+    outpost?:                string;
     placement_reason?:       string;
     repository_root?:        string;
     repository_subdir?:      string;
@@ -10371,6 +10372,7 @@ export interface SeedContinuation {
     handover_placement:      string;
     kept_conversation?:      Kept;
     native_conversation_id?: string;
+    outpost?:                string;
     placement_reason?:       string;
     repository_root?:        string;
     repository_subdir?:      string;
@@ -23442,6 +23444,7 @@ const typeMap: any = {
         { json: "handover_placement", js: "handover_placement", typ: "" },
         { json: "kept_conversation", js: "kept_conversation", typ: u(undefined, r("Kept")) },
         { json: "native_conversation_id", js: "native_conversation_id", typ: u(undefined, "") },
+        { json: "outpost", js: "outpost", typ: u(undefined, "") },
         { json: "placement_reason", js: "placement_reason", typ: u(undefined, "") },
         { json: "repository_root", js: "repository_root", typ: u(undefined, "") },
         { json: "repository_subdir", js: "repository_subdir", typ: u(undefined, "") },
@@ -26621,6 +26624,7 @@ const typeMap: any = {
         { json: "handover_placement", js: "handover_placement", typ: "" },
         { json: "kept_conversation", js: "kept_conversation", typ: u(undefined, r("Kept")) },
         { json: "native_conversation_id", js: "native_conversation_id", typ: u(undefined, "") },
+        { json: "outpost", js: "outpost", typ: u(undefined, "") },
         { json: "placement_reason", js: "placement_reason", typ: u(undefined, "") },
         { json: "repository_root", js: "repository_root", typ: u(undefined, "") },
         { json: "repository_subdir", js: "repository_subdir", typ: u(undefined, "") },

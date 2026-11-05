@@ -1723,6 +1723,7 @@ func fprintSeedHoldings(w io.Writer, result *protocol.SeedShowResult) {
 	if result.ArtifactDir != nil {
 		fmt.Fprintf(w, "artifact folder  %s\n", *result.ArtifactDir)
 	}
+	fprintSeedResume(w, result.Seed)
 	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
 		kept := continuation.KeptConversation
 		switch {
@@ -1744,6 +1745,24 @@ func fprintSeedHoldings(w io.Writer, result *protocol.SeedShowResult) {
 	}
 	if len(result.References) > 0 {
 		fprintArtifactReferences(w, result.References)
+	}
+}
+
+func fprintSeedResume(w io.Writer, seed protocol.Seed) {
+	continuation := seed.Continuation
+	if continuation == nil || continuation.SessionLive || garden.Closed(seed.Status) {
+		return
+	}
+	outpost := protocol.Deref(continuation.Outpost)
+	switch {
+	case !continuation.ResumeAvailable:
+		if reason := protocol.Deref(continuation.ResumeReason); reason != "" {
+			fmt.Fprintf(w, "resume  unavailable: %s\n", reason)
+		}
+	case outpost != "":
+		fmt.Fprintf(w, "resume  on outpost %s; attn checks its directory and conversation there when you resume\n", outpost)
+	default:
+		fmt.Fprintln(w, "resume  available")
 	}
 }
 

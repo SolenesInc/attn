@@ -88,10 +88,12 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 		directoryState := garden.ReviewDirectoryUnknown
 		resumeAvailable := false
 		handoverAvailable := false
+		directoryNote := ""
 		if continuation != nil {
 			directoryState = garden.ReviewDirectoryState(continuation.DirectoryState)
 			resumeAvailable = continuation.ResumeAvailable
 			handoverAvailable = continuation.HandoverPlacement != handoverNeedsPlacement
+			directoryNote = outpostDirectoryEvidence(continuation)
 		}
 		observation := garden.ReviewObservation{
 			Seed:              seed,
@@ -101,6 +103,7 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 			NewestNoteAt:      newestNotes[seed.ID],
 			TenderHolds:       read.parties.claimHolds(seed),
 			DirectoryState:    directoryState,
+			DirectoryNote:     directoryNote,
 			ResumeAvailable:   resumeAvailable,
 			HandoverAvailable: handoverAvailable,
 			ReviewAgainAt:     reviewAgainAt[seed.ID],
@@ -379,7 +382,20 @@ func reviewLifecycleEvidence(candidate garden.ReviewCandidate) string {
 		candidate.LifecycleAt.UTC().Format(time.RFC3339) + " is used as a conservative lower bound."
 }
 
+func outpostDirectoryEvidence(continuation *seedContinuation) string {
+	switch {
+	case continuation.Outpost == "":
+		return ""
+	case continuation.DirectoryState == directoryUnreachable:
+		return fmt.Sprintf("The saved working directory is on outpost %q, which is unreachable.", continuation.Outpost)
+	}
+	return fmt.Sprintf("The saved working directory is on outpost %q. Attn checks it there when the agent resumes.", continuation.Outpost)
+}
+
 func reviewDirectoryEvidence(observation garden.ReviewObservation) string {
+	if observation.DirectoryNote != "" {
+		return observation.DirectoryNote
+	}
 	switch observation.DirectoryState {
 	case garden.ReviewDirectoryPresent:
 		return "The saved local working directory is present."

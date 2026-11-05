@@ -24,6 +24,8 @@ const (
 	directoryMissing     = "missing"
 	directoryUnavailable = "unavailable"
 	directoryUnknown     = "unknown"
+	directoryUnchecked   = "unchecked"
+	directoryUnreachable = "unreachable"
 
 	handoverReuseCwd       = "reuse_cwd"
 	handoverRecreateBranch = "recreate_branch"
@@ -32,6 +34,7 @@ const (
 
 type seedContinuation struct {
 	Execution         garden.Execution
+	Outpost           string
 	Resume            string
 	Source            string
 	LedgerAvailable   bool
@@ -50,7 +53,7 @@ func (d *Daemon) gardenTime() time.Time {
 	if d.gardenNow != nil {
 		return d.gardenNow().UTC()
 	}
-	return time.Now().UTC()
+	return time.Now().Add(d.clock.Advanced()).UTC()
 }
 
 func formatGardenTime(at time.Time) string {
@@ -511,7 +514,10 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 		checkout, err := d.inspectRemoteCheckout(host, execution.Cwd)
 		switch {
 		case err != nil:
-			return directoryUnavailable, err
+			if bridgeAnswered(err) {
+				return directoryUnavailable, err
+			}
+			return directoryUnreachable, err
 		case !checkout.Exists:
 			return directoryMissing, nil
 		case !checkout.IsDirectory:
@@ -533,22 +539,74 @@ func (d *Daemon) continuationOnItsMachine(seed garden.Seed) *seedContinuation {
 		}
 		return conversationAvailability{Available: true}
 	}
-	return d.continuationWithChecks(seed, inspect, checkResume)
+	return d.continuationWithChecks(seed, continuationMachine{
+		outpost:          d.outpostName(host),
+		unreachable:      d.outpostUnreachableReason(host),
+		inspectDirectory: inspect,
+		checkResume:      checkResume,
+	})
 }
 
 func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
-	inspect := func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil }
-	return d.continuationWithChecks(seed, inspect, checkResume)
+	execution, _, _ := d.normalizedSeedContinuation(seed)
+	if host := d.sessionHost(execution.SessionID); host != "" {
+		return d.continuationWithChecks(seed, d.uncheckedOutpost(host))
+	}
+	return d.continuationWithChecks(seed, continuationMachine{
+		inspectDirectory: func(execution garden.Execution) (string, error) { return inspectContinuationDirectory(execution), nil },
+		checkResume:      checkResume,
+	})
 }
 
-func (d *Daemon) continuationWithChecks(seed garden.Seed, inspectDirectory func(garden.Execution) (string, error), checkResume func(string, string, string) conversationAvailability) *seedContinuation {
+func (d *Daemon) uncheckedOutpost(host string) continuationMachine {
+	_, _, unreachable := d.outpostConn(host)
+	return continuationMachine{
+		outpost:     d.outpostName(host),
+		unreachable: d.outpostUnreachableReason(host),
+		inspectDirectory: func(execution garden.Execution) (string, error) {
+			switch {
+			case strings.TrimSpace(execution.Cwd) == "":
+				return directoryUnknown, nil
+			case unreachable != nil:
+				return directoryUnreachable, nil
+			}
+			return directoryUnchecked, nil
+		},
+		checkResume: func(string, string, string) conversationAvailability {
+			return conversationAvailability{Available: true}
+		},
+	}
+}
+
+func (d *Daemon) outpostUnreachableReason(host string) string {
+	if _, err := d.resolveOutpost(host); err != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("outpost %q is unreachable, so attn cannot check its directory and conversation; Resume returns when the outpost is back", d.outpostName(host))
+}
+
+type continuationMachine struct {
+	outpost          string
+	unreachable      string
+	inspectDirectory func(garden.Execution) (string, error)
+	checkResume      func(string, string, string) conversationAvailability
+}
+
+func (m continuationMachine) onIt() string {
+	if m.outpost == "" {
+		return ""
+	}
+	return fmt.Sprintf(" on outpost %q", m.outpost)
+}
+
+func (d *Daemon) continuationWithChecks(seed garden.Seed, machine continuationMachine) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
 	key, member := d.seedResumeMember(seed, execution.SessionID)
 	if !ok && !member {
 		return nil
 	}
 	entry := d.store.SessionLedgerEntry(execution.SessionID)
-	directoryState, inspectionErr := inspectDirectory(execution)
+	directoryState, inspectionErr := machine.inspectDirectory(execution)
 	continuation := &seedContinuation{
 		Execution:         execution,
 		KeptConversation:  d.keptConversationForSession(execution.SessionID),
@@ -566,9 +624,10 @@ func (d *Daemon) continuationWithChecks(seed garden.Seed, inspectDirectory func(
 		} else {
 			continuation.ResumeAvailable = true
 		}
-		d.planSeedHandoverPlacement(continuation)
+		d.planSeedHandoverPlacement(continuation, machine)
 		return continuation
 	}
+	continuation.Outpost = machine.outpost
 	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil && d.sessionHasLiveWorker(live.ID) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true
@@ -581,51 +640,60 @@ func (d *Daemon) continuationWithChecks(seed garden.Seed, inspectDirectory func(
 	}
 	if !continuation.LedgerAvailable {
 		continuation.ResumeReason = "the original session is no longer in the ledger"
-		d.planSeedHandoverPlacement(continuation)
+		d.planSeedHandoverPlacement(continuation, machine)
 		return continuation
 	}
-	d.planSeedHandoverPlacement(continuation)
+	d.planSeedHandoverPlacement(continuation, machine)
 	if _, ok := d.store.LaunchIntent(execution.SessionID); !ok {
 		continuation.ResumeReason = "the session ledger has no saved launch contract"
 		return continuation
 	}
 	if inspectionErr != nil {
 		continuation.ResumeReason = fmt.Sprintf("the original directory could not be checked: %v", inspectionErr)
+		if continuation.DirectoryState == directoryUnreachable {
+			continuation.ResumeReason = machine.unreachable
+			continuation.OutpostLost = true
+		}
 		continuation.ResumeCheckFailed = true
-		continuation.OutpostLost = !bridgeAnswered(inspectionErr)
 		return continuation
 	}
-	if continuation.DirectoryState != directoryPresent {
-		switch continuation.DirectoryState {
-		case directoryMissing:
-			continuation.ResumeReason = fmt.Sprintf("the original directory no longer exists: %s", execution.Cwd)
-		case directoryUnknown:
-			continuation.ResumeReason = "the original directory was not saved"
-		default:
-			continuation.ResumeReason = fmt.Sprintf("the original directory cannot be opened: %s", execution.Cwd)
-		}
+	switch continuation.DirectoryState {
+	case directoryPresent, directoryUnchecked:
+	case directoryMissing:
+		continuation.ResumeReason = fmt.Sprintf("the original directory no longer exists%s: %s", machine.onIt(), execution.Cwd)
+		return continuation
+	case directoryUnknown:
+		continuation.ResumeReason = "the original directory was not saved"
+		return continuation
+	case directoryUnreachable:
+		continuation.ResumeReason = machine.unreachable
+		continuation.ResumeCheckFailed = true
+		return continuation
+	default:
+		continuation.ResumeReason = fmt.Sprintf("the original directory cannot be opened%s: %s", machine.onIt(), execution.Cwd)
 		return continuation
 	}
 	resumeID := continuation.Resume
 	agentName := strings.TrimSpace(execution.Agent)
 	if resumeID == "" || agentName == "" {
 		continuation.ResumeReason = "the original conversation identity is unavailable"
-		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
-	if availability := checkResume(agentName, resumeID, execution.Cwd); !availability.Available {
+	if availability := machine.checkResume(agentName, resumeID, execution.Cwd); !availability.Available {
 		continuation.ResumeReason = "the original conversation is unavailable: " + availability.Reason
 		continuation.ResumeCheckFailed = availability.CheckFailed
 		continuation.OutpostLost = availability.OutpostLost
-		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
 	continuation.ResumeAvailable = true
-	continuation.HandoverPlacement = handoverReuseCwd
 	return continuation
 }
 
-func (d *Daemon) planSeedHandoverPlacement(continuation *seedContinuation) {
+func (d *Daemon) planSeedHandoverPlacement(continuation *seedContinuation, machine continuationMachine) {
+	if machine.outpost != "" {
+		continuation.PlacementReason = fmt.Sprintf("the original directory is on outpost %q; choose a directory for the new agent", machine.outpost)
+		return
+	}
 	switch continuation.DirectoryState {
 	case directoryPresent:
 		continuation.HandoverPlacement = handoverReuseCwd
@@ -657,6 +725,9 @@ func continuationToProtocol(continuation *seedContinuation) *protocol.SeedContin
 		DirectoryState:    continuation.DirectoryState,
 		ResumeAvailable:   continuation.ResumeAvailable,
 		HandoverPlacement: continuation.HandoverPlacement,
+	}
+	if value := continuation.Outpost; value != "" {
+		out.Outpost = protocol.Ptr(value)
 	}
 	if value := continuation.Resume; value != "" {
 		out.NativeConversationID = protocol.Ptr(value)

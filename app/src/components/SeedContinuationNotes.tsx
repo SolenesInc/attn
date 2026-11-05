@@ -21,6 +21,9 @@ export function SeedContinuationNotes({ continuation, resumeOffered }: {
     {continuation?.kept_conversation && (
       <p className="garden-head__reason">conversation{'  '}{conversationLine(continuation.kept_conversation)}</p>
     )}
+    {resumeOffered && continuation?.outpost && !continuation.session_live && (
+      <p className="garden-head__reason">resume{'  '}on outpost {continuation.outpost}; attn checks its folder and conversation there when you resume</p>
+    )}
     {!resumeOffered && continuation?.resume_reason && (
       <p className="garden-head__reason">{continuation.resume_reason}</p>
     )}

@@ -622,7 +622,9 @@ export function GardenPanel({
   const setWideIn = useGardenWalk((walk) => walk.setWideIn);
   const arriveAt = useGardenWalk((walk) => walk.arriveAt);
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
-  const connectionGeneration = useOptionalDaemonApi()?.connectionGeneration ?? 0;
+  const daemonApi = useOptionalDaemonApi();
+  const connectionGeneration = daemonApi?.connectionGeneration ?? 0;
+  const outpostReach = daemonApi?.outposts?.map((outpost) => `${outpost.id}:${outpost.reach}`).join() ?? '';
   const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[]; connectionGeneration: number } | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
@@ -793,7 +795,7 @@ export function GardenPanel({
     return () => {
       ignore = true;
     };
-  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds, connectionGeneration]);
+  }, [hereId, hereRev, fetchSeedDocument, isOpen, seeds, connectionGeneration, outpostReach]);
 
   const onPageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'ArrowLeft') return;

@@ -10060,6 +10060,9 @@ type SeedContinuation struct {
 	// "native_conversation_id".
 	NativeConversationID *string `json:"native_conversation_id,omitempty,omitzero"`
 
+	// Outpost corresponds to the JSON schema field "outpost".
+	Outpost *string `json:"outpost,omitempty,omitzero"`
+
 	// PlacementReason corresponds to the JSON schema field "placement_reason".
 	PlacementReason *string `json:"placement_reason,omitempty,omitzero"`
 

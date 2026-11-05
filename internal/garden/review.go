@@ -144,6 +144,7 @@ type ReviewObservation struct {
 	NewestNoteAt      time.Time
 	TenderHolds       bool
 	DirectoryState    ReviewDirectoryState
+	DirectoryNote     string
 	ResumeAvailable   bool
 	HandoverAvailable bool
 	ReviewAgainAt     time.Time

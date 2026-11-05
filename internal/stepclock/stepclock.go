@@ -33,6 +33,7 @@ func (t realTimer) Stop() bool                 { return t.timer.Stop() }
 // A nil *Clock reads real time.
 type Clock struct {
 	mu      sync.Mutex
+	started time.Time
 	now     time.Time
 	pending pending[*timer]
 	holds   int
@@ -41,7 +42,8 @@ type Clock struct {
 }
 
 func New() *Clock {
-	return &Clock{now: time.Now(), pending: newPending[*timer](), idled: make(chan struct{})}
+	now := time.Now()
+	return &Clock{started: now, now: now, pending: newPending[*timer](), idled: make(chan struct{})}
 }
 
 var process = sync.OnceValue(func() *Clock {
@@ -82,6 +84,16 @@ func (c *Clock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.now
+}
+
+// Advanced is how far the clock has been stepped; zero for real time.
+func (c *Clock) Advanced() time.Duration {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now.Sub(c.started)
 }
 
 // Hold marks the clock's process busy until release is called, so a test can step it only once that work has settled.
