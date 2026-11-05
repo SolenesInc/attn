@@ -93,6 +93,30 @@ func (l codexMonitorLink) Deliver(_ context.Context, in harness.Input) harness.C
 }
 
 func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client, sessionID protocol.SessionID, conversation, text string) error {
+	return r.withResumed(ctx, client, sessionID, conversation, func(call codexCall, status codexThreadStatus) error {
+		params := map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
+		if status.Type == "active" {
+			var turns struct {
+				Data []struct {
+					ID     string `json:"id"`
+					Status string `json:"status"`
+				} `json:"data"`
+			}
+			if err := call("thread/turns/list", map[string]any{"threadId": conversation, "limit": 1, "sortDirection": "desc"}, &turns); err != nil {
+				return err
+			}
+			if len(turns.Data) > 0 && turns.Data[0].Status == "inProgress" {
+				params["expectedTurnId"] = turns.Data[0].ID
+				return call("turn/steer", params, nil)
+			}
+		}
+		return call("turn/start", params, nil)
+	})
+}
+
+type codexCall func(method string, params, result any) error
+
+func (r *codexShared) withResumed(ctx context.Context, client *codexshared.Client, sessionID protocol.SessionID, conversation string, fn func(call codexCall, status codexThreadStatus) error) error {
 	call := func(method string, params, result any) error {
 		callCtx, cancel := context.WithTimeout(ctx, codexServerCallLimit)
 		defer cancel()
@@ -117,23 +141,7 @@ func (r *codexShared) startTurn(ctx context.Context, client *codexshared.Client,
 	defer func() {
 		_ = call("thread/unsubscribe", map[string]any{"threadId": conversation}, nil)
 	}()
-	params := map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}}}
-	if resumed.Thread.Status.Type == "active" {
-		var turns struct {
-			Data []struct {
-				ID     string `json:"id"`
-				Status string `json:"status"`
-			} `json:"data"`
-		}
-		if err := call("thread/turns/list", map[string]any{"threadId": conversation, "limit": 1, "sortDirection": "desc"}, &turns); err != nil {
-			return err
-		}
-		if len(turns.Data) > 0 && turns.Data[0].Status == "inProgress" {
-			params["expectedTurnId"] = turns.Data[0].ID
-			return call("turn/steer", params, nil)
-		}
-	}
-	return call("turn/start", params, nil)
+	return fn(call, resumed.Thread.Status)
 }
 
 type codexThreadStatus struct {
@@ -231,6 +239,9 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	}
 	if json.Unmarshal(m.Params, &p) != nil || p.ThreadID == "" {
 		return
+	}
+	if compacted, done := s.compactionStepLocked(p.ThreadID, p.Status.Type); done {
+		r.d.compactions.report(r.d, compacted, compactOutcome{})
 	}
 	status, ok := p.Status.programStatus()
 	if !ok {

@@ -429,15 +429,16 @@ func agentMsgErrorMessage(parsed agentMsgArgs, err error) string {
 }
 
 type agentCloseArgs struct {
-	target string
-	reason string
-	source protocol.SessionID
-	json   bool
+	target  string
+	reason  string
+	source  protocol.SessionID
+	json    bool
+	compact bool
 }
 
 func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
 	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>] [--json]
-       attn agent close --self -m "reason" [--source-session <id>] [--json]`
+       attn agent close --self -m "reason" [--compact] [--source-session <id>] [--json]`
 	var target string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		target = strings.TrimSpace(args[0])
@@ -449,6 +450,7 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 	source := fs.String("source-session", "", "closing session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	self := fs.Bool("self", false, "close the calling session")
+	compact := fs.Bool("compact", false, "compact the conversation after this turn, then close (with --self)")
 	if err := parseFlags(fs, args); err != nil {
 		return agentCloseArgs{}, err
 	}
@@ -458,11 +460,15 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 	if fs.NArg() != 0 {
 		return agentCloseArgs{}, errors.New(usage + "; quote the reason as one argument")
 	}
+	if *compact && !*self {
+		return agentCloseArgs{}, errors.New(usage + "; --compact compacts your own conversation, so it only goes with --self")
+	}
 	parsed := agentCloseArgs{
-		target: target,
-		reason: strings.TrimSpace(*reason),
-		source: protocol.SessionID(strings.TrimSpace(*source)),
-		json:   *jsonOut,
+		target:  target,
+		reason:  strings.TrimSpace(*reason),
+		source:  protocol.SessionID(strings.TrimSpace(*source)),
+		json:    *jsonOut,
+		compact: *compact,
 	}
 	if parsed.target == "" && !*self {
 		return agentCloseArgs{}, errors.New(usage)
@@ -491,12 +497,17 @@ func runAgentClose(args []string) {
 		exit(2)
 	}
 	outliveTheCloseOfOwnSession()
-	result, err := client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
+	var result *protocol.AgentCloseResult
+	if parsed.compact {
+		result, err = client.New("").AgentCloseCompacting(parsed.source, parsed.reason)
+	} else {
+		result, err = client.New("").AgentClose(parsed.target, parsed.source, parsed.reason)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent close: %s\n", agentCloseErrorMessage(parsed, err))
 		exit(1)
 	}
-	if result.Rule == protocol.AgentCloseRuleSelf {
+	if result.Rule == protocol.AgentCloseRuleSelf && !protocol.Deref(result.PendingCompact) {
 		recordAsClosedSession(result.TargetSessionID)
 	}
 	if parsed.json {
@@ -511,6 +522,11 @@ func outliveTheCloseOfOwnSession() {
 }
 
 func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
+	if protocol.Deref(result.PendingCompact) {
+		fmt.Fprintf(w, "session %s (%s) closes after this turn, once its conversation is compacted: %s\n", agentShortID(string(result.TargetSessionID)), result.Label, result.Reason)
+		fmt.Fprintf(w, "end your turn now; input the user types before the session closes keeps it open\n")
+		return
+	}
 	fmt.Fprintf(w, "closed session %s (%s): %s\n", agentShortID(string(result.TargetSessionID)), result.Label, result.Reason)
 	for _, seedID := range result.SeedIds {
 		fmt.Fprintf(w, "noted on %s, which it was tending\n", seedID)
@@ -767,15 +783,26 @@ commands:
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
-  close --self -m "reason" [--source-session <id>] [--json]
+  close --self -m "reason" [--compact] [--source-session <id>] [--json]
         close a session for good. A session may close itself and agents below it
         in its delegation chain, including delegates of delegates; a profile's chief of staff may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
-        and the reason is what the next reader gets. It is immediate, so say
-        what you have to say first. A seed id closes whoever tends it, and the
-        seed keeps its tender with a note about the close.
+        and the reason is what the next reader gets. Without --compact it is
+        immediate, so say what you have to say first. A seed id closes whoever
+        tends it, and the seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
         --self closes the caller without its id and cannot take a target.
+        --compact goes only with --self. attn waits for your turn to end,
+        compacts your conversation through the harness, then closes the session.
+        End your turn right after the command: you get no turn after the compact.
+        Input the user types before the session closes cancels the close, and
+        the session stays open. When the compact fails, the session still
+        closes, and the reason says the compact did not run. Only a Codex
+        session on the shared Codex app server compacts. attn refuses any other
+        session, and for a Codex session off the shared server the refusal names
+        codex_shared_enabled, the setting the user turns on. Compact only a
+        session that will resume as itself, as a seed's tender does when its
+        standby wakes it. A crew member's next wake starts a fresh session.
   reload <session-or-member>... [--source-session <id>] [--json]
   reload --all [--source-session <id>] [--json]
         interrupt and reload agents in place, as "Reload this agent" does.

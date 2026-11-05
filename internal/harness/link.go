@@ -47,3 +47,9 @@ type QuestionSafeLink interface {
 	Link
 	SafeDuringQuestion()
 }
+
+// Compactor is a Link that can compact the conversation it delivers to, in the harness's own way.
+type Compactor interface {
+	Link
+	Compact(ctx context.Context, in Input) Custody
+}

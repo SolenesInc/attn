@@ -201,6 +201,7 @@ type Daemon struct {
 	terminalState            *terminalRegistry
 	claudeModOnce            sync.Once
 	tenderWakes              tenderWakeLedger
+	compactions              compactionLedger
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared

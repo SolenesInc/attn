@@ -48,6 +48,7 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 		if bytes.ContainsAny(data, "\r\n") {
 			m.runSteeredLocked()
 			l.userSubmit = true
+			m.userInputs++
 		}
 	}
 	return m.registry.host.Input(ctx, terminal, data)

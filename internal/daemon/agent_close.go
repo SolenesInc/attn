@@ -25,7 +25,9 @@ func (d *Daemon) handleAgentClose(conn net.Conn, msg *protocol.AgentCloseMessage
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentCloseResult: result})
-	d.finishSessionClose(result.TargetSessionID, closing)
+	if !protocol.Deref(result.PendingCompact) {
+		d.finishSessionClose(result.TargetSessionID, closing)
+	}
 }
 
 func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.AgentCloseResult, sessionCloseInFlight, *agentCloseRefusal) {
@@ -66,6 +68,16 @@ func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.Age
 	} else if d.chiefOfProfile(target.ProfileID) == caller.ID {
 		rule = protocol.AgentCloseRuleChiefOfStaff
 	}
+	compact := protocol.Deref(msg.Compact)
+	if compact && rule != protocol.AgentCloseRuleSelf {
+		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"compact_requires_self",
+			"--compact compacts the conversation of the session that closes itself, so it only goes with --self"}
+	}
+	if compact {
+		if refusal := d.compactPathRefusal(target); refusal != nil {
+			return nil, sessionCloseInFlight{}, refusal
+		}
+	}
 	if rule == protocol.AgentCloseRuleSelf {
 		if err := d.unreadStandbyMailRefusal(target, ""); err != nil {
 			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"standby_mail_unread", err.Error()}
@@ -73,6 +85,22 @@ func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.Age
 	}
 	if protectErr := d.sessionCloseError(target.ID); protectErr != nil {
 		return nil, sessionCloseInFlight{}, &agentCloseRefusal{"session_close_protected", protectErr.Error()}
+	}
+
+	if compact {
+		onStandby, err := d.store.SeedsOnStandbyTendedBy(target.ProfileID, d.partyOfSession(target.ID))
+		if err != nil {
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_failed", err.Error()}
+		}
+		d.registerCompactingClose(target, reason, onStandby)
+		return &protocol.AgentCloseResult{
+			TargetSessionID: target.ID,
+			Label:           sessionDisplayName(target),
+			Reason:          reason,
+			Rule:            rule,
+			SeedIds:         []string{},
+			PendingCompact:  protocol.Ptr(true),
+		}, sessionCloseInFlight{}, nil
 	}
 
 	d.logf("agent close: session %s closes %s as %s: %s", caller.ID, target.ID, rule, reason)

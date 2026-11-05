@@ -41,6 +41,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	}
 	if stateChanged {
 		d.claudeMod().placeReturned(session)
+		d.kickCompactingClose(session)
 	}
 	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
 	if stateChanged && !state.Quiet {

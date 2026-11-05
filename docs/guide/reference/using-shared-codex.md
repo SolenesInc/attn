@@ -16,12 +16,13 @@ was checked against Codex 0.160.0.
 
 ## Turn it on or off
 
-**Shared Codex** in **Settings → Experimental** is off by default. The setting
-decides how new Codex terminals, and sessions you resume from the Sessions
-ledger, launch. The setting also applies to the Codex sessions that automations
-and delegations start. A running session, hidden ones included, stays shared or
-plain until it closes or you move its conversation yourself, for example with
-`/resume` in a Codex of the other kind.
+**Shared Codex** in **Settings → Experimental** is off by default. From a
+terminal, run `attn settings set codex_shared_enabled true`, or `false` to turn
+it off. The setting decides how new Codex terminals, and sessions you resume
+from the Sessions ledger, launch. The setting also applies to the Codex
+sessions that automations and delegations start. A running session, hidden ones
+included, stays shared or plain until it closes or you move its conversation
+yourself, for example with `/resume` in a Codex of the other kind.
 
 An automation that starts shared Codex runs with its own model, effort and
 auto-approval, as with plain Codex. An automation that names its own Codex
@@ -189,6 +190,10 @@ closes the same way.
 To pick the session up again, resume the session from the Sessions ledger. Attn
 unarchives the conversation and resumes it in a new tile, shared or plain as
 the setting says.
+
+An agent can compact a shared session's conversation just before it closes
+itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. A plain
+Codex session can't.
 
 ## Limits
 

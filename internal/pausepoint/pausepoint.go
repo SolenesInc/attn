@@ -44,6 +44,7 @@ const (
 	SessionInputPasteGap         = "session-input-paste-gap"
 	ClaudeModReturnWaitsForDraft = "claude-mod-return-waits-for-draft"
 	SessionInputLaneContended    = "session-input-lane-contended"
+	CompactingClosePlacing       = "compacting-close-placing"
 	SessionSnoozeArrived         = "session-snooze-arrived"
 	SessionSnoozeDecided         = "session-snooze-decided"
 	SessionTeardownPrepared      = "session-teardown-prepared"

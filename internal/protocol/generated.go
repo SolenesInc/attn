@@ -110,6 +110,9 @@ type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Compact corresponds to the JSON schema field "compact".
+	Compact *bool `json:"compact,omitempty,omitzero"`
+
 	// Reason corresponds to the JSON schema field "reason".
 	Reason string `json:"reason"`
 
@@ -126,6 +129,9 @@ type AgentCloseMessage struct {
 type AgentCloseResult struct {
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
+
+	// PendingCompact corresponds to the JSON schema field "pending_compact".
+	PendingCompact *bool `json:"pending_compact,omitempty,omitzero"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason string `json:"reason"`
@@ -11049,6 +11055,9 @@ type SeedStandbyMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Compact corresponds to the JSON schema field "compact".
+	Compact *bool `json:"compact,omitempty,omitzero"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note *string `json:"note,omitempty,omitzero"`
 
@@ -12037,6 +12046,7 @@ const SessionPlaceErrorKindBlockedByApproval SessionPlaceErrorKind = "blocked_by
 const SessionPlaceErrorKindComposerDirty SessionPlaceErrorKind = "composer_dirty"
 const SessionPlaceErrorKindInitialPrompt SessionPlaceErrorKind = "initial_prompt"
 const SessionPlaceErrorKindLaneClosed SessionPlaceErrorKind = "lane_closed"
+const SessionPlaceErrorKindSessionClosing SessionPlaceErrorKind = "session_closing"
 const SessionPlaceErrorKindSessionStopped SessionPlaceErrorKind = "session_stopped"
 
 type SessionPlaceMessage struct {
@@ -12048,6 +12058,9 @@ type SessionPlaceMessage struct {
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Compact corresponds to the JSON schema field "compact".
+	Compact *bool `json:"compact,omitempty,omitzero"`
 
 	// DeliveryID corresponds to the JSON schema field "delivery_id".
 	DeliveryID string `json:"delivery_id"`

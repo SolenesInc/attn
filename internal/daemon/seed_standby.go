@@ -29,7 +29,9 @@ func (d *Daemon) handleSeedStandby(conn net.Conn, msg *protocol.SeedStandbyMessa
 	}
 	result.Close = closed
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedStandbyResult: result})
-	d.finishSessionClose(closed.TargetSessionID, closing)
+	if !protocol.Deref(closed.PendingCompact) {
+		d.finishSessionClose(closed.TargetSessionID, closing)
+	}
 }
 
 func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol.SeedStandbyResult, *protocol.AgentCloseMessage, error) {
@@ -38,6 +40,10 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 	setter := d.actorOfSession(callerID)
 	note := strings.TrimSpace(protocol.Deref(msg.Note))
 	closeSelf := protocol.Deref(msg.Close)
+	compact := protocol.Deref(msg.Compact)
+	if compact && !closeSelf {
+		return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--compact compacts the conversation before the session closes, so it only goes with --close: attn seed standby %s -m \"<note>\" --close --compact", seedID)
+	}
 	if protocol.Deref(msg.Clear) {
 		if note != "" || closeSelf {
 			return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no note and no --close: attn seed standby %s --clear", seedID)
@@ -65,6 +71,11 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 			return nil, nil, err
 		}
 	}
+	if compact {
+		if refusal := d.compactPathRefusal(caller); refusal != nil {
+			return nil, nil, protocol.Refuse(protocol.RefusalWrongState, "%s", refusal.message)
+		}
+	}
 	result, err := d.writeSeedStandby(seedID, &standby, setter)
 	if err != nil || !closeSelf {
 		return result, nil, err
@@ -74,6 +85,7 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 		SourceSessionID: caller.ID,
 		TargetSessionID: string(caller.ID),
 		Reason:          garden.TrimReason(fmt.Sprintf("On standby for %s: %s", seed.ID, note)),
+		Compact:         protocol.Ptr(compact),
 	}, nil
 }
 

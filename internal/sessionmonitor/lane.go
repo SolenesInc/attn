@@ -40,8 +40,9 @@ const (
 type Maintenance string
 
 const (
-	InboxRing     Maintenance = "inbox-ring"
-	CrewHeartbeat Maintenance = "crew-heartbeat"
+	InboxRing       Maintenance = "inbox-ring"
+	CrewHeartbeat   Maintenance = "crew-heartbeat"
+	CompactingClose Maintenance = "compacting-close"
 )
 
 type inputOrigin struct {
@@ -80,6 +81,7 @@ type Delivery struct {
 	AllowUserComposer    bool
 	BypassInitialGate    bool
 	RequireEmptyComposer bool
+	Compact              bool
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -89,6 +91,12 @@ func MaintenanceInput(domain Maintenance, key string, text string, placement Pla
 		origin:    inputOrigin{kind: originMaintenance, source: domain},
 		Placement: placement,
 	}
+}
+
+func CompactInput(key string) Delivery {
+	delivery := MaintenanceInput(CompactingClose, key, "", WhenPromptReady)
+	delivery.Compact = true
+	return delivery
 }
 
 func UserConversationInput(key string, text string, placement Placement) Delivery {
@@ -158,6 +166,7 @@ type lane struct {
 	userDraft                bool
 	phase                    protocol.SessionState
 	stopped                  bool
+	closing                  bool
 }
 
 var (
@@ -165,6 +174,7 @@ var (
 	ErrComposerDirty     = errors.New("session input blocked by the user's composer")
 	ErrLaneClosed        = errors.New("the session's input lane is closed")
 	ErrSessionStopped    = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
+	ErrSessionClosing    = errors.New("the session is compacting before it closes; attn's input waits until it has closed")
 	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
 
@@ -192,7 +202,8 @@ func DeferredError(err error) bool {
 	return errors.Is(err, ErrBlockedByApproval) ||
 		errors.Is(err, ErrComposerDirty) ||
 		errors.Is(err, errInitialPrompt) ||
-		errors.Is(err, ErrSessionStopped)
+		errors.Is(err, ErrSessionStopped) ||
+		errors.Is(err, ErrSessionClosing)
 }
 
 func (m *Monitor) FenceInput() {
@@ -227,8 +238,8 @@ func (m *Monitor) Place(ctx context.Context, delivery Delivery) Attempt {
 	if m == nil {
 		return Attempt{Stage: Deferred, Err: ErrLaneClosed}
 	}
-	if delivery.ID.String() == "" || strings.TrimSpace(delivery.Text) == "" {
-		return Attempt{Stage: Failed, Err: errors.New("session input needs an attempt id and text")}
+	if delivery.ID.String() == "" || (strings.TrimSpace(delivery.Text) == "") != delivery.Compact {
+		return Attempt{Stage: Failed, Err: errors.New("session input needs an attempt id, and text unless it is a compact")}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -271,6 +282,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if l.stopped {
 		return deferred(ErrLaneClosed)
 	}
+	if l.closing {
+		return deferred(ErrSessionClosing)
+	}
 	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
 		return deferred(errInitialPrompt)
 	}
@@ -288,6 +302,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	var attempt Attempt
 	handled := false
 	attempt, handled = l.placeOverLinkLocked(ctx, delivery, duringQuestion)
+	if !handled && delivery.Compact {
+		return Attempt{Stage: Failed, Err: errors.New("the session has no link that compacts its conversation")}, runRef{}
+	}
 	if !handled {
 		if duringQuestion {
 			return deferred(ErrBlockedByApproval)
@@ -302,6 +319,12 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		l.placed = make(map[string]Attempt)
 	}
 	l.placed[delivery.ID.String()] = attempt
+	if delivery.Compact {
+		l.closing = true
+	}
+	if delivery.origin.kind == originUserConversation {
+		m.userInputs++
+	}
 	if steering {
 		m.runSteeredLocked()
 	}
@@ -329,9 +352,14 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
 		link = nil
 	}
+	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice}
 	var custody harness.Custody
-	if link != nil {
-		custody = link.Deliver(ctx, harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice})
+	if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
+		custody = compactor.Compact(ctx, in)
+	} else if delivery.Compact {
+		link = nil
+	} else if link != nil {
+		custody = link.Deliver(ctx, in)
 	}
 	l.mu.Lock()
 	l.placing = false
@@ -480,6 +508,24 @@ func (l *lane) stopFollowsNotificationLocked() bool {
 		return l.run.startedByNotification()
 	}
 	return l.stoppedAfterNotification
+}
+
+func (m *Monitor) ReopenInput() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.input.closing = false
+}
+
+func (m *Monitor) UserInputs() uint64 {
+	if m == nil {
+		return 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.userInputs
 }
 
 func (m *Monitor) LatestRun() uint64 {

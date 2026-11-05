@@ -188,6 +188,9 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, sessionmonitor.ErrSessionStopped) {
 		return "queued (the user stopped the target; lands after the user's next prompt there)"
 	}
+	if errors.Is(err, sessionmonitor.ErrSessionClosing) {
+		return "queued (target is compacting before it closes; lands once it has closed, under its standby rules)"
+	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 }
 

@@ -1017,6 +1017,7 @@ export enum AgentCatalogResultMessageEvent {
 
 export interface AgentCloseMessage {
     cmd:               AgentCloseMessageCmd;
+    compact?:          boolean;
     reason:            string;
     source_session_id: string;
     target_seed_id?:   string;
@@ -1030,6 +1031,7 @@ export enum AgentCloseMessageCmd {
 
 export interface AgentCloseResult {
     label:             string;
+    pending_compact?:  boolean;
     reason:            string;
     rule:              AgentCloseRule;
     seed_ids:          string[];
@@ -9026,6 +9028,7 @@ export interface ActivityStatusResultObject {
 
 export interface AgentCloseResultObject {
     label:             string;
+    pending_compact?:  boolean;
     reason:            string;
     rule:              AgentCloseRule;
     seed_ids:          string[];
@@ -10970,6 +10973,7 @@ export interface SeedStandbyMessage {
     clear?:             boolean;
     close?:             boolean;
     cmd:                SeedStandbyMessageCmd;
+    compact?:           boolean;
     note?:              string;
     profile_id?:        string;
     seed_id:            string;
@@ -11612,6 +11616,7 @@ export interface SessionPlaceMessage {
     allow_user_composer?:    boolean;
     bypass_initial_gate?:    boolean;
     cmd:                     SessionPlaceMessageCmd;
+    compact?:                boolean;
     delivery_id:             string;
     origin:                  SessionPlaceOrigin;
     phase:                   SessionPlacePhase;
@@ -11651,6 +11656,7 @@ export enum SessionPlaceErrorKind {
     ComposerDirty = "composer_dirty",
     InitialPrompt = "initial_prompt",
     LaneClosed = "lane_closed",
+    SessionClosing = "session_closing",
     SessionStopped = "session_stopped",
 }
 
@@ -20548,6 +20554,7 @@ const typeMap: any = {
     ], "any"),
     "AgentCloseMessage": o([
         { json: "cmd", js: "cmd", typ: r("AgentCloseMessageCmd") },
+        { json: "compact", js: "compact", typ: u(undefined, true) },
         { json: "reason", js: "reason", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: "" },
         { json: "target_seed_id", js: "target_seed_id", typ: u(undefined, "") },
@@ -20555,6 +20562,7 @@ const typeMap: any = {
     ], "any"),
     "AgentCloseResult": o([
         { json: "label", js: "label", typ: "" },
+        { json: "pending_compact", js: "pending_compact", typ: u(undefined, true) },
         { json: "reason", js: "reason", typ: "" },
         { json: "rule", js: "rule", typ: r("AgentCloseRule") },
         { json: "seed_ids", js: "seed_ids", typ: a("") },
@@ -25472,6 +25480,7 @@ const typeMap: any = {
     ], "any"),
     "AgentCloseResultObject": o([
         { json: "label", js: "label", typ: "" },
+        { json: "pending_compact", js: "pending_compact", typ: u(undefined, true) },
         { json: "reason", js: "reason", typ: "" },
         { json: "rule", js: "rule", typ: r("AgentCloseRule") },
         { json: "seed_ids", js: "seed_ids", typ: a("") },
@@ -26847,6 +26856,7 @@ const typeMap: any = {
         { json: "clear", js: "clear", typ: u(undefined, true) },
         { json: "close", js: "close", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("SeedStandbyMessageCmd") },
+        { json: "compact", js: "compact", typ: u(undefined, true) },
         { json: "note", js: "note", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
@@ -27255,6 +27265,7 @@ const typeMap: any = {
         { json: "allow_user_composer", js: "allow_user_composer", typ: u(undefined, true) },
         { json: "bypass_initial_gate", js: "bypass_initial_gate", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("SessionPlaceMessageCmd") },
+        { json: "compact", js: "compact", typ: u(undefined, true) },
         { json: "delivery_id", js: "delivery_id", typ: "" },
         { json: "origin", js: "origin", typ: r("SessionPlaceOrigin") },
         { json: "phase", js: "phase", typ: r("SessionPlacePhase") },
@@ -29898,6 +29909,7 @@ const typeMap: any = {
         "composer_dirty",
         "initial_prompt",
         "lane_closed",
+        "session_closing",
         "session_stopped",
     ],
     "SessionPlaceStage": [

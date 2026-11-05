@@ -222,7 +222,7 @@ Example: attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new bui
 While someone tends the seed, only the tender, sessions above it in the
 delegation chain, the profile's chief and the user can set or clear its
 reminder. There is no --force.`, []string{"in", "at", "m", "clear", "json"}, false},
-	{`standby`, `standby <id> -m "<what to do next>" [--close] | standby <id> --clear [--json]`, `put a seed you tend on standby with a note saying what to do next. While
+	{`standby`, `standby <id> -m "<what to do next>" [--close [--compact]] | standby <id> --clear [--json]`, `put a seed you tend on standby with a note saying what to do next. While
 it is on standby, mail to the seed (attn agent msg <id>, a reminder, an ask
 answer) wakes you: when your session is closed, attn resumes it as itself and
 delivers the mail with the note. The setting garden.tender_wake chooses which
@@ -230,9 +230,16 @@ mail wakes a session: any (the default), watches or off. Standby ends when
 seed mail reaches you, and when the seed is parked, harvested, withered or
 gets a new tender. --close then closes this session as attn agent close
 --self does; it refuses while the seed's mailbox holds mail you have not read.
+--close --compact first waits for your turn to end and compacts your
+conversation, as attn agent close --self --compact does, so the session that
+wakes resumes a shorter conversation. End your turn right after the command.
+Mail for the seed that arrives during the compact waits until the session has
+closed. Only a Codex session on the shared Codex app server compacts: attn
+refuses --compact for any other session and leaves standby unset, and for a
+Codex session off the shared server the refusal names codex_shared_enabled.
 Only the seed's tender sets standby. A Claude session needs claude_mod_enabled
 when it launched. --clear ends standby.
-Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close`, []string{"m", "close", "clear", "json"}, false},
+Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close`, []string{"m", "close", "compact", "clear", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -332,6 +339,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
 	{`close`, ``, `close this session once the seed is on standby`, func(f *seedFlags) { f.fs.BoolVar(&f.closeSelf, "close", false, "") }},
+	{`compact`, ``, `with --close: compact the conversation after this turn, then close`, func(f *seedFlags) { f.fs.BoolVar(&f.compact, "compact", false, "") }},
 	{`clear`, ``, `remove the harvest condition (with --when-merged), the authorization, the reminder, or standby`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
 	{`in`, `<duration>`, `how long from now until the reminder: 20m, 2h or 1h30m`, func(f *seedFlags) { f.fs.StringVar(&f.remindIn, "in", "", "") }},
 	{`at`, `<time>`, `the time of the reminder, as an RFC3339 time such as 2026-11-05T09:00:00+01:00`, func(f *seedFlags) { f.fs.StringVar(&f.remindAt, "at", "", "") }},
@@ -542,6 +550,7 @@ type seedFlags struct {
 	whenMerged     bool
 	remindIn       string
 	closeSelf      bool
+	compact        bool
 	remindAt       string
 	force          bool
 	evidence       repeatedFlag
@@ -1395,6 +1404,8 @@ func runSeedStandby(args []string) {
 	switch {
 	case f.clear && (note != "" || f.closeSelf):
 		seedUsageError("standby", fmt.Errorf("--clear takes no note and no --close"))
+	case f.compact && !f.closeSelf:
+		seedUsageError("standby", fmt.Errorf("--compact compacts the conversation before the session closes, so it only goes with --close"))
 	case !f.clear && note == "":
 		seedUsageError("standby", fmt.Errorf("-m says what to do when mail wakes you"))
 	}
@@ -1402,11 +1413,11 @@ func runSeedStandby(args []string) {
 	if f.closeSelf {
 		outliveTheCloseOfOwnSession()
 	}
-	result, err := f.client().SeedStandby(id, client.SeedStandbyOptions{Note: note, Clear: f.clear, Close: f.closeSelf})
+	result, err := f.client().SeedStandby(id, client.SeedStandbyOptions{Note: note, Clear: f.clear, Close: f.closeSelf, Compact: f.compact})
 	if err != nil {
 		seedFail("standby", err)
 	}
-	if result.Close != nil {
+	if result.Close != nil && !protocol.Deref(result.Close.PendingCompact) {
 		recordAsClosedSession(result.Close.TargetSessionID)
 	}
 	if f.json {

@@ -60,21 +60,22 @@ type codexShared struct {
 }
 
 type codexServer struct {
-	profile  string
-	terminal harness.TerminalID
-	socket   string
-	ensureMu sync.Mutex
-	mu       sync.Mutex
-	control  *codexshared.Client
-	held     map[string]codexThreadStatus
-	parents  map[string]string
-	attempt  *codexAttempt
-	events   linkEvents
-	running  string
-	binary   string
-	exited   chan struct{}
-	restart  codexRestart
-	failed   codexStartFailure
+	profile    string
+	terminal   harness.TerminalID
+	socket     string
+	ensureMu   sync.Mutex
+	mu         sync.Mutex
+	control    *codexshared.Client
+	held       map[string]codexThreadStatus
+	compacting map[string]*codexCompaction
+	parents    map[string]string
+	attempt    *codexAttempt
+	events     linkEvents
+	running    string
+	binary     string
+	exited     chan struct{}
+	restart    codexRestart
+	failed     codexStartFailure
 }
 
 type codexAttempt struct {

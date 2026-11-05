@@ -315,7 +315,26 @@ A Claude Code session wakes only while the [Claude mod](using-claude-mod.md) is
 on. Attn delivers a woken Claude session's mail through the mod and never types
 it into the terminal. `attn seed standby` refuses in a Claude session without
 the mod, and the refusal names `claude_mod_enabled`. Codex sessions and crew
-members need no setting.
+members need no setting to go on standby or to wake.
+
+To shrink its conversation before the session closes, an agent can add
+`--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
+agent's turn to end, has the harness compact the conversation, then closes the
+session, so the woken session resumes the compacted conversation. Mail for the
+seed that arrives during the compact waits until the session has closed. If you
+type into the session before it closes, Attn cancels the close and the
+session stays open. If the compact fails, the session still closes, and its
+reason says the compact did not run. Restarting the daemon drops a close that
+still waits for its compact, and the session stays open.
+
+Only a Codex session on [shared Codex](using-shared-codex.md) compacts.
+**Shared Codex** in **Settings → Experimental**, or
+`attn settings set codex_shared_enabled true`, turns it on for the sessions you
+launch or resume afterwards. Attn refuses `--compact` for any other session,
+and for a Codex session that runs without the shared app-server the refusal
+names `codex_shared_enabled`. Compacting does not help a crew member: its wake
+starts a new session from its latest letter, and Attn refuses to close a crew
+member's session.
 
 Attn wakes the tender of one seed at most 48 times in 24 hours, and the count
 restarts when the daemon restarts. A crew member's wakes for seed mail count

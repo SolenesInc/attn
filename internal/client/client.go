@@ -622,11 +622,22 @@ func (c *Client) AgentReload(targets []string, sourceSessionID protocol.SessionI
 }
 
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
+	return c.agentClose(target, sourceSessionID, reason, false)
+}
+
+func (c *Client) AgentCloseCompacting(sessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
+	return c.agentClose(string(sessionID), sessionID, reason, true)
+}
+
+func (c *Client) agentClose(target string, sourceSessionID protocol.SessionID, reason string, compact bool) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,
 		TargetSessionID: target,
 		SourceSessionID: sourceSessionID,
 		Reason:          reason,
+	}
+	if compact {
+		msg.Compact = protocol.Ptr(true)
 	}
 	if garden.ValidateID(target) == nil {
 		msg.TargetSessionID = ""

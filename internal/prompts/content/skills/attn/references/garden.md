@@ -228,6 +228,14 @@ and why attn cannot wake the tender when a wake is blocked:
 does. attn refuses it while the seed has unread mail and names
 `attn agent inbox`. Read the mail, then run the command again.
 
+`--close --compact` compacts your conversation before the close, as
+`attn agent close --self --compact` does, so the session that wakes resumes a
+shorter conversation. [Closing a session](converse-and-observe.md#closing-a-session)
+says how it works and which sessions can compact. Seed mail that arrives during
+the compact waits until the session has closed, then wakes it as above. When
+attn refuses `--compact`, it leaves standby unset, so run the command again
+without it.
+
 A Claude Code session needs the Claude mod, because attn delivers a woken Claude
 session's mail through the mod and never types it. `attn seed standby` refuses
 in a Claude session that runs without the mod and names `claude_mod_enabled`. A

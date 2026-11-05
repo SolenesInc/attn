@@ -794,6 +794,7 @@ model AgentCloseMessage {
   target_seed_id?: string;      // close whoever tends this seed
   source_session_id: SessionID;    // who is closing
   reason: string;
+  compact?: boolean;            // compact the conversation after this turn, then close; self only
 }
 
 // The rule that authorized a close. A refusal names the rules in its message
@@ -810,6 +811,7 @@ model AgentCloseResult {
   reason: string;
   rule: AgentCloseRule;
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
+  pending_compact?: boolean;    // the session closes after this turn, once its conversation is compacted
 }
 
 @extension("x-on", #{ home: true })
@@ -6157,6 +6159,7 @@ model SeedStandbyMessage {
   "note"?: string;
   "clear"?: boolean;
   "close"?: boolean;
+  "compact"?: boolean;
 }
 
 model SeedStandbyResult {
@@ -8867,7 +8870,7 @@ enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snoo
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
 enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }
 enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
-enum SessionPlaceErrorKind { LaneClosed: "lane_closed", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped" }
+enum SessionPlaceErrorKind { LaneClosed: "lane_closed", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped", SessionClosing: "session_closing" }
 enum PullRequestLinkKind { Record: "record", Forget: "forget" }
 enum TranscriptActivityKind { Modified: "modified", Head: "head", Events: "events" }
 enum MonitorReadErrorKind { TranscriptUnavailable: "transcript_unavailable", InvalidCursor: "invalid_cursor", CursorMismatch: "cursor_mismatch", CursorPastEnd: "cursor_past_end", DeltaTooLarge: "delta_too_large" }
@@ -8898,6 +8901,7 @@ model SessionPlaceMessage {
   bypass_initial_gate?: boolean;
   allow_user_composer?: boolean;
   require_empty_composer?: boolean;
+  compact?: boolean;
 }
 model SessionPlaceResult {
   stage: SessionPlaceStage;

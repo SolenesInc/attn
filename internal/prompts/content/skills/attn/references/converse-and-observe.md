@@ -126,16 +126,32 @@ harvested, parked or withered seed has no tender, so the command refuses it.
 To close a delegate after its seed closed, name its session id, which
 `attn delegate` printed and which signs the delegate's entries in the seed log.
 
-A close takes effect immediately. The session gets no goodbye turn and reads
-nothing queued for it. Before you close a session, read what you need, such as
-the seed log, the last message, and the diff.
+Without `--compact`, a close takes effect immediately. The session gets no
+goodbye turn and reads nothing queued for it. Before you close a session, read
+what you need, such as the seed log, the last message, and the diff.
 
 To close yourself, run `attn agent close --self -m "reason"`. You do not need
 your id. The command ends your session mid-command, so write everything you
 meant to write before you run it. attn refuses the command while a seed you
-tend is on standby and has unread mail, and names `attn agent inbox`. To ask another agent to close itself, name
-that command. When the user asks you to wrap up, or asks whether they can close
-you, follow [wrap-up.md](wrap-up.md) first.
+tend is on standby and has unread mail, and names `attn agent inbox`.
+
+To compact your conversation first, add `--compact`. attn waits for your turn to
+end, has the harness compact the conversation, then closes you, so end your turn
+right after the command. You get no turn after the compact. Input the user types
+before you close cancels the close, and you stay open. If the compact
+fails, you still close, and the reason says the compact did not run. The harness
+decides what the compact keeps, so put what your next turn needs in a seed note
+or the standby note. `--compact` goes only with `--self`. Only a Codex session on
+the shared Codex app server compacts. attn refuses any other session, and for a
+Codex session off the shared server the refusal names `codex_shared_enabled`,
+the setting the user turns on. Compact when you will resume as yourself, as a
+seed's tender does when its standby wakes it ([Standby](garden.md#standby)). A
+crew member cannot close itself, and its next wake starts a fresh session from
+its letter, so a compact before a crew sleep carries nothing over.
+
+To ask another agent to close itself, name `attn agent close --self`. When the
+user asks you to wrap up, or asks whether they can close you, follow
+[wrap-up.md](wrap-up.md) first.
 
 ## Receiving a message
 
