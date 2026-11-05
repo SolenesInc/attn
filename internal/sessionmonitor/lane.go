@@ -390,7 +390,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	if !custody.Taken {
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true
 	}
-	return Attempt{Stage: Placed, At: custody.At, steered: custody.Steered}, true
+	return Attempt{Stage: Placed, At: custody.At, Held: custody.Held, steered: custody.Held}, true
 }
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.

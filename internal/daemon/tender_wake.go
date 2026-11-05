@@ -24,6 +24,8 @@ const (
 	notificationActionOpenSeed  = "open_seed"
 )
 
+var errTenderOutpostLost = errors.New("the tender's outpost did not answer the wake's checks")
+
 type tenderWakeSetting string
 
 const (
@@ -201,10 +203,13 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_wake=%s does not wake its tender for this mail", seed.ID, setting)
 		return receipt, nil
 	}
-	if host := d.unreachableSessionHost(sessionID); host != "" {
-		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and its tender's outpost %s is unreachable; attn tries again in %s", seed.ID, d.outpostName(host), inbox.AttemptDelay)
+	waitForOutpost := func() (inbox.Receipt, error) {
+		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and its tender's outpost %s is unreachable; attn tries again when it is back, or in %s", seed.ID, d.outpostName(d.sessionHost(sessionID)), inbox.AttemptDelay)
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		return receipt, nil
+	}
+	if d.unreachableSessionHost(sessionID) != "" {
+		return waitForOutpost()
 	}
 	claude := false
 	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
@@ -219,22 +224,37 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 		d.armInboxLocked(a, state, reopensAt.Sub(d.clock.Now()))
 		return receipt, nil
 	}
-	started, err := d.store.StampInboxAttempt(a, now)
-	if err != nil || !started {
-		return receipt, err
-	}
-	d.logInboxExhaustion(a)
-	count := d.tenderWakes.charge(seed.ID, d.clock.Now())
 	var outcome *seedResumeOutcome
+	var count int
 	err = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		continuation := d.continuationOnItsMachine(seed)
+		if continuation != nil && continuation.OutpostLost {
+			d.logf("tender wake: seed %s waits for its tender's outpost: %s", seed.ID, continuation.ResumeReason)
+			return errTenderOutpostLost
+		}
+		started, stampErr := d.store.StampInboxAttempt(a, now)
+		if stampErr != nil {
+			return stampErr
+		}
+		if !started {
+			return errInboxNoUnread
+		}
+		d.logInboxExhaustion(a)
+		count = d.tenderWakes.charge(seed.ID, d.clock.Now())
 		var wakeErr error
-		outcome, wakeErr = d.wakeSeedTender(protection, seed, tenderWakeCause{
+		outcome, wakeErr = d.wakeFromContinuation(protection, seed, continuation, tenderWakeCause{
 			mail:   true,
 			tend:   func(who.Party, who.Actor) error { return nil },
 			settle: func() {},
 		})
 		return wakeErr
 	})
+	if errors.Is(err, errTenderOutpostLost) {
+		return waitForOutpost()
+	}
+	if errors.Is(err, errInboxNoUnread) {
+		return receipt, nil
+	}
 	if blocked := (tenderWakeBlocked{}); errors.As(err, &blocked) {
 		receipt.Detail = d.blockTenderWake(a, seed, blocked.Error())
 		return receipt, nil
@@ -262,6 +282,28 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	d.kickInbox(a)
 	receipt.Detail = fmt.Sprintf("reopened session %s, the tender of %s on standby; the mail is delivered once it reads input", shortSessionID(outcome.SessionID), seed.ID)
 	return receipt, nil
+}
+
+func (d *Daemon) kickStandbyTendersOn(host string) {
+	addresses, err := d.store.UnreadInboxAddresses()
+	if err != nil {
+		d.logf("inbox: outpost %s back: %v", host, err)
+		return
+	}
+	for _, address := range addresses {
+		seedID, seedMail := address.TenderOf()
+		if !seedMail || d.tenderWakes.blockedReason(seedID) != "" {
+			continue
+		}
+		seed, _, err := d.readSeed(seedID)
+		if err != nil {
+			d.logf("inbox: outpost %s back: %v", host, err)
+			continue
+		}
+		if tender, session := seed.Tender.Session(); session && d.sessionHost(tender) == host {
+			d.kickInbox(address)
+		}
+	}
 }
 
 func (d *Daemon) closeTenderAfterFailedWake(sessionID protocol.SessionID, failure error) {

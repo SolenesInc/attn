@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/activity"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
@@ -92,8 +93,8 @@ func (d *Daemon) placeSessionInput(ctx context.Context, msg protocol.SessionPlac
 		return protocol.SessionPlaceResult{}, fmt.Errorf("session %s: no monitor runs it", msg.SessionID)
 	}
 	result := monitor.Place(ctx, sessionmonitor.DeliveryFromMessage(msg)).Result()
-	if d.claudeMod().holds(msg.DeliveryID) {
-		result.Held = protocol.Ptr(true)
+	if msg.Ring != nil {
+		pausepoint.At(pausepoint.RingPlacementAnswering)
 	}
 	return result, nil
 }

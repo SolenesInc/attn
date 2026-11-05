@@ -88,6 +88,7 @@ type conversationAvailability struct {
 	Available   bool   `json:"available"`
 	Reason      string `json:"reason,omitempty"`
 	CheckFailed bool   `json:"-"`
+	OutpostLost bool   `json:"-"`
 }
 
 type pluginReportStateParams struct {

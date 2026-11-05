@@ -33,6 +33,9 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 	if !attempt.At.IsZero() {
 		result.At = protocol.Ptr(attempt.At.Format(time.RFC3339Nano))
 	}
+	if attempt.Held {
+		result.Held = protocol.Ptr(true)
+	}
 	if attempt.Err == nil {
 		return result
 	}

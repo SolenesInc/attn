@@ -448,7 +448,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 			t.accepted++
 			t.held[ack.ID] = &claudeModHeld{session: delivery.session, input: delivery.input, accepted: t.accepted}
 		}
-		answer(harness.Custody{Taken: true, At: taken.At, Steered: true})
+		answer(harness.Custody{Taken: true, At: taken.At, Held: true})
 	case claudeModOutcomeSubmitted:
 		m.typedLocked(t, ack.ID)
 		answer(taken)
@@ -564,17 +564,6 @@ func (m *claudeMod) typedLocked(t *claudeModTerminal, id string) {
 	}
 }
 
-func (m *claudeMod) holds(id string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, t := range m.terminals {
-		if t.held[id] != nil {
-			return true
-		}
-	}
-	return false
-}
-
 func (m *claudeMod) reportReachChanged(session protocol.SessionID) {
 	m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeChanged})
 }
@@ -634,9 +623,10 @@ func (m *claudeMod) sendReports() {
 }
 
 func (d *Daemon) homeAnswered(err error) bool {
-	if d.enrollmentStatus().IsHome() {
-		return true
-	}
+	return d.enrollmentStatus().IsHome() || bridgeAnswered(err)
+}
+
+func bridgeAnswered(err error) bool {
 	var rejected *bridge.CallRejected
 	if !errors.As(err, &rejected) {
 		return false

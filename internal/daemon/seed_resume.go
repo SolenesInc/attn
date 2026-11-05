@@ -83,9 +83,12 @@ func (e tenderWakeBlocked) Unwrap() error { return e.err }
 func blockedWake(err error) error { return tenderWakeBlocked{err: err} }
 
 func (d *Daemon) wakeSeedTender(protection foregroundCleanupProtection, seed garden.Seed, cause tenderWakeCause) (*seedResumeOutcome, error) {
+	return d.wakeFromContinuation(protection, seed, d.continuationOnItsMachine(seed), cause)
+}
+
+func (d *Daemon) wakeFromContinuation(protection foregroundCleanupProtection, seed garden.Seed, continuation *seedContinuation, cause tenderWakeCause) (*seedResumeOutcome, error) {
 	seedID := seed.ID
 	tend, settle := cause.tend, cause.settle
-	continuation := d.continuationOnItsMachine(seed)
 	var executed protocol.SessionID
 	if continuation != nil {
 		executed = continuation.Execution.SessionID

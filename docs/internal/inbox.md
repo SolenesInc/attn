@@ -255,7 +255,8 @@ connected:
   attempt and outstanding ring, and rings again. The app shows a Quick Capture
   or a seed authorization change from that ring as read or typed while the mod
   holds it, then as waiting again once the mod gives it back, until the next
-  ring places it.
+  ring places it. A seed stays on standby while the mod holds its mail, and when
+  the mod gives the mail back, even before the home hears that the mod took it.
 - The inbox lives on the home, and the daemon that runs the session reports each
   placement and give-back to the home. A report made while the home is restarting
   or its link is down waits on that daemon and reaches the home when the link comes
@@ -397,9 +398,10 @@ A tender that closes before it reads the mail leaves the seed on standby, and
 the unread mail wakes the tender again. Nobody holds the seed's mailbox while
 the tender session is closed, so attn does not wait 5 minutes between attempts
 for seed mail. The 3 attempts per item and the seed's wake limit bound the
-repeats. attn delivers seed mail again when a session closes and when the daemon
-restarts, so a seed on standby with unread mail wakes its tender right after
-either.
+repeats. attn delivers seed mail again when a session closes, when the daemon
+restarts, and, unless the wake is blocked, when the bridge to the tender's
+outpost connects. So a seed on standby with unread mail wakes its tender right
+after any of them.
 
 `attn seed standby --close` and `attn agent close --self` refuse while a seed
 the session tends is on standby and has unread seed mail. The refusal names
@@ -429,8 +431,14 @@ seed row carries the reason as `wake_blocked`. The item stays queued. attn does
 not retry these wakes, except at the 48-wake limit: attn delivers the item when
 the 24-hour window has room again.
 
+An outpost that is unreachable, or that does not answer while attn checks the
+tender's directory or conversation, is not a failed wake. The item stays queued
+and uses neither an attempt nor a wake. attn tries again when the outpost's
+bridge connects, or after 5 minutes.
+
 A failure that can fix itself leaves the item queued, and attn tries again after
-5 minutes. These failures are a resume that fails to launch, and a plugin that
+5 minutes. These failures are a resume that fails to launch, an outpost that
+answers with an error when attn checks the tender's directory, and a plugin that
 times out or fails while attn checks whether it still has the conversation. A
 plugin that answers that the conversation is gone is a missing conversation. A
 failed launch closes the session again, so its row and tile do not stay open

@@ -156,4 +156,5 @@ func (d *Daemon) kickOutpostInboxes(host string) {
 			d.kickSessionInboxAddresses(session.ID)
 		}
 	}
+	d.kickStandbyTendersOn(host)
 }

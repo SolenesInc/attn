@@ -52,13 +52,13 @@ func (m *outpostMod) awaitStopped(app *testworld.Peer, mark int) {
 
 func newOutpostMod(t *testing.T) *outpostMod {
 	t.Helper()
-	return newOutpostModPrepared(t, func(*testworld.Stack) {})
+	return newOutpostModPrepared(t, func(_, _ *testworld.Stack) {})
 }
 
-func newOutpostModPrepared(t *testing.T, prepareOutpost func(*testworld.Stack)) *outpostMod {
+func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.Stack)) *outpostMod {
 	t.Helper()
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	prepareOutpost(outpost)
+	prepare(home, outpost)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
@@ -296,7 +296,7 @@ func TestAReportTheHomeRefusesDoesNotBlockTheOnesBehindIt(t *testing.T) {
 
 func TestAUserMessageTheOutpostModReturnsWhileWorkingReachesTheAgentWhenItParks(t *testing.T) {
 	var waits *testworld.Pause
-	m := newOutpostModPrepared(t, func(outpost *testworld.Stack) {
+	m := newOutpostModPrepared(t, func(_, outpost *testworld.Stack) {
 		outpost.Vars = append(outpost.Vars, "ATTN_HEADLESS_TASKS=on")
 		waits = outpost.PauseEvery(pausepoint.ClaudeModReturnWaits)
 	})

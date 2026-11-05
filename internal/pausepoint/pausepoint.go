@@ -43,6 +43,8 @@ const (
 	DaemonInitialStateBuilt    = "daemon-initial-state-built"
 	SessionInputPasteGap       = "session-input-paste-gap"
 	ClaudeModReturnWaits       = "claude-mod-return-waits"
+	RingPlacementAnswering     = "ring-placement-answering"
+	TenderDirectoryInspecting  = "tender-directory-inspecting"
 	SessionInputLaneContended  = "session-input-lane-contended"
 	CompactingClosePlacing     = "compacting-close-placing"
 	SessionSnoozeArrived       = "session-snooze-arrived"

@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
@@ -309,6 +310,47 @@ func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T
 	modEvent(t, run, fakeagent.ModEventRefusedStop, cacheAnswerText)
 	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
 		t.Fatalf("%s left standby after Esc returned its answer unread", seed)
+	}
+
+	mark := len(app.Log())
+	workingOn(t, app, run, session, "carry on")
+	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+	if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
+		t.Fatalf("the tool boundary appended %v, want the answer", appended)
+	}
+	awaitStandbyEnded(t, app, mark, seed)
+}
+
+func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, claudeModSetting, "true")
+	setSetting(t, app, "asks_enabled", "true")
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	run := w.Launched(session)
+	run.Prompted()
+	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	if _, err := standbyAs(t, cli, delegated, false); err != nil {
+		t.Fatalf("seed standby: %v", err)
+	}
+	workingOn(t, app, run, session, "write the essay")
+
+	asked, err := cli.AskOpen(delegated.SessionID, seed, cacheAsk, "", w.Path("api"))
+	if err != nil {
+		t.Fatalf("ask about %s: %v", seed, err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+	answering := w.PauseAt(pausepoint.RingPlacementAnswering)
+	answerCacheAsk(t, app, asked.ID)
+	answering.Await()
+	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+	stoppedByEsc(t, app, run, session)
+	answering.Release()
+	modEvent(t, run, fakeagent.ModEventRefusedStop, cacheAnswerText)
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby though the mod returned its answer before the placement answered", seed)
 	}
 
 	mark := len(app.Log())
