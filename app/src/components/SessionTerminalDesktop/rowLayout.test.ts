@@ -47,6 +47,8 @@ function widthsPx(plan: ReturnType<typeof resolveRowLayout>, areaPx: number) {
   return firsts(plan.screen).map((id) => Math.round(bounds.get(id)!.width * areaPx));
 }
 
+const closeTo = (actual: number, expected: number) => Math.abs(actual - expected) < 0.0005;
+
 function seeded(seed: number) {
   let state = seed;
   return (below: number) => {
@@ -154,33 +156,35 @@ describe('resolveRowLayout', () => {
       const back = [...sweep].reverse().map((area) => firsts(at(area).screen)).reverse();
       expect(back).toEqual(down);
 
+      const rowIds = readRow(tree).map((column) => column.leafIds[0]);
+      const need = (column: { wantedCols?: number }) => Math.max(narrowestPx, (column.wantedCols ?? 0) * PX_PER_COL);
+      const broken: string[] = [];
       for (const area of sweep) {
         const plan = at(area);
-        const context = `seed ${seed} area ${area}`;
-        const shown = plan.screen.flatMap((column) => column.leafIds);
-        expect(shown, context).toContain(activeLeafId);
-        const rowIds = readRow(tree).map((column) => column.leafIds[0]);
-        expect([...plan.before, ...plan.screen, ...plan.after].map((column) => column.leafIds[0]), context).toEqual(rowIds);
+        const promise = (kept: boolean, name: string) => {
+          if (!kept) broken.push(`seed ${seed} area ${area}: ${name}`);
+        };
+        promise(plan.screen.some((column) => column.leafIds.includes(activeLeafId)), 'the active tile is on screen');
+        const partition = [...plan.before, ...plan.screen, ...plan.after].map((column) => column.leafIds[0]);
+        promise(partition.join() === rowIds.join(), 'before, screen and after are the row in order');
 
-        const need = (column: { wantedCols?: number }) => Math.max(narrowestPx, (column.wantedCols ?? 0) * PX_PER_COL);
         const used = plan.screen.reduce((sum, column) => sum + need(column), 0);
-        if (plan.screen.length > 1) expect(used, context).toBeLessThanOrEqual(area + 0.5);
+        promise(plan.screen.length === 1 || used <= area + 0.5, 'several columns fit the area');
         const previous = plan.before[plan.before.length - 1];
-        if (previous) expect(used + need(previous), `${context} back-fill`).toBeGreaterThan(area + 0.5);
+        promise(!previous || used + need(previous) > area + 0.5, 'no earlier column would still fit');
 
         const bounds = getNormalizedPaneBounds(plan.renderedTree);
         const widths = plan.screen.map((column) => bounds.get(column.leafIds[0])!.width * area);
-        expect(widths.reduce((sum, width) => sum + width, 0), context).toBeCloseTo(area, 3);
+        promise(closeTo(widths.reduce((sum, width) => sum + width, 0), area), 'widths fill the area');
+        const everyColumnWanted = plan.screen.every((column) => column.wantedCols);
         plan.screen.forEach((column, index) => {
-          if (plan.screen.every((each) => each.wantedCols)) {
-            expect(widths[index] / need(column), context).toBeCloseTo(area / used, 3);
-          } else if (column.wantedCols) {
-            expect(widths[index], context).toBeCloseTo(need(column), 3);
-          } else {
-            expect(widths[index], context).toBeGreaterThanOrEqual(Math.min(narrowestPx, area) - 0.001);
-          }
+          const name = `width of ${column.leafIds[0]}`;
+          if (everyColumnWanted) promise(closeTo(widths[index] / need(column), area / used), `${name} scales with the others`);
+          else if (column.wantedCols) promise(closeTo(widths[index], need(column)), `${name} is its wanted width`);
+          else promise(widths[index] >= Math.min(narrowestPx, area) - 0.001, `${name} is at least the narrowest`);
         });
       }
+      expect(broken).toEqual([]);
     }
   });
 });
