@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakessh"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/toolhome"
@@ -21,7 +20,6 @@ func shellWithNoProfile() string {
 
 func Main(m *testing.M, env ...string) int {
 	fakessh.Main()
-	fakeagent.Main()
 	stepclock.Process()
 	dir, err := os.MkdirTemp("", "attn-test-process-*")
 	if err != nil {

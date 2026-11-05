@@ -49,7 +49,7 @@ trap cleanup EXIT
 runner_hash="$(cd "$root" && shasum -a 256 scripts/test-go.sh scripts/lib/test-git.sh | shasum -a 256 | awk '{ print $1 }')"
 cache_namespace="$(printf '%s\n%s\n' "$($go_bin env GOVERSION)" "$runner_hash" | shasum -a 256 | awk '{ print $1 }')"
 test_cache_root="${TMPDIR:-/tmp}/attn-go-test-cache/$cache_namespace"
-# Each kept attn binary is 57 MB, one per build a run tested: 48 of them filled
+# Each kept attn binary is 57 MB, and each fake agent less, one per build a run tested: 48 of them filled
 # 2.7 GB of a 16 GB tmpfs /tmp in a morning (2026-11-03), so they live beside
 # Go's build cache on disk. A binary no run touched for 60 minutes is removed:
 # 3x the 1200s test timeout, so no healthy run loses its own.
@@ -83,16 +83,50 @@ if [ "$("$go_bin" env CGO_ENABLED)" = 1 ]; then
   esac
 fi
 
-# The process-level E2E tests need the real attn executable. Build it once for
-# the whole run instead of independently inside each test process, and normalize
-# an explicitly supplied binary the same way. Tests read the path from
-# ATTN_E2E_BIN, so Go's test cache keys on it: the content-addressed path changes
-# whenever the executable changes, and a cached result never hides a new binary
-# built from source outside the test's own package. Without a VCS stamp the
-# executable, and so the path, stays the same across commits that leave its
+# Process-level tests need the real attn executable, and test worlds install the
+# small fake agent as every fake harness. Build each once for the whole run
+# instead of independently inside each test process, and normalize an explicitly
+# supplied binary the same way. Tests read the paths from ATTN_E2E_BIN and
+# ATTN_FAKEAGENT_BIN, so Go's test cache keys on them: a content-addressed path
+# changes whenever the executable changes, and a cached result never hides a new
+# binary built from source outside the test's own package. Without a VCS stamp
+# the executable, and so the path, stays the same across commits that leave its
 # source unchanged.
-provide_e2e_binary() {
-  local arg source_e2e_bin e2e_hash e2e_cache_dir cached_e2e_hash build_pid compile_ahead=()
+start_test_binary_build() {
+  local env_var="$1" name="$2" package="$3" source_bin="${!1:-}"
+  case "$source_bin" in "$e2e_store"/*) return 0 ;; esac
+  if [ -z "$source_bin" ]; then
+    "$go_bin" -C "$root" build -buildvcs=false -o "$test_root/$name" "$package" &
+    test_binary_builds+=("$!")
+  elif [ ! -x "$source_bin" ]; then
+    echo "$env_var is not executable: $source_bin" >&2
+    exit 2
+  fi
+}
+
+store_test_binary() {
+  local env_var="$1" name="$2" source_bin="${!1:-$test_root/$2}" hash cache_dir cached_hash
+  case "$source_bin" in "$e2e_store"/*) return 0 ;; esac
+  hash="$(shasum -a 256 "$source_bin" | awk '{ print $1 }')"
+  cache_dir="$e2e_store/$hash"
+  mkdir -p "$cache_dir"
+  touch "$cache_dir"
+  find "$e2e_store" -mindepth 1 -maxdepth 1 -type d -mmin "+$e2e_binary_idle_minutes" -exec rm -rf {} +
+  cached_hash=""
+  if [ -f "$cache_dir/$name" ]; then
+    cached_hash="$(shasum -a 256 "$cache_dir/$name" | awk '{ print $1 }')"
+  fi
+  if [ "$cached_hash" != "$hash" ]; then
+    cp "$source_bin" "$cache_dir/$name.$$.tmp"
+    chmod +x "$cache_dir/$name.$$.tmp"
+    mv -f "$cache_dir/$name.$$.tmp" "$cache_dir/$name"
+  fi
+  printf -v "$env_var" '%s' "$cache_dir/$name"
+  export "${env_var?}"
+}
+
+provide_test_binaries() {
+  local arg build_pid compile_ahead=() test_binary_builds=()
   while [ "$1" != -- ]; do
     compile_ahead+=("$1")
     shift
@@ -103,43 +137,24 @@ provide_e2e_binary() {
       return 0
     fi
   done
-  source_e2e_bin="${ATTN_E2E_BIN:-}"
-  case "$source_e2e_bin" in "$e2e_store"/*) return 0 ;; esac
-  if [ -z "$source_e2e_bin" ]; then
-    source_e2e_bin="$test_root/attn"
-    "$go_bin" -C "$root" build -buildvcs=false -o "$source_e2e_bin" ./cmd/attn &
-    build_pid=$!
-    if [ "${#compile_ahead[@]}" -gt 0 ]; then
-      "$go_bin" list -test -deps -export "${compile_ahead[@]}" >/dev/null 2>&1 || true
-    fi
+  start_test_binary_build ATTN_E2E_BIN attn ./cmd/attn
+  start_test_binary_build ATTN_FAKEAGENT_BIN fakeagent ./scripts/fakeagent
+  if [ "${#test_binary_builds[@]}" -gt 0 ] && [ "${#compile_ahead[@]}" -gt 0 ]; then
+    "$go_bin" list -test -deps -export "${compile_ahead[@]}" >/dev/null 2>&1 || true
+  fi
+  for build_pid in ${test_binary_builds[@]+"${test_binary_builds[@]}"}; do
     wait "$build_pid"
-  elif [ ! -x "$source_e2e_bin" ]; then
-    echo "ATTN_E2E_BIN is not executable: $source_e2e_bin" >&2
-    exit 2
-  fi
-  e2e_hash="$(shasum -a 256 "$source_e2e_bin" | awk '{ print $1 }')"
-  e2e_cache_dir="$e2e_store/$e2e_hash"
-  mkdir -p "$e2e_cache_dir"
-  touch "$e2e_cache_dir"
-  find "$e2e_store" -mindepth 1 -maxdepth 1 -type d -mmin "+$e2e_binary_idle_minutes" -exec rm -rf {} +
-  cached_e2e_hash=""
-  if [ -f "$e2e_cache_dir/attn" ]; then
-    cached_e2e_hash="$(shasum -a 256 "$e2e_cache_dir/attn" | awk '{ print $1 }')"
-  fi
-  if [ "$cached_e2e_hash" != "$e2e_hash" ]; then
-    cp "$source_e2e_bin" "$e2e_cache_dir/attn.$$.tmp"
-    chmod +x "$e2e_cache_dir/attn.$$.tmp"
-    mv -f "$e2e_cache_dir/attn.$$.tmp" "$e2e_cache_dir/attn"
-  fi
-  export ATTN_E2E_BIN="$e2e_cache_dir/attn"
+  done
+  store_test_binary ATTN_E2E_BIN attn
+  store_test_binary ATTN_FAKEAGENT_BIN fakeagent
 }
 
-if [ "${1:-}" = "--provide-e2e-binary" ]; then
-  e2e_binary_out="$2"
+if [ "${1:-}" = "--provide-test-binaries" ]; then
+  test_binaries_out="$2"
   shift 2
   unset GOMAXPROCS
-  provide_e2e_binary "$@" --
-  printf '%s\n' "$ATTN_E2E_BIN" >"$e2e_binary_out"
+  provide_test_binaries "$@" --
+  printf '%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" >"$test_binaries_out"
   exit 0
 fi
 
@@ -157,7 +172,7 @@ if [ "${1:-}" = "--packages" ]; then
       unit_packages+=("$package")
     fi
   done
-  provide_e2e_binary ${unit_packages[@]+"${unit_packages[@]}"} -- "$@"
+  provide_test_binaries ${unit_packages[@]+"${unit_packages[@]}"} -- "$@"
   status=0
   "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- -timeout "$test_timeout" "$@" || status=$?
   exit "$status"
@@ -200,7 +215,7 @@ any_job_selected() {
   return 1
 }
 
-provide_e2e_binary -- "$@"
+provide_test_binaries -- "$@"
 
 list_tests() {
   local package_dir="$1" tests_file="$2"

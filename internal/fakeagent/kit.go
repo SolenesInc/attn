@@ -33,6 +33,7 @@ path = %q
 type Kit struct {
 	t              testing.TB
 	cfg            config
+	binary         string
 	control        net.Listener
 	mu             sync.Mutex
 	launches       map[string]chan *Run
@@ -54,12 +55,8 @@ type fake struct {
 	exitCode *int
 }
 
-func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit {
+func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper string) *Kit {
 	t.Helper()
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
 	toolHome := filepath.Join(dir, "toolhome")
 	cfg := config{
 		Control:   filepath.Join(dir, ControlSocket),
@@ -72,17 +69,17 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	links := map[string]string{wrapperName: self}
+	links := map[string]string{wrapperName: binary}
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
 	for _, h := range []Harness{Claude, Codex, Plug, Nisse} {
-		links[string(h)] = self
+		links[string(h)] = binary
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
 	if slices.Contains(harnesses, Plug) {
 		mustInstall(t, filepath.Join(dir, "plugins", plugPluginName),
-			map[string]string{plugPluginName: self},
+			map[string]string{plugPluginName: binary},
 			map[string]string{configName: string(encoded), "attn-plugin.toml": plugManifest})
 	}
 	listener, err := net.Listen("unix", cfg.Control)
@@ -90,7 +87,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 		t.Fatal(err)
 	}
 	k := &Kit{
-		t: t, cfg: cfg, control: listener,
+		t: t, cfg: cfg, binary: binary, control: listener,
 		launches: map[string]chan *Run{},
 		headless: make(chan *HeadlessTask, headlessTaskBacklog),
 	}

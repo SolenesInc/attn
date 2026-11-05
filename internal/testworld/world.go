@@ -90,7 +90,7 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
 	if withAgentKit {
-		w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+		w.kit = fakeagent.Install(t, dir, FakeAgentBinary(t), harnesses, wrapper)
 	} else {
 		if err := os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
 			t.Fatal(err)

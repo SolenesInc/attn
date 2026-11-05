@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
@@ -34,7 +33,6 @@ func fileAnnotationSource(path string) annotationDocumentSource {
 var shippedSessionInputSubmitDelay = sessionmonitor.SubmitDelay
 
 func TestMain(m *testing.M) {
-	fakeagent.Main()
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
 		os.Exit(m.Run())
 	}

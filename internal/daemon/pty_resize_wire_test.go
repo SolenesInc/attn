@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable(t *testing.T) {
@@ -67,7 +68,7 @@ func TestAProgramReadsThePixelGeometryOfItsLastResize(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	session := w.Spawn(app, shellHarness, w.Path("shop"))
-	winsize := fakeagent.InstallWinsize(t, w.Dir)
+	winsize := fakeagent.InstallWinsize(t, testworld.FakeAgentBinary(t), w.Dir)
 
 	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: protocol.TerminalID(app.Terminal(session)), Cols: 40, Rows: 12, Xpixel: protocol.Ptr(40 * 18), Ypixel: protocol.Ptr(12 * 45)})
 	app.TypeLine(session, winsize)

@@ -119,9 +119,13 @@ var programs = map[string]func(config) int{
 
 func Main() {
 	name := filepath.Base(os.Args[0])
+	if name == winsizeProgram {
+		os.Exit(runWinsize())
+	}
 	program, ok := programs[name]
 	if !ok {
-		return
+		fmt.Fprintf(os.Stderr, "fakeagent: run as %q; it runs only under the names a test world links to it\n", name)
+		os.Exit(2)
 	}
 	cfg, err := loadConfig(programDir())
 	if err != nil {

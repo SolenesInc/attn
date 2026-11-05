@@ -18,7 +18,6 @@ func TestMain(m *testing.M) {
 		holdDaemonLockForever(pidPath, os.Getenv("ATTN_TEST_DAEMON_LOCK_CONTENT"))
 	}
 	if os.Getenv("ATTN_APP_STOP_HELPER_READY") != "" {
-		fakeagent.Main()
 		config.ScopeTestEnvironment(os.Getenv("ATTN_DATA_DIR"))
 		os.Exit(m.Run())
 	}

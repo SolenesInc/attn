@@ -303,8 +303,8 @@ git init -q
 cp "$root/scripts/landing-tests" "$root/scripts/landing-tests.sh" scripts/
 cat >scripts/test-go.sh <<'EOF'
 #!/usr/bin/env bash
-if [ "$1" = --provide-e2e-binary ]; then
-  echo fake-attn >"$2"
+if [ "$1" = --provide-test-binaries ]; then
+  printf 'fake-attn\nfake-agent\n' >"$2"
   exit 0
 fi
 printf '%s\n' "$*" >>"$LAND_CHECK_LOG"

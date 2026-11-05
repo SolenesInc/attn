@@ -132,9 +132,9 @@ settle_all_go_units() {
 }
 
 if [ -n "$go_entries" ]; then
-  ./scripts/test-go.sh --provide-e2e-binary "$work/e2e-binary" $(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
-  ATTN_E2E_BIN="$(cat "$work/e2e-binary")"
-  export ATTN_E2E_BIN
+  ./scripts/test-go.sh --provide-test-binaries "$work/test-binaries" $(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
+  { read -r ATTN_E2E_BIN; read -r ATTN_FAKEAGENT_BIN; } <"$work/test-binaries"
+  export ATTN_E2E_BIN ATTN_FAKEAGENT_BIN
 fi
 
 app_entries="$(awk '$1 == "vitest" || $1 == "playwright"' <<<"$entries")"

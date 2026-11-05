@@ -86,7 +86,7 @@ func TestASharedCodexAppServerRunsCommandsWithTheDaemonsOpenFileLimitWhenLaunche
 			t.Fatal(err)
 		}
 		lowered := exec.Command("/bin/sh", "-c", `ulimit -Sn 256 && exec "$@"`, "low-file-limit", self, "-test.v", "-test.run", "^"+t.Name()+"$")
-		lowered.Env = append(os.Environ(), "ATTN_TEST_UNDER_LOW_FILE_LIMIT=1", "ATTN_E2E_BIN="+testworld.AttnBinary(t))
+		lowered.Env = append(os.Environ(), "ATTN_TEST_UNDER_LOW_FILE_LIMIT=1", "ATTN_E2E_BIN="+testworld.AttnBinary(t), "ATTN_FAKEAGENT_BIN="+testworld.FakeAgentBinary(t))
 		if out, err := lowered.CombinedOutput(); err != nil {
 			t.Fatalf("under a soft open-file limit of 256: %v\n%s", err, out)
 		}
