@@ -1,13 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Message } from '../types'
+import type { Message, Request } from '../types'
 
 type Link = { terminal: string; socketPath: string }
 type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
+type Compacted = 'compacted' | 'skipped' | 'busy' | 'failed'
 
 const POLL_RETRY_MS = 1000
 const RING_ID_PREFIX = 'inbox-ring/'
+const BETWEEN_TURNS_ONLY = ['compacts between turns', 'a newer turn began']
 const MID_TURN_HEAD = 'The user sent a new message while you were working:\n'
 const MID_TURN_TAIL =
   '\n\nThis is how Claude Code surfaces messages the user sends mid-turn — within the running turn, often alongside the next tool result, rather than as a separate conversation turn. Address the message above as you continue this turn.'
@@ -102,6 +104,17 @@ async function place($: EngineInterface, message: Message): Promise<void> {
   return ack($, message.id, 'refused', drop)
 }
 
+function compact($: EngineInterface, id: string): void {
+  const report = (outcome: Compacted, reason?: string) => post($, '/claude/compacted', { id, outcome, reason })
+  void $.session.compact().then(
+    result => ('skip' in result ? report('skipped', String(result.skip)) : report('compacted')),
+    (err: unknown) => {
+      const reason = String(err)
+      return report(BETWEEN_TURNS_ONLY.some(busy => reason.includes(busy)) ? 'busy' : 'failed', reason)
+    },
+  )
+}
+
 async function pollForever($: EngineInterface): Promise<void> {
   const query = `terminal=${encodeURIComponent(link.terminal)}&instance=${encodeURIComponent(instance)}`
   for (;;) {
@@ -118,7 +131,12 @@ async function pollForever($: EngineInterface): Promise<void> {
       return
     }
     if (status === 200) {
-      await place($, JSON.parse(body) as Message)
+      const request = JSON.parse(body) as Request
+      if (request.kind === 'compact') {
+        compact($, request.id)
+      } else {
+        await place($, request)
+      }
     } else if (status !== 204) {
       await $.clock.sleep(POLL_RETRY_MS)
     }

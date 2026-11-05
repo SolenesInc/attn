@@ -381,6 +381,14 @@ mail wakes its tender right after either.
 the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
+With `--compact`, the close waits for the turn to end and then places the
+compact in the session's input lane, through the Claude mod or the shared Codex
+app server. A ring placed before the compact makes the compact wait for the next
+idle. Once the compact is placed, the lane holds every later item until the
+session has closed, and seed mail that arrives then wakes the closed tender as
+above. A compact that meets a running turn opens the lane again and retries at
+the next idle. User input before the close cancels it and opens the lane again.
+
 Every tender wake for seed mail, of a session or of a crew member, counts
 against one limit for the seed: 48 wakes per 24 hours, held in memory. The count
 restarts empty when the daemon restarts. These wakes do not count against

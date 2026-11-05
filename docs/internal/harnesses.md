@@ -390,6 +390,23 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
   the user answers the trust question: 0.3 to 1.4 s after the answer in 4 runs,
   and never before it. In a trusted folder, launched by attn, the first poll
   came 0.71 to 5.54 s after launch (12 launches, median 0.9 s).
+- `$.session.compact()` with no argument compacts with the engine's own prompt.
+  An idle compact resolved `{ messages, tokensBefore, tokensAfter }` 5 times out
+  of 5, in 8 to 18 s at up to 82k tokens, and it resolves `{ skip }` when a hook
+  vetoes it. While a turn runs it rejects within 1 ms with a message that says
+  the conversation compacts between turns: `a turn is running (<id>)`,
+  `a turn is in flight`, or `an external turn is driving the conversation`. A
+  turn that begins during the compact makes it reject with
+  `a newer turn began before the compaction could be applied`. It also rejects
+  on an empty conversation (`Not enough messages to compact`) and with
+  `DISABLE_COMPACT` set. A poll loop keeps running through a compaction, so the
+  mod calls it without awaiting. PreCompact and PostCompact fire with
+  `trigger: "manual"`.
+- A prompt typed during that compact waits, and Claude runs it on top of the
+  summary once the compact ends.
+- The compact's `system`/`compact_boundary` and `isCompactSummary` entries reach
+  the transcript file only when Claude exits, which attn's close does with
+  SIGTERM. `claude --resume` loads from them.
 
 ## Codex
 

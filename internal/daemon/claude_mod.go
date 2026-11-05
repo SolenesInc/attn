@@ -32,11 +32,16 @@ const (
 	claudeModPollPath                         = "/claude/next"
 	claudeModAckPath                          = "/claude/ack"
 	claudeModReturnPath                       = "/claude/return"
+	claudeModCompactedPath                    = "/claude/compacted"
 	claudeModOutcomeHeld                      = "held"
 	claudeModOutcomeAppended                  = "appended"
 	claudeModOutcomeSubmitted                 = "submitted"
 	claudeModOutcomeStopped                   = "stopped"
 	claudeModOutcomeRefused                   = "refused"
+	claudeModCompactCompacted                 = "compacted"
+	claudeModCompactSkipped                   = "skipped"
+	claudeModCompactBusy                      = "busy"
+	claudeModCompactFailed                    = "failed"
 )
 
 type claudeMod struct {
@@ -59,6 +64,7 @@ type claudeModTerminal struct {
 	queued            []*claudeModDelivery
 	handed            map[string]*claudeModDelivery
 	held              map[string]*claudeModHeld
+	compacting        map[string]protocol.SessionID
 	accepted          uint64
 }
 
@@ -71,7 +77,15 @@ type claudeModPoll struct {
 type claudeModDelivery struct {
 	session protocol.SessionID
 	input   harness.Input
+	compact bool
 	answer  chan harness.Custody
+}
+
+func (delivery *claudeModDelivery) wire() map[string]string {
+	if delivery.compact {
+		return map[string]string{"id": delivery.input.ID, "kind": "compact"}
+	}
+	return map[string]string{"id": delivery.input.ID, "kind": "input", "text": delivery.input.Text}
 }
 
 type claudeModHeld struct {
@@ -173,6 +187,7 @@ func (m *claudeMod) listen() error {
 	mux.HandleFunc("GET "+claudeModPollPath, m.servePoll)
 	mux.HandleFunc("POST "+claudeModAckPath, m.serveAck)
 	mux.HandleFunc("POST "+claudeModReturnPath, m.serveReturn)
+	mux.HandleFunc("POST "+claudeModCompactedPath, m.serveCompacted)
 	server := &http.Server{Handler: mux}
 	if !m.d.life.Go("claudeModServer", func() { _ = server.Serve(listener) }) {
 		_ = listener.Close()
@@ -235,7 +250,7 @@ func (m *claudeMod) servePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"id": delivery.input.ID, "text": delivery.input.Text})
+	_ = json.NewEncoder(w).Encode(delivery.wire())
 }
 
 func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll *claudeModPoll) *claudeModTerminal {
@@ -247,7 +262,7 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 	}
 	t := m.terminals[terminal]
 	if t == nil {
-		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld)}
+		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld), compacting: make(map[string]protocol.SessionID)}
 		m.terminals[terminal] = t
 		m.d.life.Go("claudeModReachable", func() {
 			if session, ok := m.d.shownIn(terminal); ok {
@@ -266,6 +281,7 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 				delivery.answer <- harness.Custody{Reason: "claude mod: reloaded before answering for input " + id}
 			}
 			m.returnHeldLocked(t, heldIDs(t))
+			m.failCompactingLocked(t, "the Claude mod reloaded before it reported the compact")
 		}
 		t.instance = instance
 		for session := range m.returned {
@@ -292,10 +308,16 @@ func (m *claudeMod) closePoll(t *claudeModTerminal, poll *claudeModPoll, clientG
 		m.armReachLocked(t)
 	}
 	delivery := poll.delivery
-	if delivery != nil && clientGone {
+	switch {
+	case delivery == nil:
+	case clientGone:
 		delete(t.handed, delivery.input.ID)
 		t.queued = append([]*claudeModDelivery{delivery}, t.queued...)
 		return nil
+	case delivery.compact:
+		delete(t.handed, delivery.input.ID)
+		t.compacting[delivery.input.ID] = delivery.session
+		delivery.answer <- harness.Custody{Taken: true, At: time.Now()}
 	}
 	return delivery
 }
@@ -348,6 +370,7 @@ func (m *claudeMod) dropUnreachable(t *claudeModTerminal, timer *stepclock.Timer
 	}
 	t.queued = nil
 	m.returnHeldLocked(t, heldIDs(t))
+	m.failCompactingLocked(t, "the Claude mod stopped polling before it reported the compact")
 	return sessions
 }
 
@@ -492,4 +515,59 @@ func (m *claudeMod) rememberRing(id string, ring returnableInboxRing) (alreadyBa
 		}
 	}
 	return false
+}
+
+type claudeModCompacted struct {
+	Terminal harness.TerminalID `json:"terminal"`
+	Instance string             `json:"instance"`
+	ID       string             `json:"id"`
+	Outcome  string             `json:"outcome"`
+	Reason   string             `json:"reason"`
+}
+
+func (c claudeModCompacted) outcome() (compactOutcome, bool) {
+	switch c.Outcome {
+	case claudeModCompactCompacted:
+		return compactOutcome{}, true
+	case claudeModCompactSkipped:
+		return compactOutcome{failed: "Claude skipped it: " + c.Reason}, true
+	case claudeModCompactFailed:
+		return compactOutcome{failed: c.Reason}, true
+	}
+	return compactOutcome{}, false
+}
+
+func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
+	var compacted claudeModCompacted
+	if err := json.NewDecoder(r.Body).Decode(&compacted); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	outcome, ok := compacted.outcome()
+	if !ok && compacted.Outcome != claudeModCompactBusy {
+		http.Error(w, "unknown outcome "+compacted.Outcome, http.StatusBadRequest)
+		return
+	}
+	m.mu.Lock()
+	var session protocol.SessionID
+	if t := m.terminals[compacted.Terminal]; t != nil && t.instance == compacted.Instance {
+		session = t.compacting[compacted.ID]
+		delete(t.compacting, compacted.ID)
+	}
+	m.mu.Unlock()
+	switch {
+	case session == "":
+	case compacted.Outcome == claudeModCompactBusy:
+		m.d.compactions.retryAfterBusy(m.d, session, compacted.ID, compacted.Reason)
+	default:
+		m.d.compactions.report(m.d, session, compacted.ID, outcome)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (m *claudeMod) failCompactingLocked(t *claudeModTerminal, why string) {
+	for id, session := range t.compacting {
+		delete(t.compacting, id)
+		m.d.life.Go("claudeModCompactLost", func() { m.d.compactions.report(m.d, session, id, compactOutcome{failed: why}) })
+	}
 }

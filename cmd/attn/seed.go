@@ -235,9 +235,10 @@ conversation, as attn agent close --self --compact does, so the session that
 wakes resumes a shorter conversation. End your turn right after the command.
 Mail for the seed that reaches you before the compact ends the standby, so you
 read it and stay open. Mail that arrives during the compact waits until the
-session has closed. Only a Codex session on the shared Codex app server compacts: attn
-refuses --compact for any other session and leaves standby unset, and for a
-Codex session off the shared server the refusal names codex_shared_enabled.
+session has closed. Only a Claude session with the Claude mod and a Codex
+session on the shared Codex app server compact: attn refuses --compact for any
+other session and leaves standby unset, and the refusal names the setting to
+turn on, claude_mod_enabled or codex_shared_enabled.
 Only the seed's tender sets standby. A Claude session needs claude_mod_enabled
 when it launched. --clear ends standby.
 Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close`, []string{"m", "close", "compact", "clear", "json"}, false},

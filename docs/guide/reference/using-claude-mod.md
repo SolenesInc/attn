@@ -61,6 +61,14 @@ Attn never types the mail for a session it resumes because its seed is on
 standby. Attn waits for the mod's first connection and delivers through it, as
 [Seeds on standby](delegation.md#seeds-on-standby) describes.
 
+## Compacting before a close
+
+An agent can compact its conversation through the mod just before it closes
+itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. Claude
+compacts in its own way, as `/compact` does. A Claude session without the mod can't. If
+you type into the session while it compacts, Attn cancels the close and Claude
+runs your prompt after the compact.
+
 ## Upgrades and restarts
 
 Attn keeps the mod in a `claude-mod` folder in its data directory. When an Attn

@@ -32,9 +32,11 @@ type pendingCompactClose struct {
 	userInputs uint64
 	onStandby  []string
 	key        string
+	busyTimes  int
 	placing    bool
 	again      bool
 	placed     bool
+	busy       bool
 	outcome    *compactOutcome
 	tripwire   *time.Timer
 }
@@ -49,8 +51,12 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 			"this Codex session does not run on the shared Codex app server, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Codex sessions launched after that can close with --compact. Close without --compact instead",
 			SettingCodexSharedEnabled, SettingCodexSharedEnabled)}
 	case string(protocol.SessionAgentClaude):
-		return &agentCloseRefusal{"compact_unavailable",
-			"attn cannot compact a Claude session yet; close without --compact"}
+		if d.claudeMod().reachable(d.sessionMonitor(target.ID).LinkTarget().Terminal) {
+			return nil
+		}
+		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
+			"this Claude session does not run with attn's Claude mod, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Claude sessions launched after that can close with --compact. Close without --compact instead",
+			SettingClaudeModEnabled, SettingClaudeModEnabled)}
 	}
 	return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
 		"attn has no way to compact a %s session; close without --compact", target.Agent)}
@@ -124,7 +130,7 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 			return
 		}
 		pausepoint.At(pausepoint.CompactingClosePlacing)
-		attempt := d.placeDelivery(context.Background(), p.session, sessionmonitor.CompactInput(p.key))
+		attempt := d.placeDelivery(context.Background(), p.session, p.compact())
 		l.mu.Lock()
 		if l.pending[p.session] != p {
 			l.mu.Unlock()
@@ -147,6 +153,14 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 				p.outcome = &compactOutcome{failed: attempt.Err.Error()}
 			}
 		case sessionmonitor.Placed:
+			if p.busy {
+				p.busy, p.again, p.placing = false, false, false
+				p.busyTimes++
+				l.mu.Unlock()
+				p.monitor.ReopenInput()
+				d.kickSessionInboxAddresses(p.session)
+				return
+			}
 			p.placed = true
 			if p.outcome == nil {
 				p.tripwire = d.life.AfterFunc("compactOutcomeTripwire", compactOutcomeTripwire, func() { d.compactOutcomeMissing(p) })
@@ -164,7 +178,7 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, delivery string, outcome compactOutcome) {
 	l.mu.Lock()
 	p := l.pending[session]
-	if p == nil || p.outcome != nil || sessionmonitor.CompactInput(p.key).ID.String() != delivery {
+	if p == nil || p.outcome != nil || p.compact().ID.String() != delivery {
 		l.mu.Unlock()
 		return
 	}
@@ -174,6 +188,34 @@ func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, deliver
 	if ready {
 		d.life.Go("compactingClose", func() { d.closeAfterCompact(p) })
 	}
+}
+
+func (p *pendingCompactClose) compact() sessionmonitor.Delivery {
+	return sessionmonitor.CompactInput(fmt.Sprintf("%s-%d", p.key, p.busyTimes))
+}
+
+func (l *compactionLedger) retryAfterBusy(d *Daemon, session protocol.SessionID, delivery string, why string) {
+	l.mu.Lock()
+	p := l.pending[session]
+	if p == nil || p.outcome != nil || p.compact().ID.String() != delivery {
+		l.mu.Unlock()
+		return
+	}
+	d.logf("compacting close: the compact of session %s met a running turn and waits for its end: %s", session, why)
+	if !p.placed {
+		p.busy = true
+		l.mu.Unlock()
+		return
+	}
+	p.placed, p.placing, p.again = false, false, false
+	p.busyTimes++
+	if p.tripwire != nil {
+		p.tripwire.Stop()
+		p.tripwire = nil
+	}
+	l.mu.Unlock()
+	p.monitor.ReopenInput()
+	d.kickSessionInboxAddresses(session)
 }
 
 func (d *Daemon) compactOutcomeMissing(p *pendingCompactClose) {

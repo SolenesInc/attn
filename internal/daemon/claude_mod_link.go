@@ -24,7 +24,15 @@ func (claudeModLink) Voices() []harness.Voice {
 func (claudeModLink) SafeDuringQuestion() {}
 
 func (l claudeModLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	delivery := &claudeModDelivery{session: l.session, input: in, answer: make(chan harness.Custody, 1)}
+	return l.hand(ctx, &claudeModDelivery{session: l.session, input: in, answer: make(chan harness.Custody, 1)})
+}
+
+func (l claudeModLink) Compact(ctx context.Context, in harness.Input) harness.Custody {
+	return l.hand(ctx, &claudeModDelivery{session: l.session, input: in, compact: true, answer: make(chan harness.Custody, 1)})
+}
+
+func (l claudeModLink) hand(ctx context.Context, delivery *claudeModDelivery) harness.Custody {
+	in := delivery.input
 	if !l.mod.enqueue(l.terminal, delivery) {
 		return harness.Custody{Reason: fmt.Sprintf("claude mod: terminal %s stopped polling before taking input %s, send it again", l.terminal, in.ID)}
 	}

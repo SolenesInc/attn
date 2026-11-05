@@ -108,6 +108,49 @@ func (r *Run) ModStopPolling() {
 	r.call(methodModStop, struct{}{}, nil)
 }
 
+func (r *Run) ModSkipNextCompact(reason string) {
+	r.t.Helper()
+	r.call(methodModCompactOutcome, ModCompactReport{Outcome: ModCompactSkipped, Reason: reason}, nil)
+}
+
+func (r *Run) ModFailNextCompact(reason string) {
+	r.t.Helper()
+	r.call(methodModCompactOutcome, ModCompactReport{Outcome: ModCompactFailed, Reason: reason}, nil)
+}
+
+func (r *Run) ModBusyNextCompact(reason string) {
+	r.t.Helper()
+	r.call(methodModCompactOutcome, ModCompactReport{Outcome: ModCompactBusy, Reason: reason}, nil)
+}
+
+func (r *Run) ModHoldNextCompact() (arrived, release func()) {
+	r.t.Helper()
+	r.call(methodModCompactHold, struct{}{}, nil)
+	arrived = func() {
+		r.t.Helper()
+		r.call(methodModCompactArrived, struct{}{}, nil)
+	}
+	release = func() {
+		r.t.Helper()
+		r.call(methodModCompactRelease, struct{}{}, nil)
+	}
+	return arrived, release
+}
+
+func (r *Run) ModCompactRequests() int {
+	r.t.Helper()
+	var asked int
+	r.call(methodModCompactRequests, struct{}{}, &asked)
+	return asked
+}
+
+func (r *Run) ModNextCompactReport() ModCompactReport {
+	r.t.Helper()
+	var report ModCompactReport
+	r.call(methodModCompactReport, struct{}{}, &report)
+	return report
+}
+
 func (r *Run) Exit(code int) {
 	r.t.Helper()
 	if err := r.fake.peer.notify(methodExit, exitParams{Code: code}); err != nil {

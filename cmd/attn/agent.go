@@ -797,10 +797,11 @@ commands:
         End your turn right after the command: you get no turn after the compact.
         Input the user types before the session closes cancels the close, and
         the session stays open. When the compact fails, the session still
-        closes, and the reason says the compact did not run. Only a Codex
-        session on the shared Codex app server compacts. attn refuses any other
-        session, and for a Codex session off the shared server the refusal names
-        codex_shared_enabled, the setting the user turns on. Compact only a
+        closes, and the reason says the compact did not run. Only a Claude
+        session with the Claude mod and a Codex session on the shared Codex app
+        server compact. attn refuses any other session, and the refusal names
+        the setting the user turns on: claude_mod_enabled or
+        codex_shared_enabled. Compact only a
         session that will resume as itself, as a seed's tender does when its
         standby wakes it. A crew member's next wake starts a fresh session.
   reload <session-or-member>... [--source-session <id>] [--json]

@@ -87,6 +87,13 @@ On a `fakeagent.Run`:
   `ModToolBoundary` appends what it holds, `ModEsc` stops the session and returns
   what it held, `ModReload` draws a new instance id, and `ModStopPolling` stops
   its polls. Wait for `daemon.ClaudeModPollHoldTimer` to know a poll is open.
+  The mod answers a compact request with `busy` while a turn runs, and
+  otherwise with `compacted` after Claude's PreCompact, SessionStart and
+  PostCompact hooks. `ModSkipNextCompact`, `ModFailNextCompact` and
+  `ModBusyNextCompact` script the next answer, `ModHoldNextCompact` holds it
+  (`arrived` returns once the compact is under way, `release` lets it finish),
+  `ModCompactRequests` counts the requests, and `ModNextCompactReport` returns
+  the next answer once the daemon has accepted it.
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
   are off unless the test sets `ATTN_HEADLESS_TASKS=on`. When they are on,
   `w.HeadlessTask()` returns the next task. The task carries its `Harness`,

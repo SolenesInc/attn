@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,7 +27,36 @@ const (
 	fakeModEventBacklog  = 64
 	fakeModOutcomeAppend = "appended"
 	fakeModOutcomeSubmit = "submitted"
+	fakeModKindCompact   = "compact"
+	fakeModTurnRunning   = "a turn is running"
 )
+
+const (
+	methodModCompactOutcome  = "mod_compact_outcome"
+	methodModCompactHold     = "mod_compact_hold"
+	methodModCompactArrived  = "mod_compact_arrived"
+	methodModCompactRelease  = "mod_compact_release"
+	methodModCompactRequests = "mod_compact_requests"
+	methodModCompactReport   = "mod_compact_report"
+)
+
+const (
+	ModCompactCompacted = "compacted"
+	ModCompactSkipped   = "skipped"
+	ModCompactBusy      = "busy"
+	ModCompactFailed    = "failed"
+)
+
+type ModCompactReport struct {
+	Outcome string `json:"outcome"`
+	Reason  string `json:"reason"`
+}
+
+type fakeModCompactHold struct {
+	arrived chan struct{}
+	release chan struct{}
+	taken   bool
+}
 
 type ModEvent struct {
 	Kind string `json:"kind"`
@@ -35,6 +65,7 @@ type ModEvent struct {
 
 type fakeModMessage struct {
 	ID   string `json:"id"`
+	Kind string `json:"kind"`
 	Text string `json:"text"`
 }
 
@@ -44,7 +75,9 @@ type fakeMod struct {
 	terminal string
 	client   *http.Client
 	agent    *agent
+	claude   *claude
 	events   chan ModEvent
+	reports  chan ModCompactReport
 
 	mu       sync.Mutex
 	instance string
@@ -52,6 +85,10 @@ type fakeMod struct {
 	working  bool
 	stopped  bool
 	held     []fakeModMessage
+
+	nextCompact ModCompactReport
+	compactHold *fakeModCompactHold
+	compactAsks int
 }
 
 func newFakeMod(dir string) *fakeMod {
@@ -64,6 +101,7 @@ func newFakeMod(dir string) *fakeMod {
 		socket:   socket,
 		terminal: string(harness.TerminalFromEnv()),
 		events:   make(chan ModEvent, fakeModEventBacklog),
+		reports:  make(chan ModCompactReport, fakeModEventBacklog),
 		client: &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		}}},
@@ -72,7 +110,7 @@ func newFakeMod(dir string) *fakeMod {
 
 func (c *claude) startMod(a *agent) {
 	if c.mod != nil {
-		c.mod.agent = a
+		c.mod.agent, c.mod.claude = a, c
 		c.mod.load()
 	}
 }
@@ -110,7 +148,11 @@ func (m *fakeMod) pollLoop(ctx context.Context, instance string) {
 			return
 		case response.StatusCode == http.StatusOK:
 			var message fakeModMessage
-			if json.Unmarshal(body, &message) == nil && ctx.Err() == nil {
+			switch {
+			case json.Unmarshal(body, &message) != nil || ctx.Err() != nil:
+			case message.Kind == fakeModKindCompact:
+				go m.compact(instance, message.ID)
+			default:
 				m.place(instance, message)
 			}
 		}
@@ -190,7 +232,7 @@ func (m *fakeMod) turnCompleted() {
 	go m.submit(instance, strings.Join(texts, "\n\n"), ids...)
 }
 
-func (m *fakeMod) handle(a *agent, method string) (any, error) {
+func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, error) {
 	switch method {
 	case methodModNext:
 		return <-m.events, nil
@@ -211,8 +253,100 @@ func (m *fakeMod) handle(a *agent, method string) (any, error) {
 	case methodModStop:
 		m.stopPolling()
 		return struct{}{}, nil
+	case methodModCompactOutcome:
+		var next ModCompactReport
+		if err := json.Unmarshal(params, &next); err != nil {
+			return nil, err
+		}
+		m.mu.Lock()
+		m.nextCompact = next
+		m.mu.Unlock()
+		return struct{}{}, nil
+	case methodModCompactHold:
+		m.mu.Lock()
+		m.compactHold = &fakeModCompactHold{arrived: make(chan struct{}), release: make(chan struct{})}
+		m.mu.Unlock()
+		return struct{}{}, nil
+	case methodModCompactArrived, methodModCompactRelease:
+		m.mu.Lock()
+		hold := m.compactHold
+		m.mu.Unlock()
+		if hold == nil {
+			return nil, fmt.Errorf("no compact is held to answer %s", method)
+		}
+		if method == methodModCompactArrived {
+			<-hold.arrived
+		} else {
+			close(hold.release)
+		}
+		return struct{}{}, nil
+	case methodModCompactRequests:
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.compactAsks, nil
+	case methodModCompactReport:
+		return <-m.reports, nil
 	}
 	return nil, fmt.Errorf("unknown mod method %q", method)
+}
+
+func (m *fakeMod) compact(instance, id string) {
+	m.agent.turn.Lock()
+	m.mu.Lock()
+	m.compactAsks++
+	running := m.working
+	var next ModCompactReport
+	var hold *fakeModCompactHold
+	if !running {
+		next, m.nextCompact = m.nextCompact, ModCompactReport{}
+		if m.compactHold != nil && !m.compactHold.taken {
+			hold = m.compactHold
+			hold.taken = true
+		}
+	}
+	m.mu.Unlock()
+	m.agent.turn.Unlock()
+	if running {
+		m.reportCompact(instance, id, ModCompactBusy, fakeModTurnRunning)
+		return
+	}
+	outcome := next.Outcome
+	if outcome == "" {
+		outcome = ModCompactCompacted
+	}
+	compacting := outcome == ModCompactCompacted
+	if compacting {
+		if err := m.compactHooks("PreCompact"); err != nil {
+			m.reportCompact(instance, id, ModCompactFailed, err.Error())
+			return
+		}
+	}
+	if hold != nil {
+		close(hold.arrived)
+		<-hold.release
+	}
+	if compacting {
+		if err := errors.Join(m.compactHooks("SessionStart"), m.compactHooks("PostCompact")); err != nil {
+			m.reportCompact(instance, id, ModCompactFailed, err.Error())
+			return
+		}
+	}
+	m.reportCompact(instance, id, outcome, next.Reason)
+}
+
+func (m *fakeMod) compactHooks(event string) error {
+	m.agent.turn.Lock()
+	defer m.agent.turn.Unlock()
+	c := m.claude
+	if event == "SessionStart" {
+		return c.hooks.run(event, "compact", c.hookInput(event, map[string]any{"source": "compact"}))
+	}
+	return c.hooks.run(event, "manual", c.hookInput(event, map[string]any{"trigger": "manual"}))
+}
+
+func (m *fakeMod) reportCompact(instance, id, outcome, reason string) {
+	m.post("/claude/compacted", map[string]string{"terminal": m.terminal, "instance": instance, "id": id, "outcome": outcome, "reason": reason})
+	m.reports <- ModCompactReport{Outcome: outcome, Reason: reason}
 }
 
 func (m *fakeMod) toolBoundary() []string {

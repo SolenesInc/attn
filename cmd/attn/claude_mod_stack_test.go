@@ -229,14 +229,17 @@ func writeClaudeConfig(t *testing.T, claude, configDir, work string) {
 }
 
 const (
-	mockModelToolPrompt = "touch the marker file"
-	questionWaitingPath = "/question-waiting"
+	mockModelToolPrompt     = "touch the marker file"
+	questionWaitingPath     = "/question-waiting"
+	mockModelCompactPrompt  = "create a detailed summary of the conversation so far"
+	mockModelCompactSummary = "The checkout fix landed and the session closed itself."
 )
 
 type mockModel struct {
 	*httptest.Server
 	mu      sync.Mutex
 	prompts []string
+	opening []string
 	changed chan struct{}
 	bash    []mockBashStep
 }
@@ -263,29 +266,41 @@ func startMockModel(t *testing.T) *mockModel {
 
 func (m *mockModel) awaitPrompt(t *testing.T, contains string) {
 	t.Helper()
+	m.awaitPromptSince(t, 0, contains)
+}
+
+func (m *mockModel) mark() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.prompts)
+}
+
+func (m *mockModel) awaitPromptSince(t *testing.T, mark int, contains string) (opening string) {
+	t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
 		m.mu.Lock()
-		seen, changed := append([]string(nil), m.prompts...), m.changed
+		seen, openings, changed := append([]string(nil), m.prompts...), append([]string(nil), m.opening...), m.changed
 		m.mu.Unlock()
-		for _, prompt := range seen {
-			if strings.Contains(prompt, contains) {
-				return
+		for i := mark; i < len(seen); i++ {
+			if strings.Contains(seen[i], contains) {
+				return openings[i]
 			}
 		}
 		select {
 		case <-changed:
 		case <-guard.C:
-			t.Fatalf("the model saw no prompt with %q within %s; prompts: %q", contains, fakeagent.HangGuard, seen)
+			t.Fatalf("the model saw no prompt with %q within %s; prompts: %q", contains, fakeagent.HangGuard, seen[min(mark, len(seen)):])
 		}
 	}
 }
 
-func (m *mockModel) record(prompt string) {
+func (m *mockModel) record(prompt, opening string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.prompts = append(m.prompts, prompt)
+	m.opening = append(m.opening, opening)
 	close(m.changed)
 	m.changed = make(chan struct{})
 }
@@ -293,7 +308,7 @@ func (m *mockModel) record(prompt string) {
 func (m *mockModel) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == questionWaitingPath:
-		m.record(questionWaitingPath)
+		m.record(questionWaitingPath, "")
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/messages/count_tokens"):
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"input_tokens":1200}`))
@@ -318,7 +333,7 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	callsTool := false
+	callsTool, compacts := false, false
 	bash := slices.Contains(body.Tools, mockTool{Name: "Bash"})
 	command := ""
 	for i := len(body.Messages) - 1; i >= 0; i-- {
@@ -327,15 +342,19 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 		}
 		prompt := contentText(body.Messages[i].Content)
 		callsTool = strings.Contains(prompt, mockModelToolPrompt)
+		compacts = strings.Contains(prompt, mockModelCompactPrompt)
 		m.mu.Lock()
 		if bash && len(m.bash) > 0 && strings.Contains(prompt, m.bash[0].after) {
 			command, m.bash = m.bash[0].command, m.bash[1:]
 		}
 		m.mu.Unlock()
-		m.record(prompt)
+		m.record(prompt, contentText(body.Messages[0].Content))
 		break
 	}
-	const say = "Noted."
+	say := "Noted."
+	if compacts {
+		say = "<analysis>The user asked for the checkout fix.</analysis>\n<summary>" + mockModelCompactSummary + "</summary>"
+	}
 	usage := map[string]int{"input_tokens": 1200, "output_tokens": 2, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 	if command != "" && body.Stream {
 		writeBashToolUse(w, body.Model, command, usage)
