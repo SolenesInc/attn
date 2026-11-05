@@ -15,6 +15,7 @@ import {
 } from '../../utils/agentAvailability';
 import { keyCombo } from '../../shortcuts/formatShortcut';
 import { modifierGlyphs } from '../../shortcuts/platform';
+import { HarnessCheckingStatus } from '../HarnessCheckingStatus';
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: 'available',
@@ -272,6 +273,12 @@ export function SessionControls({
     setChiefOfStaff,
   } = controls;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
+  const checkingStatus = (
+    <HarnessCheckingStatus
+      agents={targetIsOutpost ? [] : orderedAgentList}
+      availability={effectiveAgentAvailability}
+    />
+  );
   const toggles = (
     <>
       {chiefToggleEligible && (
@@ -333,6 +340,7 @@ export function SessionControls({
       {' '}
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
+        {!compact && checkingStatus}
         <div className="picker-agent-controls">
           {harnessesLoading && <span role="status">Loading harnesses…</span>}
           {harnessesError && (
@@ -390,6 +398,7 @@ export function SessionControls({
           </div>
         </div>
       </div>
+      {compact && checkingStatus}
       {compact ? <div className="launcher-toggle-group">{toggles}</div> : toggles}
       {!hasAvailableAgents && <div className="picker-agent-warning">{noAgentsMessage}</div>}
     </>

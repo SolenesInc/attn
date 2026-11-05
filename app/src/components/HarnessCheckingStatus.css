@@ -1,0 +1,23 @@
+.harness-checking-status {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-agent-bar > .harness-checking-status,
+.launcher-controls > .harness-checking-status {
+  font-family: 'JetBrains Mono', 'SF Mono', 'DejaVu Sans Mono', monospace;
+}
+
+.picker-agent-bar > .harness-checking-status {
+  margin: 0 12px;
+}
+
+.launcher-controls > .harness-checking-status {
+  text-align: left;
+}

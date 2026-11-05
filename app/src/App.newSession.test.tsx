@@ -85,6 +85,7 @@ describe('App new session', () => {
       expect(claude()).toBeEnabled();
       expect(claude()).toHaveAttribute('aria-checked', 'true');
       expect(claude()).toHaveAttribute('title', 'Checking for Claude on this machine');
+      expect(screen.getByText('Checking for Claude on this machine')).toBeVisible();
 
       await gesture(daemon, () => fireEvent.click(codex()));
       await gesture(daemon, () => fireEvent.click(claude()));
@@ -94,6 +95,7 @@ describe('App new session', () => {
       expect(claude()).toBeDisabled();
       expect(claude()).toHaveAttribute('title', 'Claude is not available on this machine');
       expect(codex()).toHaveAttribute('aria-checked', 'true');
+      expect(screen.queryByText('Checking for Claude on this machine')).toBeNull();
     });
 
     it('does not say no agent was found while every harness is being checked', async () => {
@@ -102,6 +104,7 @@ describe('App new session', () => {
 
       expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
       expect(screen.getByRole('radio', { name: /^Claude/ })).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByText('Checking for Claude and Codex on this machine')).toBeVisible();
     });
 
     it('shows a harness as checking in Settings until the daemon knows', async () => {
@@ -113,11 +116,13 @@ describe('App new session', () => {
       expect(defaultClaude()).toBeEnabled();
       expect(defaultClaude()).toHaveAttribute('aria-pressed', 'true');
       expect(defaultClaude()).toHaveAttribute('title', 'Checking for Claude on this machine');
+      expect(screen.getByText('Checking for Claude and Codex on this machine')).toBeVisible();
       expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
 
       await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { claude_available: 'true', codex_available: 'true' } }));
       expect(claudeSummary()).toHaveTextContent('Available');
       expect(defaultClaude()).not.toHaveAttribute('title');
+      expect(screen.queryByText('Checking for Claude and Codex on this machine')).toBeNull();
     });
 
     it('waits for reported harness order before assigning agent shortcuts', async () => {

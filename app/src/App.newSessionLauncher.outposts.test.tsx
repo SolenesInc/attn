@@ -262,8 +262,10 @@ describe('launcher with outposts attached', () => {
     const { daemon } = await open({ claude_available: 'checking' });
     const claude = screen.getByRole('radio', { name: /Claude/ });
     const titleByTarget = [];
+    const statusByTarget = [];
     for (let row = 0; row < recents.length; row++) {
       titleByTarget.push(claude.getAttribute('title'));
+      statusByTarget.push(screen.queryByText('Checking for Claude on this machine') !== null);
       expect(claude).toBeEnabled();
       expect(claude).toHaveAttribute('aria-checked', 'true');
       if (row < recents.length - 1) await press(daemon, 'ArrowDown');
@@ -274,6 +276,7 @@ describe('launcher with outposts attached', () => {
       null,
       'Checking for Claude on this machine',
     ]);
+    expect(statusByTarget).toEqual([false, true, false, true]);
     await press(daemon, 'Enter');
     expect(spawns(daemon)).toEqual([{ cwd: NOTES, agent: 'claude', host: undefined }]);
   });
