@@ -65,6 +65,40 @@ func TestLastKnownGoodFromAnotherEnvironmentIsNotTrusted(t *testing.T) {
 	}
 }
 
+func TestAHostThatRetiresBeforeTheCheckReachesItIsNotARejection(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
+	runs := filepath.Join(root, "runs")
+	retiring := filepath.Join(root, "retiring-host")
+	writeScript(t, retiring, "echo run >> '"+runs+"'\nexit 0")
+	hostRuns := func() int {
+		data, _ := os.ReadFile(runs)
+		return strings.Count(string(data), "run")
+	}
+	var rejections []SharedArtifactRejection
+	backend, err := NewSharedHost(WorkerBackendConfig{
+		DataRoot:                 root,
+		DaemonInstanceID:         "d-retiring",
+		BinaryPath:               retiring,
+		OnSharedArtifactRejected: func(r SharedArtifactRejection) error { rejections = append(rejections, r); return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host that retired before answering passed validation")
+	}
+	checkedRuns := hostRuns()
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host that retired before answering passed validation")
+	}
+	if len(rejections) != 0 {
+		t.Fatalf("rejections = %+v, want none for a host that retired cleanly", rejections)
+	}
+	if hostRuns() <= checkedRuns {
+		t.Fatal("the next validation did not check the build again")
+	}
+}
+
 func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	root := sharedArtifactTestRoot(t)
 	started := filepath.Join(root, "started")
