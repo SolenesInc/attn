@@ -21,15 +21,30 @@ export function gardenPathToSeed(seeds: Seed[], seedID: string): string[] {
   return path;
 }
 
+type Update<T> = T | ((prev: T) => T);
+
+function applied<T>(next: Update<T>, prev: T): T {
+  return typeof next === 'function' ? (next as (prev: T) => T)(prev) : next;
+}
+
 interface GardenWalk {
   trail: string[];
-  setTrail: (next: string[] | ((prev: string[]) => string[])) => void;
+  query: string;
+  wideIn: string | null;
+  setTrail: (next: Update<string[]>) => void;
+  setQuery: (next: Update<string>) => void;
+  setWideIn: (next: Update<string | null>) => void;
+  arriveAt: (trail: string[]) => void;
 }
 
 export const useGardenWalk = create<GardenWalk>((set) => ({
   trail: [],
-  setTrail: (next) =>
-    set((state) => ({ trail: typeof next === 'function' ? next(state.trail) : next })),
+  query: '',
+  wideIn: null,
+  setTrail: (next) => set((state) => ({ trail: applied(next, state.trail) })),
+  setQuery: (next) => set((state) => ({ query: applied(next, state.query) })),
+  setWideIn: (next) => set((state) => ({ wideIn: applied(next, state.wideIn) })),
+  arriveAt: (trail) => set({ trail, query: '', wideIn: null }),
 }));
 
 // Not store state: a per-wheel-tick write through the reducer would repaint the

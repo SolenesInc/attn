@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { openActionMenu } from './test/appFixtures';
 import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop, soloDesktop, daemonSeed, daemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
-import { gesture, renderApp } from './test/renderApp';
+import { gardenRegion, openGarden, seedHeading } from './test/garden';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 type Notification = NonNullable<EventMessage<'notification_list_result'>['notifications']>[number];
@@ -43,6 +44,37 @@ async function openNotifications(notifications: Notification[], seeds = [daemonS
   await click(daemon, 'Show Notifications');
   expect(daemon.sentOf('notification_list')).toHaveLength(listed + 1);
   return daemon;
+}
+
+const blockedWake = notification({
+  id: 'wake',
+  kind: 'tender_wake_blocked',
+  severity: 'critical',
+  title: 's-wake could not wake its tender',
+  source_kind: 'seed',
+  source_id: 's-wake',
+  actions: [{ kind: 'open_seed', label: 'Open seed', target_id: 's-wake' }],
+});
+
+const searchField = () => within(gardenRegion()).getByRole('combobox');
+
+async function openGardenWithSearch(search: string) {
+  const { daemon } = await openGarden([daemonSeed('s-wake', { title: 'Watch the deploy' })]);
+  daemon.on('notification_list', () => ({
+    event: 'notification_list_result',
+    success: true,
+    notifications: [blockedWake],
+    unread_count: 1,
+    unread_critical_count: 1,
+  }));
+  fireEvent.change(searchField(), { target: { value: search } });
+  return daemon;
+}
+
+async function openBlockedSeedFromNotification(daemon: ScriptedDaemon) {
+  await click(daemon, 'Show Notifications');
+  await gesture(daemon, () => fireEvent.click(row(blockedWake.title)));
+  await click(daemon, 'Open seed');
 }
 
 async function click(daemon: ScriptedDaemon, name: string) {
@@ -104,22 +136,35 @@ describe('App notifications', () => {
   });
 
   it('opens the seed of a blocked tender wake in the Garden', async () => {
-    const daemon = await openNotifications([
-      notification({
-        id: 'wake',
-        kind: 'tender_wake_blocked',
-        severity: 'critical',
-        title: 's-wake could not wake its tender',
-        source_kind: 'seed',
-        source_id: 's-wake',
-        actions: [{ kind: 'open_seed', label: 'Open seed', target_id: 's-wake' }],
-      }),
-    ]);
+    const daemon = await openNotifications([blockedWake]);
 
-    await gesture(daemon, () => fireEvent.click(row('s-wake could not wake its tender')));
+    await gesture(daemon, () => fireEvent.click(row(blockedWake.title)));
     await click(daemon, 'Open seed');
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
     expect(within(screen.getByTestId('garden-frame')).getAllByText('Watch the deploy').length).toBeGreaterThan(0);
+  });
+
+  it('reveals the seed past a search left in a closed Garden, which an ordinary reopen keeps', async () => {
+    const daemon = await openGardenWithSearch('unrelated');
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    await gesture(daemon, () => pressShortcut('board.open'));
+    expect(searchField()).toHaveValue('unrelated');
+    expect(seedHeading()).toBeNull();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+
+    await openBlockedSeedFromNotification(daemon);
+
+    expect(seedHeading()).toBe('Watch the deploy');
+    expect(searchField()).toHaveValue('');
+  });
+
+  it('reveals the seed past a search in a Garden that is already open', async () => {
+    const daemon = await openGardenWithSearch('unrelated');
+
+    await openBlockedSeedFromNotification(daemon);
+
+    expect(seedHeading()).toBe('Watch the deploy');
+    expect(searchField()).toHaveValue('');
   });
 
   it('installs a Codex update from its notification on the current desktop, and shows it installing until it finishes', async () => {

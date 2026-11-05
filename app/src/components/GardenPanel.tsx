@@ -613,8 +613,11 @@ export function GardenPanel({
 }: GardenPanelProps) {
   const trail = useGardenWalk((walk) => walk.trail);
   const setTrail = useGardenWalk((walk) => walk.setTrail);
-  const [query, setQuery] = useState('');
-  const [wideIn, setWideIn] = useState<string | null>(null);
+  const query = useGardenWalk((walk) => walk.query);
+  const setQuery = useGardenWalk((walk) => walk.setQuery);
+  const wideIn = useGardenWalk((walk) => walk.wideIn);
+  const setWideIn = useGardenWalk((walk) => walk.setWideIn);
+  const arriveAt = useGardenWalk((walk) => walk.arriveAt);
   const [walk, setWalk] = useState<{ of: string; index: number }>({ of: '', index: 0 });
   const connectionGeneration = useOptionalDaemonApi()?.connectionGeneration ?? 0;
   const [seedDocument, setSeedDocument] = useState<{ document: SeedDocument; snapshot: Seed[]; connectionGeneration: number } | null>(null);
@@ -736,10 +739,8 @@ export function GardenPanel({
   const openResult = useCallback((id: string) => {
     rememberScroll();
     arrival.current = { direction: 'in', fromRow: '' };
-    setTrail(gardenPathToSeed(seeds, id));
-    setQuery('');
-    setWideIn(null);
-  }, [rememberScroll, seeds, setTrail]);
+    arriveAt(gardenPathToSeed(seeds, id));
+  }, [arriveAt, rememberScroll, seeds]);
 
   const openSeedCheck = useCallback((seedId: string, checkId: string) => {
     openResult(seedId);
@@ -759,11 +760,11 @@ export function GardenPanel({
   const toggleWide = useCallback(() => {
     setWideIn((cur) => (cur === null ? plotId : null));
     focusSearch();
-  }, [focusSearch, plotId]);
+  }, [focusSearch, plotId, setWideIn]);
   const toggleClosedLens = useCallback(() => {
     setQuery((cur) => toggleToken(cur, 'is:any'));
     focusSearch();
-  }, [focusSearch]);
+  }, [focusSearch, setQuery]);
 
   // Keep the frame below controls that register after opening, such as a lightbox.
   useEscapeStack(onEscapeFloor ?? (() => {}), isOpen && !!onEscapeFloor);

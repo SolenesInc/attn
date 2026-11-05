@@ -73,6 +73,7 @@ describe('App garden seeds', () => {
     const beta = daemonSeed('s-beta11', { title: 'Side work', profile_id: 'profile-side' });
     const { daemon } = await openGarden([alpha]);
     expect(screen.getByText('Default work')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'default' } });
 
     await gesture(daemon, () => daemon.emit({
       event: 'profile_arrangement_changed',
@@ -80,6 +81,7 @@ describe('App garden seeds', () => {
       desktops: [emptyDesktop('side-desktop', { profile_id: 'profile-side' })],
     }));
     expect(screen.queryByText('Default work')).toBeNull();
+    expect(screen.getByRole('combobox')).toHaveValue('');
     daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-side', seeds: [beta], total: 1 });
     expect(screen.getByText('Side work')).toBeInTheDocument();
     daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: [alpha], total: 1 });

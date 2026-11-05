@@ -90,7 +90,7 @@ export function useAppGardenActions({
         showError(`Could not find ${seedId} in the Garden`);
         return;
       }
-      useGardenWalk.getState().setTrail(trail);
+      useGardenWalk.getState().arriveAt(trail);
       openDockPanel('garden');
     },
     [openDockPanel, seeds, showError],
