@@ -80,13 +80,14 @@ type pluginResumeAvailableParams struct {
 type pluginResumeAvailableResult struct {
 	Availability []struct {
 		pluginResumeConversation
-		pluginResumeAvailability
+		conversationAvailability
 	} `json:"availability"`
 }
 
-type pluginResumeAvailability struct {
-	Available bool   `json:"available"`
-	Reason    string `json:"reason,omitempty"`
+type conversationAvailability struct {
+	Available   bool   `json:"available"`
+	Reason      string `json:"reason,omitempty"`
+	CheckFailed bool   `json:"-"`
 }
 
 type pluginReportStateParams struct {
@@ -618,34 +619,33 @@ func (d *Daemon) notifyPluginDriverSessionClosed(pluginName string, terminal har
 	})
 }
 
-func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) (bool, string) {
+func (d *Daemon) pluginConversationResumable(reg pluginDriverRegistration, resumeID, cwd string) conversationAvailability {
 	if !reg.Capabilities["resume_availability"] {
-		return true, ""
+		return conversationAvailability{Available: true}
 	}
 	conversation := pluginResumeConversation{Agent: reg.Agent, CWD: cwd, ResumeSessionID: resumeID}
-	result := d.pluginConversationsResumable(reg, []pluginResumeConversation{conversation})[conversation]
-	return result.Available, result.Reason
+	return d.pluginConversationsResumable(reg, []pluginResumeConversation{conversation})[conversation]
 }
 
-func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]pluginResumeAvailability {
+func (d *Daemon) pluginConversationsResumable(reg pluginDriverRegistration, conversations []pluginResumeConversation) map[pluginResumeConversation]conversationAvailability {
 	ctx, cancel := context.WithTimeout(context.Background(), pluginResumeAvailabilityTimeout)
 	defer cancel()
 	var result pluginResumeAvailableResult
 	err := d.callPlugin(ctx, reg.PluginName, "driver.resume_available", pluginResumeAvailableParams{Conversations: conversations}, &result)
-	reported := make(map[pluginResumeConversation]pluginResumeAvailability, len(result.Availability))
+	reported := make(map[pluginResumeConversation]conversationAvailability, len(result.Availability))
 	for _, answer := range result.Availability {
-		reported[answer.pluginResumeConversation] = answer.pluginResumeAvailability
+		reported[answer.pluginResumeConversation] = answer.conversationAvailability
 	}
-	availability := make(map[pluginResumeConversation]pluginResumeAvailability, len(conversations))
+	availability := make(map[pluginResumeConversation]conversationAvailability, len(conversations))
 	for _, conversation := range conversations {
 		answer, found := reported[conversation]
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
-			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
+			answer = conversationAvailability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: resume_availability_timeout=%s exceeded; the driver did not answer", conversation.ResumeSessionID, conversation.Agent, pluginResumeAvailabilityTimeout)}
 		case err != nil:
-			answer = pluginResumeAvailability{Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
+			answer = conversationAvailability{CheckFailed: true, Reason: fmt.Sprintf("cannot check conversation %s in %s's storage: %v", conversation.ResumeSessionID, conversation.Agent, err)}
 		case !found:
-			answer = pluginResumeAvailability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
+			answer = conversationAvailability{Reason: fmt.Sprintf("driver %s omitted resume availability for conversation %s in %s", conversation.Agent, conversation.ResumeSessionID, conversation.CWD)}
 		case !answer.Available && strings.TrimSpace(answer.Reason) == "":
 			answer.Reason = fmt.Sprintf("conversation %s is no longer in %s's storage", conversation.ResumeSessionID, conversation.Agent)
 		}

@@ -236,6 +236,11 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	}
 	if err != nil {
 		d.logf("tender wake: seed %s: reopening session %s failed, retrying in %s: %v", seed.ID, sessionID, inbox.AttemptDelay, err)
+		d.closeTenderAfterFailedWake(sessionID, err)
+		if remaining, attemptErr := d.store.InboxAttempt(a); attemptErr == nil && remaining.Live == 0 {
+			receipt.Detail = d.blockTenderWake(a, seed, err.Error())
+			return receipt, nil
+		}
 		receipt.Detail = err.Error()
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		return receipt, nil
@@ -252,6 +257,18 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	d.kickInbox(a)
 	receipt.Detail = fmt.Sprintf("reopened session %s, the tender of %s on standby; the mail is delivered once it reads input", shortSessionID(outcome.SessionID), seed.ID)
 	return receipt, nil
+}
+
+func (d *Daemon) closeTenderAfterFailedWake(sessionID protocol.SessionID, failure error) {
+	if d.store.Get(sessionID) == nil || d.sessionHasLiveWorker(sessionID) {
+		return
+	}
+	closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: who.Attn(), Reason: "attn could not resume it for seed mail: " + failure.Error()}, nil)
+	if err != nil {
+		d.logf("tender wake: closing session %s after its failed wake: %v", sessionID, err)
+		return
+	}
+	d.finishSessionClose(sessionID, closing)
 }
 
 func (d *Daemon) seedMailCause(a who.Address) string {

@@ -127,7 +127,11 @@ func (d *Daemon) wakeSeedTender(protection foregroundCleanupProtection, seed gar
 		if reason == "" {
 			reason = "the original conversation is unavailable"
 		}
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: %s", seedID, reason))
+		refusal := protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: %s", seedID, reason)
+		if continuation.ResumeCheckFailed {
+			return nil, refusal
+		}
+		return nil, blockedWake(refusal)
 	}
 	recorded := sessionReopenVerdict{SessionID: sessionID}
 	d.planReopenProfile(&recorded)

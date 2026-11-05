@@ -413,9 +413,17 @@ conversation, a conversation that would reopen in another profile, a Claude
 session that cannot receive the mail through its mod, and the 48-wake limit. The
 seed row carries the reason as `wake_blocked`. The item stays queued. attn does
 not retry these wakes, except at the 48-wake limit: attn delivers the item when
-the 24-hour window has room again. A failure that can fix itself leaves the item
-queued, and attn tries again after 5 minutes. Each wake uses one of the item's 3
-attempts.
+the 24-hour window has room again.
+
+A failure that can fix itself leaves the item queued, and attn tries again after
+5 minutes. These failures are a resume that fails to launch, and a plugin that
+times out or fails while attn checks whether it still has the conversation. A
+plugin that answers that the conversation is gone is a missing conversation. A
+failed launch closes the session again, so its row and tile do not stay open
+with nothing running, and the next attempt resumes it as itself. User input waits
+for the next attempt too, because nothing is running to type it into. Each wake
+uses one of the item's 3 attempts. A failure on the last attempt blocks the wake
+as above, naming the failure. New mail gives the wake fresh attempts.
 
 ## Reading and receipts
 

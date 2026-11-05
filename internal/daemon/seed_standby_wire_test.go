@@ -2,14 +2,17 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
@@ -887,4 +890,244 @@ func gardenPushesSince(app *testworld.Peer, mark int) int {
 		}
 	}
 	return pushes
+}
+
+func pluginTenderOnStandby(t *testing.T, w *world, capabilities map[string]bool) (*driverPeer, *protocol.DelegateResult) {
+	t.Helper()
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "sender")
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", capabilities)
+	awaitDriverAvailable(app, "snipe")
+	delegations := make(chan *protocol.DelegateResult, 1)
+	go func() { delegations <- seedResumeDelegate(t, w, scriptedAgent, "tender") }()
+	run := driver.launched()
+	delegated := <-delegations
+	driver.mustReport("session.report_metadata", map[string]any{
+		"session_id": run.SessionID, "run_id": run.RunID, "seq": 1,
+		"metadata": map[string]string{"native_id": "saved-conversation"}, "resume_session_id": "saved-conversation",
+	})
+	return driver, delegated
+}
+
+type resumeStorage struct {
+	stalled   atomic.Bool
+	available atomic.Bool
+	stall     chan struct{}
+}
+
+func serveResumeStorage(t *testing.T, driver *driverPeer) *resumeStorage {
+	t.Helper()
+	storage := &resumeStorage{stall: make(chan struct{}, 1)}
+	storage.available.Store(true)
+	done := make(chan struct{})
+	t.Cleanup(func() { close(done) })
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case request := <-driver.requests:
+				if storage.stalled.Load() {
+					storage.stall <- struct{}{}
+					continue
+				}
+				var check resumeInspection
+				if err := json.Unmarshal(request.Params, &check); err != nil {
+					t.Error(err)
+					return
+				}
+				available := storage.available.Load()
+				answerResumeInspection(driver, request.ID, check, func(string, string) bool { return available }, "the plugin's storage lost it")
+			}
+		}
+	}()
+	return storage
+}
+
+func noWakeBlocked(t *testing.T, app *testworld.Peer, cli *client.Client, seed string) {
+	t.Helper()
+	if standby := lifeShow(t, cli, seed).Seed.Standby; standby == nil || protocol.Deref(standby.WakeBlocked) != "" {
+		t.Fatalf("the standby of %s is %+v, want it on standby with no blocked wake", seed, standby)
+	}
+	if slices.ContainsFunc(listNotifications(app).Notifications, func(n protocol.Notification) bool { return n.Severity == protocol.NotificationSeverityCritical }) {
+		t.Fatal("a failure that can fix itself raised a critical notification")
+	}
+}
+
+func retriedWakeDeliversTheOriginalMail(t *testing.T, w *world, driver *driverPeer, delegated *protocol.DelegateResult, retried driverLaunch) {
+	t.Helper()
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	if retried.Method != "driver.resume" || retried.ResumeSessionID != "saved-conversation" {
+		t.Fatalf("the retry was %+v, want it resuming saved-conversation", retried)
+	}
+	if err := driver.state(retried, 1, "waiting_input"); err != nil {
+		t.Fatal(err)
+	}
+	synctest.Wait()
+	if typed := strings.Join(w.terminal(session).Submitted(), "\n"); !strings.Contains(typed, standbyNote) {
+		t.Fatalf("the woken tender received %q, want the standby note", typed)
+	}
+	if mail := seedMail(t, w.Client(), session, seed); len(mail) != 1 || mail[0].Content != "the pull request is approved" {
+		t.Fatalf("the woken tender reads %+v, want the original mail", mail)
+	}
+}
+
+func TestATenderWakeThatFailsToLaunchRetriesAndDeliversTheOriginalMail(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
+		onStandbyAndClosed(t, w, cli, delegated)
+
+		w.terms.RefuseNextSpawn(errors.New("PTY temporarily unavailable"))
+		sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
+		if !strings.Contains(sent.Detail, "PTY temporarily unavailable") {
+			t.Fatalf("mail during the outage = %+v, want it queued naming the outage", sent)
+		}
+		driver.launched()
+		synctest.Wait()
+		stillClosed(t, cli, delegated, "a failed launch")
+		noWakeBlocked(t, app, cli, delegated.SeedID)
+
+		w.advance(5 * time.Minute)
+		retriedWakeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
+	})
+}
+
+func TestATenderWakeWhoseResumeInspectionFailsRetriesAndDeliversTheOriginalMail(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
+		storage := serveResumeStorage(t, driver)
+		onStandbyAndClosed(t, w, cli, delegated)
+
+		storage.stalled.Store(true)
+		sending := make(chan *protocol.AgentMsgResult, 1)
+		go func() {
+			sending <- sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
+		}()
+		<-storage.stall
+		w.advance(10 * time.Second)
+		if sent := <-sending; !strings.Contains(sent.Detail, "resume_availability_timeout") {
+			t.Fatalf("mail during the outage = %+v, want it queued naming the timeout", sent)
+		}
+		storage.stalled.Store(false)
+		synctest.Wait()
+		stillClosed(t, cli, delegated, "a failed inspection")
+		noWakeBlocked(t, app, cli, delegated.SeedID)
+
+		w.advance(5 * time.Minute)
+		retriedWakeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
+	})
+}
+
+func TestATenderWakeForAConversationThePluginReportsGoneStaysBlockedWithoutRetrying(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
+		storage := serveResumeStorage(t, driver)
+		onStandbyAndClosed(t, w, cli, delegated)
+
+		storage.available.Store(false)
+		reason := "the plugin's storage lost it"
+		if sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved"); !strings.Contains(sent.Detail, reason) {
+			t.Fatalf("mail for a lost conversation = %+v, want it queued naming %q", sent, reason)
+		}
+		wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+
+		w.advance(5 * time.Minute)
+		synctest.Wait()
+		select {
+		case launch := <-driver.launches:
+			t.Fatalf("a blocked wake launched %+v", launch)
+		default:
+		}
+		stillClosed(t, cli, delegated, "a blocked wake")
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
+			t.Fatalf("the standby of %s is %+v, want wake_blocked naming %q", delegated.SeedID, standby, reason)
+		}
+	})
+}
+
+func TestAnAnswerWaitsForTheRetryOfATenderWakeThatFailedToLaunch(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
+		asked, err := cli.AskOpen(delegated.SessionID, "", cacheAsk, "", w.Path("tender"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		onStandbyAndClosed(t, w, cli, delegated)
+
+		w.terms.RefuseNextSpawn(errors.New("PTY temporarily unavailable"))
+		requestID := uuid.NewString()
+		answered := testworld.Request(app, protocol.AskAnswerMessage{
+			Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: asked.ID,
+			Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+		}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+		if !answered.Success {
+			t.Fatalf("answer: %s", protocol.Deref(answered.Error))
+		}
+		driver.launched()
+		synctest.Wait()
+		select {
+		case launch := <-driver.launches:
+			t.Fatalf("the failed wake retried at once with %+v, want it to wait for the retry", launch)
+		default:
+		}
+		stillClosed(t, cli, delegated, "a failed launch")
+
+		w.advance(5 * time.Minute)
+		retried := driver.launched()
+		if err := driver.state(retried, 1, "waiting_input"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if typed := strings.Join(w.terminal(string(delegated.SessionID)).Submitted(), "\n"); !strings.Contains(typed, standbyNote) || !strings.Contains(typed, "Postgres") {
+			t.Fatalf("the woken tender received %q, want the standby note and the answer", typed)
+		}
+	})
+}
+
+func TestATenderWakeThatFailsOnItsLastAttemptIsBlockedUntilNewMailWakesIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
+		onStandbyAndClosed(t, w, cli, delegated)
+
+		reason := "PTY temporarily unavailable"
+		w.terms.RefuseNextSpawn(errors.New(reason))
+		sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
+		driver.launched()
+		synctest.Wait()
+		noWakeBlocked(t, app, cli, delegated.SeedID)
+		w.terms.RefuseNextSpawn(errors.New(reason))
+		w.advance(5 * time.Minute)
+		driver.launched()
+		synctest.Wait()
+		noWakeBlocked(t, app, cli, delegated.SeedID)
+		w.terms.RefuseNextSpawn(errors.New(reason))
+		w.advance(5 * time.Minute)
+		driver.launched()
+		synctest.Wait()
+		stillClosed(t, cli, delegated, "the last failed attempt")
+		wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
+			t.Fatalf("the standby of %s is %+v, want wake_blocked naming %q", delegated.SeedID, standby, reason)
+		}
+
+		sendAgentMessage(t, cli, "sender", delegated.SeedID, "the checks passed too")
+		w.advance(5 * time.Minute)
+		retried := driver.launched()
+		if err := driver.state(retried, 1, "waiting_input"); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || protocol.Deref(standby.WakeBlocked) != "" {
+			t.Fatalf("after new mail woke the tender the standby is %+v, want no blocked wake", standby)
+		}
+		if mail := seedMail(t, cli, string(delegated.SessionID), delegated.SeedID); len(mail) != 2 {
+			t.Fatalf("the woken tender reads %+v, want both messages", mail)
+		}
+	})
 }

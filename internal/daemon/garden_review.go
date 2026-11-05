@@ -73,11 +73,11 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 	}
 	pending := make(map[string][]pendingInspection)
 	registrations := make(map[string]pluginDriverRegistration)
-	checkResume := func(agentName, resumeID, cwd string) (bool, string) {
+	checkResume := func(agentName, resumeID, cwd string) conversationAvailability {
 		if reg, ok := d.ensurePluginRegistry().driver(agentName); ok && reg.Capabilities["resume"] && reg.Capabilities["resume_availability"] {
 			pending[reg.PluginName] = append(pending[reg.PluginName], pendingInspection{len(observations), pluginResumeConversation{Agent: agentName, CWD: cwd, ResumeSessionID: resumeID}})
 			registrations[reg.PluginName] = reg
-			return false, ""
+			return conversationAvailability{}
 		}
 		return d.conversationResumable(agentName, resumeID, cwd)
 	}
@@ -111,7 +111,7 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 
 	type inspectionResult struct {
 		checks       []pendingInspection
-		availability map[pluginResumeConversation]pluginResumeAvailability
+		availability map[pluginResumeConversation]conversationAvailability
 	}
 	results := make([]inspectionResult, len(pending))
 	tasks := make([]func(), 0, len(pending))

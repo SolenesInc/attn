@@ -255,23 +255,24 @@ func (d *Daemon) reopenConversation(execution garden.Execution, resumeID string,
 			return true, ""
 		}
 	}
-	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID, execution.Cwd)
+	availability := d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID, execution.Cwd)
+	return availability.Available, availability.Reason
 }
 
-func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, string) {
+func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) conversationAvailability {
 	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
 		if !plugin.Capabilities["resume"] {
-			return false, fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)
+			return conversationAvailability{Reason: fmt.Sprintf("agent %q does not resume conversations, so conversation %s cannot be picked up", agentName, resumeID)}
 		}
 		return d.pluginConversationResumable(plugin, resumeID, cwd)
 	}
 	driver := agentdriver.Get(agentName)
 	if driver == nil {
-		return false, fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", agentName)
+		return conversationAvailability{Reason: fmt.Sprintf("agent %q is not installed here, so its conversation cannot be resumed", agentName)}
 	}
 	readiness, err := d.readConversationReadiness(context.Background(), protocol.ConversationReadinessMessage{Agent: agentName, Conversation: resumeID})
 	if err != nil {
-		return false, err.Error()
+		return conversationAvailability{Reason: err.Error()}
 	}
 	if !readiness.Known {
 		reason := fmt.Sprintf("conversation %s is no longer in %s's storage", resumeID, agentName)
@@ -282,9 +283,9 @@ func (d *Daemon) conversationResumable(agentName, resumeID, cwd string) (bool, s
 				reason += fmt.Sprintf("; attn deleted its copy of conversation %s on %s, %d days after no open seed pointed at it", resumeID, kept.DeletedAt.UTC().Format("2006-01-02"), int(conversationKeepGrace().Hours()/24))
 			}
 		}
-		return false, reason
+		return conversationAvailability{Reason: reason}
 	}
-	return true, ""
+	return conversationAvailability{Available: true}
 }
 
 type sessionReopenOutcome struct {

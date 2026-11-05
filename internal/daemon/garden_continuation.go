@@ -39,6 +39,7 @@ type seedContinuation struct {
 	KeptConversation  *protocol.KeptConversation
 	ResumeAvailable   bool
 	ResumeReason      string
+	ResumeCheckFailed bool
 	HandoverPlacement string
 	PlacementReason   string
 }
@@ -494,7 +495,7 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 	return d.continuationForSeedWithResumeCheck(seed, d.conversationResumable)
 }
 
-func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) (bool, string)) *seedContinuation {
+func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
 	key, member := d.seedResumeMember(seed, execution.SessionID)
 	if !ok && !member {
@@ -559,8 +560,9 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}
-	if ok, reason := checkResume(agentName, resumeID, execution.Cwd); !ok {
-		continuation.ResumeReason = "the original conversation is unavailable: " + reason
+	if availability := checkResume(agentName, resumeID, execution.Cwd); !availability.Available {
+		continuation.ResumeReason = "the original conversation is unavailable: " + availability.Reason
+		continuation.ResumeCheckFailed = availability.CheckFailed
 		continuation.HandoverPlacement = handoverReuseCwd
 		return continuation
 	}

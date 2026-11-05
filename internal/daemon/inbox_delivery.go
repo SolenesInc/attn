@@ -212,10 +212,12 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		now := time.Now()
 		due := inbox.Due(attempt.Last, now)
-		if _, seedMail := a.TenderOf(); seedMail && holder == nil && state.rang != "" {
+		_, seedMail := a.TenderOf()
+		if seedMail && holder == nil && state.rang != "" {
 			due, state.rang = now, ""
 		}
-		if due.After(now) && attempt.FromUser > 0 {
+		nobodyToType := seedMail && holder == nil
+		if due.After(now) && attempt.FromUser > 0 && !nobodyToType {
 			bellHeldUntil = due
 		} else if due.After(now) {
 			d.armInboxLocked(a, state, due.Sub(now))
