@@ -160,7 +160,7 @@ func (m *Monitor) save(view View) bool {
 		durable := m.saved.cost.Initialized != checkpoint.Initialized || len(m.saved.cost.Sources) != len(checkpoint.Sources)
 		for id, source := range checkpoint.Sources {
 			prior := m.saved.cost.Sources[id]
-			durable = durable || prior == nil || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
+			durable = durable || prior == nil || prior.Root != source.Root || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
 		}
 		cost = &CostSave{Checkpoint: checkpoint, Durable: durable}
 	}

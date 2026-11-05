@@ -144,7 +144,7 @@ func (t *usageTracker) readIfMoved(tracked *trackedUsageSource) (changed bool) {
 		return t.markIncomplete()
 	}
 	tracked.info = info
-	return t.monitor.applyCostObservations(tracked.source.ID, tracked.follower.Cursor(), usageObservations(tracked.source, batch.Usage))
+	return t.monitor.applyCostObservations(tracked.source.ID, tracked.source.Root, tracked.follower.Cursor(), usageObservations(tracked.source, batch.Usage))
 }
 
 func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []sessioncost.Observation {

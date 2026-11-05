@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *testing.T) {
@@ -197,32 +199,8 @@ func TestSessionFactsAndVentsTellTheReportedModelFromTheRequestedOne(t *testing.
 			t.Fatal(err)
 		}
 		subject := analytics.HashSubject(secret, id)
-		sessionFacts := func(after int64) []analytics.SessionTraits {
-			var traits []analytics.SessionTraits
-			for _, record := range mirroredRecords(t, app, "") {
-				if record.Subject != subject || !strings.HasPrefix(record.Name, "session.") || record.Seq <= after {
-					continue
-				}
-				var derived analytics.Derived
-				if err := json.Unmarshal(record.Props, &derived); err != nil {
-					t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
-				}
-				if derived.Session != nil {
-					traits = append(traits, *derived.Session)
-				}
-			}
-			return traits
-		}
-		ventModels := func() (string, string) {
-			vent, err := cli.RecordVent(protocol.SessionID(id), protocol.VentKindAttn, "attn ask lost my answer.")
-			if err != nil {
-				t.Fatalf("vent: %v", err)
-			}
-			if err := cli.WithdrawVent(protocol.SessionID(id), vent.ID); err != nil {
-				t.Fatalf("withdraw: %v", err)
-			}
-			return protocol.Deref(vent.Context.Model), protocol.Deref(vent.Context.ModelRequested)
-		}
+		sessionFacts := func(after int64) []analytics.SessionTraits { return mirroredSessionTraits(t, app, subject, after) }
+		ventModels := func() (string, string) { return ventModelsOf(t, cli, id) }
 
 		before := sessionFacts(0)
 		if len(before) == 0 {
@@ -258,6 +236,157 @@ func TestSessionFactsAndVentsTellTheReportedModelFromTheRequestedOne(t *testing.
 			t.Errorf("after usage a vent carries model %q and model_requested %q, want claude-opus-5-5 and opus", model, requested)
 		}
 	})
+}
+
+func mirroredSessionTraits(t *testing.T, app *testworld.Peer, subject string, after int64) []analytics.SessionTraits {
+	t.Helper()
+	var traits []analytics.SessionTraits
+	for _, record := range mirroredRecords(t, app, "") {
+		if record.Subject != subject || !strings.HasPrefix(record.Name, "session.") || record.Seq <= after {
+			continue
+		}
+		var derived analytics.Derived
+		if err := json.Unmarshal(record.Props, &derived); err != nil {
+			t.Fatalf("%s props %s: %v", record.Name, record.Props, err)
+		}
+		if derived.Session != nil {
+			traits = append(traits, *derived.Session)
+		}
+	}
+	slices.Reverse(traits)
+	return traits
+}
+
+func ventModelsOf(t *testing.T, cli *client.Client, id string) (string, string) {
+	t.Helper()
+	vent, err := cli.RecordVent(protocol.SessionID(id), protocol.VentKindAttn, "attn ask lost my answer.")
+	if err != nil {
+		t.Fatalf("vent: %v", err)
+	}
+	if err := cli.WithdrawVent(protocol.SessionID(id), vent.ID); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	return protocol.Deref(vent.Context.Model), protocol.Deref(vent.Context.ModelRequested)
+}
+
+func TestSessionFactsAndVentsNameTheMainLoopsModelWhenASubagentUsesMoreTokensOnAnother(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setAnalyticsEnabled(app, "true")
+		id := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Model = protocol.Ptr("opus") })
+		agent := w.bootBubbleClaude(t, id)
+		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		subject := analytics.HashSubject(secret, id)
+		subagent := filepath.Join(strings.TrimSuffix(agent.transcript.Path, ".jsonl"), "subagents", "agent-research.jsonl")
+		if err := os.MkdirAll(filepath.Dir(subagent), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		usageAfterATick := func(tokens int) *protocol.SessionUsage {
+			t.Helper()
+			w.advance(time.Second)
+			usage := queriedSession(t, cli, id).Usage
+			if usage == nil || usage.TotalTokens != tokens {
+				t.Fatalf("usage = %+v, want %d tokens", usage, tokens)
+			}
+			return usage
+		}
+		expect := func(moment, wantModel string) {
+			t.Helper()
+			facts := mirroredSessionTraits(t, app, subject, 0)
+			if len(facts) == 0 {
+				t.Fatalf("%s: the outbox holds no session fact", moment)
+			}
+			if latest := facts[len(facts)-1]; latest.Model != wantModel || latest.ModelRequested != "opus" {
+				t.Errorf("%s: the latest session fact carries model %q and model_requested %q, want %q and opus", moment, latest.Model, latest.ModelRequested, wantModel)
+			}
+			if model, requested := ventModelsOf(t, cli, id); model != wantModel || requested != "opus" {
+				t.Errorf("%s: a vent carries model %q and model_requested %q, want %q and opus", moment, model, requested, wantModel)
+			}
+		}
+
+		appendLegacyCostUsage(t, subagent, "research-1", "claude-sonnet-5-5", 1000, 1000)
+		appendLegacyCostUsage(t, agent.transcript.Path, "root-no-usage-1", "claude-opus-5-5", 0, 0)
+		usageAfterATick(2000)
+		expect("with only subagent usage", "")
+
+		appendLegacyCostUsage(t, agent.transcript.Path, "root-1", "claude-opus-5-5", 10, 4)
+		usageAfterATick(2014)
+		expect("with root usage smaller than the subagent's", "claude-opus-5-5")
+
+		appendLegacyCostUsage(t, subagent, "research-2", "claude-sonnet-5-5", 5000, 5000)
+		appendLegacyCostUsage(t, agent.transcript.Path, "root-no-usage-2", "claude-opus-5-5", 0, 0)
+		usage := usageAfterATick(12014)
+		expect("after the subagent's usage grew", "claude-opus-5-5")
+		rows := map[string]int{}
+		for _, row := range usage.Models {
+			if row.Purpose != "agent" {
+				t.Errorf("usage row %+v, want purpose agent", row)
+			}
+			rows[row.Model] = row.TotalTokens
+		}
+		if rows["claude-sonnet-5-5"] != 12000 || rows["claude-opus-5-5"] != 14 {
+			t.Errorf("usage rows %v, want the subagent's 12000 tokens under its model beside the root's 14", rows)
+		}
+
+		w.restart()
+		if model, _ := ventModelsOf(t, w.Client(), id); model != "claude-opus-5-5" {
+			t.Errorf("after a restart a vent carries model %q, want claude-opus-5-5", model)
+		}
+	})
+}
+
+func TestASessionSavedBeforeRootsWereRecordedGetsItsMainLoopsModelBack(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "old work")
+		agent.reply("done <!-- attn:state=idle -->")
+		cursor, err := transcript.HeadCursor(agent.transcript.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved, err := json.Marshal(map[string]any{"initialized": true, "sources": map[string]any{agent.transcript.Path: map[string]any{
+			"initialized": true, "cursor": cursor, "ledger": map[string]any{"agent|claude-opus-4-8": map[string]any{"input_tokens": 10, "output_tokens": 2}},
+		}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.stop()
+		loadLegacyCostFixture(t, w, agent.id, string(saved))
+		w.start()
+		w.advance(time.Second)
+		if model, _ := ventModelsOf(t, w.Client(), agent.id); model != "claude-opus-4-8" {
+			t.Errorf("a vent carries model %q, want claude-opus-4-8", model)
+		}
+	})
+}
+
+func TestACodexSessionsFactsNameItsRootRolloutsModelOverASubagents(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setAnalyticsEnabled(app, "true")
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	codex.CodexSettings("gpt-6.1-sol", "default")
+	app.TypeLine(session, "continue")
+	codex.Prompted()
+	reply := "Ready. <!-- attn:state=idle -->"
+	codex.Reply(reply)
+	tokens := 2 * len(reply)
+	awaitUsageTokens(app, session, tokens)
+
+	codex.CodexSettings("gpt-5.5", "default")
+	research := strings.Repeat("The refund flow reads the ledger. ", 10)
+	codex.Subagent(research)
+	tokens += 2 * len(research)
+	awaitUsageTokens(app, session, tokens)
+	if model, _ := ventModelsOf(t, w.Client(), session); model != "gpt-6.1-sol" {
+		t.Errorf("a vent carries model %q, want the root rollout's gpt-6.1-sol", model)
+	}
 }
 
 func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *testing.T) {

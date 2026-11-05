@@ -65,8 +65,10 @@ it stores them:
   its concrete name.
 - Session facts carry the harness, how the session was launched (user,
   delegation, automation, crew, chief), its state and two model fields.
-  `model` is the model the harness reports using, such as `claude-opus-5-5`,
-  and is absent until the harness reports usage. `model_requested` is the
+  `model` is the model of the session's main loop, as the harness reports it,
+  such as `claude-opus-5-5`: the model with the most tokens in the session's
+  own transcript. Subagents never choose it. It is absent until the main loop
+  reports usage. `model_requested` is the
   model attn launched the session with, as it was given, such as the alias
   `opus`. Repository facts carry three booleans: has an `AGENTS.md`, is a
   worktree, has a remote. Names and paths never leave the machine.

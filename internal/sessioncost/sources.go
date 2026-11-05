@@ -22,6 +22,7 @@ type Checkpoint struct {
 }
 
 type Source struct {
+	Root                  bool                   `json:"root,omitempty"`
 	Initialized           bool                   `json:"initialized,omitempty"`
 	Cursor                string                 `json:"cursor,omitempty"`
 	UsageUnavailable      bool                   `json:"usage_unavailable,omitempty"`
@@ -32,6 +33,7 @@ type Source struct {
 }
 
 type SourceTotals struct {
+	Root                  bool   `json:"root,omitempty"`
 	Initialized           bool   `json:"initialized,omitempty"`
 	UsageUnavailable      bool   `json:"usage_unavailable,omitempty"`
 	MeasurementIncomplete bool   `json:"measurement_incomplete,omitempty"`
@@ -41,7 +43,7 @@ type SourceTotals struct {
 func (state Checkpoint) SourceTotals() map[string]SourceTotals {
 	totals := make(map[string]SourceTotals, len(state.Sources))
 	for id, source := range state.Sources {
-		totals[id] = SourceTotals{Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
+		totals[id] = SourceTotals{Root: source.Root, Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
 	}
 	return totals
 }
@@ -49,7 +51,7 @@ func (state Checkpoint) SourceTotals() map[string]SourceTotals {
 func FromSourceTotals(initialized bool, totals map[string]SourceTotals) Checkpoint {
 	state := Checkpoint{Initialized: initialized, Sources: make(map[string]*Source, len(totals))}
 	for id, source := range totals {
-		state.Sources[id] = &Source{Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
+		state.Sources[id] = &Source{Root: source.Root, Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
 	}
 	return state
 }
@@ -89,4 +91,27 @@ func (state Checkpoint) Usage() Totals {
 		}
 	}
 	return usage
+}
+
+func (state Checkpoint) MainLoopModel() string {
+	ledger := make(Ledger)
+	for _, source := range state.Sources {
+		if !source.Root {
+			continue
+		}
+		for key, value := range source.Ledger {
+			ledger[key] = ledger[key].Add(value)
+		}
+	}
+	summary := Summarize(ledger, nil)
+	if !summary.Valid {
+		return ""
+	}
+	leading, most := "", int64(-1)
+	for _, row := range summary.Models {
+		if row.Purpose == PurposeAgent && row.TotalTokens > most {
+			leading, most = row.Model, row.TotalTokens
+		}
+	}
+	return leading
 }

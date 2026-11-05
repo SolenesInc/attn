@@ -269,22 +269,11 @@ type sessionModels struct {
 }
 
 func (d *Daemon) sessionModels(session *protocol.Session, intent store.LaunchIntent) sessionModels {
-	return sessionModels{reported: d.leadingAgentModel(session), requested: intent.Model}
-}
-
-func (d *Daemon) leadingAgentModel(session *protocol.Session) string {
-	clone := cloneSession(session)
-	d.decorateSessionWithCost(clone)
-	if clone.Usage == nil {
-		return ""
+	reported, err := d.store.SessionMainLoopModel(session.ID)
+	if err != nil {
+		d.logf("session %s: reading the main loop's model: %v", session.ID, err)
 	}
-	leading, most := "", -1
-	for _, row := range clone.Usage.Models {
-		if row.Purpose == "agent" && row.TotalTokens > most {
-			leading, most = row.Model, row.TotalTokens
-		}
-	}
-	return leading
+	return sessionModels{reported: reported, requested: intent.Model}
 }
 
 func (d *Daemon) handleWithdrawVent(conn net.Conn, msg *protocol.WithdrawVentMessage) {

@@ -63,7 +63,7 @@ func (m *Monitor) initializeCostSources(cursors map[string]string, consumeLegacy
 	return changed
 }
 
-func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
+func (m *Monitor) applyCostObservations(sourceID string, root bool, cursor string, observations []sessioncost.Observation) bool {
 	m.mu.Lock()
 	sources := maps.Clone(m.cost)
 	if sources == nil {
@@ -79,8 +79,8 @@ func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []
 		return source
 	}
 	observed := edit(sourceID)
-	changed := !m.costInitialized || !observed.Initialized || observed.Cursor != cursor
-	observed.Cursor, observed.Initialized = cursor, true
+	changed := !m.costInitialized || !observed.Initialized || observed.Cursor != cursor || observed.Root != root
+	observed.Cursor, observed.Initialized, observed.Root = cursor, true, root
 	if m.costOwners == nil {
 		m.costOwners = make(map[string]costOwner)
 	}
@@ -191,7 +191,7 @@ func CostChange(previous, view View) (changed, durable, usageChanged bool) {
 	}
 	for id, source := range view.Cost.Entries {
 		prior, exists := previous.Cost.Entries[id]
-		flagsChanged := !exists || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
+		flagsChanged := !exists || prior.Root != source.Root || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
 		ledgerChanged := !maps.Equal(prior.Ledger, source.Ledger)
 		changed = changed || flagsChanged || ledgerChanged
 		durable = durable || flagsChanged

@@ -113,30 +113,39 @@ func decodeSessionMonitorCost(raw string) (sessioncost.Checkpoint, error) {
 	return state, nil
 }
 
-func (s *Store) SessionCostCheckpoint(sessionID protocol.SessionID) (sessioncost.Checkpoint, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (s *Store) sessionCheckpointLocked(sessionID protocol.SessionID) (sessioncost.Checkpoint, error) {
 	if s.db == nil {
-		return s.sessionCosts[sessionID].Clone(), nil
+		return s.sessionCosts[sessionID], nil
 	}
 	entry, _, err := s.liveSessionCost(sessionID)
 	if err != nil {
 		return sessioncost.Checkpoint{}, err
 	}
-	return entry.state.Clone(), nil
+	return entry.state, nil
+}
+
+func (s *Store) SessionCostCheckpoint(sessionID protocol.SessionID) (sessioncost.Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, err := s.sessionCheckpointLocked(sessionID)
+	return state.Clone(), err
 }
 
 func (s *Store) SessionCost(sessionID protocol.SessionID) (sessioncost.Totals, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.db == nil {
-		return s.sessionCosts[sessionID].Usage(), nil
-	}
-	entry, _, err := s.liveSessionCost(sessionID)
+	state, err := s.sessionCheckpointLocked(sessionID)
 	if err != nil {
 		return sessioncost.Totals{}, err
 	}
-	return entry.state.Usage(), nil
+	return state.Usage(), nil
+}
+
+func (s *Store) SessionMainLoopModel(sessionID protocol.SessionID) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, err := s.sessionCheckpointLocked(sessionID)
+	return state.MainLoopModel(), err
 }
 
 func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol.SessionID]sessioncost.Totals, error) {
