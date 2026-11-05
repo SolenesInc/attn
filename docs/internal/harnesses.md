@@ -71,6 +71,10 @@ Probed on 2.1.288 with a mock API.
 
 - SessionStart blocks Claude until the hook exits. SessionEnd is cut off
   after about 1.5 s and may never arrive.
+- Claude also compacts by itself while it sits at its prompt, unless
+  `idleCompaction` is false in its settings. PreCompact and PostCompact arrive
+  with the trigger `auto`, and no Stop or `idle_prompt` follows. Seen in daemon
+  logs from production sessions on 2026-11-05, not with a mock API.
 - Plan mode's "clear context and proceed" is SessionEnd `clear`, SessionStart
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`. attn reads the

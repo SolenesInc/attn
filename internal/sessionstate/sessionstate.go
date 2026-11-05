@@ -58,6 +58,8 @@ type ConversationEvidence struct {
 	BackgroundWork    bool
 	PendingCron       bool
 	Compacting        bool
+	IdleCompaction    bool
+	BusyAtStop        time.Time
 	InitialPromptOwed bool
 	PromptIdleAt      time.Time
 	ClassifyingSince  time.Time
@@ -193,7 +195,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 			return r
 		}
 		if parkedVerdict(e) {
-			if now.Sub(e.LastClassifier.ObservedAt) <= policy.ParkedAfter {
+			if parkedWindowOpen(e, policy, now) {
 				return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBackgroundParked}
 			}
 			if promptIdleConfirmed(e) {
@@ -399,6 +401,14 @@ func parkedVerdict(e evidence) bool {
 	return e.LastClassifier != nil &&
 		e.LastClassifier.Claim == ClaimParked &&
 		!supersededByBusy(e.LastClassifier, e)
+}
+
+func parkedWindowOpen(e evidence, policy Policy, now time.Time) bool {
+	return parkedVerdict(e) && now.Sub(e.LastClassifier.ObservedAt) <= policy.ParkedAfter
+}
+
+func Parked(terminal TerminalEvidence, conversation ConversationEvidence, policy Policy, now time.Time) bool {
+	return parkedWindowOpen(evidence{terminal, conversation}, policy, now)
 }
 
 func classifierVerdict(e evidence) (Resolution, bool) {

@@ -286,7 +286,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	}
 	pending := state.pending
 	if pending == nil {
-		bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, holder.State)
+		bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
 		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
 		if err != nil {
 			return receipt, err

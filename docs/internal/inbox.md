@@ -211,10 +211,15 @@ that input. A ring lost to an open menu in the harness stays lost.
   adds the 📬 line only at a safe prompt. A ring placed while the agent
   works types its user input alone. The 📬 line for the other items waits for
   the prompt.
+- A safe prompt is an agent that is idle or waiting, an agent parked on its
+  background work, or an agent in a state attn cannot tell. A parked agent shows
+  as working but has stopped at its prompt. An agent in a state attn cannot tell
+  gets rings so that it does not wait forever, even though a ring can land on an
+  open menu.
 - attn decides from the agent's state and never reads the agent's screen. attn
-  types nothing while the agent needs approval, is launching, or is in a state
-  attn cannot tell. attn also types nothing within 30 seconds of the user's last
-  keystroke in the agent's terminal. Waiting costs no attempt.
+  types nothing while the agent needs approval or is launching. attn also types
+  nothing within 30 seconds of the user's last keystroke in the agent's
+  terminal. Waiting costs no attempt.
 - A shell never gets a ring.
 - When a ring includes the 📬 line, the address has an outstanding ring until
   the agent reads the inbox or 5 minutes pass. While the address has an

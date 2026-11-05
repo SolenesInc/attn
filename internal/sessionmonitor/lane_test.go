@@ -20,7 +20,7 @@ func TestSessionInput_PlacementPhaseContracts(t *testing.T) {
 	for _, state := range states {
 		t.Run(string(state), func(t *testing.T) {
 			promptReady := PhaseAllows(WhenPromptReady, state)
-			wantPromptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput
+			wantPromptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput || state == protocol.SessionStateUnknown
 			if promptReady != wantPromptReady {
 				t.Fatalf("WhenPromptReady(%s)=%v, want %v", state, promptReady, wantPromptReady)
 			}

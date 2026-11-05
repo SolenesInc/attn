@@ -276,7 +276,11 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 				if sent.Status != protocol.AgentMsgStatusQueued {
 					t.Fatalf("blocked send=%+v", sent)
 				}
-				w.advance(15 * time.Minute)
+				if approval == "" {
+					recipient.keepWorkingFor(w, 15*time.Minute)
+				} else {
+					w.advance(15 * time.Minute)
+				}
 				if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
 					t.Fatalf("blocked rings=%d", got)
 				}
@@ -423,7 +427,7 @@ func TestAnInboxWakeThatPrimesForTenMinutesStillWaitsFiveMinutesBetweenRings(t *
 		registerSessions(t, w, cli, "sender")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "wait through priming")
 		day := w.bootBubbleClaude(t, string(sent.TargetSessionID))
-		w.advance(10 * time.Minute)
+		day.keepWorkingFor(w, 10*time.Minute)
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if day.promptsContaining(inboxDoorbell) != 1 {
 			t.Fatal("wake did not finish its ring")

@@ -145,8 +145,9 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 	if msg.Active {
 		phase = "started"
 	}
-	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: strings.TrimSpace(protocol.Deref(msg.Trigger))}, phase)
-	d.monitorInTerminal(msg.ID, sessionID).RecordCompaction(msg.Active)
+	trigger := strings.TrimSpace(protocol.Deref(msg.Trigger))
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: trigger}, phase)
+	d.monitorInTerminal(msg.ID, sessionID).RecordCompaction(msg.Active, trigger)
 	d.sendOK(conn)
 }
 

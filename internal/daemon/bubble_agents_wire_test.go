@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -96,6 +97,16 @@ func (a *bubbleClaude) reply(text string) {
 		a.t.Fatalf("%s stops: %v", a.id, err)
 	}
 	synctest.Wait()
+}
+
+func (a *bubbleClaude) keepWorkingFor(w *world, d time.Duration) {
+	a.t.Helper()
+	for range int(d / time.Minute) {
+		if err := a.cli.UpdateState(protocol.TerminalID(a.self), protocol.StateWorking); err != nil {
+			a.t.Fatalf("%s reports its tool use: %v", a.id, err)
+		}
+		w.advance(time.Minute)
+	}
 }
 
 func (a *bubbleClaude) prompts() []string {

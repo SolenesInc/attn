@@ -10,12 +10,12 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-func (m *Monitor) openTurnLocked(now time.Time, afterNotification bool) bool {
+func (m *Monitor) openTurnLocked(now time.Time, quietStop bool) bool {
 	if !attention.OpensTurn(m.state.State) {
 		return false
 	}
 	requested := !m.turn.RequestedAt.IsZero()
-	if afterNotification && !requested && !attention.OpensTurnAfterNotification(m.state.State) {
+	if quietStop && !requested && !attention.OpensTurnAfterNotification(m.state.State) {
 		return false
 	}
 	if deadline := m.turn.SnoozedUntil; !deadline.IsZero() {

@@ -286,14 +286,13 @@ func (m *Monitor) RecordBracket(state string) {
 				}
 			}
 			e.Compacting = false
+			e.IdleCompaction = false
 			e.BackgroundWork = false
 			e.PendingCron = false
 		case protocol.StateIdle:
-			e.TurnOpen = false
-			e.ToolOpen = false
+			recordAgentStopped(e)
 		case protocol.StateWaitingInput:
-			e.TurnOpen = false
-			e.ToolOpen = false
+			recordAgentStopped(e)
 			e.LastHarnessEvent = &sessionstate.Observation{
 				Source:     sessionstate.SourceHarnessEvent,
 				Claim:      sessionstate.ClaimNeedsInput,
@@ -309,6 +308,21 @@ func (m *Monitor) RecordBracket(state string) {
 	})
 }
 
+func recordAgentStopped(e *Evidence) {
+	e.TurnOpen = false
+	e.ToolOpen = false
+	recordStop(e)
+}
+
+func recordStop(e *Evidence) {
+	e.IdleCompaction = false
+	e.BusyAtStop = e.LastBusyAt
+}
+
+func stoppedAtItsPrompt(e *Evidence) bool {
+	return (!e.TurnOpen && !e.ToolOpen) || e.BackgroundWork || e.PendingCron
+}
+
 func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Time) {
 	if m == nil {
 		return
@@ -322,8 +336,7 @@ func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Ti
 	}
 	m.RecordEvidence(observedAt, func(e *Evidence) {
 		m.input.userSubmit = false
-		e.TurnOpen = false
-		e.ToolOpen = false
+		recordAgentStopped(e)
 		e.LastHarnessEvent = &sessionstate.Observation{
 			Source:     sessionstate.SourceHarnessEvent,
 			Claim:      sessionstate.ClaimTurnAborted,
@@ -340,8 +353,7 @@ func (m *Monitor) RecordTurnEnded(classifies bool) {
 	at := time.Now()
 	m.RecordEvidence(at, func(e *Evidence) {
 		m.input.userSubmit = false
-		e.TurnOpen = false
-		e.ToolOpen = false
+		recordAgentStopped(e)
 		if classifies {
 			e.ClassifyingSince = at
 		}
@@ -367,6 +379,7 @@ func (m *Monitor) RecordStopFacts(backgroundWork, pendingCron bool) {
 		return
 	}
 	m.RecordEvidence(time.Now(), func(e *Evidence) {
+		recordStop(e)
 		e.BackgroundWork = backgroundWork
 		e.PendingCron = pendingCron
 	})
@@ -384,6 +397,7 @@ func (m *Monitor) RecordReviewer(inLoop bool) {
 const (
 	notifyPermissionPrompt = "permission_prompt"
 	notifyIdlePrompt       = "idle_prompt"
+	compactionTriggerAuto  = "auto"
 )
 
 func (m *Monitor) RecordNotification(notificationType string, message string) {
@@ -427,12 +441,19 @@ func (m *Monitor) RecordStopFailure(errorType string, message string) {
 	})
 }
 
-func (m *Monitor) RecordCompaction(active bool) {
+func (m *Monitor) RecordCompaction(active bool, trigger string) {
 	if m == nil {
 		return
 	}
-	m.RecordEvidence(time.Now(), func(e *Evidence) {
+	now := time.Now()
+	m.RecordEvidence(now, func(e *Evidence) {
 		e.Compacting = active
+		if active {
+			e.IdleCompaction = trigger == compactionTriggerAuto && stoppedAtItsPrompt(e)
+		} else if e.IdleCompaction {
+			e.LastBusyAt = e.BusyAtStop
+			e.IdleCompaction = !sessionstate.Parked(e.TerminalEvidence, e.ConversationEvidence, sessionstate.PolicyFor(m.agent), now)
+		}
 	})
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 type Stage uint8
@@ -273,8 +274,8 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
 		return deferred(errInitialPrompt)
 	}
-	phaseErr := allowedForPhase(delivery.Placement, m.state.State)
-	duringQuestion := errors.Is(phaseErr, ErrBlockedByApproval) && l.questionInTurn && allowedForPhase(delivery.Placement, protocol.SessionStateWorking) == nil
+	phaseErr := allowedForPhase(delivery.Placement, m.state.State, m.reason)
+	duringQuestion := errors.Is(phaseErr, ErrBlockedByApproval) && l.questionInTurn && allowedForPhase(delivery.Placement, protocol.SessionStateWorking, "") == nil
 	if phaseErr != nil && !duringQuestion {
 		return deferred(phaseErr)
 	}
@@ -376,11 +377,21 @@ func (l *lane) claimNextLocked() bool {
 	return credit
 }
 
-func allowedForPhase(placement Placement, state protocol.SessionState) error {
+func PromptReady(state protocol.SessionState, reason string) bool {
+	switch state {
+	case protocol.SessionStateIdle, protocol.SessionStateWaitingInput, protocol.SessionStateUnknown:
+		return true
+	case protocol.SessionStateWorking:
+		return reason == string(sessionstate.ReasonBackgroundParked)
+	}
+	return false
+}
+
+func allowedForPhase(placement Placement, state protocol.SessionState, reason string) error {
 	if state == protocol.SessionStatePendingApproval {
 		return ErrBlockedByApproval
 	}
-	promptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput
+	promptReady := PromptReady(state, reason)
 	if placement == WhenPromptReady && !promptReady {
 		return fmt.Errorf("session input requires a prompt-ready session, got %s", state)
 	}
@@ -391,7 +402,7 @@ func allowedForPhase(placement Placement, state protocol.SessionState) error {
 }
 
 func PhaseAllows(placement Placement, state protocol.SessionState) bool {
-	return allowedForPhase(placement, state) == nil
+	return allowedForPhase(placement, state, "") == nil
 }
 
 // attn's own words earned credit at custody; this hook never matches prompt text.
