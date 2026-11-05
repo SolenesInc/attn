@@ -11949,7 +11949,6 @@ const SessionPlaceErrorKindBlockedByApproval SessionPlaceErrorKind = "blocked_by
 const SessionPlaceErrorKindComposerDirty SessionPlaceErrorKind = "composer_dirty"
 const SessionPlaceErrorKindInitialPrompt SessionPlaceErrorKind = "initial_prompt"
 const SessionPlaceErrorKindLaneClosed SessionPlaceErrorKind = "lane_closed"
-const SessionPlaceErrorKindPlacingAnother SessionPlaceErrorKind = "placing_another"
 const SessionPlaceErrorKindSessionStopped SessionPlaceErrorKind = "session_stopped"
 
 type SessionPlaceMessage struct {

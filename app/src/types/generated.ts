@@ -11566,7 +11566,6 @@ export enum SessionPlaceErrorKind {
     ComposerDirty = "composer_dirty",
     InitialPrompt = "initial_prompt",
     LaneClosed = "lane_closed",
-    PlacingAnother = "placing_another",
     SessionStopped = "session_stopped",
 }
 
@@ -29712,7 +29711,6 @@ const typeMap: any = {
         "composer_dirty",
         "initial_prompt",
         "lane_closed",
-        "placing_another",
         "session_stopped",
     ],
     "SessionPlaceStage": [

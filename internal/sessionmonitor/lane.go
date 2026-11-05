@@ -146,6 +146,7 @@ type lane struct {
 	run                      *runState
 	questionInTurn           bool
 	placing                  bool
+	placementEnded           *sync.Cond
 	placed                   map[string]Attempt
 	creditNextRun            bool
 	notifyNextRun            Maintenance
@@ -161,7 +162,6 @@ type lane struct {
 var (
 	ErrBlockedByApproval = errors.New("session input blocked by pending approval")
 	ErrComposerDirty     = errors.New("session input blocked by the user's composer")
-	errPlacingAnother    = errors.New("another session input is being placed")
 	ErrLaneClosed        = errors.New("the session's input lane is closed")
 	ErrSessionStopped    = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
 	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
@@ -177,17 +177,12 @@ func (e *quietError) Error() string {
 
 func (e *quietError) Unwrap() error { return ErrComposerDirty }
 
-var PlacingRetry = 3 * time.Second
-
 const MaxPlacedDeliveries = 65_536
 
 func RetryDelay(err error) (time.Duration, bool) {
 	var quiet *quietError
 	if errors.As(err, &quiet) {
 		return quiet.retryAfter, true
-	}
-	if errors.Is(err, errPlacingAnother) {
-		return PlacingRetry, true
 	}
 	return 0, false
 }
@@ -220,7 +215,7 @@ func (m *Monitor) ResetInput() {
 }
 
 func (m *Monitor) freshLaneLocked() *lane {
-	l := &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	l := &lane{mu: &m.mu, monitor: m, placementEnded: sync.NewCond(&m.mu), stopped: m.registry.closed.Load()}
 	l.observePhaseLocked(m.state.State)
 	return l
 }
@@ -262,6 +257,9 @@ func (m *Monitor) settleForRunningNotification() {
 func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for m.input.placing {
+		m.input.placementEnded.Wait()
+	}
 	l := m.input
 	if placed, ok := l.placed[delivery.ID.String()]; ok {
 		return placed, runRef{}
@@ -271,9 +269,6 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	if l.stopped {
 		return deferred(ErrLaneClosed)
-	}
-	if l.placing {
-		return deferred(errPlacingAnother)
 	}
 	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
 		return deferred(errInitialPrompt)
@@ -339,6 +334,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	}
 	l.mu.Lock()
 	l.placing = false
+	l.placementEnded.Broadcast()
 	if link == nil {
 		return Attempt{}, false
 	}

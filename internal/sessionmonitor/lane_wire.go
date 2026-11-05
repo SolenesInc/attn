@@ -42,7 +42,6 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 		kind protocol.SessionPlaceErrorKind
 	}{
 		{ErrLaneClosed, protocol.SessionPlaceErrorKindLaneClosed},
-		{errPlacingAnother, protocol.SessionPlaceErrorKindPlacingAnother},
 		{ErrBlockedByApproval, protocol.SessionPlaceErrorKindBlockedByApproval},
 		{ErrComposerDirty, protocol.SessionPlaceErrorKindComposerDirty},
 		{errInitialPrompt, protocol.SessionPlaceErrorKindInitialPrompt},
@@ -71,8 +70,6 @@ func AttemptFromResult(result protocol.SessionPlaceResult) Attempt {
 	switch protocol.Deref(result.ErrorKind) {
 	case protocol.SessionPlaceErrorKindLaneClosed:
 		attempt.Err = ErrLaneClosed
-	case protocol.SessionPlaceErrorKindPlacingAnother:
-		attempt.Err = errPlacingAnother
 	case protocol.SessionPlaceErrorKindBlockedByApproval:
 		attempt.Err = ErrBlockedByApproval
 	case protocol.SessionPlaceErrorKindComposerDirty:
