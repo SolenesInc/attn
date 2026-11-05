@@ -5,6 +5,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -43,4 +44,26 @@ func TestAHaltedTurnSettlesIdleAndAnOldHaltDoesNotSettleTheNextRun(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestAHaltedFirstTurnSettlesIdleHoweverLongTheUserWaitedBeforeAskingForIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+	w.awaitTimer(sessionmonitor.TranscriptPoll)
+	w.advance(sessionmonitor.TranscriptDiscoveryGrace)
+	w.readTranscripts()
+
+	app.TypeLine(session, "write an essay on checkout flows")
+	run.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Stream("Checkout flows begin with the cart.")
+
+	run.Halt()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "turn_aborted"
+	})
+	messageWindowShowing(app, session, "Checkout flows begin with the cart.")
 }
