@@ -279,7 +279,7 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 			return fmt.Errorf("%v: %w", err, ctx.Err())
 		case attempt == 0 && isRetiringSharedHost(err):
 			continue
-		case errors.Is(err, errHostNotLaunched), errors.Is(err, errHostNotReady):
+		case errors.Is(err, errHostNotLaunched), errors.Is(err, errHostNotReady), errors.Is(err, errHostRetired):
 			return err
 		default:
 			return fmt.Errorf("%w: %w", errArtifactRejected, err)

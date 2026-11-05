@@ -24,7 +24,8 @@ last-known-good build, or Go workers when no build has passed yet. When a build
 fails, the daemon shows one in-app notification and does not check that build
 again until the build changes or the user turns the setting on again. The daemon
 does not count a check as a failure when its time limit or a daemon shutdown
-cuts the check short.
+cuts the check short, or when the host retires cleanly before the daemon reaches
+it.
 
 Every host process has its own socket and control token. A host retires 45
 seconds after its last terminal closes, or after it starts without a terminal.

@@ -94,7 +94,7 @@ func TestSharedHost_RetiredHostRelaunchAcceptsInputAndResize(t *testing.T) {
 	binary, root := sharedHostTestRoot(t, "attn-host-retire-")
 	stopHostsAtCleanup(t, root)
 	previousIdle := sharedHostIdleTimeout
-	sharedHostIdleTimeout = 200 * time.Millisecond
+	sharedHostIdleTimeout = 2 * time.Second
 	t.Cleanup(func() { sharedHostIdleTimeout = previousIdle })
 
 	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-retire", BinaryPath: binary})
@@ -116,7 +116,7 @@ func TestSharedHost_RetiredHostRelaunchAcceptsInputAndResize(t *testing.T) {
 	if len(retired) != 1 {
 		t.Fatalf("hosts after validation = %v, want the validation host", retired)
 	}
-	if !waitForPIDsGone(5*time.Second, retired...) {
+	if !waitForPIDsGone(30*time.Second, retired...) {
 		t.Fatalf("idle validation host %v did not retire", retired)
 	}
 
@@ -510,7 +510,7 @@ func TestSharedHost_UnusedHostRetiresOnItsOwn(t *testing.T) {
 	binary, root := sharedHostTestRoot(t, "attn-host-unused-")
 	stopHostsAtCleanup(t, root)
 	previousIdle := sharedHostIdleTimeout
-	sharedHostIdleTimeout = 200 * time.Millisecond
+	sharedHostIdleTimeout = 2 * time.Second
 	t.Cleanup(func() { sharedHostIdleTimeout = previousIdle })
 	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-unused", BinaryPath: binary})
 	if err != nil {
@@ -525,7 +525,7 @@ func TestSharedHost_UnusedHostRetiresOnItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitForPIDsGone(5*time.Second, host.HostPID) {
+	if !waitForPIDsGone(30*time.Second, host.HostPID) {
 		t.Fatal("a host that never received a terminal did not retire")
 	}
 }

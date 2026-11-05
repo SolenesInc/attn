@@ -681,7 +681,7 @@ func (b *WorkerBackend) commitSharedSession(ctx context.Context, inc hostIncarna
 }
 
 func isRetiringSharedHost(err error) bool {
-	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) ||
+	return errors.Is(err, errHostRetired) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) ||
 		isRetryablePersistentConnError(err) || strings.Contains(err.Error(), "host is shutting down")
 }
 
@@ -725,6 +725,7 @@ const sharedHostReadyPollInterval = 100 * time.Millisecond
 var (
 	errHostNotLaunched = errors.New("shared PTY host could not be launched")
 	errHostNotReady    = errors.New("shared PTY host did not become ready")
+	errHostRetired     = errors.New("shared PTY host retired before it was reached")
 )
 
 type sharedHostLaunch struct {
@@ -782,10 +783,13 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 		return ptyhost.HostRegistry{}, fmt.Errorf("start shared PTY host: %w", err)
 	}
 	pid := cmd.Process.Pid
+	exited := make(chan error, 1)
 	go func() {
-		if waitErr := cmd.Wait(); waitErr != nil {
+		waitErr := cmd.Wait()
+		if waitErr != nil {
 			b.cfg.Logf("shared PTY host exited: pid=%d err=%v", pid, waitErr)
 		}
+		exited <- waitErr
 	}()
 	b.cfg.Logf("shared PTY host starting: artifact=%s incarnation=%s pid=%d", artifact.ID, incarnation, pid)
 
@@ -811,15 +815,18 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 		} else if readErr != nil {
 			lastErr = readErr
 		}
-		if !pidAlive(pid) {
-			return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host exited before ready: %v", lastErr)
-		}
 		timer := time.NewTimer(sharedHostReadyPollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			b.stopSharedHostPID(pid)
 			return ptyhost.HostRegistry{}, ctx.Err()
+		case waitErr := <-exited:
+			timer.Stop()
+			if waitErr == nil {
+				return ptyhost.HostRegistry{}, errHostRetired
+			}
+			return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host exited before ready: %v: %v", waitErr, lastErr)
 		case <-timer.C:
 		}
 	}
