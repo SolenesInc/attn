@@ -39,6 +39,7 @@ const (
 	DaemonEnrollmentLoaded       = "daemon-enrollment-loaded"
 	DaemonStartupRecovery        = "daemon-startup-recovery"
 	RecoverableAgentsReviving    = "recoverable-agents-reviving"
+	LaunchAwaitsPluginHarness    = "launch-awaits-plugin-harness"
 	DaemonInitialStateBuilt      = "daemon-initial-state-built"
 	SessionInputPasteGap         = "session-input-paste-gap"
 	ClaudeModReturnWaitsForDraft = "claude-mod-return-waits-for-draft"

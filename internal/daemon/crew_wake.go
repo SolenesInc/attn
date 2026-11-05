@@ -285,6 +285,10 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	if err := d.chiefWakeRefusal(member); err != nil {
 		return nil, err
 	}
+	if agent == "" {
+		agent = member.LaunchAgent()
+	}
+	d.awaitPluginHarness(agent)
 	if beforeWake != nil {
 		if err := beforeWake(); err != nil {
 			return nil, err
@@ -294,9 +298,6 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	profile, err := d.liveLaunchProfile(member.ProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("wake %s: %w", member.Name, err)
-	}
-	if agent == "" {
-		agent = member.LaunchAgent()
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)

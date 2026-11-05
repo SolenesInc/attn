@@ -234,6 +234,9 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if sessionID == "" {
 		return errors.New("session not found")
 	}
+	if session := d.store.Get(sessionID); session != nil {
+		d.awaitPluginHarness(session.Agent)
+	}
 	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows)
 	if err != nil || resume == nil {
 		return err

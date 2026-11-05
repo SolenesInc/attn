@@ -253,7 +253,8 @@ type Daemon struct {
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
 
-	loginEnv *loginEnv
+	loginEnv         *loginEnv
+	pluginStartEnded chan struct{}
 
 	backgroundLoginEnv bool
 
@@ -510,6 +511,7 @@ func New(socketPath string) *Daemon {
 	d.delegationWaitsForFirstTurn = true
 	d.sessionTitleExec = d.execSessionTitle
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
+	d.pluginStartEnded = make(chan struct{})
 	return d
 }
 
@@ -547,6 +549,7 @@ func NewForTesting(socketPath string) *Daemon {
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
+	d.pluginStartEnded = make(chan struct{})
 	return d
 }
 

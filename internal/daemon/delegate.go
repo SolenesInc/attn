@@ -98,14 +98,19 @@ func truncateDelegationName(name string) string {
 	return strings.TrimRight(string(runes[:maxSessionNameRunes]), "-_. \t")
 }
 
-func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {
+func delegationAgentName(sourceAgent string, requested *string) string {
 	agent := strings.TrimSpace(strings.ToLower(protocol.Deref(requested)))
 	if agent == "" {
 		agent = strings.TrimSpace(strings.ToLower(sourceAgent))
 	}
 	if agent == "" || agent == protocol.AgentShellValue {
-		agent = string(protocol.SessionAgentCodex)
+		return string(protocol.SessionAgentCodex)
 	}
+	return agent
+}
+
+func (d *Daemon) resolveDelegationAgent(sourceAgent string, requested *string) (string, error) {
+	agent := delegationAgentName(sourceAgent, requested)
 	if pluginDriver, ok := d.ensurePluginRegistry().driver(agent); ok {
 		if !pluginDriver.Capabilities["initial_prompt"] {
 			return "", fmt.Errorf("agent %q does not support initial prompts", agent)
@@ -339,6 +344,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	} else if existingSession != nil {
 		sourceAgent = existingSession.Agent
 	}
+	d.awaitPluginHarness(delegationAgentName(sourceAgent, msg.Agent))
 	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {
 		return nil, err

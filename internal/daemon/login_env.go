@@ -3,11 +3,21 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/stepclock"
+	"github.com/victorarias/attn/internal/supervise"
 )
+
+// A plugin that fails to connect restarts with backoff that reaches 61 s, the same time supervise needs to call a connection stable.
+const pluginStartLimit = supervise.StableConnection
+
+const PluginStartLimitTimer stepclock.Name = "plugin-start-limit"
 
 // loginEnv owns the login environment: capturing while done is open, then ready, or failed when err is set.
 type loginEnv struct {
@@ -104,6 +114,37 @@ func (d *Daemon) finishLoginEnvCapture() {
 	d.publishHarnessAvailability()
 	d.ensureAvailableAgentSkills()
 	d.startDiscoveredPlugins()
+	limit := d.clock.NewTimer(PluginStartLimitTimer, pluginStartLimit)
+	defer limit.Stop()
+	select {
+	case <-limit.C():
+		close(d.pluginStartEnded)
+	case <-d.life.Done():
+	}
+}
+
+// awaitPluginHarness holds a launch that names a harness no plugin has registered yet, until a plugin registers it or the
+// plugins started after the capture have had pluginStartLimit to do so. The caller then looks the harness up as usual.
+func (d *Daemon) awaitPluginHarness(agent string) {
+	agent = strings.TrimSpace(strings.ToLower(agent))
+	if !d.backgroundLoginEnv || agent == "" || agent == protocol.AgentShellValue || agentdriver.Get(agent) != nil {
+		return
+	}
+	for {
+		registered, next := d.ensurePluginRegistry().driverOrRegistration(agent)
+		if registered {
+			return
+		}
+		pausepoint.At(pausepoint.LaunchAwaitsPluginHarness)
+		select {
+		case <-next:
+		case <-d.pluginStartEnded:
+			d.logf("harness %q: no plugin registered it within %s of the login environment capture", agent, pluginStartLimit)
+			return
+		case <-d.life.Done():
+			return
+		}
+	}
 }
 
 func (d *Daemon) publishHarnessAvailability() {

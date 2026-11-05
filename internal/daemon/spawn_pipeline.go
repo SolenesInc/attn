@@ -631,7 +631,14 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 	return rejection
 }
 
+func (d *Daemon) awaitSpawnHarness(msg *protocol.SpawnSessionMessage) {
+	if protocol.Deref(msg.Host) == "" {
+		d.awaitPluginHarness(msg.Agent)
+	}
+}
+
 func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	d.awaitSpawnHarness(msg)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var placed placementOutcome
@@ -655,6 +662,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		}
 		d.publishFact(FactSessionReregistered, string(msg.ID), nil)
 	}()
+	d.awaitSpawnHarness(msg)
 	ctx, cancel := context.WithTimeout(protection.Context(), 30*time.Second)
 	defer cancel()
 	req, rejection := d.validateSpawnPrelock(msg, policy)

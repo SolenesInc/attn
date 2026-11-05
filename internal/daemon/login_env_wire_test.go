@@ -8,10 +8,12 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -222,49 +224,76 @@ func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 }
 
 func TestADelegationToAPluginHarnessWaitsForItsPluginAcrossARestartDuringTheCapture(t *testing.T) {
-	w := &world{World: prepareWorld(t)}
-	shell := installBlockedLoginShell(t, w)
-	w.start()
-	answerBeforeTheCapture(t, w)
-	app := w.App()
-	driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
-	awaitDriverAvailable(app, "plug")
+	for _, row := range []struct {
+		name   string
+		choose func(*protocol.DelegateMessage)
+	}{
+		{name: "named directly", choose: func(request *protocol.DelegateMessage) { request.Agent = protocol.Ptr("plug") }},
+		{name: "through a role", choose: func(request *protocol.DelegateMessage) { request.Agent, request.Role = nil, protocol.Ptr("build") }},
+	} {
+		t.Run(row.name, func(t *testing.T) {
+			w := &world{World: prepareWorld(t)}
+			shell := installBlockedLoginShell(t, w)
+			w.start()
+			answerBeforeTheCapture(t, w)
+			app := w.App()
+			driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
+			awaitDriverAvailable(app, "plug")
+			onPlug := protocol.DelegationSelection{Harness: "plug"}
+			saved := addAttnDelegationRoles(app, protocol.DelegationPreferences{
+				Enabled: true, WorkflowSkillEnabled: true,
+				Roles: []protocol.DelegationRole{{ID: "build", Name: "Builder", Enabled: true,
+					DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Everyday", Selection: onPlug}}}},
+				Fallback: protocol.DelegationFallback{Selection: onPlug},
+			})
+			if !saved.Success {
+				t.Fatalf("saving the roles: %s", protocol.Deref(saved.Error))
+			}
 
-	repo := newRepo(t, "shop")
-	request := delegateCheckoutAt(repo, delegateNewWorktree("feature/plug", "main"))
-	request.RequestID, request.Label, request.Agent = "plug-delegation", protocol.Ptr("plug-delegation"), protocol.Ptr("plug")
-	driver.mu.Lock()
-	driver.holdLaunch = true
-	driver.mu.Unlock()
-	accepted, err := w.Client().StartDelegation(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var launching driverLaunch
-	driver.asked("driver.spawn", &launching)
+			repo := newRepo(t, "shop")
+			request := delegateCheckoutAt(repo, delegateNewWorktree("feature/plug", "main"))
+			request.RequestID, request.Label = "plug-delegation", protocol.Ptr("plug-delegation")
+			row.choose(&request)
+			driver.mu.Lock()
+			driver.holdLaunch = true
+			driver.mu.Unlock()
+			accepted, err := w.Client().StartDelegation(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var launching driverLaunch
+			driver.asked("driver.spawn", &launching)
 
-	shell.block()
-	finishStop := w.beginStop(t)
-	driver.hangUp()
-	finishStop()
-	w.start()
-	w.App()
-	shell.release()
-	driver = connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
+			waiting := w.PauseAt(pausepoint.LaunchAwaitsPluginHarness)
+			shell.block()
+			finishStop := w.beginStop(t)
+			driver.hangUp()
+			finishStop()
+			w.start()
+			w.App()
+			if _, err := w.Client().StartDelegation(request); err != nil {
+				t.Fatalf("the client's retry during the capture: %v", err)
+			}
+			waiting.Await()
+			waiting.Release()
+			shell.release()
+			driver = connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
 
-	delegated := make(chan *protocol.DelegateResult, 1)
-	go func() {
-		result, err := w.Client().Delegate(request)
-		if err != nil {
-			t.Errorf("the delegation after the restart: %v", err)
-		}
-		delegated <- result
-	}()
-	if err := driver.state(driver.launched(), 1, "working"); err != nil {
-		t.Fatal(err)
-	}
-	if result := <-delegated; result == nil || result.SessionID != accepted.SessionID {
-		t.Fatalf("after the restart the delegation = %+v, want it finished on %s", result, accepted.SessionID)
+			delegated := make(chan *protocol.DelegateResult, 1)
+			go func() {
+				result, err := w.Client().Delegate(request)
+				if err != nil {
+					t.Errorf("the delegation after the restart: %v", err)
+				}
+				delegated <- result
+			}()
+			if err := driver.state(driver.launched(), 1, "working"); err != nil {
+				t.Fatal(err)
+			}
+			if result := <-delegated; result == nil || result.SessionID != accepted.SessionID {
+				t.Fatalf("after the restart the delegation = %+v, want it finished on %s", result, accepted.SessionID)
+			}
+		})
 	}
 }
 
@@ -310,4 +339,201 @@ func TestALoginShellThatLeavesAChildHoldingItsOutputStillGivesItsEnvironment(t *
 	if got, _ := envEntry(run.Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
 		t.Fatalf("the agent has ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
 	}
+}
+
+// restartDuringTheCapture restarts the daemon with its login shell blocked and answers once recovery settled, when a launch that
+// finds no harness would fail.
+func restartDuringTheCapture(t *testing.T, w *world, shell *blockedLoginShell) (app *testworld.Peer, recovered func()) {
+	t.Helper()
+	settling := w.PauseAt(pausepoint.RecoverableAgentsReviving)
+	shell.block()
+	w.restart()
+	return w.App(), func() {
+		settling.Await()
+		settling.Release()
+	}
+}
+
+func plugWorldBehindALoginShell(t *testing.T) (*world, *blockedLoginShell) {
+	t.Helper()
+	w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Plug)}
+	writeCrewHomes(t, w)
+	shell := installBlockedLoginShell(t, w)
+	w.start()
+	answerBeforeTheCapture(t, w)
+	pluginDriverSettings(w.App(), "plug")
+	return w, shell
+}
+
+func TestANewDelegationToAPluginHarnessDuringTheCaptureWaitsAndRuns(t *testing.T) {
+	w, shell := plugWorldBehindALoginShell(t)
+	_, recovered := restartDuringTheCapture(t, w, shell)
+
+	request := brief(w.Path("shop"), "Add a discount field")
+	if err := os.MkdirAll(request.Cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID, request.Agent = "plug-during-capture", protocol.Ptr("plug")
+	if _, err := w.Client().StartDelegation(request); err != nil {
+		t.Fatal(err)
+	}
+	recovered()
+
+	delegated := make(chan *protocol.DelegateResult, 1)
+	go func() {
+		result, err := w.Client().Delegate(request)
+		if err != nil {
+			t.Errorf("the delegation during the capture: %v", err)
+		}
+		delegated <- result
+	}()
+	shell.release()
+	result := <-delegated
+	if result == nil {
+		t.FailNow()
+	}
+	if got, _ := envEntry(w.Launched(string(result.SessionID)).Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("the delegate has ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+}
+
+func TestANewDelegationThroughARoleOnAPluginHarnessDuringTheCaptureWaitsAndRuns(t *testing.T) {
+	w, shell := plugWorldBehindALoginShell(t)
+	onPlug := protocol.DelegationSelection{Harness: "plug"}
+	saved := addAttnDelegationRoles(w.App(), protocol.DelegationPreferences{
+		Enabled: true, WorkflowSkillEnabled: true,
+		Roles: []protocol.DelegationRole{{ID: "build", Name: "Builder", Enabled: true,
+			DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Everyday", Selection: onPlug}}}},
+		Fallback: protocol.DelegationFallback{Selection: onPlug},
+	})
+	if !saved.Success {
+		t.Fatalf("saving the roles: %s", protocol.Deref(saved.Error))
+	}
+	_, recovered := restartDuringTheCapture(t, w, shell)
+	recovered()
+
+	request := brief(w.Path("shop"), "Add a discount field")
+	if err := os.MkdirAll(request.Cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	request.Role = protocol.Ptr("build")
+	delegated := make(chan *protocol.DelegateResult, 1)
+	go func() {
+		result, err := w.Client().Delegate(request)
+		if err != nil {
+			t.Errorf("the delegation during the capture: %v", err)
+		}
+		delegated <- result
+	}()
+	shell.release()
+	if result := <-delegated; result == nil {
+		t.FailNow()
+	} else if got, _ := envEntry(w.Launched(string(result.SessionID)).Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("the delegate has ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+}
+
+func TestMailDuringTheCaptureWakesAMemberOnAPluginHarness(t *testing.T) {
+	w, shell := plugWorldBehindALoginShell(t)
+	setCrew(t, w.Client(), "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("plug")})
+
+	_, recovered := restartDuringTheCapture(t, w, shell)
+	recovered()
+	const sender = "mail-sender"
+	registerSessions(t, w, w.Client(), sender)
+
+	mailed := make(chan *protocol.AgentMsgResult, 1)
+	go func() {
+		result, err := w.Client().AgentMsg("keel", protocol.SessionID(sender), "please wake")
+		if err != nil {
+			t.Errorf("mail during the capture: %v", err)
+		}
+		mailed <- result
+	}()
+	shell.release()
+	result := <-mailed
+	if result == nil {
+		t.FailNow()
+	}
+	if !strings.Contains(result.Detail, "woke Keel") {
+		t.Fatalf("mail during the capture = %+v, want Keel woken", result)
+	}
+	bound := crewRosterMember(t, w.Client(), "keel").BindingSession
+	if bound == nil {
+		t.Fatalf("mail during the capture = %+v and left Keel asleep", result)
+	}
+	if got, _ := envEntry(w.Launched(string(*bound)).Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("Keel woke with ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+}
+
+func TestASpawnOfAPluginHarnessDuringTheCaptureWaitsAndRuns(t *testing.T) {
+	w, shell := plugWorldBehindALoginShell(t)
+	app, recovered := restartDuringTheCapture(t, w, shell)
+	recovered()
+
+	spawned := make(chan protocol.SpawnResultMessage, 1)
+	go func() {
+		result, _, _ := w.RequestSpawn(app, fakeagent.Plug, w.Path("shop"))
+		spawned <- result
+	}()
+	shell.release()
+	result := <-spawned
+	if !result.Success {
+		t.Fatalf("spawn during the capture: %s", protocol.Deref(result.Error))
+	}
+	if got, _ := envEntry(w.Launched(string(result.ID)).Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("the agent has ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+}
+
+func TestAnAgentNoPluginRegistersFailsWithItsErrorOnceThePluginsHadTheirTime(t *testing.T) {
+	w, shell := plugWorldBehindALoginShell(t)
+	app, recovered := restartDuringTheCapture(t, w, shell)
+	recovered()
+
+	const unknown = fakeagent.Harness("no-such-harness")
+	want := `agent "no-such-harness" is not available`
+	spawned := make(chan protocol.SpawnResultMessage, 1)
+	go func() {
+		result, _, _ := w.RequestSpawn(app, unknown, w.Path("shop"))
+		spawned <- result
+	}()
+	shell.release()
+	w.awaitTimer(daemon.PluginStartLimitTimer)
+	select {
+	case result := <-spawned:
+		t.Fatalf("the spawn answered %+v before the plugins had their time", result)
+	default:
+	}
+	w.advance(supervise.StableConnection)
+	if result := <-spawned; result.Success || protocol.Deref(result.Error) != want {
+		t.Fatalf("spawn of an unregistered agent = %+v, want %q", result, want)
+	}
+	if result, _, _ := w.RequestSpawn(app, unknown, w.Path("shop")); result.Success || protocol.Deref(result.Error) != want {
+		t.Fatalf("spawn of an unregistered agent after the limit = %+v, want %q at once", result, want)
+	}
+}
+
+func TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w, shell := plugWorldBehindALoginShell(t)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	session := w.Spawn(w.App(), fakeagent.Plug, w.Path("shop"))
+	w.Launched(session)
+
+	waiting := w.PauseAt(pausepoint.LaunchAwaitsPluginHarness)
+	shell.block()
+	w.restart()
+	app := w.App()
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
+	waiting.Await()
+
+	if closed := closeFromApp(app, session); closed.Error != nil {
+		t.Fatalf("closing the session while its reload waits: %s", *closed.Error)
+	}
+	waiting.Release()
+	shell.release()
+	testworld.Await(app, protocol.EventReloadSessionResult, func(m protocol.ReloadSessionResultMessage) bool { return string(m.ID) == session })
 }

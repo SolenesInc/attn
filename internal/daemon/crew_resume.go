@@ -14,7 +14,11 @@ func (d *Daemon) reviveMembersInterruptedSession(memberID string) bool {
 		return false
 	}
 	session := d.store.Get(latest)
-	if session == nil || session.State != protocol.SessionStateRecoverable || !d.agentAvailable(string(session.Agent)) {
+	if session == nil || session.State != protocol.SessionStateRecoverable {
+		return false
+	}
+	d.awaitPluginHarness(string(session.Agent))
+	if !d.agentAvailable(string(session.Agent)) {
 		return false
 	}
 	if err := d.reviveSession(latest, 80, 24); err != nil {
