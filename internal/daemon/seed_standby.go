@@ -153,10 +153,27 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 		"%s was rewritten under all %d attempts to save its standby; read it again with `attn seed show %s`", seedID, attempts, seedID)
 }
 
-func (d *Daemon) endStandbyOnDelivery(seedID string) {
+func (d *Daemon) endStandbyOnceMailRead(addresses ...who.Address) {
+	for _, a := range addresses {
+		seedID, seedMail := a.TenderOf()
+		if !seedMail {
+			continue
+		}
+		attempt, err := d.store.InboxAttempt(a)
+		if err != nil {
+			d.logf("standby: count the unread mail of %s: %v", seedID, err)
+			continue
+		}
+		if attempt.Unread == 0 {
+			d.endStandby(seedID)
+		}
+	}
+}
+
+func (d *Daemon) endStandby(seedID string) {
 	schema, err := d.seedsCollection()
 	if err != nil {
-		d.logf("standby: end %s after delivery: %v", seedID, err)
+		d.logf("standby: end %s once its mail was read: %v", seedID, err)
 		return
 	}
 	const attempts = 3
@@ -176,7 +193,7 @@ func (d *Daemon) endStandbyOnDelivery(seedID string) {
 			continue
 		}
 		if err != nil {
-			d.logf("standby: end %s after delivery: %v", seedID, err)
+			d.logf("standby: end %s once its mail was read: %v", seedID, err)
 		}
 		return
 	}

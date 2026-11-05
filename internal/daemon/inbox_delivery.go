@@ -35,6 +35,7 @@ type inboxDeliveryState struct {
 	wakeSession protocol.SessionID
 	tenderWake  *tenderWakeDelivery
 	pending     *inboxRing
+	rang        protocol.SessionID
 }
 
 func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
@@ -211,6 +212,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		now := time.Now()
 		due := inbox.Due(attempt.Last, now)
+		if _, seedMail := a.TenderOf(); seedMail && holder == nil && state.rang != "" {
+			due, state.rang = now, ""
+		}
 		if due.After(now) && attempt.FromUser > 0 {
 			bellHeldUntil = due
 		} else if due.After(now) {
@@ -346,17 +350,19 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		state.pending = nil
 		state.tenderWake = nil
-		if seedID, seedMail := a.TenderOf(); seedMail {
-			d.endStandbyOnDelivery(seedID)
-		}
+		state.rang = holder.ID
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
 		for _, seedID := range paste.authorizedSeeds {
 			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
 		}
-		if ring := (returnableInboxRing{address: a, profileID: holder.ProfileID, paste: paste, stamp: readAt}); d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
+		ring := returnableInboxRing{address: a, profileID: holder.ProfileID, paste: paste, stamp: readAt}
+		switch d.claudeMod().rememberRing(pending.input.ID.String(), ring) {
+		case ringReturned:
 			d.returnInboxRing(ring)
+		case ringTyped:
+			d.endStandbyOnceMailRead(a)
 		}
 		if !bellWaitsForPrompt {
 			state.wakeSession = ""

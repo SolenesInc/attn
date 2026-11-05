@@ -291,8 +291,11 @@ with the note. Mail for a seed is a reminder, an update from a pull request
 watch that addresses the seed, a message to the seed's id, and your answer to an
 ask about the seed. Only the seed's tender can put a seed on standby.
 
-Standby ends when mail reaches the agent. It also ends when the seed is parked,
-harvested or withered, and when the seed gets a new tender. A session you closed
+Standby ends when the agent has read all of the seed's mail. It also ends when
+the seed is parked, harvested or withered, and when the seed gets a new tender.
+If the session closes before the agent reads the mail, the seed stays on standby
+and the mail wakes the agent again right away. Attn tries each piece of mail at
+most 3 times, and the wake limit below still applies. A session you closed
 yourself wakes the same way while its seed is on standby. A closed session
 whose seed isn't on standby stays closed, and its mail waits for the next
 tender. To keep an agent closed, park or wither its seed.
@@ -320,15 +323,17 @@ members need no setting to go on standby or to wake.
 To shrink its conversation before the session closes, an agent can add
 `--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
 agent's turn to end, has the harness compact the conversation, then closes the
-session, so the woken session resumes the compacted conversation. Mail for the
-seed that reaches the session before the compact ends the standby, so the agent
-reads it and the session stays open. Mail that arrives during the compact
-waits until the session has closed. If you
-type into the session before it closes, Attn cancels the close and the
-session stays open. Notes you send from the app or a phone while the compact
-runs are not delivered: Attn cancels the close and asks you to send them again. If the compact fails, the session still closes, and its
-reason says the compact did not run. Restarting the daemon drops a close that
-still waits for its compact, and the session stays open.
+session, so the woken session resumes the compacted conversation. Mail the
+agent reads before the compact ends the standby, and the session stays open.
+Mail the agent hasn't read doesn't cancel the close: the session compacts and
+closes, and the unread mail wakes it again. Mail that arrives during the compact
+waits until the session has closed, then wakes the agent. If you type into the
+session before it closes, Attn cancels the close and the session stays open.
+Notes you send from the app or a phone while the compact runs are not delivered:
+Attn cancels the close and asks you to send them again. If the compact fails,
+the session still closes, and its reason says the compact did not run.
+Restarting the daemon drops a close that still waits for its compact, and the
+session stays open.
 
 Only a Claude Code session with the [Claude mod](using-claude-mod.md) and a
 Codex session on [shared Codex](using-shared-codex.md) compact. **Claude mod**

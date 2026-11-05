@@ -226,7 +226,8 @@ that input. A ring lost to an open menu in the harness stays lost.
   the agent reads the inbox or 5 minutes pass. While the address has an
   outstanding ring, new items wait for the read or for the next ring. attn types
   user input right away, without the 📬 line.
-- After 5 minutes with unread items, attn rings again.
+- After 5 minutes with unread items, attn rings again. Seed mail that nobody
+  holds does not wait (see [A seed on standby](#a-seed-on-standby)).
 - Each ring that includes the 📬 line is one attempt for every unread item the
   ring covers. An item gets at most 3 attempts. Then attn stops ringing for that
   item. The item stays unread, and the daemon log records the stop. Typing
@@ -328,7 +329,7 @@ session, attn resumes that session and rings it instead of starting a new one.
   attn delivers those items, and the delivery can wake the member.
 - attn wakes a member again when the member goes back to sleep with unread
   items that have attempts left. The wake comes 5 minutes after the last
-  attempt, or at once for user input.
+  attempt, or at once for user input and for seed mail.
 - attn never wakes a chief address. With crew v2 on, attn wakes the Chief
   member like any member.
 - A manual wake does not ring for items that have no attempts left. The agent
@@ -371,11 +372,20 @@ not be watching, and names the ways to end the turn: put the seed on standby
 again, harvest it, ask the user with `attn ask`, or report. A woken session that
 stops owes the user a turn, as any resumed session does.
 
-Standby ends when attn delivers seed mail to the tender, whether the session
-was open or woken. It also ends when the seed is parked, harvested or withered,
-and when the seed gets a new tender. attn delivers seed mail again when a
-session closes and when the daemon restarts, so a seed on standby with unread
-mail wakes its tender right after either.
+Standby ends when the tender has read all of the seed's mail, whether the
+session was open or woken. The tender reads the mail with `attn agent inbox`,
+or with `attn agent inbox <message-id>` for one message. A ring also reads the
+mail it types, such as the user's answer to an ask. A ring that only carries the
+📬 line reads nothing. Standby also ends when the seed is parked, harvested or
+withered, and when the seed gets a new tender.
+
+A tender that closes before it reads the mail leaves the seed on standby, and
+the unread mail wakes the tender again. Nobody holds the seed's mailbox while
+the tender session is closed, so attn does not wait 5 minutes between attempts
+for seed mail. The 3 attempts per item and the seed's wake limit bound the
+repeats. attn delivers seed mail again when a session closes and when the daemon
+restarts, so a seed on standby with unread mail wakes its tender right after
+either.
 
 `attn seed standby --close` and `attn agent close --self` refuse while a seed
 the session tends is on standby and has unread seed mail. The refusal names
@@ -415,10 +425,12 @@ returns 20 items by default, and `--limit` allows up to 50. The command marks
 the items read, records which session read them, and says how many unread items
 remain. The command ends the outstanding ring of every address it read, even
 when `--limit` left items unread. attn rings again for those items at the next
-safe prompt.
+safe prompt. When a read leaves a seed's mailbox with no unread item, the seed's
+standby ends.
 
 `attn agent inbox <message-id>` reads one peer message once attn has rung it,
-whether or not the session read the message before.
+whether or not the session read the message before. It ends standby the same
+way.
 
 `attn agent msg` replies at once with what happens next. The reply says one of
 these:
@@ -436,7 +448,7 @@ notified, or read.
 
 | Limit | Value | Where | Receipt |
 |---|---|---|---|
-| Time between attempts (user input does not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
+| Time between attempts (user input and seed mail that nobody holds do not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items. The repeats were harness outages. |
 | Inbox wakes per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
 | Tender wakes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender wake with the seed and its cause. |
@@ -495,8 +507,9 @@ new tender.
 `attn seed standby s-x -m "Read the rollout dashboard and report" --close`. The
 session closes. When the reminder comes due, the seed is on standby and
 `garden.tender_wake` is `any`, so attn resumes the closed session. For a Claude
-session, attn waits for the mod's first poll. The session reads the reminder and
-the note, and standby ends. The agent reports, or goes on standby again.
+session, attn waits for the mod's first poll. The session gets the note and
+reads the reminder with `attn agent inbox`, and standby ends. The agent
+reports, or goes on standby again.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
 member's 8th wake in 12 hours. The reply to the sender names `crew.wake_limit`.

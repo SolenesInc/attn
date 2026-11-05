@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage) {
@@ -83,6 +85,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		Ok: true, AgentInboxResult: d.peerMessageResult(record),
 	})
 	if readNow {
+		d.endStandbyOnceMailRead(record.To)
 		d.kickInboxAfterCommit(record.To)
 	}
 }
@@ -108,7 +111,11 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 	}
 	items := make([]protocol.AgentInboxItem, 0, len(deliveries))
 	parties := d.partiesNow()
+	var read []who.Address
 	for _, delivery := range deliveries {
+		if !slices.Contains(read, delivery.Item.To) {
+			read = append(read, delivery.Item.To)
+		}
 		item := protocol.AgentInboxItem{
 			Address: delivery.Item.To.String(), ItemID: delivery.Item.ID, Kind: string(delivery.Item.Kind),
 			Content: mailboxItemContent(delivery), CreatedAt: delivery.Item.CreatedAt,
@@ -126,6 +133,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		}
 		items = append(items, item)
 	}
+	d.endStandbyOnceMailRead(read...)
 	d.kickInboxAfterCommit(addresses...)
 	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
 	if len(items) > 0 && d.quietNotifications() && d.inNotificationRun(recipientSessionID) {

@@ -71,13 +71,50 @@ func TestSeedMailReopensACodexTenderOnStandbyAsItselfWithItsNote(t *testing.T) {
 	if !strings.Contains(got, standbyNote) || !strings.Contains(got, seed) {
 		t.Fatalf("the woken tender received %q, want the standby note of %s", got, seed)
 	}
-	awaitStandbyEnded(t, app, mark, seed)
 	if mail := seedMail(t, cli, string(session), seed); len(mail) != 1 || mail[0].Content != "the pull request is approved" {
 		t.Fatalf("the woken tender's seed mailbox holds %+v, want the message", mail)
 	}
+	awaitStandbyEnded(t, app, mark, seed)
 	if reopened := showSession(t, cli, string(session)); protocol.Deref(reopened.ClosedAt) != "" {
 		t.Errorf("the ledger still shows %s closed after the wake", session)
 	}
+}
+
+func TestATenderClosedBeforeReadingItsSeedMailIsWokenAgainForIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "sender")
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	session, seed := delegated.SessionID, delegated.SeedID
+	first := w.Launched(string(session))
+	first.Prompted()
+	onStandbyAndClosed(t, w, cli, delegated)
+
+	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
+	woken := w.Launched(string(session))
+	if got := woken.Prompted(); !strings.Contains(got, standbyNote) {
+		t.Fatalf("the woken tender received %q, want the standby note", got)
+	}
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby once its mail rang, before the tender read it", seed)
+	}
+
+	closePane(app, sessionPane{session: string(session)})
+	awaitClosed(app, string(session))
+	again := w.Launched(string(session))
+	if !again.Resumed || again.ConversationID != first.ConversationID {
+		t.Fatalf("after the close the tender ran %s %q, want it resuming conversation %s", again.Harness, again.Argv, first.ConversationID)
+	}
+	if got := again.Prompted(); !strings.Contains(got, standbyNote) {
+		t.Fatalf("the tender woken again received %q, want the standby note", got)
+	}
+
+	mark := len(app.Log())
+	if mail := seedMail(t, cli, string(session), seed); len(mail) != 1 || mail[0].Content != "the pull request is approved" {
+		t.Fatalf("the tender woken again reads %+v, want the unread message", mail)
+	}
+	awaitStandbyEnded(t, app, mark, seed)
 }
 
 func TestAWokenCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
@@ -107,6 +144,7 @@ func TestAWokenCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
 	if got := relaunched.Prompted(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the woken Codex took %q, want the standby note once it booted", got)
 	}
+	seedMail(t, cli, string(session), seed)
 	awaitStandbyEnded(t, app, mark, seed)
 	nothingElsePrompted(t, app, relaunched, string(session))
 }
@@ -156,6 +194,7 @@ func TestOnlySeedMailForASeedOnStandbyReopensAClosedTender(t *testing.T) {
 	if got := relaunched.Prompted(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the tender the user closed received %q, want the standby note", got)
 	}
+	seedMail(t, cli, string(session), seed)
 	awaitStandbyEnded(t, app, mark, seed)
 	stillClosed(t, cli, idle, "mail for a seed that is not on standby")
 	stillClosed(t, cli, direct, "a session: message to a tender whose seed is on standby")
@@ -192,6 +231,7 @@ func TestSeedMailReachesAWokenClaudeTenderThroughItsModAfterTheFirstPoll(t *test
 	if !relaunched.ThroughMod || !strings.Contains(got, standbyNote) {
 		t.Fatalf("the woken Claude took %q (through the mod: %t), want the standby note through the mod", got, relaunched.ThroughMod)
 	}
+	seedMail(t, cli, string(session), seed)
 	awaitStandbyEnded(t, app, mark, seed)
 	nothingElsePrompted(t, app, relaunched, string(session))
 }
@@ -228,8 +268,51 @@ func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.
 	if !relaunched.ThroughMod || !strings.Contains(got, standbyNote) {
 		t.Fatalf("the woken Claude took %q (through the mod: %t), want the standby note through the mod once it polls", got, relaunched.ThroughMod)
 	}
+	seedMail(t, cli, string(session), seed)
 	awaitStandbyEnded(t, app, mark, seed)
 	nothingElsePrompted(t, app, relaunched, string(session))
+}
+
+func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, claudeModSetting, "true")
+	setSetting(t, app, "asks_enabled", "true")
+
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	run := w.Launched(session)
+	run.Prompted()
+	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	if _, err := standbyAs(t, cli, delegated, false); err != nil {
+		t.Fatalf("seed standby: %v", err)
+	}
+	workingOn(t, app, run, session, "write the essay")
+
+	asked, err := cli.AskOpen(delegated.SessionID, seed, cacheAsk, "", w.Path("api"))
+	if err != nil {
+		t.Fatalf("ask about %s: %v", seed, err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+	answerCacheAsk(t, app, asked.ID)
+	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby while the mod held its answer", seed)
+	}
+
+	stoppedByEsc(t, app, run, session)
+	modEvent(t, run, fakeagent.ModEventRefusedStop, cacheAnswerText)
+	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
+		t.Fatalf("%s left standby after Esc returned its answer unread", seed)
+	}
+
+	mark := len(app.Log())
+	workingOn(t, app, run, session, "carry on")
+	modEvent(t, run, fakeagent.ModEventHeld, cacheAnswerText)
+	if appended := run.ModToolBoundary(); len(appended) != 1 || !strings.Contains(appended[0], cacheAnswerText) {
+		t.Fatalf("the tool boundary appended %v, want the answer", appended)
+	}
+	awaitStandbyEnded(t, app, mark, seed)
 }
 
 func TestAClaudeTenderWithoutTheModCannotGoOnStandby(t *testing.T) {
@@ -513,11 +596,11 @@ func TestSeedMailWakesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
 		if day.promptsContaining(standbyNote) != 1 || day.promptsContaining(seed) == 0 {
 			t.Fatalf("the woken member took %q, want the standby note of %s once", day.prompts(), seed)
 		}
-		if standby := lifeShow(t, cli, seed).Seed.Standby; standby != nil {
-			t.Errorf("after the woken member got its mail %s still shows standby %+v", seed, standby)
-		}
 		if mail := seedMail(t, cli, day.id, seed); len(mail) != 1 || mail[0].Content != "the pull request is approved" {
 			t.Fatalf("the woken member's seed mailbox holds %+v, want the message", mail)
+		}
+		if standby := lifeShow(t, cli, seed).Seed.Standby; standby != nil {
+			t.Errorf("after the woken member read its mail %s still shows standby %+v", seed, standby)
 		}
 	})
 }

@@ -430,10 +430,10 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 		}
 		answer(harness.Custody{Taken: true, At: taken.At, Steered: true})
 	case claudeModOutcomeSubmitted:
-		delete(t.held, ack.ID)
+		m.typedLocked(t, ack.ID)
 		answer(taken)
 	case claudeModOutcomeAppended:
-		delete(t.held, ack.ID)
+		m.typedLocked(t, ack.ID)
 	case claudeModOutcomeStopped:
 		answer(harness.Custody{Stopped: true, ComposerEmpty: ack.ComposerEmpty})
 	case claudeModOutcomeRefused:
@@ -501,20 +501,38 @@ func (m *claudeMod) redeliver(sessions map[protocol.SessionID]bool, rest []*clau
 	}
 }
 
-func (m *claudeMod) rememberRing(id string, ring returnableInboxRing) (alreadyBack bool) {
+type ringCustody int
+
+const (
+	ringTyped ringCustody = iota
+	ringHeld
+	ringReturned
+)
+
+func (m *claudeMod) rememberRing(id string, ring returnableInboxRing) ringCustody {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.ringsBackBeforeStamp[id] {
 		delete(m.ringsBackBeforeStamp, id)
-		return true
+		return ringReturned
 	}
 	for _, t := range m.terminals {
 		if held := t.held[id]; held != nil {
 			held.ring = &ring
-			return false
+			return ringHeld
 		}
 	}
-	return false
+	return ringTyped
+}
+
+func (m *claudeMod) typedLocked(t *claudeModTerminal, id string) {
+	held := t.held[id]
+	delete(t.held, id)
+	if held == nil || held.ring == nil {
+		return
+	}
+	address := held.ring.address
+	m.d.life.Go("claudeModRingTyped", func() { m.d.endStandbyOnceMailRead(address) })
 }
 
 type claudeModCompacted struct {

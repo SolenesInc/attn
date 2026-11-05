@@ -5538,7 +5538,7 @@ model SeedReminder {
 }
 
 // A seed on standby: its tender set a note saying what to do next, and seed
-// mail wakes the tender. Delivering seed mail to the tender ends it.
+// mail wakes the tender. The tender reading all of the seed's mail ends it.
 model SeedStandbyView {
   "note": string;
   "set_at": string;

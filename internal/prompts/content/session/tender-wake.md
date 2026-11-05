@@ -1,4 +1,4 @@
-attn resumed you because seed {{seed_id}} "{{seed_title}}" got mail while it was on standby. Standby has ended. The user may not be watching, so act on your note without waiting for them.
+attn resumed you because seed {{seed_id}} "{{seed_title}}" got mail while it was on standby. Standby ends once you have read all of the seed's mail. The user may not be watching, so act on your note without waiting for them.
 
 Your standby note:
 {{note}}

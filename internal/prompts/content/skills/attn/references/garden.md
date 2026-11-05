@@ -211,11 +211,15 @@ The woken session reads the mail and your standby note. The user may not be
 watching, so it ends its turn one of four ways: it puts the seed on standby
 again, harvests it, asks the user with `attn ask`, or reports.
 
-Standby ends when seed mail reaches the tender, whether the session was open or
-woken. It also ends when the seed is parked, harvested or withered, and when the
-seed gets a new tender. A new standby replaces the note. Write down anything
-the user approved up front, such as "merge once approved". The session that
-wakes may have compacted its conversation, and the note is what it reads first.
+Standby ends once the tender has read all of the seed's mail with
+`attn agent inbox`, whether the session was open or woken. Input that attn types
+into the session, such as the user's answer to an ask, counts as read. Standby
+also ends when the seed is parked, harvested or withered, and when the seed gets
+a new tender. If the session closes before you read the mail, the seed stays on
+standby and the mail wakes it again at once. A new standby replaces the note.
+Write down anything the user approved up front, such as "merge once approved".
+The session that wakes may have compacted its conversation, and the note is what
+it reads first.
 
 `attn seed ls --standby` lists the seeds on standby. Each row names the pull
 requests the seed's mailbox watches with their readiness, the seed's reminder,
@@ -231,12 +235,12 @@ does. attn refuses it while the seed has unread mail and names
 `--close --compact` compacts your conversation before the close, as
 `attn agent close --self --compact` does, so the session that wakes resumes a
 shorter conversation. [Closing a session](converse-and-observe.md#closing-a-session)
-says how it works and which sessions can compact. Seed mail that reaches you
-before the compact ends the standby, so you read it and stay open. Seed mail
-that arrives during the compact waits until the session has closed, then wakes
-it as above. When
-attn refuses `--compact`, it leaves standby unset, so run the command again
-without it.
+says how it works and which sessions can compact. Seed mail you read before the
+compact ends the standby, and you stay open. Seed mail you leave unread does not
+cancel the close: the session compacts and closes, and the unread mail wakes it
+again. Seed mail that arrives during the compact waits until the session has
+closed, then wakes it as above. When attn refuses `--compact`, it leaves standby
+unset, so run the command again without it.
 
 A Claude Code session needs the Claude mod, because attn delivers a woken Claude
 session's mail through the mod and never types it. `attn seed standby` refuses
