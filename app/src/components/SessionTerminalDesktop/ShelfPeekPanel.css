@@ -1,0 +1,74 @@
+.shelf-peek-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.shelf-peek {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-editor);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+}
+
+.shelf-peek-screen {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  color: var(--color-text-primary);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  white-space: pre;
+}
+
+.shelf-peek-reply {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.shelf-peek-reply input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+  font-size: var(--font-size-sm);
+}
+
+.shelf-peek-reply button {
+  flex: none;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-bg-button);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.shelf-peek-reply button:hover {
+  color: var(--color-text-primary);
+}
+
+.shelf-peek-reply kbd {
+  margin-left: 4px;
+  font: inherit;
+  opacity: 0.7;
+}

@@ -148,3 +148,20 @@ func (d *Daemon) agentPeekScreen(sessionID protocol.SessionID) *protocol.AgentPe
 		Rows: protocol.Deref(snapshot.Rows),
 	}
 }
+
+func (d *Daemon) sendTerminalReadTextWSResult(client *wsClient, msg *protocol.TerminalReadTextMessage) {
+	ctx, cancel := context.WithTimeout(context.Background(), agentPeekSnapshotTimeout)
+	defer cancel()
+	reply := protocol.TerminalReadTextResultMessage{
+		Event:     protocol.EventTerminalReadTextResult,
+		RequestID: protocol.Deref(msg.RequestID),
+	}
+	text, err := Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: msg.TerminalID, Mode: msg.Mode, Lines: msg.Lines})
+	if err != nil {
+		reply.Error = protocol.Ptr(err.Error())
+	} else {
+		reply.Success = true
+		reply.Text = protocol.Ptr(text.Text)
+	}
+	d.sendToClient(client, reply)
+}

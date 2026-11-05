@@ -146,3 +146,33 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 func withIDPrefix(prefix string) func(*protocol.SpawnSessionMessage) {
 	return func(m *protocol.SpawnSessionMessage) { m.ID = protocol.SessionID(prefix + string(m.ID)) }
 }
+
+func TestAppReadsATerminalsScreenWithoutAttaching(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+	app.TypeLine(session, "plan the discount field")
+	codex.Prompted()
+	codex.Reply("latest answer <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+
+	viewer := w.ConnectApp()
+	read := func(requestID, terminal string) protocol.TerminalReadTextResultMessage {
+		return testworld.Request(viewer, protocol.TerminalReadTextMessage{
+			Cmd:        protocol.CmdTerminalReadText,
+			TerminalID: protocol.TerminalID(terminal),
+			Mode:       protocol.TerminalReadModeScreen,
+			RequestID:  protocol.Ptr(requestID),
+		}, protocol.EventTerminalReadTextResult, func(result protocol.TerminalReadTextResultMessage) bool {
+			return result.RequestID == requestID
+		})
+	}
+
+	if result := read("known", w.Terminal(session)); !result.Success || !strings.Contains(protocol.Deref(result.Text), "latest answer") {
+		t.Errorf("read of the terminal = %q, %q, want its screen with the latest reply", protocol.Deref(result.Text), protocol.Deref(result.Error))
+	}
+	if result := read("unknown", "no-such-terminal"); result.Success || protocol.Deref(result.Error) == "" {
+		t.Errorf("read of an unknown terminal = %+v, want a failure that says why", result)
+	}
+}

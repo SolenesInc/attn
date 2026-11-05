@@ -6,6 +6,7 @@ import {
   updateBrowserHost,
   type BrowserHostRect,
 } from '../../browser/host';
+import { useDesktopShelfStore } from '../../store/desktopShelf';
 
 function hostRect(element: HTMLElement): BrowserHostRect {
   const rect = element.getBoundingClientRect();
@@ -22,7 +23,7 @@ export function BrowserTileBody({
   tileId,
   url,
   dragging,
-  visible,
+  visible: visibleInTile,
   paneGeometry,
   onClose,
 }: {
@@ -34,6 +35,8 @@ export function BrowserTileBody({
   paneGeometry?: string;
   onClose: () => void;
 }) {
+  const peekOverDesktop = useDesktopShelfStore((state) => state.peek?.desktopId === desktopId);
+  const visible = visibleInTile && !peekOverDesktop;
   const hostRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(dragging);
   const visibleRef = useRef(visible);

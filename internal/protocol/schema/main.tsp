@@ -3441,6 +3441,7 @@ model TerminalReadTextMessage {
   terminal_id: TerminalID;
   mode: TerminalReadMode;
   lines: int32;
+  request_id?: string; // set by the WS frontend to correlate the result event
 }
 model TerminalText {
   text: string;
@@ -8172,6 +8173,14 @@ model SessionShowResultMessage {
   entry?: SessionLedgerEntry;
 }
 
+model TerminalReadTextResultMessage {
+  event: "terminal_read_text_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  text?: string;
+}
+
 model SessionReopenResultMessage {
   event: "session_reopen_result";
   request_id: string;
@@ -8795,6 +8804,7 @@ alias DaemonEvent =
   | TasksChangedMessage
   | SessionListResultMessage
   | SessionShowResultMessage
+  | TerminalReadTextResultMessage
   | SessionReopenResultMessage
   | SessionClosedMessage
   | NotificationListResultMessage

@@ -8,6 +8,7 @@ import { useSessionStore } from '../../store/sessions';
 import type { AskHolderSession } from '../../utils/asks';
 import { StateIndicator } from '../StateIndicator';
 import { NARROWEST_STEPS } from './rowLayout';
+import { closeShelfPeek, useShelfPeekHover } from './useShelfPeekHover';
 import './DesktopShelf.css';
 
 const CHIP_PX = 112;
@@ -30,14 +31,17 @@ function AskMark({ session }: { session: AskHolderSession }) {
 }
 
 function ColumnChip({ column, desktopId, onGo }: { column: ShelfColumn; desktopId: string; onGo?: () => void }) {
+  const peekHover = useShelfPeekHover(desktopId, column.goLeafId);
   return (
     <button
       type="button"
       className={`desktop-shelf-chip${column.tiles.some(needsYou) ? ' is-needs' : ''}`}
       data-testid={`shelf-chip-${column.key}`}
       title={column.label}
+      {...peekHover}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => {
+        closeShelfPeek();
         onGo?.();
         useSessionStore.getState().selectLeaf(desktopId, column.goLeafId);
       }}

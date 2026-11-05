@@ -123,6 +123,7 @@ import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
+import { handleTerminalTextDaemonEvent } from './daemonTerminalTextEvents';
 import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
@@ -2337,6 +2338,7 @@ export function useDaemonSocket({
             if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
+            if (handleTerminalTextDaemonEvent(data, pending)) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, pending)) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2593,6 +2595,9 @@ export function useDaemonSocket({
       ...(traceId ? { trace_id: traceId } : {}),
     });
   }, [sendOrQueueCommand]);
+
+  const readTerminalScreen = useCallback((terminalId: string) =>
+    sendRequest<string>('terminal_read_text', { terminal_id: terminalId, mode: 'screen', lines: 0 }, 'Reading the terminal timed out'), [sendRequest]);
 
   const sendTerminalPointerActivity = useCallback((id: string) => {
     const ws = wsRef.current;
@@ -4380,6 +4385,7 @@ export function useDaemonSocket({
     sendSeedAuthorization,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
+    readTerminalScreen,
     sendTerminalPointerActivity,
     sendTerminalFocus,
     sendSetClientPresence,

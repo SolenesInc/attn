@@ -7,6 +7,8 @@ import { useProfilesStore } from './profiles';
 export interface ShelfTile {
   leafId: string;
   kind: string;
+  title: string;
+  terminalId?: string;
   state?: UISessionState;
   offline?: boolean;
   askHolder?: AskHolderSession;
@@ -27,9 +29,24 @@ export interface PublishedShelf {
   narrowestCols: number;
 }
 
+export interface ShelfPeekAnchor {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+export interface ShelfPeek {
+  desktopId: string;
+  leafId: string;
+  anchor: ShelfPeekAnchor | null;
+}
+
 interface DesktopShelfState {
   firstColumnByDesktop: Readonly<Record<string, FirstColumn>>;
   shelfByDesktop: Readonly<Record<string, PublishedShelf>>;
+  peek: ShelfPeek | null;
+  setPeek: (peek: ShelfPeek | null) => void;
   setFirstColumn: (desktopId: string, firstColumn: FirstColumn) => void;
   publishShelf: (desktopId: string, shelf: PublishedShelf | null) => void;
   forgetDesktop: (desktopId: string) => void;
@@ -44,6 +61,8 @@ function without<T>(record: Readonly<Record<string, T>>, key: string): Readonly<
 export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
   firstColumnByDesktop: {},
   shelfByDesktop: {},
+  peek: null,
+  setPeek: (peek) => set({ peek }),
   setFirstColumn: (desktopId, firstColumn) =>
     set((state) => {
       const current = state.firstColumnByDesktop[desktopId];
@@ -61,6 +80,7 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
     set((state) => ({
       firstColumnByDesktop: without(state.firstColumnByDesktop, desktopId),
       shelfByDesktop: without(state.shelfByDesktop, desktopId),
+      peek: state.peek?.desktopId === desktopId ? null : state.peek,
     })),
 }));
 

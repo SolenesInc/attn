@@ -1,5 +1,6 @@
 import { DesktopRenamePopover } from './DesktopRenamePopover';
 import { DesktopShelf, ShelfWidthLabel } from './DesktopShelf';
+import { ShelfPeekPanel } from './ShelfPeekPanel';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDragOverlays } from './DesktopDragOverlays';
 import { DesktopFocusBar } from './DesktopFocusBar';
@@ -63,6 +64,7 @@ export function DesktopSurface() {
       <DesktopFocusBar />
       {shelfOn && !shelfInQueueBar && <DesktopShelf desktopId={desktopId} />}
       {shelfWidthLabelShown && <ShelfWidthLabel desktopId={desktopId} />}
+      {shelfOn && <ShelfPeekPanel />}
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}
         paneIds={renderedPaneIds}

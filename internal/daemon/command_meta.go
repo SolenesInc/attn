@@ -15,12 +15,13 @@ func commandMetadata(blocksDuringRecovery bool, log bool) CommandMetadata {
 }
 
 var CommandMeta = map[string]CommandMetadata{
-	protocol.CmdTerminalList:  commandMetadata(false, true),
-	protocol.CmdTerminalOpen:  commandMetadata(true, true),
-	protocol.CmdTerminalInput: commandMetadata(true, true),
-	protocol.CmdTerminalRead:  commandMetadata(false, true),
-	protocol.CmdTerminalWait:  commandMetadata(false, true),
-	protocol.CmdTerminalClose: commandMetadata(true, true),
+	protocol.CmdTerminalList:     commandMetadata(false, true),
+	protocol.CmdTerminalOpen:     commandMetadata(true, true),
+	protocol.CmdTerminalInput:    commandMetadata(true, true),
+	protocol.CmdTerminalRead:     commandMetadata(false, true),
+	protocol.CmdTerminalWait:     commandMetadata(false, true),
+	protocol.CmdTerminalReadText: commandMetadata(false, false),
+	protocol.CmdTerminalClose:    commandMetadata(true, true),
 
 	protocol.CmdUpdateOutpost:                 commandMetadata(false, true),
 	protocol.CmdAddOutpost:                    commandMetadata(false, true),

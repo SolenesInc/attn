@@ -439,6 +439,7 @@ const (
 	EventTasksChanged                    = "tasks_changed"
 	EventSessionListResult               = "session_list_result"
 	EventSessionShowResult               = "session_show_result"
+	EventTerminalReadTextResult          = "terminal_read_text_result"
 	EventSessionReopenResult             = "session_reopen_result"
 	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"

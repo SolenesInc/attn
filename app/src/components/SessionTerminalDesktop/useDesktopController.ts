@@ -1212,6 +1212,7 @@ export function useDesktopController(
   );
 
   return {
+    focusActiveLeaf: () => focusShownLeafRef.current(activeLeafIdRef.current),
     desktopId,
     desktopSelectionStyle,
     activeAgentPaneId,

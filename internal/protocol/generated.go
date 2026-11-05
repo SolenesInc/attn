@@ -13685,8 +13685,28 @@ type TerminalReadTextMessage struct {
 	// Mode corresponds to the JSON schema field "mode".
 	Mode TerminalReadMode `json:"mode"`
 
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`
+}
+
+type TerminalReadTextResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
 }
 
 type TerminalRemoveMessage struct {

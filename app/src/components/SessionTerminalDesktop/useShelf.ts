@@ -60,15 +60,19 @@ export function useShelfPublisher({
       for (const leafId of column.leafIds) {
         const tile = tileLeafById.get(leafId);
         if (tile) {
-          tiles.push({ leafId, kind: tile.tileKind });
-          titles.push(deriveTileTitle(tile, tileContents?.[tileContentKey(desktopId, leafId)], seedTitle));
+          const title = deriveTileTitle(tile, tileContents?.[tileContentKey(desktopId, leafId)], seedTitle);
+          tiles.push({ leafId, kind: tile.tileKind, title });
+          titles.push(title);
           continue;
         }
         const pane = agentPaneById.get(leafId);
         const session = pane ? sessionById.get(pane.sessionId) : undefined;
+        const title = session ? sessionDisplayName(session) : pane?.title || 'Terminal';
         tiles.push({
           leafId,
           kind: 'agent',
+          title,
+          terminalId: pane?.runtimeId,
           state: session?.state,
           offline: session?.offline,
           askHolder: session && {
@@ -78,7 +82,7 @@ export function useShelfPublisher({
             seedId: session.seedId,
           },
         });
-        titles.push(session ? sessionDisplayName(session) : pane?.title || 'Terminal');
+        titles.push(title);
       }
       return {
         key: column.leafIds[0],

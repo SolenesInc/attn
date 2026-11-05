@@ -149,6 +149,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-layout'],
   },
   {
+    id: 'shelf-peek',
+    runnerId: 'SHELF-PEEK',
+    label: 'Hovering a chip shows a terminal, a reply reaches it, and a browser tile hides and returns',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-peek'],
+  },
+  {
     id: 'desktop-close-one-session-keeps-selection',
     runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Closing one session on a desktop keeps the selection',
