@@ -335,10 +335,16 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if steering {
 		m.runSteeredLocked()
 	}
-	if delivery.origin.kind == originMaintenance && !steering && !attempt.steered {
-		l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
+	credited := l.tookLocked(delivery)
+	if !steering && !attempt.steered {
+		if delivery.origin.kind == originMaintenance {
+			l.notificationTookLocked(delivery.origin.source, epochAtPlacing)
+		}
+		if l.epoch != epochAtPlacing {
+			m.runStartedDuringPlacementLocked()
+		}
 	}
-	return attempt, l.tookLocked(delivery)
+	return attempt, credited
 }
 
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
