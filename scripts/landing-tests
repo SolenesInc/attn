@@ -54,6 +54,8 @@ go ./internal/daemon TestAReplyWrittenWhileANewConversationIsBoundCountsTowardIt
 go ./internal/daemon TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart
 go ./internal/daemon TestAFailureInsideAPeerAwaitEndsTheTestAtOnceWithItsScreensAndDaemonLog
 go ./internal/stepclock TestAnAdvanceItsCallerGaveUpOnNeitherStallsItsProcessNorAnswersTheNextAdvance
+go ./internal/daemon TestASeedReminderPostsToTheSeedMailboxOnceAfterARestart
+go ./internal/daemon TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

@@ -50,7 +50,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		broadcast = true
 	}
-	if !stateChanged && state.Reason != previous.State.V.Reason && sessionmonitor.PromptReady(state.State, state.Reason) {
+	if !stateChanged && !sessionmonitor.PromptReady(previous.State.V.State, previous.State.V.Reason) && sessionmonitor.PromptReady(state.State, state.Reason) {
 		d.kickSessionInboxAddresses(session)
 	}
 	if broadcast {

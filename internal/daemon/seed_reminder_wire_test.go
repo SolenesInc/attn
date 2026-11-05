@@ -43,14 +43,20 @@ func TestASeedReminderPostsToTheSeedMailboxOnceAfterARestart(t *testing.T) {
 			t.Fatalf("before its time the tender's inbox holds %q; want nothing", inboxContents(items))
 		}
 		w.advance(2 * time.Minute)
-		w.advance(time.Hour)
+		if got := tender.promptsContaining("unread items in your attn inbox"); got != 1 {
+			t.Fatalf("the tender was rung %d times: %q; want once", got, tender.prompts())
+		}
 		items := readInbox(t, cli, id, 0).Items
 		if len(items) != 1 || items[0].Address != "seed:"+seed || protocol.Deref(items[0].SourceID) != "seed-reminder" ||
 			!strings.Contains(items[0].Content, "Check the rollout") || !strings.Contains(items[0].Content, seed) {
 			t.Fatalf("past its time the tender's inbox holds %+v; want one reminder in the mailbox of %s and no seed update", items, seed)
 		}
+		w.advance(time.Hour)
+		if items := readInbox(t, cli, id, 0).Items; len(items) != 0 {
+			t.Fatalf("an hour after the tender read the reminder its inbox holds %q; want nothing", inboxContents(items))
+		}
 		if got := tender.promptsContaining("unread items in your attn inbox"); got != 1 {
-			t.Fatalf("the tender was rung %d times: %q; want once", got, tender.prompts())
+			t.Fatalf("the tender was rung %d times after it read the reminder: %q; want once", got, tender.prompts())
 		}
 		if r := lifeShow(t, cli, seed).Seed.Reminder; r != nil {
 			t.Fatalf("the seed still carries reminder %+v after it fired", r)
