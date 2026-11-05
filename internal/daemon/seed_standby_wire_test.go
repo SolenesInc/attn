@@ -257,7 +257,9 @@ func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
 	boot.Await()
 	w.awaitTimer(daemon.ClaudeModFirstPollTimer)
+	beforeMiss := len(app.Log())
 	w.clock.Fire(daemon.ClaudeModFirstPollTimer)
+	testworld.AwaitSince(app, beforeMiss, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
 	reason := "never polled"
 	wakeBlockedNotice(t, app, cli, seed, reason)
 	if later := sendAgentMessage(t, cli, "sender", seed, "and the checks passed"); later.Status != protocol.AgentMsgStatusQueued || !strings.Contains(later.Detail, "first poll") {
