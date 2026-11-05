@@ -72,9 +72,24 @@ Probed on 2.1.288 with a mock API.
 - SessionStart blocks Claude until the hook exits. SessionEnd is cut off
   after about 1.5 s and may never arrive.
 - Claude also compacts by itself while it sits at its prompt, unless
-  `idleCompaction` is false in its settings. PreCompact and PostCompact arrive
-  with the trigger `auto`, and no Stop or `idle_prompt` follows. Seen in daemon
-  logs from production sessions on 2026-11-05, not with a mock API.
+  `idleCompaction` is false in its settings. Probed on 2.1.318 with the real
+  model and a subscription login, without attn, in two conversations of about
+  245k tokens on the 1-hour prompt cache. Request timing and usage come from
+  `--debug`, because no proxy recorded the requests:
+  - The compact starts 54 minutes after the last main-thread request was sent,
+    within 0.1 s in both runs. Stop and an unsent draft typed later do not move
+    or prevent it. The bundle computes this as 90% of the cache lifetime and
+    requires at least `max(100000, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ?? 200000)`
+    tokens of context. The threshold was read there, not probed.
+  - The hooks are PreCompact `auto`, SessionStart `compact` and PostCompact
+    `auto`, over about 6.5 s, all carrying the last turn's `prompt_id`. No
+    UserPromptSubmit, Stop or Notification comes with them.
+  - The compact request read about 40k tokens from the cache and sent about
+    207k uncached.
+  - The screen shows `Compacting conversation…` above the composer. An unsent
+    draft stays in the composer, and Enter then submits it as a normal turn on
+    top of the summary. The next request carried about 41k tokens of context.
+    The fullscreen renderer was not probed.
 - Plan mode's "clear context and proceed" is SessionEnd `clear`, SessionStart
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`. attn reads the
