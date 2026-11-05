@@ -247,7 +247,13 @@ func (r *codexShared) observeStatus(s *codexServer, m codexshared.Message) {
 	if !ok {
 		return
 	}
-	s.events.run(r.d, func() { r.observe(r.holder(s.profile, p.ThreadID), status) })
+	s.events.run(r.d, func() {
+		holder := r.holder(s.profile, p.ThreadID)
+		r.observe(holder, status)
+		if status == pty.ProgramIdle {
+			r.d.kickCompactingClose(holder)
+		}
+	})
 }
 
 func (r *codexShared) hiddenSessions(profile string) []protocol.SessionID {

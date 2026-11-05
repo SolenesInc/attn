@@ -233,8 +233,9 @@ gets a new tender. --close then closes this session as attn agent close
 --close --compact first waits for your turn to end and compacts your
 conversation, as attn agent close --self --compact does, so the session that
 wakes resumes a shorter conversation. End your turn right after the command.
-Mail for the seed that arrives during the compact waits until the session has
-closed. Only a Codex session on the shared Codex app server compacts: attn
+Mail for the seed that reaches you before the compact ends the standby, so you
+read it and stay open. Mail that arrives during the compact waits until the
+session has closed. Only a Codex session on the shared Codex app server compacts: attn
 refuses --compact for any other session and leaves standby unset, and for a
 Codex session off the shared server the refusal names codex_shared_enabled.
 Only the seed's tender sets standby. A Claude session needs claude_mod_enabled

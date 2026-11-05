@@ -321,7 +321,9 @@ To shrink its conversation before the session closes, an agent can add
 `--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
 agent's turn to end, has the harness compact the conversation, then closes the
 session, so the woken session resumes the compacted conversation. Mail for the
-seed that arrives during the compact waits until the session has closed. If you
+seed that reaches the session before the compact ends the standby, so the agent
+reads it and the session stays open. Mail that arrives during the compact
+waits until the session has closed. If you
 type into the session before it closes, Attn cancels the close and the
 session stays open. If the compact fails, the session still closes, and its
 reason says the compact did not run. Restarting the daemon drops a close that

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,6 +16,8 @@ import (
 )
 
 var compactOutcomeTripwire = 10 * time.Minute
+
+var errCompactWaitsForPrompt = errors.New("the session is not at a prompt")
 
 type compactOutcome struct {
 	failed string
@@ -114,8 +117,11 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 			d.logf("compacting close: session %s stays open: %s", p.session, why)
 			return
 		}
-		pausepoint.At(pausepoint.CompactingClosePlacing)
-		attempt := d.placeDelivery(context.Background(), p.session, sessionmonitor.CompactInput(p.key))
+		attempt := sessionmonitor.Attempt{Stage: sessionmonitor.Deferred, Err: errCompactWaitsForPrompt}
+		if session := d.store.Get(p.session); session != nil && sessionmonitor.PromptReady(session.State, d.stateReason(p.session)) {
+			pausepoint.At(pausepoint.CompactingClosePlacing)
+			attempt = d.placeDelivery(context.Background(), p.session, sessionmonitor.CompactInput(p.key))
+		}
 		l.mu.Lock()
 		if l.pending[p.session] != p {
 			l.mu.Unlock()
@@ -202,9 +208,6 @@ func (d *Daemon) compactingCloseCanceled(p *pendingCompactClose) string {
 		if standby, err := d.store.SeedStandby(seedID); err != nil || standby == nil || standby.Tender != who.Session(p.session) {
 			return fmt.Sprintf("%s left standby after the close was asked", seedID)
 		}
-	}
-	if err := d.unreadStandbyMailRefusal(target, ""); err != nil {
-		return err.Error()
 	}
 	return ""
 }

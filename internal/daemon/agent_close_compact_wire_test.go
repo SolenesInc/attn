@@ -191,9 +191,9 @@ func TestARingThatWinsTheTurnsEndIsReadBeforeTheCompactingCloseCompactsAtTheNext
 	session, codex := sharedCodexInATurn(t, w, app)
 	conversation := codex.ConversationID
 
+	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
 	closeCompacting(t, cli, session)
 	sent := sendAgentMessage(t, cli, "sender", session, "the review is in")
-	placing := w.PauseAt(pausepoint.CompactingClosePlacing)
 	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
 	placing.Await()
 	if rang := w.CodexServer().Prompted(conversation); rang == "" {
