@@ -31,7 +31,7 @@ type outpostMachine struct {
 }
 
 func (d *Daemon) outpostMachineReport() outpostMachine {
-	machine := d.recoverMachine(d.life.Context())
+	ctx := d.life.Context()
 	report := outpostMachine{Live: make(map[harness.TerminalID]outpostLiveTerminal), Probes: make(map[harness.TerminalID]outpostProbe)}
 	for _, session := range d.store.List("") {
 		if d.copiedSession(session.ID) {
@@ -40,11 +40,20 @@ func (d *Daemon) outpostMachineReport() outpostMachine {
 			}
 		}
 	}
-	for id, live := range machine.live {
-		if d.copiedSession(id) {
-			report.Live[live.terminal] = outpostLiveTerminal{Info: live.info, HaveInfo: live.haveInfo}
+	provider, _ := d.ptyBackend.(ptybackend.SessionInfoProvider)
+	for id, live := range d.placedLiveTerminals(ctx) {
+		if !d.copiedSession(id) {
+			continue
 		}
+		var read outpostLiveTerminal
+		if !live.link && provider != nil {
+			if info, err := provider.SessionInfo(ctx, live.terminal); err == nil {
+				read = outpostLiveTerminal{Info: info, HaveInfo: true}
+			}
+		}
+		report.Live[live.terminal] = read
 	}
+	pausepoint.At(pausepoint.OutpostMachineRead)
 	d.monitors().notifyViewsChanged()
 	return report
 }

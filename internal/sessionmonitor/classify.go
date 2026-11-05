@@ -9,6 +9,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statemarker"
 	"github.com/victorarias/attn/internal/statetrace"
@@ -167,6 +168,7 @@ func (m *Monitor) classifyLastMessage(classificationStartTime time.Time, lastMes
 }
 
 func (m *Monitor) applyClassification(classificationStartTime time.Time, decision classifyDecision) {
+	pausepoint.At(pausepoint.ClassifierVerdictReached)
 	label := m.Label()
 	if decision.action != classifyApply {
 		m.logf("classifySessionState: session=%s no state applied reason=%s", label, decision.reason)

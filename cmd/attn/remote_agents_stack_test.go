@@ -467,6 +467,43 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	t.Logf("pending conversation survived outpost restart: %s -> %s, tokens=%d", first, next.ID, current.Usage.TotalTokens)
 }
 
+func TestAReplyDuringAnOutpostReconnectKeepsTheSessionWaitingForTheUser(t *testing.T) {
+	home := testworld.NewStack(t)
+	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	read := outpost.PauseEvery(pausepoint.OutpostMachineRead)
+	verdict := outpost.PauseAt(pausepoint.ClassifierVerdictReached)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	read.Await()
+	read.Release()
+	applied.Await()
+	applied.Release()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	app := pair.App
+	id := home.Spawn(app, fakeagent.Claude, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	agent := outpost.LaunchedCarrying(app.Terminal(id))
+	app.TypeLine(id, "work")
+	agent.Prompted()
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	pair.Disconnect()
+	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
+	pair.Reconnect()
+	stopRetries := home.FireTimers(bridge.RetryTimer)
+	read.Await()
+	stopRetries()
+	agent.Reply("Done. <!-- attn:state=waiting_input -->")
+	verdict.Await()
+	read.Release()
+	applied.Await()
+	applied.Release()
+	verdict.Release()
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+	})
+}
+
 func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T) {
 	home := testworld.NewStack(t)
 	outcome := home.PauseAt(pausepoint.ConversationMoveSaved)

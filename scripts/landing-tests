@@ -39,6 +39,9 @@ go ./internal/daemon TestAMessageSentWhileARingIsBeingPlacedIsAnsweredOnceTheRin
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
+go ./cmd/attn TestAnOutpostReplaysItsPendingConversationAfterRestart
+go ./cmd/attn TestAReplyDuringAnOutpostReconnectKeepsTheSessionWaitingForTheUser
+go ./cmd/attn TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket
 go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./scripts/test-history TestATerminationSentToCaptureReachesTheCommand

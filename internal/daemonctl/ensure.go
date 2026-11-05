@@ -19,6 +19,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -80,9 +81,7 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	defer release()
 
 	if !isSocketLive(config.SocketPath()) {
-		if err := removeStaleSocketFiles(); err != nil {
-			return EnsureResult{}, err
-		}
+		pausepoint.At(pausepoint.EnsureFoundNoListener)
 		contended, err := startDaemon(ctx, binaryPath)
 		if err != nil {
 			return EnsureResult{}, err
@@ -131,9 +130,6 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 
 	reason := mismatchReason(health)
 	if err := stopRunningDaemon(ctx, reason); err != nil {
-		return EnsureResult{}, err
-	}
-	if err := removeStaleSocketFiles(); err != nil {
 		return EnsureResult{}, err
 	}
 	contended, err := startDaemon(ctx, binaryPath)
@@ -466,14 +462,6 @@ func matchingDaemonIsLive(ctx context.Context) bool {
 	}
 	health, err := fetchHealth(ctx)
 	return err == nil && daemonMatchesCurrentBinary(health) && daemonIsReady(health) && isSocketLive(config.SocketPath())
-}
-
-func removeStaleSocketFiles() error {
-	socketPath := config.SocketPath()
-	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove stale socket %s: %w", socketPath, err)
-	}
-	return nil
 }
 
 func stopRunningDaemon(ctx context.Context, reason string) error {

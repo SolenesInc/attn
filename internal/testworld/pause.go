@@ -202,6 +202,10 @@ func (s *Stack) listenForPauses() *pauseSocket {
 	return ps
 }
 
+func (s *Stack) PauseEnv() []string {
+	return s.pauses.env()
+}
+
 func (ps *pauseSocket) env() []string {
 	if ps == nil {
 		return nil

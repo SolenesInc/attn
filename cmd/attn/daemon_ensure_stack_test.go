@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -54,6 +55,27 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	app.TypeLine(shell, "printf '__survived_%s\\n' \"$kept\"")
 	app.AwaitScreen(shell, "__survived_before")
 	t.Logf("daemon pid %s and its embedded shell survived both Ensure callers", strings.TrimSpace(string(pid)))
+}
+
+func TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	looked := s.PauseAt(pausepoint.EnsureFoundNoListener)
+	ensured := make(chan testworld.Result, 1)
+	go func() {
+		defer close(ensured)
+		ensured <- s.Run(testworld.Invocation{Args: []string{"daemon", "ensure"}, Env: s.PauseEnv()})
+	}()
+	resume := looked.Take()
+	s.Start()
+	resume()
+	got := <-ensured
+	if got.Code != 0 || !strings.Contains(got.Stdout, `"already_running"`) {
+		t.Fatalf("attn daemon ensure while a daemon started: %+v; want already_running", got)
+	}
+	if again := s.Attn("daemon", "ensure"); again.Code != 0 || !strings.Contains(again.Stdout, `"already_running"`) {
+		t.Fatalf("attn daemon ensure afterward: %+v; want the daemon still reachable on its socket", again)
+	}
 }
 
 func TestDaemonEnsureStartsOneDaemonForRacingCallersAndSaysWhyOneCannotStart(t *testing.T) {

@@ -1236,16 +1236,21 @@ func (d *Daemon) recoverSessions(ctx context.Context, rules recoveryRules) worke
 	return d.recoverRecords(machine, sessions, rules)
 }
 
-func (d *Daemon) recoverMachine(ctx context.Context) machineReport {
-	report := machineReport{live: make(map[protocol.SessionID]liveTerminal), probes: make(map[protocol.SessionID]livenessProbe)}
+func (d *Daemon) placedLiveTerminals(ctx context.Context) map[protocol.SessionID]liveTerminal {
+	placed := make(map[protocol.SessionID]liveTerminal)
 	for terminalID := range d.liveTerminals(ctx) {
-		sessionID, placed := d.terminals().Showing(terminalID)
-		if !placed {
+		sessionID, ok := d.terminals().Showing(terminalID)
+		if !ok {
 			d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
 			continue
 		}
-		report.live[sessionID] = liveTerminal{terminal: terminalID, link: d.linkProcess(terminalID)}
+		placed[sessionID] = liveTerminal{terminal: terminalID, link: d.linkProcess(terminalID)}
 	}
+	return placed
+}
+
+func (d *Daemon) recoverMachine(ctx context.Context) machineReport {
+	report := machineReport{live: d.placedLiveTerminals(ctx), probes: make(map[protocol.SessionID]livenessProbe)}
 
 	infoProvider, _ := d.ptyBackend.(ptybackend.SessionInfoProvider)
 	for sessionID, live := range report.live {
