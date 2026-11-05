@@ -1,0 +1,277 @@
+#!/usr/bin/env node
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { DaemonObserver } from './daemonObserver.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { waitForPaneInputFocus, waitForPaneState, waitForSessionDesktop } from './scenarioAssertions.mjs';
+import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
+import { UiAutomationClient } from './uiAutomationClient.mjs';
+
+const TILES = 7;
+const execFileAsync = promisify(execFile);
+const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
+const runner = createScenarioRunner(options, {
+  scenarioId: 'SHELF-LAYOUT',
+  tier: 'tier1-local-shell',
+  prefix: 'shelf-layout',
+  metadata: { agent: 'shell', focus: 'the row, the shelf and slide through AppKit keys with real terminals, in every sidebar shape, with a browser tile staying aligned through a slide' },
+});
+const client = new UiAutomationClient(options);
+const observer = new DaemonObserver({ wsUrl: options.wsUrl });
+const driver = createWindowDriver({ appPath: options.appPath, client });
+const instance = currentHarnessInstance();
+const request = (action, payload) => client.request(action, payload);
+const waitDom = (selector, extra = {}) => request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
+const press = (shortcutId) => pressShortcutKeys(client, driver, shortcutId);
+const shot = async (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+const sessions = [];
+let firstSession;
+let desktop;
+
+let resolveClick = () => {};
+let pageClick = new Promise((resolve) => { resolveClick = resolve; });
+const server = http.createServer((incoming, response) => {
+  const url = new URL(incoming.url, 'http://127.0.0.1');
+  if (url.pathname === '/click') {
+    resolveClick(Object.fromEntries([...url.searchParams].map(([key, value]) => [key, Number(value)])));
+    response.end();
+    return;
+  }
+  response.setHeader('content-type', 'text/html');
+  response.end('<title>Shelf browser</title><body style="margin:0;background:#264f78;height:100vh"><script>document.addEventListener("click",(event)=>fetch(`/click?x=${event.clientX}&y=${event.clientY}&w=${innerWidth}&h=${innerHeight}`))</script>');
+});
+
+const leavesOf = (node) => (node.type === 'split' ? node.children.flatMap(leavesOf) : [node.paneId ?? node.tileId]);
+const readRow = async () => leavesOf((await request('get_desktop', { sessionId: firstSession })).desktop.layoutTree);
+const shownLeaves = async () => (await request('get_desktop_ui_state', { desktopId: desktop })).shownLeafIds;
+const surface = () => `[data-session-terminal-desktop="${desktop}"]`;
+
+async function waitForActive(leafId) {
+  await waitDom(`${surface()}[data-active-leaf-id="${leafId}"] .desktop-pane[data-pane-id="${leafId}"]`);
+}
+
+async function focusLeaf(leafId) {
+  await request('dom_click', { selector: `${surface()} [data-testid="shelf-chip-${leafId}"]` }).catch(() => {});
+  await request('focus_pane', { sessionId: firstSession, paneId: leafId }).catch(() => {});
+  await waitForActive(leafId);
+}
+
+async function setWindowWidth(width) {
+  const { logicalBounds } = await request('get_window_bounds');
+  await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width, height: 900 } });
+}
+
+async function assertColsOfShownTerminals(name, narrowestCols) {
+  const desktopState = await request('get_desktop', { sessionId: firstSession });
+  for (const leafId of await shownLeaves()) {
+    const pane = desktopState.panes.find((entry) => entry.paneId === leafId);
+    if (!pane) continue;
+    const state = await waitForPaneState(client, firstSession, leafId, (current) => current.pane?.size?.cols >= narrowestCols, `${name}: ${leafId} has at least ${narrowestCols} cols`).catch((error) => {
+      runner.log(`${name} cols`, { leafId, error: String(error) });
+      return request('get_pane_state', { sessionId: firstSession, paneId: leafId });
+    });
+    const bounds = await request('dom_bounds', { selector: `${surface()} .desktop-pane[data-pane-id="${leafId}"]` });
+    const container = await request('dom_bounds', { selector: `${surface()} .desktop-pane[data-pane-id="${leafId}"] .terminal-container` });
+    runner.log(`${name} terminal`, { leafId, size: state.pane?.size, pane: bounds.bounds.width, container: container.bounds.width });
+    runner.assert(state.pane?.size?.cols >= narrowestCols, `${name}: a shown terminal has at least ${narrowestCols} cols`, { leafId, size: state.pane?.size, pane: bounds.bounds.width, container: container.bounds.width });
+  }
+}
+
+async function assertScreen(name, row) {
+  const shown = await shownLeaves();
+  const start = row.indexOf(shown[0]);
+  runner.assert(shown.length >= 1 && shown.length < row.length, `${name}: the screen shows part of the row`, { shown, row });
+  runner.assert(shown.every((id, index) => row[start + index] === id), `${name}: the screen is neighbours in row order`, { shown, row });
+  await waitDom('[data-pane-suspended]', { absent: true });
+  runner.log(name, { shown });
+  return shown;
+}
+
+async function walkTheRow(label) {
+  const row = await readRow();
+  await focusLeaf(row[0]);
+  await assertScreen(`${label} at the row start`, row);
+  for (const leafId of row.slice(1)) {
+    await press('terminal.focusRight');
+    await waitForActive(leafId);
+  }
+  const end = await assertScreen(`${label} at the row end`, row);
+  runner.assert(end.at(-1) === row.at(-1), `${label}: ⌘⌥→ slides to the row's end`, { end, row });
+  await waitForPaneInputFocus(client, firstSession, row.at(-1));
+  await shot(`${label}-row-end`);
+  for (const leafId of row.slice(0, -1).reverse()) {
+    await press('terminal.focusLeft');
+    await waitForActive(leafId);
+  }
+  const start = await assertScreen(`${label} back at the row start`, row);
+  runner.assert(start[0] === row[0], `${label}: ⌘⌥← slides back to the row's start`, { start, row });
+}
+
+async function stepTheWidth(label) {
+  const shown = (await shownLeaves()).length;
+  runner.assert(shown >= 2, `${label}: two tiles fit, so one fewer can show`, { shown });
+  const labelSelector = '[data-testid="shelf-width-label"]';
+  await press('shelf.fewerTiles');
+  await waitDom(labelSelector, { textIncludes: `${shown - 1} tile` });
+  await shot(`${label}-width-label`);
+  await press('shelf.moreTiles');
+  await waitDom(labelSelector, { textIncludes: `${shown} tile` });
+  await waitDom(labelSelector, { absent: true });
+  runner.assert((await shownLeaves()).length === shown, `${label}: ⌘⌥= returns to the same tile count`);
+}
+
+runner.registerCleanup('close_server', () => new Promise((resolve) => {
+  server.close(resolve);
+  server.closeAllConnections();
+}));
+runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('quit_app', () => client.quitApp());
+runner.registerCleanup('restore_settings', async () => {
+  await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
+});
+runner.registerCleanup('close_sessions', async () => {
+  for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
+});
+registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shelf: '[data-testid="desktop-shelf"]' }) });
+
+try {
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  await runner.step('launch_with_the_setting_on', async () => {
+    await launchFreshAppAndConnect(client, observer);
+    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+  });
+
+  await runner.step('build_a_row_of_real_shells', async () => {
+    const cwd = path.join(runner.sessionDir, 'row');
+    fs.mkdirSync(cwd, { recursive: true });
+    firstSession = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: `shelf-${runner.runId}`, agent: 'shell', waitForInitialPaneVisible: false });
+    sessions.push(firstSession);
+    await request('select_session', { sessionId: firstSession });
+    for (let count = 2; count <= TILES; count += 1) {
+      await request('dispatch_shortcut', { shortcutId: 'terminal.splitVertical' });
+      const state = await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.length === count && current.panes.every((pane) => pane.runtimeId), `${count} shells`, 30_000);
+      sessions.push(...state.panes.map((pane) => pane.sessionId).filter((id) => !sessions.includes(id)));
+    }
+    desktop = (await request('get_desktop', { sessionId: firstSession })).desktopId;
+    await setWindowWidth(1900);
+  });
+
+  await runner.step('a_window_sweep_returns_to_the_same_screen', async () => {
+    const row = await readRow();
+    await focusLeaf(row[3]);
+    const wide = await assertScreen('wide window', row);
+    await assertColsOfShownTerminals('wide window', 66);
+    await setWindowWidth(1000);
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${wide.find((id) => id !== row[3])}"]`, { absent: true });
+    await assertScreen('narrow window', row);
+    await setWindowWidth(1900);
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${wide.find((id) => id !== row[3])}"]`);
+    const back = await shownLeaves();
+    runner.assert(back.join() === wide.join(), 'a window that returns to its width shows the same screen', { wide, back });
+  });
+
+  await runner.step('sidebar_open', async () => {
+    await waitDom('.sidebar:not(.collapsed)');
+    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await walkTheRow('sidebar-open');
+    await stepTheWidth('sidebar-open');
+    await driver.hover('[data-testid="shelf-live-dots"]');
+    await waitDom('[data-testid="shelf-width-control"]');
+    await shot('sidebar-open-width-control');
+    await driver.click('[data-testid="shelf-width-control"] [aria-label="More, narrower tiles"]');
+    await waitDom('[data-testid="shelf-width-label"]');
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await waitDom('[data-testid="shelf-width-label"]', { absent: true });
+  });
+
+  await runner.step('sidebar_collapsed', async () => {
+    await press('session.toggleSidebar');
+    await waitDom('.sidebar.collapsed');
+    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await walkTheRow('sidebar-collapsed');
+    await stepTheWidth('sidebar-collapsed');
+  });
+
+  await runner.step('queue_bar', async () => {
+    await request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await waitDom('[data-testid="queue-bar"] [data-testid="desktop-shelf"]');
+    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`, { absent: true });
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await walkTheRow('queue-bar');
+    await stepTheWidth('queue-bar');
+    await press('session.toggleSidebar');
+    await waitDom('[data-testid="queue-bar"]', { absent: true });
+    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await waitDom('.sidebar:not(.collapsed)');
+  });
+
+  await runner.step('a_browser_tile_stays_aligned_through_a_slide', async () => {
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    const before = await readRow();
+    await focusLeaf(before[0]);
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${before[1]}"]`);
+    const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(firstSession) });
+    await execFileAsync(appDaemonInTree(options.appPath), ['browser', 'open', `http://127.0.0.1:${server.address().port}/`, '--session', firstSession], { env });
+    const hostSelector = `${surface()} .browser-tile-host`;
+    await waitDom(hostSelector);
+    const row = await readRow();
+    const browserLeaf = row.find((id) => !before.includes(id));
+    runner.log('row with the browser tile', { row, browserLeaf });
+
+    const clickCentre = async (when) => {
+      pageClick = new Promise((resolve) => { resolveClick = resolve; });
+      await driver.click({ selector: hostSelector, at: { x: 0.5, y: 0.5 } }, { withoutReceipt: 'the browser page takes it' });
+      const { x, y, w, h } = await pageClick;
+      runner.log(when, { x, y, w, h });
+      runner.assert(Math.abs(x - w / 2) <= 2 && Math.abs(y - h / 2) <= 2, `${when}: the webview sits on its tile`, { x, y, w, h });
+    };
+
+    await focusLeaf(row[0]);
+    const shownBefore = await shownLeaves();
+    runner.assert(shownBefore[0] === row[0] && shownBefore[1] === browserLeaf, 'the browser tile starts in the second slot', { row, shownBefore });
+    await clickCentre('in the second slot');
+    await shot('browser-before-slide');
+
+    await driver.click(`${surface()} .desktop-pane[data-pane-id="${row[0]}"] .terminal-container`);
+    await waitForPaneInputFocus(client, firstSession, row[0]);
+    const slideTarget = row[row.indexOf(browserLeaf) + shownBefore.length - 1];
+    for (const leafId of row.slice(1, row.indexOf(slideTarget) + 1)) {
+      await press('terminal.focusRight');
+      await waitForActive(leafId);
+    }
+    const shownAfter = await shownLeaves();
+    runner.assert(shownAfter[0] === browserLeaf, 'the slide moved the browser tile to the first slot', { shownBefore, shownAfter });
+    await clickCentre('after the slide');
+    await shot('browser-after-slide');
+    await request('dom_click', { selector: `${surface()} [data-tile-kind="browser"] [aria-label="Close tile"]` });
+    await waitDom(hostSelector, { absent: true });
+  });
+
+  await runner.step('past_the_row_end_goes_to_the_next_desktop', async () => {
+    const cwd = path.join(runner.sessionDir, 'next');
+    fs.mkdirSync(cwd, { recursive: true });
+    const next = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: `shelf-next-${runner.runId}`, agent: 'shell', waitForInitialPaneVisible: false });
+    sessions.push(next);
+    await request('select_session', { sessionId: firstSession });
+    const row = await readRow();
+    await focusLeaf(row.at(-1));
+    await press('terminal.focusRight');
+    await waitDom(`${surface()}[data-session-visible="0"]`);
+    runner.assert((await request('get_state')).arrangement.currentDesktopId !== desktop, '⌘⌥→ past the row end leaves the desktop');
+  });
+
+  console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
+} catch (error) {
+  console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
+  process.exitCode = 1;
+}

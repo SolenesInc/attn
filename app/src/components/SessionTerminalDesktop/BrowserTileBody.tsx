@@ -23,6 +23,7 @@ export function BrowserTileBody({
   url,
   dragging,
   visible,
+  paneGeometry,
   onClose,
 }: {
   desktopId: string;
@@ -30,6 +31,7 @@ export function BrowserTileBody({
   url: string;
   dragging: boolean;
   visible: boolean;
+  paneGeometry?: string;
   onClose: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -135,7 +137,7 @@ export function BrowserTileBody({
       observer.disconnect();
       window.removeEventListener('resize', sync);
     };
-  }, [dragging, label, visible]);
+  }, [dragging, label, paneGeometry, visible]);
 
   useEffect(() => {
     const handleNativeClose = (event: Event) => {

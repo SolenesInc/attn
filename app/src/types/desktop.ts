@@ -9,6 +9,7 @@ export type TileKind = 'markdown' | 'seed' | 'browser' | (string & {});
 export interface TerminalPaneLeaf {
   type: 'pane';
   paneId: string;
+  wantedCols?: number;
 }
 
 export interface TileLeaf {
@@ -17,6 +18,7 @@ export interface TileLeaf {
   tileKind: TileKind;
   tileParams?: string;
   tileSessionId?: string;
+  wantedCols?: number;
 }
 
 export type TerminalLeaf = TerminalPaneLeaf | TileLeaf;
@@ -295,6 +297,10 @@ export function findLeafInDirection(
   return candidates[0]?.leafId ?? null;
 }
 
+function parseWantedCols(value: { wanted_cols?: unknown }): { wantedCols?: number } {
+  return typeof value.wanted_cols === 'number' && value.wanted_cols > 0 ? { wantedCols: value.wanted_cols } : {};
+}
+
 function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
   if (!raw || typeof raw !== 'object') {
     return null;
@@ -304,6 +310,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
     return {
       type: 'pane',
       paneId: value.pane_id,
+      ...parseWantedCols(value),
     };
   }
   if (
@@ -321,6 +328,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
       tileSessionId: typeof value.tile_session_id === 'string' && value.tile_session_id.length > 0
         ? value.tile_session_id
         : undefined,
+      ...parseWantedCols(value),
     };
   }
   if (

@@ -2,6 +2,7 @@ import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useMemo } from 'react';
 import { useAsksAvailable } from '../store/asks';
 import { useToast } from '../components/Toast';
+import { triggerShortcut } from '../shortcuts/useShortcut';
 import type { PaletteCommand } from '../components/palette/paletteCommands';
 import { EditorIcon, NotebookIcon } from '../components/Sidebar';
 import { SessionRoleIcon } from '../components/DelegationChain';
@@ -62,6 +63,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
+  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
   const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
@@ -303,6 +305,26 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
         icon: <KeyboardActionIcon />,
         run: whatsNew.open,
       },
+      ...(shelfLayoutEnabled
+        ? [
+            {
+              id: 'shelf-fewer-tiles',
+              title: 'Fewer, wider tiles',
+              keywords: ['shelf', 'narrowest', 'width', 'tiles'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('shelf.fewerTiles'),
+              run: () => void triggerShortcut('shelf.fewerTiles'),
+            },
+            {
+              id: 'shelf-more-tiles',
+              title: 'More, narrower tiles',
+              keywords: ['shelf', 'narrowest', 'width', 'tiles'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('shelf.moreTiles'),
+              run: () => void triggerShortcut('shelf.moreTiles'),
+            },
+          ]
+        : []),
       {
         id: 'settings',
         title: 'Settings',
@@ -315,6 +337,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return commands;
   }, [
     agentOnScreenId,
+    shelfLayoutEnabled,
     automationsPanelOpen,
     desktopNavigation,
     desktops,

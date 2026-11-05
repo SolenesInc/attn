@@ -1,0 +1,205 @@
+.desktop-shelf {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.session-terminal-desktop > .desktop-shelf {
+  flex: 0 0 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+}
+
+.desktop-shelf-chip {
+  display: inline-flex;
+  flex: 0 0 108px;
+  align-items: center;
+  gap: 5px;
+  width: 108px;
+  height: 22px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-bg-button);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.desktop-shelf-chip:hover {
+  color: var(--color-text-primary);
+}
+
+.desktop-shelf-chip.is-needs {
+  border-color: var(--color-accent, #ff6b35);
+  color: var(--color-text-primary);
+}
+
+.desktop-shelf-chip-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-shelf-cap {
+  flex: 0 0 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.desktop-shelf-cap-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.desktop-shelf-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+}
+
+.desktop-shelf-menu--before {
+  left: 0;
+}
+
+.desktop-shelf-menu--after {
+  right: 0;
+}
+
+.desktop-shelf-menu .desktop-shelf-chip {
+  flex: 0 0 24px;
+  width: 200px;
+}
+
+.desktop-shelf-live {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 4px;
+}
+
+.desktop-shelf-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+}
+
+.desktop-shelf-dot.is-current {
+  border-bottom-color: var(--color-text-secondary);
+}
+
+.desktop-shelf-mark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--color-text-secondary);
+}
+
+.desktop-shelf-stepper {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  z-index: 20;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.desktop-shelf-stepper::before {
+  content: '';
+  position: absolute;
+  inset: -6px 0 auto;
+  height: 6px;
+}
+
+.desktop-shelf-live:hover .desktop-shelf-stepper,
+.desktop-shelf-live:focus-within .desktop-shelf-stepper {
+  display: inline-flex;
+}
+
+.desktop-shelf-stepper button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.desktop-shelf-width-label {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.desktop-shelf-width-label b {
+  color: var(--color-text-primary);
+}
+
+.desktop-shelf-width-steps {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.desktop-shelf-width-steps i {
+  font-style: normal;
+  opacity: 0.55;
+}
+
+.desktop-shelf-width-steps i.is-on {
+  color: var(--color-text-primary);
+  opacity: 1;
+}

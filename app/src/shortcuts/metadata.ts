@@ -97,6 +97,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'terminal.focusRight': { label: 'Move focus right', category: 'panes', requiresTerminal: true },
   'terminal.focusUp': { label: 'Move focus up', category: 'panes', requiresTerminal: true },
   'terminal.focusDown': { label: 'Move focus down', category: 'panes', requiresTerminal: true },
+  'shelf.fewerTiles': { label: 'Fewer, wider tiles (Shelf layout)', category: 'panes' },
+  'shelf.moreTiles': { label: 'More, narrower tiles (Shelf layout)', category: 'panes' },
   'terminal.find': { label: 'Find in terminal', category: 'panes', requiresTerminal: true },
 
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },

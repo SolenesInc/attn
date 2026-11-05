@@ -6,6 +6,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
+import { DEFAULT_NARROWEST_COLS } from '../components/SessionTerminalDesktop/rowLayout';
 import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
@@ -55,7 +56,8 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
+  const { seedPopoverRequest, usagePopoverRequest, openAsk, sidebarCollapsed } = useAppPanelsContext();
+  const { queueModeEnabled } = useAttentionQueueContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions, settings } = useAppInputs();
@@ -71,6 +73,7 @@ export function AppDesktops() {
     sendRenameSession,
     sendDesktopSetSplitRatio,
     sendDesktopUpdateTile,
+    sendSetSetting,
     desktopTileContents,
     isReady,
   } = useDaemonApi();
@@ -181,6 +184,10 @@ export function AppDesktops() {
           isSessionViewVisible={view === 'session'}
           terminalsLive
           attachOnlyDrawn={settings.pty_shared_host_enabled === 'true'}
+          shelfNarrowestCols={settings.shelf_layout_enabled === 'true' ? Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS : undefined}
+          shelfInQueueBar={queueModeEnabled && sidebarCollapsed}
+          onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
+          onShelfLimit={showError}
           connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {

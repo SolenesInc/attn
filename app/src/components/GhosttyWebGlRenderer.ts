@@ -1,3 +1,4 @@
+import { measureCellWidth } from '../utils/terminalSizing';
 import { CellFlags, type GhosttyCell, type GhosttyTerminal } from '../ghostty';
 import { cursorRowInViewport, viewportBufferStart } from '../utils/ghosttyScroll';
 import {
@@ -362,13 +363,7 @@ export class WebGlTerminalRenderer {
     this.gl = gl;
     this.program = createProgram(gl);
 
-    const metricsCanvas = document.createElement('canvas');
-    const metricsContext = metricsCanvas.getContext('2d');
-    if (!metricsContext) {
-      throw new Error('Unable to measure terminal font');
-    }
-    metricsContext.font = `${fontSize}px ${fontFamily}`;
-    this.cellWidth = Math.max(1, Math.ceil(metricsContext.measureText('M').width));
+    this.cellWidth = measureCellWidth(fontSize, fontFamily);
     this.cellHeight = Math.max(1, Math.ceil(fontSize * 1.45));
     this.baseline = Math.ceil(fontSize * 1.1);
 
@@ -850,13 +845,7 @@ export class WebGlTerminalRenderer {
   // WKWebView's small context pool can permanently break a rebuilt pane.
   setFontSize(fontSize: number): void {
     this.fontSize = fontSize;
-    const metricsCanvas = document.createElement('canvas');
-    const metricsContext = metricsCanvas.getContext('2d');
-    if (!metricsContext) {
-      throw new Error('Unable to measure terminal font');
-    }
-    metricsContext.font = `${fontSize}px ${this.fontFamily}`;
-    this.cellWidth = Math.max(1, Math.ceil(metricsContext.measureText('M').width));
+    this.cellWidth = measureCellWidth(fontSize, this.fontFamily);
     this.cellHeight = Math.max(1, Math.ceil(fontSize * 1.45));
     this.baseline = Math.ceil(fontSize * 1.1);
     this.metricsDirty = true;

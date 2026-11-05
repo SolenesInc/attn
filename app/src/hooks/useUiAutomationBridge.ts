@@ -2526,6 +2526,9 @@ export function useUiAutomationBridge({
           sessionVisible: surface?.getAttribute('data-session-visible') === '1',
           tileIds,
           paneCount,
+          shownLeafIds: surface
+            ? Array.from(surface.querySelectorAll('.desktop-pane[data-pane-id]')).map((node) => node.getAttribute('data-pane-id') || '')
+            : [],
           tileTitles,
           tileBodyFocused,
         };

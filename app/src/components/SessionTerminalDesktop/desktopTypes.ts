@@ -117,6 +117,10 @@ export interface SessionTerminalDesktopProps {
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onTerminalPathRefused?: (message: string) => void;
+  shelfNarrowestCols?: number;
+  shelfInQueueBar?: boolean;
+  onSetNarrowestCols?: (cols: number) => void;
+  onShelfLimit?: (message: string) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;

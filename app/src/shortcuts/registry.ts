@@ -44,6 +44,8 @@ export const MAC_SHORTCUTS = {
   'terminal.focusRight': { key: 'ArrowRight', meta: true, alt: true },
   'terminal.focusUp': { key: 'ArrowUp', meta: true, alt: true },
   'terminal.focusDown': { key: 'ArrowDown', meta: true, alt: true },
+  'shelf.fewerTiles': { key: '-', code: 'Minus', meta: true, alt: true },
+  'shelf.moreTiles': { key: '=', code: 'Equal', meta: true, alt: true },
 
   // In editable targets ⌘F belongs to the focused editor (CodeMirror search).
   'terminal.find': { key: 'f', meta: true, editableTarget: 'native' },
@@ -155,6 +157,8 @@ export const LINUX_SHORTCUTS = {
   'terminal.focusRight': { key: 'ArrowRight', meta: true, shift: true },
   'terminal.focusUp': { key: 'ArrowUp', meta: true, shift: true },
   'terminal.focusDown': { key: 'ArrowDown', meta: true, shift: true },
+  'shelf.fewerTiles': { key: '-', code: 'Minus', meta: true, alt: true },
+  'shelf.moreTiles': { key: '=', code: 'Equal', meta: true, alt: true },
   'terminal.find': { key: 'f', meta: true, shift: true, editableTarget: 'native' },
 
   'session.new': { key: 'n', meta: true, shift: true },

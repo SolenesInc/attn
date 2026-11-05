@@ -48,6 +48,7 @@ export function DesktopTilePane({
     focusLeaf,
     beginLeafDrag,
     effectiveDraggingLeafId,
+    paneGeometry,
   } = useDesktopContext();
 
   if (leafShowsAsStrip(tileLeaf.tileId, suspendedLeafIds, effectivePaneId)) {
@@ -85,6 +86,7 @@ export function DesktopTilePane({
         desktopId={desktopId}
         content={tileContents?.[tileContentKey(desktopId, tileLeaf.tileId)]}
         dragging={effectiveDraggingLeafId === tileLeaf.tileId}
+        paneGeometry={paneGeometry.get(tileLeaf.tileId)}
         visible={
           isActiveSession &&
           isSessionViewVisible &&

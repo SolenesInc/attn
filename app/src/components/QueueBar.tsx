@@ -19,14 +19,16 @@ import { useSidebarContext } from './SidebarContext';
 import { ExpandIcon } from './SidebarIcons';
 import { FlowToggleButton } from './SidebarHeader';
 import type { LocalSession } from './sidebarTypes';
+import { DesktopShelf, useDesktopHasShelf } from './SessionTerminalDesktop/DesktopShelf';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 
 const LEAD_TURNS = 3;
 const PEEK_ROWS = 16;
 
 export function QueueBar() {
-  const { instance, criticalNotifications, onOpenNotifications, profileName, onSwitchProfile, onToggleCollapse } =
+  const { instance, criticalNotifications, onOpenNotifications, profileName, onSwitchProfile, onToggleCollapse, selectedDesktopId } =
     useSidebarContext();
+  const hasShelf = useDesktopHasShelf(selectedDesktopId);
 
   return (
     <div className="queue-bar" data-testid="queue-bar" data-callout-anchor="sidebar">
@@ -68,7 +70,7 @@ export function QueueBar() {
           onOpen={onOpenNotifications}
         />
       )}
-      <span className="queue-bar-spacer" />
+      {hasShelf && selectedDesktopId ? <DesktopShelf desktopId={selectedDesktopId} /> : <span className="queue-bar-spacer" />}
       <RunsChip />
       <DesktopChips />
     </div>

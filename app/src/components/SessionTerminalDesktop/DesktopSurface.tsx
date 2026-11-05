@@ -1,4 +1,5 @@
 import { DesktopRenamePopover } from './DesktopRenamePopover';
+import { DesktopShelf, ShelfWidthLabel } from './DesktopShelf';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDragOverlays } from './DesktopDragOverlays';
 import { DesktopFocusBar } from './DesktopFocusBar';
@@ -27,6 +28,9 @@ export function DesktopSurface() {
     draggingLeafLabel,
     splitDividers,
     handleDividerPointerDown,
+    shelfOn,
+    shelfInQueueBar,
+    shelfWidthLabelShown,
   } = useDesktopContext();
   if (!renderedLayoutTree) {
     return (
@@ -57,6 +61,8 @@ export function DesktopSurface() {
       data-zoomed-pane-id={effectiveZoomedPaneId || ''}
     >
       <DesktopFocusBar />
+      {shelfOn && !shelfInQueueBar && <DesktopShelf desktopId={desktopId} />}
+      {shelfWidthLabelShown && <ShelfWidthLabel desktopId={desktopId} />}
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}
         paneIds={renderedPaneIds}

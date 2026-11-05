@@ -143,6 +143,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-desktop-splits'],
   },
   {
+    id: 'shelf-layout',
+    runnerId: 'SHELF-LAYOUT',
+    label: 'The row, the shelf and slide through native keys in every sidebar shape',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-layout'],
+  },
+  {
     id: 'desktop-close-one-session-keeps-selection',
     runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Closing one session on a desktop keeps the selection',

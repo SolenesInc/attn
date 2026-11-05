@@ -24,18 +24,20 @@ sessions on a launch desktop.
 - `tile-history`: walk back and forward through the tiles this window showed.
 - `tile-close`: close the active tile.
 - `shelf-layout-setting`: the experimental "Shelf layout" switch and, while it is on, the narrowest tile width in columns.
+- `shelf-row`: with the setting on, the screen shows a run of the row's columns and the shelf lists the rest, above the tiles or inside the queue bar. ⌥⌘←→ slide along the row and leave for the next desktop past its end. A chip or a cap's menu makes that tile active. ⌥⌘− and ⌥⌘= step the narrowest width until one fewer or one more tile fits.
 - `launch-desktop`: the desktop where a crew member's or an automation's sessions start.
 
 ## How to get to it
 
 ### People
 
-- Keys (`app/src/shortcuts/registry.ts`): ⌘1–⌘9 (`desktop.select1`–`desktop.select9`), ⌥⌘1–⌥⌘9 move the active tile and follow (`desktop.send1`–`desktop.send9`), ⇧⌥⌘1–⇧⌥⌘9 move it and stay (`desktop.sendStay1`–`desktop.sendStay9`), ⌘G (`desktop.overview`), ⌘D and ⌘⇧D split (`terminal.splitVertical`, `terminal.splitHorizontal`), ⌘⇧Z zoom (`terminal.toggleZoom`), ⌘⇧↩ focus (`terminal.toggleMaximize`), ⌥⌘←→↑↓ (`terminal.focusLeft|Right|Up|Down`), ⌘W (`terminal.close`, `session.close`), ⌘[ and ⌘] (`session.historyBack`, `session.historyForward`), and in desktop flow ⌘↑ and ⌘↓ (`session.prev`, `session.next`).
+- Keys (`app/src/shortcuts/registry.ts`): ⌘1–⌘9 (`desktop.select1`–`desktop.select9`), ⌥⌘1–⌥⌘9 move the active tile and follow (`desktop.send1`–`desktop.send9`), ⇧⌥⌘1–⇧⌥⌘9 move it and stay (`desktop.sendStay1`–`desktop.sendStay9`), ⌘G (`desktop.overview`), ⌘D and ⌘⇧D split (`terminal.splitVertical`, `terminal.splitHorizontal`), ⌘⇧Z zoom (`terminal.toggleZoom`), ⌘⇧↩ focus (`terminal.toggleMaximize`), ⌥⌘←→↑↓ (`terminal.focusLeft|Right|Up|Down`), with the shelf layout on ⌥⌘− and ⌥⌘= (`shelf.fewerTiles`, `shelf.moreTiles`), ⌘W (`terminal.close`, `session.close`), ⌘[ and ⌘] (`session.historyBack`, `session.historyForward`), and in desktop flow ⌘↑ and ⌘↓ (`session.prev`, `session.next`).
 - Native menu (`app/src-tauri/core/src/lib.rs`): File → "Close Pane" carries ⌘W. Close Pane closes the focused markdown, seed, editor or browser tile. Otherwise Close Pane closes the terminal on screen and ends the terminal's shell or agent. On an empty desktop, Close Pane closes the desktop.
-- Palette (`app/src/application/useAppCommands.tsx`): `desktop-overview`, `new-desktop`, `close-desktop`, `sort-desktops`, `desktop-<id>` ("Go to <desktop>"), `move-with-delegates-<id>` ("Move with delegates to <desktop>", offered while the agent on screen has a delegate on this desktop), and `tile-focus-dim`, `tile-focus-rail`, `tile-focus-spotlight`.
+- Palette (`app/src/application/useAppCommands.tsx`): `desktop-overview`, `new-desktop`, `close-desktop`, `sort-desktops`, `desktop-<id>` ("Go to <desktop>"), `move-with-delegates-<id>` ("Move with delegates to <desktop>", offered while the agent on screen has a delegate on this desktop), and `tile-focus-dim`, `tile-focus-rail`, `tile-focus-spotlight`, and with the shelf layout on `shelf-fewer-tiles`, `shelf-more-tiles`.
 - Sidebar (`app/src/components/SidebarDesktops.tsx`): the "Desktop overview" row, each desktop's row ("Open <desktop>"), its "Rename <desktop>" and "Close <desktop>" buttons, dragging a desktop's row to reorder it, and dragging an agent's row onto another desktop. Dropping the row with ⌥ held brings the agent's delegates along. Each tile's row under its desktop has a "Close <title>" button, and a browser tile's row has a "Reload <title>" button (`app/src/components/SidebarRows.tsx`). The row buttons take clicks only while the pointer is over the row. Closing a desktop shows a confirmation first (`app/src/components/DesktopClosePrompt.tsx`).
 - Overview (`app/src/components/DesktopOverview.tsx`): arrows move, ↵ switches, ⇧↵ sends the active tile, digits switch, Esc closes, "+ New desktop" creates.
 - Tile headers (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `DesktopAgentHeader.tsx`): "Close tile", "Focus agent <name>", and dragging a header to another place or desktop (`app/src/application/useLeafDrag.ts`). An agent tile's header has two rows of one fixed height: the state dot, the title and the settling and ask signals, then the seed, role, outpost, usage and pull request or automation. As the tile narrows, each row shortens its pieces in a fixed order (`headerFit.ts`); the dot, the title and the signals stay. "Rename session" and "Focus agent" appear over the end of the title on hover.
+- Shelf (`app/src/components/SessionTerminalDesktop/DesktopShelf.tsx`, inside `QueueBar` when the queue sidebar is collapsed): each chip, the `‹ n` and `n ›` caps and their menus, the live dots, and hovering the dots for the width control.
 - Launch desktop field in the crew launch tab and the automation form (`app/src/components/LaunchDesktopSelect.tsx`).
 - Where people see what agents do: the sidebar lists a terminal that an agent opens or moves under the desktop the terminal sits on. An empty desktop shows the launcher (`app/src/application/EmptyDesktopLauncher.tsx`).
 - Their own shell: the `--launch-desktop` verbs below. `attn terminal` refuses without a session.
@@ -120,8 +122,9 @@ Preconditions:
 
 - Wire: `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
 - Stack: `cmd/attn/launch_desktop_stack_test.go`, `cmd/attn/terminal_move_stack_test.go`, `scripts/verify-terminal-move.sh`, `app/e2e/desktop-sessions.spec.ts`, `app/e2e/tile-header.spec.ts`, `app/e2e/agent-header.spec.ts`, `app/e2e/pane-focus-ring.spec.ts`, `app/e2e/split-paint.spec.ts`.
-- Scenario: `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
-- Kernel: `internal/layouttree/*_test.go`.
+- Scenario: `shelf-layout`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
+- Kernel: `internal/layouttree/*_test.go`, `app/src/components/SessionTerminalDesktop/rowLayout.test.ts`.
+- App wire: `app/src/App.shelfLayout.test.tsx`.
 - App: `app/src/App.desktop*.test.tsx`, `app/src/App.closeDesktop.test.tsx`, `app/src/App.activeLeaf.test.tsx`, `app/src/App.moveLeaf.test.tsx`, `app/src/App.moveDelegates.test.tsx`, `app/src/App.paneHeader.test.tsx`, `app/src/App.launchDesktops.test.tsx`, `app/src/App.launchDesktopKeyboard.test.tsx`, `app/src/components/SessionTerminalDesktop.test.tsx`, `app/src/components/SessionTerminalDesktop/*.test.*`, `app/src/components/DesktopOverview.keyboard.test.tsx`, `app/src/application/useLeafDrag.lifecycle.test.tsx`.
 
 ## Gotchas

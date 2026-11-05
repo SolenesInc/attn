@@ -309,7 +309,7 @@ interface DividerAncestor {
 
 // A boundary beside a sliver re-aims (grabRatio) at the nearest same-axis
 // split separating its visible sides; only viewport edge beyond means no divider.
-function buildDividers(
+export function buildDividers(
   node: TerminalLayoutNode,
   suspended: ReadonlySet<string>,
 ): SplitDivider[] {
@@ -376,14 +376,14 @@ function buildDividers(
   return dividers;
 }
 
-function findLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode | null {
+export function findLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode | null {
   if (node.type !== 'split') {
     return leafSlotId(node) === leafId ? node : null;
   }
   return findLeaf(node.children[0], leafId) || findLeaf(node.children[1], leafId);
 }
 
-function zoomLayoutTowardLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode {
+export function zoomLayoutTowardLeaf(node: TerminalLayoutNode, leafId: string): TerminalLayoutNode {
   if (node.type !== 'split') {
     return node;
   }

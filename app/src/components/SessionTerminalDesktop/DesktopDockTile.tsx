@@ -55,6 +55,7 @@ interface DesktopDockTileProps {
   content?: TileContentState;
   dragging: boolean;
   visible?: boolean;
+  paneGeometry?: string;
   desktopSessions?: DesktopTileSessionOption[];
   gardenSeeds?: Seed[];
   desktopDirectory?: string;
@@ -78,6 +79,7 @@ export function DesktopDockTile({
   content,
   dragging,
   visible = true,
+  paneGeometry,
   desktopSessions = NO_DESKTOP_SESSIONS,
   gardenSeeds = NO_GARDEN_SEEDS,
   desktopDirectory,
@@ -259,6 +261,7 @@ export function DesktopDockTile({
           seedArrival={seedArrival}
           dragging={dragging}
           visible={visible}
+          paneGeometry={paneGeometry}
           onClose={onClose}
           notebookSurfaceRef={notebookSurfaceRef}
           documentSource={documentSource}
@@ -391,6 +394,7 @@ interface ContentProps {
   seedArrival: 'in' | 'out';
   dragging: boolean;
   visible: boolean;
+  paneGeometry?: string;
   onClose: () => void;
   notebookSurfaceRef: RefObject<NotebookSurfaceHandle | null>;
   documentSource: MarkdownDocumentSource;
@@ -409,6 +413,7 @@ function DesktopTileContent({
   seedArrival,
   dragging,
   visible,
+  paneGeometry,
   onClose,
   notebookSurfaceRef,
   documentSource,
@@ -442,6 +447,7 @@ function DesktopTileContent({
         url={tile.tileParams || ''}
         dragging={dragging}
         visible={visible}
+        paneGeometry={paneGeometry}
         onClose={onClose}
       />
     );
