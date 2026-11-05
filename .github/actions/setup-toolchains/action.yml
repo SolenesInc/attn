@@ -42,6 +42,17 @@ runs:
       with:
         go-version: ${{ steps.pins.outputs.go }}
         cache: ${{ inputs.go-cache }}
+        cache-dependency-path: |
+          go.sum
+          go-cgo-cflags
+
+    - name: Use the Go build flags of make and the test runner
+      if: inputs.go == 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        echo "CGO_CFLAGS=$(cat go-cgo-cflags)" >> "$GITHUB_ENV"
+        echo "GOFLAGS=-trimpath" >> "$GITHUB_ENV"
 
     - name: Save Go toolchain
       if: >-

@@ -83,6 +83,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go-cgo-cflags
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -290,6 +293,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go-cgo-cflags
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -361,6 +367,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            go-cgo-cflags
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master

@@ -11,6 +11,9 @@ esac
 
 cd "$(git rev-parse --show-toplevel)"
 
+CGO_CFLAGS="$(cat go-cgo-cflags)"
+export CGO_CFLAGS
+
 max_attempts=5
 protocol_outputs=(
   internal/protocol/generated.go

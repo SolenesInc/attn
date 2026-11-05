@@ -34,6 +34,8 @@ export GOGC="${GOGC:-400}"
 go_bin="$(command -v go)"
 GOFLAGS="$("$go_bin" env GOFLAGS) -trimpath -ldflags=-w"
 export GOFLAGS
+CGO_CFLAGS="$(cat "$root/go-cgo-cflags")"
+export CGO_CFLAGS
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-go-test.XXXXXX")"
 # shellcheck disable=SC2329 # invoked indirectly by trap
 cleanup() {

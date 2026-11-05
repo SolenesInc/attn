@@ -7,6 +7,7 @@
 .DEFAULT_GOAL := run
 
 export GOFLAGS := $(shell go env GOFLAGS) -trimpath
+export CGO_CFLAGS := $(shell cat go-cgo-cflags)
 
 BINARY_NAME=attn
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every

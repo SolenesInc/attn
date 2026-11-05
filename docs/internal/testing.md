@@ -216,8 +216,12 @@ A full run is eleven `go test` jobs run at once: `packages`,
 `daemon-1` to `daemon-4` and `attn-1` to `attn-6`. Leading `--job <name>` options run only
 the jobs they name, as CI does to spread the suite across runners:
 `./scripts/test-go.sh --job daemon-3 --job attn-1`.
-The runner and Makefile use `-trimpath` so unchanged packages can reuse build
-artifacts across worktrees. The runner gives targeted and full test runs the
+The runner, Makefile and CI use `-trimpath` so unchanged packages can reuse build
+artifacts across worktrees. They and `scripts/land.sh` also read `CGO_CFLAGS`
+from `go-cgo-cflags`, which builds SQLite without memory statistics, so every daemon does less work
+per allocation. attn calls nothing that needs them. A bare `go build` or
+`go test` still works, but it compiles go-sqlite3 again and keeps the statistics.
+The runner gives targeted and full test runs the
 same isolated outer data directory, and each package's `TestMain` still creates
 a fresh directory when tests run. Go can reuse successful test results when
 their flags, environment, and file inputs also match.

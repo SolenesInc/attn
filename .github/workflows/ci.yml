@@ -66,6 +66,7 @@ jobs:
               - 'test/**'
               - 'go.mod'
               - 'go.sum'
+              - 'go-cgo-cflags'
               - 'Makefile'
               - 'scripts/**'
               - '.github/workflows/app-acceptance.yml'
@@ -144,6 +145,7 @@ jobs:
               - 'scripts/**'
               - 'go.mod'
               - 'go.sum'
+              - 'go-cgo-cflags'
               - 'Makefile'
               - '.tool-versions'
               - 'ghostty-vt.pin'
@@ -162,6 +164,7 @@ jobs:
               - 'Makefile'
               - 'go.mod'
               - 'go.sum'
+              - 'go-cgo-cflags'
               - 'cmd/**'
               - 'internal/**'
               - 'pty-host/**'
@@ -275,7 +278,7 @@ jobs:
           path: |
             ${{ steps.go-cache-paths.outputs.build }}
             ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
 
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
@@ -346,7 +349,7 @@ jobs:
           path: |
             ${{ steps.go-cache-paths.outputs.build }}
             ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -439,7 +442,7 @@ jobs:
           path: |
             ${{ steps.go-cache-paths.outputs.build }}
             ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -695,7 +698,7 @@ jobs:
           path: |
             ${{ steps.go-cache-paths.outputs.build }}
             ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum', 'go-cgo-cflags') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master

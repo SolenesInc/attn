@@ -69,6 +69,7 @@ printf 'package removed\n' >internal/removed/removed.go
 printf 'module example.invalid/landing\n' >go.mod
 printf 'baseline\n' >README.md
 cp "$root/scripts/landing-tests" scripts/landing-tests
+cp "$root/go-cgo-cflags" go-cgo-cflags
 cat >scripts/landing-tests.sh <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "landing-tests $*" >>"$LAND_CHECK_LOG"
