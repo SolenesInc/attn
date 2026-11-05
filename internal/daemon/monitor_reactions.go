@@ -39,8 +39,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if turn.OpenedAt.After(previous.Turn.V.OpenedAt) || (stateChanged && attention.OpensTurn(state.State) && turn.SnoozedUntil.IsZero()) {
 		d.enqueueSessionActivity(session)
 	}
-	becamePromptReady := !stateChanged && !sessionmonitor.PromptReady(previous.State.V.State, previous.State.V.Reason) && sessionmonitor.PromptReady(state.State, state.Reason)
-	if stateChanged || becamePromptReady {
+	if returnedInputMayPlace(previous, view) {
 		d.claudeMod().placeReturned(session)
 	}
 	if stateChanged {
@@ -54,7 +53,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		broadcast = true
 	}
-	if becamePromptReady {
+	if becamePromptReadyByReason(previous, view) {
 		d.kickSessionInboxAddresses(session)
 	}
 	if broadcast {
@@ -70,4 +69,13 @@ func sameAppliedExit(a, b *sessionmonitor.Exit) bool {
 		return sessionmonitor.SameExit(a, b)
 	}
 	return sameExitScreen(a, b)
+}
+
+func returnedInputMayPlace(previous, view sessionmonitor.View) bool {
+	return view.State.V.Sequence != previous.State.V.Sequence || becamePromptReadyByReason(previous, view)
+}
+
+func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {
+	before, now := previous.State.V, view.State.V
+	return now.Sequence == before.Sequence && !sessionmonitor.PromptReady(before.State, before.Reason) && sessionmonitor.PromptReady(now.State, now.Reason)
 }

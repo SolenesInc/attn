@@ -11,8 +11,10 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/claudemod"
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -50,7 +52,13 @@ func (m *outpostMod) awaitStopped(app *testworld.Peer, mark int) {
 
 func newOutpostMod(t *testing.T) *outpostMod {
 	t.Helper()
+	return newOutpostModPrepared(t, func(*testworld.Stack) {})
+}
+
+func newOutpostModPrepared(t *testing.T, prepareOutpost func(*testworld.Stack)) *outpostMod {
+	t.Helper()
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	prepareOutpost(outpost)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
@@ -62,7 +70,10 @@ func newOutpostMod(t *testing.T) *outpostMod {
 	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "true" })
 	register(t, home, outpostModSender, "reviewer")
 	m := &outpostMod{home: home, outpost: outpost, pair: pair, app: pair.App}
-	m.session = home.Spawn(pair.App, fakeagent.Claude, outpost.Path("shop"), func(msg *protocol.SpawnSessionMessage) { msg.Host = &pair.Host })
+	m.session = home.Spawn(pair.App, fakeagent.Claude, outpost.Path("shop"), func(msg *protocol.SpawnSessionMessage) {
+		msg.Host = &pair.Host
+		msg.Label = protocol.Ptr("deploy work")
+	})
 	m.terminal = protocol.TerminalID(pair.App.Terminal(m.session))
 	m.run = outpost.LaunchedCarrying(string(m.terminal))
 	m.run.SessionID = m.session
@@ -281,6 +292,46 @@ func TestAReportTheHomeRefusesDoesNotBlockTheOnesBehindIt(t *testing.T) {
 	m.esc(t, "the ring")
 	m.workingOn(t, m.pair.App, "carry on")
 	m.ringHeld(t)
+}
+
+func TestAUserMessageTheOutpostModReturnsWhileWorkingReachesTheAgentWhenItParks(t *testing.T) {
+	var waits *testworld.Pause
+	m := newOutpostModPrepared(t, func(outpost *testworld.Stack) {
+		outpost.Vars = append(outpost.Vars, "ATTN_HEADLESS_TASKS=on")
+		waits = outpost.PauseEvery(pausepoint.ClaudeModReturnWaits)
+	})
+	app := m.pair.App
+	m.workingOn(t, app, "deploy to staging")
+	const words = "check the rollout"
+	app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "held", SessionID: protocol.SessionID(m.session), Text: words})
+	if taken := testworld.Await(app, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
+		return r.RequestID == "held"
+	}); taken.Status != "delivered" {
+		t.Fatalf("the annotation was answered %+v, want it delivered", taken)
+	}
+	m.modEvent(t, fakeagent.ModEventHeld, words)
+
+	m.run.ModReload()
+	waits.Await()
+	waits.Release()
+
+	m.run.Stream("The deploy is running in the background.")
+	transcript := fakeagent.WriteClaudeTranscript(t, m.outpost.Path("shop"), m.run.ConversationID)
+	if err := m.outpost.Client().SendStop(m.terminal, transcript.Path, client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
+		{Type: "background_session", Status: "running", Name: protocol.Ptr("./deploy.sh staging")},
+	}}); err != nil {
+		t.Fatalf("stop with background work: %v", err)
+	}
+	m.run.ProgramStatus("state=done:app=claude-code")
+	task := m.outpost.HeadlessTask()
+	if !strings.Contains(task.Prompt, "Classify how this assistant message ends the agent's turn") {
+		t.Fatalf("the outpost asked %q, want the turn's verdict", task.Prompt)
+	}
+	task.Answer(`{"verdict":"PARKED"}`)
+
+	if got := m.run.Prompted(); got != words {
+		t.Fatalf("the parked agent took %q, want the returned annotation", got)
+	}
 }
 
 func TestAUserMessageTheOutpostModReturnsReachesTheSessionOnce(t *testing.T) {
