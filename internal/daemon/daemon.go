@@ -99,6 +99,13 @@ const (
 
 var ErrAlreadyRunning = errors.New("daemon already running")
 
+const (
+	PIDLockReleaseTimer stepclock.Name = "pid-lock-release"
+	// A gone daemon's child keeps the lock only until its exec closes the inherited descriptor:
+	// at most 38ms over 16 such holds, on 4 CPUs shared with 12 busy loops (2026-11-05).
+	PIDLockReleaseTripwire = 5 * time.Second
+)
+
 type Daemon struct {
 	monitorsOnce        sync.Once
 	monitorState        *monitorIndex

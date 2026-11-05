@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -40,5 +41,54 @@ func TestADaemonThatFailsToStartLeavesThePIDLockToAProcessAlreadyHoldingTheFile(
 	}
 	if !os.SameFile(held, current) {
 		t.Fatal("the daemon replaced the pid file, so the lock just taken guards an orphan while the next daemon locks a new file")
+	}
+}
+
+func TestADaemonWaitsOutTheLockAGoneDaemonLeftWithItsChild(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	s.Stop()
+	pidPath := filepath.Join(filepath.Dir(s.Socket), "attn.pid")
+	holdLock := func() *os.File {
+		t.Helper()
+		child, err := os.OpenFile(pidPath, os.O_RDWR, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = child.Close() })
+		if err := syscall.Flock(int(child.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			t.Fatalf("taking the gone daemon's lock: %v", err)
+		}
+		return child
+	}
+
+	child := holdLock()
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		s.Start()
+	}()
+	s.AwaitTimer(daemon.PIDLockReleaseTimer)
+	if err := child.Close(); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	s.Stop()
+
+	gonePID, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	holdLock()
+	refused := make(chan testworld.Result, 1)
+	go func() { refused <- s.Run(testworld.Invocation{Args: []string{"daemon"}}) }()
+	s.AwaitTimer(daemon.PIDLockReleaseTimer)
+	s.Advance(daemon.PIDLockReleaseTripwire)
+	got := <-refused
+	for _, want := range []string{string(gonePID), pidPath, daemon.PIDLockReleaseTripwire.String()} {
+		if got.Code != 1 || !strings.Contains(got.Stderr, want) {
+			t.Errorf("attn daemon behind a lock that never came free exited %d, want 1 naming %q\nstderr:\n%s", got.Code, want, got.Stderr)
+		}
 	}
 }
