@@ -51,14 +51,15 @@ type claudeMod struct {
 }
 
 type claudeModTerminal struct {
-	id       harness.TerminalID
-	instance string
-	poll     *claudeModPoll
-	reach    stepclock.Timer
-	queued   []*claudeModDelivery
-	handed   map[string]*claudeModDelivery
-	held     map[string]*claudeModHeld
-	accepted uint64
+	id                harness.TerminalID
+	instance          string
+	replacedInstances map[string]bool
+	poll              *claudeModPoll
+	reach             stepclock.Timer
+	queued            []*claudeModDelivery
+	handed            map[string]*claudeModDelivery
+	held              map[string]*claudeModHeld
+	accepted          uint64
 }
 
 type claudeModPoll struct {
@@ -207,6 +208,10 @@ func (m *claudeMod) servePoll(w http.ResponseWriter, r *http.Request) {
 	}
 	poll := &claudeModPoll{given: make(chan struct{}), replaced: make(chan struct{})}
 	t := m.openPoll(terminal, instance, poll)
+	if t == nil {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
 	hold := m.d.clock.NewTimer(ClaudeModPollHoldTimer, claudeModPollHold)
 	defer hold.Stop()
 	select {
@@ -236,11 +241,15 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 	}
 	t := m.terminals[terminal]
 	if t == nil {
-		t = &claudeModTerminal{id: terminal, handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld)}
+		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld)}
 		m.terminals[terminal] = t
+	}
+	if t.replacedInstances[instance] {
+		return nil
 	}
 	if t.instance != instance {
 		if t.instance != "" {
+			t.replacedInstances[t.instance] = true
 			for id, delivery := range t.handed {
 				delete(t.handed, id)
 				delivery.answer <- harness.Custody{Reason: "claude mod: reloaded before answering for input " + id}
