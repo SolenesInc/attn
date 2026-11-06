@@ -32,10 +32,11 @@ INSERT INTO settings (key, value) VALUES
   ('outposts_enabled', 'false'),
   ('analytics.sharing_enabled', 'false');
 $creates
+UPDATE profile_settings SET value = '$data/notebook-scratch' WHERE key = 'notebook.root';
 UPDATE automation_definitions SET enabled = 0;
 COMMIT;
 SQL
 sqlite3 "$data/attn.db.copying" ".backup '$data/attn.db'"
 rm -f "$data/attn.db.copying" "$data/attn.db.copying-wal" "$data/attn.db.copying-shm"
 
-sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"
+sqlite3 "$data/attn.db" "SELECT key || '=' || value FROM settings WHERE key IN ('notebook.root', 'worktree_sweep_enabled', 'outposts_enabled', 'analytics.sharing_enabled') ORDER BY key; SELECT 'profile notebook.root=' || value FROM profile_settings WHERE key = 'notebook.root'; SELECT count(*) || ' automations enabled' FROM automation_definitions WHERE enabled != 0;"
