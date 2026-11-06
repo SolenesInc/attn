@@ -83,12 +83,20 @@ Probed on 2.1.288 with a mock API.
     more than 60 s late, context is under
     `max(100000, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ?? 200000)` tokens, a newer
     request exists, or the rate limit status is not `allowed`. The list comes
-    from the bundle. A skip has no hook and no screen change. Three were seen:
-    168k tokens skipped under the default threshold, 168k passed that gate with
-    the threshold at 100000, and 245k skipped while responses carried
-    `anthropic-ratelimit-unified-status: allowed_warning` at 76% of the 7-day
-    limit. An account past that warning gets no idle compaction. The bundle also
-    has a variant that precomputes the summary, which was not seen.
+    from the bundle, and the bundle also has a variant that precomputes the
+    summary, which was not seen. A skip has no hook and no screen change. Claude's
+    telemetry reported two skip reasons: `small` for 168k tokens under the default
+    threshold, and `near_limit` for 245k, and for 168k with the threshold at
+    100000.
+  - There is no fixed usage cutoff. The bundle sets the status to
+    `allowed_warning` when a response reports
+    `anthropic-ratelimit-unified-<window>-surpassed-threshold` for any window, or
+    when its pacing table matches. In the 5-hour window, that is 90% used with at
+    most 72% elapsed. In the 7-day window, it is 75% with at most 60% elapsed, 50%
+    with at most 35%, or 25% with at most 15%. The `near_limit` skips came from the
+    header: `7d-surpassed-threshold: 0.75` at 76% used and 66% elapsed, which the
+    table alone would not match. Where the server sets its thresholds was not
+    seen.
   - A compact's hooks are PreCompact `auto`, SessionStart `compact` and
     PostCompact `auto`, over about 6.5 s, all carrying the last turn's
     `prompt_id`. No UserPromptSubmit, Stop or Notification comes with them.
