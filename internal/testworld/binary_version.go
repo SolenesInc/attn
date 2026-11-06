@@ -80,14 +80,15 @@ func (s *Stack) InstallBuild(attn, host string) {
 	s.binary = installed
 }
 
+// replaceFile copies in a child process: a write descriptor open in this process would leak into any exec running
+// beside it, and the kernel refuses to run a file open for writing.
 func replaceFile(t testing.TB, from, to string) {
 	t.Helper()
-	data, err := os.ReadFile(from)
-	if err != nil {
-		t.Fatal(err)
-	}
 	staged := to + ".new"
-	if err := os.WriteFile(staged, data, 0o755); err != nil {
+	if output, err := exec.Command("cp", from, staged).CombinedOutput(); err != nil {
+		t.Fatalf("copy %s: %v\n%s", from, err, output)
+	}
+	if err := os.Chmod(staged, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(staged, to); err != nil {

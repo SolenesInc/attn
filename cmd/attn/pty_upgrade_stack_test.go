@@ -24,7 +24,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/protocol/gateway"
 	"github.com/victorarias/attn/internal/ptyhost"
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 	"nhooyr.io/websocket"
@@ -327,21 +329,20 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			if prompt := claude.run.Prompted(); prompt != "turn-across-the-replace" {
 				t.Fatalf("claude took %q", prompt)
 			}
-			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 			if !path.appOpen {
 				app.Close()
 			}
 			u.InstallBuild(u.currentAttn, u.currentHost)
-			claude.run.Reply("turn-across-the-replace reply <!-- attn:state=idle -->")
+			acrossTheReplace := u.reply(claude, "turn-across-the-replace")
 			if path.appOpen {
-				testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+				testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == acrossTheReplace })
 			}
 
 			app = u.ensureCurrent()
 			if len(app.Initial.Warnings) != 0 {
 				t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 			}
-			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == acrossTheReplace })
 			app.AwaitScreen(claude.session, "turn-across-the-replace reply")
 			for _, agent := range []releaseAgent{claude, codex} {
 				u.assertNoReloadNotice(app, agent.session)
@@ -424,6 +425,41 @@ func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing
 		u.assertParent(agent.run, "attn-pty-host")
 		u.turn(app, agent, "on-a-fresh-install")
 	}
+}
+
+func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRuns(t *testing.T) {
+	t.Parallel()
+	s, currentHost := newInstalledStack(t)
+	s.InstallBuild(testworld.AttnBinary(t), currentHost)
+	t.Cleanup(func() { s.Attn("daemon", "stop") })
+	if got := s.Attn("daemon", "ensure"); got.Code != 0 {
+		t.Fatalf("attn daemon ensure: %+v", got)
+	}
+	u := &releaseUpdate{Stack: s, t: t}
+	u.storeTheNewDefaults(s.App())
+	if got := s.Attn("daemon", "stop"); got.Code != 0 {
+		t.Fatalf("attn daemon stop: %+v", got)
+	}
+	if err := os.RemoveAll(filepath.Join(s.Dir, "pty-hosts")); err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	if got := s.Attn("daemon", "ensure"); got.Code != 0 {
+		t.Fatalf("attn daemon ensure with no host build checked yet: %+v", got)
+	}
+	app := s.App()
+	early := u.spawnAgent(app, fakeagent.Claude)
+	if app.Initial.Settings[upgradeSharedHostActive] != "true" {
+		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+			return m.Settings[upgradeSharedHostActive] == "true"
+		})
+	}
+	t.Logf("host-ready window: the host was active %s after the daemon start began", time.Since(started).Round(time.Millisecond))
+	u.turn(app, early, "opened-during-the-window")
+	late := u.spawnAgent(app, fakeagent.Claude)
+	u.assertParent(late.run, "attn-pty-host")
+	u.turn(app, late, "opened-after-the-window")
 }
 
 func TestAnUpdateFromTheReleaseKeepsStoredOffSettingsOffWithoutANag(t *testing.T) {
@@ -660,11 +696,203 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 	}
 }
 
+func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
+	t.Parallel()
+	if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
+	}
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL, "ATTN_PTY_BACKEND=migrating")
+	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "phone-current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "phone-current"))
+	u := &releaseUpdate{Stack: s, t: t}
+	app := s.App()
+	u.storeTheNewDefaults(app)
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "pair").Qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := socket.Pair(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Hello()
+	shell := u.spawnShell(app)
+	terminal := app.Terminal(shell.session)
+	sharedHostOf(t, s.Dir, terminal)
+
+	s.Stop()
+	socket.AwaitPresence(false)
+	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "phone-next"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "phone-next"))
+	socket.AwaitPresence(true)
+	if err := socket.Resume(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Send(gateway.GatewayHello{Cmd: "hello", API: gateway.APIVersion, DeviceID: "phone"})
+	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	for {
+		raw, err := socket.Next()
+		if err != nil {
+			t.Fatalf("waiting for the terminal's screen: %v", err)
+		}
+		var head struct {
+			Event string `json:"event"`
+		}
+		_ = json.Unmarshal(raw, &head)
+		if head.Event == "terminal_error" {
+			t.Fatalf("the phone's attach after the update was refused: %s", raw)
+		}
+		if head.Event == "terminal_screen" {
+			var screen gateway.TerminalScreen
+			_ = json.Unmarshal(raw, &screen)
+			ansi, _ := base64.StdEncoding.DecodeString(screen.Ansi)
+			if !strings.Contains(string(ansi), "printed-2") {
+				t.Fatalf("the screen after the update shows %q, want the shell's earlier output", ansi)
+			}
+			break
+		}
+	}
+	shell.assertSameProcess(s.App())
+}
+
+func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecovers(t *testing.T) {
+	for _, point := range []string{"shared-handover-before-request", "shared-handover-after-request"} {
+		t.Run(point, func(t *testing.T) {
+			t.Parallel()
+			if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
+				t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
+			}
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			current := testworld.AttnBinaryWithSnapshotFormat(t, "move-current")
+			next := testworld.AttnBinaryWithSnapshotFormat(t, "move-next")
+			nextHost := "ATTN_PTY_HOST_BINARY=" + ptyhosttest.BuildWithSnapshotFormat(t, "move-next")
+			s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
+			s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "move-current"))
+			u := &releaseUpdate{Stack: s, t: t}
+			app := s.App()
+			u.storeTheNewDefaults(app)
+			agent := u.spawnAgent(app, fakeagent.Claude)
+			u.turn(app, agent, "before-update")
+			shell := u.spawnShell(app)
+			hostBefore := sharedHostOf(t, s.Dir, app.Terminal(shell.session))
+			s.Stop()
+
+			held := s.PauseAt(point)
+			s.RunFrom(next)
+			s.Vars = append(s.Vars, "ATTN_PTY_WORKER_BINARY="+next, nextHost, "ATTN_CRASH_AT="+point)
+			s.StartHeldAt(held)
+			held.Release()
+			s.AwaitCrash()
+
+			s.Vars = append(s.Vars, "ATTN_CRASH_AT=")
+			s.Start()
+			app = s.App()
+			terminal := app.Terminal(shell.session)
+			attach := func() protocol.AttachResultMessage {
+				return testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+					protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+			}
+			if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "move-next" {
+				testworld.AwaitEvent(app, "the attached stream of "+terminal+" to end when its host hands over", func(e protocol.WebSocketEvent) bool {
+					return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
+				})
+				if attached := attach(); attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "move-next" {
+					t.Fatalf("after the recovery the terminal attached with snapshot %+v, want its host on move-next", attached.Snapshot)
+				}
+			}
+			if host := sharedHostOf(t, s.Dir, terminal); host != hostBefore {
+				t.Errorf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)
+			}
+			shell.assertSameProcess(app)
+			u.turn(app, agent, "after-recovery")
+			u.assertNoReloadNotice(s.App(), shell.session)
+		})
+	}
+}
+
+func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *testing.T) {
+	t.Parallel()
+	releaseAttn := os.Getenv("ATTN_UPGRADE_RELEASE_BIN")
+	if releaseAttn == "" || os.Getenv("ATTN_E2E_BIN") == "" {
+		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
+	}
+	current := testworld.AttnBinary(t)
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t)
+	ssh.Use(home.World)
+	ssh.Route("release-outpost", remote)
+	ssh.InstallBinary(remote, releaseAttn)
+	remote.RunFrom(ssh.InstallPath(remote))
+	remote.StartRelease()
+	remoteApp := remote.ReleaseApp()
+	liveShell := remote.Spawn(remoteApp, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
+	pidPath := filepath.Join(remote.Dir, "shell.pid")
+	remoteApp.TypeLine(liveShell, "echo $$ > "+pidPath+"; echo before-$((1+1))")
+	remoteApp.AwaitScreen(liveShell, "before-2")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+current)
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "release-outpost"})
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
+		t.Fatalf("adding the outpost: %+v %+v", row, row.Update)
+	}
+	remote.AwaitStopped()
+	host := row.ID
+	shellPID, err := strconv.Atoi(strings.TrimSpace(string(before)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(shellPID, 0); err != nil {
+		t.Errorf("the outpost's shell (pid %d) did not survive the update: %v", shellPID, err)
+	}
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync
+	})
+	fresh := home.Spawn(app, fakeagent.Claude, remote.Path("claude"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	run := remote.LaunchedCarrying(app.Terminal(fresh))
+	app.TypeLine(fresh, "on-the-updated-outpost")
+	if prompt := run.Prompted(); prompt != "on-the-updated-outpost" {
+		t.Errorf("the new agent on the outpost took %q", prompt)
+	}
+}
+
+func TestAnOutpostAddedByAddressOnTheReleaseExplainsItselfAfterTheUpdate(t *testing.T) {
+	t.Parallel()
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	requireStdout(t, u.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	app.Send(struct {
+		Cmd     string `json:"cmd"`
+		Name    string `json:"name"`
+		Address string `json:"address"`
+	}{protocol.CmdAddOutpost, "by-address", "127.0.0.1:1"})
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 1 })
+
+	u.InstallBuild(u.currentAttn, u.currentHost)
+	app = u.ensureCurrent()
+	row := outpostStateOnConnect(app, "by-address", protocol.OutpostStateRefused)
+	if !strings.Contains(protocol.Deref(row.LastError), "add it again by the name you use with ssh") {
+		t.Errorf("the refused row does not say how to recover: %q", protocol.Deref(row.LastError))
+	}
+	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+}
+
 // releaseUpdate is a stack that started on the real previous release, with the current build ready to install.
 type releaseUpdate struct {
 	*testworld.Stack
 	t                        *testing.T
 	currentAttn, currentHost string
+	endedWaiting             map[string]bool
 }
 
 type releaseAgent struct {
@@ -701,6 +929,11 @@ func newInstalledStack(t *testing.T) (*testworld.Stack, string) {
 	}
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	t.Cleanup(func() {
+		if t.Failed() {
+			s.LogDaemonTail()
+		}
+	})
 	return s, currentHost
 }
 
@@ -808,10 +1041,24 @@ func (u *releaseUpdate) turn(app *testworld.Peer, agent releaseAgent, phase stri
 	if prompt := agent.run.Prompted(); prompt != phase {
 		u.T.Fatalf("%s took %q, want %q", agent.run.Harness, prompt, phase)
 	}
-	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
-	agent.run.Reply(phase + " reply <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	state := u.reply(agent, phase)
+	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == state })
 	app.AwaitScreen(agent.session, phase+" reply")
+}
+
+// reply ends the agent's turn in the state its last turn did not end in, so seeing that state proves this turn's hooks ran.
+func (u *releaseUpdate) reply(agent releaseAgent, phase string) protocol.SessionState {
+	u.T.Helper()
+	state, marker := protocol.SessionStateWaitingInput, "waiting_input"
+	if u.endedWaiting[agent.session] {
+		state, marker = protocol.SessionStateIdle, "idle"
+	}
+	if u.endedWaiting == nil {
+		u.endedWaiting = map[string]bool{}
+	}
+	u.endedWaiting[agent.session] = marker == "waiting_input"
+	agent.run.Reply(phase + " reply <!-- attn:state=" + marker + " -->")
+	return state
 }
 
 func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {

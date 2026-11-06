@@ -63,4 +63,4 @@ if [ -z "${ATTN_E2E_BIN:-}" ]; then
     -o "$test_root/attn-current" ./cmd/attn
   export ATTN_E2E_BIN="$test_root/attn-current"
 fi
-go test ./cmd/attn -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestTurningTheSettingsOffAndOn.*|TestDirectLaunchStartsAgents.*)$' -count=1 -timeout=180s -v "$@"
+go test ./cmd/attn -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestTheFirstStartWithTheHostOn.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestTurningTheSettingsOffAndOn.*|TestDirectLaunchStartsAgents.*|TestAPhoneReattachesToAHost.*|TestKillingTheDaemonDuringAHostMove.*|TestAnOutpostOnTheRelease.*|TestAnOutpostAddedByAddress.*)$' -count=1 -timeout=180s -v "$@"

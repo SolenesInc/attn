@@ -61,9 +61,11 @@ them.
 bash scripts/test-pty-upgrade.sh
 ```
 
-The script builds the last pre-Rust daemon, the current daemon, and the host,
-then checks that sessions survive daemon upgrades, backend toggles, host changes,
-failing host builds, and a missing host, all in temporary data directories. CI
+The script downloads the latest release and builds the last pre-Rust daemon, the
+current daemon, and the host. It checks that sessions survive updates from both
+old builds, backend toggles, host changes, failing host builds, a missing host,
+and a daemon killed during a host move, and that agents start through the user's
+login shell, all in temporary data directories. It needs `lsof` and `fish`. CI
 runs it on macOS and Linux.
 
 `scripts/build-retained-pty-host.sh OUTPUT` builds the retained host, the last

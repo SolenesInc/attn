@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
@@ -96,11 +97,13 @@ func (b *WorkerBackend) runSharedHandover(ctx context.Context, inc hostIncarnati
 		return fmt.Errorf("rehearse handover %s -> %s: %w", current.ID, target.ID, err)
 	}
 	started := time.Now()
+	crashpoint.At("shared-handover-before-request")
 	handedOver, err := b.requestHandover(ctx, inc, target)
 	b.closeSharedControl(inc)
 	if err != nil {
 		return err
 	}
+	crashpoint.At("shared-handover-after-request")
 	after, err := b.sharedHostInfo(ctx, inc)
 	if err != nil {
 		return fmt.Errorf("shared PTY host at %s did not answer after handing over to %s: %w", inc.socketPath, target.ID, err)
