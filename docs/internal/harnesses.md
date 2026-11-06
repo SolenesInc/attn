@@ -144,6 +144,17 @@ Probed on 2.1.288 with a mock API.
   message with its usage. Only `stop_hook_summary`, `last-prompt` and
   `cost-state` lines come after it (probed on 2.1.316 in `claude -p`, with a
   Stop hook that copied the transcript; the interactive TUI was not probed).
+- A composer suggestion is Claude's guess at the user's next prompt, not input.
+  A plain-text screen read, such as `attn agent peek`, cannot tell a suggestion
+  from a typed draft: both read `❯ keep the gate, harvest it`. In cell styles, a
+  suggestion is dim with the cursor on its first letter, and a typed draft is
+  normal text with the cursor after it. An idle compact leaves both in place.
+  Enter alone leaves a suggestion unsent. A paste and Enter replace a suggestion,
+  so the model sees only the pasted text. With a typed draft, the model sees the
+  draft and the pasted text as one prompt. Probed on 2.1.318 with a local fake
+  API, under tmux, with `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=true`. Claude asks
+  for a suggestion with a `[SUGGESTION MODE` request after a turn stops, and not
+  before the conversation has two assistant messages (read in the bundle).
 
 Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 
