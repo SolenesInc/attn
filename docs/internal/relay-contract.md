@@ -27,11 +27,11 @@ sequenceDiagram
   R-->>H: challenge(nonce)
   H->>R: auth(sig)
   R-->>H: ready
-  H->>R: allowlist({devices, pairing_open_until})
+  H->>R: allowlist({devices, pairings})
   R-->>H: allowlist (applied)
   D->>R: WSS /v1/homes/{home_id}/device?device_sign_pub=…
   R-->>D: challenge(nonce)
-  D->>R: auth(sig)
+  D->>R: auth(sig, or sig + relay token while pairing)
   R-->>D: ready(conn_id), presence(online)
   R-->>H: open(conn_id, device_sign_pub)
   D->>R: data(conn_id, ciphertext)
@@ -149,13 +149,13 @@ Refused with `404 unknown_home` before registration.
 GET /v1/homes/{home_id}/device?device_sign_pub=<key>      (WebSocket upgrade)
 ```
 
-Admitted when `device_sign_pub` is on the home's allowlist, or when a pairing window is open (`now < pairing_open_until`). Otherwise the relay accepts the upgrade and closes the socket at once with `4403` and the reason `device is not on the home's allowlist and no pairing window is open`, before any frame. It does not answer HTTP 403, because a WebView's WebSocket reports a refused upgrade only as `1006`, the same as a network failure, and a phone revoked while it was offline must be able to tell that it was revoked. One device may hold several sockets to one relay, one per pairing (one per home profile).
+Admitted when `device_sign_pub` is on the home's allowlist, or when a pairing window is open (see [`allowlist`](#allowlist)). A device admitted only by a window still has to pass the check in [Authentication](#authentication) before the home hears of it. Otherwise the relay accepts the upgrade and closes the socket at once with `4403` and the reason `device is not on the home's allowlist and no pairing window is open`, before any frame. It does not answer HTTP 403, because a WebView's WebSocket reports a refused upgrade only as `1006`, the same as a network failure, and a phone revoked while it was offline must be able to tell that it was revoked. One device may hold several sockets to one relay, one per pairing (one per home profile).
 
 ### Authentication
 
 On both sockets the relay sends `challenge` first. The client answers with one `auth` frame and waits for `ready` before sending anything else.
 
-The `auth` payload is the client's signature over:
+The `auth` payload is the client's signature, 64 bytes, over:
 
 ```
 "attn-cloud/v1 auth home\n<home_id>\n" || nonce        (home socket, signed with the home key)
@@ -164,7 +164,25 @@ The `auth` payload is the client's signature over:
 
 where the prefix is UTF-8 and `nonce` is the 32 raw bytes of the challenge payload.
 
-A bad signature, or any frame other than `auth` before `ready`, closes the socket with `4401`.
+On a device socket the payload may be 96 bytes: the signature, then a 32-byte relay token. A device sends the token while it is pairing. A device on the allowlist may send one too, and the relay ignores it.
+
+A bad signature, a payload of any other length, or any frame other than `auth` before `ready`, closes the socket with `4401`.
+
+A device that is not on the allowlist goes live only when, at the moment of its `auth` frame, a window sent as `pairing_open_until` is open, or the SHA-256 of its token equals the `token_hash` of a pairing whose `until` is still ahead. Otherwise the relay closes the socket with `4403`, with one of these reasons, and the home hears nothing of that socket:
+
+| Reason                                                                | When                                                |
+| --------------------------------------------------------------------- | --------------------------------------------------- |
+| `pairing needs a relay token; update the attn app`                    | a pairing is live and the payload has no token      |
+| `relay token matches no open pairing`                                 | a pairing is live and the token matches no live one |
+| `device is not on the home's allowlist and no pairing window is open` | no window is open any more                          |
+
+The relay token is opaque to the relay. The home and the phone both derive it from the secret in the QR code that pairs them, which the relay never sees:
+
+```
+relay token = HKDF-SHA256(ikm = QR secret, salt = empty, info = "attn-cloud/v1 relay token", 32 bytes)
+```
+
+The relay keeps only the hash it receives from the home, and neither stores nor logs the token. The token only grants admission: the home still authenticates every device in the Noise handshake.
 
 When a home authenticates, the relay closes any older authenticated home socket with `4409`, sends `ready`, sends `open` for every device already connected, and sends `presence` online to every device.
 
@@ -188,7 +206,7 @@ Every binary frame is an envelope:
 | type | name        | direction                  | conn_id                        | payload                                              |
 | ---- | ----------- | -------------------------- | ------------------------------ | ---------------------------------------------------- |
 | 1    | `challenge` | relay → home, device       | 0                              | 32-byte nonce                                        |
-| 2    | `auth`      | home, device → relay       | 0                              | 64-byte signature                                    |
+| 2    | `auth`      | home, device → relay       | 0                              | signature, and a device's relay token                |
 | 3    | `ready`     | relay → home, device       | home: 0; device: its `conn_id` | empty                                                |
 | 4    | `open`      | relay → home               | the device                     | its 32-byte `device_sign_pub`                        |
 | 5    | `data`      | home ↔ relay ↔ device      | the device                     | opaque bytes                                         |
@@ -217,14 +235,19 @@ Home → relay: close that device's socket, with `4000`. Relay → home: that de
 The home sends the full list of devices allowed to connect, replacing the previous one:
 
 ```json
-{ "devices": ["<device_sign_pub>", "…"], "pairing_open_until": 1793600000000 }
+{
+  "devices": ["<device_sign_pub>", "…"],
+  "pairings": [{ "token_hash": "<base64url>", "until": 1793600000000 }]
+}
 ```
 
-`pairing_open_until` is Unix time in milliseconds. While `now < pairing_open_until`, devices not on the list are admitted too, so a new phone can reach the home to pair. `0` means no window is open. The home sends the list again on every connect and after every pairing or revoke, and closes the window as soon as the pairing completes.
+`pairings` holds one entry per open pairing window. `token_hash` is the SHA-256 of the window's relay token, 32 bytes in base64url. `until` is Unix time in milliseconds. While `now < until` for any entry, devices not on the list get their upgrade, so a new phone can reach its `auth` frame, and a device whose token matches a live entry goes live. The home sends the list again on every connect and after every pairing or revoke, and takes a window off the list as soon as its pairing completes.
 
-The relay stores the list, closes every device socket that the new list no longer admits with `4403` (sending the home `close` for each), deletes the push tokens of devices no longer on the list, and answers with an empty `allowlist` frame once the list is in effect.
+`pairing_open_until` is the older way to open a window: Unix time in milliseconds, and while `now < pairing_open_until`, any device not on the list goes live with no token. `0` means no window is open. `pairings` and `pairing_open_until` are each optional, and when absent or `null` mean no window of that kind.
 
-The allowlist holds at most 1000 devices. A list that is malformed or too long is not applied; the relay answers with `error` `bad_allowlist`, and the message names the problem (for example `allowlist has 1200 devices; the limit is 1000`).
+The relay stores the list, closes every device socket that the new list no longer admits with `4403` (sending the home `close` for each; a socket that is live stays only while its device is on the list, a window sent as `pairing_open_until` is open, or the pairing of its token is live), deletes the push tokens of devices no longer on the list, and answers with an empty `allowlist` frame once the list is in effect.
+
+The allowlist holds at most 1000 devices and 100 pairings. A list that is malformed or too long is not applied; the relay answers with `error` `bad_allowlist`, and the message names the problem (for example `allowlist has 1200 devices; the limit is 1000`).
 
 The allowlist turns away unknown devices early. It is not the trust boundary: the home still authenticates every device in the Noise handshake.
 
@@ -319,7 +342,7 @@ A relay update drops busy sockets without a close frame. Both sides treat EOF wi
 | 4000 | device | the home closed this connection (`close` frame)                                                           |
 | 4400 | either | malformed frame: shorter than 6 bytes, unsupported version, or a device's wrong `conn_id`                 |
 | 4401 | either | authentication failed, or a frame came before `ready`                                                     |
-| 4403 | device | the device is not on the allowlist and no pairing window is open, at connect or after an allowlist change |
+| 4403 | device | the device is not on the allowlist and no pairing window is open, at connect or after an allowlist change, or its relay token is missing or matches no live pairing |
 | 4408 | home   | no `ping` for 60 seconds                                                                                  |
 | 4409 | home   | a newer home connection replaced this one                                                                 |
 | 4410 | either | the relay deleted itself after 180 days with no home; a home registers again, and a device retries        |
@@ -338,3 +361,4 @@ Additions to version 1:
 - Push notifications: `POST /v1/homes/{home_id}/push-token`, the `push` frame (type 10), the `push_*` and `bad_push` error codes, and HTTP `403 device_not_allowed` for push token registration.
 - HTTP `429 registration_limited` on `POST /v1/homes`.
 - A relay deletes itself after 180 days with no home connection, closing its sockets with `4410`.
+- Relay tokens: `pairings` in the allowlist, and a 96-byte `auth` payload on a device socket. `pairing_open_until` becomes optional.

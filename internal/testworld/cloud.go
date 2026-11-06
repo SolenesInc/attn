@@ -42,7 +42,10 @@ const (
 	framePush      = 10
 
 	notAdmittedReason = "device is not on the home's allowlist and no pairing window is open"
+	noTokenReason     = "pairing needs a relay token; update the attn app"
+	wrongTokenReason  = "relay token matches no open pairing"
 	maxAllowlist      = 1000
+	maxPairings       = 100
 	maxNewHomes       = 100
 )
 
@@ -231,16 +234,24 @@ type fakeHome struct {
 	signPub     ed25519.PublicKey
 	home        *websocket.Conn
 	devices     map[uint32]*fakeDevice
+	challenged  map[*websocket.Conn]string
 	allowed     []string
 	openUntil   int64
+	pairings    []fakePairing
 	nextConn    uint32
 	tokens      map[string]bool
 	listApplied chan struct{}
 }
 
+type fakePairing struct {
+	TokenHash *string `json:"token_hash"`
+	Until     *int64  `json:"until"`
+}
+
 type fakeDevice struct {
-	conn    *websocket.Conn
-	signPub string
+	conn      *websocket.Conn
+	signPub   string
+	tokenHash string
 }
 
 func newFakeRelay() *fakeRelay {
@@ -315,7 +326,7 @@ func (r *fakeRelay) register(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if r.homes[id] == nil {
-		r.homes[id] = &fakeHome{signPub: pub, devices: map[uint32]*fakeDevice{}, tokens: map[string]bool{}, listApplied: make(chan struct{})}
+		r.homes[id] = &fakeHome{signPub: pub, devices: map[uint32]*fakeDevice{}, challenged: map[*websocket.Conn]string{}, tokens: map[string]bool{}, listApplied: make(chan struct{})}
 	}
 	r.mu.Unlock()
 	json.NewEncoder(w).Encode(map[string]string{"home_id": id})
@@ -327,22 +338,23 @@ func (r *fakeRelay) lookup(id string) *fakeHome {
 	return r.homes[id]
 }
 
-func authenticate(ctx context.Context, conn *websocket.Conn, prefix string, pub ed25519.PublicKey) bool {
+// authenticate returns the auth frame's payload, once its signature verifies.
+func authenticate(ctx context.Context, conn *websocket.Conn, prefix string, pub ed25519.PublicKey, sizes ...int) ([]byte, bool) {
 	nonce := make([]byte, 32)
 	rand.Read(nonce)
 	if conn.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameChallenge, 0, nonce)) != nil {
-		return false
+		return nil, false
 	}
 	_, data, err := conn.Read(ctx)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	f, err := decodeEnvelope(data)
-	if err != nil || f.kind != frameAuth || !ed25519.Verify(pub, append([]byte(prefix), nonce...), f.payload) {
+	if err != nil || f.kind != frameAuth || !slices.Contains(sizes, len(f.payload)) || !ed25519.Verify(pub, append([]byte(prefix), nonce...), f.payload[:ed25519.SignatureSize]) {
 		conn.Close(4401, "authentication failed")
-		return false
+		return nil, false
 	}
-	return true
+	return f.payload, true
 }
 
 func isUpgrade(req *http.Request) bool {
@@ -366,7 +378,7 @@ func (r *fakeRelay) serveHome(w http.ResponseWriter, req *http.Request) {
 	}
 	conn.SetReadLimit(-1)
 	ctx := req.Context()
-	if !authenticate(ctx, conn, "attn-cloud/v1 auth home\n"+id+"\n", h.signPub) {
+	if _, ok := authenticate(ctx, conn, "attn-cloud/v1 auth home\n"+id+"\n", h.signPub, ed25519.SignatureSize); !ok {
 		return
 	}
 	r.mu.Lock()
@@ -469,11 +481,12 @@ func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 
 func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []byte) {
 	var list struct {
-		Devices          *[]string `json:"devices"`
-		PairingOpenUntil *int64    `json:"pairing_open_until"`
+		Devices          *[]string     `json:"devices"`
+		PairingOpenUntil int64         `json:"pairing_open_until"`
+		Pairings         []fakePairing `json:"pairings"`
 	}
-	if json.Unmarshal(payload, &list) != nil || list.Devices == nil || list.PairingOpenUntil == nil {
-		writeRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairing_open_until}")
+	if json.Unmarshal(payload, &list) != nil || list.Devices == nil {
+		writeRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairings}")
 		return
 	}
 	if count := len(*list.Devices); count > maxAllowlist {
@@ -486,14 +499,34 @@ func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []b
 			return
 		}
 	}
-	h.allowed, h.openUntil = *list.Devices, *list.PairingOpenUntil
+	if count := len(list.Pairings); count > maxPairings {
+		writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d pairings; the limit is %d", count, maxPairings))
+		return
+	}
+	for _, pairing := range list.Pairings {
+		if pairing.TokenHash == nil || pairing.Until == nil {
+			writeRelayError(ctx, h.home, "bad_allowlist", "each pairing needs a token_hash and an until")
+			return
+		}
+		if _, ok := decodeKey(*pairing.TokenHash); !ok {
+			writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("token_hash %q is not 32 bytes in base64url", *pairing.TokenHash))
+			return
+		}
+	}
+	h.allowed, h.openUntil, h.pairings = *list.Devices, list.PairingOpenUntil, list.Pairings
 	for device := range h.tokens {
 		if !slices.Contains(h.allowed, device) {
 			delete(h.tokens, device)
 		}
 	}
+	for conn, signPub := range h.challenged {
+		if !h.admitsLocked(signPub) {
+			delete(h.challenged, conn)
+			closeWithoutWaiting(conn, 4403, notAdmittedReason)
+		}
+	}
 	for connID, dev := range h.devices {
-		if !h.admitsLocked(dev.signPub) {
+		if h.tokenRefusalLocked(dev.signPub, dev.tokenHash) != "" {
 			delete(h.devices, connID)
 			closeWithoutWaiting(dev.conn, 4403, notAdmittedReason)
 			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameClose, connID, nil))
@@ -609,7 +642,35 @@ func (r *fakeRelay) awaitAllowed(ctx context.Context, homeID, signPub string) er
 }
 
 func (h *fakeHome) admitsLocked(signPub string) bool {
-	return slices.Contains(h.allowed, signPub) || time.Now().UnixMilli() < h.openUntil
+	return slices.Contains(h.allowed, signPub) || time.Now().UnixMilli() < h.openUntil || len(h.livePairingsLocked()) > 0
+}
+
+func (h *fakeHome) livePairingsLocked() []string {
+	var hashes []string
+	for _, pairing := range h.pairings {
+		if time.Now().UnixMilli() < *pairing.Until {
+			hashes = append(hashes, *pairing.TokenHash)
+		}
+	}
+	return hashes
+}
+
+// tokenRefusalLocked says why an authenticated device can't be live, or returns "" when it can.
+func (h *fakeHome) tokenRefusalLocked(signPub, tokenHash string) string {
+	if slices.Contains(h.allowed, signPub) || time.Now().UnixMilli() < h.openUntil {
+		return ""
+	}
+	live := h.livePairingsLocked()
+	if len(live) == 0 {
+		return notAdmittedReason
+	}
+	if tokenHash == "" {
+		return noTokenReason
+	}
+	if !slices.Contains(live, tokenHash) {
+		return wrongTokenReason
+	}
+	return ""
 }
 
 func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
@@ -628,26 +689,44 @@ func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
 		cloudRefusal(w, 400, "bad_request", "device_sign_pub must be a 32-byte Ed25519 key, base64url")
 		return
 	}
-	r.mu.Lock()
-	admitted := h.admitsLocked(signPub)
-	r.mu.Unlock()
 	conn, err := websocket.Accept(w, req, nil)
 	if err != nil {
 		return
 	}
 	conn.SetReadLimit(-1)
+	r.mu.Lock()
+	admitted := h.admitsLocked(signPub)
+	if admitted {
+		h.challenged[conn] = signPub
+	}
+	r.mu.Unlock()
 	if !admitted {
 		conn.Close(4403, notAdmittedReason)
 		return
 	}
 	ctx := req.Context()
-	if !authenticate(ctx, conn, "attn-cloud/v1 auth device\n"+id+"\n", mustUnb64(signPub)) {
+	auth, ok := authenticate(ctx, conn, "attn-cloud/v1 auth device\n"+id+"\n", mustUnb64(signPub), ed25519.SignatureSize, ed25519.SignatureSize+sha256.Size)
+	if !ok {
+		r.mu.Lock()
+		delete(h.challenged, conn)
+		r.mu.Unlock()
 		return
 	}
 	r.mu.Lock()
+	delete(h.challenged, conn)
+	tokenHash := ""
+	if len(auth) > ed25519.SignatureSize {
+		hash := sha256.Sum256(auth[ed25519.SignatureSize:])
+		tokenHash = b64(hash[:])
+	}
+	if refusal := h.tokenRefusalLocked(signPub, tokenHash); refusal != "" {
+		r.mu.Unlock()
+		conn.Close(4403, refusal)
+		return
+	}
 	h.nextConn++
 	connID := h.nextConn
-	h.devices[connID] = &fakeDevice{conn: conn, signPub: signPub}
+	h.devices[connID] = &fakeDevice{conn: conn, signPub: signPub, tokenHash: tokenHash}
 	online := byte(0)
 	conn.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameReady, connID, nil))
 	if h.home != nil {
