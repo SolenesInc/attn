@@ -1,8 +1,22 @@
+.garden-resume-split > span:first-child {
+  flex: none;
+}
+
 .garden-resume-split__machine {
   align-items: center;
   border-left: 1px solid var(--color-border);
   color: var(--color-text-tertiary);
   display: flex;
   gap: 4px;
+  min-width: 0;
+}
+
+.garden-resume-split__machine svg {
+  flex: none;
+}
+
+.garden-resume-split__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }

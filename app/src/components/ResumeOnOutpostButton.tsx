@@ -15,7 +15,7 @@ export function ResumeOnOutpostButton({ outpost, testId, recommended, unreachabl
       data-testid={unreachable ? undefined : testId}
       aria-label={`Resume on ${outpost}`}
       disabled={unreachable}
-      title={unreachableReason}
+      title={unreachableReason ?? outpost}
       onClick={onResume}
     >
       <span>Resume</span>
@@ -26,7 +26,7 @@ export function ResumeOnOutpostButton({ outpost, testId, recommended, unreachabl
           <circle cx="4.8" cy="4.75" r="0.6" fill="currentColor" />
           <circle cx="4.8" cy="11.25" r="0.6" fill="currentColor" />
         </svg>
-        {outpost}
+        <span className="garden-resume-split__name">{outpost}</span>
       </span>
     </button>
   );
