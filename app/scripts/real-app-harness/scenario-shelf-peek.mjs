@@ -112,7 +112,7 @@ try {
     }
     desktop = (await request('get_desktop', { sessionId: firstSession })).desktopId;
     const { logicalBounds } = await request('get_window_bounds');
-    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
+    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1600, height: 900 } });
     row = await readRow();
     target = row.at(-1);
     await focusLeaf(target);
@@ -223,6 +223,8 @@ try {
     await pageClick;
     runner.log('the page saw a click after the panel closed');
     await shot('browser-after-peek');
+    await request('dom_click', { selector: `${surface()} [data-tile-kind="browser"] [aria-label="Close tile"]` });
+    await waitDom(host, { absent: true });
   });
 
   await runner.step('a_stopped_terminal_keeps_the_reply_and_the_tile_offers_it', async () => {

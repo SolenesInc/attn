@@ -284,40 +284,120 @@ impl Geometry {
     }
 }
 
-fn set_geometry(webview: &tauri::Webview, geometry: Geometry) -> Result<(), String> {
-    if !geometry.visible {
-        clear_browser_focus_for(webview.label());
-    }
+#[cfg(not(target_os = "linux"))]
+fn place_webview(webview: &tauri::Webview, geometry: Geometry) -> Result<(), String> {
     let window = webview.window();
     webview
         .set_position(native_position(&window, geometry.x, geometry.y))
         .map_err(|error| format!("position browser webview: {error}"))?;
     webview
         .set_size(geometry.size())
-        .map_err(|error| format!("resize browser webview: {error}"))?;
+        .map_err(|error| format!("resize browser webview: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn place_webview(webview: &tauri::Webview, geometry: Geometry) -> Result<(), String> {
+    webview
+        .with_webview(move |platform| {
+            use gtk::prelude::WidgetExt;
+
+            let widget = platform.inner();
+            let size = geometry.size();
+            widget.set_margin_start(geometry.x.max(0.0).round() as i32);
+            widget.set_margin_top(geometry.y.max(0.0).round() as i32);
+            widget.set_size_request(size.width.round() as i32, size.height.round() as i32);
+            if geometry.visible {
+                widget.show();
+            }
+        })
+        .map_err(|error| format!("place browser webview: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn parent_box(widget: &webkit2gtk::WebView) -> Option<gtk::Box> {
+    use gtk::prelude::{Cast, WidgetExt};
+
+    widget.parent()?.downcast::<gtk::Box>().ok()
+}
+
+#[cfg(target_os = "linux")]
+pub fn wrap_main_webview_in_browser_layer(window: &tauri::WebviewWindow) -> Result<(), String> {
+    window
+        .with_webview(|platform| {
+            use gtk::prelude::{BoxExt, ContainerExt, WidgetExt};
+
+            let main = platform.inner();
+            let Some(window_box) = parent_box(&main) else {
+                eprintln!("[BrowserHost] The main webview is not in the window's box");
+                return;
+            };
+            let position = window_box.child_position(&main);
+            let layer = gtk::Overlay::new();
+            window_box.remove(&main);
+            layer.add(&main);
+            window_box.pack_start(&layer, true, true, 0);
+            window_box.reorder_child(&layer, position);
+            layer.show();
+        })
+        .map_err(|error| format!("wrap main webview: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn move_webview_to_browser_layer(webview: &tauri::Webview) -> Result<(), String> {
+    webview
+        .with_webview(|platform| {
+            use gtk::prelude::{Cast, ContainerExt, OverlayExt, WidgetExt};
+
+            let widget = platform.inner();
+            let window_box = parent_box(&widget);
+            let layer = window_box.as_ref().and_then(|window_box| {
+                window_box
+                    .children()
+                    .into_iter()
+                    .find_map(|child| child.downcast::<gtk::Overlay>().ok())
+            });
+            let (Some(window_box), Some(layer)) = (window_box, layer) else {
+                eprintln!("[BrowserHost] The window has no browser layer");
+                return;
+            };
+            window_box.remove(&widget);
+            widget.set_no_show_all(true);
+            widget.set_halign(gtk::Align::Start);
+            widget.set_valign(gtk::Align::Start);
+            layer.add_overlay(&widget);
+        })
+        .map_err(|error| format!("move browser webview: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn return_focus_to_main(webview: &tauri::Webview) -> Result<(), String> {
+    let main = webview
+        .app_handle()
+        .get_webview("main")
+        .ok_or_else(|| "main webview is unavailable".to_string())?;
+    webview
+        .with_webview(move |platform| {
+            use gtk::prelude::WidgetExt;
+
+            if platform.inner().is_focus() {
+                if let Err(error) = main.set_focus() {
+                    eprintln!("[BrowserHost] Failed to return focus to main webview: {error}");
+                }
+            }
+        })
+        .map_err(|error| format!("return browser webview focus: {error}"))
+}
+
+fn set_geometry(webview: &tauri::Webview, geometry: Geometry) -> Result<(), String> {
+    if !geometry.visible {
+        clear_browser_focus_for(webview.label());
+    }
+    place_webview(webview, geometry)?;
     if geometry.visible {
         webview.show()
     } else {
         #[cfg(target_os = "linux")]
-        {
-            let main = webview
-                .app_handle()
-                .get_webview("main")
-                .ok_or_else(|| "main webview is unavailable".to_string())?;
-            webview
-                .with_webview(move |platform| {
-                    use gtk::prelude::WidgetExt;
-
-                    if platform.inner().is_focus() {
-                        if let Err(error) = main.set_focus() {
-                            eprintln!(
-                                "[BrowserHost] Failed to return focus to main webview: {error}"
-                            );
-                        }
-                    }
-                })
-                .map_err(|error| format!("return browser webview focus: {error}"))?;
-        }
+        return_focus_to_main(webview)?;
         webview.hide()
     }
     .map_err(|error| format!("change browser webview visibility: {error}"))
@@ -371,6 +451,8 @@ pub async fn browser_host_mount(
             }
             tauri::webview::NewWindowResponse::Deny
         });
+    #[cfg(target_os = "linux")]
+    let builder = builder.focused(false);
     let webview = window
         .add_child(
             builder,
@@ -378,6 +460,8 @@ pub async fn browser_host_mount(
             geometry.size(),
         )
         .map_err(|error| format!("create browser webview: {error}"))?;
+    #[cfg(target_os = "linux")]
+    move_webview_to_browser_layer(&webview)?;
     register_focus_handler(&webview)?;
     browser_alerts::register(&webview)?;
     restore_cookie_jar(&app, &webview)?;
@@ -414,6 +498,8 @@ pub fn browser_host_unmount(
     browser_alerts::remove(&label);
     if let Some(webview) = app.get_webview(&label) {
         let persist_error = persist_cookie_jar(&app, &webview).err();
+        #[cfg(target_os = "linux")]
+        return_focus_to_main(&webview)?;
         let close_error = webview
             .close()
             .err()

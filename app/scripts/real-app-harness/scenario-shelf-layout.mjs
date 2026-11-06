@@ -186,13 +186,19 @@ try {
     await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
     await walkTheRow('sidebar-open');
     await stepTheWidth('sidebar-open');
-    await driver.hover('[data-testid="shelf-live-dots"]');
-    await waitDom('[data-testid="shelf-width-control"]');
+    const shown = (await shownLeaves()).length;
+    const clickWidthButton = async (name) => {
+      await driver.hover('[data-testid="shelf-live-dots"]');
+      await waitDom('[data-testid="shelf-width-control"]');
+      await driver.click(`[data-testid="shelf-width-control"] [aria-label="${name}"]`);
+    };
+    await clickWidthButton('Fewer, wider tiles');
+    await waitDom('[data-testid="shelf-width-label"]', { textIncludes: `${shown - 1} tile` });
     await shot('sidebar-open-width-control');
-    await driver.click('[data-testid="shelf-width-control"] [aria-label="More, narrower tiles"]');
-    await waitDom('[data-testid="shelf-width-label"]');
-    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await clickWidthButton('More, narrower tiles');
+    await waitDom('[data-testid="shelf-width-label"]', { textIncludes: `${shown} tile` });
     await waitDom('[data-testid="shelf-width-label"]', { absent: true });
+    runner.assert((await shownLeaves()).length === shown, 'sidebar-open: the width buttons return to the same tile count');
   });
 
   await runner.step('sidebar_collapsed', async () => {
@@ -234,7 +240,10 @@ try {
     const clickCentre = async (when) => {
       pageClick = new Promise((resolve) => { resolveClick = resolve; });
       await driver.click({ selector: hostSelector, at: { x: 0.5, y: 0.5 } }, { withoutReceipt: 'the browser page takes it' });
-      const { x, y, w, h } = await pageClick;
+      const noClick = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`${when}: the page saw no click within 15000ms, so the webview is not on its tile`)), 15_000).unref();
+      });
+      const { x, y, w, h } = await Promise.race([pageClick, noClick]);
       runner.log(when, { x, y, w, h });
       runner.assert(Math.abs(x - w / 2) <= 2 && Math.abs(y - h / 2) <= 2, `${when}: the webview sits on its tile`, { x, y, w, h });
     };
@@ -256,6 +265,17 @@ try {
     runner.assert(shownAfter[0] === browserLeaf, 'the slide moved the browser tile to the first slot', { shownBefore, shownAfter });
     await clickCentre('after the slide');
     await shot('browser-after-slide');
+
+    const elsewhereCwd = path.join(runner.sessionDir, 'elsewhere');
+    fs.mkdirSync(elsewhereCwd, { recursive: true });
+    const elsewhere = await createSessionAndWaitForInitialPane({ client, observer, cwd: elsewhereCwd, label: `shelf-elsewhere-${runner.runId}`, agent: 'shell', waitForInitialPaneVisible: false });
+    sessions.push(elsewhere);
+    await request('select_session', { sessionId: elsewhere });
+    await waitDom(`${surface()}[data-session-visible="0"]`);
+    await request('select_session', { sessionId: firstSession });
+    await waitDom(`${surface()}[data-session-visible="1"]`);
+    await clickCentre('back from another desktop');
+
     await request('dom_click', { selector: `${surface()} [data-tile-kind="browser"] [aria-label="Close tile"]` });
     await waitDom(hostSelector, { absent: true });
   });

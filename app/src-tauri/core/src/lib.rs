@@ -1181,7 +1181,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             native_input_diagnostics::native_input_diagnostics_snapshot,
         ])
         .setup(|app| {
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             use tauri::Manager;
             // Fail closed: an app that starts unlocked can have its instance deleted out
             // from under it by a `instance clean` that is already past its last check.
@@ -1198,6 +1198,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quick_capture::install(app)?;
             #[cfg(target_os = "macos")]
             wake::install(&app.handle().clone());
+            #[cfg(target_os = "linux")]
+            if let Some(window) = app.get_webview_window("main") {
+                browser_host::wrap_main_webview_in_browser_layer(&window)?;
+            }
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
             // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.
