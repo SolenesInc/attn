@@ -133,7 +133,6 @@ export function useRowSettling(input: RowSettlingInput) {
   useLayoutEffect(() => {
     latest.current = input;
   });
-  const seen = useRef<{ row: Set<string>; screen: Set<string>; firstColumn: RowLayoutPlan['firstColumn']; activeLeafId: string; orderKey: string } | null>(null);
   const { desktopId, rowPlan, measured, activeLeafId } = input;
   const orderKey = rowPlan ? [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|') : '';
 
@@ -141,7 +140,8 @@ export function useRowSettling(input: RowSettlingInput) {
     const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById } = latest.current;
     if (!measured || !plan || !rowInput) return;
     const shelf = useDesktopShelfStore.getState();
-    const previous = seen.current;
+    const previous = shelf.settledRowByDesktop[desktopId];
+    const previousFirstColumn = shelf.firstColumnByDesktop[desktopId] ?? plan.firstColumn;
     const row = new Set(leavesOf([...plan.before, ...plan.screen, ...plan.after]));
     let firstColumn = plan.firstColumn;
 
@@ -149,7 +149,7 @@ export function useRowSettling(input: RowSettlingInput) {
       const returns = shelf.documentReturnsByDesktop[desktopId] ?? {};
       for (const leafId of previous.row) {
         const documentReturn = returns[leafId];
-        if (row.has(leafId) || !documentReturn || previous.firstColumn.leafId !== documentReturn.shownAtLeafId) continue;
+        if (row.has(leafId) || !documentReturn || previousFirstColumn.leafId !== documentReturn.shownAtLeafId) continue;
         if (columnIndexOf(readRow(rowInput.tree), documentReturn.firstColumn.leafId) < 0) continue;
         firstColumn = documentReturn.firstColumn;
         if (previous.activeLeafId === leafId && row.has(documentReturn.activeLeafId) && !firstColumnStillShows(rowInput, firstColumn)) {
@@ -168,7 +168,7 @@ export function useRowSettling(input: RowSettlingInput) {
         if (revealed) firstColumn = revealed;
         else if (!onScreen.has(leafId)) shelf.markUnseen(desktopId, leafId);
         shelf.saveDocumentReturn(desktopId, leafId, {
-          firstColumn: previous.firstColumn,
+          firstColumn: previousFirstColumn,
           shownAtLeafId: (revealed ?? plan.firstColumn).leafId,
           activeLeafId: previous.activeLeafId,
         });
@@ -176,7 +176,7 @@ export function useRowSettling(input: RowSettlingInput) {
 
       if (activeLeafId !== previous.activeLeafId && shelf.unseenByDesktop[desktopId]?.includes(activeLeafId)) {
         shelf.saveDocumentReturn(desktopId, activeLeafId, {
-          firstColumn: previous.firstColumn,
+          firstColumn: previousFirstColumn,
           shownAtLeafId: plan.firstColumn.leafId,
           activeLeafId: previous.activeLeafId,
         });
@@ -190,16 +190,23 @@ export function useRowSettling(input: RowSettlingInput) {
     }
     shelf.settleLeaves(desktopId, row, screen, activeLeafId);
     shelf.setFirstColumn(desktopId, firstColumn);
-    seen.current = { row, screen, firstColumn, activeLeafId, orderKey };
+    shelf.settleRow(desktopId, { row, screen, activeLeafId, orderKey });
   }, [activeLeafId, desktopId, measured, orderKey]);
 
   const screenKey = rowPlan ? leavesOf(rowPlan.screen).join('|') : '';
   useLayoutEffect(() => {
     const { rowPlan: plan } = latest.current;
-    if (!plan) return;
+    const shelf = useDesktopShelfStore.getState();
+    if (!plan) {
+      shelf.markSeen(desktopId, activeLeafId);
+      return;
+    }
+    if (!measured) return;
     const row = new Set(leavesOf([...plan.before, ...plan.screen, ...plan.after]));
-    useDesktopShelfStore.getState().settleLeaves(desktopId, row, new Set(leavesOf(plan.screen)), activeLeafId);
-  }, [activeLeafId, desktopId, screenKey]);
+    const screen = new Set(leavesOf(plan.screen));
+    shelf.settleScreen(desktopId, screen);
+    shelf.settleLeaves(desktopId, row, screen, activeLeafId);
+  }, [activeLeafId, desktopId, measured, screenKey]);
 }
 
 interface ShelfControlsInput {

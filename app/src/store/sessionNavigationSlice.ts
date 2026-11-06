@@ -35,7 +35,7 @@ import type { LeafRef } from '../navigation/leafHistory';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import { recordAppAction, type AppActionProps } from '../analytics/appActions';
 import { usePendingTerminalInput } from './pendingTerminalInput';
-import { bringAnchor } from './desktopShelf';
+import { bringAnchor, useDesktopShelfStore } from './desktopShelf';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
@@ -168,11 +168,13 @@ export function createSessionNavigationActions(
       set((state) => ({
         utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
       })),
-    syncNavigationSettings: (settings) =>
+    syncNavigationSettings: (settings) => {
+      useDesktopShelfStore.getState().shelfLayoutChanged(settings.shelf_layout_enabled === 'true');
       set((state) =>
         reconcileSessionNavigation(state, {
           navigationSettings: settings,
         }),
-      ),
+      );
+    },
   };
 }

@@ -21,7 +21,7 @@ function rightChain(nodes: unknown[], depth = 0): unknown {
 
 const ELEVEN_TILES = rightChain(IDS.map(pane));
 
-async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES, others = [] as string[], shelfWidth = PANES_WIDTH } = {}) {
+async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES, others = [] as string[], shelfWidth = PANES_WIDTH, startOn = 's1' } = {}) {
   sizeTerminals((terminal) => ({
     clientWidth: (PANES_WIDTH * parseFloat(terminal.closest<HTMLElement>('[data-pane-id]')?.style.width || '100')) / 100,
     clientHeight: PANES_HEIGHT,
@@ -39,7 +39,11 @@ async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES
     initialState: {
       settings,
       sessions: [...IDS, ...others].map((id) => daemonSession(id, { state: 'idle' })),
-      desktops: [{ ...laidOutDesktop(root, IDS), active_pane_id: 'pane-s1' }, ...others.map((id) => soloDesktop(id))],
+      desktops: [
+        ...others.filter((id) => id === startOn).map((id) => soloDesktop(id, { shortcut_slot: others.indexOf(id) + 2 })),
+        { ...laidOutDesktop(root, IDS), active_pane_id: 'pane-s1', shortcut_slot: 1 },
+        ...others.filter((id) => id !== startOn).map((id) => soloDesktop(id, { shortcut_slot: others.indexOf(id) + 2 })),
+      ],
     },
     script: (scripted) => {
       serveSettings(scripted, settings);
@@ -56,7 +60,7 @@ async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES
       });
     },
   });
-  await openSession(daemon, 's1');
+  await openSession(daemon, startOn);
   await daemon.idle();
   return daemon;
 }
@@ -519,6 +523,130 @@ describe('Shelf layout', () => {
         expect(active()).toBe('pane-s3');
         expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
         expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
+      });
+
+      it('shows a document opened by an agent newly revealed by more tiles', async () => {
+        const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: FOUR });
+        await slideTo(daemon, 'terminal.focusRight');
+        expect(active()).toBe('pane-s2');
+        expect(paneIds()).toEqual(onScreen('s1', 's2'));
+        await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+        expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+        await agentOpens(daemon, 's3');
+        expect(active()).toBe('pane-s2');
+        expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
+      });
+
+      describe('when the setting changes', () => {
+        const NARROW = { ...SHELF_ON, narrowest_tile_cols: '86' };
+        const flipSetting = async (daemon: ScriptedDaemon, value: 'true' | 'false') => {
+          await gesture(daemon, () => pressShortcut('ui.openSettings'));
+          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-shelf-layout-toggle')));
+          expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'shelf_layout_enabled', value });
+          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-close')));
+        };
+        const waitingS4 = (daemon: ScriptedDaemon) => gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [
+          ...IDS.slice(0, 3).map((id) => daemonSession(id, { state: 'idle' })),
+          daemonSession('s4', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-11-05T00:00:00Z' }),
+        ] }));
+        const activate = (daemon: ScriptedDaemon, leafId: string) => gesture(daemon, () => {
+          daemon.arrangement.replace({ ...daemon.arrangement.desktop('ws')!, active_pane_id: leafId });
+          daemon.emit(daemon.arrangement.changed());
+        });
+
+        it('jump to waiting follows the queue while off, and the document waits again when back on', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR });
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
+          await waitingS4(daemon);
+          await agentOpens(daemon, 's1');
+          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
+
+          await flipSetting(daemon, 'false');
+          expect(screen.queryByTestId('desktop-shelf')).toBeNull();
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(active()).toBe('pane-s4');
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(active()).toBe('pane-s4');
+
+          await flipSetting(daemon, 'true');
+          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(active()).toBe('doc');
+        });
+
+        it('a document read while off no longer waits when back on', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR });
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
+          await agentOpens(daemon, 's1');
+          await flipSetting(daemon, 'false');
+          await activate(daemon, 'doc');
+          await activate(daemon, 'pane-s4');
+
+          await flipSetting(daemon, 'true');
+
+          expect(active()).toBe('pane-s4');
+          expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
+        });
+
+        it('a document opened while off does not wait when back on', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR });
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
+          await flipSetting(daemon, 'false');
+          await agentOpens(daemon, 's1');
+
+          await flipSetting(daemon, 'true');
+
+          expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
+        });
+      });
+
+      describe('while its desktop is not current', () => {
+        const NARROW = { ...SHELF_ON, narrowest_tile_cols: '86' };
+        const others = ['other', 'third'];
+        const present = () => document.querySelector('[data-session-terminal-desktop="ws"]');
+        const returnAndJump = async (daemon: ScriptedDaemon) => {
+          await gesture(daemon, () => pressShortcut('desktop.select1'));
+          expect(active()).not.toBe('doc');
+          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(active()).toBe('doc');
+        };
+
+        it('waits for the user while the desktop stays mounted', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR, others });
+          await gesture(daemon, () => pressShortcut('desktop.select2'));
+          expect(present()).not.toBeNull();
+          await agentOpens(daemon, 's4');
+          await returnAndJump(daemon);
+        });
+
+        it('waits for the user after the desktop unmounted', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR, others });
+          await gesture(daemon, () => pressShortcut('desktop.select2'));
+          await gesture(daemon, () => pressShortcut('desktop.select3'));
+          expect(present()).toBeNull();
+          await agentOpens(daemon, 's4');
+          await returnAndJump(daemon);
+        });
+
+        it('waits for the user on a desktop this app has not shown yet', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR, others, startOn: 'other' });
+          expect(present()).toBeNull();
+          await agentOpens(daemon, 's4');
+          await returnAndJump(daemon);
+        });
+
+        it('slides into view on return when its agent was on screen and the active tile stays', async () => {
+          const daemon = await renderRow(NARROW, { root: FOUR, others });
+          await slideTo(daemon, 'terminal.focusRight');
+          await gesture(daemon, () => pressShortcut('desktop.select2'));
+          await gesture(daemon, () => pressShortcut('desktop.select3'));
+          await agentOpens(daemon, 's2');
+          await gesture(daemon, () => pressShortcut('desktop.select1'));
+          expect(active()).toBe('pane-s2');
+          expect(paneIds().filter((id) => id !== 'pane-third')).toEqual(['pane-s2', 'doc']);
+        });
       });
 
       it('a terminal an agent starts flashes its chip and moves nothing', async () => {
