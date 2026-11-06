@@ -47,6 +47,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 import { useSharedCodexCommands } from './useSharedCodex';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -64,7 +65,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
-  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
+  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
   const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();

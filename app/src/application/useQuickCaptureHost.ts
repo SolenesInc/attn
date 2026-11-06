@@ -7,10 +7,11 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { quickCaptureDaemonClient } from '../quickCapture/daemonClient';
 import { isMacLikePlatform } from '../shortcuts/platform';
 import {
-  QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_ENABLED_SETTING, QUICK_CAPTURE_FONT,
+  QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_FONT,
   EMPTY_HOST_STATE,
   type QuickCaptureHostState, type QuickCaptureRequest,
 } from '../quickCapture/client';
+import { BoolSetting, isOn } from '../utils/settings';
 
 interface NativeStatus { binding: string | null; active: string | null; error?: string }
 
@@ -25,7 +26,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const current = useRef({ daemon, settings, delivery, profileId });
   useLayoutEffect(() => { current.current = { daemon, settings, delivery, profileId }; }, [daemon, settings, delivery, profileId]);
   const state: QuickCaptureHostState = {
-    enabled: settings[QUICK_CAPTURE_ENABLED_SETTING] === 'true',
+    enabled: isOn(settings, BoolSetting.quickCaptureEnabled),
     profileId, connected: !!profileId && daemon.isReady,
     mailboxes: [EMPTY_HOST_STATE.mailboxes[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
       id: member.id, name: member.name, detail: member.binding_session ? 'Awake' : 'Asleep',

@@ -22,7 +22,7 @@ func TestAnAgentShowsACalloutAndGetsItsRefusals(t *testing.T) {
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	s.Launched(session)
 	refused(t, s.Run(testworld.Invocation{Session: session, Args: []string{"callout", "show", "garden", "Work tracked here"}}), 1,
-		"callout show: callouts are off: the user can turn them on in Settings > Experimental > Agent callouts")
+		"callout show: Agent callouts is off. Turn it on in Settings → Experimental → Agent callouts (callouts_enabled)")
 
 	enabled := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "callouts_enabled", Value: "true", RequestID: protocol.Ptr("callouts")},
 		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "callouts" })

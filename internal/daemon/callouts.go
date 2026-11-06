@@ -41,7 +41,7 @@ func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
 		return fmt.Errorf("session not found")
 	}
 	if !d.on(setting.CalloutsEnabled) && !d.onboardingChief(session.ID) {
-		return fmt.Errorf("callouts are off: the user can turn them on in Settings > Experimental > Agent callouts")
+		return setting.CalloutsEnabled.Refusal()
 	}
 	return nil
 }

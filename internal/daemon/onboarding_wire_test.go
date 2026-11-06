@@ -123,7 +123,7 @@ func TestOnlyTheOnboardingChiefPointsWithCalloutsOff(t *testing.T) {
 	selectProfile(target, app.SelectedProfile())
 
 	_, err := cli.CalloutShow("other", []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}})
-	calloutRefused(t, err, "Settings > Experimental > Agent callouts")
+	calloutRefused(t, err, "Settings → Experimental → Agent callouts")
 	answered := make(chan error, 1)
 	go func() {
 		_, err := cli.CalloutShow(chief, []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}, {Anchor: "commands", Text: "Find commands here"}})
@@ -137,5 +137,5 @@ func TestOnlyTheOnboardingChiefPointsWithCalloutsOff(t *testing.T) {
 
 	onboardingPending(t, cli, protocol.OnboardingActionDone, "")
 	_, err = cli.CalloutShow(chief, []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}})
-	calloutRefused(t, err, "Settings > Experimental > Agent callouts")
+	calloutRefused(t, err, "Settings → Experimental → Agent callouts")
 }

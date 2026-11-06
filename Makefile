@@ -450,6 +450,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 		--no-prefer-unions --no-prefer-unknown \
 		-o app/src/types/generated.ts
 	node scripts/generate-protocol-version.mjs
+	go run ./cmd/settingsgen app/src/types/settings.generated.ts
 	rm -rf internal/protocol/schema/tsp-output-gateway
 	cd internal/protocol/schema && pnpm exec tsp compile gateway.tsp --output-dir tsp-output-gateway
 	$(GO_JSONSCHEMA) -p gateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
@@ -469,7 +470,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/gateway app/src/types/gatewayGenerated.ts app/src/types/gatewayVersion.ts
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/gateway app/src/types/gatewayGenerated.ts app/src/types/gatewayVersion.ts
 
 # Refuses a gateway API change that is not an addition to the schema on origin/main.
 check-gateway-compat:

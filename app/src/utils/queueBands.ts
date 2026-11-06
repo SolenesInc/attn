@@ -1,6 +1,7 @@
 import type { DesktopWithSessions, DesktopViewSession } from './desktopViewModels';
 import { isSnoozed } from './snoozeDurations';
 import type { ActorView } from '../types/generated';
+import { BoolSetting, isOn } from './settings';
 
 /** Daemon-owned setting selecting the sidebar arrangement. Always read through
  * isQueueModeEnabled so no surface disagrees. */
@@ -9,15 +10,15 @@ export const QUEUE_CREW_SETTING = 'queue_crew_enabled';
 export const QUEUE_SHOW_HIDDEN_SETTING = 'queue_show_hidden_sessions';
 
 export function isQueueModeEnabled(settings: Record<string, string>): boolean {
-  return (settings[QUEUE_MODE_SETTING] || 'false') === 'true';
+  return isOn(settings, BoolSetting.queueModeEnabled);
 }
 
 export function isHiddenInQueue(settings: Record<string, string>): boolean {
-  return (settings[QUEUE_SHOW_HIDDEN_SETTING] || 'true') !== 'false';
+  return isOn(settings, BoolSetting.queueShowHiddenSessions);
 }
 
 export function isCrewQueueEnabled(settings: Record<string, string>): boolean {
-  return (settings[QUEUE_CREW_SETTING] || 'false') === 'true';
+  return isOn(settings, BoolSetting.queueCrewEnabled);
 }
 
 /** Auto-settle closes a turn once the user steered the agent and it went back to
@@ -30,7 +31,7 @@ export const DEFAULT_AUTO_SETTLE_ARM_SECONDS = 30;
 export const DEFAULT_AUTO_SETTLE_COUNTDOWN_SECONDS = 15;
 
 export function isAutoSettleEnabled(settings: Record<string, string>): boolean {
-  return (settings[AUTO_SETTLE_ENABLED_SETTING] || 'false') === 'true';
+  return isOn(settings, BoolSetting.autoSettleEnabled);
 }
 
 /** The effective seconds for one of the two windows; the daemon normalizes

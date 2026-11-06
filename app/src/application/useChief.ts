@@ -4,6 +4,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { storedRouteModel, type HarnessRoute } from '../hooks/useHarnessRoute';
 import type { CrewMember } from '../types/generated';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export type ChiefPhase = 'unconfigured' | 'configuring' | 'waking' | 'awake' | 'sleeping' | 'asleep';
 export interface ChiefView {
@@ -38,7 +39,7 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
   const crew = useDaemonStore(state => state.crew);
   const profileId = useProfilesStore(state => state.selectedProfileId);
   const { settings, sendCrewSet, sendCrewWake, sendCrewSleep } = useDaemonApi();
-  const member = settings.crew_v2_enabled === 'true'
+  const member = isOn(settings, BoolSetting.crewV2Enabled)
     ? crew.find(candidate => candidate.chief && candidate.profile_id === profileId)
     : undefined;
   const [pending, setPending] = useState<Pending | null>(null);

@@ -189,6 +189,11 @@ land 'Scripts and generated inputs'
 expect_checks 'check-types check-prompts' 'land --group prompts' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
+mkdir -p internal/setting
+printf 'setting\n' >internal/setting/example.txt
+land 'Settings declaration change'
+expect_checks 'check-types' sync
+
 printf 'gateway\n' >internal/protocol/schema/gateway.tsp
 land 'Gateway API change'
 expect_checks 'check-types check-gateway-compat' sync

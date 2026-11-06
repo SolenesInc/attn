@@ -13,6 +13,7 @@ import {
   parseActivityConfigSetting,
   parseActivityIntervalsSetting,
 } from '../utils/activitySettings';
+import { BoolSetting, isOn } from '../utils/settings';
 
 interface SessionActivitySettingsProps {
   settings: Record<string, string>;
@@ -30,7 +31,7 @@ export function SessionActivitySettings({
     () => parseActivityIntervalsSetting(settings[ACTIVITY_INTERVALS_SETTING]),
     [settings],
   );
-  const enabled = (settings[ACTIVITY_ENABLED_SETTING] || 'false') === 'true';
+  const enabled = isOn(settings, BoolSetting.activityEnabled);
 
   const configDraft = useAutosaveSetting(ACTIVITY_CONFIG_SETTING, JSON.stringify(saved), onSetSetting, (raw) => {
     const value = JSON.parse(raw) as typeof saved;

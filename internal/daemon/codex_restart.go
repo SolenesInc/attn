@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -592,7 +593,7 @@ func (d *Daemon) handleRestartSharedCodex(client *wsClient, msg *protocol.Restar
 
 func (r *codexShared) requestRestart(profile string, now bool) error {
 	if !r.enabledForNewLaunches() {
-		return errors.New("shared Codex is off; turn it on in Settings → Experimental")
+		return setting.CodexSharedEnabled.Refusal()
 	}
 	r.mu.Lock()
 	s := r.servers[profile]

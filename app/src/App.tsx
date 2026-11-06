@@ -27,6 +27,7 @@ import { useDaemonStore } from './store/daemonSessions';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { setAppActionSink } from './analytics/appActions';
+import { BoolSetting, isOn } from './utils/settings';
 
 function App() {
   useAutomationRequestListener();
@@ -131,7 +132,7 @@ function App() {
   });
 
   const captureHost = useQuickCaptureHost(daemon, settings);
-  const analyticsEnabled = settings['analytics.enabled'] === 'true';
+  const analyticsEnabled = isOn(settings, BoolSetting.analyticsEnabled);
   const { sendRecordAnalytics } = daemon;
   useEffect(() => {
     setAppActionSink(analyticsEnabled ? sendRecordAnalytics : null);

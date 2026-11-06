@@ -193,7 +193,7 @@ func gatewaySessionIDs(sessions []gateway.GatewaySession) []string {
 	return ids
 }
 
-const phoneAccessOff = "phone access is off on this home; turn it on in Settings → Experimental → Phone access"
+const phoneAccessOff = "Phone access is off. Turn it on in Settings → Experimental → Phone access (phone_access_enabled)"
 
 func TestGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testing.T) {
 	w := newWorld(t)

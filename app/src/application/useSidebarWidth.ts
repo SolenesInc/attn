@@ -7,6 +7,7 @@ import { useShortcut } from '../shortcuts/useShortcut';
 import { useSidebarDrag } from '../store/sidebarDrag';
 import { beginPointerResize } from '../utils/resizeGesture';
 import { useAppErrorsContext, useAppInputs } from './AppContexts';
+import { BoolSetting, isOn } from '../utils/settings';
 
 const WIDTH_VARIABLE = '--sidebar-width';
 
@@ -18,7 +19,7 @@ export function useSidebarWidth({ sidebarShown }: { sidebarShown: boolean }) {
   const { settings } = useAppInputs();
   const { sendSetSetting } = useDaemonApi();
   const { showError } = useAppErrorsContext();
-  const resizable = settings.shelf_layout_enabled === 'true';
+  const resizable = isOn(settings, BoolSetting.shelfLayoutEnabled);
   const storedPx = storedSidebarPx(settings.sidebar_width);
   const dragging = useSidebarDrag((state) => state.dragging);
   const labelRef = useRef<HTMLDivElement>(null);

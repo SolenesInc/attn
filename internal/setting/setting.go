@@ -1,6 +1,9 @@
 package setting
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type Class int
 
@@ -32,15 +35,25 @@ const (
 	On
 )
 
+type Stage int
+
+const (
+	NotAFeature Stage = iota
+	Experimental
+	OnByDefault
+)
+
 type Setting struct {
-	Key          string
-	Class        Class
-	Kind         Kind
-	Scope        Scope
-	Default      Default
-	Experimental bool
-	Internal     bool
-	Description  string
+	Key         string
+	Class       Class
+	Kind        Kind
+	Scope       Scope
+	Default     Default
+	Internal    bool
+	Description string
+	Name        string
+	Stage       Stage
+	Since       string
 }
 
 var (
@@ -65,7 +78,37 @@ func add(s *Setting) *Setting {
 	return s
 }
 
+func feature(key, name string, stage Stage, since, description string) *Setting {
+	return add(newFeature(key, Home, name, stage, since, description))
+}
+
+func machineFeature(key, name string, stage Stage, since, description string) *Setting {
+	return add(newFeature(key, Machine, name, stage, since, description))
+}
+
+func newFeature(key string, class Class, name string, stage Stage, since, description string) *Setting {
+	s := &Setting{Key: key, Class: class, Kind: Bool, Name: name, Stage: stage, Since: since, Description: description}
+	if stage == OnByDefault {
+		s.Default = On
+	}
+	return s
+}
+
 func All() []*Setting { return all }
+
+func Features() []*Setting {
+	var features []*Setting
+	for _, s := range all {
+		if s.Stage != NotAFeature {
+			features = append(features, s)
+		}
+	}
+	return features
+}
+
+func (s *Setting) Refusal() error {
+	return fmt.Errorf("%s is off. Turn it on in Settings → Experimental → %s (%s)", s.Name, s.Name, s.Key)
+}
 
 func (s *Setting) String() string { return s.Key }
 

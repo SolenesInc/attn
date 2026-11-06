@@ -1,11 +1,12 @@
 import type { Ask, AskAnswer, AskQuestion, Seed } from '../types/generated';
 import type { AskDraft } from '../store/asks';
 import { crewDisplayName, crewRef } from './crewName';
+import { BoolSetting, isOn } from './settings';
 
 export const ASKS_SETTING = 'asks_enabled';
 
 export function isAsksEnabled(settings: Record<string, string>): boolean {
-  return settings[ASKS_SETTING] === 'true';
+  return isOn(settings, BoolSetting.asksEnabled);
 }
 
 export interface AskHolderSession {

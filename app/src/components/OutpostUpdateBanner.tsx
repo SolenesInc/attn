@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import type { OutpostInfo } from '../types/generated';
 import { readClosedOutpostBanner, persistClosedOutpostBanner } from '../utils/outpostBannerDismissals';
+import { BoolSetting, isOn } from '../utils/settings';
 
 const OUTPOST_DONE_CLOSE_SECONDS = 5;
 
@@ -57,7 +58,7 @@ export function OutpostUpdateBanner() {
   const api = useOptionalDaemonApi();
   const [closed, setClosed] = useState(readClosedOutpostBanner);
   const [paused, setPaused] = useState(false);
-  const enabled = !!api?.homeBuild && api.settings.outposts_enabled === 'true';
+  const enabled = !!api?.homeBuild && isOn(api.settings, BoolSetting.outpostsEnabled);
   const homeBuild = api?.homeBuild ?? '';
   const different = enabled ? api.outposts.filter(row => outpostNeedsUpdate(row, homeBuild)) : [];
   const updated = enabled ? api.outposts.filter(row => row.update) : [];

@@ -41,6 +41,7 @@ import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
 import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
 import { focusLanded, selectionShown } from '../hooks/uiAutomationSelection';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function useAppController({
   daemonSessions,
@@ -206,7 +207,7 @@ export function useAppController({
     sessions.length +
     desktopViews.filter((group) => group.hasUnresolvedAgentPanes).length;
   const chief = useChief({ liveSessionIds: appSessions.liveGardenSessions, selectSession: handleSelectSession, showError });
-  const appPanels = useAppPanels({ sidebarEmpty: agentSurfaceCount === 0 && settings.crew_v2_enabled !== 'true' });
+  const appPanels = useAppPanels({ sidebarEmpty: agentSurfaceCount === 0 && !isOn(settings, BoolSetting.crewV2Enabled) });
   const crewPanelState = useCrewPanel();
   const { crewPanel, closeCrewPanel } = crewPanelState;
   const {

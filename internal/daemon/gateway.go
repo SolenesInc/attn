@@ -27,7 +27,7 @@ type GatewayStream interface {
 	Close() error
 }
 
-const phoneAccessOff = "phone access is off on this home; turn it on in Settings → Experimental → Phone access"
+var phoneAccessOff = setting.PhoneAccessEnabled.Refusal().Error()
 
 var gatewayFacts = bus.Filter{
 	FactSessionRegistered,

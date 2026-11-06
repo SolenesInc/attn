@@ -10,6 +10,7 @@ import {
   useAppPanelsContext,
   useNavigationContext,
 } from './AppContexts';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppPreferences() {
   const {
@@ -53,7 +54,7 @@ export function AppPreferences() {
   } = useDaemonApi();
   const { handleSelectSession } = useNavigationContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
-  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
+  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
   return (
     <>
       <ShortcutsModal

@@ -29,6 +29,7 @@ import { EmptyDesktopLauncher } from './EmptyDesktopLauncher';
 import { openThenShow } from './openThenShow';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 import { localDirectory } from '../utils/outpostPaths';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppDesktops() {
   const { snoozeMenu } = useAttentionQueueContext();
@@ -185,8 +186,8 @@ export function AppDesktops() {
           isActiveSession={isCurrent && view !== 'dashboard'}
           isSessionViewVisible={view === 'session'}
           terminalsLive
-          attachOnlyDrawn={settings.pty_shared_host_enabled === 'true'}
-          shelfNarrowestCols={settings.shelf_layout_enabled === 'true' ? Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS : undefined}
+          attachOnlyDrawn={isOn(settings, BoolSetting.ptySharedHostEnabled)}
+          shelfNarrowestCols={isOn(settings, BoolSetting.shelfLayoutEnabled) ? Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS : undefined}
           shelfInQueueBar={queueModeEnabled && sidebarCollapsed}
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}

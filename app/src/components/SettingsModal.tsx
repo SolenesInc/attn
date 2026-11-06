@@ -22,6 +22,7 @@ import {
 } from './SettingsModalSections';
 import { SettingsModalHandle, SettingsModalProps } from './settingsModalShared';
 import { useSettingsModalState, type SettingsModalState } from './useSettingsModalState';
+import { BoolSetting, isOn } from '../utils/settings';
 export type { SettingsModalHandle } from './settingsModalShared';
 
 export const SettingsModal = forwardRef<SettingsModalHandle, SettingsModalProps>((props, ref) => (
@@ -291,9 +292,9 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'analytics':
       return state.analyticsEnabled ? (
         <AnalyticsSettings
-          sharing={state.settings['analytics.sharing_enabled'] === 'true'}
-          sendVents={state.settings['analytics.share_vents'] === 'true'}
-          toolVents={state.settings['analytics.tool_vents'] === 'true'}
+          sharing={isOn(state.settings, BoolSetting.analyticsSharingEnabled)}
+          sendVents={isOn(state.settings, BoolSetting.analyticsShareVents)}
+          toolVents={isOn(state.settings, BoolSetting.analyticsToolVents)}
           onSetSetting={state.onSetSetting}
           onDisableRecording={() => {
             state.onSetSetting('analytics.enabled', 'false');

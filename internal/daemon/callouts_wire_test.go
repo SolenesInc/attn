@@ -29,7 +29,7 @@ func TestCalloutsCheckTheLiveSettingAndRefuseInvalidSteps(t *testing.T) {
 			}
 		} else {
 			for _, err := range []error{showErr, anchorsErr} {
-				calloutRefused(t, err, "Settings > Experimental > Agent callouts")
+				calloutRefused(t, err, "Settings → Experimental → Agent callouts")
 			}
 		}
 	}

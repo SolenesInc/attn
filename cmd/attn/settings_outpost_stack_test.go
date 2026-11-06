@@ -1,8 +1,11 @@
 package main_test
 
 import (
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/testworld"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -83,6 +86,33 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 		requireStdout(t, outpost.Attn("settings", "get", key), value)
 	}
 	t.Log("home setting copied and read-only; outpost home write reached home; machine write stayed local; offline restart retained home values; leave restored standalone values including family keys")
+}
+
+func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	remote := outpost.App()
+	pair.Connect()
+	var perMachine []*setting.Setting
+	for _, feature := range setting.Features() {
+		if feature.Class == setting.Machine {
+			perMachine = append(perMachine, feature)
+			continue
+		}
+		requireStdout(t, home.Attn("settings", "set", feature.Key, "true"), "true")
+		testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[feature.Key] == "true" })
+		requireStdout(t, outpost.Attn("settings", "get", feature.Key), "true")
+	}
+	var keys []string
+	for _, feature := range perMachine {
+		keys = append(keys, feature.Key)
+	}
+	if want := []string{"analytics.enabled", "background_login_env_enabled", "outposts_enabled", "pty_shared_host_enabled", "shelf_layout_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
+		t.Fatalf("features still decided per machine = %v, want only the named exceptions %v", keys, want)
+	}
+	t.Log("every feature except the named exceptions reads the home's value on an outpost")
 }
 
 func TestOutpostEnrollmentAppliesUnsetHomeDefaultsToRunningServices(t *testing.T) {

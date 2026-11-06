@@ -11,6 +11,7 @@ import {
   useSessionLaunchContext,
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function EmptyDesktopLauncher({
   desktopId,
@@ -39,7 +40,7 @@ export function EmptyDesktopLauncher({
   const { agentAvailability } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
-  const experimental = settings.new_session_launcher_enabled === 'true';
+  const experimental = isOn(settings, BoolSetting.newSessionLauncherEnabled);
   const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);

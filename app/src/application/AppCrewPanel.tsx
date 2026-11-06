@@ -3,6 +3,7 @@ import { CrewPanel } from '../components/CrewPanel';
 import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useAppGardenActionsContext, useAppInputs, useCrewPanelContext } from './AppContexts';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppCrewPanel() {
   const { daemonSessions, settings } = useAppInputs();
@@ -23,7 +24,7 @@ export function AppCrewPanel() {
       initialMember={crewPanel.member}
       initialTab={crewPanel.tab}
       members={crew}
-      canRename={settings.crew_v2_enabled === 'true'}
+      canRename={isOn(settings, BoolSetting.crewV2Enabled)}
       sessions={daemonSessions}
       seeds={seeds}
       seedsTotal={seedsTotal}

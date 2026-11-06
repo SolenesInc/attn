@@ -45,6 +45,7 @@ import { isAccelKeyPressed } from '../shortcuts/platform';
 import { keyCombo } from '../shortcuts/formatShortcut';
 import './LocationPicker.css';
 import './NewSessionLauncher.css';
+import { BoolSetting, isOn } from '../utils/settings';
 
 type RepoInfo = NonNullable<
   Awaited<ReturnType<NonNullable<LocationPickerProps['onGetRepoInfo']>>>['info']
@@ -144,7 +145,7 @@ export function NewSessionLauncher({
   const inline = variant === 'inline';
   const { settings, setSetting } = useSettings();
   const api = useOptionalDaemonApi();
-  const outposts = (settings.outposts_enabled === 'true' && api?.outposts) || NO_OUTPOSTS;
+  const outposts = (isOn(settings, BoolSetting.outpostsEnabled) && api?.outposts) || NO_OUTPOSTS;
   const outpostsAtOpen = useRef(outposts);
   outpostsAtOpen.current = outposts;
   const sendAgentCatalog = api?.sendAgentCatalog;

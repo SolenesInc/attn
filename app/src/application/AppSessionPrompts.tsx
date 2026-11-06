@@ -15,6 +15,7 @@ import {
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppSessionPrompts() {
   const { desktopClosePrompt, confirmCloseDesktop, cancelCloseDesktop } =
@@ -49,7 +50,7 @@ export function AppSessionPrompts() {
     handleConfirmChiefTransfer,
     setChiefTransferTarget,
   } = useChiefOfStaffContext();
-  const experimental = settings.new_session_launcher_enabled === 'true';
+  const experimental = isOn(settings, BoolSetting.newSessionLauncherEnabled);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const pickerProps = {
     initialAgent: locationPickerInitialAgent,

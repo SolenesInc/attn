@@ -39,6 +39,7 @@ import {
 } from './settingsModalShared';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export function useSettingsModalState({
   closeRef,
@@ -112,11 +113,11 @@ export function useSettingsModalState({
   );
   useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
-  const outpostsEnabled = settings.outposts_enabled === 'true';
+  const outpostsEnabled = isOn(settings, BoolSetting.outpostsEnabled);
   useEffect(() => {
     if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
   }, [selectedSection, outpostsEnabled]);
-  const phonesEnabled = settings.phone_access_enabled === 'true';
+  const phonesEnabled = isOn(settings, BoolSetting.phoneAccessEnabled);
   useEffect(() => {
     if (selectedSection === 'phones' && !phonesEnabled) setSelectedSection('connectivity');
   }, [selectedSection, phonesEnabled]);
@@ -136,7 +137,7 @@ export function useSettingsModalState({
   const actualProjectsDir = settings.projects_directory || '';
   const actualNotebookRoot = settings['notebook.root'] || '';
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
-  const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
+  const autoApproveEnabled = isOn(settings, BoolSetting.autoApproveEnabled);
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
   const actualAgentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
@@ -145,10 +146,10 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
-  const calloutsEnabled = settings.callouts_enabled === 'true';
-  const phoneAccessEnabled = settings.phone_access_enabled === 'true';
-  const crewV2Enabled = settings.crew_v2_enabled === 'true';
-  const analyticsEnabled = settings['analytics.enabled'] === 'true';
+  const calloutsEnabled = isOn(settings, BoolSetting.calloutsEnabled);
+  const phoneAccessEnabled = isOn(settings, BoolSetting.phoneAccessEnabled);
+  const crewV2Enabled = isOn(settings, BoolSetting.crewV2Enabled);
+  const analyticsEnabled = isOn(settings, BoolSetting.analyticsEnabled);
   const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
@@ -253,16 +254,16 @@ export function useSettingsModalState({
   }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const agentCapabilityOrder = useMemo(() => AGENT_CAPABILITY_ORDER.map((cap) => cap as string), []);
   const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
-  const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
-  const codexSharedEnabled = settings.codex_shared_enabled === 'true';
-  const claudeModEnabled = settings.claude_mod_enabled === 'true';
-  const nisseEnabled = settings.nisse_enabled === 'true';
-  const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
-  const queueQuietNotifications = settings.queue_quiet_notifications !== 'false';
-  const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
-  const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
-  const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
-  const shelfLayoutEnabled = settings.shelf_layout_enabled === 'true';
+  const newSessionLauncherEnabled = isOn(settings, BoolSetting.newSessionLauncherEnabled);
+  const codexSharedEnabled = isOn(settings, BoolSetting.codexSharedEnabled);
+  const claudeModEnabled = isOn(settings, BoolSetting.claudeModEnabled);
+  const nisseEnabled = isOn(settings, BoolSetting.nisseEnabled);
+  const queueShowHiddenSessions = isOn(settings, BoolSetting.queueShowHiddenSessions);
+  const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
+  const directAgentLaunchEnabled = isOn(settings, BoolSetting.directAgentLaunchEnabled);
+  const quickCaptureEnabled = isOn(settings, BoolSetting.quickCaptureEnabled);
+  const sharedPtyHostEnabled = isOn(settings, BoolSetting.ptySharedHostEnabled);
+  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
@@ -398,7 +399,7 @@ export function useSettingsModalState({
     onSetSetting(AUTO_SETTLE_ENABLED_SETTING, autoSettleEnabled ? 'false' : 'true');
   }, [onSetSetting, autoSettleEnabled]);
 
-  const openSentFilesEnabled = (settings[OPEN_SENT_FILES_ENABLED_SETTING] || 'true') === 'true';
+  const openSentFilesEnabled = isOn(settings, BoolSetting.openSentFilesEnabled);
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
   }, [onSetSetting, openSentFilesEnabled]);
@@ -424,7 +425,7 @@ export function useSettingsModalState({
     if (isAgentSelectable(agentAvailability, agent)) void defaultAgentDraft.apply(agent);
   };
 
-  const worktreeSweepEnabled = settings['worktree_sweep_enabled'] !== 'false';
+  const worktreeSweepEnabled = isOn(settings, BoolSetting.worktreeSweepEnabled);
 
   const handleToggleWorktreeSweep = useCallback(() => {
     onSetSetting('worktree_sweep_enabled', worktreeSweepEnabled ? 'false' : 'true');

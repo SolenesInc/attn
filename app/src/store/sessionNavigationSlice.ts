@@ -36,6 +36,7 @@ import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import { recordAppAction, type AppActionProps } from '../analytics/appActions';
 import { usePendingTerminalInput } from './pendingTerminalInput';
 import { bringAnchor, useDesktopShelfStore } from './desktopShelf';
+import { BoolSetting, isOn } from '../utils/settings';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
@@ -169,7 +170,7 @@ export function createSessionNavigationActions(
         utilityFocusRequestToken: state.utilityFocusRequestToken + 1,
       })),
     syncNavigationSettings: (settings) => {
-      useDesktopShelfStore.getState().shelfLayoutChanged(settings.shelf_layout_enabled === 'true');
+      useDesktopShelfStore.getState().shelfLayoutChanged(isOn(settings, BoolSetting.shelfLayoutEnabled));
       set((state) =>
         reconcileSessionNavigation(state, {
           navigationSettings: settings,
