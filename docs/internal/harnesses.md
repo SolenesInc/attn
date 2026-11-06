@@ -71,23 +71,24 @@ Probed on 2.1.288 with a mock API.
 
 - SessionStart blocks Claude until the hook exits. SessionEnd is cut off
   after about 1.5 s and may never arrive.
-- Claude also compacts by itself while it sits at its prompt. Probed on 2.1.318
-  with Opus 5.5 and a subscription login, without attn, in six conversations on
-  the 1-hour prompt cache. Four of them ran behind a recording proxy, set with
-  `HTTPS_PROXY` and `NODE_EXTRA_CA_CERTS`.
+- Claude also compacts by itself while it sits at its prompt. Probed with Opus
+  5.5 and subscription logins, without attn, in seven conversations on the
+  1-hour prompt cache: two on 2.1.318, and five on 2.1.319 behind a recording
+  proxy, set with `HTTPS_PROXY` and `NODE_EXTRA_CA_CERTS`. The rules below were
+  read in the 2.1.318 and 2.1.319 bundles.
   - Claude checks 54 minutes after the last main-thread request was sent, with
-    6 minutes of cache left, within 0.1 s in all six. Stop and an unsent draft
+    6 minutes of cache left, within 0.2 s in every run. Stop and an unsent draft
     typed later do not move the check.
   - The check does nothing when auto-compact or `idleCompaction` is off, the
     prefix changed, the cache is not 1-hour, the cache lapsed or the check runs
     more than 60 s late, context is under
     `max(100000, CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS ?? 200000)` tokens, a newer
-    request exists, or the rate limit status is not `allowed`. The list comes
-    from the bundle, and the bundle also has a variant that precomputes the
-    summary, which was not seen. A skip has no hook and no screen change. Claude's
-    telemetry reported two skip reasons: `small` for 168k tokens under the default
-    threshold, and `near_limit` for 245k, and for 168k with the threshold at
-    100000.
+    request exists, or the rate limit status is not `allowed`. The bundle also
+    has a variant that precomputes the summary, which was not seen. A skip has no
+    hook and no screen change. Claude's telemetry reported two skip reasons:
+    `small` for 168k tokens under the default threshold, and `near_limit` for
+    245k, and for 168k with the threshold at 100000. At 238k on another account
+    with status `allowed`, it reported `started`.
   - There is no fixed usage cutoff. The bundle sets the status to
     `allowed_warning` when a response reports
     `anthropic-ratelimit-unified-<window>-surpassed-threshold` for any window, or
@@ -99,19 +100,27 @@ Probed on 2.1.288 with a mock API.
     seen.
   - A compact's hooks are PreCompact `auto`, SessionStart `compact` and
     PostCompact `auto`, over about 6.5 s, all carrying the last turn's
-    `prompt_id`. No UserPromptSubmit, Stop or Notification comes with them.
+    `prompt_id`. No UserPromptSubmit, Stop or Notification comes with them. When
+    the compact fails, PreCompact is the only hook and the screen shows no error.
+    That was seen against a local server that answered without a summary.
   - A normal turn opens with `thread: {type: "create"}`. Its later requests use
     `{type: "continue", previous_message_id}` and carry only the new messages,
-    with no `tools`. A compact request has no `thread` and sends
-    `x-claude-code-request-class: compaction` with the whole conversation and
-    its summary prompt. Its usage at 245k was about 40k read from the cache and
-    207k uncached. The next turn opens a new thread with about 41k of context.
-    The request bodies were recorded on a manual `/compact`, because the
-    recorded idle checks all skipped. The usage is from idle compacts.
+    with no `tools`. A compact request has no `thread`, sends
+    `x-claude-code-request-class: compaction` and
+    `x-claude-code-compaction: auto`, and carries the whole conversation and its
+    summary prompt. Its usage at about 240k was 32k to 40k read from the cache and
+    207k uncached. The next turn opens a new thread with 34k to 41k of context.
   - The screen shows `Compacting conversation…` above the composer. An unsent
-    draft stays in the composer, and Enter then submits it as a normal turn on
-    top of the summary. That was seen on the default renderer only. After 75
-    minutes the footer shows `new task? /clear to save <n>k tokens`.
+    draft stays in the composer on the default and fullscreen renderers, and
+    Enter then submits it as a normal turn on top of the summary. After 75 minutes
+    the footer shows `new task? /clear to save <n>k tokens`.
+  - Against a local server with `ANTHROPIC_BASE_URL` and an API key, Claude sends
+    no `thread` and no compaction headers, and uses the 5-minute cache, so the
+    timer never arms. With `ENABLE_PROMPT_CACHING_1H=1` and a response reporting
+    245k of usage, the same idle compact runs at 54 minutes with the same hooks.
+    The summary prompt contains
+    `create a detailed summary of the conversation so far`, and the response must
+    hold a `<summary>`.
 - Plan mode's "clear context and proceed" is SessionEnd `clear`, SessionStart
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`. attn reads the
