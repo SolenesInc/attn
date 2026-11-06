@@ -199,7 +199,10 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	if askedForUser {
 		agentTurn = protocol.Deref(session.TurnOpenedAt)
 	}
-	notificationStop := d.stopFollowsNotification(sessionID)
+	notificationStop, sameState := d.stopFollowsNotification(session)
+	if !sameState {
+		return phonePushNote{}, false
+	}
 	announced := agentTurn != "" && pushes.pushedAgentTurn[sessionID] == agentTurn
 	switch {
 	case session.State == protocol.SessionStateWaitingInput && !notificationStop:

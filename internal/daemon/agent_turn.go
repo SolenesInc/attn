@@ -27,7 +27,10 @@ func (d *Daemon) inNotificationRun(sessionID protocol.SessionID) bool {
 	return ok && view.NotificationRun.V
 }
 
-func (d *Daemon) stopFollowsNotification(sessionID protocol.SessionID) bool {
-	view, ok := d.monitorViewFor(sessionID)
-	return ok && view.NotificationStop.V
+func (d *Daemon) stopFollowsNotification(session *protocol.Session) (followsNotification, sameState bool) {
+	view, ok := d.monitorViewFor(session.ID)
+	if !ok {
+		return false, true
+	}
+	return view.NotificationStop.V, view.State.V.State == session.State
 }
