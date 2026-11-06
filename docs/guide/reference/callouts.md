@@ -30,8 +30,13 @@ marks the part of the window it points at.
 | Enter or → on any other last step | Ends the callout |
 | Esc, or **End callout** | Ends the callout |
 
-A click outside the card, another overlay such as Settings, or a profile switch
-also ends the callout.
+A profile switch also ends the callout. A callout with one step also ends when
+you click outside the card or open another overlay, such as Settings.
+
+A callout with several steps stays so you can try what it points at. Another
+overlay hides the card, and the card comes back on the same step when the overlay
+closes. After a click elsewhere the card stays, and Enter, → and Esc go to what
+you clicked until you click the card.
 
 ## What an agent can point at
 

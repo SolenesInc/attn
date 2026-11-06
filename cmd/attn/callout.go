@@ -123,7 +123,8 @@ earlier step it moves on.
 
 A callout has at most 20 steps, each at most 160 characters. A new callout
 replaces the one showing. The command returns when the app accepts it; the
-user steps through it with Enter or →, and Esc or a click outside ends it.
+user steps through it with Enter or →. Esc or the card's × ends it, and so
+does a click outside a one-step callout.
 A missing fixed anchor refuses the whole callout. Every refusal exits 1.
 Use --session <id> to point from a specific session.
 

@@ -70,6 +70,31 @@ describe('App callouts', () => {
     expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
   });
 
+  it('keeps a tour through another overlay and a click elsewhere', async () => {
+    const { daemon } = await launch();
+    await show(daemon, [{ anchor: 'commands', text: 'First' }, { anchor: 'garden', text: 'Second' }]);
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Escape' }));
+    expect(card()).toHaveTextContent('First');
+
+    await gesture(daemon, () => fireEvent.pointerDown(document.body));
+    expect(card()).toHaveTextContent('First');
+    const typed = fireEvent.keyDown(window, { key: 'Enter' });
+    expect(typed).toBe(true);
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(card()).toHaveTextContent('First');
+
+    await gesture(daemon, () => fireEvent.pointerDown(card()));
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Enter' }));
+    expect(card()).toHaveTextContent('Second');
+
+    await show(daemon, [{ anchor: 'sidebar', text: 'Only' }], 'single');
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'Escape' }));
+    expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+  });
+
   it('refuses requests from other profiles without revealing anchors or replacing the current callout', async () => {
     const { daemon } = await launch();
     const stale = {
@@ -262,6 +287,10 @@ describe('App callouts', () => {
     expect(updates().slice(-1)[0]).toMatchObject({ geometry: { visible: false } });
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     expect(updates().slice(-1)[0]).toMatchObject({ geometry: { visible: true } });
+    await show(daemon, [{ anchor: 'sidebar', text: 'Tour' }, { anchor: 'garden', text: 'Stays' }], 'tour');
+    await gesture(daemon, () => fireEvent.pointerDown(document.body));
+    expect(card()).toHaveTextContent('Tour');
+    expect(updates().slice(-1)[0]).toMatchObject({ geometry: { visible: false } });
   });
 
   it('saves the Experimental opt-in', async () => {
