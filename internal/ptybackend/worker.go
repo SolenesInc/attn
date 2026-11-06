@@ -65,7 +65,7 @@ type WorkerBackendConfig struct {
 	OwnerStartedAt   string
 	OwnerNonce       string
 	Logf             func(format string, args ...interface{})
-	OnTerminalBuild  func(id harness.TerminalID, snapshotFormat string)
+	OnTerminalBuild  func(id harness.TerminalID)
 
 	OnSharedArtifactRejected func(SharedArtifactRejection) error
 }
@@ -1921,7 +1921,7 @@ func (b *WorkerBackend) connectWithIdentity(
 		session.snapshotFormat = hello.SnapshotFormat
 		session.mu.Unlock()
 		if changed && session.SessionID != "" && b.cfg.OnTerminalBuild != nil {
-			b.cfg.OnTerminalBuild(harness.TerminalID(session.SessionID), hello.SnapshotFormat)
+			b.cfg.OnTerminalBuild(harness.TerminalID(session.SessionID))
 		}
 		break
 	}

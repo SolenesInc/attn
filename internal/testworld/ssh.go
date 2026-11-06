@@ -404,20 +404,11 @@ func (s *SSH) HostPath(remote *Stack) string {
 }
 func (s *SSH) InstallBinary(remote *Stack, binary string) {
 	s.t.Helper()
-	data, err := os.ReadFile(binary)
-	if err != nil {
-		s.t.Fatal(err)
-	}
 	target := s.InstallPath(remote)
 	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 		s.t.Fatal(err)
 	}
-	if err := os.WriteFile(target+".next", data, 0700); err != nil {
-		s.t.Fatal(err)
-	}
-	if err := os.Rename(target+".next", target); err != nil {
-		s.t.Fatal(err)
-	}
+	replaceFile(s.t, binary, target)
 }
 func (s *SSH) MachineCommand(remote *Stack, name, body string) {
 	s.t.Helper()

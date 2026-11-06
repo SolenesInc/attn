@@ -19,17 +19,20 @@ func inplaceUpgradeEnabled() bool {
 	return os.Getenv(inplaceUpgradeEnvVar) != "0"
 }
 
-func (d *Daemon) handleTerminalBuildChanged(terminal harness.TerminalID, workerFormat string) {
-	d.upgradeInPlace(terminal, workerFormat)
+func (d *Daemon) handleTerminalBuildChanged(terminal harness.TerminalID) {
+	sessionID, shown := d.shownIn(terminal)
+	if shown && d.ptyRecoveredYet() {
+		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)
+	}
 }
 
-func (d *Daemon) upgradeInPlace(terminal harness.TerminalID, workerFormat string) <-chan struct{} {
+func (d *Daemon) upgradeInPlace(terminal harness.TerminalID) <-chan struct{} {
 	sessionID, shown := d.shownIn(terminal)
-	if !shown || !d.ptyRecoveredYet() {
+	if !shown {
 		return nil
 	}
 	upgrader, canUpgrade := d.ptyBackend.(ptybackend.WorkerUpgrader)
-	if !canUpgrade || !inplaceUpgradeEnabled() || workerFormat == buildinfo.SnapshotFormat {
+	if !canUpgrade || !inplaceUpgradeEnabled() {
 		d.publishFact(FactSessionTerminalBuildChanged, string(sessionID), nil)
 		return nil
 	}
@@ -37,8 +40,7 @@ func (d *Daemon) upgradeInPlace(terminal harness.TerminalID, workerFormat string
 	if !claimed {
 		return done
 	}
-	d.logf("terminal build: session=%s terminal=%s worker=%q daemon=%s; upgrading in place",
-		sessionID, terminal, workerFormat, buildinfo.SnapshotFormat)
+	d.logf("terminal build: session=%s terminal=%s daemon=%s; upgrading in place", sessionID, terminal, buildinfo.SnapshotFormat)
 	if !d.life.Go("upgradeStaleWorker", func() { d.upgradeStaleWorker(sessionID, terminal, upgrader) }) {
 		d.releaseWorkerUpgrade(terminal)
 	}
@@ -61,7 +63,7 @@ func (d *Daemon) ptyRecoveredYet() bool {
 }
 
 func (d *Daemon) upgradeStaleTerminals() {
-	d.markPtyRecovered()
+	defer d.markPtyRecovered()
 	provider, ok := d.ptyBackend.(ptybackend.TerminalBuildProvider)
 	if !ok || d.store == nil {
 		return
@@ -70,7 +72,7 @@ func (d *Daemon) upgradeStaleTerminals() {
 	for _, session := range d.store.List("") {
 		for _, terminal := range d.terminalsOf(session.ID) {
 			if format, known := provider.SessionTerminalBuild(terminal); known && format != buildinfo.SnapshotFormat {
-				if done := d.upgradeInPlace(terminal, format); done != nil {
+				if done := d.upgradeInPlace(terminal); done != nil {
 					upgrades = append(upgrades, done)
 				}
 			}

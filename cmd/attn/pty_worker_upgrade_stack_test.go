@@ -245,6 +245,39 @@ func initialSession(t *testing.T, app *testworld.Peer, id string) protocol.Sessi
 	return protocol.Session{}
 }
 
+func TestATerminalOpenedWhileAnotherBuildIsOnDiskKeepsItsWorkerUntilTheDaemonRestarts(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+	onDisk := testworld.AttnBinaryWithSnapshotFormat(t, "on-disk-format")
+	upgrade := s.PauseAt(pausepoint.PtyWorkerUpgrade)
+	s.StartWith("ATTN_PTY_WORKER_BINARY=" + onDisk)
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+
+	answered := make(chan struct{})
+	go func() {
+		defer close(answered)
+		app.TypeLine(shell, "echo typed-$((1+1))")
+		app.AwaitScreen(shell, "typed-2")
+	}()
+	if upgrade.AwaitBefore(answered) {
+		upgrade.Release()
+		<-answered
+		t.Fatal("the daemon began swapping the worker it had just started from the binary on disk")
+	}
+	terminal := app.Terminal(shell)
+	s.Stop()
+
+	s.StartBinaryHeldAt(testworld.AttnBinaryWithSnapshotFormat(t, "next-format"), upgrade)
+	upgrade.Release()
+	app = s.App()
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if !attached.Success || attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next-format" {
+		t.Fatalf("the attach after the daemon's restart answered %+v, want the worker swapped onto next-format", attached)
+	}
+}
+
 func TestAnAppReconnectingAfterAnUpdateAttachesToTheUpgradedWorker(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))

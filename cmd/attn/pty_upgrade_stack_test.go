@@ -953,6 +953,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	ssh.Route("release-outpost", remote)
 	ssh.InstallBinary(remote, releaseAttn)
 	remote.RunFrom(ssh.InstallPath(remote))
+	remote.Vars = append(remote.Vars, "ATTN_WRAPPER_PATH="+ssh.InstallPath(remote))
 	remote.StartRelease()
 	remoteApp := remote.ReleaseApp()
 	liveShell := remote.Spawn(remoteApp, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
