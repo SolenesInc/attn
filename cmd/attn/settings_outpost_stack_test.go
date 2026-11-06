@@ -5,7 +5,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/testworld"
-	"slices"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,7 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 
 func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	home, outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	home.UseSharedHostBinary(filepath.Join(home.Dir, "no-host-yet"))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
@@ -97,24 +99,72 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	remote := outpost.App()
 	pair.Connect()
 	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["shelf_layout_enabled"] == "true" })
-	var perMachine []*setting.Setting
 	for _, feature := range setting.Features() {
-		if feature.Class == setting.Machine {
-			perMachine = append(perMachine, feature)
-			continue
+		value := "true"
+		if feature.Default == setting.On {
+			value = "false"
 		}
-		requireStdout(t, home.Attn("settings", "set", feature.Key, "true"), "true")
-		testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[feature.Key] == "true" })
-		requireStdout(t, outpost.Attn("settings", "get", feature.Key), "true")
+		requireStdout(t, home.Attn("settings", "set", feature.Key, value), value)
+		testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[feature.Key] == value })
+		requireStdout(t, outpost.Attn("settings", "get", feature.Key), value)
 	}
-	var keys []string
-	for _, feature := range perMachine {
-		keys = append(keys, feature.Key)
+}
+
+func setSharedHostAtTheHomeAndAwaitOutpost(t *testing.T, home *testworld.Stack, remote *testworld.Peer, value, enabled, active string) {
+	t.Helper()
+	mark := remote.EventCount()
+	requireStdout(t, home.Attn("settings", "set", "pty_shared_host_enabled", value))
+	testworld.AwaitSince(remote, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return protocol.Deref(m.ChangedKey) == "pty_shared_host_active" && m.Settings["pty_shared_host_enabled"] == enabled && m.Settings["pty_shared_host_active"] == active
+	})
+}
+
+func TestAnOutpostsNewTerminalsFollowTheHomesSharedHostSetting(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	home.UseSharedHostBinary(filepath.Join(home.Dir, "no-host-yet"))
+	outpost.UseSharedHostBinary(testworld.SharedHostBinary(t))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	remote := outpost.App()
+	pair.Connect()
+	setSharedHostAtTheHomeAndAwaitOutpost(t, home, remote, "false", "false", "false")
+	outpost.Stop()
+	outpost.Start()
+	remote = outpost.App()
+	if active := remote.Initial.Settings["pty_shared_host_active"]; active != "false" {
+		t.Fatalf("after a restart the outpost reports pty_shared_host_active = %v, though the home turned the host off", active)
 	}
-	if want := []string{"pty_shared_host_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
-		t.Fatalf("features still decided per machine = %v, want only the named exceptions %v", keys, want)
+	setSharedHostAtTheHomeAndAwaitOutpost(t, home, remote, "", "true", "true")
+}
+
+func TestAnOutpostWithNoHostFollowsTheSharedHostSettingQuietly(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	home.UseSharedHostBinary(filepath.Join(home.Dir, "no-host-yet"))
+	outpost.UseSharedHostBinary(testworld.SharedHostBinary(t))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	requireStdout(t, outpost.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	pair.Connect()
+	outpost.Stop()
+	if err := os.RemoveAll(filepath.Join(outpost.Dir, "pty-hosts")); err != nil {
+		t.Fatal(err)
 	}
-	t.Log("every feature except the named exceptions reads the home's value on an outpost")
+	outpost.UseSharedHostBinary(filepath.Join(outpost.Dir, "no-host-yet"))
+	outpost.Vars = append(outpost.Vars, "ATTN_PTY_SKIP_STARTUP_PROBE=false")
+	outpost.Start()
+	remote := outpost.App()
+	if active := remote.Initial.Settings["pty_shared_host_active"]; active != "false" {
+		t.Fatalf("an outpost with no host reports pty_shared_host_active = %v", active)
+	}
+	for _, warning := range remote.Initial.Warnings {
+		if strings.Contains(warning.Message, "Shared PTY host") {
+			t.Fatalf("the outpost warned about a value it did not choose: %s", warning.Message)
+		}
+	}
+	setSharedHostAtTheHomeAndAwaitOutpost(t, home, remote, "false", "false", "false")
+	setSharedHostAtTheHomeAndAwaitOutpost(t, home, remote, "", "true", "false")
 }
 
 func TestAnOutpostCannotCutItsOwnBridgeAndAnUnchangedHomeValueKeepsItUp(t *testing.T) {

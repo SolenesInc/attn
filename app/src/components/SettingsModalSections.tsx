@@ -970,7 +970,7 @@ export function AgentSettings({
             <p className="settings-row-title">Shared terminal host</p>
             <p className="settings-row-copy" id="shared-terminal-host-description">
               Run terminals in one shared process, which uses less memory, and stream output only to the terminals the
-              window shows. On by default on this machine; applies to new and reloaded terminals.
+              window shows. On by default; applies to new and reloaded terminals.
             </p>
           </div>
           <button

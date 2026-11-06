@@ -88,7 +88,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Start()
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
 	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
-	requireStdout(t, s.Attn("settings", "list", "--features"), "quick_capture_enabled", "experimental", "the home", "Now", "Quick Capture")
+	requireStdout(t, s.Attn("settings", "list", "--features"), "quick_capture_enabled", "experimental", "Now", "Quick Capture")
 	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", "false"), "false")
 	requireStdout(t, s.Attn("settings", "list"), "this machine")
 	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", ""))

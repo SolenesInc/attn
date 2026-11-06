@@ -2,12 +2,13 @@
 
 New and explicitly reloaded terminals run in the shared Rust PTY host by
 default. **Settings → Agents and models → Shared terminal host** turns it off on
-this machine, and a stored value always wins over the default. Running sessions
-keep their current backend. `ATTN_PTY_BACKEND` overrides the backend choice.
+the home and its outposts, and a stored value always wins over the default.
+Running sessions keep their current backend. `ATTN_PTY_BACKEND` overrides the backend choice.
 
 A machine with no host, such as Linux with only `attn` downloaded, starts its
 terminals on Go workers. It logs the cause and warns only when the user stored
-`true` on that machine, because attn can't do what the user asked. The app
+`true` at the home on that same machine, because attn can't do what the user
+asked. An outpost that follows the home's value stays quiet. The app
 reports `pty_shared_host_enabled` true and `pty_shared_host_active` false.
 
 The same setting makes the app stream output only to the terminals it draws.

@@ -60,7 +60,9 @@ only at the home. On an outpost, `attn settings get notebook.root` refuses and
 points there, and `notebook.root.effective` names this machine's copy.
 
 Machine settings describe one computer: harness executables, the terminal
-backend and shared terminal host, and worktree sweep. Changing a machine setting on an outpost changes only that
+backend and worktree sweep. A switch for an attn feature is never a machine
+setting: the home decides it, and a machine that can't follow yet, such as one
+without the shared terminal host, keeps working the old way. Changing a machine setting on an outpost changes only that
 outpost. Computed machine values, such as harness
 availability and connection status, also describe the computer where you read
 them.

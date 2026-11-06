@@ -40,6 +40,28 @@ func (d *Daemon) setSharedPTYHostEnabled(value string) error {
 	return nil
 }
 
+func (d *Daemon) followSharedPTYHost() {
+	d.ptySettingsChangeMu.Lock()
+	defer d.ptySettingsChangeMu.Unlock()
+	backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend)
+	if !ok {
+		return
+	}
+	enabled := d.on(setting.SharedPTYHostEnabled)
+	if enabled {
+		ctx, cancel := context.WithTimeout(d.life.Context(), workerStartupProbeTimeout)
+		defer cancel()
+		if err := backend.ProbeShared(ctx); err != nil {
+			d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", err)
+			enabled = false
+		}
+	}
+	d.ptySettingsMu.Lock()
+	backend.SetSharedForNewSessions(enabled)
+	d.ptySettingsMu.Unlock()
+	d.publishFact(FactSettingChanged, setting.SharedPTYHostActive.Key, nil)
+}
+
 func (d *Daemon) sharedPTYHostSettings() (enabled, active bool) {
 	d.ptySettingsMu.Lock()
 	defer d.ptySettingsMu.Unlock()

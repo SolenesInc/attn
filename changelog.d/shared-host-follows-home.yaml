@@ -1,0 +1,3 @@
+kind: changed
+area: terminals
+change: The shared terminal host setting now follows the home on every outpost. An outpost that has no host keeps its terminals on workers.

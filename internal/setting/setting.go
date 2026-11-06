@@ -118,19 +118,11 @@ func add(s *Setting) *Setting {
 }
 
 func feature(key, description string, info Info) *Setting {
-	return add(newFeature(key, Home, description, info))
-}
-
-func machineFeature(key, description string, info Info) *Setting {
-	return add(newFeature(key, Machine, description, info))
-}
-
-func newFeature(key string, class Class, description string, info Info) *Setting {
-	s := &Setting{Info: info, Key: key, Class: class, Kind: Bool, Description: description}
+	s := &Setting{Info: info, Key: key, Class: Home, Kind: Bool, Description: description}
 	if info.Stage == OnByDefault {
 		s.Default = On
 	}
-	return s
+	return add(s)
 }
 
 func All() []*Setting { return all }

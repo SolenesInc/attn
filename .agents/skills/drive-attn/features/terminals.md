@@ -31,7 +31,7 @@ came back and close the shells. Terminals keep running when the app or the daemo
 - In the terminal (`app/src/components/GhosttyTerminal.tsx`): typing and paste, the find bar ("Find", "Match case", "Previous match", "Next match", "Close find"), the block filter ("Filter block output"), ⌘-click on links, and the right-click menu (`app/src/components/TerminalContextMenu.tsx`) with Copy, Copy command, Copy output, Paste, Filter block output, Find, Scroll to top of block and Scroll to bottom of block.
 - Tile header (`app/src/components/SessionTerminalDesktop/DesktopAgentHeader.tsx`): "Rename session <name>" on a shell's tile.
 - Size: typing in a terminal (`pty_input`), moving the pointer over it (`terminal_pointer_activity`) or focusing it (`terminal_focus`, sent when the terminal takes focus by click or key) makes the app the terminal's size owner (`internal/daemon/pty_size_owner.go`). The app's `pty_resize` applies only while the app owns the size. A second client, such as `wsctl attach`, takes the size the same way.
-- **Settings → Agents and models**, "Shared terminal host" (`app/src/components/SettingsModalSections.tsx`), the machine setting `pty_shared_host_enabled`.
+- **Settings → Agents and models**, "Shared terminal host" (`app/src/components/SettingsModalSections.tsx`), the home setting `pty_shared_host_enabled`.
 - Where people see what agents do: a shell an agent opens appears beside the agent with a pulse and takes no focus (at the row's end with the shelf layout on, [desktops.md](desktops.md)), and the shell's tile shows what the agent typed and what ran.
 - Their own shell: nothing. `attn terminal`, below, refuses without a calling agent.
 - Splitting, zooming, moving and closing terminal tiles belong to [desktops.md](desktops.md).

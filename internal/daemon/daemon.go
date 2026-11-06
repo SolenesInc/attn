@@ -585,7 +585,7 @@ func (d *Daemon) startMigratingPTYBackend() error {
 	}
 	if candidateErr := shared.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
 		d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
-		if storedOnThisMachine := parseBooleanSetting(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)); storedOnThisMachine {
+		if d.enrollmentStatus().IsHome() && parseBooleanSetting(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)) {
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
 		}
 	}
@@ -649,6 +649,9 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	if err := d.ensureEnrollment(); err != nil {
+		return fmt.Errorf("ensure enrollment record: %w", err)
+	}
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
@@ -668,9 +671,6 @@ func (d *Daemon) Start() error {
 			return fmt.Errorf("ensure client token: %w", err)
 		}
 		d.clientToken = token
-	}
-	if err := d.ensureEnrollment(); err != nil {
-		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
 	if err := d.dropStaleCopy(); err != nil {

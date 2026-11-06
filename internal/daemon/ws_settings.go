@@ -167,6 +167,9 @@ func (d *Daemon) refreshChangedSettings(before map[string]string) {
 	for key, value := range after {
 		if before[key] != value {
 			d.settingChanged(key, value)
+			if key == setting.SharedPTYHostEnabled.Key {
+				d.life.Go("followSharedPTYHost", d.followSharedPTYHost)
+			}
 		}
 	}
 }

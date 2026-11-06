@@ -139,11 +139,7 @@ func runSettings() {
 			if values[feature.Key] == "true" {
 				state = "on"
 			}
-			decidedBy := "the home"
-			if feature.Class == setting.Machine {
-				decidedBy = "this machine"
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", feature.Key, state, feature.Stage, decidedBy, feature.Applies, feature.Name)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", feature.Key, state, feature.Stage, feature.Applies, feature.Name)
 		}
 		_ = w.Flush()
 		return

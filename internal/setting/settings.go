@@ -118,7 +118,7 @@ var (
 		Since:   "2026-10-15",
 		Search:  "memory launcher",
 	})
-	SharedPTYHostEnabled = machineFeature("pty_shared_host_enabled", "Use the shared terminal host, and stream output only to terminals the window draws: true or false. On by default; applies to new and reloaded terminals.", Info{
+	SharedPTYHostEnabled = feature("pty_shared_host_enabled", "Use the shared terminal host, and stream output only to terminals the window draws: true or false. On by default; applies to new and reloaded terminals.", Info{
 		Name:    "Shared terminal host",
 		Summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.",
 		Group:   UnderTheHood,
