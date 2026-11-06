@@ -20,6 +20,7 @@ const (
 	SettingProjectsDirectory             HomeSetting    = "projects_directory"
 	SettingUIScale                       HomeSetting    = "uiScale"
 	SettingGardenScale                   HomeSetting    = "gardenScale"
+	SettingSidebarWidth                  HomeSetting    = "sidebar_width"
 	SettingModelTierOverrides            HomeSetting    = "model_tier_overrides"
 	SettingClaudeExecutable              MachineSetting = "claude_executable"
 	SettingCodexExecutable               MachineSetting = "codex_executable"

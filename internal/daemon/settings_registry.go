@@ -31,6 +31,7 @@ const (
 	SettingProjectsDirectory             = settingkeys.SettingProjectsDirectory
 	SettingUIScale                       = settingkeys.SettingUIScale
 	SettingGardenScale                   = settingkeys.SettingGardenScale
+	SettingSidebarWidth                  = settingkeys.SettingSidebarWidth
 	SettingModelTierOverrides            = settingkeys.SettingModelTierOverrides
 	SettingClaudeExecutable              = settingkeys.SettingClaudeExecutable
 	SettingCodexExecutable               = settingkeys.SettingCodexExecutable
@@ -195,6 +196,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	}},
 	{key: string(SettingShelfLayoutEnabled), scope: daemonScope, experimental: true, description: "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingNarrowestTileCols), scope: daemonScope, description: "Narrowest width of a tile in the shelf layout, in terminal columns: a positive whole number. Empty uses the default of 66.", validate: func(d *Daemon, key, value string) error { return validateNarrowestTileCols(value) }},
+	{key: string(SettingSidebarWidth), scope: daemonScope, description: "Width of the open sidebar in pixels, from 200 to 600, with the shelf layout on. Empty uses the default of 240.", validate: func(d *Daemon, key, value string) error { return validateSidebarWidth(value) }},
 	{key: string(SettingBackgroundLoginEnvEnabled), scope: daemonScope, experimental: true, description: "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
@@ -448,6 +450,27 @@ func validateNarrowestTileCols(value string) error {
 
 func resolveNarrowestTileCols(value string) int {
 	return resolveBoundedIntSetting(value, defaultNarrowestTileCols, 1, math.MaxInt)
+}
+
+const (
+	defaultSidebarWidthPx = 240
+	narrowestSidebarPx    = 200
+	widestSidebarPx       = 600
+)
+
+func validateSidebarWidth(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if n, err := strconv.Atoi(trimmed); err != nil || n < narrowestSidebarPx || n > widestSidebarPx {
+		return fmt.Errorf("%s must be a whole number from %d to %d, got %q", SettingSidebarWidth, narrowestSidebarPx, widestSidebarPx, value)
+	}
+	return nil
+}
+
+func resolveSidebarWidth(value string) int {
+	return resolveBoundedIntSetting(value, defaultSidebarWidthPx, narrowestSidebarPx, widestSidebarPx)
 }
 
 func (d *Daemon) settingValues() map[string]string {

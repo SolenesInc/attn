@@ -294,6 +294,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(SettingAnalyticsToolVents)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsToolVents)]))
 	settings[string(SettingShelfLayoutEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingShelfLayoutEnabled)]))
 	settings[string(SettingNarrowestTileCols)] = strconv.Itoa(resolveNarrowestTileCols(stored[string(SettingNarrowestTileCols)]))
+	settings[string(SettingSidebarWidth)] = strconv.Itoa(resolveSidebarWidth(stored[string(SettingSidebarWidth)]))
 	settings[string(SettingAutoSettleArmSeconds)] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[string(SettingAutoSettleArmSeconds)], defaultAutoSettleArmSeconds) / time.Second))
 	settings[string(SettingAutoSettleCountdownSeconds)] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[string(SettingAutoSettleCountdownSeconds)], defaultAutoSettleCountdownSeconds) / time.Second))
 	settings[string(SettingOpenSentFilesEnabled)] = strconv.FormatBool(d.openSentFilesEnabled())
