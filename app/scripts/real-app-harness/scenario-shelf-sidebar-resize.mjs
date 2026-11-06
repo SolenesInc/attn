@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, relaunchAppAndConnect } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -15,7 +16,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-SIDEBAR-RESIZE',
   tier: 'tier1-local-shell',
   prefix: 'shelf-sidebar-resize',
-  metadata: { agent: 'shell', focus: 'dragging the open sidebar by native pointer input in desktop and queue flow: the frozen tile area, the limits, Esc, the width keys, double-click, collapse and relaunch' },
+  metadata: { agent: 'shell', focus: 'dragging the open sidebar by native pointer input in desktop and queue flow: the frozen tile area, the limits, Esc, the width keys, double-click, collapse and relaunch, and a press on the whole handle beside a browser page' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -28,6 +29,7 @@ const waitDom = (selector, extra = {}) => request('dom_wait', { selector, timeou
 const KEY_CODE_DIGIT_8 = 28;
 const KEY_CODE_BRACKET_LEFT = 33;
 const HANDLE = '.sidebar-resize-handle';
+const HANDLE_TILE_SIDE = { selector: HANDLE, at: { x: 0.9, y: 0.5 } };
 const LABEL = '.sidebar-resize-label';
 const DRAG = { steps: 24, withoutReceipt: 'pointer capture sends the mouse-up to the handle, which has moved by then' };
 const sessions = [];
@@ -101,6 +103,47 @@ async function dragChangesWidthOnRelease({ by, px, flow }) {
   runner.assert((await request('get_pane_state', { sessionId: active.sessionId, paneId: active.leafId })).inputFocused, `${flow}: the active terminal keeps its input`, { active });
 }
 
+async function tileSideOfTheHandleTakesTheDrag(context) {
+  const startPx = await sidebarPx();
+  const hover = await driver.hover(HANDLE_TILE_SIDE);
+  runner.assert(hover.receipt.matches, `${context}: the handle's tile side takes the hover`, { hover });
+  const drag = await driver.holdDrag(HANDLE_TILE_SIDE, { by: { x: 80, y: 0 } }, DRAG);
+  await waitForLabel(`${startPx + 80}px`);
+  await waitForSidebarPx(startPx + 80);
+  await shot(`${context}-tile-side-mid-drag`);
+  await driver.pressKey('Escape');
+  await waitForSidebarPx(startPx);
+  await drag.dragTo({ by: { x: 0, y: 0 } });
+  await drag.release();
+}
+
+let resolvePageClick;
+const pageServer = http.createServer((request, response) => {
+  const url = new URL(request.url, 'http://127.0.0.1');
+  if (url.pathname === '/click') {
+    resolvePageClick?.({ x: Number(url.searchParams.get('x')), y: Number(url.searchParams.get('y')), w: Number(url.searchParams.get('w')), h: Number(url.searchParams.get('h')) });
+    response.end();
+    return;
+  }
+  response.setHeader('content-type', 'text/html');
+  response.end('<title>Sidebar browser</title><body style="margin:0;background:#264f78;height:100vh"><script>document.addEventListener("click",(event)=>fetch(`/click?x=${event.clientX}&y=${event.clientY}&w=${innerWidth}&h=${innerHeight}`))</script>');
+});
+await new Promise((resolve) => pageServer.listen(0, '127.0.0.1', resolve));
+
+async function pageSeesClick(target, when) {
+  const seen = new Promise((resolve) => { resolvePageClick = resolve; });
+  await driver.click(target, { withoutReceipt: 'the browser page takes it' });
+  const click = await seen;
+  runner.log(when, click);
+  return click;
+}
+
+const surface = () => `[data-session-terminal-desktop="${desktop}"]`;
+const browserHost = () => `${surface()} .browser-tile-host`;
+const leavesOf = (node) => (node.type === 'split' ? node.children.flatMap(leavesOf) : [node.paneId ?? node.tileId]);
+const readRow = async () => leavesOf((await request('get_desktop', { sessionId: firstSession })).desktop.layoutTree);
+
+runner.registerCleanup('close_page_server', () => new Promise((resolve) => pageServer.close(resolve)));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
@@ -192,6 +235,52 @@ try {
     await driver.click(HANDLE, { clickCount: 2 });
     await waitForSidebarPx(240);
     await waitForStored('');
+  });
+
+  await runner.step('the_tile_side_of_the_handle_takes_a_drag_beside_a_terminal', async () => {
+    await tileSideOfTheHandleTakesTheDrag('terminal');
+    runner.assert(storedWidth() === '', 'Esc saves nothing beside a terminal');
+  });
+
+  await runner.step('the_whole_handle_takes_a_press_beside_a_browser', async () => {
+    const before = await readRow();
+    const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(firstSession) });
+    execFileSync(resolveHarnessResources(instance).appDaemon, ['browser', 'open', `http://127.0.0.1:${pageServer.address().port}/`, '--session', firstSession], { env });
+    await waitDom(browserHost());
+    const browserLeaf = (await readRow()).find((leaf) => !before.includes(leaf));
+    await driver.click({ selector: `${surface()} [data-pane-id="${browserLeaf}"]`, at: { x: 0.7, y: 0.01 } });
+    await waitDom(`${surface()}[data-active-leaf-id="${browserLeaf}"] .desktop-pane[data-pane-id="${browserLeaf}"]`);
+    for (let moves = (await readRow()).indexOf(browserLeaf); moves > 0; moves -= 1) await press('shelf.carryLeft');
+    await waitUntil(async () => (await readRow())[0], (leaf) => leaf === browserLeaf, 'the browser tile is first in the row');
+    await waitUntil(async () => (await boxOf(`${surface()} [data-pane-id="${browserLeaf}"]`)).x, (x) => x === 240, 'the browser tile sits against the sidebar');
+    await shot('browser-first-in-row');
+
+    await tileSideOfTheHandleTakesTheDrag('browser');
+    runner.assert(storedWidth() === '', 'Esc saves nothing beside a browser');
+
+    const edge = await pageSeesClick({ selector: browserHost(), at: { x: 0, y: 0.5 }, offset: { x: 1, y: 0 } }, 'the page left edge');
+    runner.assert(edge.x <= 3, 'the page takes a click right beside the handle', edge);
+
+    const hostPxBefore = (await boxOf(browserHost())).width;
+    const drag = await driver.holdDrag(HANDLE_TILE_SIDE, { by: { x: 80, y: 0 } }, DRAG);
+    await waitForLabel('320px');
+    await waitForSidebarPx(320);
+    await shot('browser-mid-drag');
+    await drag.release();
+    await waitForStored(320);
+    const hostAfter = await waitUntil(async () => boxOf(browserHost()), ({ x, width }) => x >= 325 && width < hostPxBefore, 'the tile takes its new place and width on release');
+    const moved = await pageSeesClick({ selector: browserHost(), at: { x: 0.5, y: 0.5 } }, 'the page centre after the drag');
+    runner.assert(Math.abs(moved.x - hostAfter.width / 2) <= 2, 'the webview follows its tile after the drag', { moved, hostAfter });
+    await shot('browser-after-drag');
+
+    await driver.click(HANDLE_TILE_SIDE);
+    await driver.click(HANDLE_TILE_SIDE, { clickCount: 2 });
+    await waitForSidebarPx(240);
+    await waitForStored('');
+
+    await request('dom_click', { selector: `${surface()} [data-tile-kind="browser"] [aria-label="Close tile"]` });
+    await waitDom(browserHost(), { absent: true });
+    await waitUntil(terminalCols, (cols) => Object.keys(cols).length === 2, 'both terminals back in the row');
   });
 
   await runner.step('drag_in_queue_flow', async () => {

@@ -169,7 +169,7 @@ export const scenarioCatalog = [
   {
     id: 'shelf-sidebar-resize',
     runnerId: 'SHELF-SIDEBAR-RESIZE',
-    label: 'Dragging the open sidebar keeps the tile area frozen, fits each terminal once on release and honors its limits, Esc, double-click and the width keys',
+    label: 'Dragging the open sidebar keeps the tile area frozen, fits each terminal once on release, honors its limits, Esc, double-click and the width keys, and starts from the whole handle beside a browser page',
     command: ['pnpm', 'run', 'real-app:scenario-shelf-sidebar-resize'],
   },
   {

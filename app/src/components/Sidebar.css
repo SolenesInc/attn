@@ -786,6 +786,11 @@
   touch-action: none;
 }
 
+.sidebar-resize-handle ~ .view-stack .desktop-pane--flush-left .browser-tile-host {
+  margin-left: 5px;
+  width: calc(100% - 5px);
+}
+
 .sidebar-resize-handle::after {
   content: '';
   position: absolute;

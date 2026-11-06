@@ -71,7 +71,7 @@ export function DesktopTilePane({
   return (
     <div
       key={`tile:${tileLeaf.tileId}`}
-      className={`desktop-pane desktop-pane--tile ${activeLeafId === tileLeaf.tileId ? 'active' : ''}`.trim()}
+      className={`desktop-pane desktop-pane--tile${bounds.left === 0 ? ' desktop-pane--flush-left' : ''}${activeLeafId === tileLeaf.tileId ? ' active' : ''}`}
       role="group"
       aria-label={`Desktop ${tileLeaf.tileKind}`}
       onMouseDown={() => focusLeaf(tileLeaf.tileId)}
