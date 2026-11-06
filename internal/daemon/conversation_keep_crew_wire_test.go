@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestConversationKeepSurvivesAnUnavailableCrewHome(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	home := crewHome(w, "keel")
-	if err := os.RemoveAll(home); err != nil {
+	if err := os.Rename(home, filepath.Join(w.Dir, "keel-aside")); err != nil {
 		t.Fatal(err)
 	}
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
