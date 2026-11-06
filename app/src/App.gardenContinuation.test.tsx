@@ -163,13 +163,13 @@ describe('App garden continuation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await gesture(daemon, () => pressShortcut('board.open'));
     await openRow(daemon, unreachable.title);
-    expect(screen.queryByRole('button', { name: /^Resume/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/outpost "studio" is unreachable/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume on studio' })).toBeDisabled();
+    expect(screen.queryByText(/outpost "studio" is unreachable/)).not.toBeInTheDocument();
 
     garden.documents[unreachable.id] = { seed: continued({ outpost: 'studio', directory_state: 'unchecked', resume_available: true, handover_placement: 'placement_required' }) };
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [STUDIO] }));
 
-    expect(screen.getByRole('button', { name: 'Resume on studio' })).toHaveTextContent('studio');
+    expect(screen.getByRole('button', { name: 'Resume on studio' })).toBeEnabled();
     expect(screen.queryByText(/is unreachable/)).not.toBeInTheDocument();
   });
 

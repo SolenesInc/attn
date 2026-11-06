@@ -28,6 +28,7 @@ import { SeedAuthorization } from './SeedAuthorization';
 import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
 import { checkTally, hasChecks } from './seedCheckPresentation';
 import { SeedContinuationNotes } from './SeedContinuationNotes';
+import { ResumeOnOutpostButton } from './ResumeOnOutpostButton';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
 import type { SeedDocument } from './SeedDocumentView';
 import type { SeedDocumentNote } from './seedArtifacts';
@@ -938,6 +939,8 @@ export function GardenPanel({
   const continuation = seedDoc?.seed.continuation;
   const seedIsOpen = seedDoc ? !isClosed(seedDoc.seed) : false;
   const canResume = Boolean(documentIsCurrent && onResumeSeed && seedIsOpen && continuation?.resume_available);
+  const resumeOutpost = documentIsCurrent && onResumeSeed && seedIsOpen ? continuation?.outpost : undefined;
+  const outpostUnreachable = continuation?.directory_state === 'unreachable' && !continuation.resume_available;
   const canHandover = Boolean(
     documentIsCurrent && onHandoverSeed && seedIsOpen && continuation,
   );
@@ -1212,16 +1215,18 @@ export function GardenPanel({
             {onOpenAsTile && (
               <button type="button" onClick={() => onOpenAsTile(here.id)}>Open as tile</button>
             )}
-            {canResume && (
-              <button
-                type="button"
-                data-testid={`seed-resume-${here.id}`}
-                aria-label={continuation?.outpost ? `Resume on ${continuation.outpost}` : undefined}
-                onClick={() => onResumeSeed?.(here.id)}
-              >
+            {canResume && !resumeOutpost && (
+              <button type="button" data-testid={`seed-resume-${here.id}`} onClick={() => onResumeSeed?.(here.id)}>
                 Resume
-                {continuation?.outpost && <span className="garden-head__host">{continuation.outpost}</span>}
               </button>
+            )}
+            {resumeOutpost && (canResume || outpostUnreachable) && (
+              <ResumeOnOutpostButton
+                outpost={resumeOutpost}
+                testId={`seed-resume-${here.id}`}
+                unreachableReason={outpostUnreachable ? continuation?.resume_reason ?? '' : undefined}
+                onResume={() => onResumeSeed?.(here.id)}
+              />
             )}
             {canHandover && !composingContinuation && (
               <button

@@ -177,11 +177,12 @@ the branch first when needed. Attn refuses to resume a session whose outpost is
 unreachable or removed, and names the host.
 
 A seed whose closed session ran on an outpost offers **Resume** on the seed's
-page, where the button shows the outpost's name, and in Garden review.
+page, where the button names the outpost, and in Garden review.
 `attn seed show` prints a `resume` line that names the outpost. If the session's
 directory or conversation is gone, Resume says which and where, and leaves the
-seed as it was. While the outpost is unreachable, the seed says so instead of
-offering Resume, and the offer returns when the outpost does. A running Garden review follows the outpost the
+seed as it was. While the outpost is unreachable, the seed page dims the button
+and Garden review says so instead of offering Resume. Both offer it again when
+the outpost returns. A running Garden review follows the outpost the
 same way and keeps its advice, and its other actions work either way. **Handover**
 asks where the new agent should work and starts it on the home.
 

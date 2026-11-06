@@ -21,7 +21,7 @@ export function SeedContinuationNotes({ continuation, resumeOffered }: {
     {continuation?.kept_conversation && (
       <p className="garden-head__reason">conversation{'  '}{conversationLine(continuation.kept_conversation)}</p>
     )}
-    {!resumeOffered && continuation?.resume_reason && (
+    {!resumeOffered && continuation?.resume_reason && continuation.directory_state !== 'unreachable' && (
       <p className="garden-head__reason">{continuation.resume_reason}</p>
     )}
   </>;
