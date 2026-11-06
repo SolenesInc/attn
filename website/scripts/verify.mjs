@@ -47,6 +47,12 @@ function guideFiles() {
   ];
 }
 
+function featurePaths() {
+  return readdirSync(join(websiteRoot, 'src/content/features'))
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => `/features/${name.replace(/\.md$/, '')}`);
+}
+
 function freePort() {
   return new Promise((done, fail) => {
     const probe = createServer();
@@ -122,6 +128,9 @@ function readPage(page) {
     h1: document.querySelector('h1')?.textContent?.trim() ?? '',
     ids: [...document.querySelectorAll('[id]')].map((element) => element.id),
     links: [...document.querySelectorAll('a[href]')].map((link) => link.href),
+    mainText: document.querySelector('main')?.innerText ?? '',
+    slot: document.querySelector('.recording-slot .label')?.textContent ?? '',
+    video: Boolean(document.querySelector('.recording video')),
   }));
 }
 
@@ -133,12 +142,12 @@ async function checkView(browser, base, path, view, scheme) {
   const page = await context.newPage();
   watchPage(page, base, `${path} [${view.name} ${scheme}]`);
   const response = await page.goto(base + path, { waitUntil: 'load' });
-  let facts = { h1: '', ids: [], links: [] };
+  let facts = { h1: '', ids: [], links: [], mainText: '', slot: '', video: false };
   if (!response?.ok()) {
     problems.push(`${path}: HTTP ${response?.status()} loading the page`);
   } else {
     facts = await readPage(page);
-    if (path.startsWith('/guide') && !facts.h1) problems.push(`${path}: no h1 on the page`);
+    if ((path.startsWith('/guide') || path.startsWith('/features')) && !facts.h1) problems.push(`${path}: no h1 on the page`);
     const images = await checkImages(page);
     facts.images = images.total;
     for (const src of images.broken) problems.push(`${path}: image did not load: ${src}`);
@@ -155,6 +164,18 @@ async function checkView(browser, base, path, view, scheme) {
   }
   await context.close();
   return facts;
+}
+
+function checkFeaturePage(path, facts) {
+  const slug = path.split('/').pop();
+  if (!facts.video && !facts.slot.endsWith(`: ${slug}`)) {
+    problems.push(`${path}: no recording slot named ${slug}`);
+  }
+  if (!facts.links.some((href) => /^\/guide\/./.test(new URL(href).pathname))) {
+    problems.push(`${path}: no link into the guide`);
+  }
+  const named = facts.mainText.match(/experimental|crew v2|launcher 2\.0/i);
+  if (named) problems.push(`${path}: the page says "${named[0]}", which feature pages never say`);
 }
 
 async function checkThemeToggle(browser, base) {
@@ -188,7 +209,8 @@ const preview = options.url ? null : await startPreview();
 const base = (options.url ?? preview.base).replace(/\/$/, '');
 
 const files = guideFiles();
-const queue = ['/', ...files.map((entry) => entry.path)];
+const features = featurePaths();
+const queue = ['/', '/features', ...features, ...files.map((entry) => entry.path)];
 const visited = new Map();
 const linksFrom = [];
 
@@ -233,6 +255,13 @@ try {
     }
   }
 
+  for (const path of features) {
+    checkFeaturePage(path, visited.get(path));
+    if (!linksFrom.some((link) => link.from === '/features' && link.target === path)) {
+      problems.push(`/features: no link to ${path}`);
+    }
+  }
+
   await checkThemeToggle(browser, base);
 } finally {
   await browser.close();
@@ -247,6 +276,6 @@ if (unique.length > 0) {
 }
 console.log(
   `\nPASS: ${visited.size} pages at ${base}, ${files.length} guide files, ` +
-    `${linksFrom.length} internal links, views ${views.map(([view, scheme]) => `${view.name}/${scheme}`).join(' ')}`,
+    `${features.length} feature pages, ${linksFrom.length} internal links, views ${views.map(([view, scheme]) => `${view.name}/${scheme}`).join(' ')}`,
 );
 if (options.shots) console.log(`Screenshots in ${resolve(options.shots)}`);

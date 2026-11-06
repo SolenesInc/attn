@@ -1,0 +1,28 @@
+---
+import '../../styles/features.css';
+import { orderedFeatures } from '../../features';
+import Base from '../../layouts/Base.astro';
+
+const features = await orderedFeatures();
+---
+
+<Base title="Features | attn" description="What each attn feature does for you, how you use it, and where the guide covers it.">
+  <main id="main" class="features">
+    <h1>Features</h1>
+    <p class="features-intro">
+      Each page says what the feature does for you, how you use it, and where <a href="/guide/">the guide</a> covers it.
+    </p>
+    <ul class="features-list">
+      {
+        features.map((feature) => (
+          <li>
+            <a href={`/features/${feature.id}`}>
+              <span class="features-name">{feature.data.title}</span>
+              <span class="features-summary">{feature.data.summary}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</Base>
