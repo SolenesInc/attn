@@ -84,7 +84,8 @@ type codexAttempt struct {
 }
 
 type codexProxy struct {
-	drop context.CancelFunc
+	drop       context.CancelFunc
+	mcpStartup codexViewMCPStartup
 }
 
 type codexView struct {
@@ -622,21 +623,55 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 		_ = down.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	joined := &codexJoinedConversations{}
 	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message), error) {
 		if m.Method == "thread/resume" {
-			joined.resuming(s, m)
+			proxy.mcpStartup.resuming(s, m)
 		}
 		return r.prepare(connection, v, m)
-	}, joined.forwards)
+	}, func(m codexshared.Message) bool {
+		return r.forwardsToView(s, proxy, m)
+	})
 }
 
-type codexJoinedConversations struct {
-	mu            sync.Mutex
-	conversations map[string]bool
+func (r *codexShared) forwardsToView(s *codexServer, proxy *codexProxy, m codexshared.Message) bool {
+	if m.Method != "mcpServer/startupStatus/updated" {
+		return true
+	}
+	var p struct {
+		ThreadID string `json:"threadId"`
+		Name     string `json:"name"`
+		Status   string `json:"status"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return true
+	}
+	forwards, lastStarted := proxy.mcpStartup.record(p.ThreadID, p.Name, p.Status)
+	if lastStarted {
+		s.events.run(r.d, func() { r.checkWorkingSoon(r.holder(s.profile, p.ThreadID)) })
+	}
+	return forwards
 }
 
-func (j *codexJoinedConversations) resuming(s *codexServer, m *codexshared.Message) {
+func (r *codexShared) mcpServerStarting(conversation string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, v := range r.views {
+		for proxy := range v.proxies {
+			if proxy.mcpStartup.starting(conversation) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type codexViewMCPStartup struct {
+	mu              sync.Mutex
+	joined          map[string]bool
+	startingServers map[string]map[string]bool
+}
+
+func (t *codexViewMCPStartup) resuming(s *codexServer, m *codexshared.Message) {
 	var p struct {
 		ThreadID string `json:"threadId"`
 	}
@@ -646,29 +681,50 @@ func (j *codexJoinedConversations) resuming(s *codexServer, m *codexshared.Messa
 	s.mu.Lock()
 	_, loaded := s.held[p.ThreadID]
 	s.mu.Unlock()
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if j.conversations == nil {
-		j.conversations = make(map[string]bool)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.startingServers, p.ThreadID)
+	if t.joined == nil {
+		t.joined = make(map[string]bool)
 	}
-	if _, decided := j.conversations[p.ThreadID]; !decided {
-		j.conversations[p.ThreadID] = loaded
+	if _, decided := t.joined[p.ThreadID]; !decided {
+		t.joined[p.ThreadID] = loaded
 	}
 }
 
-func (j *codexJoinedConversations) forwards(m codexshared.Message) bool {
-	if m.Method != "mcpServer/startupStatus/updated" {
-		return true
+func (t *codexViewMCPStartup) record(conversation, server, status string) (forwards, lastStarted bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.joined[conversation] {
+		return false, false
 	}
-	var p struct {
-		ThreadID string `json:"threadId"`
+	servers := t.startingServers[conversation]
+	if status == "starting" {
+		if servers == nil {
+			servers = make(map[string]bool)
+			if t.startingServers == nil {
+				t.startingServers = make(map[string]map[string]bool)
+			}
+			t.startingServers[conversation] = servers
+		}
+		servers[server] = true
+		return true, false
 	}
-	if json.Unmarshal(m.Params, &p) != nil {
-		return true
+	if !servers[server] {
+		return true, false
 	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	return !j.conversations[p.ThreadID]
+	delete(servers, server)
+	if len(servers) > 0 {
+		return true, false
+	}
+	delete(t.startingServers, conversation)
+	return true, true
+}
+
+func (t *codexViewMCPStartup) starting(conversation string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.startingServers[conversation]) > 0
 }
 
 func (r *codexShared) proxying(v *codexView) (context.Context, *codexProxy) {

@@ -860,6 +860,21 @@ frame tap on attn's view proxy. These decide when a shared Codex tile leaves
 - A healthy TUI and the server agree within 103 ms when a turn starts and 30 ms
   when it ends.
 
+Probed on 0.167.0 with a stdio MCP server that answers after 12 s and a frame
+tap on attn's view proxy, restarting the app-server under a live TUI:
+
+- `starting` for every server reaches the TUI within 100 ms of `thread/resume`,
+  and the TUI reports `working` within 100 ms of those frames. The conversation
+  stays `idle` throughout. The TUI reports `idle` within 3 ms of the last
+  `ready`.
+- With a server removed from `config.toml` after launch, the same frames arrive
+  and every server reaches `ready`, but the TUI stays on `working`. A frame tap
+  therefore tells a server that is starting from a round with no end.
+- A server's startup is bound by `startup_timeout_sec`, 30 s by default
+  (`codex-mcp/src/rmcp_client.rs`).
+- A new conversation of a fresh TUI has no attn conversation while its first
+  round runs, so `thread/read` on the session cannot run yet.
+
 Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
 
 - The TUI reports `blocked` only while a question, an approval overlay or an

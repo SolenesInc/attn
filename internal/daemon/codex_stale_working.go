@@ -36,7 +36,8 @@ func (r *codexShared) checkWorking(sessionID protocol.SessionID) {
 	if client == nil {
 		return
 	}
-	idle, err := r.idleWithoutBackgroundTerminals(client, r.conversation(sessionID))
+	conversation := r.conversation(sessionID)
+	idle, err := r.idleWithoutBackgroundTerminals(client, conversation)
 	if err != nil {
 		r.d.logf("shared Codex: checking the working terminal of session %s: %v", sessionID, err)
 		return
@@ -45,7 +46,7 @@ func (r *codexShared) checkWorking(sessionID protocol.SessionID) {
 		return
 	}
 	s.events.run(r.d, func() {
-		if r.terminalClaimsWorking(sessionID) {
+		if r.terminalClaimsWorking(sessionID) && !r.mcpServerStarting(conversation) {
 			r.report(sessionID, session, pty.ProgramIdle)
 		}
 	})

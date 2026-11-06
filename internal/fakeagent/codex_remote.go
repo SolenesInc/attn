@@ -281,7 +281,9 @@ func (c *codexRemote) observe(m codexshared.Message) {
 	c.mu.Unlock()
 	switch {
 	case m.Method == codexMCPStartupStatus && shown:
-		c.term.programStatus("state=" + c.mcpRoundState(p.Name, p.Status) + ":app=codex")
+		if state, changed := c.mcpRoundState(p.Name, p.Status); changed {
+			c.term.programStatus("state=" + state + ":app=codex")
+		}
 	case m.Method == codexApprovalRequest:
 		c.mu.Lock()
 		c.approvals[p.ThreadID] = m.ID
@@ -306,23 +308,24 @@ func (c *codexRemote) observe(m codexshared.Message) {
 	}
 }
 
-func (c *codexRemote) mcpRoundState(server, status string) string {
+func (c *codexRemote) mcpRoundState(server, status string) (state string, changed bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.mcpRound == nil {
+	opening := c.mcpRound == nil
+	if opening {
 		c.mcpRound = map[string]string{}
 	}
 	c.mcpRound[server] = status
 	if _, configured := c.mcpRound[codexConfiguredServer]; !configured {
-		return "working"
+		return "working", opening
 	}
 	for _, reported := range c.mcpRound {
 		if reported == "starting" {
-			return "working"
+			return "working", opening
 		}
 	}
 	c.mcpRound = nil
-	return "idle"
+	return "idle", true
 }
 
 func (c *codexRemote) showApproval(id json.RawMessage) {
