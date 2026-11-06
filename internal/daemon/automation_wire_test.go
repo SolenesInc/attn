@@ -335,6 +335,13 @@ func TestDisablingOrDeletingAnAutomationCancelsItsPendingRunAndKeepsItsHistory(t
 			if len(cancelled) != 1 || cancelled[0].ID != held[0].ID || cancelled[0].State != "cancelled" || protocol.Deref(cancelled[0].CancelReason) != tc.reason {
 				t.Errorf("runs after %s = %+v, want the held run kept and cancelled as %s", tc.name, cancelled, tc.reason)
 			}
+			seed, err := cli.SeedShow("", protocol.Deref(cancelled[0].SeedID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if seed.Seed.Status != "withered" {
+				t.Errorf("seed after %s is %s, want it withered", tc.name, seed.Seed.Status)
+			}
 		})
 	}
 }

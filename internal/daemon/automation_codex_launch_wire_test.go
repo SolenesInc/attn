@@ -1,8 +1,10 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -313,5 +315,87 @@ func TestTurningOffAReviewAutomationAfterItsCodexLaunchedKeepsTheRunPendingAcros
 	})[0]
 	if delivered.State != "delivered" || delivered.ID != started.ID {
 		t.Fatalf("after its first turn started the run is %+v, want run %s delivered", delivered, started.ID)
+	}
+}
+
+func rewindToBeforeTheLaunchedMarker(t *testing.T, w *world) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+ALTER TABLE automation_runs DROP COLUMN launched_at;
+DELETE FROM schema_migrations WHERE version IN (1793985310641958, 1793993403875462);
+`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpgradingWhileACodexReviewAwaitsItsFirstTurnKeepsTheRunWhileGitHubIsSignedOut(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		disable bool
+	}{
+		{"automation stays on", false},
+		{"automation turned off", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			github := newAutomationGitHub(t)
+			w := &world{World: prepareWorld(t), terms: testworld.NewTerminals(t)}
+			w.start()
+			clone := newRepo(t, "shop")
+			runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
+			head := commitFile(t, clone, "change.go", "package change\n")
+			w.SetCodexFolderTrust(clone, "trusted")
+			spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
+			applyAutomation(t, w.Client(), spec)
+			r := &automationReviewWorld{t: t, w: w, app: w.App(), cli: w.Client(), github: github}
+			r.refresh()
+
+			launched := make(chan *testworld.Terminal, 2)
+			w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+			github.request(42, head, false)
+			r.refresh()
+			agent := <-launched
+			started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+				return len(runs) == 1 && runs[0].State == "pending"
+			})[0]
+
+			t.Setenv("ATTN_MOCK_GH_TOKEN", "")
+			w.stop()
+			rewindToBeforeTheLaunchedMarker(t, w)
+			w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+			w.start()
+			r.app, r.cli = w.App(), w.Client()
+
+			if tc.disable {
+				setAutomationEnabled(t, r.cli, 1, false)
+				if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
+					t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
+				}
+				seed, err := r.cli.SeedShow("", protocol.Deref(started.SeedID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if seed.Seed.Status == "withered" {
+					t.Fatalf("turning the automation off withered the seed of a run whose agent is running: %+v", seed)
+				}
+			}
+
+			if err := r.cli.UpdateStateFromHook(agent.Options.ID, "working", ""); err != nil {
+				t.Fatal(err)
+			}
+			delivered := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+				return len(runs) == 1 && runs[0].State != "pending"
+			})[0]
+			if delivered.State != "delivered" || delivered.ID != started.ID {
+				t.Fatalf("after its first turn started the run is %+v, want run %s delivered", delivered, started.ID)
+			}
+			if len(launched) != 0 {
+				t.Fatal("the upgrade started a second agent for a run whose agent was running")
+			}
+		})
 	}
 }
