@@ -49,6 +49,10 @@ Probed on 2.1.288 with a mock API.
     `prompt_id`. No UserPromptSubmit, Stop or Notification comes with them. When
     the compact fails, PreCompact is the only hook and the screen shows no error.
     That was seen against a local server that answered without a summary.
+  - Program status goes `working`, then `done`, around an idle compact, whether
+    or not it succeeds. PreCompact and PostCompact finish before `done` is sent.
+    So a `done` with no PostCompact before it means the compact failed. The next
+    prompt then runs as a normal turn. Probed on 2.1.319.
   - A normal turn opens with `thread: {type: "create"}`. Its later requests use
     `{type: "continue", previous_message_id}` and carry only the new messages,
     with no `tools`. A compact request has no `thread`, sends

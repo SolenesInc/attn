@@ -69,7 +69,12 @@ func (m *Monitor) RecordPTY(obs pty.Observation) bool {
 	}
 	return m.UpdateEvidence(func(e *Evidence) bool {
 		return holdsPTYEvidence(e, obs)
-	}, movedAt(at, mutate))
+	}, movedAt(at, func(e *Evidence) {
+		mutate(e)
+		if e.Compacting && e.ProgramStatus != nil && e.ProgramStatus.Claim == sessionstate.ClaimSettled {
+			m.endCompaction(e, at)
+		}
+	}))
 }
 
 func (m *Monitor) RecordServerStatus(status string, at time.Time) bool {
@@ -447,14 +452,21 @@ func (m *Monitor) RecordCompaction(active bool, trigger string) {
 	}
 	now := time.Now()
 	m.RecordEvidence(now, func(e *Evidence) {
-		e.Compacting = active
 		if active {
+			e.Compacting = true
 			e.IdleCompaction = trigger == compactionTriggerAuto && stoppedAtItsPrompt(e)
-		} else if e.IdleCompaction {
-			e.LastBusyAt = e.BusyAtStop
-			e.IdleCompaction = !sessionstate.Parked(e.TerminalEvidence, e.ConversationEvidence, sessionstate.PolicyFor(m.agent), now)
+			return
 		}
+		m.endCompaction(e, now)
 	})
+}
+
+func (m *Monitor) endCompaction(e *Evidence, now time.Time) {
+	e.Compacting = false
+	if e.IdleCompaction {
+		e.LastBusyAt = e.BusyAtStop
+		e.IdleCompaction = !sessionstate.Parked(e.TerminalEvidence, e.ConversationEvidence, sessionstate.PolicyFor(m.agent), now)
+	}
 }
 
 func (m *Monitor) RecordProcessExit() {
