@@ -125,53 +125,52 @@ type Daemon struct {
 	store               *store.Store
 	gardenSeeds         store.DocumentsMemo[gardenSeeds]
 	// Serializes PR fetches with review-request edge reconciliation.
-	prRefreshMu              sync.Mutex
-	prDetailFetches          prDetailFetches
-	automationMu             sync.Mutex
-	automationLaunchFailures sync.Map
-	automationLaunchResults  sync.Map
-	automationLaunchWaits    sync.Map
-	automationRepoMu         sync.Mutex
-	automationRepos          map[string]*sync.Mutex
-	wsWriteTimeout           time.Duration
-	wsPingInterval           time.Duration
-	wsPingTimeout            time.Duration
-	listener                 net.Listener
-	httpServer               *http.Server
-	httpListener             net.Listener
-	httpHandler              http.Handler
-	diagServer               *diag.Server
-	harnessWSListenerFD      string
-	wsHub                    *wsHub
-	startedAt                time.Time
-	analyticsUpload          analyticsUpload
-	analyticsOnSince         atomic.Pointer[time.Time]
-	appIdentity              atomic.Pointer[appIdentity]
-	lastPresentAt            time.Time
-	presenceMu               sync.RWMutex
-	crewLifecycleState       *crewLifecycleMemo
-	crewMemoOnce             sync.Once
-	crewCharterMu            sync.Mutex
-	life                     lifetime
-	stopOnce                 sync.Once
-	logger                   *logging.Logger
-	debugLogging             bool
-	ghRegistry               *github.ClientRegistry
-	reopenGitMu              sync.Mutex
-	reopenBranches           *sharedCalls[reopenBranchKey, branchInspection]
-	reopenInspect            func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitExec                  gitExecutor
-	worktreeMaintenance      worktreeMaintenanceCoordinator
-	warnings                 []protocol.DaemonWarning
-	warningsMu               sync.RWMutex
-	ptyBackend               ptybackend.Backend
-	ptySettingsMu            sync.Mutex
-	ptySettingsChangeMu      sync.Mutex
-	sharedPTYHost            *ptybackend.WorkerBackend
-	upgradingMu              sync.Mutex
-	upgradingWorkers         map[harness.TerminalID]chan struct{}
-	ptyRecovered             chan struct{}
-	monitorTerminalsDirty    atomic.Bool
+	prRefreshMu             sync.Mutex
+	prDetailFetches         prDetailFetches
+	automationMu            sync.Mutex
+	automationLaunchResults sync.Map
+	automationLaunchWaits   sync.Map
+	automationRepoMu        sync.Mutex
+	automationRepos         map[string]*sync.Mutex
+	wsWriteTimeout          time.Duration
+	wsPingInterval          time.Duration
+	wsPingTimeout           time.Duration
+	listener                net.Listener
+	httpServer              *http.Server
+	httpListener            net.Listener
+	httpHandler             http.Handler
+	diagServer              *diag.Server
+	harnessWSListenerFD     string
+	wsHub                   *wsHub
+	startedAt               time.Time
+	analyticsUpload         analyticsUpload
+	analyticsOnSince        atomic.Pointer[time.Time]
+	appIdentity             atomic.Pointer[appIdentity]
+	lastPresentAt           time.Time
+	presenceMu              sync.RWMutex
+	crewLifecycleState      *crewLifecycleMemo
+	crewMemoOnce            sync.Once
+	crewCharterMu           sync.Mutex
+	life                    lifetime
+	stopOnce                sync.Once
+	logger                  *logging.Logger
+	debugLogging            bool
+	ghRegistry              *github.ClientRegistry
+	reopenGitMu             sync.Mutex
+	reopenBranches          *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect           func(context.Context, *git.Client, string, string) (branchInspection, error)
+	gitExec                 gitExecutor
+	worktreeMaintenance     worktreeMaintenanceCoordinator
+	warnings                []protocol.DaemonWarning
+	warningsMu              sync.RWMutex
+	ptyBackend              ptybackend.Backend
+	ptySettingsMu           sync.Mutex
+	ptySettingsChangeMu     sync.Mutex
+	sharedPTYHost           *ptybackend.WorkerBackend
+	upgradingMu             sync.Mutex
+	upgradingWorkers        map[harness.TerminalID]chan struct{}
+	ptyRecovered            chan struct{}
+	monitorTerminalsDirty   atomic.Bool
 
 	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 

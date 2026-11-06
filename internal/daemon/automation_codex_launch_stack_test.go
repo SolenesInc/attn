@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -135,76 +136,40 @@ func TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunch
 	}
 }
 
-func TestTurningOffACodexAutomationLeavesARunWhoseAgentStartedPendingAcrossARestartToItsFirstTurn(t *testing.T) {
-	s := codexAutomationStack(t)
-	app := s.App()
-	s.RequireEnterAtNextBoot(codexStuckOnAModal)
-	answered := runAutomationFromApp(app, "started")
-	if !answered.Success || answered.Run == nil || answered.Run.State != "pending" {
-		t.Fatalf("a run whose Codex sits on a modal answered %s, want it pending", describeRunAnswer(answered))
-	}
-	session := string(protocol.Deref(answered.Run.SessionID))
-	app.AwaitScreen(session, "A new version of Codex")
-
-	setAutomationEnabled(t, s.Client(), 1, false)
-	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("after turning the automation off the runs are %+v, want the started run still pending", runs)
-	}
-	s.Stop()
-	s.Start()
-	app = s.App()
-	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("after a restart with the automation off the runs are %+v, want the started run still pending", runs)
-	}
-
-	app.TypeLine(session, "")
-	if opening := s.Launched(session).Prompted(); !strings.Contains(opening, "Check the code.") {
-		t.Fatalf("once past the modal the agent was prompted %q, want its opening prompt", opening)
-	}
-	delivered := awaitStackRun(t, s, app, answered.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-	if delivered.State != "delivered" {
-		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
-	}
-}
-
-func TestTurningOffACodexReviewAutomationAroundARestartWhileGitHubIsSignedOutStillDeliversItsStartedRun(t *testing.T) {
-	github := newAutomationGitHub(t)
+func TestACodexAutomationConfirmedJustBeforeAMachineRebootIsDeliveredWithoutAFreshOpening(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	s.Vars = append(s.Vars, "ATTN_MOCK_GH_URL="+github.url, "ATTN_MOCK_GH_TOKEN=test-token", "ATTN_MOCK_GH_HOST=github.test")
+	confirmed := s.PauseAt(pausepoint.AutomationRunFinalizing)
 	s.Start()
-	clone := newRepo(t, "shop")
-	s.SetCodexFolderTrust(clone, "trusted")
-	runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
-	head := commitFile(t, clone, "change.go", "package change\n")
-	spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
-	applyAutomation(t, s.Client(), spec)
-	r := &automationReviewWorld{t: t, app: s.App(), cli: s.Client(), github: github}
-	r.refresh()
-
-	s.RequireEnterAtNextBoot(codexStuckOnAModal)
-	github.request(42, head, false)
-	r.refresh()
-	started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
-		return len(runs) == 1 && runs[0].State == "pending" && protocol.Deref(runs[0].SessionID) != ""
-	})[0]
-	session := string(protocol.Deref(started.SessionID))
-	r.app.AwaitScreen(session, "A new version of Codex")
-
-	s.Stop()
-	s.Vars = append(s.Vars, "ATTN_MOCK_GH_TOKEN=")
-	s.Start()
-	r.app, r.cli = s.App(), s.Client()
-	setAutomationEnabled(t, r.cli, 1, false)
-	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("with the review automation off across the restart the runs are %+v, want the started run still pending", runs)
+	applyCodexAutomation(t, s)
+	app := s.App()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "reboot"})
+	runs := automationRuns(t, s.Client(), 1)
+	for len(runs) == 0 {
+		awaitAutomationChanged(app, 1)
+		runs = automationRuns(t, s.Client(), 1)
 	}
-
-	r.app.TypeLine(session, "")
-	if opening := s.Launched(session).Prompted(); !strings.Contains(opening, "Review this pull request.") {
-		t.Fatalf("once past the modal the reviewer was prompted %q, want its opening prompt", opening)
+	session := string(protocol.Deref(runs[0].SessionID))
+	agent := s.Launched(session)
+	confirmed.Await()
+	if opening := agent.Prompted(); !strings.Contains(opening, "Check the code.") {
+		t.Fatalf("the agent was prompted %q, want its opening prompt", opening)
 	}
-	delivered := awaitStackRun(t, s, r.app, started.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-	if delivered.State != "delivered" {
-		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
+	agent.Reply("Checked. <!-- attn:state=idle -->")
+	s.Kill()
+	s.Reboot()
+	confirmed.Release()
+
+	ready := s.StartHeldBeforeReady(confirmed)
+	confirmed.Release()
+	ready()
+	app = s.App()
+	delivered := awaitStackRun(t, s, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if delivered.State != "delivered" || protocol.Deref(delivered.SessionID) != protocol.SessionID(session) {
+		t.Fatalf("after the reboot the run is %+v, want delivered on session %s", delivered, session)
+	}
+	revived := s.Launched(session)
+	app.TypeLine(session, "anything else?")
+	if next := revived.Prompted(); next != "anything else?" {
+		t.Fatalf("the next prompt was %q, want only what was typed and no fresh opening prompt", next)
 	}
 }

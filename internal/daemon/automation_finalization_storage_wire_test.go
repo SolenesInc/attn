@@ -19,9 +19,9 @@ func TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover(t *testing
 	}
 	applyAutomation(t, cli, strings.Replace(manualAutomation(w, "Check the code."), "driver: codex", "driver: claude", 1))
 	awaitAutomationChanged(app, 1)
-	finalizing := w.PauseAt(pausepoint.AutomationRunFinalizing)
+	started := w.PauseAt(pausepoint.AutomationAgentStarted)
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"})
-	finalizing.Await()
+	started.Await()
 	awaitAutomationChanged(app, 1)
 	runs := automationRuns(t, cli, 1)
 	if len(runs) != 1 || runs[0].State != "pending" {
@@ -32,7 +32,7 @@ func TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover(t *testing
 	testworld.AwaitSession(app, string(sessionID), func(s protocol.Session) bool { return s.ID == sessionID })
 	restore := w.RefuseDatabaseCommits()
 	defer restore()
-	finalizing.Release()
+	started.Release()
 	result := testworld.Await(app, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
 	if result.Success {
 		t.Fatalf("run with unavailable persistence = %+v, want the launched run still pending", result)
@@ -55,5 +55,43 @@ func TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover(t *testing
 	seed, err := cli.SeedShow("", protocol.Deref(run.SeedID))
 	if err != nil || seed.Seed.Status != "growing" {
 		t.Fatalf("launched seed = %+v (%v), want its growing state preserved", seed, err)
+	}
+}
+
+func TestALaunchedAutomationWhoseAgentStoppedIsDeliveredAfterARestartWithoutASecondAgent(t *testing.T) {
+	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals(t)}
+	w.start()
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path("check"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, cli, strings.Replace(manualAutomation(w, "Check the code."), "driver: codex", "driver: claude", 1))
+	awaitAutomationChanged(app, 1)
+	launched := make(chan *testworld.Terminal, 2)
+	w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+	finalizing := w.PauseAt(pausepoint.AutomationRunFinalizing)
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"})
+	finalizing.Await()
+	agent := <-launched
+	restore := w.RefuseDatabaseCommits()
+	defer restore()
+	finalizing.Release()
+	testworld.Await(app, protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
+	restore()
+	agent.Exit(0)
+	w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+	w.restart()
+	finalizing.Await()
+	finalizing.Release()
+	app, cli = w.App(), w.Client()
+	var runs []protocol.AutomationRunSummary
+	for runs = automationRuns(t, cli, 1); runs[0].State == "pending"; runs = automationRuns(t, cli, 1) {
+		awaitAutomationChanged(app, 1)
+	}
+	if runs[0].State != "delivered" {
+		t.Fatalf("after the restart the run is %+v, want it delivered", runs[0])
+	}
+	if len(launched) != 0 {
+		t.Fatal("the restart started a second agent for a run whose agent had started")
 	}
 }

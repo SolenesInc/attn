@@ -23,7 +23,7 @@ func (d *Daemon) recoverAutomations() {
 		}
 		d.automationMu.Lock()
 		run, err := d.store.GetAutomationRun(runs[i].ID)
-		if err == nil && run.State == store.AutomationRunStatePending && d.recoveryDelivers(run, occurrence) {
+		if err == nil && run.State == store.AutomationRunStatePending && automationRunRecovers(run, occurrence) {
 			err = d.deliverAutomationRun(context.Background(), run)
 			if err != nil {
 				_, err = d.handleAutomationDeliveryError(run, err)
@@ -36,12 +36,8 @@ func (d *Daemon) recoverAutomations() {
 	}
 }
 
-func (d *Daemon) recoveryDelivers(run *store.AutomationRun, occurrence *store.AutomationOccurrence) bool {
-	if occurrence == nil || occurrence.Provider != "github" {
-		return true
-	}
-	req, err := d.automationRunRequest(run)
-	return err == nil && d.automationRunAgentStarted(run, req)
+func automationRunRecovers(run *store.AutomationRun, occurrence *store.AutomationOccurrence) bool {
+	return run.LaunchedAt != nil || occurrence == nil || occurrence.Provider != "github"
 }
 
 func recoverAutomationsAfterGitHubReady(ready, stopping <-chan struct{}, recover func()) bool {

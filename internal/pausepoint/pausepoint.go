@@ -100,6 +100,7 @@ const (
 	DatabaseBackupStarting     = "database-backup-starting"
 	DatabaseBackupCopied       = "database-backup-copied"
 	AutomationRunReserved      = "automation-run-reserved"
+	AutomationAgentStarted     = "automation-agent-started"
 	AutomationRunFinalizing    = "automation-run-finalizing"
 	RemoteRecentRecorded       = "remote-recent-recorded"
 	KittyImageRequested        = "kitty-image-requested"

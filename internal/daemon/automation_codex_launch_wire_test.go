@@ -271,3 +271,47 @@ func TestACodexSingletonWhoseFirstLaunchExitsBeforeItsFirstTurnStartsFreshAtTheN
 		}
 	})
 }
+
+func TestTurningOffAReviewAutomationAfterItsCodexLaunchedKeepsTheRunPendingAcrossARestartWhileGitHubIsSignedOutUntilItDelivers(t *testing.T) {
+	github := newAutomationGitHub(t)
+	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals(t)}
+	w.start()
+	clone := newRepo(t, "shop")
+	runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
+	head := commitFile(t, clone, "change.go", "package change\n")
+	w.SetCodexFolderTrust(clone, "trusted")
+	spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
+	applyAutomation(t, w.Client(), spec)
+	r := &automationReviewWorld{t: t, w: w, app: w.App(), cli: w.Client(), github: github}
+	r.refresh()
+
+	launched := make(chan *testworld.Terminal, 1)
+	w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
+	github.request(42, head, false)
+	r.refresh()
+	agent := <-launched
+	started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+		return len(runs) == 1 && runs[0].State == "pending"
+	})[0]
+
+	setAutomationEnabled(t, r.cli, 1, false)
+	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
+	}
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "")
+	w.restart()
+	r.app, r.cli = w.App(), w.Client()
+	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after a restart signed out of GitHub the runs are %+v, want the launched run still pending", runs)
+	}
+
+	if err := r.cli.UpdateStateFromHook(agent.Options.ID, "working", ""); err != nil {
+		t.Fatal(err)
+	}
+	delivered := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
+		return len(runs) == 1 && runs[0].State != "pending"
+	})[0]
+	if delivered.State != "delivered" || delivered.ID != started.ID {
+		t.Fatalf("after its first turn started the run is %+v, want run %s delivered", delivered, started.ID)
+	}
+}

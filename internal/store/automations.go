@@ -70,7 +70,7 @@ type AutomationRun struct {
 	ProfileID                         string
 	ResolvedLocationJSON              string
 	CreatedAt, UpdatedAt              time.Time
-	DeliveredAt                       *time.Time
+	DeliveredAt, LaunchedAt           *time.Time
 }
 
 type AutomationContinuityBinding struct {
@@ -1030,20 +1030,21 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey stri
 
 func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun, error) {
 	var r AutomationRun
-	var created, updated, delivered string
-	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered)
+	var created, updated, delivered, launched string
+	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &launched)
 	if err != nil {
 		return nil, err
 	}
 	r.CreatedAt = parseStoredTime(created)
 	r.UpdatedAt = parseStoredTime(updated)
 	r.DeliveredAt = parseOptionalAutomationTime(delivered)
+	r.LaunchedAt = parseOptionalAutomationTime(launched)
 	return &r, nil
 }
 
-const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,seed_id,session_id,profile_id,resolved_location_json,created_at,updated_at,delivered_at`
+const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,seed_id,session_id,profile_id,resolved_location_json,created_at,updated_at,delivered_at,launched_at`
 
-const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.seed_id,r.session_id,r.profile_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
+const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.seed_id,r.session_id,r.profile_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at,r.launched_at`
 
 func (s *Store) getAutomationRunUnlocked(id string) (*AutomationRun, error) {
 	r, e := scanAutomationRun(s.db.QueryRow(`SELECT `+automationRunColumns+` FROM automation_runs WHERE id=?`, id))
@@ -1127,14 +1128,15 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID int, limit int
 	var out []AutomationRunWithOccurrenceKey
 	for rows.Next() {
 		var r AutomationRun
-		var created, updated, delivered, occurrenceKey string
+		var created, updated, delivered, launched, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON, &provenance.SingletonSessionID); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &launched, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON, &provenance.SingletonSessionID); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseStoredTime(created)
 		r.UpdatedAt = parseStoredTime(updated)
 		r.DeliveredAt = parseOptionalAutomationTime(delivered)
+		r.LaunchedAt = parseOptionalAutomationTime(launched)
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
 		provenance.SessionID = r.SessionID
@@ -1172,14 +1174,15 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[int]AutomationRunWithOcc
 	out := make(map[int]AutomationRunWithOccurrenceKey)
 	for rows.Next() {
 		var r AutomationRun
-		var created, updated, delivered, occurrenceKey string
+		var created, updated, delivered, launched, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON, &provenance.SingletonSessionID); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &launched, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON, &provenance.SingletonSessionID); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseStoredTime(created)
 		r.UpdatedAt = parseStoredTime(updated)
 		r.DeliveredAt = parseOptionalAutomationTime(delivered)
+		r.LaunchedAt = parseOptionalAutomationTime(launched)
 		provenance.RunID = r.ID
 		provenance.DefinitionID = r.DefinitionID
 		provenance.SessionID = r.SessionID
@@ -1312,6 +1315,16 @@ func (s *Store) ListPendingAutomationRuns() ([]AutomationRun, error) {
 	}
 	return out, rows.Err()
 }
+func (s *Store) SetAutomationRunLaunched(id string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("automation persistence unavailable")
+	}
+	_, err := s.db.Exec(`UPDATE automation_runs SET launched_at=? WHERE id=? AND launched_at=''`, formatStoredTime(now), id)
+	return err
+}
+
 func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	id, resolved string, event BusEvent, now time.Time,
 ) (int64, bool, error) {

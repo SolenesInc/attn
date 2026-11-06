@@ -317,10 +317,6 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 }
 
 func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) protocol.AutomationRunSummary {
-	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
-		run.State = store.AutomationRunStateFailed
-		run.LastError = cause.(error).Error()
-	}
 	summary := protocol.AutomationRunSummary{
 		ID:            run.ID,
 		DefinitionID:  run.DefinitionID,

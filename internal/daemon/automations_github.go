@@ -264,11 +264,7 @@ func (d *Daemon) settleWithdrawnAutomationRuns(definitionID int, host string) er
 	return cancelErr
 }
 func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
-	continuation, err := d.automationRunIsContinuation(run.DefinitionID, run.SeedID, run.ID)
-	if err != nil {
-		return err
-	}
-	if !continuation && run.State == store.AutomationRunStatePending && d.hasAutomationSession(run.SessionID) {
+	if run.State == store.AutomationRunStatePending && run.LaunchedAt != nil {
 		if deliverErr := d.deliverAutomationRun(context.Background(), run); deliverErr != nil {
 			if _, err := d.handleAutomationDeliveryError(run, deliverErr); err != nil {
 				d.logf("automation deliver started reviewer %s: %v", run.ID, err)
@@ -281,10 +277,4 @@ func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
 	}
 	_, cancelErr := d.cancelAutomationRun(run, store.AutomationCancelReasonReviewWithdrawn, automationReviewWithdrawnMessage)
 	return cancelErr
-}
-func (d *Daemon) hasAutomationSession(sessionID protocol.SessionID) bool {
-	if d.store.Get(sessionID) != nil {
-		return true
-	}
-	return d.sessionLive(context.Background(), sessionID)
 }
