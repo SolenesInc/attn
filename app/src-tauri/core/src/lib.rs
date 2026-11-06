@@ -9,6 +9,7 @@ mod native_input_diagnostics;
 #[cfg(target_os = "macos")]
 mod native_keyboard;
 mod quick_capture;
+mod title_bar;
 mod ui_automation;
 mod wake;
 
@@ -1175,6 +1176,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
             browser_host::browser_host_control,
+            title_bar::set_title_bar_overlay,
             browser_host::browser_host_clear_focus,
             browser_host::browser_host_claim_focus,
             browser_host::browser_host_focus_state,

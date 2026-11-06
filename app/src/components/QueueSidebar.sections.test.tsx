@@ -1,7 +1,7 @@
 import { StrictMode, type ComponentProps } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { Sidebar } from './Sidebar';
+import { StandaloneSidebar as Sidebar } from '../test/standaloneSidebar';
 import { useAgentList } from './useAgentList';
 import { focusedQueueRow } from './focusedQueueRow';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';

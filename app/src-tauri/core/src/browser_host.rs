@@ -229,11 +229,15 @@ fn report_location(app: &AppHandle, label: &str, url: &tauri::Url) {
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn content_layout_inset(
+    full_size_content: bool,
     window_height: f64,
     layout_x: f64,
     layout_y: f64,
     layout_height: f64,
 ) -> (f64, f64) {
+    if full_size_content {
+        return (0.0, 0.0);
+    }
     let left = layout_x.max(0.0);
     let top = (window_height - (layout_y + layout_height)).max(0.0);
     (left, top)
@@ -251,6 +255,9 @@ fn native_content_inset(window: &tauri::Window) -> (f64, f64) {
         let frame = window.frame();
         let layout = window.contentLayoutRect();
         content_layout_inset(
+            window
+                .styleMask()
+                .contains(objc2_app_kit::NSWindowStyleMask::FullSizeContentView),
             frame.size.height,
             layout.origin.x,
             layout.origin.y,
@@ -1929,7 +1936,17 @@ mod tests {
 
     #[test]
     fn content_layout_inset_uses_the_unobscured_appkit_rect() {
-        assert_eq!(content_layout_inset(1662.0, 0.0, 0.0, 1630.0), (0.0, 32.0));
-        assert_eq!(content_layout_inset(600.0, 0.0, 0.0, 568.0), (0.0, 32.0),);
+        assert_eq!(
+            content_layout_inset(false, 1662.0, 0.0, 0.0, 1630.0),
+            (0.0, 32.0)
+        );
+        assert_eq!(
+            content_layout_inset(false, 600.0, 0.0, 0.0, 568.0),
+            (0.0, 32.0),
+        );
+        assert_eq!(
+            content_layout_inset(true, 1000.0, 0.0, 0.0, 968.0),
+            (0.0, 0.0)
+        );
     }
 }

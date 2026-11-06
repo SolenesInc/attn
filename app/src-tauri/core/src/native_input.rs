@@ -858,7 +858,11 @@ mod platform {
 
     fn mouse_target(target: &Target, origin: (f64, f64)) -> Result<Target, String> {
         let point = window_point(target, origin);
-        let layout = target.window.contentLayoutRect();
+        let layout = target
+            .window
+            .contentView()
+            .ok_or("the window has no content view")?
+            .frame();
         if point.x < layout.origin.x
             || point.y < layout.origin.y
             || point.x >= layout.origin.x + layout.size.width

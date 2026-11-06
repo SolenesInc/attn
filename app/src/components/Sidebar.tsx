@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useRevealSelection } from './useRevealSelection';
 import { treeSelectionKey } from './sidebarModel';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -17,15 +17,15 @@ import {
 import { useSidebarState } from './useSidebarState';
 export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
 
-export function Sidebar(props: SidebarProps) {
+export function SidebarProvider({ children, ...props }: SidebarProps & { children: ReactNode }) {
   const state = useSidebarState(props);
-  const QueueChrome = props.collapsed ? QueueBar : QueueSidebar;
-  const TreeChrome = props.collapsed ? SidebarCollapsed : SidebarExpanded;
-  return (
-    <SidebarContext.Provider value={state}>
-      {props.queue ? <QueueChrome /> : <TreeChrome />}
-    </SidebarContext.Provider>
-  );
+  return <SidebarContext.Provider value={state}>{children}</SidebarContext.Provider>;
+}
+
+export function Sidebar() {
+  const { queue, collapsed } = useSidebarContext();
+  if (queue) return collapsed ? <QueueBar /> : <QueueSidebar />;
+  return collapsed ? <SidebarCollapsed /> : <SidebarExpanded />;
 }
 
 function SidebarExpanded() {

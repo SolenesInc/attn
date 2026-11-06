@@ -29,7 +29,7 @@ import { AppLibrarySurfaces } from './AppLibrarySurfaces';
 import { AppNavigationMenus } from './AppNavigationMenus';
 import { AppPreferences } from './AppPreferences';
 import { AppSessionPrompts } from './AppSessionPrompts';
-import { AppSidebar } from './AppSidebar';
+import { AppSidebar, AppSidebarProvider } from './AppSidebar';
 import { AppDesktopNavigation } from './AppDesktopNavigation';
 import { AppDesktops } from './AppDesktops';
 import { handleAppPointerDownCapture } from './appSupport';
@@ -96,36 +96,38 @@ export function AppSurface() {
                   step={openPRLauncherJob.progress.step}
                 />
               )}
-              <div className="app-main">
-                <BannerStack
-                  connectionError={connectionError}
-                  warnings={warnings}
-                  updateAvailableVersion={updateAvailableVersion}
-                  onOpenWarningUrl={(url) => {
-                    openUrl(url).catch((err) => {
-                      console.error('[App] Failed to open warning link:', err);
-                    });
-                  }}
-                  onClearWarnings={clearWarnings}
-                  onOpenLatestRelease={onOpenLatestRelease}
-                  onDismissLatestRelease={onDismissLatestRelease}
-                />
-                <div className="app-frame">
-                  <AppSidebar />
-                  <div className="view-stack">
-                    {/* Always rendered; shown/hidden via z-index. */}
-                    <AppDashboard />
-                    {/* Always rendered, to keep terminals alive. */}
-                    <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
-                      <div className="terminal-pane">
-                        <AppDesktops />
+              <AppSidebarProvider>
+                <div className="app-main">
+                  <BannerStack
+                    connectionError={connectionError}
+                    warnings={warnings}
+                    updateAvailableVersion={updateAvailableVersion}
+                    onOpenWarningUrl={(url) => {
+                      openUrl(url).catch((err) => {
+                        console.error('[App] Failed to open warning link:', err);
+                      });
+                    }}
+                    onClearWarnings={clearWarnings}
+                    onOpenLatestRelease={onOpenLatestRelease}
+                    onDismissLatestRelease={onDismissLatestRelease}
+                  />
+                  <div className="app-frame">
+                    <AppSidebar />
+                    <div className="view-stack">
+                      {/* Always rendered; shown/hidden via z-index. */}
+                      <AppDashboard />
+                      {/* Always rendered, to keep terminals alive. */}
+                      <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
+                        <div className="terminal-pane">
+                          <AppDesktops />
+                        </div>
                       </div>
+                      <AppDock />
+                      <AppCrewPanel />
                     </div>
-                    <AppDock />
-                    <AppCrewPanel />
                   </div>
                 </div>
-              </div>
+              </AppSidebarProvider>
 
               {/* Yield library focus traps before session prompts take focus in layout effects. */}
               <AppLibrarySurfaces />

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { Sidebar, type DockItem } from './Sidebar';
+import type { DockItem } from './Sidebar';
+import { StandaloneSidebar as Sidebar } from '../test/standaloneSidebar';
 import { type SessionDelegationRole } from '../types/generated';
 import { type DesktopWithSessions } from '../utils/desktopViewModels';
 import { desktopGroups, groupIndexes } from '../test/desktops';

@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { Sidebar } from './Sidebar';
+import { StandaloneSidebar as Sidebar } from '../test/standaloneSidebar';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { AutomationProvenance } from '../types/generated';

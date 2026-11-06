@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react';
-import { Sidebar } from '../components/Sidebar';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { Sidebar, SidebarProvider } from '../components/Sidebar';
 import { SidebarResizeHandle } from '../components/SidebarResizeHandle';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAskList } from '../store/asks';
@@ -31,6 +31,18 @@ import { useSidebarWidth } from './useSidebarWidth';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 
 export function AppSidebar() {
+  const { sidebarCollapsed } = useAppPanelsContext();
+  const { agentFocused } = useAppShell();
+  const width = useSidebarWidth({ sidebarShown: !sidebarCollapsed && !agentFocused });
+  return (
+    <>
+      <Sidebar />
+      {width.resizable && !sidebarCollapsed && !agentFocused && <SidebarResizeHandle width={width} />}
+    </>
+  );
+}
+
+export function AppSidebarProvider({ children }: { children: ReactNode }) {
   const {
     desktopViews,
     currentDesktopId,
@@ -108,89 +120,87 @@ export function AppSidebar() {
   const { handleRequestCloseSession, handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
   const { desktopNavigation } = useDesktopNavigationContext();
-  const width = useSidebarWidth({ sidebarShown: !sidebarCollapsed && !agentFocused });
   return (
-    <>
-      <Sidebar
-        desktops={desktopViews}
-        visualIndexByDesktopId={slotIndexByDesktopId}
-        selectedId={shownAgentId}
-        selectionRequest={focusRequest}
-        selectedDesktopId={currentDesktopId}
-        selectedTile={selectedTile}
-        tileContents={desktopTileContents}
-        collapsed={sidebarCollapsed}
-        surface={sidebarSurface}
-        instance={BUILD_DEMO ? '' : BUILD_INSTANCE}
-        headerActions={sidebarHeaderActions}
-        criticalNotifications={criticalNotifications}
-        onOpenNotifications={openNotificationsPanel}
-        dockItems={dockItems}
-        dockCollapsed={keybindings.dock.collapsed}
-        onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
-        onRenameSession={sendRenameSession}
-        onCloseDesktop={handleRequestCloseDesktop}
-        onRenameDesktop={desktopNavigation.renameDesktop}
-        onDesktopReorder={({ desktopId, prevDesktopId, nextDesktopId }) =>
-          desktopNavigation.reorderDesktop({
-            desktopId,
-            previousDesktopId: prevDesktopId,
-            nextDesktopId,
-          })
-        }
-        onTogglePriority={togglePriority}
-        onChangeChiefOfStaff={handleChangeChiefOfStaff}
-        crew={crew}
-        chief={chief.view}
-        chiefActions={chief.actions}
-        chiefSetupOpen={chief.setupOpen}
-        chiefSetupOpenedByUser={chief.setupOpenedByUser}
-        onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
-        onWakeCrewMember={handleWakeCrewMember}
-        onSleepCrewMember={handleSleepCrewMember}
-        onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
-        onOpenCrewMemberDetails={handleOpenCrew}
-        crewQueueEnabled={crewQueueEnabled}
-        harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
-        leafDrag={leafDesktopDrag ? { sourceDesktopId: leafDesktopDrag.sourceDesktopId } : null}
-        dragHoverDesktopId={dragHoverDesktopId}
-        onDesktopDragEnter={handleDesktopDragEnter}
-        onDesktopDragLeave={handleDesktopDragLeave}
-        onDesktopDragDrop={handleDesktopDragDrop}
-        onNewDesktopDrop={handleNewDesktopDrop}
-        onSessionDragStart={handleSessionDragStart}
-        onSessionDragEnd={handleLeafDragEnd}
-        queue={queueBands}
-        onSettleTurn={sendSettleTurn}
-        onWalkRuns={handleNextRun}
-        onJumpToWaiting={handleJumpToWaiting}
-        asks={asks}
-        onOpenAsk={openAsk}
-        profileName={profileName}
-        onSwitchProfile={() => setProfileSwitcherOpen(true)}
-        onOpenCommands={() => handleOpenPalette('commands')}
-        onToggleFlow={handleToggleQueueMode}
-        onOpenAgents={() => handleOpenPalette('agents')}
-        peeksSilenced={windowCovered || agentFocused}
-        agentListOpen={agentListOpen}
-        onToggleAgentList={toggleAgentList}
-        onOpenOverview={() => setDesktopOverviewOpen(true)}
-        onOpenSnooze={openSnoozeMenu}
-        onWakeTurn={sendWakeTurn}
-        onScreenSessionIds={onScreenSessionIds}
-        onSelectSession={handleSelectSession}
-        onSelectDesktop={handleSelectDesktop}
-        onSelectTile={handleSelectTile}
-        onCloseTile={handleCloseTile}
-        onReloadTile={handleReloadTile}
-        onNewSession={() => handleNewSession('vertical')}
-        onCloseSession={handleRequestCloseSession}
-        onReloadSession={handleReloadSession}
-        onGoToDashboard={goToDashboard}
-        homeActive={view === 'dashboard'}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      {width.resizable && !sidebarCollapsed && !agentFocused && <SidebarResizeHandle width={width} />}
-    </>
+    <SidebarProvider
+      desktops={desktopViews}
+      visualIndexByDesktopId={slotIndexByDesktopId}
+      selectedId={shownAgentId}
+      selectionRequest={focusRequest}
+      selectedDesktopId={currentDesktopId}
+      selectedTile={selectedTile}
+      tileContents={desktopTileContents}
+      collapsed={sidebarCollapsed}
+      surface={sidebarSurface}
+      instance={BUILD_DEMO ? '' : BUILD_INSTANCE}
+      headerActions={sidebarHeaderActions}
+      criticalNotifications={criticalNotifications}
+      onOpenNotifications={openNotificationsPanel}
+      dockItems={dockItems}
+      dockCollapsed={keybindings.dock.collapsed}
+      onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
+      onRenameSession={sendRenameSession}
+      onCloseDesktop={handleRequestCloseDesktop}
+      onRenameDesktop={desktopNavigation.renameDesktop}
+      onDesktopReorder={({ desktopId, prevDesktopId, nextDesktopId }) =>
+        desktopNavigation.reorderDesktop({
+          desktopId,
+          previousDesktopId: prevDesktopId,
+          nextDesktopId,
+        })
+      }
+      onTogglePriority={togglePriority}
+      onChangeChiefOfStaff={handleChangeChiefOfStaff}
+      crew={crew}
+      chief={chief.view}
+      chiefActions={chief.actions}
+      chiefSetupOpen={chief.setupOpen}
+      chiefSetupOpenedByUser={chief.setupOpenedByUser}
+      onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
+      onWakeCrewMember={handleWakeCrewMember}
+      onSleepCrewMember={handleSleepCrewMember}
+      onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
+      onOpenCrewMemberDetails={handleOpenCrew}
+      crewQueueEnabled={crewQueueEnabled}
+      harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
+      leafDrag={leafDesktopDrag ? { sourceDesktopId: leafDesktopDrag.sourceDesktopId } : null}
+      dragHoverDesktopId={dragHoverDesktopId}
+      onDesktopDragEnter={handleDesktopDragEnter}
+      onDesktopDragLeave={handleDesktopDragLeave}
+      onDesktopDragDrop={handleDesktopDragDrop}
+      onNewDesktopDrop={handleNewDesktopDrop}
+      onSessionDragStart={handleSessionDragStart}
+      onSessionDragEnd={handleLeafDragEnd}
+      queue={queueBands}
+      onSettleTurn={sendSettleTurn}
+      onWalkRuns={handleNextRun}
+      onJumpToWaiting={handleJumpToWaiting}
+      asks={asks}
+      onOpenAsk={openAsk}
+      profileName={profileName}
+      onSwitchProfile={() => setProfileSwitcherOpen(true)}
+      onOpenCommands={() => handleOpenPalette('commands')}
+      onToggleFlow={handleToggleQueueMode}
+      onOpenAgents={() => handleOpenPalette('agents')}
+      peeksSilenced={windowCovered || agentFocused}
+      agentListOpen={agentListOpen}
+      onToggleAgentList={toggleAgentList}
+      onOpenOverview={() => setDesktopOverviewOpen(true)}
+      onOpenSnooze={openSnoozeMenu}
+      onWakeTurn={sendWakeTurn}
+      onScreenSessionIds={onScreenSessionIds}
+      onSelectSession={handleSelectSession}
+      onSelectDesktop={handleSelectDesktop}
+      onSelectTile={handleSelectTile}
+      onCloseTile={handleCloseTile}
+      onReloadTile={handleReloadTile}
+      onNewSession={() => handleNewSession('vertical')}
+      onCloseSession={handleRequestCloseSession}
+      onReloadSession={handleReloadSession}
+      onGoToDashboard={goToDashboard}
+      homeActive={view === 'dashboard'}
+      onToggleCollapse={toggleSidebarCollapse}
+    >
+      {children}
+    </SidebarProvider>
   );
 }

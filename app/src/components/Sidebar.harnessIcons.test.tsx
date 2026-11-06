@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { Sidebar } from './Sidebar';
+import { StandaloneSidebar as Sidebar } from '../test/standaloneSidebar';
 import { desktopGroups } from '../test/desktops';
 import { buildQueueBands } from '../utils/queueBands';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
