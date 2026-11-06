@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::sync::{LazyLock, OnceLock};
@@ -34,7 +34,7 @@ const BROWSER_DATA_STORE_ID: [u8; 16] = *b"attn-browser-v1!";
 #[cfg(target_os = "macos")]
 const BROWSER_CONTENT_WORLD_NAME: &str = "attn-browser-control";
 static NEXT_RUNTIME_RESULT_ID: AtomicU64 = AtomicU64::new(1);
-static COOKIE_JAR_IO: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static COOKIE_JAR: CookieJar = CookieJar::new();
 static COOKIE_SYNC_WORKERS: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static FOCUSED_BROWSER_LABEL: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
@@ -1222,19 +1222,60 @@ fn cookie_jar_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| format!("resolve browser cookie jar path: {error}"))
 }
 
-fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
-    let cookies = webview
-        .cookies()
-        .map_err(|error| format!("read browser cookie jar: {error}"))?
-        .iter()
-        .map(stored_cookie)
-        .collect::<Vec<_>>();
-    let data = serde_json::to_vec_pretty(&cookies)
-        .map_err(|error| format!("encode browser cookie jar: {error}"))?;
-    let _guard = COOKIE_JAR_IO
-        .lock()
-        .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
-    let path = cookie_jar_path(app)?;
+struct CookieJar {
+    last_snapshot_started: AtomicU64,
+    newest_snapshot_written: Mutex<u64>,
+}
+
+impl CookieJar {
+    const fn new() -> Self {
+        Self {
+            last_snapshot_started: AtomicU64::new(0),
+            newest_snapshot_written: Mutex::new(0),
+        }
+    }
+
+    fn save(
+        &self,
+        path: &Path,
+        capture_snapshot: impl FnOnce() -> Result<Vec<StoredCookie>, String>,
+    ) -> Result<(), String> {
+        let snapshot = self.last_snapshot_started.fetch_add(1, Ordering::Relaxed) + 1;
+        let data = serde_json::to_vec_pretty(&capture_snapshot()?)
+            .map_err(|error| format!("encode browser cookie jar: {error}"))?;
+        let mut newest_snapshot_written = self
+            .newest_snapshot_written
+            .lock()
+            .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
+        if *newest_snapshot_written > snapshot {
+            return Ok(());
+        }
+        replace_cookie_jar_file(path, &data)?;
+        *newest_snapshot_written = snapshot;
+        Ok(())
+    }
+
+    fn read(&self, path: &Path) -> Result<Vec<StoredCookie>, String> {
+        let _guard = self
+            .newest_snapshot_written
+            .lock()
+            .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
+        let data = match std::fs::read(path) {
+            Ok(data) => data,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(format!("read browser cookie jar: {error}")),
+        };
+        match serde_json::from_slice::<Vec<StoredCookie>>(&data) {
+            Ok(stored) => Ok(stored),
+            Err(_) => {
+                let _ = std::fs::rename(path, path.with_extension("json.corrupt"));
+                Ok(Vec::new())
+            }
+        }
+    }
+}
+
+fn replace_cookie_jar_file(path: &Path, data: &[u8]) -> Result<(), String> {
     let directory = path
         .parent()
         .ok_or_else(|| "browser cookie jar directory is unavailable".to_string())?;
@@ -1249,31 +1290,23 @@ fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), S
         std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o600))
             .map_err(|error| format!("secure browser cookie jar: {error}"))?;
     }
-    std::fs::rename(&temporary, &path)
+    std::fs::rename(&temporary, path)
         .map_err(|error| format!("replace browser cookie jar: {error}"))
 }
 
-fn read_cookie_jar(app: &AppHandle) -> Result<Vec<StoredCookie>, String> {
-    let _guard = COOKIE_JAR_IO
-        .lock()
-        .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
-    let path = cookie_jar_path(app)?;
-    let data = match std::fs::read(&path) {
-        Ok(data) => data,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(format!("read browser cookie jar: {error}")),
-    };
-    match serde_json::from_slice::<Vec<StoredCookie>>(&data) {
-        Ok(stored) => Ok(stored),
-        Err(_) => {
-            let _ = std::fs::rename(&path, path.with_extension("json.corrupt"));
-            Ok(Vec::new())
-        }
-    }
+fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
+    COOKIE_JAR.save(&cookie_jar_path(app)?, || {
+        Ok(webview
+            .cookies()
+            .map_err(|error| format!("read browser cookie jar: {error}"))?
+            .iter()
+            .map(stored_cookie)
+            .collect())
+    })
 }
 
 fn restore_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
-    for cookie in read_cookie_jar(app)? {
+    for cookie in COOKIE_JAR.read(&cookie_jar_path(app)?)? {
         webview
             .set_cookie(cookie_from_stored(cookie)?)
             .map_err(|error| format!("restore browser cookie: {error}"))?;
@@ -1570,13 +1603,49 @@ mod tests {
         cookie_from_stored, cookie_path_matches, focused_browser_label,
         isolated_initialization_script, page_action_timeout, page_size,
         register_cookie_sync_worker, set_browser_runtime_js, single_tab_script, stop_cookie_sync,
-        validate_browser_command_caller, StoredCookie, TrustedMainWebview,
+        validate_browser_command_caller, CookieJar, StoredCookie, TrustedMainWebview,
     };
     use serde_json::{json, Map};
     use std::sync::atomic::Ordering;
     use std::time::Duration;
 
     static FOCUS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct TestJarFile(std::path::PathBuf);
+
+    impl TestJarFile {
+        fn new(test_name: &str) -> Self {
+            let directory = std::env::temp_dir().join(format!(
+                "attn-cookie-jar-{}-{test_name}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&directory);
+            Self(directory.join("browser").join("cookies.json"))
+        }
+
+        fn cookie_values(&self, jar: &CookieJar) -> Vec<String> {
+            jar.read(&self.0)
+                .expect("read jar")
+                .into_iter()
+                .map(|cookie| cookie.value)
+                .collect()
+        }
+    }
+
+    impl Drop for TestJarFile {
+        fn drop(&mut self) {
+            if let Some(directory) = self.0.parent().and_then(|browser| browser.parent()) {
+                let _ = std::fs::remove_dir_all(directory);
+            }
+        }
+    }
+
+    fn cookie_with_value(value: &str) -> StoredCookie {
+        StoredCookie {
+            value: value.to_string(),
+            ..session_cookie()
+        }
+    }
 
     fn session_cookie() -> StoredCookie {
         StoredCookie {
@@ -1589,6 +1658,76 @@ mod tests {
             same_site: Some("Lax".to_string()),
             expiry: None,
         }
+    }
+
+    #[test]
+    fn a_save_during_a_capture_completes_and_the_older_capture_is_discarded() {
+        let file = TestJarFile::new("nested");
+        let jar = CookieJar::new();
+        jar.save(&file.0, || {
+            jar.save(&file.0, || Ok(vec![cookie_with_value("new")]))
+                .expect("save while another capture waits");
+            Ok(vec![cookie_with_value("old")])
+        })
+        .expect("older save");
+        assert_eq!(file.cookie_values(&jar), ["new"]);
+    }
+
+    #[test]
+    fn a_sync_paused_across_an_unmount_save_cannot_restore_a_deleted_cookie() {
+        let file = TestJarFile::new("paused-sync");
+        let jar = CookieJar::new();
+        jar.save(&file.0, || Ok(vec![cookie_with_value("signed-in")]))
+            .expect("first sync");
+        let captured = std::sync::Barrier::new(2);
+        let resume = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let paused_sync = scope.spawn(|| {
+                jar.save(&file.0, || {
+                    captured.wait();
+                    resume.wait();
+                    Ok(vec![cookie_with_value("signed-in")])
+                })
+            });
+            captured.wait();
+            jar.save(&file.0, || Ok(Vec::new())).expect("unmount save");
+            resume.wait();
+            paused_sync.join().expect("join sync").expect("paused save");
+        });
+        assert!(file.cookie_values(&jar).is_empty());
+    }
+
+    #[test]
+    fn saves_from_several_tiles_keep_the_one_that_started_last() {
+        let file = TestJarFile::new("several-tiles");
+        let jar = CookieJar::new();
+        jar.save(&file.0, || {
+            jar.save(&file.0, || {
+                jar.save(&file.0, || Ok(vec![cookie_with_value("third")]))
+                    .expect("third tile");
+                Ok(vec![cookie_with_value("second")])
+            })
+            .expect("second tile");
+            Ok(vec![cookie_with_value("first")])
+        })
+        .expect("first tile");
+        assert_eq!(file.cookie_values(&jar), ["third"]);
+        jar.save(&file.0, || Ok(vec![cookie_with_value("next-sync")]))
+            .expect("next sync");
+        assert_eq!(file.cookie_values(&jar), ["next-sync"]);
+    }
+
+    #[test]
+    fn a_failed_newer_capture_does_not_discard_an_older_snapshot() {
+        let file = TestJarFile::new("failed-capture");
+        let jar = CookieJar::new();
+        jar.save(&file.0, || {
+            let failed = jar.save(&file.0, || Err("webview closed".to_string()));
+            assert_eq!(failed, Err("webview closed".to_string()));
+            Ok(vec![cookie_with_value("older")])
+        })
+        .expect("older save");
+        assert_eq!(file.cookie_values(&jar), ["older"]);
     }
 
     #[test]
