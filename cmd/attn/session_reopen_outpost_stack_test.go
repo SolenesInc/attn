@@ -25,12 +25,8 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			harness := scenario.harness
-			backend := testworld.SharedHostPTY
-			if scenario.shared {
-				backend = testworld.WorkerPTY
-			}
 			home := testworld.NewStack(t)
-			outpost := testworld.NewStack(t, testworld.WithAgents(harness), testworld.OnPTYBackend(backend))
+			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			pair.Start()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)

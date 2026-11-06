@@ -967,6 +967,8 @@ func (b *WorkerBackend) Kill(ctx context.Context, id harness.TerminalID, sig sys
 	return b.callEndingLocked(ctx, session, ptyworker.MethodSignal, ptyworker.SignalParams{Signal: signalName(sig)})
 }
 
+const removedRuntimeExitCode = 128 + int(syscall.SIGTERM)
+
 func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error {
 	sessionID := string(id)
 	session, err := b.getSession(sessionID)
@@ -986,6 +988,9 @@ func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error
 		if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 			b.closePersistentControlConnLocked(session, "remove")
 			b.forgetSession(session)
+			if b.kind == workerRuntimeSharedHost {
+				b.reportExit(session, removedRuntimeExitCode, signalName(syscall.SIGTERM))
+			}
 		}
 		return err
 	}()
