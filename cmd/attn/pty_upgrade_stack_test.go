@@ -885,6 +885,8 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 		t.Errorf("the outpost's shell attached as %+v, want the same running process %d", attached, shellPID)
 	}
 	remoteApp.AwaitScreen(liveShell, "before-2")
+	remoteApp.Type(liveShell, "echo after-$((2+2))\r", "keyboard")
+	remoteApp.AwaitScreen(liveShell, "after-4")
 	fresh := home.Spawn(app, fakeagent.Claude, remote.Path("claude"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	run := remote.LaunchedCarrying(app.Terminal(fresh))
 	app.TypeLine(fresh, "on-the-updated-outpost")

@@ -346,3 +346,55 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 		}
 	}
 }
+
+func TestAShellFromBeforeTheHomeAddedItsMachineTakesInputThereWithoutTheBridge(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{remote, home} {
+		ssh.Use(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	ssh.Route(address, remote)
+	direct := remote.App()
+	shell := remote.Spawn(direct, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
+	direct.AwaitScreen(shell, "$")
+
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
+	connected := outpostState(app, "outpost", protocol.OutpostStateConnected)
+	mark := len(app.Log())
+
+	direct.Type(shell, "echo after-$((1+1))\r", "keyboard")
+	direct.AwaitScreen(shell, "after-2")
+	terminal := protocol.TerminalID(direct.Terminal(shell))
+	snapshot := testworld.Request(direct, protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal},
+		protocol.EventGetScreenSnapshotResult, func(r protocol.GetScreenSnapshotResultMessage) bool { return r.ID == terminal })
+	if !snapshot.Success {
+		t.Fatalf("the screen of a shell on this machine: %+v", snapshot)
+	}
+
+	gone := "no-such-terminal"
+	missing := testworld.Request(direct, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(gone), Data: "x", ProbeID: &gone},
+		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == gone })
+	if missing.Success || protocol.Deref(missing.Error) == bridge.ErrUnanswered.Error() {
+		t.Fatalf("input for a terminal this machine does not run went to the home: %+v", missing)
+	}
+
+	host := connected.ID
+	fresh := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("fresh"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	app.TypeLine(fresh, "echo fresh-$((2+2))")
+	app.AwaitScreen(fresh, "fresh-4")
+	for _, raw := range app.Log()[mark:] {
+		var update protocol.OutpostsUpdatedMessage
+		if json.Unmarshal(raw, &update) != nil || update.Event != protocol.EventOutpostsUpdated {
+			continue
+		}
+		for _, row := range update.Outposts {
+			if row.State != protocol.OutpostStateConnected {
+				t.Fatalf("typing on the outpost dropped its bridge: %+v", row)
+			}
+		}
+	}
+}
