@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { open } from '@tauri-apps/plugin-dialog';
 import { describe, expect, it, vi } from 'vitest';
 import { crewMember, daemonSession, soloDesktop, defaultProfile, emptyDesktop, DEFAULT_DESKTOP_ID } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
@@ -26,9 +27,11 @@ describe('Chief slot in queue flow', () => {
     expect(setup().getByRole('radio', { name: /Opus/ })).toHaveAttribute('aria-checked', 'true');
     expect(setup().getByRole('radio', { name: 'low' })).toHaveAttribute('aria-checked', 'true');
     expect(setup().queryByText('Plug')).toBeNull();
-    const folder = setup().getByRole('textbox', { name: 'Notebook folder' });
-    expect(folder).toHaveValue('~/attn-notebook-work');
-    await gesture(daemon, () => fireEvent.change(folder, { target: { value: '~/Notes/Work' } }));
+    expect(setup().getByTestId('chief-notebook-folder')).toHaveTextContent('~/attn-notebook-work');
+    vi.mocked(open).mockResolvedValueOnce('/Users/you/Notes/Work');
+    await gesture(daemon, () => fireEvent.click(setup().getByRole('button', { name: 'Choose the Notebook folder' })));
+    expect(open).toHaveBeenLastCalledWith(expect.objectContaining({ directory: true, defaultPath: '~/attn-notebook-work' }));
+    expect(setup().getByTestId('chief-notebook-folder')).toHaveTextContent('/Users/you/Notes/Work');
     const configured = member({ agent: 'claude', model: 'opus', revision: 2 });
     daemon.on('crew_set', () => [
       { event: 'crew_updated', members: [configured] },
@@ -41,7 +44,7 @@ describe('Chief slot in queue flow', () => {
       { event: 'crew_wake_result', success: true, session_id: 'chief-day', member: current.id },
     ]);
     await gesture(daemon, () => fireEvent.click(wake));
-    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low', expected_revision: 1, notebook_root: '~/Notes/Work' })]);
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low', expected_revision: 1, notebook_root: '/Users/you/Notes/Work' })]);
     expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:chief-key' })]);
     expect(phase()).toBe('awake');
     expect(screen.queryByTestId('chief-setup')).toBeNull();
@@ -133,7 +136,7 @@ describe('Chief slot in queue flow', () => {
     expect(slot().getByText('waking…')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'crew_updated', members: [member({ agent: 'codex', model: 'gpt-6.1-sol' })] }));
     expect(setup().getByRole('heading', { name: 'Set up Captain' })).toBeInTheDocument();
-    expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toBeDisabled();
+    expect(setup().getByRole('button', { name: 'Choose the Notebook folder' })).toBeDisabled();
     expect(setup().getByRole('button', { name: 'Waking…' })).toHaveAttribute('aria-disabled', 'true');
   });
   it('ignores the new-agent picker Option+digit shortcuts behind its dialog', async () => {
@@ -161,7 +164,7 @@ describe('Chief slot in queue flow', () => {
     await gesture(daemon, () => fireEvent.click(setup().getByRole('button', { name: /Wake Captain/ })));
     expect(setup().getByRole('alert')).toHaveTextContent('Cannot start here');
     expect(setup().getByRole('radio', { name: /Sonnet/ })).toHaveAttribute('aria-checked', 'true');
-    expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toHaveValue('~/attn-notebook-work');
+    expect(setup().getByTestId('chief-notebook-folder')).toHaveTextContent('~/attn-notebook-work');
     expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveAttribute('aria-disabled', 'false');
     expect(daemon.sentOf('crew_set')).toHaveLength(1);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
