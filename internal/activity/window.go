@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -135,7 +136,7 @@ func clip(event transcript.Event) string {
 	if len(text) <= budget {
 		return text
 	}
-	return text[:budget] + "…"
+	return prompts.CutAtRune(text, budget) + "…"
 }
 
 func (w Window) Render() string {

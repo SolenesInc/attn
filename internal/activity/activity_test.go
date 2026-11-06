@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -53,6 +54,36 @@ func TestClipIsPerKind(t *testing.T) {
 		got := clip(transcript.Event{Kind: tc.kind, Text: long})
 		if len([]rune(got)) > tc.limit+1 {
 			t.Errorf("%s clipped to %d, want <= %d", tc.kind, len(got), tc.limit)
+		}
+	}
+}
+
+func TestRenderKeepsEveryCharacterWhole(t *testing.T) {
+	for _, tc := range []struct {
+		kind   string
+		budget int
+	}{
+		{transcript.EventKindThinking, ClipThinking},
+		{transcript.EventKindAssistant, ClipAssistant},
+		{transcript.EventKindUser, ClipUser},
+		{transcript.EventKindToolCall, ClipToolCall},
+		{transcript.EventKindToolResult, ClipToolResult},
+	} {
+		for _, char := range []string{"é", "—", "😀"} {
+			for overhang := 1; overhang < len(char); overhang++ {
+				kept := strings.Repeat("x", tc.budget-len(char)+overhang)
+				text := kept + char + strings.Repeat("y", 50)
+				window := Window{Events: []transcript.Event{{Kind: tc.kind, Text: text}}}
+
+				got := window.Render()
+
+				if !utf8.ValidString(got) {
+					t.Errorf("%s budget %d, %q overhanging by %d bytes: invalid UTF-8 %q", tc.kind, tc.budget, char, overhang, got)
+				}
+				if !strings.HasSuffix(got, kept+"…") {
+					t.Errorf("%s budget %d, %q overhanging by %d bytes: want the text cut right before the character, got %q", tc.kind, tc.budget, char, overhang, got)
+				}
+			}
 		}
 	}
 }

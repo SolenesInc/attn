@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func writeJSONL(t *testing.T, lines ...string) string {
@@ -348,6 +349,36 @@ func TestExtractConversationSlice_Caps(t *testing.T) {
 	}
 	if got.Summary != longSummary {
 		t.Errorf("Summary should not be truncated (len %d < SummaryCharCap %d), got %q", len(longSummary), opts.SummaryCharCap, got.Summary)
+	}
+}
+
+func TestExtractConversationSlice_CapsKeepEveryCharacterWhole(t *testing.T) {
+	const turnCap, summaryCap = 20, 40
+	opts := SliceOptions{TurnCharCap: turnCap, SummaryCharCap: summaryCap}
+	for _, char := range []string{"é", "—", "😀"} {
+		for overhang := 1; overhang < len(char); overhang++ {
+			turn := strings.Repeat("x", turnCap-len(char)+overhang) + char + "tail"
+			summary := strings.Repeat("y", summaryCap-len(char)+overhang) + char + "tail"
+			path := writeJSONL(t,
+				`{"type":"user","origin":{"kind":"human"},"message":{"content":"`+turn+`"}}`,
+				`{"type":"user","origin":{"kind":"human"},"message":{"content":"`+turn+` again"}}`,
+				`{"type":"user","isCompactSummary":true,"message":{"content":"`+summary+`"}}`,
+				`{"type":"assistant","message":{"content":"`+turn+`"}}`,
+			)
+
+			got, err := ExtractConversationSlice(path, opts)
+			if err != nil {
+				t.Fatalf("ExtractConversationSlice: %v", err)
+			}
+
+			rendered := got.Render()
+			if !utf8.ValidString(rendered) {
+				t.Errorf("%q overhanging by %d bytes: invalid UTF-8 %q", char, overhang, rendered)
+			}
+			if strings.Contains(rendered, char) {
+				t.Errorf("%q overhanging by %d bytes: want the text cut before the character, got %q", char, overhang, rendered)
+			}
+		}
 	}
 }
 

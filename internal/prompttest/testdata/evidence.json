@@ -4,7 +4,7 @@
   "cap/0/λ {{literal}}\nnext": "\"λ {{literal}}\\nnext\"",
   "cap/1/": "\"\"",
   "cap/1/ \n\t": "\"\"",
-  "cap/1/λ {{literal}}\nnext": "\"\\xce\\n...[truncated, 19 chars total]\"",
+  "cap/1/λ {{literal}}\nnext": "\"\\n...[truncated, 19 chars total]\"",
   "cap/100/": "\"\"",
   "cap/100/ \n\t": "\"\"",
   "cap/100/λ {{literal}}\nnext": "\"λ {{literal}}\\nnext\"",

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -136,7 +135,7 @@ func inlineHeldHandoff(text, seedID string) string {
 		return text
 	}
 	return prompts.RenderText("crew", "trimmed-note", prompts.Values{
-		"text":  cutAtRune(text, MaxHeldHandoffBytes),
+		"text":  prompts.CutAtRune(text, MaxHeldHandoffBytes),
 		"limit": fmt.Sprint(MaxHeldHandoffBytes),
 		"total": fmt.Sprint(len(text)),
 		"seed":  seedID,
@@ -147,15 +146,7 @@ func inlineHandoff(text, path string) string {
 	if len(text) <= handoffInlineLimit {
 		return text
 	}
-	return prompts.RenderText("crew", "truncated-handoff", prompts.Values{"text": cutAtRune(text, handoffInlineLimit), "limit": fmt.Sprint(handoffInlineLimit), "total": fmt.Sprint(len(text)), "path": path})
-}
-
-func cutAtRune(text string, limit int) string {
-	end := limit
-	for end > 0 && !utf8.RuneStart(text[end]) {
-		end--
-	}
-	return text[:end]
+	return prompts.RenderText("crew", "truncated-handoff", prompts.Values{"text": prompts.CutAtRune(text, handoffInlineLimit), "limit": fmt.Sprint(handoffInlineLimit), "total": fmt.Sprint(len(text)), "path": path})
 }
 
 func trimmed(values []string) []string {

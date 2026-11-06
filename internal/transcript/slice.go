@@ -294,7 +294,7 @@ func (b *sliceBuilder) processLine(line []byte) {
 func capText(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if n > 0 && len(s) > n {
-		return prompts.RenderText("conversation-evidence", "truncated", prompts.Values{"text": s[:n], "total": fmt.Sprint(len(s))})
+		return prompts.RenderText("conversation-evidence", "truncated", prompts.Values{"text": prompts.CutAtRune(s, n), "total": fmt.Sprint(len(s))})
 	}
 	return s
 }
