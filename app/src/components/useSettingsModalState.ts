@@ -250,6 +250,7 @@ export function useSettingsModalState({
   const agentCapabilityOrder = useMemo(() => AGENT_CAPABILITY_ORDER.map((cap) => cap as string), []);
   const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
   const queueShowHiddenSessions = isOn(settings, BoolSetting.queueShowHiddenSessions);
+  const queueCrewEnabled = isOn(settings, BoolSetting.queueCrewEnabled);
   const directAgentLaunchEnabled = isOn(settings, BoolSetting.directAgentLaunchEnabled);
   const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
   const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
@@ -505,9 +506,9 @@ export function useSettingsModalState({
           {
             id: 'hygiene',
             label: 'Attention queue',
-            description: 'When a turn settles itself, which notifications stay out of the queue, whether hidden sessions join it, and which repositories and authors never reach it.',
+            description: 'When a turn settles itself, which notifications stay out of the queue, whether hidden sessions or crew members join it, and which repositories and authors never reach it.',
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications show hidden sessions shared codex',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications show hidden sessions shared codex crew member put the crew in the queue',
           },
         ],
       },
@@ -680,6 +681,7 @@ export function useSettingsModalState({
     narrowestTileColsDraft,
     sidebarWidthDraft,
     queueShowHiddenSessions,
+    queueCrewEnabled,
     directAgentLaunchEnabled,
     queueQuietNotifications,
     onSetSetting,

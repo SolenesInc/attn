@@ -1074,6 +1074,7 @@ export function HygieneSettings({
   autoSettleCountdownDraft,
   queueQuietNotifications,
   queueShowHiddenSessions,
+  queueCrewEnabled,
   onSetSetting,
   mutedRepos,
   onUnmuteRepo,
@@ -1088,6 +1089,7 @@ export function HygieneSettings({
   | 'autoSettleCountdownDraft'
   | 'queueQuietNotifications'
   | 'queueShowHiddenSessions'
+  | 'queueCrewEnabled'
   | 'onSetSetting'
   | 'mutedRepos'
   | 'onUnmuteRepo'
@@ -1247,6 +1249,37 @@ export function HygieneSettings({
               onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
             >
               {queueShowHiddenSessions ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <h3>Crew</h3>
+          <p className="settings-description">
+            Crew members that are owed a turn. They stay in the Crew section either way. Off by default.
+          </p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Put the crew in the queue</p>
+              <p className="settings-row-copy" id="queue-crew-description">
+                A crew member that is owed a turn also waits in the queue. Its row stays in the Crew section.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Put the crew in the queue"
+              aria-checked={queueCrewEnabled}
+              aria-describedby="queue-crew-description"
+              className="settings-action"
+              data-testid="settings-queue-crew-toggle"
+              onClick={() => onSetSetting('queue_crew_enabled', queueCrewEnabled ? 'false' : 'true')}
+            >
+              {queueCrewEnabled ? 'Disable' : 'Enable'}
             </button>
           </div>
         </div>

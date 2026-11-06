@@ -194,6 +194,25 @@ describe('SettingsModal sections', () => {
     ]);
   });
 
+  it('finds the crew switch by searching "crew" in the attention queue settings, and saves it both ways', async () => {
+    const { daemon } = await renderSettings();
+    const search = screen.getByRole('searchbox', { name: 'Search settings' });
+    await gesture(daemon, () => fireEvent.change(search, { target: { value: 'crew' } }));
+    const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
+    await gesture(daemon, () => fireEvent.click(navigation.getByRole('button', { name: 'Attention queue' })));
+    const crewInQueue = () => screen.getByRole('switch', { name: 'Put the crew in the queue' });
+
+    expect(crewInQueue()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(crewInQueue()));
+    expect(crewInQueue()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(crewInQueue()));
+    expect(crewInQueue()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([
+      ['queue_crew_enabled', 'true'],
+      ['queue_crew_enabled', 'false'],
+    ]);
+  });
+
   it('raises a saved mark when a blur-committed field lands, and takes it away', async () => {
     const daemon = await openSection('desktop');
 

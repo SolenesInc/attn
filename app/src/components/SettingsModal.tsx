@@ -255,6 +255,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           autoSettleCountdownDraft={state.autoSettleCountdownDraft}
           queueQuietNotifications={state.queueQuietNotifications}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
+          queueCrewEnabled={state.queueCrewEnabled}
           onSetSetting={state.onSetSetting}
           mutedRepos={state.mutedRepos}
           onUnmuteRepo={state.onUnmuteRepo}

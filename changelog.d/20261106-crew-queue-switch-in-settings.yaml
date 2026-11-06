@@ -1,0 +1,6 @@
+kind: added
+area: settings
+change: >
+  Settings → Attention queue now has a "Put the crew in the queue" switch, so
+  searching Settings for "crew" finds it. It is the same setting as the
+  command palette's "Put the crew in the queue".

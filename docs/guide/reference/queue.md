@@ -101,7 +101,7 @@ Settling takes you to the agent after the one you settled, in queue order, and w
 <details>
 <summary>What stays out of the queue?</summary>
 
-Shells and the Chief are never owed a turn, and the Chief keeps its own slot in the Crew section of the sidebar. Crew members also stay in the Crew section until you run "Put the crew in the queue" from the command palette. "Take the crew out of the queue" undoes that. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that is owed a turn. Delegates are full agents, so they queue like any other.
+Shells and the Chief are never owed a turn, and the Chief keeps its own slot in the Crew section of the sidebar. Crew members also stay in the Crew section until you turn on "Put the crew in the queue", a switch in Settings → Attention queue (search "crew") that the command palette also offers. Turning it off, or running "Take the crew out of the queue", undoes that. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that is owed a turn. Delegates are full agents, so they queue like any other.
 </details>
 
 <details>
@@ -149,7 +149,7 @@ Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, t
 <details>
 <summary>Does the queue cover all my profiles?</summary>
 
-Each profile has its own queue, and it holds only that profile's agents. Turning the queue on or off applies to every profile at once, and so do auto-settle and "Put the crew in the queue".
+Each profile has its own queue, and it holds only that profile's agents. Turning the queue on or off applies to every profile at once, and so do auto-settle and the crew switch.
 </details>
 
 ## Quiet notifications
