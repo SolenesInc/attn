@@ -29,6 +29,12 @@ returns `testworld.Main(m)`.
   that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured
   PID to read the assigned port. The test does not release a reservation or
   retry startup.
+- The release upgrade tests start from the binaries of the latest release, which
+  `scripts/test-pty-upgrade.sh` downloads. `s.InstallBuild(attn, host)` renames a
+  build over the stack's install folder, as an update does: running processes keep
+  the old image, and every later exec, such as an agent's hook, runs the new build.
+  `s.StartRelease()` starts the installed release. `s.ReleaseApp()` connects to it
+  without `s.App()`'s protocol check, because a release speaks an older protocol.
 - For a promise about a moment between two steps of one operation, call
   `s.PauseAt(point)` to hold the daemon or a worker the first time that process
   reaches a pause point named in the process's code (`internal/pausepoint`,

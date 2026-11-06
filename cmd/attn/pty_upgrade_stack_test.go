@@ -301,6 +301,252 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current.stop()
 }
 
+func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectLaunch(t *testing.T) {
+	for _, path := range []struct {
+		name    string
+		appOpen bool
+	}{
+		{name: "the app runs while it is replaced", appOpen: true},
+		{name: "the app is quit before it is replaced", appOpen: false},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			t.Parallel()
+			u := startTheRelease(t)
+			app := u.ReleaseApp()
+			claude, codex := u.spawnAgent(app, fakeagent.Claude), u.spawnAgent(app, fakeagent.Codex)
+			shell := u.spawnShell(app)
+			for _, agent := range []releaseAgent{claude, codex} {
+				u.assertParent(agent.run, " -s ")
+				u.turn(app, agent, "before-update")
+			}
+
+			app.TypeLine(claude.session, "turn-across-the-replace")
+			if prompt := claude.run.Prompted(); prompt != "turn-across-the-replace" {
+				t.Fatalf("claude took %q", prompt)
+			}
+			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+			if !path.appOpen {
+				app.Close()
+			}
+			u.InstallBuild(u.currentAttn, u.currentHost)
+			claude.run.Reply("turn-across-the-replace reply <!-- attn:state=idle -->")
+			if path.appOpen {
+				testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+			}
+
+			app = u.ensureCurrent()
+			if len(app.Initial.Warnings) != 0 {
+				t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
+			}
+			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+			app.AwaitScreen(claude.session, "turn-across-the-replace reply")
+			for _, agent := range []releaseAgent{claude, codex} {
+				u.assertNoReloadNotice(app, agent.session)
+				app.AwaitScreen(agent.session, "before-update reply")
+				u.assertParent(agent.run, " -s ")
+				u.turn(app, agent, "after-update")
+			}
+			u.assertNoReloadNotice(app, shell.session)
+			shell.assertSameProcess(app)
+
+			u.storeTheNewDefaults(app)
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				agent := u.spawnAgent(app, h)
+				u.assertParent(agent.run, "attn-pty-host")
+				u.turn(app, agent, "new-after-update")
+			}
+			for _, agent := range []releaseAgent{claude, codex} {
+				u.assertParent(agent.run, " -s ")
+				u.turn(app, agent, "after-new-defaults")
+			}
+			shell.assertSameProcess(app)
+			settled := u.App()
+			for _, session := range []string{claude.session, codex.session, shell.session} {
+				u.assertNoReloadNotice(settled, session)
+			}
+		})
+	}
+}
+
+func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheHostWithDirectLaunch(t *testing.T) {
+	t.Parallel()
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	onWorker := u.spawnAgent(app, fakeagent.Claude)
+	u.assertNoSharedHost(app.Terminal(onWorker.session))
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	onHost := u.spawnAgent(app, fakeagent.Claude)
+	sharedHostOf(t, u.Dir, app.Terminal(onHost.session))
+	shellOnHost := u.spawnShell(app)
+	sharedHostOf(t, u.Dir, app.Terminal(shellOnHost.session))
+	for _, agent := range []releaseAgent{onWorker, onHost} {
+		u.turn(app, agent, "before-update")
+	}
+
+	u.InstallBuild(u.currentAttn, u.currentHost)
+	app = u.ensureCurrent()
+	for _, agent := range []releaseAgent{onWorker, onHost} {
+		app.AwaitScreen(agent.session, "before-update reply")
+		u.turn(app, agent, "after-update")
+	}
+	shellOnHost.assertSameProcess(app)
+	settled := u.App()
+	for _, session := range []string{onWorker.session, onHost.session, shellOnHost.session} {
+		u.assertNoReloadNotice(settled, session)
+	}
+
+	u.storeTheNewDefaults(app)
+	for _, agent := range []releaseAgent{onWorker, onHost} {
+		conversation := agent.run.ConversationID
+		result := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(agent.session), Cols: 100, Rows: 30},
+			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == agent.session })
+		if !result.Success {
+			t.Fatalf("reload: %s", protocol.Deref(result.Error))
+		}
+		reloaded := releaseAgent{session: agent.session, run: u.Launched(agent.session)}
+		u.assertParent(reloaded.run, "attn-pty-host")
+		sharedHostOf(t, u.Dir, app.Terminal(agent.session))
+		u.turn(app, reloaded, "after-reload")
+		if !reloaded.run.Resumed || reloaded.run.ConversationID != conversation {
+			t.Errorf("the reload ran conversation %q (resumed=%t), want %q resumed", reloaded.run.ConversationID, reloaded.run.Resumed, conversation)
+		}
+	}
+	shellOnHost.assertSameProcess(app)
+}
+
+// releaseUpdate is a stack that started on the real previous release, with the current build ready to install.
+type releaseUpdate struct {
+	*testworld.Stack
+	t                        *testing.T
+	currentAttn, currentHost string
+}
+
+type releaseAgent struct {
+	session string
+	run     *fakeagent.Run
+}
+
+type releaseShell struct {
+	u       *releaseUpdate
+	session string
+	pid     string
+	checks  int
+}
+
+func startTheRelease(t *testing.T) *releaseUpdate {
+	t.Helper()
+	releaseAttn, releaseHost, currentHost := os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_RELEASE_HOST"), os.Getenv("ATTN_TEST_PTY_HOST")
+	if releaseAttn == "" || releaseHost == "" || currentHost == "" || os.Getenv("ATTN_E2E_BIN") == "" {
+		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
+	}
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
+	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	u := &releaseUpdate{Stack: s, t: t, currentAttn: testworld.AttnBinary(t), currentHost: currentHost}
+	s.InstallBuild(releaseAttn, releaseHost)
+	s.StartRelease()
+	return u
+}
+
+// ensureCurrent is what the updated app does at launch: its daemon ensure replaces the daemon of the older build.
+func (u *releaseUpdate) ensureCurrent() *testworld.Peer {
+	u.T.Helper()
+	u.T.Cleanup(func() { u.Attn("daemon", "stop") })
+	got := u.Attn("daemon", "ensure")
+	if got.Code != 0 || !strings.Contains(got.Stdout, `"restarted"`) {
+		u.T.Fatalf("attn daemon ensure from the update: %+v", got)
+	}
+	u.AwaitStopped()
+	return u.App()
+}
+
+// storeTheNewDefaults stands in for the flips of both settings until they land.
+func (u *releaseUpdate) storeTheNewDefaults(app *testworld.Peer) {
+	u.T.Helper()
+	setSetting(u.t, app, upgradeSharedHostEnabled, "true")
+	setSetting(u.t, app, "direct_agent_launch_enabled", "true")
+}
+
+func (u *releaseUpdate) spawnAgent(app *testworld.Peer, h fakeagent.Harness) releaseAgent {
+	u.T.Helper()
+	session := u.Spawn(app, h, u.Path(string(h)))
+	return releaseAgent{session: session, run: u.Launched(session)}
+}
+
+func (u *releaseUpdate) spawnShell(app *testworld.Peer) *releaseShell {
+	u.T.Helper()
+	session := u.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), u.Path("shell"))
+	shell := &releaseShell{u: u, session: session}
+	app.TypeLine(session, `for i in $(seq 1 300); do printf 'scroll-%03d\n' $i; done; echo printed-$((1+1))`)
+	app.AwaitScreen(session, "printed-2")
+	shell.pid = shell.currentPID(app)
+	return shell
+}
+
+func (shell *releaseShell) currentPID(app *testworld.Peer) string {
+	shell.u.T.Helper()
+	shell.checks++
+	path := filepath.Join(shell.u.Dir, "shell-"+shell.session+".pid")
+	done := fmt.Sprintf("recorded-%d-$((1+1))", shell.checks)
+	app.TypeLine(shell.session, "echo $$ > "+path+"; echo "+done)
+	app.AwaitScreen(shell.session, fmt.Sprintf("recorded-%d-2", shell.checks))
+	pid, err := os.ReadFile(path)
+	if err != nil {
+		shell.u.T.Fatal(err)
+	}
+	return strings.TrimSpace(string(pid))
+}
+
+func (shell *releaseShell) assertSameProcess(app *testworld.Peer) {
+	shell.u.T.Helper()
+	app.AwaitScreen(shell.session, "scroll-001")
+	if got := shell.currentPID(app); got != shell.pid {
+		shell.u.T.Errorf("the shell was pid %s and is now pid %s, want the same process", shell.pid, got)
+	}
+}
+
+// turn proves input reaches the agent's process and that its hooks still drive its state.
+func (u *releaseUpdate) turn(app *testworld.Peer, agent releaseAgent, phase string) {
+	u.T.Helper()
+	app.TypeLine(agent.session, phase)
+	if prompt := agent.run.Prompted(); prompt != phase {
+		u.T.Fatalf("%s took %q, want %q", agent.run.Harness, prompt, phase)
+	}
+	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	agent.run.Reply(phase + " reply <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	app.AwaitScreen(agent.session, phase+" reply")
+}
+
+func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {
+	u.T.Helper()
+	ppid, err := exec.Command("ps", "-p", strconv.Itoa(run.PID), "-o", "ppid=").Output()
+	if err != nil {
+		u.T.Fatalf("read %s's parent: %v", run.Harness, err)
+	}
+	parent, err := exec.Command("ps", "-p", strings.TrimSpace(string(ppid)), "-o", "args=").Output()
+	if err != nil {
+		u.T.Fatalf("read %s's parent: %v", run.Harness, err)
+	}
+	if !strings.Contains(string(parent), want) {
+		u.T.Errorf("%s's parent is %s, want %q", run.Harness, parent, want)
+	}
+}
+
+func (u *releaseUpdate) assertNoReloadNotice(app *testworld.Peer, session string) {
+	u.T.Helper()
+	if came := initialSession(u.t, app, session); protocol.Deref(came.TerminalBuildStale) {
+		u.T.Errorf("session %s came back with the reload notice", session)
+	}
+}
+
+func (u *releaseUpdate) assertNoSharedHost(terminal string) {
+	u.T.Helper()
+	paths, _ := filepath.Glob(filepath.Join(u.Dir, "pty-hosts", "*", "registry", terminal+".json"))
+	if len(paths) != 0 {
+		u.T.Fatalf("terminal %s is on the shared host: %v", terminal, paths)
+	}
+}
+
 const (
 	upgradeSharedHostEnabled = "pty_shared_host_enabled"
 	upgradeSharedHostActive  = "pty_shared_host_active"
