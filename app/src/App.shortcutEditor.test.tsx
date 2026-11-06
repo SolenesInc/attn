@@ -181,6 +181,18 @@ describe('App shortcut editor', () => {
     expect(keybindingWrites(daemon)).toEqual([]);
   });
 
+  it.each([
+    ['a digit that types a bracket', { key: '[', code: 'Digit8', metaKey: true, altKey: true }, 'Move this to desktop 8 and follow'],
+    ['a bracket key that types a symbol', { key: '“', code: 'BracketLeft', metaKey: true, altKey: true }, 'Narrow the sidebar'],
+  ])('asks before taking the keys of %s, naming what those keys run', async (_, keys, holder) => {
+    const { daemon } = await renderEditor({ shelfLayout: true });
+
+    await record(daemon, 'New session below', keys);
+
+    expect(row('New session below')).toHaveTextContent(`is “${holder}”.`);
+    expect(keybindingWrites(daemon)).toEqual([]);
+  });
+
   it('reassigns claimed keys, unbinding their previous holder', async () => {
     const { daemon } = await renderEditor();
 

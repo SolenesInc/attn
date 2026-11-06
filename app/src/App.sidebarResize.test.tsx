@@ -171,6 +171,33 @@ describe('Stepping the sidebar', () => {
     expect(label()).not.toBeVisible();
   });
 
+  it.each([
+    ['8 on a Swedish keyboard', { key: '[', code: 'Digit8' }, 8],
+    ['9 on a Swedish keyboard', { key: ']', code: 'Digit9' }, 9],
+    ['5 on a German keyboard', { key: '[', code: 'Digit5' }, 5],
+    ['6 on a German keyboard', { key: ']', code: 'Digit6' }, 6],
+  ])('leaves Cmd+Option+%s to the desktop move', async (_, keys, slot) => {
+    const { daemon } = await renderApp({
+      initialState: {
+        settings: SHELF_ON,
+        sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+        desktops: [soloDesktop('s1', { shortcut_slot: 1 }), soloDesktop('s2', { shortcut_slot: slot })],
+      },
+      script: (scripted) => serveSettings(scripted, SHELF_ON),
+    });
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+    await gesture(daemon, () => fireEvent.keyDown(window, { ...keys, metaKey: true, altKey: true }));
+    expect(widthSaves(daemon)).toEqual([]);
+    expect(daemon.sentOf('desktop_move_leaf').map((command) => command.target_shortcut_slot)).toEqual([slot]);
+  });
+
+  it('steps from the bracket keys whatever they type', async () => {
+    const daemon = await renderSidebar(SHELF_ON);
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: '~', code: 'BracketRight', metaKey: true, altKey: true }));
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: '˙', code: 'BracketLeft', metaKey: true, altKey: true }));
+    expect(savedValues(daemon)).toEqual(['280', '240']);
+  });
+
   it('runs the same steps from the palette, and resets to the default', async () => {
     const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
     await runCommand(daemon, 'Widen the sidebar');

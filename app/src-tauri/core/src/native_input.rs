@@ -400,7 +400,7 @@ pub fn inject<R: Runtime>(
         "native_input_state" => platform::input_state(app, &label),
         "native_key" => {
             let modifiers = parse_modifiers(payload.get("modifiers"))?;
-            let stroke = match (
+            let mut stroke = match (
                 payload.get("key").and_then(Value::as_str),
                 payload.get("keyCode").and_then(Value::as_u64),
             ) {
@@ -411,6 +411,9 @@ pub fn inject<R: Runtime>(
                 )?,
                 (None, None) => return Err("native_key needs key or keyCode".to_string()),
             };
+            if let Some(characters) = payload.get("characters").and_then(Value::as_str) {
+                stroke.characters = characters.to_string();
+            }
             platform::send_keys(app, &label, &[stroke], payload.get("window").is_some())
         }
         "native_text" => {

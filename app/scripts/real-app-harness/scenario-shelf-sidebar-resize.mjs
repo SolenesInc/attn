@@ -25,6 +25,8 @@ const press = (shortcutId) => pressShortcutKeys(client, driver, shortcutId);
 const shot = async (name) => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
 const waitDom = (selector, extra = {}) => request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
 
+const KEY_CODE_DIGIT_8 = 28;
+const KEY_CODE_BRACKET_LEFT = 33;
 const HANDLE = '.sidebar-resize-handle';
 const LABEL = '.sidebar-resize-label';
 const DRAG = { steps: 24, withoutReceipt: 'pointer capture sends the mouse-up to the handle, which has moved by then' };
@@ -218,6 +220,25 @@ try {
     runner.log('relaunch', { cols, fits });
     runner.assert(Object.values(fits).every((count) => count === 1), 'no terminal fits at a second size', { fits });
   });
+
+  if (process.platform === 'darwin') {
+    await runner.step('a_digit_that_types_a_bracket_moves_the_tile_and_the_bracket_key_steps_the_width', async () => {
+      const option = ['command', 'option'];
+      await request('native_key', { keyCode: KEY_CODE_BRACKET_LEFT, characters: '˙', modifiers: option });
+      await waitForStored(280);
+      const { sessionId } = (await request('get_state')).activeLeaf;
+      await request('native_key', { keyCode: KEY_CODE_DIGIT_8, characters: '[', modifiers: option });
+      await waitUntil(
+        async () => {
+          const { desktopId } = await request('get_desktop', { sessionId });
+          return observer.desktops.find((candidate) => candidate.id === desktopId)?.shortcut_slot;
+        },
+        (slot) => slot === 8,
+        'the tile on desktop 8',
+      );
+      runner.assert(storedWidth() === '280', 'the digit changes no width');
+    });
+  }
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {

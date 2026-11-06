@@ -122,8 +122,8 @@ export function eventToBinding(e: KeyboardEvent): CaptureResult {
   if (e.metaKey || e.ctrlKey) def.meta = true;
   if (e.altKey) def.alt = true;
   if (e.shiftKey) def.shift = true;
-  // Keep code for keys whose `key` is layout/locale dependent (digits, named keys).
-  if (/^Digit\d$/.test(e.code) || e.key.length !== 1) def.code = e.code;
+  // Keep code for keys whose `key` is layout/locale dependent (digits, named keys, macOS's Option layer).
+  if (/^Digit\d$/.test(e.code) || e.key.length !== 1 || (e.altKey && isMacLikePlatform())) def.code = e.code;
 
   return { kind: 'binding', def };
 }

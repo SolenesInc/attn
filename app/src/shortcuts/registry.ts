@@ -126,8 +126,8 @@ export const MAC_SHORTCUTS = {
   'ui.decreaseFontSize': { key: '-', meta: true },
   'ui.resetFontSize': { key: '0', meta: true },
 
-  // Option-modified letters need the `code` fallback: with ⌥ held macOS/WebKit reports a
-  // dead-key character as e.key, never 'n'. Playwright synthesizes key:'n', so e2e can't see it.
+  // Playwright synthesizes key:'n' with ⌥ held; macOS/WebKit reports a dead-key character instead,
+  // so e2e can't see that these bindings depend on `code`.
   'notebook.openTile': { key: 'n', code: 'KeyN', meta: true, alt: true },
   'notebook.openFullscreen': { key: 'n', code: 'KeyN', meta: true, alt: true, shift: true },
 
@@ -259,10 +259,16 @@ function modifiersEqual(a: Combo, b: Combo): boolean {
     && !!a.shift === !!b.shift;
 }
 
+/** macOS's Option layer types symbols on other keys: ⌥8 is `[` on a Swedish keyboard. */
+function followsPhysicalKey(def: Combo): boolean {
+  return !!def.alt && !!def.code && isMacLikePlatform();
+}
+
 /** Whether two combos share a keystroke: equal modifiers AND an overlapping key OR code,
  * mirroring matchesShortcut so conflicts match dispatch semantics. */
 export function combosConflict(a: Combo, b: Combo): boolean {
   if (!modifiersEqual(a, b)) return false;
+  if (followsPhysicalKey(a) && followsPhysicalKey(b)) return a.code === b.code;
   if (a.key.toLowerCase() === b.key.toLowerCase()) return true;
   return !!a.code && !!b.code && a.code === b.code;
 }
@@ -301,8 +307,9 @@ export function validateNoConflicts(shortcuts: ShortcutRegistry): void {
 }
 
 export function matchesShortcut(e: KeyboardEvent, def: ShortcutDef): boolean {
-  const keyMatches = e.key.toLowerCase() === def.key.toLowerCase()
-    || (!!def.code && e.code === def.code);
+  const keyMatches = followsPhysicalKey(def)
+    ? e.code === def.code
+    : e.key.toLowerCase() === def.key.toLowerCase() || (!!def.code && e.code === def.code);
   const wantsMeta = !!def.meta;
   const isMac = isMacLikePlatform();
   const accelPressed = isMac ? e.metaKey : (e.metaKey || e.ctrlKey);

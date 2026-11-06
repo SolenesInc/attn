@@ -105,6 +105,8 @@ Drag the divider between two columns to give them the widths you want, and the o
 
 The open sidebar has one width, in desktop flow and queue flow and on every profile. Drag its right edge to change it. The tiles hold still during the drag and fit once when you release, so running agents resize only once. Esc, leaving the window or collapsing the sidebar cancels the drag. Cmd+Option+] and Cmd+Option+[ (Ctrl+Alt+] and [ on Linux) step the width by 40 pixels, and so do "Widen the sidebar" and "Narrow the sidebar" in the palette. To type a width, use **Settings → Experimental** or `attn settings set sidebar_width <pixels>`.
 
+On a Mac, Option shortcuts go by key position, so a keyboard that isn't US English keeps every one of them. On a Swedish keyboard, Option+8 types `[`, yet Cmd+Option+8 moves a tile to desktop 8. Cmd+Option+[ is the key to the right of P, Å.
+
 The width runs from 200 to 600 pixels, and tiles always keep at least 480 pixels, so an 800-pixel window shows at most 320. A wider saved width comes back when the window grows. A label shows the width during a drag and after a step, and Attn names the limit when a step can't go further. A wider sidebar leaves less room, so fewer tiles may fit.
 
 To go back to the default of 240 pixels, double-click the edge, run "Reset sidebar width", click **Use default** in Settings, or run `attn settings set sidebar_width ""`. The width survives a restart. Whether the sidebar is collapsed does not.
