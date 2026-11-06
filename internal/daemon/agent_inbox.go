@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -136,8 +137,13 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 	d.endStandbyOnceMailRead(read...)
 	d.kickInboxAfterCommit(addresses...)
 	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
-	if len(items) > 0 && d.quietNotifications() && d.inNotificationRun(recipientSessionID) {
-		result.QuietNotifications = protocol.Ptr(true)
+	if len(items) > 0 && d.inNotificationRun(recipientSessionID) {
+		switch {
+		case d.quietNotifications():
+			result.QuietNotifications = protocol.Ptr(true)
+		case d.on(setting.PhoneAccessEnabled):
+			result.PhoneStaysSilent = protocol.Ptr(true)
+		}
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxBatchResult: result})
 }

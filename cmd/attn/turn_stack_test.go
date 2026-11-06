@@ -22,13 +22,9 @@ func TestAnAgentOpensAndSettlesItsOwnTurnFromItsSession(t *testing.T) {
 		return s.Run(testworld.Invocation{Args: []string{"turn", action}, Session: session})
 	}
 
-	if got := turn("open"); got.Code != 0 || got.Stdout != "The user does not work in the queue flow, so there is no queue to join; nothing changed.\n" {
-		t.Errorf("attn turn open with the queue flow off exited %d and printed %q, stderr %q", got.Code, got.Stdout, got.Stderr)
-	}
-	setSetting(t, app, "queue_mode_enabled", "true")
 	for _, step := range []struct{ action, want string }{
-		{"open", "Your turn is open; the user will come to you.\n"},
-		{"settle", "Your turn is settled; you are out of the user's queue.\n"},
+		{"open", "Your turn is open; it shows in the user's queue and notifies their phone, if they use them.\n"},
+		{"settle", "Your turn is settled.\n"},
 		{"settle", "No turn was open; nothing changed.\n"},
 	} {
 		if got := turn(step.action); got.Code != 0 || got.Stdout != step.want {

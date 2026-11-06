@@ -1054,6 +1054,7 @@ export enum AgentCloseRule {
 
 export interface AgentInboxBatchResult {
     items:                AgentInboxItemResultElement[];
+    phone_stays_silent?:  boolean;
     quiet_notifications?: boolean;
     remaining:            number;
     [property: string]: any;
@@ -1325,7 +1326,6 @@ export enum AgentTurnOutcome {
     NotOpen = "not_open",
     Opened = "opened",
     OpensAtStop = "opens_at_stop",
-    QueueOff = "queue_off",
     Settled = "settled",
     Snoozed = "snoozed",
     Withdrawn = "withdrawn",
@@ -9085,6 +9085,7 @@ export interface AgentCloseResultObject {
 
 export interface AgentInboxBatchResultObject {
     items:                AgentInboxItemResultElement[];
+    phone_stays_silent?:  boolean;
     quiet_notifications?: boolean;
     remaining:            number;
     [property: string]: any;
@@ -20703,6 +20704,7 @@ const typeMap: any = {
     ], "any"),
     "AgentInboxBatchResult": o([
         { json: "items", js: "items", typ: a(r("AgentInboxItemResultElement")) },
+        { json: "phone_stays_silent", js: "phone_stays_silent", typ: u(undefined, true) },
         { json: "quiet_notifications", js: "quiet_notifications", typ: u(undefined, true) },
         { json: "remaining", js: "remaining", typ: 0 },
     ], "any"),
@@ -25639,6 +25641,7 @@ const typeMap: any = {
     ], "any"),
     "AgentInboxBatchResultObject": o([
         { json: "items", js: "items", typ: a(r("AgentInboxItemResultElement")) },
+        { json: "phone_stays_silent", js: "phone_stays_silent", typ: u(undefined, true) },
         { json: "quiet_notifications", js: "quiet_notifications", typ: u(undefined, true) },
         { json: "remaining", js: "remaining", typ: 0 },
     ], "any"),
@@ -28553,7 +28556,6 @@ const typeMap: any = {
         "not_open",
         "opened",
         "opens_at_stop",
-        "queue_off",
         "settled",
         "snoozed",
         "withdrawn",

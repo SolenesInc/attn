@@ -156,6 +156,9 @@ type AgentInboxBatchResult struct {
 	// Items corresponds to the JSON schema field "items".
 	Items []AgentInboxItem `json:"items"`
 
+	// PhoneStaysSilent corresponds to the JSON schema field "phone_stays_silent".
+	PhoneStaysSilent *bool `json:"phone_stays_silent,omitempty,omitzero"`
+
 	// QuietNotifications corresponds to the JSON schema field "quiet_notifications".
 	QuietNotifications *bool `json:"quiet_notifications,omitempty,omitzero"`
 
@@ -477,7 +480,6 @@ type AgentTurnOutcome string
 const AgentTurnOutcomeNotOpen AgentTurnOutcome = "not_open"
 const AgentTurnOutcomeOpened AgentTurnOutcome = "opened"
 const AgentTurnOutcomeOpensAtStop AgentTurnOutcome = "opens_at_stop"
-const AgentTurnOutcomeQueueOff AgentTurnOutcome = "queue_off"
 const AgentTurnOutcomeSettled AgentTurnOutcome = "settled"
 const AgentTurnOutcomeSnoozed AgentTurnOutcome = "snoozed"
 const AgentTurnOutcomeWithdrawn AgentTurnOutcome = "withdrawn"

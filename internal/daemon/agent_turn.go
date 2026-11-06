@@ -18,9 +18,6 @@ func (d *Daemon) handleAgentTurn(conn net.Conn, msg *protocol.AgentTurnMessage) 
 }
 
 func (d *Daemon) agentTurn(sessionID protocol.SessionID, action protocol.AgentTurnAction) (protocol.AgentTurnOutcome, error) {
-	if !d.queueFlowOn() {
-		return protocol.AgentTurnOutcomeQueueOff, nil
-	}
 	result, err := d.monitorCommand(sessionID, "agent_turn", time.Time{}, action)
 	return protocol.Deref(result.Outcome), err
 }

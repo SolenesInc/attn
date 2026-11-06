@@ -1,0 +1,6 @@
+kind: changed
+area: agents
+change: >
+  `attn turn open` and `attn turn settle` now work in desktop flow too, so an
+  agent a notification woke can still notify your phone when it needs you. With
+  phone access on, attn tells such an agent that its stop stays silent otherwise.

@@ -744,6 +744,9 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 	if protocol.Deref(result.QuietNotifications) {
 		fmt.Fprintln(w, prompts.RenderText("session", "inbox-quiet", nil))
 	}
+	if protocol.Deref(result.PhoneStaysSilent) {
+		fmt.Fprintln(w, prompts.RenderText("session", "inbox-phone-silent", nil))
+	}
 }
 
 func printAgentMsgStatus(w io.Writer, message *protocol.AgentPeerMessage) {

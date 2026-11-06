@@ -763,6 +763,16 @@
           }
         },
         {
+          "id": "inbox-phone-silent",
+          "delivery": "cli_output",
+          "description": "After the items, when a notification started the reader's run, its stop still opens a turn, and phone access is on, so only the phone stays silent.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-phone-silent",
+            "source": "content/session/inbox-phone-silent.md"
+          }
+        },
+        {
           "id": "inbox-quiet",
           "delivery": "cli_output",
           "description": "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.",
@@ -6157,5 +6167,5 @@
       ]
     }
   ],
-  "definitions_hash": "1a2f24f7f7954509b77be9853ee75318abd69b1164088076780b2b376f29d030"
+  "definitions_hash": "4d0b6c65b34592ae684632853931f23692e82c1137f465aac741e36708b45988"
 }

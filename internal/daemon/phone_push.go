@@ -55,10 +55,12 @@ type phonePushNote struct {
 	collapseID string
 	freshUntil time.Time
 	episode    string
+	agentTurn  string
 }
 
 type phonePushes struct {
-	pushedEpisode map[protocol.SessionID]string
+	pushedEpisode   map[protocol.SessionID]string
+	pushedAgentTurn map[protocol.SessionID]string
 }
 
 var phonePushFacts = bus.Filter{FactSessionStateChanged, FactAskOpened}
@@ -67,7 +69,7 @@ func (d *Daemon) registerPhonePush() {
 	if d.eventBus == nil {
 		return
 	}
-	pushes := &phonePushes{pushedEpisode: map[protocol.SessionID]string{}}
+	pushes := &phonePushes{pushedEpisode: map[protocol.SessionID]string{}, pushedAgentTurn: map[protocol.SessionID]string{}}
 	if err := d.eventBus.Register(phonePushConsumer, phonePushFacts, func(ctx context.Context, ev bus.Event) error {
 		return d.pushToPhones(ctx, pushes, ev)
 	}); err != nil {
@@ -104,6 +106,9 @@ func (d *Daemon) pushToPhones(ctx context.Context, pushes *phonePushes, ev bus.E
 		if linkDown == nil {
 			if note.episode != "" {
 				pushes.pushedEpisode[protocol.SessionID(note.SessionID)] = note.episode
+			}
+			if note.agentTurn != "" {
+				pushes.pushedAgentTurn[protocol.SessionID(note.SessionID)] = note.agentTurn
 			}
 			return nil
 		}
@@ -185,16 +190,23 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	}
 	if session == nil || !protocol.Deref(session.TurnOwed) {
 		delete(pushes.pushedEpisode, sessionID)
+		delete(pushes.pushedAgentTurn, sessionID)
 		return phonePushNote{}, false
 	}
 	var kind, text string
-	switch session.State {
-	case protocol.SessionStateWaitingInput:
-		if d.stopFollowsNotification(sessionID) && !protocol.Deref(session.TurnByAgent) {
-			return phonePushNote{}, false
-		}
+	askedForUser := protocol.Deref(session.TurnByAgent)
+	var agentTurn string
+	if askedForUser {
+		agentTurn = protocol.Deref(session.TurnOpenedAt)
+	}
+	notificationStop := d.stopFollowsNotification(sessionID)
+	announced := agentTurn != "" && pushes.pushedAgentTurn[sessionID] == agentTurn
+	switch {
+	case session.State == protocol.SessionStateWaitingInput && !notificationStop:
 		kind = phonePushWaiting
-	case protocol.SessionStatePendingApproval:
+	case (session.State == protocol.SessionStateWaitingInput || session.State == protocol.SessionStateIdle) && askedForUser && !announced:
+		kind = phonePushWaiting
+	case session.State == protocol.SessionStatePendingApproval:
 		kind = phonePushNeedsApproval
 	default:
 		return phonePushNote{}, false
@@ -217,6 +229,7 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 		collapseID: hex.EncodeToString(sum[:16]),
 		freshUntil: since.Add(phonePushFreshFor),
 		episode:    episode,
+		agentTurn:  agentTurn,
 	}, true
 }
 

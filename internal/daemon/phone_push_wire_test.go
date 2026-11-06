@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -197,20 +198,79 @@ func TestANotificationRunThatNeedsApprovalPushesInEitherFlow(t *testing.T) {
 
 func TestAStopAfterAttnTurnOpenPushesThoughANotificationStartedTheRun(t *testing.T) {
 	for _, flow := range phonePushFlows {
-		if !flow.queue {
-			continue
-		}
 		t.Run(flow.name, func(t *testing.T) {
 			w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
 			session, agent, owed := owingIdleAgent(t, w, app, cli)
-			working, _ := notificationRunStarts(t, app, cli, agent, session, settleFromApp(app, owed), "the migration failed")
-			opened, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen)
-			if err != nil || opened.Outcome != protocol.AgentTurnOutcomeOpensAtStop {
+			settled := settleFromApp(app, owed)
+			for i, marker := range []string{"waiting_input", "idle"} {
+				working, _ := notificationRunStarts(t, app, cli, agent, session, settled, fmt.Sprintf("migration %d failed", i+1))
+				opened, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen)
+				if err != nil || opened.Outcome != protocol.AgentTurnOutcomeOpensAtStop {
+					t.Fatalf("attn turn open while working = %+v, %v; want it to open at the stop", opened, err)
+				}
+				text := fmt.Sprintf("Migration %d needs your call.", i+1)
+				agent.Reply(text + " <!-- attn:state=" + marker + " -->")
+				stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+				phone.expect("waiting", text)
+				stopped = notificationRunStops(t, app, cli, agent, session, stopped, fmt.Sprintf("migration %d note", i+1), "Noted. <!-- attn:state="+marker+" -->")
+				if closed, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionSettle); err != nil || closed.Outcome != protocol.AgentTurnOutcomeSettled {
+					t.Fatalf("attn turn settle = %+v, %v; want settled", closed, err)
+				}
+				settled = testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+					return s.StateSince == stopped.StateSince && !protocol.Deref(s.TurnOwed)
+				})
+			}
+		})
+	}
+}
+
+func TestAnOpenTurnAnnouncedAfterTheUsersPromptDoesNotPushAgainForANotificationsStop(t *testing.T) {
+	for _, flow := range phonePushFlows {
+		t.Run(flow.name, func(t *testing.T) {
+			w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
+			session, agent, owed := owingIdleAgent(t, w, app, cli)
+			captureRun := func(before protocol.Session, capture string) protocol.Session {
+				t.Helper()
+				sendQuickCapture(t, app, sessionMailbox(session), capture)
+				if got := agent.Prompted(); !strings.Contains(got, capture) {
+					t.Fatalf("the agent was prompted with %q, want %q", got, capture)
+				}
+				return testworld.AwaitStateAfter(app, before, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			}
+			stops := func(working protocol.Session, reply string) protocol.Session {
+				t.Helper()
+				agent.Reply(reply + " <!-- attn:state=waiting_input -->")
+				return testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+			}
+
+			working := captureRun(settleFromApp(app, owed), "run the migration")
+			if opened, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen); err != nil || opened.Outcome != protocol.AgentTurnOutcomeOpensAtStop {
 				t.Fatalf("attn turn open while working = %+v, %v; want it to open at the stop", opened, err)
 			}
-			agent.Reply("The migration needs your call. <!-- attn:state=waiting_input -->")
-			testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+			stopped := stops(working, "The migration needs your call.")
 			phone.expect("waiting", "The migration needs your call.")
+
+			stopped = notificationRunStops(t, app, cli, agent, session, stopped, "the review is in", "Noted. <!-- attn:state=waiting_input -->")
+			stopped = stops(captureRun(stopped, "still there?"), "Yes.")
+			phone.expect("waiting", "Yes.")
+
+			stopped = notificationRunStops(t, app, cli, agent, session, stopped, "the second review is in", "Noted again. <!-- attn:state=waiting_input -->")
+			stops(captureRun(stopped, "and now?"), "Still here.")
+			phone.expect("waiting", "Still here.")
+		})
+	}
+}
+
+func TestAnAgentANotificationWokeIsToldThePhoneStaysSilentWhenItsStopStillOpensATurn(t *testing.T) {
+	for _, flow := range phonePushFlows {
+		t.Run(flow.name, func(t *testing.T) {
+			w, app, cli, _ := phonePushWorld(t, flow.queue, flow.quiet)
+			session, agent, owed := owingIdleAgent(t, w, app, cli)
+			_, batch := notificationRunStarts(t, app, cli, agent, session, settleFromApp(app, owed), "the review is in")
+			quiet := flow.queue && flow.quiet
+			if protocol.Deref(batch.QuietNotifications) != quiet || protocol.Deref(batch.PhoneStaysSilent) == quiet {
+				t.Fatalf("the agent was told quiet=%v phone_silent=%v in %s", protocol.Deref(batch.QuietNotifications), protocol.Deref(batch.PhoneStaysSilent), flow.name)
+			}
 		})
 	}
 }

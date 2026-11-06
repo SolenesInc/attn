@@ -1652,7 +1652,6 @@ enum AgentTurnAction {
 
 // What an agent turn command did.
 enum AgentTurnOutcome {
-  queue_off,      // The queue flow is off; nothing changed.
   opens_at_stop,  // The turn opens when the agent's current run stops.
   opened,         // The turn is open now.
   snoozed,        // The user snoozed the agent; its turn opens once the snooze ends and the agent has stopped.
@@ -7738,6 +7737,10 @@ model AgentInboxBatchResult {
   // notifications apply: when that run stops the agent does not enter the
   // user's queue unless it opens its turn.
   quiet_notifications?: boolean;
+  // True when the reader is in a run a notification started, its stop still
+  // opens a turn, and phone access is on: that stop does not notify the phone
+  // unless the agent opens its turn.
+  phone_stays_silent?: boolean;
 }
 
 model EvidenceExcerpt {

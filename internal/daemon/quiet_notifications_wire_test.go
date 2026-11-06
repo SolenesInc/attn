@@ -284,20 +284,23 @@ func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
 	})
 }
 
-func TestWithTheQueueFlowOffAnAgentsTurnCommandsChangeNothing(t *testing.T) {
+func TestWithTheQueueFlowOffAnAgentOpensAndSettlesItsOwnTurn(t *testing.T) {
 	w, app, cli := quietNotificationsWorld(t, true)
 	setSetting(t, app, "queue_mode_enabled", "false")
 	session, _, owed := owingIdleAgent(t, w, app, cli)
 	settleFromApp(app, owed)
 
-	for _, action := range []protocol.AgentTurnAction{protocol.AgentTurnActionOpen, protocol.AgentTurnActionSettle} {
-		result, err := cli.AgentTurn(protocol.SessionID(session), action)
-		if err != nil || result.Outcome != protocol.AgentTurnOutcomeQueueOff {
-			t.Fatalf("attn turn %s with the queue flow off = %+v, %v; want queue_off", action, result, err)
-		}
+	if opened, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen); err != nil || opened.Outcome != protocol.AgentTurnOutcomeOpened {
+		t.Fatalf("attn turn open with the queue flow off = %+v, %v; want opened", opened, err)
 	}
-	if s := queriedSession(t, cli, session); protocol.Deref(s.TurnOwed) || protocol.Deref(s.TurnByAgent) {
-		t.Fatalf("with the queue flow off attn turn open left owed=%v by_agent=%v", protocol.Deref(s.TurnOwed), protocol.Deref(s.TurnByAgent))
+	if s := queriedSession(t, cli, session); !protocol.Deref(s.TurnOwed) || !protocol.Deref(s.TurnByAgent) {
+		t.Fatalf("attn turn open left owed=%v by_agent=%v", protocol.Deref(s.TurnOwed), protocol.Deref(s.TurnByAgent))
+	}
+	if closed, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionSettle); err != nil || closed.Outcome != protocol.AgentTurnOutcomeSettled {
+		t.Fatalf("attn turn settle with the queue flow off = %+v, %v; want settled", closed, err)
+	}
+	if s := queriedSession(t, cli, session); protocol.Deref(s.TurnOwed) {
+		t.Fatal("attn turn settle left the turn open")
 	}
 }
 

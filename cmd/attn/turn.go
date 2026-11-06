@@ -34,16 +34,14 @@ func executeTurn(args []string, stdout, stderr io.Writer) int {
 
 func agentTurnOutcomeText(outcome protocol.AgentTurnOutcome) string {
 	switch outcome {
-	case protocol.AgentTurnOutcomeQueueOff:
-		return "The user does not work in the queue flow, so there is no queue to join; nothing changed."
 	case protocol.AgentTurnOutcomeOpensAtStop:
-		return "Your turn opens when you stop; the user will come to you then."
+		return "Your turn opens when you stop; it then shows in the user's queue and notifies their phone, if they use them."
 	case protocol.AgentTurnOutcomeOpened:
-		return "Your turn is open; the user will come to you."
+		return "Your turn is open; it shows in the user's queue and notifies their phone, if they use them."
 	case protocol.AgentTurnOutcomeSnoozed:
 		return "The user snoozed you; your turn opens once the snooze ends and you have stopped."
 	case protocol.AgentTurnOutcomeSettled:
-		return "Your turn is settled; you are out of the user's queue."
+		return "Your turn is settled."
 	case protocol.AgentTurnOutcomeWithdrawn:
 		return "Your turn will not open when you stop."
 	default:
@@ -55,11 +53,13 @@ func writeTurnHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn turn open
        attn turn settle
 
-Put yourself in the user's queue when you cannot continue without them, and
-take yourself out again. When a notification from attn woke you (a message, a
-seed update, a pull request update, an ask's answer), your stop may not put
-you in the queue, and the user may not read what you write. Open your turn
-when you need them.
+Ask for the user when you cannot continue without them, and take it back
+again. Your turn shows in the user's queue and notifies their phone, if they
+use them. When a
+notification from attn woke you (a message, a seed update, a pull request
+update, an ask's answer), your stop does not notify their phone and may not put
+you in the queue, so the user may not read what you write. Open your turn when
+you need them.
 
 commands:
   open      ask for the user. Run while you work, it opens your turn when you
@@ -70,8 +70,7 @@ commands:
             when you stop. A turn that opened when you stopped on your own is
             the user's to settle.
 
-Both act on the session running the command. When the user does not work in
-the queue flow, both succeed and change nothing.
+Both act on the session running the command.
 
 Use attn ask instead when you can keep working while the user decides.
 `)
