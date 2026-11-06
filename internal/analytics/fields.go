@@ -57,6 +57,7 @@ var AppFields = map[string]Fields{
 
 var SampleFields = map[string]Fields{
 	"daemon_start": {"previous_end": Safe, "stop_reason": Safe, "previous_run": ID},
+	"process":      {"processes.role": Safe},
 }
 
 var RunFields = Fields{

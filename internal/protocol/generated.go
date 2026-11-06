@@ -2039,6 +2039,9 @@ type ClientHelloMessage struct {
 	// AppChannel corresponds to the JSON schema field "app_channel".
 	AppChannel *string `json:"app_channel,omitempty,omitzero"`
 
+	// AppPid corresponds to the JSON schema field "app_pid".
+	AppPid *int `json:"app_pid,omitempty,omitzero"`
+
 	// AppVersion corresponds to the JSON schema field "app_version".
 	AppVersion *string `json:"app_version,omitempty,omitzero"`
 

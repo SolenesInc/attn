@@ -27,9 +27,10 @@ type ProcessSample struct {
 func Sample() ProcessSample {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
+	self, _ := ReadProcess(os.Getpid())
 	return ProcessSample{
 		Goroutines:    runtime.NumGoroutine(),
-		ResidentBytes: residentBytes(),
+		ResidentBytes: self.ResidentBytes,
 		CPUTimeMS:     cpuTime().Milliseconds(),
 		OpenFDs:       openFDs(),
 		HeapAlloc:     ms.HeapAlloc,

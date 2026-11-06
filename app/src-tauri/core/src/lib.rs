@@ -550,6 +550,11 @@ fn get_browser_host_token(_caller: browser_host::TrustedMainWebview) -> Result<S
 }
 
 #[tauri::command]
+fn get_app_pid() -> u32 {
+    std::process::id()
+}
+
+#[tauri::command]
 fn get_client_token() -> Result<String, String> {
     instance::read_client_token()
 }
@@ -1157,6 +1162,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             open_safe_seed_artifact_target,
             get_browser_host_token,
             get_client_token,
+            get_app_pid,
             quick_capture::capture_hide,
             quick_capture::capture_enable,
             quick_capture::capture_disable,

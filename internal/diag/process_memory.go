@@ -1,0 +1,68 @@
+package diag
+
+import (
+	"slices"
+	"strings"
+)
+
+const (
+	RoleDaemon           = "daemon"
+	RolePTYWorker        = "pty_worker"
+	RolePTYHost          = "pty_host"
+	RoleApp              = "app"
+	RoleWebKitContent    = "webkit_content"
+	RoleWebKitGPU        = "webkit_gpu"
+	RoleWebKitNetworking = "webkit_networking"
+)
+
+type Process struct {
+	PID            int
+	Name           string
+	FootprintBytes uint64
+	ResidentBytes  uint64
+}
+
+type RoleMemory struct {
+	Role           string `json:"role"`
+	Count          int    `json:"count"`
+	ResidentBytes  uint64 `json:"resident_bytes"`
+	FootprintBytes uint64 `json:"footprint_bytes,omitempty"`
+}
+
+func (m *RoleMemory) add(process Process) {
+	m.Count++
+	m.ResidentBytes += process.ResidentBytes
+	m.FootprintBytes += process.FootprintBytes
+}
+
+type RoleMemories map[string]*RoleMemory
+
+func (r RoleMemories) Add(role string, process Process) {
+	memory := r[role]
+	if memory == nil {
+		memory = &RoleMemory{Role: role}
+		r[role] = memory
+	}
+	memory.add(process)
+}
+
+func (r RoleMemories) Sorted() []RoleMemory {
+	sorted := make([]RoleMemory, 0, len(r))
+	for _, memory := range r {
+		sorted = append(sorted, *memory)
+	}
+	slices.SortFunc(sorted, func(a, b RoleMemory) int { return strings.Compare(a.Role, b.Role) })
+	return sorted
+}
+
+func webKitRole(name string) (string, bool) {
+	switch {
+	case strings.HasPrefix(name, "com.apple.WebKit.WebContent"), strings.HasPrefix(name, "WebKitWebProces"):
+		return RoleWebKitContent, true
+	case strings.HasPrefix(name, "com.apple.WebKit.GPU"), strings.HasPrefix(name, "WebKitGPUProces"):
+		return RoleWebKitGPU, true
+	case strings.HasPrefix(name, "com.apple.WebKit.Networking"), strings.HasPrefix(name, "WebKitNetworkPr"):
+		return RoleWebKitNetworking, true
+	}
+	return "", false
+}

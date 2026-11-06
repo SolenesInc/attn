@@ -37,7 +37,7 @@ Every record is one line of JSON:
 | `bus` | Every fact on Attn's event bus, except `vent.*` facts |
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
 | `cli` | One record per `attn` command, named by its command path as typed (`seed check report`, or `_hook-state` for a harness hook): whether it succeeded, its exit code, what kind of error ended it (`refused`, `failed`, `usage`, `unknown_command`, `unknown_flag`, `missing_value`, `invalid_value`), why the daemon refused it (`invalid_input`, `limit`, `not_found`, `wrong_state`, `not_tender`, `conflict`, `unclassified`), whether an agent or a person ran it, and the agent's harness. A command that an agent runs, including a hook that the agent's harness runs, has the agent's hashed session as its subject, so the record matches that session's facts. A command from a person's shell has no subject. |
-| `sample` | One `daemon_start` record each time the daemon starts, and a `process` sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients. Every record of one daemon run has that run's hashed run id as its subject, a random id the daemon makes at start. `daemon_start` says how the previous run ended (`previous_end`): `stopped` on purpose, with who stopped it in `stop_reason` (`stop` for `attn daemon stop`, why `attn daemon ensure` replaced it, such as `source_fingerprint_mismatch`, or `app_recovery` when the app stopped it because `attn daemon ensure` failed), `machine_restarted`, `exited_unexpectedly`, or `unknown` when there was no previous run on this data folder. `previous_run` is the previous run's subject. |
+| `sample` | One `daemon_start` record each time the daemon starts, and a `process` sample every 20 minutes. [Process samples](#process-samples) lists what a sample holds. Every record of one daemon run has that run's hashed run id as its subject, a random id the daemon makes at start. `daemon_start` says how the previous run ended (`previous_end`): `stopped` on purpose, with who stopped it in `stop_reason` (`stop` for `attn daemon stop`, why `attn daemon ensure` replaced it, such as `source_fingerprint_mismatch`, or `app_recovery` when the app stopped it because `attn daemon ensure` failed), `machine_restarted`, `exited_unexpectedly`, or `unknown` when there was no previous run on this data folder. `previous_run` is the previous run's subject. |
 | `run` | One record per agent run, from the moment the agent goes working to its stop, when `analytics.enabled` was on for the whole run. An approval wait does not end a run. The record says what started the run (`user`: your words; `ring` or `heartbeat`: Attn's own input; `launch`: the launch's initial prompt; `agent`: anything else, such as the agent resuming on its own; words you add while a run works do not change it), its length (`duration_ms`), the state it stopped in (`ended`), whether the stop opened a turn for you (`opened_turn`), how many approvals it waited on (`approvals`) and the session's harness, model and launch. `usage` is `known` when Attn read the transcript after the run, and the record then carries the run's `tokens` (`input`, `output`, `cache_read`, `cache_write`) and, when the models are priced, `usd`. `usage` is `unavailable` or `incomplete` when Attn could not measure the run. The record's subject is the session's hash, and `at` is the run's end, so the `cli` records of `_hook-tool-use` between `at` minus `duration_ms` and `at` are the run's tool calls |
 | `vent` | An Attn vent you chose to send |
 
@@ -49,6 +49,37 @@ uploads. A record from an outpost names that outpost in its stream, as a hash:
 and reach the home when it reconnects, unless you turned analytics off, cleared
 the record or forgot the install in the meantime. Turning analytics off also
 deletes what a connected outpost has not sent yet.
+
+### Process samples
+
+A `process` sample holds the daemon's memory, goroutines, open files and CPU
+time, the database size, the bus size and the connected clients, and these
+fields, so that memory can be compared across builds at a similar workload. The
+build that took a sample is the build stored with its record, which an upload
+batch names.
+
+```json
+{"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},
+ "processes":[{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000}]}
+```
+
+| Field | Holds |
+|---|---|
+| `workload.sessions`, `workload.agents` | Sessions the daemon holds, in every profile, and those among them that run a harness rather than a shell |
+| `workload.terminals` | Terminals the daemon runs |
+| `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws while the shared PTY host is on. With the host off, the app also stays attached to some terminals it hides |
+| `workload.desktops`, `workload.seeds` | Desktops, and seeds in any state, in every profile |
+| `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
+| `processes[].count` | How many processes hold the role |
+| `processes[].resident_bytes` | Their total resident memory |
+| `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
+
+The app tells the daemon its process id when it connects, and the daemon finds
+the app's WebKit processes from it. WebKit processes of other apps, and of other
+attn instances, are not counted. On macOS, the kernel ties the WebKit processes of
+an app started from a terminal to that terminal, so that app's sample has an
+`app` entry and no `webkit_*` entries. The sample reads the kernel's process tables
+and starts no process. With `analytics.enabled` off, it reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:

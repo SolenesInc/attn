@@ -183,6 +183,7 @@ func (w *World) appHello() protocol.ClientHelloMessage {
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
 		AppVersion:   protocol.Ptr(AppVersion),
 		AppChannel:   protocol.Ptr(AppChannel),
+		AppPid:       protocol.Ptr(os.Getpid()),
 	}
 }
 

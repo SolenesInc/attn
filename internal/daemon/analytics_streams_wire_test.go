@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -96,25 +97,27 @@ func TestCLIRecordsCarryTheSameHashedSubjectAsSessionFacts(t *testing.T) {
 	})
 }
 
-func TestOneResourceSampleEveryFiveMinutesWhileAnalyticsIsOn(t *testing.T) {
+const sampleInterval = 20 * time.Minute
+
+func TestOneResourceSampleEveryTwentyMinutesWhileAnalyticsIsOn(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
-		w.advance(5*time.Minute + time.Second)
+		w.advance(sampleInterval + time.Second)
 		if got := streamRecords(t, app, analytics.StreamSample); len(got) != 0 {
 			t.Fatalf("with analytics off the outbox holds samples %v", got)
 		}
 
 		setAnalyticsEnabled(app, "true")
-		w.advance(5 * time.Minute)
+		w.advance(sampleInterval)
 		listed := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 10, Stream: protocol.Ptr(string(analytics.StreamSample))})
 		if len(listed.Records) != 1 {
-			t.Fatalf("after five minutes with analytics on the outbox holds %d samples, want 1", len(listed.Records))
+			t.Fatalf("after twenty minutes with analytics on the outbox holds %d samples, want 1", len(listed.Records))
 		}
 		var record analytics.Record
 		if err := json.Unmarshal([]byte(listed.Records[0].Record), &record); err != nil {
 			t.Fatal(err)
 		}
-		var sample map[string]float64
+		var sample map[string]any
 		if err := json.Unmarshal(record.Props, &sample); err != nil {
 			t.Fatalf("sample props %s: %v", record.Props, err)
 		}
@@ -122,12 +125,94 @@ func TestOneResourceSampleEveryFiveMinutesWhileAnalyticsIsOn(t *testing.T) {
 			t.Errorf("sample name = %q, want process", record.Name)
 		}
 		for _, field := range []string{"goroutines", "resident_bytes", "open_fds", "heap_alloc", "database_bytes", "bus_retained_facts", "connected_clients"} {
-			if sample[field] <= 0 {
+			if measured, _ := sample[field].(float64); measured <= 0 {
 				t.Errorf("sample %s = %v, want a positive measurement (props %s)", field, sample[field], record.Props)
 			}
 		}
 		if _, ok := sample["cpu_time_ms"]; !ok {
 			t.Errorf("sample has no cpu_time_ms (props %s)", record.Props)
+		}
+	})
+}
+
+type processSampleProps struct {
+	Workload struct {
+		Sessions   int `json:"sessions"`
+		Agents     int `json:"agents"`
+		Terminals  int `json:"terminals"`
+		PanesDrawn int `json:"panes_drawn"`
+		Desktops   int `json:"desktops"`
+		Seeds      int `json:"seeds"`
+	} `json:"workload"`
+	Processes []struct {
+		Role           string `json:"role"`
+		Count          int    `json:"count"`
+		ResidentBytes  uint64 `json:"resident_bytes"`
+		FootprintBytes uint64 `json:"footprint_bytes"`
+	} `json:"processes"`
+}
+
+func newestProcessSample(t *testing.T, app *testworld.Peer) processSampleProps {
+	t.Helper()
+	records := streamOutbox(t, app, analytics.StreamSample)
+	for _, record := range records {
+		if record.Name != "process" {
+			continue
+		}
+		var props processSampleProps
+		if err := json.Unmarshal(record.Props, &props); err != nil {
+			t.Fatalf("process sample props %s: %v", record.Props, err)
+		}
+		return props
+	}
+	t.Fatalf("the outbox holds no process sample among %d sample records", len(records))
+	return processSampleProps{}
+}
+
+func (p processSampleProps) roleCount(role string) int {
+	for _, process := range p.Processes {
+		if process.Role == role {
+			return process.Count
+		}
+	}
+	return 0
+}
+
+func TestASampleCarriesItsWorkloadAndTheMemoryOfTheConnectedAppByRole(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		shell := w.Spawn(app, fakeagent.Harness("shell"), w.Path("notes"))
+		w.bubbleClaude(t, app, "shop")
+		synctest.Wait()
+		terminal := protocol.TerminalID(w.Terminal(shell))
+		testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal},
+			protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+		plantSeed(t, w, "Count me")
+
+		w.advance(sampleInterval)
+		sample := newestProcessSample(t, app)
+
+		workload := sample.Workload
+		if workload.Sessions != 2 || workload.Agents != 1 || workload.PanesDrawn != 1 || workload.Desktops < 1 || workload.Seeds != 1 {
+			t.Errorf("sample workload = %+v, want 2 sessions, 1 agent, 1 pane drawn, a desktop and 1 seed", workload)
+		}
+		for _, process := range sample.Processes {
+			if process.Count < 1 || process.ResidentBytes == 0 {
+				t.Errorf("sample of role %s = %+v, want a measured process", process.Role, process)
+			}
+		}
+		if sample.roleCount("daemon") != 1 || sample.roleCount("app") != 1 {
+			t.Errorf("sample processes = %+v, want the daemon and the connected app", sample.Processes)
+		}
+
+		observer := w.Connect(helloWithToken(protocol.Ptr(config.ClientToken())), nil)
+		app.Close()
+		synctest.Wait()
+		w.advance(sampleInterval)
+		after := newestProcessSample(t, observer)
+		if after.roleCount("app") != 0 || after.Workload.PanesDrawn != 0 {
+			t.Errorf("after the app left the sample has processes %+v and %d panes drawn, want neither", after.Processes, after.Workload.PanesDrawn)
 		}
 	})
 }

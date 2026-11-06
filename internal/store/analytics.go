@@ -357,3 +357,14 @@ func (s *Store) DatabaseBytes() (int64, error) {
 	err := s.db.QueryRow("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&size)
 	return size, err
 }
+
+func (s *Store) CountDesktops() (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM desktops WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '')`).Scan(&count)
+	return count, err
+}

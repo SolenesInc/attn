@@ -54,6 +54,73 @@ need a dedicated instance
 (`make install INSTANCE=perf`). Add `--record-baseline` only after an intended
 footprint change, never to silence a regression you don't understand.
 
+## Memory by version
+
+Each `process` record in the analytics `sample` stream
+([Telemetry](../guide/reference/telemetry.md#process-samples)) holds memory by
+process role and its workload, and is stored with the build that took it. One
+sample is weak evidence: the same 4 pane workload on a Mac ranged 440-760 MB
+depending on when JavaScriptCore collected. Compare medians per build at
+comparable workload. Builds from source between releases share a version, so
+group by commit as well. A new build needs a few hours of use before its median
+means anything.
+
+These queries read the home's samples. An outpost's arrive under a stream named
+for it, such as `sample_m9c1e04b7aa21`: change the stream filter to include them.
+A Mac app started from a terminal, as `bridge --launch` does, has no `webkit_*`
+entries, so to sample WebKit on an instance, start the app through launchd:
+`launchctl submit -l <label> -- <app executable>`, and `launchctl remove <label>`
+before you quit it.
+
+Across installs, query attn-ingest's ClickHouse, which keeps records past the
+outbox's 7 days:
+
+```sql
+SELECT
+  build_version, build_commit, build_os,
+  JSONExtractString(process, 'role') AS role,
+  JSONExtractInt(props, 'workload', 'panes_drawn') AS panes,
+  intDiv(JSONExtractInt(props, 'workload', 'agents'), 5) * 5 AS agents_from,
+  count() AS samples,
+  round(median(if(JSONExtractUInt(process, 'footprint_bytes') > 0,
+    JSONExtractUInt(process, 'footprint_bytes'),
+    JSONExtractUInt(process, 'resident_bytes'))) / 1048576) AS median_mib
+FROM events FINAL
+ARRAY JOIN JSONExtractArrayRaw(props, 'processes') AS process
+WHERE stream = 'sample' AND name = 'process'
+GROUP BY build_version, build_commit, build_os, role, panes, agents_from
+ORDER BY role, panes, agents_from, build_version, build_commit
+```
+
+On one machine, the same from the outbox of an instance, or of a copy of
+production, which reaches back 7 days:
+
+```bash
+sqlite3 -readonly "$(attn instance resolve --field dataDir)/attn.db" <<'SQL'
+WITH memory AS (
+  SELECT
+    json_extract(b.build, '$.version') AS version,
+    substr(json_extract(b.build, '$.commit'), 1, 9) AS commit_id,
+    json_extract(p.value, '$.role') AS role,
+    json_extract(o.record, '$.props.workload.panes_drawn') AS panes,
+    json_extract(o.record, '$.props.workload.agents') / 5 * 5 AS agents_from,
+    coalesce(json_extract(p.value, '$.footprint_bytes'), json_extract(p.value, '$.resident_bytes')) / 1048576 AS mib
+  FROM analytics_outbox o
+  JOIN analytics_builds b ON b.id = o.build_id,
+    json_each(o.record, '$.props.processes') p
+  WHERE o.stream = 'sample'
+), ranked AS (
+  SELECT *,
+    row_number() OVER (PARTITION BY version, commit_id, role, panes, agents_from ORDER BY mib) AS rank,
+    count(*) OVER (PARTITION BY version, commit_id, role, panes, agents_from) AS samples
+  FROM memory
+)
+SELECT version, commit_id, role, panes, agents_from, samples, mib AS median_mib
+FROM ranked WHERE rank = (samples + 1) / 2
+ORDER BY role, panes, agents_from, version, commit_id;
+SQL
+```
+
 ## Terminal streaming
 
 `scenario-perf-pty-stream` measures what streaming terminal output costs while

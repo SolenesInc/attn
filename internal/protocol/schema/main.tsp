@@ -607,6 +607,9 @@ model ClientHelloMessage {
   // cask, dmg). Analytics batches carry them in their build block.
   app_version?: string;
   app_channel?: string;
+  // The app's own process id, which roots the daemon's memory sample of the app
+  // and its WebKit processes while this client stays connected.
+  app_pid?: int32;
 }
 
 @extension("x-on", #{ home: true })

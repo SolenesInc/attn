@@ -2672,6 +2672,7 @@ export enum ClientEvictionNoticeMessageEvent {
 
 export interface ClientHelloMessage {
     app_channel?:        string;
+    app_pid?:            number;
     app_version?:        string;
     browser_host_token?: string;
     capabilities:        string[];
@@ -21747,6 +21748,7 @@ const typeMap: any = {
     ], "any"),
     "ClientHelloMessage": o([
         { json: "app_channel", js: "app_channel", typ: u(undefined, "") },
+        { json: "app_pid", js: "app_pid", typ: u(undefined, 0) },
         { json: "app_version", js: "app_version", typ: u(undefined, "") },
         { json: "browser_host_token", js: "browser_host_token", typ: u(undefined, "") },
         { json: "capabilities", js: "capabilities", typ: a("") },

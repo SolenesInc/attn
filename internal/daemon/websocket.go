@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,6 +44,7 @@ type wsClient struct {
 	trustedTauriOrigin       bool
 	browserHostAuthenticated bool
 
+	pid             int
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
 	terminalOrder   terminalOrder
@@ -129,6 +132,30 @@ func (c *wsClient) setIdentity(kind, version string, caps []string) {
 	for _, cap := range caps {
 		c.capabilities[cap] = struct{}{}
 	}
+}
+
+func (c *wsClient) setProcessID(pid int) {
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
+	c.pid = pid
+}
+
+func (c *wsClient) processID() int {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.pid
+}
+
+func (c *wsClient) isApp() bool {
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.clientKind == "tauri-app"
+}
+
+func (c *wsClient) attachedTerminals() []protocol.TerminalID {
+	c.attachMu.Lock()
+	defer c.attachMu.Unlock()
+	return slices.Collect(maps.Keys(c.attachedStreams))
 }
 
 func (c *wsClient) setClientID(id string) {

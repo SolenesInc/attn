@@ -1013,6 +1013,7 @@ export function useDaemonSocket({
 
     let browserHostToken = '';
     let clientToken = import.meta.env.VITE_CLIENT_TOKEN ?? '';
+    let appPid: number | undefined;
     if (isTauri()) {
       try {
         browserHostToken = await invoke<string>('get_browser_host_token');
@@ -1023,6 +1024,11 @@ export function useDaemonSocket({
         clientToken = await invoke<string>('get_client_token');
       } catch (error) {
         console.warn('[Daemon] Client token is unavailable:', error);
+      }
+      try {
+        appPid = await invoke<number>('get_app_pid');
+      } catch (error) {
+        console.warn('[Daemon] App pid is unavailable:', error);
       }
     }
 
@@ -1081,6 +1087,7 @@ export function useDaemonSocket({
           profile_id: readSelectedProfileId(),
           app_version: __ATTN_APP_VERSION__,
           app_channel: normalizeInstallChannel(import.meta.env.VITE_INSTALL_CHANNEL),
+          app_pid: appPid,
         }),
       );
 
