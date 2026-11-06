@@ -17,20 +17,36 @@ import {
   COLORS_OFF_PALETTE,
   COLORS_SIZE,
   GRID_REF_SIZE,
+  POINT_OFF_TAG,
+  POINT_OFF_X,
+  POINT_OFF_Y,
+  POINT_SIZE,
+  STYLE_FLAG_BLINK,
+  STYLE_FLAG_BOLD,
+  STYLE_FLAG_FAINT,
+  STYLE_FLAG_INVERSE,
+  STYLE_FLAG_INVISIBLE,
+  STYLE_FLAG_ITALIC,
+  STYLE_FLAG_OVERLINE,
+  STYLE_FLAG_STRIKETHROUGH,
   STYLE_OFF_BG,
   STYLE_OFF_BG_KIND,
-  STYLE_OFF_BLINK,
-  STYLE_OFF_BOLD,
-  STYLE_OFF_FAINT,
   STYLE_OFF_FG,
   STYLE_OFF_FG_KIND,
-  STYLE_OFF_INVERSE,
-  STYLE_OFF_INVISIBLE,
-  STYLE_OFF_ITALIC,
-  STYLE_OFF_OVERLINE,
-  STYLE_OFF_STRIKETHROUGH,
-  STYLE_OFF_UNDERLINE,
+  STYLE_OFF_FLAGS,
   STYLE_SIZE,
+  STYLE_UNDERLINE_MASK,
+  TERMINAL_OPT_COLOR_BACKGROUND,
+  TERMINAL_OPT_COLOR_CURSOR,
+  TERMINAL_OPT_COLOR_FOREGROUND,
+  TERMINAL_OPT_COLOR_PALETTE,
+  TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
+  TERMINAL_OPT_WRITE_PTY,
+  RENDER_OPT_DIRTY,
+  STRING_OFF_LEN,
+  STRING_OFF_PTR,
+  STRING_SIZE,
+  ROW_OPT_DIRTY,
   cellCodepoint,
   cellHasGrapheme,
   cellHasHyperlink,
@@ -49,6 +65,8 @@ interface TypeInfo {
   size: number;
   align: number;
   fields: Record<string, TypeField>;
+  values: Record<string, number>;
+  bits: Record<string, { lsb: number; width: number }>;
 }
 
 let types: Record<string, TypeInfo>;
@@ -84,6 +102,18 @@ beforeAll(async () => {
 });
 
 describe('the ABI abi.ts transcribes', () => {
+  it('names the setter options where the module reads them', () => {
+    const terminal = types.GhosttyTerminalOption.values;
+    expect(terminal.WRITE_PTY).toBe(TERMINAL_OPT_WRITE_PTY);
+    expect(terminal.COLOR_FOREGROUND).toBe(TERMINAL_OPT_COLOR_FOREGROUND);
+    expect(terminal.COLOR_BACKGROUND).toBe(TERMINAL_OPT_COLOR_BACKGROUND);
+    expect(terminal.COLOR_CURSOR).toBe(TERMINAL_OPT_COLOR_CURSOR);
+    expect(terminal.COLOR_PALETTE).toBe(TERMINAL_OPT_COLOR_PALETTE);
+    expect(terminal.SCROLLBACK_MAX_BYTES).toBe(TERMINAL_OPT_SCROLLBACK_MAX_BYTES);
+    expect(types.GhosttyRenderStateOption.values.DIRTY).toBe(RENDER_OPT_DIRTY);
+    expect(types.GhosttyRenderStateRowOption.values.DIRTY).toBe(ROW_OPT_DIRTY);
+  });
+
   // Every offset below is a wasm32 offset: on a 64-bit ABI the leading size_t
   // alone would shift all of them.
   it('is the wasm32 one', () => {
@@ -105,15 +135,18 @@ describe('the ABI abi.ts transcribes', () => {
   it('lays GhosttyStyle out where the cell attributes are read', () => {
     const t = types.GhosttyStyle;
     expect(t.size).toBe(STYLE_SIZE);
-    expect(t.fields.bold.offset).toBe(STYLE_OFF_BOLD);
-    expect(t.fields.italic.offset).toBe(STYLE_OFF_ITALIC);
-    expect(t.fields.faint.offset).toBe(STYLE_OFF_FAINT);
-    expect(t.fields.blink.offset).toBe(STYLE_OFF_BLINK);
-    expect(t.fields.inverse.offset).toBe(STYLE_OFF_INVERSE);
-    expect(t.fields.invisible.offset).toBe(STYLE_OFF_INVISIBLE);
-    expect(t.fields.strikethrough.offset).toBe(STYLE_OFF_STRIKETHROUGH);
-    expect(t.fields.overline.offset).toBe(STYLE_OFF_OVERLINE);
-    expect(t.fields.underline.offset).toBe(STYLE_OFF_UNDERLINE);
+    expect(t.fields.flags.offset).toBe(STYLE_OFF_FLAGS);
+    const bits = types.GhosttyStyleFlags.bits;
+    const mask = (name: string) => ((1 << bits[name].width) - 1) << bits[name].lsb;
+    expect(mask('bold')).toBe(STYLE_FLAG_BOLD);
+    expect(mask('italic')).toBe(STYLE_FLAG_ITALIC);
+    expect(mask('faint')).toBe(STYLE_FLAG_FAINT);
+    expect(mask('blink')).toBe(STYLE_FLAG_BLINK);
+    expect(mask('inverse')).toBe(STYLE_FLAG_INVERSE);
+    expect(mask('invisible')).toBe(STYLE_FLAG_INVISIBLE);
+    expect(mask('strikethrough')).toBe(STYLE_FLAG_STRIKETHROUGH);
+    expect(mask('overline')).toBe(STYLE_FLAG_OVERLINE);
+    expect(mask('underline')).toBe(STYLE_UNDERLINE_MASK);
   });
 
   it('lays the style colour slots out where the scrollback path reads them', () => {
@@ -164,5 +197,21 @@ describe('the ABI abi.ts transcribes', () => {
 
   it('sizes GhosttyGridRef as the scratch buffer assumes', () => {
     expect(types.GhosttyGridRef.size).toBe(GRID_REF_SIZE);
+  });
+
+  it('lays GhosttyString out where a key event reads its text', () => {
+    const t = types.GhosttyString;
+    expect(t.size).toBe(STRING_SIZE);
+    expect(t.fields.ptr.offset).toBe(STRING_OFF_PTR);
+    expect(t.fields.len.offset).toBe(STRING_OFF_LEN);
+  });
+
+  it('lays GhosttyPoint out where a grid ref is asked for', () => {
+    const t = types.GhosttyPoint;
+    const coordinate = types.GhosttyPointCoordinate;
+    expect(t.size).toBe(POINT_SIZE);
+    expect(t.fields.tag.offset).toBe(POINT_OFF_TAG);
+    expect(t.fields.value.offset + coordinate.fields.x.offset).toBe(POINT_OFF_X);
+    expect(t.fields.value.offset + coordinate.fields.y.offset).toBe(POINT_OFF_Y);
   });
 });

@@ -7,12 +7,12 @@ export const GHOSTTY_OUT_OF_SPACE = -3;
 /** Not an error: the asked-for value does not exist in the current state. */
 export const GHOSTTY_NO_VALUE = -4;
 
-export const TERMINAL_OPT_WRITE_PTY = 1;
-export const TERMINAL_OPT_COLOR_FOREGROUND = 11;
-export const TERMINAL_OPT_COLOR_BACKGROUND = 12;
-export const TERMINAL_OPT_COLOR_CURSOR = 13;
-export const TERMINAL_OPT_COLOR_PALETTE = 14;
-export const TERMINAL_OPT_SCROLLBACK_MAX_BYTES = 27;
+export const TERMINAL_OPT_WRITE_PTY = 2;
+export const TERMINAL_OPT_COLOR_FOREGROUND = 12;
+export const TERMINAL_OPT_COLOR_BACKGROUND = 13;
+export const TERMINAL_OPT_COLOR_CURSOR = 14;
+export const TERMINAL_OPT_COLOR_PALETTE = 15;
+export const TERMINAL_OPT_SCROLLBACK_MAX_BYTES = 28;
 
 export const TERMINAL_DATA_COLS = 1;
 export const TERMINAL_DATA_ROWS = 2;
@@ -42,7 +42,7 @@ export const RENDER_DATA_CURSOR_VIEWPORT_X = 15;
 export const RENDER_DATA_CURSOR_VIEWPORT_Y = 16;
 export const RENDER_DATA_COLORS = 19;
 
-export const RENDER_OPT_DIRTY = 0;
+export const RENDER_OPT_DIRTY = 1;
 
 export const DIRTY_FALSE = 0;
 export const DIRTY_PARTIAL = 1;
@@ -57,7 +57,7 @@ export const ROW_DATA_DIRTY = 1;
 export const ROW_DATA_CELLS = 3;
 export const ROW_DATA_CELLS_RAW = 5;
 
-export const ROW_OPT_DIRTY = 0;
+export const ROW_OPT_DIRTY = 1;
 
 export const CELLS_DATA_STYLE = 2;
 export const CELLS_DATA_GRAPHEMES_LEN = 3;
@@ -80,35 +80,42 @@ export const ROW_RAW_DATA_WRAP = 1;
 export const POINT_TAG_ACTIVE = 0;
 export const POINT_TAG_HISTORY = 3;
 
-/** GhosttyPoint (16 bytes): the union carries a u64 for ABI padding, which is what pushes
- * the coordinate to offset 8. */
-export const POINT_SIZE = 16;
+/** GhosttyPoint (24 bytes): the union carries two u64s for ABI padding, and their alignment
+ * is what pushes the coordinate to offset 8. */
+export const POINT_SIZE = 24;
 export const POINT_OFF_TAG = 0;
 export const POINT_OFF_X = 8;
 export const POINT_OFF_Y = 12;
 
-/** GhosttyGridRef (12 bytes): sized struct, then an opaque node and x/y. */
-export const GRID_REF_SIZE = 12;
+/** GhosttyString (8 bytes). wasm32 passes it by reference to where its fields live. */
+export const STRING_SIZE = 8;
+export const STRING_OFF_PTR = 0;
+export const STRING_OFF_LEN = 4;
 
-/** GhosttyStyle (72 bytes). The render-state path resolves colors via CELLS_DATA_FG_COLOR
- * / BG_COLOR; grid refs (scrollback) read the slots. */
-export const STYLE_SIZE = 72;
-export const STYLE_OFF_FG_KIND = 8;
-export const STYLE_OFF_FG = 16;
-export const STYLE_OFF_BG_KIND = 24;
-export const STYLE_OFF_BG = 32;
+/** GhosttyGridRef (8 bytes): an opaque node and x/y, frozen with no size field. */
+export const GRID_REF_SIZE = 8;
+
+/** GhosttyStyle (16 bytes), frozen with no size field. The render-state path resolves colors
+ * via CELLS_DATA_FG_COLOR / BG_COLOR; grid refs (scrollback) read the slots: a one-byte tag,
+ * then a palette index or three RGB bytes. */
+export const STYLE_SIZE = 16;
+export const STYLE_OFF_FG_KIND = 0;
+export const STYLE_OFF_FG = 1;
+export const STYLE_OFF_BG_KIND = 4;
+export const STYLE_OFF_BG = 5;
 export const STYLE_COLOR_DEFAULT = 0;
 export const STYLE_COLOR_PALETTE = 1;
 export const STYLE_COLOR_RGB = 2;
-export const STYLE_OFF_BOLD = 56;
-export const STYLE_OFF_ITALIC = 57;
-export const STYLE_OFF_FAINT = 58;
-export const STYLE_OFF_BLINK = 59;
-export const STYLE_OFF_INVERSE = 60;
-export const STYLE_OFF_INVISIBLE = 61;
-export const STYLE_OFF_STRIKETHROUGH = 62;
-export const STYLE_OFF_OVERLINE = 63;
-export const STYLE_OFF_UNDERLINE = 64;
+export const STYLE_OFF_FLAGS = 12;
+export const STYLE_FLAG_BOLD = 1 << 0;
+export const STYLE_FLAG_ITALIC = 1 << 1;
+export const STYLE_FLAG_FAINT = 1 << 2;
+export const STYLE_FLAG_BLINK = 1 << 3;
+export const STYLE_FLAG_INVERSE = 1 << 4;
+export const STYLE_FLAG_INVISIBLE = 1 << 5;
+export const STYLE_FLAG_STRIKETHROUGH = 1 << 6;
+export const STYLE_FLAG_OVERLINE = 1 << 7;
+export const STYLE_UNDERLINE_MASK = 0x7 << 8;
 
 /** GhosttyRenderStateColors is 784, not the 782 its fields add up to: the struct is padded
  * to its alignment, and the size field must carry sizeof. */
@@ -143,13 +150,13 @@ export interface GhosttyExports extends WebAssembly.Exports {
   ghostty_key_event_set_mods(event: number, mods: number): void;
   ghostty_key_event_set_consumed_mods(event: number, mods: number): void;
   ghostty_key_event_set_composing(event: number, composing: number): void;
-  ghostty_key_event_set_utf8(event: number, ptr: number, len: number): void;
+  ghostty_key_event_set_utf8(event: number, utf8: number): number;
   ghostty_key_event_set_unshifted_codepoint(event: number, codepoint: number): void;
 
   ghostty_key_encoder_new(allocator: number, out: number): number;
   ghostty_key_encoder_free(encoder: number): void;
-  ghostty_key_encoder_setopt(encoder: number, option: number, value: number): void;
-  ghostty_key_encoder_setopt_from_terminal(encoder: number, terminal: number): void;
+  ghostty_key_encoder_set(encoder: number, option: number, value: number): void;
+  ghostty_key_encoder_set_from_terminal(encoder: number, terminal: number): void;
   ghostty_key_encoder_encode(
     encoder: number,
     event: number,

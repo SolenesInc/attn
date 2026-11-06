@@ -66,7 +66,7 @@ static bool ghosttyvt_kitty_placement_read(
 		out->render_rc = GHOSTTY_NO_VALUE;
 		return true;
 	}
-	ghostty_kitty_graphics_image_get(img, GHOSTTY_KITTY_IMAGE_DATA_GENERATION, &out->image_generation);
+	ghostty_kitty_graphics_image_get(img, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION, &out->image_generation);
 	out->render_rc = ghostty_kitty_graphics_placement_render_info(it, img, t, &out->info);
 	if (out->render_rc != GHOSTTY_SUCCESS) {
 		// Undefined geometry must not read as a position at (0,0).
@@ -81,37 +81,34 @@ typedef struct {
 	uint32_t height;
 	GhosttyKittyImageFormat format;
 	GhosttyKittyImageCompression compression;
-	const uint8_t* data;
-	size_t data_len;
+	GhosttyString pixels;
 	uint64_t generation;
 } ghosttyvt_kitty_image;
 
-// data stays borrowed from the terminal: the caller copies it out before
+// pixels stay borrowed from the terminal: the caller copies it out before
 // releasing the terminal lock.
 static bool ghosttyvt_kitty_image_read(GhosttyKittyGraphics g, uint32_t id, ghosttyvt_kitty_image* out) {
 	memset(out, 0, sizeof(*out));
 	if (g == NULL) return false;
 	GhosttyKittyGraphicsImage img = ghostty_kitty_graphics_image(g, id);
 	if (img == NULL) return false;
-	const GhosttyKittyGraphicsImageData keys[7] = {
-		GHOSTTY_KITTY_IMAGE_DATA_WIDTH,
-		GHOSTTY_KITTY_IMAGE_DATA_HEIGHT,
-		GHOSTTY_KITTY_IMAGE_DATA_FORMAT,
-		GHOSTTY_KITTY_IMAGE_DATA_COMPRESSION,
-		GHOSTTY_KITTY_IMAGE_DATA_DATA_PTR,
-		GHOSTTY_KITTY_IMAGE_DATA_DATA_LEN,
-		GHOSTTY_KITTY_IMAGE_DATA_GENERATION,
+	const GhosttyKittyGraphicsImageData keys[6] = {
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_WIDTH,
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_HEIGHT,
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_FORMAT,
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_COMPRESSION,
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS,
+		GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION,
 	};
-	void* values[7] = {
+	void* values[6] = {
 		&out->width,
 		&out->height,
 		&out->format,
 		&out->compression,
-		(void*)&out->data,
-		&out->data_len,
+		&out->pixels,
 		&out->generation,
 	};
-	return ghostty_kitty_graphics_image_get_multi(img, 7, keys, values, NULL) == GHOSTTY_SUCCESS;
+	return ghostty_kitty_graphics_image_get_multi(img, 6, keys, values, NULL) == GHOSTTY_SUCCESS;
 }
 */
 import "C"
@@ -242,8 +239,8 @@ func (t *Terminal) KittyImage(id uint32) (KittyImage, bool) {
 		return KittyImage{}, false
 	}
 	var data []byte
-	if rec.data != nil && rec.data_len > 0 {
-		data = C.GoBytes(unsafe.Pointer(rec.data), C.int(rec.data_len))
+	if rec.pixels.ptr != nil && rec.pixels.len > 0 {
+		data = C.GoBytes(unsafe.Pointer(rec.pixels.ptr), C.int(rec.pixels.len))
 	}
 	return KittyImage{
 		ID:         id,

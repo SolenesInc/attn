@@ -1,6 +1,9 @@
 import {
   GHOSTTY_OUT_OF_SPACE,
   GHOSTTY_SUCCESS,
+  STRING_OFF_LEN,
+  STRING_OFF_PTR,
+  STRING_SIZE,
   type GhosttyExports,
 } from './abi';
 
@@ -20,8 +23,8 @@ const REQUIRED_KEY_EXPORTS = [
   'ghostty_key_event_set_unshifted_codepoint',
   'ghostty_key_encoder_new',
   'ghostty_key_encoder_free',
-  'ghostty_key_encoder_setopt',
-  'ghostty_key_encoder_setopt_from_terminal',
+  'ghostty_key_encoder_set',
+  'ghostty_key_encoder_set_from_terminal',
   'ghostty_key_encoder_encode',
 ] as const satisfies readonly (keyof GhosttyExports)[];
 
@@ -173,6 +176,7 @@ export class GhosttyKeyEncoder {
   private encoder = 0;
   private event = 0;
   private pWritten = 0;
+  private pUtf8String = 0;
   private outputPtr = 0;
   private outputCapacity = 0;
   private utf8Ptr = 0;
@@ -204,6 +208,7 @@ export class GhosttyKeyEncoder {
       this.event = this.view().getUint32(out, true);
 
       this.pWritten = this.allocate(WASM32_USIZE_BYTES);
+      this.pUtf8String = this.allocate(STRING_SIZE);
       this.ensureOutputCapacity(INITIAL_OUTPUT_CAPACITY);
     } catch (error) {
       this.releaseAllocatedResources();
@@ -229,13 +234,15 @@ export class GhosttyKeyEncoder {
     this.e.ghostty_key_event_set_mods(this.event, input.mods ?? 0);
     this.e.ghostty_key_event_set_consumed_mods(this.event, input.consumedMods ?? 0);
     this.e.ghostty_key_event_set_composing(this.event, input.composing ? 1 : 0);
-    this.e.ghostty_key_event_set_utf8(this.event, utf8?.length ? this.utf8Ptr : 0, utf8?.length ?? 0);
+    this.view().setUint32(this.pUtf8String + STRING_OFF_PTR, utf8?.length ? this.utf8Ptr : 0, true);
+    this.view().setUint32(this.pUtf8String + STRING_OFF_LEN, utf8?.length ?? 0, true);
+    this.e.ghostty_key_event_set_utf8(this.event, this.pUtf8String);
     this.e.ghostty_key_event_set_unshifted_codepoint(this.event, input.unshiftedCodepoint ?? 0);
 
-    this.e.ghostty_key_encoder_setopt_from_terminal(this.encoder, this.terminal);
+    this.e.ghostty_key_encoder_set_from_terminal(this.encoder, this.terminal);
     // Terminal mode sync resets attn's macOS Option-as-Alt policy.
     this.view().setInt32(this.pWritten, this.abi.optionAsAlt.TRUE, true);
-    this.e.ghostty_key_encoder_setopt(
+    this.e.ghostty_key_encoder_set(
       this.encoder,
       this.abi.encoderOptions.MACOS_OPTION_AS_ALT,
       this.pWritten,
@@ -318,6 +325,7 @@ export class GhosttyKeyEncoder {
     if (this.utf8Ptr) this.e.ghostty_wasm_free(this.utf8Ptr, this.utf8Capacity);
     if (this.outputPtr) this.e.ghostty_wasm_free(this.outputPtr, this.outputCapacity);
     if (this.pWritten) this.e.ghostty_wasm_free(this.pWritten, WASM32_USIZE_BYTES);
+    if (this.pUtf8String) this.e.ghostty_wasm_free(this.pUtf8String, STRING_SIZE);
     if (this.event) this.e.ghostty_key_event_free(this.event);
     if (this.encoder) this.e.ghostty_key_encoder_free(this.encoder);
     this.utf8Ptr = 0;
@@ -325,6 +333,7 @@ export class GhosttyKeyEncoder {
     this.outputPtr = 0;
     this.outputCapacity = 0;
     this.pWritten = 0;
+    this.pUtf8String = 0;
     this.event = 0;
     this.encoder = 0;
   }

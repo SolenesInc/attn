@@ -4,6 +4,7 @@ package ghosttyvt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,5 +66,34 @@ func TestSnapshotFixtureIsCurrent(t *testing.T) {
 	want := fixtureTerminal(t).ViewportText()
 	if got := term.ViewportText(); got != want {
 		t.Fatalf("fixture viewport drifted from the corpus that produced it:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestASnapshotLeavesKittyPixelsBehind(t *testing.T) {
+	term, err := New(80, 24, Options{KittyImageStorageLimit: 1 << 20})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(term.Close)
+	term.Write([]byte("hello\r\n"))
+	withoutImage := len(term.Serialize().Payload)
+
+	pixels := base64.StdEncoding.EncodeToString(make([]byte, 4*64*64))
+	term.Write([]byte("\x1b_Ga=T,i=7,f=32,s=64,v=64,q=2;" + pixels + "\x1b\\"))
+	if _, stored := term.KittyImage(7); !stored {
+		t.Fatal("image was not stored")
+	}
+
+	snapshot := term.Serialize().Payload
+	if len(snapshot) >= withoutImage+4*64*64 {
+		t.Fatalf("snapshot is %d bytes with a 16 KiB image, %d without", len(snapshot), withoutImage)
+	}
+	restored, err := Restore(snapshot, Options{})
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	t.Cleanup(restored.Close)
+	if text := restored.PlainText(); !strings.Contains(text, "hello") {
+		t.Fatalf("restored text = %q", text)
 	}
 }

@@ -449,29 +449,35 @@ uint8_t *attn_ghostty_snapshot(AttnGhosttyTerminal *attn, size_t *out_len) {
   return copy;
 }
 
-static GhosttyFormatterTerminalOptions attn_formatter_options(
-    GhosttyFormatterFormat format) {
-  GhosttyFormatterTerminalOptions options;
-  memset(&options, 0, sizeof(options));
-  options.size = sizeof(options);
-  options.emit = format;
-  options.unwrap = false;
-  options.trim = false;
-  options.extra.size = sizeof(options.extra);
-  options.extra.palette = true;
-  options.extra.modes = true;
-  options.extra.scrolling_region = true;
-  options.extra.tabstops = true;
-  options.extra.pwd = true;
-  options.extra.keyboard = true;
-  options.extra.screen.size = sizeof(options.extra.screen);
-  options.extra.screen.cursor = true;
-  options.extra.screen.style = true;
-  options.extra.screen.hyperlink = true;
-  options.extra.screen.protection = true;
-  options.extra.screen.kitty_keyboard = true;
-  options.extra.screen.charsets = true;
-  return options;
+static uint8_t *attn_format(AttnGhosttyTerminal *attn,
+                            GhosttyFormatterFormat format, bool unwrap,
+                            const GhosttySelection *selection,
+                            size_t *out_len) {
+  GhosttyFormatter formatter;
+  if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal) !=
+      GHOSTTY_SUCCESS) return NULL;
+  bool trim = false;
+  GhosttyFormatterExtras extras = GHOSTTY_FORMATTER_EXTRAS_ALL;
+  uint8_t *raw = NULL;
+  size_t len = 0;
+  GhosttyResult rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_EMIT, &format);
+  if (rc == GHOSTTY_SUCCESS)
+    rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_UNWRAP, &unwrap);
+  if (rc == GHOSTTY_SUCCESS)
+    rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_TRIM, &trim);
+  if (rc == GHOSTTY_SUCCESS)
+    rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_EXTRAS, &extras);
+  if (rc == GHOSTTY_SUCCESS)
+    rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_SELECTION, selection);
+  if (rc == GHOSTTY_SUCCESS)
+    rc = ghostty_formatter_format_alloc(formatter, NULL, &raw, &len);
+  ghostty_formatter_free(formatter);
+  if (rc != GHOSTTY_SUCCESS) return NULL;
+  uint8_t *copy = attn_copy_bytes(raw, len);
+  ghostty_free(NULL, raw, len);
+  if (copy == NULL && len != 0) return NULL;
+  *out_len = len;
+  return copy;
 }
 
 static GhosttyPoint attn_viewport_point(uint16_t x, uint32_t y) {
@@ -484,33 +490,15 @@ static uint8_t *attn_ghostty_format_viewport(AttnGhosttyTerminal *attn,
   if (out_len == NULL) return NULL;
   *out_len = 0;
   if (attn == NULL || attn->cols == 0 || attn->rows == 0) return NULL;
-  GhosttyGridRef start, end;
+  GhosttySelection selection;
+  memset(&selection, 0, sizeof(selection));
   if (ghostty_terminal_grid_ref(attn->terminal, attn_viewport_point(0, 0),
-                                &start) != GHOSTTY_SUCCESS) return NULL;
+                                &selection.start) != GHOSTTY_SUCCESS) return NULL;
   if (ghostty_terminal_grid_ref(
           attn->terminal,
           attn_viewport_point(attn->cols - 1, attn->rows - 1),
-          &end) != GHOSTTY_SUCCESS) return NULL;
-  GhosttySelection selection;
-  memset(&selection, 0, sizeof(selection));
-  selection.size = sizeof(selection);
-  selection.start = start;
-  selection.end = end;
-  GhosttyFormatterTerminalOptions options = attn_formatter_options(format);
-  options.selection = &selection;
-  GhosttyFormatter formatter;
-  if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal,
-                                     options) != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *raw = NULL;
-  size_t len = 0;
-  GhosttyResult rc = ghostty_formatter_format_alloc(formatter, NULL, &raw, &len);
-  ghostty_formatter_free(formatter);
-  if (rc != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *copy = attn_copy_bytes(raw, len);
-  ghostty_free(NULL, raw, len);
-  if (copy == NULL && len != 0) return NULL;
-  *out_len = len;
-  return copy;
+          &selection.end) != GHOSTTY_SUCCESS) return NULL;
+  return attn_format(attn, format, false, &selection, out_len);
 }
 
 static uint8_t *attn_ghostty_format(AttnGhosttyTerminal *attn,
@@ -519,21 +507,8 @@ static uint8_t *attn_ghostty_format(AttnGhosttyTerminal *attn,
   if (out_len == NULL) return NULL;
   *out_len = 0;
   if (attn == NULL) return NULL;
-  GhosttyFormatter formatter;
-  GhosttyFormatterTerminalOptions options = attn_formatter_options(format);
-  options.unwrap = format == GHOSTTY_FORMATTER_FORMAT_VT;
-  if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal,
-                                     options) != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *raw = NULL;
-  size_t len = 0;
-  GhosttyResult rc = ghostty_formatter_format_alloc(formatter, NULL, &raw, &len);
-  ghostty_formatter_free(formatter);
-  if (rc != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *copy = attn_copy_bytes(raw, len);
-  ghostty_free(NULL, raw, len);
-  if (copy == NULL && len != 0) return NULL;
-  *out_len = len;
-  return copy;
+  return attn_format(attn, format, format == GHOSTTY_FORMATTER_FORMAT_VT, NULL,
+                     out_len);
 }
 
 uint8_t *attn_ghostty_vt_dump(AttnGhosttyTerminal *attn, size_t *out_len) {
@@ -550,22 +525,9 @@ uint8_t *attn_ghostty_text_range(AttnGhosttyTerminal *attn, uint16_t cols,
   a.value.coordinate.x = sx; a.value.coordinate.y = sy;
   b.value.coordinate.x = ex; b.value.coordinate.y = ey;
   GhosttySelection selection = {0};
-  selection.size = sizeof(selection);
   if (ghostty_terminal_grid_ref(attn->terminal, a, &selection.start) != GHOSTTY_SUCCESS ||
       ghostty_terminal_grid_ref(attn->terminal, b, &selection.end) != GHOSTTY_SUCCESS) return NULL;
-  GhosttyFormatterTerminalOptions options = attn_formatter_options(GHOSTTY_FORMATTER_FORMAT_PLAIN);
-  options.unwrap = true;
-  options.selection = &selection;
-  GhosttyFormatter formatter;
-  if (ghostty_formatter_terminal_new(NULL, &formatter, attn->terminal, options) != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *raw = NULL; size_t len = 0;
-  GhosttyResult rc = ghostty_formatter_format_alloc(formatter, NULL, &raw, &len);
-  ghostty_formatter_free(formatter);
-  if (rc != GHOSTTY_SUCCESS) return NULL;
-  uint8_t *copy = attn_copy_bytes(raw, len);
-  ghostty_free(NULL, raw, len);
-  *out_len = len;
-  return copy;
+  return attn_format(attn, GHOSTTY_FORMATTER_FORMAT_PLAIN, true, &selection, out_len);
 }
 
 uint8_t *attn_ghostty_plain_text(AttnGhosttyTerminal *attn, size_t *out_len) {
@@ -657,7 +619,7 @@ size_t attn_ghostty_kitty_placements(AttnGhosttyTerminal *attn,
     if (image == NULL) continue;
     uint64_t generation = 0;
     ghostty_kitty_graphics_image_get(
-        image, GHOSTTY_KITTY_IMAGE_DATA_GENERATION, &generation);
+        image, GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION, &generation);
     GhosttyKittyGraphicsPlacementRenderInfo info;
     memset(&info, 0, sizeof(info));
     info.size = sizeof(info);
@@ -718,20 +680,22 @@ bool attn_ghostty_kitty_image(AttnGhosttyTerminal *attn, uint32_t image_id,
   GhosttyKittyGraphicsImage image =
       ghostty_kitty_graphics_image(graphics, image_id);
   if (image == NULL) return false;
-  const GhosttyKittyGraphicsImageData keys[7] = {
-      GHOSTTY_KITTY_IMAGE_DATA_WIDTH,
-      GHOSTTY_KITTY_IMAGE_DATA_HEIGHT,
-      GHOSTTY_KITTY_IMAGE_DATA_FORMAT,
-      GHOSTTY_KITTY_IMAGE_DATA_COMPRESSION,
-      GHOSTTY_KITTY_IMAGE_DATA_DATA_PTR,
-      GHOSTTY_KITTY_IMAGE_DATA_DATA_LEN,
-      GHOSTTY_KITTY_IMAGE_DATA_GENERATION,
+  GhosttyString pixels = {0};
+  const GhosttyKittyGraphicsImageData keys[6] = {
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_WIDTH,
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_HEIGHT,
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_FORMAT,
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_COMPRESSION,
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_PIXELS,
+      GHOSTTY_KITTY_GRAPHICS_IMAGE_DATA_GENERATION,
   };
-  void *values[7] = {&out->width, &out->height, &out->format,
-                     &out->compression, (void *)&out->data, &out->data_len,
-                     &out->generation};
-  return ghostty_kitty_graphics_image_get_multi(image, 7, keys, values, NULL) ==
-         GHOSTTY_SUCCESS;
+  void *values[6] = {&out->width, &out->height, &out->format,
+                     &out->compression, &pixels, &out->generation};
+  if (ghostty_kitty_graphics_image_get_multi(image, 6, keys, values, NULL) !=
+      GHOSTTY_SUCCESS) return false;
+  out->data = pixels.ptr;
+  out->data_len = pixels.len;
+  return true;
 }
 
 void attn_ghostty_bytes_free(uint8_t *data) { free(data); }

@@ -91,7 +91,7 @@ $(NATIVE_VT_LIBS): ghostty-vt.pin scripts/build-libghostty-vt.sh scripts/lib/lib
 
 # Rebuild the native archives for EVERY supported target from source and publish
 # them as prebuilt assets. Run after changing the shared ghostty-vt.pin; needs
-# zig 0.16.x (cross-compiles all targets from one
+# zig 0.17.x (cross-compiles all targets from one
 # host) and an authenticated gh. Commit the regenerated ghostty-vt-native.lock.
 publish-native-vt:
 	./scripts/publish-libghostty-vt.sh

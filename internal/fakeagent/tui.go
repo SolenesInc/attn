@@ -87,8 +87,8 @@ func (t *terminal) probeProgramStatus() bool {
 		replies = append(replies, chunk[:n]...)
 		if start, end, ok := deviceAttributesReply(replies); ok {
 			beforeDA := string(replies[:start])
-			supported := strings.Contains(beforeDA, programStatusQuery)
-			typed := strings.Replace(beforeDA, programStatusQuery, "", 1) + string(replies[end:])
+			supported := programStatusReplyPattern.MatchString(beforeDA)
+			typed := programStatusReplyPattern.ReplaceAllString(beforeDA, "") + string(replies[end:])
 			t.early = []byte(typed)
 			return supported
 		}
@@ -98,7 +98,10 @@ func (t *terminal) probeProgramStatus() bool {
 	}
 }
 
-var deviceAttributesReplyPattern = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+var (
+	deviceAttributesReplyPattern = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+	programStatusReplyPattern    = regexp.MustCompile(`\x1b\]7501;\?[^\x1b]*\x1b\\`)
+)
 
 func deviceAttributesReply(input []byte) (start, end int, ok bool) {
 	at := deviceAttributesReplyPattern.FindIndex(input)

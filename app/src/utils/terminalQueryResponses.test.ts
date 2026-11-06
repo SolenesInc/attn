@@ -12,6 +12,10 @@ describe('stripDaemonOwnedResponses', () => {
     expect(stripDaemonOwnedResponses(ESC + '[24;1R')).toBe('');
   });
 
+  it('drops an extended cursor position report', () => {
+    expect(stripDaemonOwnedResponses(ESC + '[?24;1;1R')).toBe('');
+  });
+
   it('drops a standalone DA1 device-attributes report', () => {
     expect(stripDaemonOwnedResponses(ESC + '[?1;2c')).toBe('');
   });

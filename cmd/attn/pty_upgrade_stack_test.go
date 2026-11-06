@@ -383,13 +383,23 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 	onHost := u.spawnAgent(app, fakeagent.Claude)
 	sharedHostOf(t, u.Dir, app.Terminal(onHost.session))
 	shellOnHost := u.spawnShell(app)
-	sharedHostOf(t, u.Dir, app.Terminal(shellOnHost.session))
+	hostTerminal := app.Terminal(shellOnHost.session)
+	hostBefore := sharedHostOf(t, u.Dir, hostTerminal)
+	formatBefore := attachedFormat(app, hostTerminal)
 	for _, agent := range []releaseAgent{onWorker, onHost} {
 		u.turn(app, agent, "before-update")
 	}
 
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
+	format := attachedFormatAfterMove(app, hostTerminal, formatBefore)
+	if format == formatBefore || format == "" {
+		t.Fatalf("the host terminal attaches with format %q after the update from %q, want the current build's", format, formatBefore)
+	}
+	t.Logf("snapshot format moved from %s to %s", formatBefore, format)
+	if host := sharedHostOf(t, u.Dir, hostTerminal); host != hostBefore {
+		t.Errorf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)
+	}
 	for _, agent := range []releaseAgent{onWorker, onHost} {
 		app.AwaitScreen(agent.session, "before-update reply")
 		u.turn(app, agent, "after-update")
@@ -405,6 +415,95 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 		u.reloadOntoTheHost(app, agent)
 	}
 	shellOnHost.assertSameProcess(app)
+}
+
+func TestAnUpdateFromTheReleaseKeepsAHostTerminalAfterTheSettingWasTurnedOff(t *testing.T) {
+	t.Parallel()
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	agent := u.spawnAgent(app, fakeagent.Claude)
+	u.turn(app, agent, "before-update")
+	shell := u.spawnShell(app)
+	terminal := app.Terminal(shell.session)
+	sharedHostOf(t, u.Dir, terminal)
+	setSetting(t, app, upgradeSharedHostEnabled, "false")
+
+	u.InstallBuild(u.currentAttn, u.currentHost)
+	app = u.ensureCurrent()
+	if got := app.Initial.Settings[upgradeSharedHostEnabled]; got != "false" {
+		t.Errorf("%s = %q after the update, want false", upgradeSharedHostEnabled, got)
+	}
+	shell.assertSameProcess(app)
+	app.AwaitScreen(agent.session, "before-update reply")
+	u.turn(app, agent, "after-update")
+	fresh := u.spawnAgent(app, fakeagent.Claude)
+	u.assertNoSharedHost(app.Terminal(fresh.session))
+	u.turn(app, fresh, "on-a-worker")
+	u.assertNoReloadNotice(u.App(), shell.session)
+}
+
+func TestAnUpdateFromTheReleaseWithTheSettingOnAndNoHostLeavesTerminalsOnWorkers(t *testing.T) {
+	t.Parallel()
+	skipUnlessAMachineCanHaveNoHost(t)
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	live := u.spawnAgent(app, fakeagent.Claude)
+	u.turn(app, live, "before-update")
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	if got := u.Attn("daemon", "stop"); got.Code != 0 {
+		t.Fatalf("attn daemon stop: %+v", got)
+	}
+	u.AwaitStopped()
+	u.Vars = append(u.Vars, "XDG_DATA_HOME="+filepath.Join(u.Dir, "share"))
+	u.InstallBuild(u.currentAttn, "")
+	for _, path := range []string{filepath.Join(u.Dir, "install", ptyhost.BinaryName), filepath.Join(u.Dir, "pty-hosts")} {
+		if err := os.RemoveAll(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := u.Attn("daemon", "ensure"); got.Code != 0 {
+		t.Fatalf("attn daemon ensure with no host: %+v", got)
+	}
+	t.Cleanup(func() { u.Attn("daemon", "stop") })
+	app = u.App()
+	if active := app.Initial.Settings[upgradeSharedHostActive]; active != "false" {
+		t.Errorf("%s = %q, want false on a machine with no host", upgradeSharedHostActive, active)
+	}
+	u.turn(app, live, "after-update")
+	fresh := u.spawnAgent(app, fakeagent.Claude)
+	u.assertNoSharedHost(app.Terminal(fresh.session))
+	u.turn(app, fresh, "on-a-worker")
+}
+
+func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWorkers(t *testing.T) {
+	t.Parallel()
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	u.storeTheNewDefaults(app)
+	shell := u.spawnShell(app)
+	sharedHostOf(t, u.Dir, app.Terminal(shell.session))
+
+	broken := filepath.Join(u.Dir, "broken-host")
+	if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	u.InstallBuild(u.currentAttn, broken)
+	app = u.ensureCurrent()
+	if len(u.notifications(app)) == 0 {
+		testworld.Await(app, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
+	}
+	if notifications := u.notifications(app); len(notifications) != 1 || notifications[0].Kind != "pty_host_rejected" {
+		t.Errorf("notifications = %+v, want one pty_host_rejected", notifications)
+	}
+	shell.assertSameProcess(app)
+	if came := initialSession(t, u.App(), shell.session); !protocol.Deref(came.TerminalBuildStale) {
+		t.Errorf("the live shell on the old host shows no reload notice")
+	}
+	fresh := u.spawnAgent(app, fakeagent.Claude)
+	u.assertParent(fresh.run, " pty-worker ")
+	u.assertNoSharedHost(app.Terminal(fresh.session))
+	u.turn(app, fresh, "on-a-worker")
 }
 
 func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing.T) {
@@ -573,19 +672,7 @@ func TestAHostThatCannotRunLeavesNewTerminalsOnWorkersWithOneNotification(t *tes
 
 func TestAMachineWithOnlyAttnKeepsTerminalsOnWorkersWithoutAWarning(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
-		t.Skip("only Linux publishes attn without its host")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".local", "bin", ptyhost.BinaryName)); err == nil {
-		t.Skipf("%s has a host in ~/.local/bin, which the daemon would find", home)
-	}
-	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
-		t.Skipf("%s is on PATH, which the daemon would find", path)
-	}
+	skipUnlessAMachineCanHaveNoHost(t)
 	releaseAttn := os.Getenv("ATTN_UPGRADE_RELEASE_BIN")
 	if releaseAttn == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
@@ -916,6 +1003,43 @@ func TestAnOutpostAddedByAddressOnTheReleaseExplainsItselfAfterTheUpdate(t *test
 	}
 	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
 	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+}
+
+func skipUnlessAMachineCanHaveNoHost(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("only Linux publishes attn without its host")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".local", "bin", ptyhost.BinaryName)); err == nil {
+		t.Skipf("%s has a host in ~/.local/bin, which the daemon would find", home)
+	}
+	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
+		t.Skipf("%s is on PATH, which the daemon would find", path)
+	}
+}
+
+func attachedFormat(app *testworld.Peer, terminal string) string {
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if attached.Snapshot == nil {
+		return ""
+	}
+	return protocol.Deref(attached.Snapshot.Format)
+}
+
+// attachedFormatAfterMove waits out a host handover that is still running when the app first attaches.
+func attachedFormatAfterMove(app *testworld.Peer, terminal, before string) string {
+	if format := attachedFormat(app, terminal); format != before {
+		return format
+	}
+	testworld.AwaitEvent(app, "the attached stream of "+terminal+" to end when its host hands over", func(e protocol.WebSocketEvent) bool {
+		return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
+	})
+	return attachedFormat(app, terminal)
 }
 
 // releaseUpdate is a stack that started on the real previous release, with the current build ready to install.

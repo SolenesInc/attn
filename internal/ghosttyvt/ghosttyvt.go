@@ -108,32 +108,31 @@ static GhosttyResult ghosttyvt_set_color_theme(
 	return GHOSTTY_SUCCESS;
 }
 
-// Build formatter options: one self-contained VT (or plain) stream with all
-// "extra" state on and unwrap=false so soft-wrap survives the dump. NULL
-// selection = the entire screen including scrollback history.
-static GhosttyFormatterTerminalOptions ghosttyvt_make_opts(GhosttyFormatterFormat emit) {
-	GhosttyFormatterTerminalOptions o;
-	memset(&o, 0, sizeof(o));
-	o.size = sizeof(GhosttyFormatterTerminalOptions);
-	o.emit = emit;
-	o.unwrap = false;
-	o.trim = false;
-	o.extra.size = sizeof(GhosttyFormatterTerminalExtra);
-	o.extra.palette = true;
-	o.extra.modes = true;
-	o.extra.scrolling_region = true;
-	o.extra.tabstops = true;
-	o.extra.pwd = true;
-	o.extra.keyboard = true;
-	o.extra.screen.size = sizeof(GhosttyFormatterScreenExtra);
-	o.extra.screen.cursor = true;
-	o.extra.screen.style = true;
-	o.extra.screen.hyperlink = true;
-	o.extra.screen.protection = true;
-	o.extra.screen.kitty_keyboard = true;
-	o.extra.screen.charsets = true;
-	o.selection = NULL;
-	return o;
+// One self-contained VT (or plain) stream with every extra on and untrimmed
+// rows, so soft-wrap survives the dump unless unwrap asks otherwise. A NULL
+// selection formats the entire screen including scrollback history.
+static GhosttyResult ghosttyvt_format(
+	GhosttyTerminal t,
+	GhosttyFormatterFormat emit,
+	bool unwrap,
+	const GhosttySelection* selection,
+	uint8_t** out_ptr,
+	size_t* out_len
+) {
+	GhosttyFormatter formatter;
+	bool trim = false;
+	GhosttyFormatterExtras extras = GHOSTTY_FORMATTER_EXTRAS_ALL;
+	GhosttyResult rc = ghostty_formatter_terminal_new(NULL, &formatter, t);
+	if (rc != GHOSTTY_SUCCESS) return rc;
+	if ((rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_EMIT, &emit)) == GHOSTTY_SUCCESS &&
+		(rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_UNWRAP, &unwrap)) == GHOSTTY_SUCCESS &&
+		(rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_TRIM, &trim)) == GHOSTTY_SUCCESS &&
+		(rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_EXTRAS, &extras)) == GHOSTTY_SUCCESS &&
+		(rc = ghostty_formatter_set(formatter, GHOSTTY_FORMATTER_OPT_SELECTION, selection)) == GHOSTTY_SUCCESS) {
+		rc = ghostty_formatter_format_alloc(formatter, NULL, out_ptr, out_len);
+	}
+	ghostty_formatter_free(formatter);
+	return rc;
 }
 
 static size_t ghosttyvt_get_usize(GhosttyTerminal t, GhosttyTerminalData data) {
@@ -200,29 +199,14 @@ static GhosttyResult ghosttyvt_format_viewport(
 	uint8_t** out_ptr,
 	size_t* out_len
 ) {
-	GhosttyGridRef start;
-	GhosttyGridRef end;
 	GhosttySelection selection;
-	GhosttyFormatter formatter;
-	GhosttyFormatterTerminalOptions opts;
 	GhosttyResult rc;
 
 	if (cols == 0 || rows == 0) return GHOSTTY_INVALID_VALUE;
-	if ((rc = ghostty_terminal_grid_ref(t, ghosttyvt_viewport_point(0, 0), &start)) != GHOSTTY_SUCCESS) return rc;
-	if ((rc = ghostty_terminal_grid_ref(t, ghosttyvt_viewport_point(cols - 1, rows - 1), &end)) != GHOSTTY_SUCCESS) return rc;
-
 	memset(&selection, 0, sizeof(selection));
-	selection.size = sizeof(selection);
-	selection.start = start;
-	selection.end = end;
-	selection.rectangle = false;
-
-	opts = ghosttyvt_make_opts(emit);
-	opts.selection = &selection;
-	if ((rc = ghostty_formatter_terminal_new(NULL, &formatter, t, opts)) != GHOSTTY_SUCCESS) return rc;
-	rc = ghostty_formatter_format_alloc(formatter, NULL, out_ptr, out_len);
-	ghostty_formatter_free(formatter);
-	return rc;
+	if ((rc = ghostty_terminal_grid_ref(t, ghosttyvt_viewport_point(0, 0), &selection.start)) != GHOSTTY_SUCCESS) return rc;
+	if ((rc = ghostty_terminal_grid_ref(t, ghosttyvt_viewport_point(cols - 1, rows - 1), &selection.end)) != GHOSTTY_SUCCESS) return rc;
+	return ghosttyvt_format(t, emit, false, &selection, out_ptr, out_len);
 }
 static GhosttyResult ghosttyvt_text_range(GhosttyTerminal t, uint16_t cols,
     uint16_t sx, uint32_t sy, uint16_t ex, uint32_t ey, bool inclusive, uint8_t** ptr, size_t* len) {
@@ -232,26 +216,18 @@ static GhosttyResult ghosttyvt_text_range(GhosttyTerminal t, uint16_t cols,
     a.tag = b.tag = GHOSTTY_POINT_TAG_SCREEN;
     GhosttySelection selection;
     memset(&selection, 0, sizeof(selection));
-    selection.size = sizeof(selection);
     GhosttyResult rc = ghostty_terminal_grid_ref(t, a, &selection.start);
     if (rc != GHOSTTY_SUCCESS) return rc;
     rc = ghostty_terminal_grid_ref(t, b, &selection.end);
     if (rc != GHOSTTY_SUCCESS) return rc;
-    GhosttyFormatterTerminalOptions opts = ghosttyvt_make_opts(GHOSTTY_FORMATTER_FORMAT_PLAIN);
-    opts.unwrap = true;
-    opts.selection = &selection;
-    GhosttyFormatter formatter;
-    rc = ghostty_formatter_terminal_new(NULL, &formatter, t, opts);
-    if (rc != GHOSTTY_SUCCESS) return rc;
-    rc = ghostty_formatter_format_alloc(formatter, NULL, ptr, len);
-    ghostty_formatter_free(formatter);
-    return rc;
+    return ghosttyvt_format(t, GHOSTTY_FORMATTER_FORMAT_PLAIN, true, &selection, ptr, len);
 }
 
 */
 import "C"
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"runtime"
@@ -628,6 +604,38 @@ func (t *Terminal) serializeLocked() Snapshot {
 	}
 }
 
+const (
+	snapshotEnvelopeBytes     = 10
+	snapshotRecordHeaderBytes = 10
+	snapshotTagKittyStorage   = 8
+	snapshotTagKittyPlacement = 10
+)
+
+// Clients draw images from the placement feed and the image cache, never from
+// their restored terminal, so a snapshot sent to one leaves the pixels behind.
+func withoutKittyRecords(snapshot []byte) []byte {
+	if len(snapshot) < snapshotEnvelopeBytes {
+		return snapshot
+	}
+	kept := snapshot[:snapshotEnvelopeBytes:snapshotEnvelopeBytes]
+	copied := snapshotEnvelopeBytes
+	at := snapshotEnvelopeBytes
+	for at+snapshotRecordHeaderBytes <= len(snapshot) {
+		tag := binary.LittleEndian.Uint16(snapshot[at:])
+		size := int(binary.LittleEndian.Uint32(snapshot[at+2:]))
+		next := at + snapshotRecordHeaderBytes + size
+		if tag >= snapshotTagKittyStorage && tag <= snapshotTagKittyPlacement {
+			kept = append(kept, snapshot[copied:at]...)
+			copied = next
+		}
+		at = next
+	}
+	if copied == snapshotEnvelopeBytes {
+		return snapshot
+	}
+	return append(kept, snapshot[copied:]...)
+}
+
 func (t *Terminal) encodeSnapshotLocked() []byte {
 	var ptr *C.uint8_t
 	var n C.size_t
@@ -638,7 +646,7 @@ func (t *Terminal) encodeSnapshotLocked() []byte {
 	if n == 0 {
 		return nil
 	}
-	return C.GoBytes(unsafe.Pointer(ptr), C.int(n))
+	return withoutKittyRecords(C.GoBytes(unsafe.Pointer(ptr), C.int(n)))
 }
 
 func (t *Terminal) cursorXYLocked() (x, y int) {
@@ -665,16 +673,10 @@ func (t *Terminal) AltScreenActive() bool {
 }
 
 func (t *Terminal) format(emit C.GhosttyFormatterFormat) []byte {
-	var f C.GhosttyFormatter
-	opts := C.ghosttyvt_make_opts(emit)
-	opts.unwrap = C.bool(emit == C.GHOSTTY_FORMATTER_FORMAT_VT)
-	if rc := C.ghostty_formatter_terminal_new(nil, &f, t.term, opts); rc != C.GHOSTTY_SUCCESS {
-		return nil
-	}
-	defer C.ghostty_formatter_free(f)
 	var ptr *C.uint8_t
 	var n C.size_t
-	if rc := C.ghostty_formatter_format_alloc(f, nil, &ptr, &n); rc != C.GHOSTTY_SUCCESS {
+	unwrap := C.bool(emit == C.GHOSTTY_FORMATTER_FORMAT_VT)
+	if rc := C.ghosttyvt_format(t.term, emit, unwrap, nil, &ptr, &n); rc != C.GHOSTTY_SUCCESS {
 		return nil
 	}
 	defer C.ghostty_free(nil, ptr, n)

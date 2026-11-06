@@ -288,7 +288,10 @@ mod tests {
         terminal.write(output);
         let drained = terminal.drain_responses();
         let replies = String::from_utf8(queries.replies_after_feed(&terminal, &drained)).unwrap();
-        assert_eq!(replies, "\x1b]7501;?\x1b\\\x1b[?1;2c");
+        assert_eq!(
+            replies,
+            "\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\\x1b[?1;2c"
+        );
     }
 
     #[test]

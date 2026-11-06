@@ -1,4 +1,4 @@
-const CURSOR_POSITION_REPORT_RE = /\x1b\[\d+;\d+R/g;
+const CURSOR_POSITION_REPORT_RE = /\x1b\[\??\d+;\d+(?:;\d+)?R/g;
 const DEVICE_ATTRIBUTES_RESPONSE_RE = /\x1b\[\?[0-9;]*c/g;
 const OSC_COLOR_RESPONSE_RE = /\x1b\]1[012];[^\x07\x1b]*(?:\x07|\x1b\\)/g;
 

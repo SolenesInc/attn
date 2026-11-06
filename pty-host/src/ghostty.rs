@@ -4,6 +4,35 @@ use std::sync::OnceLock;
 
 const DEFAULT_SCROLLBACK_BYTES: u64 = 8 << 20;
 const DEFAULT_KITTY_BYTES: u64 = 320_000_000;
+const SNAPSHOT_ENVELOPE_BYTES: usize = 10;
+const SNAPSHOT_RECORD_HEADER_BYTES: usize = 10;
+const SNAPSHOT_TAGS_KITTY: std::ops::RangeInclusive<u16> = 8..=10;
+
+// Clients draw images from the placement feed and the image cache, never from
+// their restored terminal, so a snapshot sent to one leaves the pixels behind.
+fn without_kitty_records(snapshot: Vec<u8>) -> Vec<u8> {
+    if snapshot.len() < SNAPSHOT_ENVELOPE_BYTES {
+        return snapshot;
+    }
+    let mut kept = snapshot[..SNAPSHOT_ENVELOPE_BYTES].to_vec();
+    let mut at = SNAPSHOT_ENVELOPE_BYTES;
+    while at + SNAPSHOT_RECORD_HEADER_BYTES <= snapshot.len() {
+        let tag = u16::from_le_bytes([snapshot[at], snapshot[at + 1]]);
+        let size = u32::from_le_bytes([
+            snapshot[at + 2],
+            snapshot[at + 3],
+            snapshot[at + 4],
+            snapshot[at + 5],
+        ]) as usize;
+        let next = at + SNAPSHOT_RECORD_HEADER_BYTES + size;
+        if !SNAPSHOT_TAGS_KITTY.contains(&tag) {
+            kept.extend_from_slice(&snapshot[at..next]);
+        }
+        at = next;
+    }
+    kept.extend_from_slice(&snapshot[at..]);
+    kept
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -412,7 +441,9 @@ impl Terminal {
     }
 
     pub fn snapshot(&self) -> Vec<u8> {
-        unsafe { take_bytes(|len| attn_ghostty_snapshot(self.raw.as_ptr(), len)) }
+        without_kitty_records(unsafe {
+            take_bytes(|len| attn_ghostty_snapshot(self.raw.as_ptr(), len))
+        })
     }
 
     fn vt_dump(&self) -> Vec<u8> {
@@ -725,6 +756,20 @@ mod tests {
         terminal.write(b"hello from rust\r\n");
         let snapshot = terminal.snapshot();
         assert!(!snapshot.is_empty());
+        let restored = Terminal::restore(&snapshot).expect("restore terminal");
+        assert!(restored.plain_text().contains("hello from rust"));
+    }
+
+    #[test]
+    fn a_snapshot_leaves_kitty_pixels_behind() {
+        let mut terminal = Terminal::new(80, 24).expect("create terminal");
+        terminal.write(b"hello from rust\r\n");
+        let without_image = terminal.snapshot().len();
+        let pixels = "A".repeat(21_846);
+        terminal.write(format!("\x1b_Ga=T,i=7,f=32,s=64,v=64,q=2;{pixels}==\x1b\\").as_bytes());
+        assert!(terminal.kitty_image(7, 0).is_some());
+        let snapshot = terminal.snapshot();
+        assert!(snapshot.len() < without_image + 4 * 64 * 64);
         let restored = Terminal::restore(&snapshot).expect("restore terminal");
         assert!(restored.plain_text().contains("hello from rust"));
     }

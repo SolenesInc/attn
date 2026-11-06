@@ -107,3 +107,13 @@ describe('GhosttyTerminal reads what libghostty-vt holds', () => {
     t.free();
   });
 });
+
+describe('key encoding', () => {
+  it('reports a key event\'s text to a program that asked for it', () => {
+    const t = ghostty.createTerminal(20, 5, {});
+    t.write('\x1b[>31u');
+    expect(t.encodeKey({ action: 'press', key: 'A', utf8: 'a', unshiftedCodepoint: 97 })).toBe('\x1b[97;;97u');
+    expect(t.encodeKey({ action: 'release', key: 'A', unshiftedCodepoint: 97 })).toBe('\x1b[97;1:3u');
+    t.free();
+  });
+});

@@ -277,8 +277,9 @@ does not turn auto memory off (checked with unpaid CLI probes on 2.1.310).
 Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
 
 - At startup Claude sends `OSC 7501 ; ?` before its DA1 query. Claude reports
-  only when the 7501 reply arrives before the DA1 reply. Otherwise Claude never
-  asks again in that process. `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` turns the
+  only when a reply starting with `?` arrives before the DA1 reply, so
+  Ghostty's `?:states=…:kinds=…` counts (read in 2.1.319's bundle). Otherwise
+  Claude never asks again in that process. `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` turns the
   reports off along with the title.
 - Claude reports the root record with `app=claude-code`:
 

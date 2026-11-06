@@ -42,18 +42,19 @@ import {
   SCREEN_TYPE_ALTERNATE,
   SNAPSHOT_DATA_HISTORY_ROWS_PRIMARY,
   SNAPSHOT_DATA_PROGRESS_ROWS,
-  STYLE_OFF_BLINK,
-  STYLE_OFF_BOLD,
   STYLE_OFF_BG,
   STYLE_OFF_BG_KIND,
-  STYLE_OFF_FAINT,
   STYLE_OFF_FG,
   STYLE_OFF_FG_KIND,
-  STYLE_OFF_INVERSE,
-  STYLE_OFF_INVISIBLE,
-  STYLE_OFF_ITALIC,
-  STYLE_OFF_STRIKETHROUGH,
-  STYLE_OFF_UNDERLINE,
+  STYLE_OFF_FLAGS,
+  STYLE_FLAG_BLINK,
+  STYLE_FLAG_BOLD,
+  STYLE_FLAG_FAINT,
+  STYLE_FLAG_INVERSE,
+  STYLE_FLAG_INVISIBLE,
+  STYLE_FLAG_ITALIC,
+  STYLE_FLAG_STRIKETHROUGH,
+  STYLE_UNDERLINE_MASK,
   STYLE_COLOR_PALETTE,
   STYLE_COLOR_RGB,
   STYLE_SIZE,
@@ -587,7 +588,6 @@ export class GhosttyTerminal {
 
       e.ghostty_render_state_row_cells_select(cells, x);
       if (styled) {
-        this.dv().setUint32(this.pStyle, STYLE_SIZE, true);
         if (e.ghostty_render_state_row_cells_get(cells, CELLS_DATA_STYLE, this.pStyle) === GHOSTTY_SUCCESS) {
           cell.flags = this.styleFlags(this.pStyle);
         }
@@ -624,15 +624,15 @@ export class GhosttyTerminal {
   }
 
   private styleFlags(ptr: number): number {
-    const s = new Uint8Array(this.e.memory.buffer, ptr, STYLE_SIZE);
-    return (s[STYLE_OFF_BOLD] ? CellFlags.BOLD : 0)
-      | (s[STYLE_OFF_ITALIC] ? CellFlags.ITALIC : 0)
-      | (s[STYLE_OFF_FAINT] ? CellFlags.FAINT : 0)
-      | (s[STYLE_OFF_BLINK] ? CellFlags.BLINK : 0)
-      | (s[STYLE_OFF_INVERSE] ? CellFlags.INVERSE : 0)
-      | (s[STYLE_OFF_INVISIBLE] ? CellFlags.INVISIBLE : 0)
-      | (s[STYLE_OFF_STRIKETHROUGH] ? CellFlags.STRIKETHROUGH : 0)
-      | (this.dv().getInt32(ptr + STYLE_OFF_UNDERLINE, true) !== 0 ? CellFlags.UNDERLINE : 0);
+    const style = this.dv().getUint16(ptr + STYLE_OFF_FLAGS, true);
+    return (style & STYLE_FLAG_BOLD ? CellFlags.BOLD : 0)
+      | (style & STYLE_FLAG_ITALIC ? CellFlags.ITALIC : 0)
+      | (style & STYLE_FLAG_FAINT ? CellFlags.FAINT : 0)
+      | (style & STYLE_FLAG_BLINK ? CellFlags.BLINK : 0)
+      | (style & STYLE_FLAG_INVERSE ? CellFlags.INVERSE : 0)
+      | (style & STYLE_FLAG_INVISIBLE ? CellFlags.INVISIBLE : 0)
+      | (style & STYLE_FLAG_STRIKETHROUGH ? CellFlags.STRIKETHROUGH : 0)
+      | (style & STYLE_UNDERLINE_MASK ? CellFlags.UNDERLINE : 0);
   }
 
   private scratchRgb(): RGB {
@@ -658,16 +658,13 @@ export class GhosttyTerminal {
   private applyStyleColors(cell: GhosttyCell, defaults: { fg: RGB; bg: RGB }, palette: Uint8Array | null): void {
     const dv = this.dv();
     const resolve = (kindOff: number, valueOff: number, def: RGB): RGB => {
-      const kind = dv.getUint32(this.pStyle + kindOff, true);
+      const kind = dv.getUint8(this.pStyle + kindOff);
       if (kind === STYLE_COLOR_RGB) {
-        const value = dv.getUint32(this.pStyle + valueOff, true);
-        return { r: value & 0xff, g: (value >>> 8) & 0xff, b: (value >>> 16) & 0xff };
+        return { r: dv.getUint8(this.pStyle + valueOff), g: dv.getUint8(this.pStyle + valueOff + 1), b: dv.getUint8(this.pStyle + valueOff + 2) };
       }
       if (kind === STYLE_COLOR_PALETTE && palette) {
-        const index = dv.getUint32(this.pStyle + valueOff, true);
-        if (index < 256) {
-          return { r: palette[index * 3], g: palette[index * 3 + 1], b: palette[index * 3 + 2] };
-        }
+        const index = dv.getUint8(this.pStyle + valueOff);
+        return { r: palette[index * 3], g: palette[index * 3 + 1], b: palette[index * 3 + 2] };
       }
       return def;
     };
@@ -769,7 +766,6 @@ export class GhosttyTerminal {
     dv.setUint32(this.pPoint + POINT_OFF_TAG, tag, true);
     dv.setUint16(this.pPoint + POINT_OFF_X, x, true);
     dv.setUint32(this.pPoint + POINT_OFF_Y, y, true);
-    dv.setUint32(this.pRef, GRID_REF_SIZE, true);
     return this.e.ghostty_terminal_grid_ref(this.handle, this.pPoint, this.pRef) === GHOSTTY_SUCCESS;
   }
 
@@ -783,7 +779,6 @@ export class GhosttyTerminal {
       if (!this.ref(POINT_TAG_HISTORY, x, offset)) return cell;
       this.e.ghostty_grid_ref_cell(this.pRef, this.pScratch);
       if (this.readCellWord(cell, this.pScratch)) {
-        this.dv().setUint32(this.pStyle, STYLE_SIZE, true);
         if (this.e.ghostty_grid_ref_style(this.pRef, this.pStyle) === GHOSTTY_SUCCESS) {
           cell.flags = this.styleFlags(this.pStyle);
           this.applyStyleColors(cell, defaults, palette);

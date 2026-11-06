@@ -45,7 +45,7 @@ vt_platform_goos()   { printf '%s' "${1%%_*}"; }
 vt_platform_goarch() { printf '%s' "${1##*_}"; }
 
 # zig -Dtarget / `zig cc -target` triple for a platform tuple. Linux tuples use
-# zig's bundled libc (no SDK); darwin needs the macOS SDK via SDKROOT.
+# zig's bundled libc; darwin uses the macOS SDK via SDKROOT when xcrun exists.
 vt_zig_target() {
   case "$1" in
     darwin_arm64) printf 'aarch64-macos' ;;
@@ -181,14 +181,14 @@ vt_source_key() {
     vt_commit
     printf '\n%s\n%s\n%s\n' "$platform" "$zig" "${SDKROOT:-}"
     "$zig" version
-    if [[ "$platform" == darwin_* ]]; then xcrun --show-sdk-version; fi
+    if [[ "$platform" == darwin_* ]] && command -v xcrun >/dev/null; then xcrun --show-sdk-version; fi
     cd "$vt_repo_dir" || exit
     shasum -a 256 scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh .tool-versions
   } | shasum -a 256 | awk '{ print $1 }'
 }
 
 # Build the archive + headers for one platform from pinned source into its
-# per-platform output dir. Requires zig 0.16.x and network access to clone
+# per-platform output dir. Requires zig 0.17.x and network access to clone
 # ghostty. This is the maintainer path and the consumer fallback; ordinary
 # contributors never reach it (they download a prebuilt).
 vt_build_from_source() {
@@ -199,7 +199,7 @@ vt_build_from_source() {
 
   zig="$(vt_zig)"
   if [[ -z "$zig" ]]; then
-    echo "error: zig not found on PATH; need zig 0.16.x to build libghostty-vt from source" >&2
+    echo "error: zig not found on PATH; need zig 0.17.x to build libghostty-vt from source" >&2
     echo "       (consumers normally download a prebuilt asset — this path only runs when" >&2
     echo "        you have changed ghostty-vt.pin, or forced" >&2
     echo "        ATTN_VT_FROM_SOURCE=1)" >&2
@@ -207,14 +207,15 @@ vt_build_from_source() {
   fi
   zig_version="$("$zig" version)"
   case "$zig_version" in
-    0.16.*) ;;
-    *) echo "error: need zig 0.16.x, found $zig_version (asdf: 'asdf local zig 0.16.0')" >&2; return 1 ;;
+    0.17.*) ;;
+    *) echo "error: need zig 0.17.x, found $zig_version (asdf: 'asdf local zig 0.17.0')" >&2; return 1 ;;
   esac
 
-  # Only the macOS target needs the platform SDK; Linux targets use zig's
-  # bundled libc headers and cross-build from any host.
+  # On a Mac the macOS target builds against the platform SDK. Everywhere else
+  # zig's bundled libc headers cross-build every target; the archive needs no
+  # framework symbols to be built.
   sdkroot=""
-  if [[ "$goos" == "darwin" ]]; then
+  if [[ "$goos" == "darwin" ]] && command -v xcrun >/dev/null; then
     sdkroot="${SDKROOT:-$(xcrun --show-sdk-path)}"
   fi
 
@@ -243,8 +244,9 @@ vt_build_from_source() {
 
   local artifact identity cached
   artifact="$workdir/artifact"
-  mkdir "$artifact"
-  cp -R "$workdir/prefix/lib" "$workdir/prefix/include" "$artifact/"
+  mkdir -p "$artifact/lib"
+  cp "$workdir/prefix/lib/libghostty-vt.a" "$artifact/lib/"
+  cp -R "$workdir/prefix/include" "$artifact/"
   if [[ -f "$workdir/ghostty/LICENSE" ]]; then
     cp "$workdir/ghostty/LICENSE" "$artifact/LICENSE"
   fi
