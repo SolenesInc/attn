@@ -93,8 +93,10 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
+	requireStdout(t, home.Attn("settings", "set", "shelf_layout_enabled", "true"), "true")
 	remote := outpost.App()
 	pair.Connect()
+	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["shelf_layout_enabled"] == "true" })
 	var perMachine []*setting.Setting
 	for _, feature := range setting.Features() {
 		if feature.Class == setting.Machine {
@@ -109,7 +111,7 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	for _, feature := range perMachine {
 		keys = append(keys, feature.Key)
 	}
-	if want := []string{"analytics.enabled", "background_login_env_enabled", "outposts_enabled", "pty_shared_host_enabled", "shelf_layout_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
+	if want := []string{"analytics.enabled", "pty_shared_host_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
 		t.Fatalf("features still decided per machine = %v, want only the named exceptions %v", keys, want)
 	}
 	t.Log("every feature except the named exceptions reads the home's value on an outpost")

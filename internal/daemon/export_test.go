@@ -88,6 +88,7 @@ func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
 }
 
 const BridgeCallRecovery = bridgeCallRecovery
+const BridgeCallCopy = bridgeCallCopy
 
 const AutomationScheduleTick = defaultAutomationScheduleInterval
 

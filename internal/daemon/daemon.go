@@ -648,7 +648,6 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
-	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
@@ -672,6 +671,7 @@ func (d *Daemon) Start() error {
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
+	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
 	if !d.backgroundLoginEnv {

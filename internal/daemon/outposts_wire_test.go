@@ -59,9 +59,10 @@ func startFarOutpost(t *testing.T, w *world, connected func(*bridge.Conn)) *farO
 		served <- bridge.Serve(ctx, o.network, bridge.ServerConfig{
 			Self:        self,
 			HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key"),
-			Handlers: bridge.Handlers{daemon.BridgeCallRecovery: func(_ *bridge.Conn, incoming ssh.NewChannel) {
-				bridge.Answer(incoming, func(context.Context, []byte) (any, error) { return struct{}{}, nil })
-			}},
+			Handlers: bridge.Handlers{
+				daemon.BridgeCallRecovery: answerBridgeCall,
+				daemon.BridgeCallCopy:     answerBridgeCall,
+			},
 		}, connected)
 	}()
 	t.Cleanup(func() {
@@ -71,6 +72,10 @@ func startFarOutpost(t *testing.T, w *world, connected func(*bridge.Conn)) *farO
 	})
 	w.daemon.UseBridgeDialer(o.dial)
 	return o
+}
+
+func answerBridgeCall(_ *bridge.Conn, incoming ssh.NewChannel) {
+	bridge.Answer(incoming, func(context.Context, []byte) (any, error) { return struct{}{}, nil })
 }
 
 func (o *farOutpost) dial(ctx context.Context, network, _ string) (net.Conn, error) {

@@ -24,7 +24,7 @@ closes the session.
 - `session-title`: a background model names a new session from its first prompt.
 - `launch-launcher`: the experimental "Launcher 2.0" replaces the picker with one dialog for the path, the repository and its worktree. With an outpost attached it starts on the highlighted recent's machine ([outposts.md](outposts.md) `launcher-machines`).
 - `launch-mode`: the experimental "Direct agent launches" switch, described in Settings as launching agents using less memory.
-- `launch-before-login-env`: with the experimental machine setting `background_login_env_enabled`, the daemon answers while the login shell runs. Harnesses report `checking`, stay selectable, and every launch waits for the login environment. A launch that names a plugin harness also waits for a plugin to register it, up to 60 s after the capture, and then fails with `agent "<name>" is not available`.
+- `launch-before-login-env`: with the experimental setting `background_login_env_enabled`, the daemon answers while the login shell runs. Harnesses report `checking`, stay selectable, and every launch waits for the login environment. A launch that names a plugin harness also waits for a plugin to register it, up to 60 s after the capture, and then fails with `agent "<name>" is not available`.
 
 ## How to get to it
 
