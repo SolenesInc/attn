@@ -615,7 +615,7 @@ export function useAppController({
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {
       const looking = useSessionStore.getState().view === 'session';
-      setView('session');
+      if (!looking) setView('session');
       desktopNavigation.switchToSlot(slot, looking);
     },
     onMoveToDesktopSlot: desktopNavigation.moveActiveLeafToSlot,

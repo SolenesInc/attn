@@ -1166,6 +1166,32 @@ describe('keyboard focus', () => {
     expect(daemon.sentOf('desktop_set_current').slice(-1)).toEqual([expect.objectContaining({ desktop_id: 'desktop-s2' })]);
   });
 
+  it('goes to the digit’s desktop when the daemon has not yet answered the digit before it', async () => {
+    const { daemon } = await onDesktopWithAPrevious();
+    const held: Array<{ request_id?: string; cmd: 'desktop_set_current'; profile_id: string; desktop_id: string }> = [];
+    daemon.on('desktop_set_current', (command) => {
+      held.push(command);
+      return undefined;
+    });
+    const currentDigit = () => document.querySelector('.desktop-rule.current .desktop-number')?.textContent;
+
+    await gesture(daemon, () => pressShortcut('desktop.select6'));
+    expect(currentDigit()).toBe('6');
+    await gesture(daemon, () => pressShortcut('desktop.select5'));
+    expect(currentDigit()).toBe('5');
+
+    expect(held.map((command) => command.desktop_id)).toEqual(['desktop-s2', 'desktop-s1']);
+    for (const command of held.splice(0)) {
+      await gesture(daemon, () => {
+        daemon.arrangement.profiles = daemon.arrangement.profiles.map((profile) =>
+          profile.id === command.profile_id ? { ...profile, current_desktop_id: command.desktop_id, revision: profile.revision + 1 } : profile);
+        daemon.emit(daemon.arrangement.answer(command));
+        daemon.replyTo(command as never, { event: 'profile_action_result', action: command.cmd, request_id: command.request_id ?? '', success: true });
+      });
+    }
+    expect(currentDigit()).toBe('5');
+  });
+
   it('opens the digit’s desktop from home even with a previous desktop to bounce to', async () => {
     const { daemon } = await onDesktopWithAPrevious();
     await gesture(daemon, keys.home);
