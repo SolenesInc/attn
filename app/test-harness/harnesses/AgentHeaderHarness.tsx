@@ -9,6 +9,7 @@ import type { TerminalLayoutNode } from '../../src/types/desktop';
 import type { DesktopSelectionStyle } from '../../src/utils/desktopSelectionStyle';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
+import '../../src/components/Sidebar.css';
 
 const eventRouter = createPaneRuntimeEventRouterController();
 const api = {} as DaemonApi;

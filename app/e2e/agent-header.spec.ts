@@ -209,6 +209,25 @@ test('a pull request collapsed to its icon still opens its details from the keyb
   expect(await page.locator('.session-pr-popover').isVisible()).toBe(true);
 });
 
+for (const scale of ['1', '1.5']) {
+  test(`the status dot sits on the title's vertical center at text size ${scale}`, async ({ page }) => {
+    await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
+    await page.goto('/test-harness/?component=AgentHeader&width=480');
+    await fitted(page);
+    await page.evaluate((value) => document.documentElement.style.setProperty('--ui-scale', value), scale);
+    await fitted(page);
+    const offsets = await page.locator('.desktop-pane-headline').evaluateAll((rows) => rows.map((row) => {
+      const middle = (selector: string) => {
+        const box = row.querySelector(selector)!.getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      return Math.abs(middle('.state-indicator') - middle('.desktop-pane-title'));
+    }));
+    expect(offsets).toHaveLength(TILES);
+    for (const offset of offsets) expect(offset).toBeLessThanOrEqual(0.5);
+  });
+}
+
 test('agent headers refit when the app text size changes', async ({ page }) => {
   await page.setViewportSize({ width: 480 * TILES + 200, height: 600 });
   await page.goto('/test-harness/?component=AgentHeader&width=480');
