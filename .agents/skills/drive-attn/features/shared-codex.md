@@ -21,6 +21,7 @@ the tiles still on the old Codex.
 - `codex-restart`: the app-server moves to the installed Codex once no turn runs, or now on request. If the new Codex fails to start, the old one keeps running.
 - `codex-reload-tiles`: restart the tiles still on an older Codex, in the same conversations.
 - `codex-names`: a session's name and its Codex conversation's name follow each other.
+- `codex-stuck-working`: a visible tile's terminal can stick on `working` while its conversation is idle (`docs/internal/harnesses.md` has the cause). After 5 s attn checks the server, and with no background terminal the tile follows the server's status until the terminal reports again. `attn state explain` shows `program_status working` then `app_server idle`. Only stock Codex reproduces it: the mock does not model the TUI's MCP startup.
 - `codex-compact`: `attn agent close --self --compact` and `attn seed standby --close --compact` compact a shared Codex conversation through `thread/compact/start` before the session closes. A Codex session that does not run on the shared app-server is refused, naming `codex_shared_enabled`. [agent-launch.md](agent-launch.md) `close-compact` holds the rules, the recipe and the tests.
 
 ## How to get to it

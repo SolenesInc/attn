@@ -2294,6 +2294,9 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 	origin := sessionmonitor.Origin{Source: string(obs.Source), Detail: obs.Detail, ObservedAt: obs.At}
 	monitor := d.monitorInTerminal(terminal, sessionID)
 	evidenceChanged := monitor.RecordPTY(obs)
+	if obs.Source == pty.SourceProgramStatus && obs.Claim == pty.ProgramWorking {
+		d.codexShared().checkWorkingSoon(sessionID)
+	}
 	if !obs.Source.ClaimsProtocolState() {
 		if evidenceChanged {
 			d.traceStateEvidence(sessionID, origin, state)

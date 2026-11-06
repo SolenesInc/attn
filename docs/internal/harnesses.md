@@ -840,6 +840,17 @@ frame tap on attn's view proxy. These decide when a shared Codex tile leaves
   keeps reporting `working` after its turn completes.
 - `thread/resume` can start a round, even for a conversation already loaded.
   `turn/start` can start a round that reports only `ready`.
+- The TUI reads the servers it waits for from its config at launch, and `/new`
+  reads them again. A server removed from `config.toml` after launch leaves any
+  later round without an end. Restarting the app-server under that TUI starts
+  such a round, and the TUI reports `working` from then on, through later turns
+  too, probed with a real model. Typed prompts still run.
+- `thread/backgroundTerminals/list` names the running background terminals of a
+  loaded conversation. The conversation is `idle` while one runs after its turn
+  ends, and the TUI correctly reports `working` until the terminal exits, then
+  `done`.
+- A healthy TUI and the server agree within 103 ms when a turn starts and 30 ms
+  when it ends.
 
 Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
 

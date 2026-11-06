@@ -105,6 +105,16 @@ func (s *CodexServer) Work(conversation string) {
 	s.call(methodWork, serverThreadParams{ThreadID: conversation}, nil)
 }
 
+func (s *CodexServer) StartBackgroundTerminal(conversation string) {
+	s.t.Helper()
+	s.call(methodStartTerminal, serverThreadParams{ThreadID: conversation}, nil)
+}
+
+func (s *CodexServer) AwaitBackgroundTerminalsListed(conversation string) {
+	s.t.Helper()
+	s.call(methodAwaitListed, serverThreadParams{ThreadID: conversation}, nil)
+}
+
 func (s *CodexServer) AskQuestion(conversation string) {
 	s.t.Helper()
 	s.call(methodAskQuestion, serverThreadParams{ThreadID: conversation}, nil)

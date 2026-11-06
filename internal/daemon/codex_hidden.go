@@ -206,11 +206,23 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	if session == nil {
 		return
 	}
-	now := time.Now()
-	r.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: now}, status)
-	if !r.d.hidden(sessionID) {
+	if r.d.hidden(sessionID) || r.followsServer(sessionID) {
+		r.report(sessionID, session, status)
 		return
 	}
+	r.traceServerStatus(sessionID, status, time.Now())
+	if status == pty.ProgramIdle && r.terminalClaimsWorking(sessionID) {
+		r.checkWorkingSoon(sessionID)
+	}
+}
+
+func (r *codexShared) traceServerStatus(sessionID protocol.SessionID, status string, at time.Time) {
+	r.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: at}, status)
+}
+
+func (r *codexShared) report(sessionID protocol.SessionID, session *protocol.Session, status string) {
+	now := time.Now()
+	r.traceServerStatus(sessionID, status, now)
 	if status == pty.ProgramIdle {
 		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,6 +48,8 @@ const (
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
 	methodCloseThread    = "close_thread"
+	methodStartTerminal  = "start_background_terminal"
+	methodAwaitListed    = "await_background_terminals_listed"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 	codexDrainRefusal    = "Server is draining; retry after reconnecting"
 )
@@ -58,22 +61,23 @@ func (r codexRefusal) Error() string { return string(r) }
 var codexRefusedWhileDraining = map[string]bool{"turn/start": true, "turn/steer": true, "thread/start": true, "thread/resume": true, "thread/fork": true, "thread/archive": true}
 
 type codexAppServer struct {
-	cfg      config
-	version  string
-	control  *rpcPeer
-	listener net.Listener
-	draining bool
-	hooks    hookSet
-	toolEnv  []string
-	mu       sync.Mutex
-	threads  map[string]*codexServerThread
-	conns    map[*codexServerConn]bool
-	nextID   int
-	prompts  map[string]chan string
-	named    chan struct{}
-	archived chan struct{}
-	listed   chan struct{}
-	held     map[string]*codexHeldReply
+	cfg             config
+	version         string
+	control         *rpcPeer
+	listener        net.Listener
+	draining        bool
+	hooks           hookSet
+	toolEnv         []string
+	mu              sync.Mutex
+	threads         map[string]*codexServerThread
+	conns           map[*codexServerConn]bool
+	nextID          int
+	prompts         map[string]chan string
+	named           chan struct{}
+	archived        chan struct{}
+	terminalsListed chan struct{}
+	listed          chan struct{}
+	held            map[string]*codexHeldReply
 
 	compactRefusal string
 	compactions    map[string]int
@@ -86,22 +90,23 @@ type codexServerConn struct {
 }
 
 type codexServerThread struct {
-	c              *codex
-	written        bool
-	started        time.Time
-	sessionSource  string
-	sessionStarted bool
-	active         bool
-	compactEnded   chan struct{}
-	subscribers    map[*codexServerConn]bool
-	approval       json.RawMessage
-	approvalID     string
-	question       bool
-	instructions   string
-	compactLimit   string
-	memoryConfig   map[string]any
-	workspaceRoots []string
-	parent         string
+	c                   *codex
+	written             bool
+	started             time.Time
+	sessionSource       string
+	sessionStarted      bool
+	active              bool
+	backgroundTerminals []map[string]any
+	compactEnded        chan struct{}
+	subscribers         map[*codexServerConn]bool
+	approval            json.RawMessage
+	approvalID          string
+	question            bool
+	instructions        string
+	compactLimit        string
+	memoryConfig        map[string]any
+	workspaceRoots      []string
+	parent              string
 }
 
 type CodexPermissions struct {
@@ -149,17 +154,18 @@ func runCodexAppServer(cfg config) int {
 		return 1
 	}
 	s := &codexAppServer{
-		cfg:      cfg,
-		version:  installedCodexVersion(),
-		hooks:    hookSet{groups: configured.groups, env: os.Environ()},
-		toolEnv:  configured.env,
-		threads:  map[string]*codexServerThread{},
-		conns:    map[*codexServerConn]bool{},
-		prompts:  map[string]chan string{},
-		named:    make(chan struct{}),
-		archived: make(chan struct{}),
-		listed:   make(chan struct{}),
-		held:     map[string]*codexHeldReply{},
+		cfg:             cfg,
+		version:         installedCodexVersion(),
+		hooks:           hookSet{groups: configured.groups, env: os.Environ()},
+		toolEnv:         configured.env,
+		threads:         map[string]*codexServerThread{},
+		conns:           map[*codexServerConn]bool{},
+		prompts:         map[string]chan string{},
+		named:           make(chan struct{}),
+		archived:        make(chan struct{}),
+		terminalsListed: make(chan struct{}, 1),
+		listed:          make(chan struct{}),
+		held:            map[string]*codexHeldReply{},
 
 		compactions: map[string]int{},
 	}
@@ -495,6 +501,19 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		return s.endTurn(methodFakeHalt, p)
 	case "thread/compact/start":
 		return s.compactStart(p)
+	case "thread/backgroundTerminals/list":
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, nil, err
+		}
+		s.mu.Lock()
+		data := slices.Clone(t.backgroundTerminals)
+		s.mu.Unlock()
+		select {
+		case s.terminalsListed <- struct{}{}:
+		default:
+		}
+		return map[string]any{"data": data}, nil, nil
 	case methodFakeTerminal:
 		s.mu.Lock()
 		conn.terminal = true
@@ -1077,6 +1096,18 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			after()
 		}
 		return struct{}{}, err
+	case methodStartTerminal:
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		t.backgroundTerminals = append(t.backgroundTerminals, map[string]any{"itemId": "item-background", "processId": "1000", "command": "sleep 600", "cwd": t.c.cwd})
+		s.mu.Unlock()
+		return struct{}{}, nil
+	case methodAwaitListed:
+		<-s.terminalsListed
+		return struct{}{}, nil
 	case methodWork:
 		t, err := s.loaded(p.ThreadID)
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -192,4 +193,54 @@ func stateExplainOf(t *testing.T, cli *client.Client, session string) *protocol.
 		t.Fatalf("state explain %s: %v", session, err)
 	}
 	return explained
+}
+
+func TestSharedCodexTileSettlesWhenItsTerminalSticksOnWorkingWhileItsConversationIsIdle(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+
+	mark := len(app.Log())
+	codex.ProgramStatus("state=working:app=codex")
+	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
+	mark = len(app.Log())
+	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.advance(5 * time.Second)
+	awaitStateSince(app, mark, checkout, protocol.SessionStateIdle)
+
+	mark = len(app.Log())
+	app.TypeLine(checkout, "lock the tax lookup")
+	codex.Prompted()
+	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
+	mark = len(app.Log())
+	codex.Reply("Locked. <!-- attn:state=idle -->")
+	awaitStateSince(app, mark, checkout, protocol.SessionStateIdle)
+}
+
+func TestSharedCodexTileKeepsWorkingWhileABackgroundTerminalRunsInItsIdleConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+
+	w.CodexServer().StartBackgroundTerminal(codex.ConversationID)
+	mark := len(app.Log())
+	codex.ProgramStatus("state=working:app=codex")
+	awaitStateSince(app, mark, checkout, protocol.SessionStateWorking)
+	w.awaitTimer(daemon.CodexWorkingCheckTimer)
+	w.advance(5 * time.Second)
+	w.CodexServer().AwaitBackgroundTerminalsListed(codex.ConversationID)
+	mark = len(app.Log())
+	typeInto(app, app.Terminal(checkout), "/rename Still running\r")
+	codex.Prompted()
+	shown := testworld.AwaitSessionSince(app, mark, checkout, func(s protocol.Session) bool { return s.Label == "Still running" })
+	if shown.State != protocol.SessionStateWorking {
+		t.Fatalf("the tile is %s while a background terminal runs, want working", shown.State)
+	}
+}
+
+func awaitStateSince(app *testworld.Peer, mark int, session string, state protocol.SessionState) {
+	app.T.Helper()
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == state })
 }
