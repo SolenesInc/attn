@@ -63,9 +63,11 @@ Profiling costs CPU, so profiled runs are not baselines.
 The garden and session tools measure a copy of a real database in a named
 instance. `scripts/gardenpushperf/copy-production.sh <name> [<source db>]`
 copies the source read-only, production's `~/.attn/attn.db` by default, and
-turns off what the copy would otherwise reach: the real Notebook root, worktree
-removal, outposts and every automation. Pass a source to measure a copy made
-on another machine, such as a Mac copy under `~/perf-copies/` on ai-sandbox.
+turns off what the copy would otherwise reach: the real Notebook root, crew
+homes, worktree removal, outposts and every automation. A copied crew member's
+home starts empty in the copy's data folder. Pass a source to measure a copy
+made on another machine, such as a Mac copy under `~/perf-copies/` on
+ai-sandbox.
 `attn instance resolve --field dataDir` and `--field wsPort` give the copy's
 data directory and port.
 

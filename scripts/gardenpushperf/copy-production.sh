@@ -22,6 +22,7 @@ sqlite3 "file:$source_db?mode=ro" ".backup '$data/attn.db.copying'"
 
 drops=$(sqlite3 "$data/attn.db.copying" "SELECT 'DROP TRIGGER ' || name || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
 creates=$(sqlite3 "$data/attn.db.copying" "SELECT sql || ';' FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'settings'")
+crew_in_data_dir=$(sqlite3 "$data/attn.db.copying" "SELECT 'UPDATE doc_' || id || ' SET body = json_set(json_remove(body, ''\$.home_dir'', ''\$.cwd''), ''\$.awareness_dirs'', json(''[]''));' FROM document_collections WHERE namespace = 'core/crew' AND collection = 'members'")
 sqlite3 "$data/attn.db.copying" <<SQL
 BEGIN;
 $drops
@@ -33,6 +34,7 @@ INSERT INTO settings (key, value) VALUES
   ('analytics.sharing_enabled', 'false');
 $creates
 UPDATE profile_settings SET value = '$data/notebook-scratch' WHERE key = 'notebook.root';
+$crew_in_data_dir
 UPDATE automation_definitions SET enabled = 0;
 COMMIT;
 SQL
