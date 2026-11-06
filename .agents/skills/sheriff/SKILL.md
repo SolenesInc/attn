@@ -67,6 +67,7 @@ Correction seed you plant moves the class to a stronger fix.
 | Class | Instance | What prevents it |
 |---|---|---|
 | A package host that a job is not testing turns App acceptance red | Run 41902160029, shard 2/10: `apt download exceeded 300s`, no test failed | `setup-linux-app-deps`: shards restore a frozen apt layer and install with every network source removed. Only the build job can reach the mirror, on a cache miss |
+| A landing adds or changes a scenario that passed only on the author's Mac, and it fails on Linux in CI | 729fdd236, SHELF-MOVES: `the active tile sits at the end of the screen` | `scripts/land-scenarios.sh`: `land.sh` runs each changed catalog scenario on CI's Linux before the push |
 
 ## Find the failure
 

@@ -358,8 +358,15 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
+run_changed_scenarios() {
+  git fetch --quiet origin main
+  rebase_onto_main
+  scripts/land-scenarios.sh origin/main
+}
+
 # GOGC=400 cut staticcheck on internal/daemon from 19.4 to 15.3 CPU-s and added
 # about 1 GiB to its peak of 1.2 GiB (2026-11-04).
 export GOGC="${GOGC:-400}"
+run_changed_scenarios
 take_land_queue
 land 9>&-

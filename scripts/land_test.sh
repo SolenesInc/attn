@@ -49,8 +49,24 @@ case "$3" in
 esac
 EOF
 chmod +x "$work/bin/go"
+cat >"$work/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1 $2" in
+  "workflow run")
+    printf 'soak %s\n' "$*" >>"$LAND_CHECK_LOG"
+    git --git-dir="$LAND_REMOTE" for-each-ref --format='%(refname)' refs/heads/land-scenarios >>"$LAND_SOAK_REFS"
+    ;;
+  "run list") echo 7 ;;
+  "run view") echo https://example.invalid/runs/7 ;;
+  "run watch") exit "${LAND_SOAK_EXIT:-0}" ;;
+  *) echo "unexpected gh $*" >&2; exit 2 ;;
+esac
+EOF
+chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
+export LAND_REMOTE="$work/remote" LAND_SOAK_REFS="$work/soak-refs"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
 selected_units="--unit go ./internal/example TestExample --unit vitest src/example.test.ts"
 go_choice=('land --group go --group prompts' "landing-tests --no-go-vet $selected_units")
@@ -76,6 +92,10 @@ printf '%s\n' "landing-tests $*" >>"$LAND_CHECK_LOG"
 exit "${LAND_TESTS_EXIT:-0}"
 EOF
 chmod +x scripts/landing-tests.sh
+cp "$root/scripts/land-scenarios.sh" scripts/land-scenarios.sh
+mkdir -p app/scripts/real-app-harness
+cp "$root"/app/scripts/real-app-harness/{changed-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
+cp "$root/app/package.json" app/package.json
 git add .
 git commit -qm baseline
 git remote add origin "$work/remote"
@@ -223,6 +243,26 @@ printf '\n' >>README.md
 land 'Documentation change'
 expect_checks sync
 
+no_land_scenario_refs() {
+  [ -z "$(git --git-dir="$work/remote" for-each-ref refs/heads/land-scenarios)" ] || { echo 'the scenario run left its ref on the remote' >&2; exit 1; }
+}
+
+mkdir -p app/scripts/real-app-harness
+printf '// changed\n' >app/scripts/real-app-harness/scenario-shelf-moves.mjs
+: >"$LAND_SOAK_REFS"
+land 'Change a scenario, named through a package script'
+grep -qF 'soak workflow run acceptance-soak.yml' "$LAND_CHECK_LOG" || { echo 'a changed scenario did not run before the push' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF -- '-f scenarios=shelf-moves -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the changed scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+[ "$(sed -n 1p "$LAND_CHECK_LOG" | cut -d' ' -f1)" = soak ] || { echo 'the scenario did not run first' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+grep -qF refs/heads/land-scenarios/ "$LAND_SOAK_REFS" || { echo 'the soak ran before its ref reached the remote' >&2; exit 1; }
+no_land_scenario_refs
+expect_output 'passed on CI'
+
+printf '// changed\n' >app/scripts/real-app-harness/scenario-focusless-native.mjs
+land 'Change a macOS-only scenario'
+if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a macOS-only scenario ran on Linux' >&2; exit 1; fi
+expect_output 'scenario focusless-native changed and does not run on Linux'
+
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
 land 'Go change while main moves'
@@ -269,6 +309,9 @@ refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the failed Go check left no output' >&2; cat "$work/failure" >&2; exit 1; }
 refuses 'a failed landing test beside passing Go checks' LAND_TESTS_EXIT=1 internal/example/example.go
 grep -qF 'make ran: check-go' "$work/failure" || { echo 'the Go checks left no output' >&2; cat "$work/failure" >&2; exit 1; }
+refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
+grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the failed scenario did not say how to read it' >&2; cat "$work/failure" >&2; exit 1; }
+no_land_scenario_refs
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"

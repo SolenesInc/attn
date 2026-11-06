@@ -80,7 +80,7 @@ runs:
     - name: Cache Rust build
       uses: Swatinem/rust-cache@v2
       with:
-        key: fast-profile
+        shared-key: app-acceptance-fast-profile
         workspaces: |
           app/src-tauri
           pty-host

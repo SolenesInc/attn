@@ -25,6 +25,8 @@ repository root.
   stop a daemon that predates the run only when its terminals outlive it, so
   never one on the embedded backend.
 - Install the current checkout first; a stale build fails its fingerprint check.
+- `scripts/land.sh` runs each scenario a landing adds or changes on CI's Linux
+  before the push, through the Acceptance soak workflow.
 - Hunt CI flakes with
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
   `scripts/ci-flake-report.sh` ranks failing tests across CI history.

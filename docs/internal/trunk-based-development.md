@@ -21,8 +21,19 @@ dispatches a fixer. The release process writes release notes from the commits.
 
 ### What land.sh does
 
-`scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the paths the
-landing changes, and pushes:
+`scripts/land.sh` rebases onto `origin/main`, runs each catalog scenario the
+landing adds or changes on CI's Linux, runs a fast gate for the paths the landing
+changes, and pushes.
+
+A scenario can pass on the Mac where its author ran it and fail on Linux, so
+`land.sh` starts the Acceptance soak workflow for the changed scenarios on a
+temporary `land-scenarios/` branch, waits for it, and deletes the branch. Every
+machine lands through this one path. A soak took about nine minutes on a cold
+Rust build (2026-11-06). Scenarios skipped on Linux are named and not run. An
+edit to a shared harness file or to product code selects no scenario, because
+the whole matrix does not fit in a landing. This step runs before `land.sh`
+takes the land queue, and only once, so a later rebase does not repeat it. The
+fast gate:
 
 - Go: vet all packages and their tests, which type-checks everything without
   linking test binaries; run staticcheck on changed packages; and check daemon

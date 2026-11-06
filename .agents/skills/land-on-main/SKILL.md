@@ -45,7 +45,9 @@ landing, as `AGENTS.md` "Commands and verification" says.
 
 When the machine has the capacity, you may run the scenarios that cover an
 app-observable change on a non-production instance. When no scenario covers
-the change, add one or tell the user.
+the change, add one or tell the user. `scripts/land.sh` runs a scenario you add
+or change on CI's Linux, so a scenario you ran on a Mac still gets its Linux run
+before the push.
 
 Before you land, clean every instance the check started, as the drive-attn
 skill's Cleanup says.
@@ -119,8 +121,9 @@ Settle uncertain findings yourself against the code, or ask the user.
 scripts/land.sh
 ```
 
-Push with `scripts/land.sh`. It rebases onto `origin/main`, runs a fast gate
-for the changed paths, and pushes. `.githooks/pre-push` refuses a plain
+Push with `scripts/land.sh`. It rebases onto `origin/main`, runs the scenarios
+you added or changed on CI's Linux, runs a fast gate for the changed paths, and
+pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.
 
@@ -140,6 +143,11 @@ again and pushes on its own. Your checks still count. When `scripts/land.sh`
 stops on a conflict in your code, resolve the conflict with
 `git rebase origin/main`, rerun the checks that the resolution touches, and
 run `scripts/land.sh` again.
+
+A changed scenario adds up to about ten minutes, and the land prints the run's URL
+while it waits. When the scenario fails there, the land stops before the push
+and prints how to read the failure. Fix it and land again: a product failure on
+Linux is a finding, as `app/scripts/real-app-harness/AGENTS.md` says.
 
 The landing tests of the gate come from the shared test history. They are the
 groups of `scripts/landing-tests` that the changed paths match, the tests you
