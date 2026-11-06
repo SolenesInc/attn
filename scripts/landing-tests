@@ -48,6 +48,7 @@ go ./cmd/attn TestAReplyDuringAnOutpostReconnectKeepsTheSessionWaitingForTheUser
 go ./cmd/attn TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket
 go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./cmd/attn TestLauncherReadsRunOnTheNamedOutpost
+go ./cmd/attn TestEveryCommandStartsWithoutPayingForInitItNeverUses
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./scripts/test-history TestATerminationSentToCaptureReachesTheCommand
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice

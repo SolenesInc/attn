@@ -16,9 +16,9 @@ reading today's data. attn's promises include:
   and machine restarts, and upgrades between versions.
 - **CLI**: commands, output, and exit codes that users and agents rely on.
 - **Screen**: what the user sees, and what keyboard and pointer input does.
-- **Performance**: idle attn stays quiet, and memory does not creep.
-  Benchmarks and memory scenarios track it. See
-  [Performance testing](perf-testing.md).
+- **Performance**: commands start fast, idle attn stays quiet, and memory does
+  not creep. A limit on start work fails a land, and benchmarks and memory
+  scenarios track the rest. See [Performance testing](perf-testing.md).
 - **Agent prompts**: the instructions attn sends to the agents it runs. Their
   compatibility fixtures change only for intentional wording edits, per
   [Prompt authoring](prompt-authoring.md#verify).

@@ -232,6 +232,10 @@ lint-go: $(NATIVE_VT_DEP)
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
 	fi
+	@deps=$$(go list -deps ./cmd/attn) || exit 1; \
+	if printf '%s\n' "$$deps" | grep -E '^github.com/(santhosh-tekuri/jsonschema|prometheus)/'; then \
+		echo "attn must not link the packages listed above: every CLI command and agent hook pays for their init on every start" >&2; exit 1; \
+	fi
 	@deps=$$(go list -deps ./internal/sessionmonitor) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(daemon|store|garden)(/|$$)'; then \
 		echo "internal/sessionmonitor must not import the home's packages listed above: it reads only its Policy, View and Host" >&2; exit 1; \

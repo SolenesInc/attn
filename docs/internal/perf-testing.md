@@ -1,6 +1,31 @@
 # Performance testing
 
-Performance checks record trends. None fails a PR.
+One check here fails a land: the limit on the work attn does at start. Timing
+can't gate a land, because other agents load the machine, so that check counts
+allocations instead. For the costs a count can't see, the `verify-perf` skill
+has the reader of a landing look for them. The other tools on this page record
+trends and fail nothing.
+
+## Start cost
+
+Every CLI command and agent hook runs package init before doing anything else.
+`TestEveryCommandStartsWithoutPayingForInitItNeverUses` runs on every Go land
+and fails when `attn version` makes more than `maxPackageInitAllocs` init
+allocations, naming the heaviest packages. `lint-go` also refuses jsonschema
+and Prometheus, which the start work dropped, because the limit alone would let
+Prometheus's 1,429 allocations back in.
+
+| `GODEBUG=inittrace=1 attn version`, Linux unless named | Init allocations |
+| --- | --- |
+| Today, 5db0778fa | 10,373 |
+| macOS arm64, 25c2331c | 10,537 |
+| Today plus Prometheus | 11,802 |
+| Today plus jsonschema | 32,725 |
+| Before the start work, 6496f367b | 39,179 |
+
+The count moves by a few allocations between runs, even at load 16, while init
+time moves by a third. Raise the limit only after you can name what the extra
+work buys, and update this table with the new measurement.
 
 ## Go benchmarks
 
@@ -9,8 +34,10 @@ go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 ```
 
 `allocs/op` is the stable signal. Compare `ns/op` only between runs on the same machine.
-For PRs that touch those packages, the `Bench A/B` workflow runs base and head
-on one runner and posts the `benchstat` delta in the workflow summary.
+The `Bench A/B` workflow runs `origin/main` and a pushed ref on one runner and
+posts the `benchstat` delta in the workflow summary. Landings open no pull
+request to trigger it, so start it by hand with `gh workflow run bench-ab.yml
+--ref <ref>`.
 
 ## Real-app memory
 
