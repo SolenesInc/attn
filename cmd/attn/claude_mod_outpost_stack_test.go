@@ -87,6 +87,17 @@ func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.S
 	return m
 }
 
+func (m *outpostMod) restartOutpost(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	mark := len(app.Log())
+	m.outpost.Stop()
+	m.outpost.Start()
+	m.home.FireTimers(bridge.RetryTimer)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.outpost.FireTimers(daemon.ClaudeModReportRetryTimer)
+}
+
 func (m *outpostMod) sendMail(t *testing.T, to, text string) {
 	t.Helper()
 	sent := m.home.Run(testworld.Invocation{Args: []string{"agent", "msg", to, text}, Session: outpostModSender})
@@ -193,10 +204,7 @@ func TestARingTheModReturnsAfterTheOutpostRestartsIsUnreadAtHome(t *testing.T) {
 	m.sendMail(t, m.session, "the discount is applied after tax")
 	m.ringHeld(t)
 
-	m.outpost.Stop()
-	m.outpost.Start()
-	outpostStateOnConnect(m.pair.App, "outpost", protocol.OutpostStateConnected)
-	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.restartOutpost(t, m.pair.App)
 	m.esc(t, "the ring")
 
 	m.workingOn(t, m.pair.App, "carry on")
@@ -240,10 +248,7 @@ func TestAUserMessageTheModReturnsAfterTheOutpostRestartsReachesTheSessionOnce(t
 	app.Send(protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: "held", SessionID: protocol.SessionID(m.session), Text: words})
 	m.modEvent(t, fakeagent.ModEventHeld, words)
 
-	m.outpost.Stop()
-	m.outpost.Start()
-	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
-	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	m.restartOutpost(t, app)
 	m.pressEsc(t, "the annotation")
 	m.modEvent(t, fakeagent.ModEventRefusedStop, words)
 	if got := m.run.Prompted(); got != words || m.run.ThroughMod {
