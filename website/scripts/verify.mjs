@@ -30,7 +30,11 @@ const GITHUB_BLOB = 'https://github.com/SolenesInc/attn/blob/main/';
 const DESKTOP = { name: '1280', width: 1280, height: 900 };
 const PHONE = { name: '390', width: 390, height: 844 };
 
+const SCHEDULING_WINDOW_MS = 2500;
+const SETTLE_MS = 300;
+
 const problems = [];
+const queueLog = [];
 
 function guideFiles() {
   const inFolder = (folder) =>
@@ -131,6 +135,10 @@ function readPage(page) {
     mainText: document.querySelector('main')?.innerText ?? '',
     slot: document.querySelector('.recording-slot .label')?.textContent ?? '',
     video: Boolean(document.querySelector('.recording video')),
+    doing: [...document.querySelectorAll('.doing-item')].map((item) => ({
+      title: item.querySelector('h3')?.textContent ?? '',
+      guide: item.querySelector('h3 a')?.href ?? '',
+    })),
   }));
 }
 
@@ -142,12 +150,12 @@ async function checkView(browser, base, path, view, scheme) {
   const page = await context.newPage();
   watchPage(page, base, `${path} [${view.name} ${scheme}]`);
   const response = await page.goto(base + path, { waitUntil: 'load' });
-  let facts = { h1: '', ids: [], links: [], mainText: '', slot: '', video: false };
+  let facts = { h1: '', ids: [], links: [], mainText: '', slot: '', video: false, doing: [] };
   if (!response?.ok()) {
     problems.push(`${path}: HTTP ${response?.status()} loading the page`);
   } else {
     facts = await readPage(page);
-    if ((path.startsWith('/guide') || path.startsWith('/features')) && !facts.h1) problems.push(`${path}: no h1 on the page`);
+    if (!facts.h1) problems.push(`${path}: no h1 on the page`);
     const images = await checkImages(page);
     facts.images = images.total;
     for (const src of images.broken) problems.push(`${path}: image did not load: ${src}`);
@@ -176,6 +184,149 @@ function checkFeaturePage(path, facts) {
   }
   const named = facts.mainText.match(/experimental|crew v2|launcher 2\.0/i);
   if (named) problems.push(`${path}: the page says "${named[0]}", which feature pages never say`);
+}
+
+function checkLandingPage(facts, features) {
+  if (!facts.video && !facts.slot.endsWith(': queue-loop')) problems.push('/: no recording slot named queue-loop');
+  if (!facts.mainText.includes('brew install --cask victorarias/attn/attn')) problems.push('/: no install command');
+  const paths = facts.links.map((href) => normalizePath(new URL(href).pathname));
+  for (const path of ['/guide', ...features]) {
+    if (!paths.includes(path)) problems.push(`/: no link to ${path}`);
+  }
+  if (facts.doing.length === 0) problems.push('/: "What attn does" has no items');
+  for (const { title, guide } of facts.doing) {
+    if (!guide || !new URL(guide).pathname.startsWith('/guide/')) problems.push(`/: "${title}" does not link into the guide`);
+  }
+}
+
+function countScheduling() {
+  window.scheduling = { scheduled: 0, fired: 0 };
+  for (const name of ['setTimeout', 'setInterval', 'requestAnimationFrame']) {
+    const original = window[name];
+    window[name] = (callback, ...rest) => {
+      window.scheduling.scheduled += 1;
+      return original.call(
+        window,
+        (...args) => {
+          window.scheduling.fired += 1;
+          callback(...args);
+        },
+        ...rest,
+      );
+    };
+  }
+}
+
+async function schedulingOver(page) {
+  const read = () =>
+    page.evaluate(() => ({
+      ...window.scheduling,
+      animations: document.getAnimations().filter((animation) => animation.playState === 'running').length,
+    }));
+  const before = await read();
+  await page.waitForTimeout(SCHEDULING_WINDOW_MS);
+  const after = await read();
+  return {
+    scheduled: after.scheduled - before.scheduled,
+    fired: after.fired - before.fired,
+    animations: after.animations,
+  };
+}
+
+function queueView(page) {
+  return page.evaluate(() => ({
+    pane: document.querySelector('.queue-pane.is-on')?.dataset.pane,
+    waiting: [...document.querySelectorAll('[data-waiting] [data-row]')].map((row) => row.dataset.row),
+    count: document.querySelector('[data-waiting-count]')?.textContent,
+    action: document.querySelector('[data-action-label]')?.textContent,
+    focused: document.activeElement?.hasAttribute('data-action') ?? false,
+  }));
+}
+
+async function pressEnterAndExpect(page, label, pane) {
+  await page.keyboard.press('Enter');
+  const view = await queueView(page);
+  queueLog.push(`${label}: Enter -> on ${view.pane}, ${view.count} waiting, action "${view.action}"`);
+  if (view.pane !== pane) problems.push(`queue ${label}: Enter went to ${view.pane}, expected ${pane}`);
+  return view;
+}
+
+function expectAllSettled(view, label) {
+  if (view.pane !== 'Home' || view.count !== '0' || view.action !== 'Start over') {
+    problems.push(`queue ${label}: did not end at Home with nobody waiting: ${JSON.stringify(view)}`);
+  }
+}
+
+async function queuePage(browser, base, contextOptions = {}) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...contextOptions });
+  const page = await context.newPage();
+  await page.addInitScript(countScheduling);
+  watchPage(page, base, '/ [queue]');
+  await page.goto(base, { waitUntil: 'load' });
+  return { context, page };
+}
+
+async function checkQueueKeyboardRun(browser, base) {
+  const { context, page } = await queuePage(browser, base);
+  queueLog.push('Keyboard run, normal motion, nothing focused:');
+  await pressEnterAndExpect(page, 'motion', 'fix-unit-conversion');
+  const first = await pressEnterAndExpect(page, 'motion', 'Home');
+  if (first.action !== "Nobody's waiting") problems.push(`queue motion: Home offered "${first.action}" while an agent still works`);
+  await page.waitForFunction(() => document.querySelector('.queue-pane.is-on')?.dataset.pane === 'Run the tests', null, {
+    timeout: 15000,
+    polling: 200,
+  });
+  queueLog.push('motion: Run the tests finished, and the ticked box took the page to it with no key pressed');
+  expectAllSettled(await pressEnterAndExpect(page, 'motion', 'Home'), 'motion');
+  await context.close();
+}
+
+async function checkQueueReducedMotion(browser, base) {
+  const { context, page } = await queuePage(browser, base, { reducedMotion: 'reduce' });
+  queueLog.push('Keyboard run, reduced motion, Tab to Settle:');
+  for (let presses = 0; presses < 20 && !(await queueView(page)).focused; presses += 1) await page.keyboard.press('Tab');
+  if (!(await queueView(page)).focused) problems.push('queue reduced motion: Tab never reached Settle');
+  const start = await queueView(page);
+  queueLog.push(`reduced motion: starts on ${start.pane}, ${start.count} waiting`);
+  if (start.waiting.length !== 3) problems.push(`queue reduced motion: expected 3 waiting at rest, saw ${start.waiting.length}`);
+  await pressEnterAndExpect(page, 'reduced motion', 'fix-unit-conversion');
+  await pressEnterAndExpect(page, 'reduced motion', 'Run the tests');
+  const end = await pressEnterAndExpect(page, 'reduced motion', 'Home');
+  expectAllSettled(end, 'reduced motion');
+  if (!end.focused) problems.push('queue reduced motion: Settle lost keyboard focus');
+  const idle = await schedulingOver(page);
+  const total = await page.evaluate(() => window.scheduling);
+  queueLog.push(`reduced motion: over the whole visit, ${total.scheduled} frames or timers scheduled; ${idle.animations} animations running`);
+  if (total.scheduled > 0 || idle.animations > 0) problems.push(`queue reduced motion: it scheduled work: ${JSON.stringify({ total, idle })}`);
+  await context.close();
+}
+
+async function checkQueueStopsWhenUnseen(browser, base) {
+  const { context, page } = await queuePage(browser, base);
+  const seen = await schedulingOver(page);
+  queueLog.push(`In view for ${SCHEDULING_WINDOW_MS}ms: ${JSON.stringify(seen)}`);
+  if (seen.fired === 0) problems.push('queue in view: no timer fired, so the unseen measurements prove nothing');
+
+  await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
+  await page.waitForTimeout(SETTLE_MS);
+  const offScreen = await schedulingOver(page);
+  queueLog.push(`Scrolled off-screen for ${SCHEDULING_WINDOW_MS}ms: ${JSON.stringify(offScreen)}`);
+  if (offScreen.scheduled || offScreen.fired || offScreen.animations) problems.push(`queue off-screen: it kept working: ${JSON.stringify(offScreen)}`);
+
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.waitForTimeout(SETTLE_MS);
+  const back = await schedulingOver(page);
+  queueLog.push(`Back in view for ${SCHEDULING_WINDOW_MS}ms: ${JSON.stringify(back)}`);
+  if (back.fired === 0) problems.push('queue back in view: the clock did not restart');
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const hidden = await schedulingOver(page);
+  queueLog.push(`Tab hidden (simulated, because Playwright keeps pages visible) for ${SCHEDULING_WINDOW_MS}ms: ${JSON.stringify(hidden)}`);
+  if (hidden.scheduled || hidden.fired || hidden.animations) problems.push(`queue hidden tab: it kept working: ${JSON.stringify(hidden)}`);
+  await context.close();
 }
 
 async function checkThemeToggle(browser, base) {
@@ -262,12 +413,17 @@ try {
     }
   }
 
+  checkLandingPage(visited.get('/'), features);
+  await checkQueueKeyboardRun(browser, base);
+  await checkQueueReducedMotion(browser, base);
+  await checkQueueStopsWhenUnseen(browser, base);
   await checkThemeToggle(browser, base);
 } finally {
   await browser.close();
   preview?.stop();
 }
 
+console.log(`\nQueue miniature:\n  ${queueLog.join('\n  ')}`);
 const unique = [...new Set(problems)];
 if (unique.length > 0) {
   console.error(`\nFAIL: ${unique.length} problems on ${visited.size} pages at ${base}`);

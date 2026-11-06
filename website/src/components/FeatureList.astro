@@ -1,0 +1,18 @@
+---
+import { orderedFeatures } from '../features';
+
+const features = await orderedFeatures();
+---
+
+<ul class="features-list">
+  {
+    features.map((feature) => (
+      <li>
+        <a href={`/features/${feature.id}`}>
+          <span class="features-name">{feature.data.title}</span>
+          <span class="features-summary">{feature.data.summary}</span>
+        </a>
+      </li>
+    ))
+  }
+</ul>
