@@ -165,8 +165,9 @@ names the outpost. Reading a seed never asks the outpost, so Attn checks the
 directory and conversation there when you resume. If either is gone, Resume
 refuses, says which and where, and leaves the seed as it was. While the outpost
 is unreachable, the seed says so instead of offering Resume, and the offer
-returns when the outpost does. **Handover** asks where the new agent should work
-and starts it on the home.
+returns when the outpost does. A running Garden review follows the outpost the
+same way and keeps its advice, and its other actions work either way. **Handover**
+asks where the new agent should work and starts it on the home.
 
 The chief and crew run only at the home. Attn refuses to start, wake or hand off
 a crew member on an outpost, and refuses to make an outpost agent the chief. The

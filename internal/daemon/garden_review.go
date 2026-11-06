@@ -27,6 +27,8 @@ const (
 	gardenReviewMaxAttempts         = 3
 	gardenReviewNoteEvidenceLimit   = 3
 	gardenReviewChildEvidenceLimit  = 6
+
+	gardenReviewDirectoryEvidenceLabel = "Working directory"
 )
 
 type gardenReviewJobPayload struct {
@@ -84,7 +86,7 @@ func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, 
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
 		lifecycleAt, exact := reviewLifecycleTime(seed, doc)
-		continuation := d.continuationForSeedWithResumeCheck(seed, checkResume)
+		continuation := d.continuationIgnoringReach(seed, checkResume)
 		directoryState := garden.ReviewDirectoryUnknown
 		resumeAvailable := false
 		handoverAvailable := false
@@ -293,7 +295,7 @@ func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandida
 	evidence := []garden.ReviewEvidence{
 		{Label: "Review signal", Text: reviewCandidateReason(candidate)},
 		{Label: "Lifecycle", Text: reviewLifecycleEvidence(candidate)},
-		{Label: "Working directory", Text: reviewDirectoryEvidence(observation)},
+		{Label: gardenReviewDirectoryEvidenceLabel, Text: reviewDirectoryEvidence(observation)},
 	}
 	if unsettled := reviewUnsettledChecks(capture.read.plots.EffectiveChecks(candidate.SeedID)); unsettled != "" {
 		evidence = append(evidence, garden.ReviewEvidence{Label: "Checks", Text: unsettled})
@@ -387,7 +389,7 @@ func outpostDirectoryEvidence(continuation *seedContinuation) string {
 	case continuation.Outpost == "":
 		return ""
 	case continuation.DirectoryState == directoryUnreachable:
-		return fmt.Sprintf("The saved working directory is on outpost %q, which is unreachable.", continuation.Outpost)
+		return fmt.Sprintf("The saved working directory is on outpost %q, which is unreachable. Resume returns when the outpost is back.", continuation.Outpost)
 	}
 	return fmt.Sprintf("The saved working directory is on outpost %q. Attn checks it there when the agent resumes.", continuation.Outpost)
 }
@@ -445,7 +447,7 @@ func (d *Daemon) startGardenReview(ctx context.Context, profileID ...string) (ga
 		if err := d.enqueueGardenReviewItems(run, items); err != nil {
 			return garden.ReviewRun{}, nil, err
 		}
-		return run, items, nil
+		return run, d.overlayGardenReviewReach(items), nil
 	}
 
 	capture, err := d.captureGardenReview(profileID...)
@@ -484,7 +486,7 @@ func (d *Daemon) startGardenReview(ctx context.Context, profileID ...string) (ga
 	if err := d.enqueueGardenReviewItems(run, items); err != nil {
 		return run, items, err
 	}
-	return run, items, nil
+	return run, d.overlayGardenReviewReach(items), nil
 }
 
 func (d *Daemon) createGardenReview(run garden.ReviewRun, items []garden.ReviewItem) error {
@@ -658,7 +660,7 @@ func invalidatedGardenReviewItem(item garden.ReviewItem, stillCandidate bool, no
 		return item
 	}
 	item.Status = garden.ReviewItemStatusInvalidated
-	item.Error = "The seed or its evidence changed during classification."
+	item.Error = "The seed or its evidence changed since the advisor read it."
 	return item
 }
 
@@ -924,7 +926,7 @@ func (d *Daemon) showGardenReview(runID string, profileID ...string) (garden.Rev
 	if err != nil {
 		return garden.ReviewRun{}, nil, err
 	}
-	return run, d.overlayGardenReviewJobStates(items), nil
+	return run, d.overlayGardenReviewReach(d.overlayGardenReviewJobStates(items)), nil
 }
 
 func (d *Daemon) gardenReviewOverview(profileID ...string) (*garden.ReviewRun, []garden.ReviewItem, int, error) {
@@ -937,7 +939,7 @@ func (d *Daemon) gardenReviewOverview(profileID ...string) (*garden.ReviewRun, [
 		if readErr != nil {
 			return nil, nil, 0, readErr
 		}
-		items = d.overlayGardenReviewJobStates(items)
+		items = d.overlayGardenReviewReach(d.overlayGardenReviewJobStates(items))
 		return &run, items, unresolvedGardenReviewItemCount(items), nil
 	}
 	capture, err := d.captureGardenReview(profileID...)
@@ -1009,12 +1011,24 @@ func (d *Daemon) validateGardenReviewAction(
 	}
 	current, candidate := capture.items[seedID]
 	if !candidate {
+		d.recordStaleGardenReviewAdvice(item, false)
 		return garden.ReviewItem{}, fmt.Errorf("seed %s no longer needs review; refresh the garden", seedID)
 	}
 	if current.EvidenceVersion != item.EvidenceVersion {
+		d.recordStaleGardenReviewAdvice(item, true)
 		return garden.ReviewItem{}, fmt.Errorf("seed %s or its plot changed since this review item was loaded; refresh the garden", seedID)
 	}
 	return item, nil
+}
+
+func (d *Daemon) recordStaleGardenReviewAdvice(item garden.ReviewItem, stillCandidate bool) {
+	if item.Status != garden.ReviewItemStatusReady {
+		return
+	}
+	payload := gardenReviewJobPayload{RunID: item.RunID, ItemID: item.ID, EvidenceVersion: item.EvidenceVersion}
+	if err := d.finishGardenReviewItem(payload, invalidatedGardenReviewItem(item, stillCandidate, d.gardenTime())); err != nil {
+		d.logf("garden review: record stale advice for %s: %v", item.SeedID, err)
+	}
 }
 
 func (d *Daemon) resolveGardenReviewAction(
@@ -1129,6 +1143,36 @@ func (d *Daemon) overlayGardenReviewJobStates(items []garden.ReviewItem) []garde
 			items[i].AdvisorError = gardenAdvisorProgressError(job.LastError)
 		default:
 			items[i].AdvisorState = string(job.State)
+		}
+	}
+	return items
+}
+
+func (d *Daemon) overlayGardenReviewReach(items []garden.ReviewItem) []garden.ReviewItem {
+	for i := range items {
+		if items[i].Resolution != garden.ReviewResolutionUnresolved {
+			continue
+		}
+		seed, _, err := d.readSeed(items[i].SeedID)
+		if err != nil {
+			continue
+		}
+		execution, _, _ := d.normalizedSeedContinuation(seed)
+		host := d.sessionHost(execution.SessionID)
+		if host == "" {
+			continue
+		}
+		continuation := d.continuationWithChecks(seed, d.uncheckedOutpost(host))
+		if continuation == nil || continuation.Outpost == "" || continuation.DirectoryState != directoryUnreachable {
+			continue
+		}
+		if !continuation.ResumeAvailable {
+			items[i].Actions = slices.DeleteFunc(items[i].Actions, func(action string) bool { return action == "resume" })
+		}
+		for j := range items[i].Evidence {
+			if items[i].Evidence[j].Label == gardenReviewDirectoryEvidenceLabel {
+				items[i].Evidence[j].Text = outpostDirectoryEvidence(continuation)
+			}
 		}
 	}
 	return items

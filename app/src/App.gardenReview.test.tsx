@@ -193,6 +193,27 @@ describe('App garden review', () => {
     expect(advice()).toHaveTextContent('Park');
   });
 
+  it('follows an outpost\'s reach on an open item and keeps its advice', async () => {
+    const daemon = await openReview({
+      actions: ['send_to_chief', 'keep_growing', 'park', 'harvest', 'wither'],
+      evidence: [{ label: 'Working directory', text: 'The saved working directory is on outpost "box", which is unreachable.' }],
+    });
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(screen.getByText(/which is unreachable/)).toBeInTheDocument();
+
+    daemon.emit({
+      event: 'garden_review_updated',
+      review: review([reviewItem({
+        actions: ['resume', 'send_to_chief', 'keep_growing', 'park', 'harvest', 'wither'],
+        evidence: [{ label: 'Working directory', text: 'The saved working directory is on outpost "box". Attn checks it there when the agent resumes.' }],
+      })]),
+    });
+
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+    expect(screen.queryByText(/which is unreachable/)).toBeNull();
+    expect(advice()).toHaveTextContent('Park');
+  });
+
   it('offers only the actions the captured item allows', async () => {
     await openReview({ actions: ['handover', 'park'], recommendation: 'handover' });
 

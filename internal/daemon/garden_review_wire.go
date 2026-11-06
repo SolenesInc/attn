@@ -270,6 +270,17 @@ func (d *Daemon) projectGardenReview(runID string) {
 	})
 }
 
+func (d *Daemon) projectRunningGardenReviews() {
+	runs, err := d.runningGardenReviews()
+	if err != nil {
+		d.logf("garden review: project running reviews: %v", err)
+		return
+	}
+	for _, run := range runs {
+		d.projectGardenReview(run.ID)
+	}
+}
+
 func (d *Daemon) projectGardenReviewJob(jobID string) {
 	runner := d.jobQueueRef()
 	if runner == nil || runner.Disabled() {

@@ -558,17 +558,34 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 	})
 }
 
+func (d *Daemon) continuationIgnoringReach(seed garden.Seed, checkResume func(string, string, string) conversationAvailability) *seedContinuation {
+	execution, _, _ := d.normalizedSeedContinuation(seed)
+	if host := d.sessionHost(execution.SessionID); host != "" {
+		return d.continuationWithChecks(seed, d.outpostAssumedReachable(host))
+	}
+	return d.continuationForSeedWithResumeCheck(seed, checkResume)
+}
+
 func (d *Daemon) uncheckedOutpost(host string) continuationMachine {
-	_, _, unreachable := d.outpostConn(host)
+	machine := d.outpostAssumedReachable(host)
+	if _, _, err := d.outpostConn(host); err != nil {
+		machine.inspectDirectory = func(execution garden.Execution) (string, error) {
+			if strings.TrimSpace(execution.Cwd) == "" {
+				return directoryUnknown, nil
+			}
+			return directoryUnreachable, nil
+		}
+	}
+	return machine
+}
+
+func (d *Daemon) outpostAssumedReachable(host string) continuationMachine {
 	return continuationMachine{
 		outpost:     d.outpostName(host),
 		unreachable: d.outpostUnreachableReason(host),
 		inspectDirectory: func(execution garden.Execution) (string, error) {
-			switch {
-			case strings.TrimSpace(execution.Cwd) == "":
+			if strings.TrimSpace(execution.Cwd) == "" {
 				return directoryUnknown, nil
-			case unreachable != nil:
-				return directoryUnreachable, nil
 			}
 			return directoryUnchecked, nil
 		},

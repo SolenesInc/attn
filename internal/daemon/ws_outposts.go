@@ -187,6 +187,11 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 	return message
 }
 
+func (d *Daemon) projectOutpostReach() {
+	d.projectOutpostsUpdated()
+	d.projectRunningGardenReviews()
+}
+
 func (d *Daemon) projectOutpostsUpdated() {
 	d.projectSnapshot(protocol.EventOutpostsUpdated, func() { d.wsHub.BroadcastValue(d.outpostsUpdatedMessage()) })
 }
