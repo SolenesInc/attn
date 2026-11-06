@@ -13,8 +13,9 @@ Your operating guidance gives you the Notebook root, and the chief of staff
 gets that guidance at launch. `attn settings get notebook.root.effective`
 prints the root. Each profile sets its folder with `notebook.root`. A blank
 value uses `~/attn-notebook`, and a non-default instance adds its name to that
-folder name. Profiles on the same folder share its files. Paths below are
-relative to `<root>`.
+folder name. Profiles on the same folder share its files. attn refuses a
+folder inside or around another profile's folder or the default folder. Paths
+below are relative to `<root>`.
 
 On an outpost, `notebook.root.effective` is that machine's copy of your
 profile's Notebook folder, and the copy syncs with the home. `attn seed show

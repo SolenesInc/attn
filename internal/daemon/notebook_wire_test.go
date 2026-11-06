@@ -194,7 +194,7 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 	w := newWorld(t)
 	app := w.App()
 	root := fsNotebookRoot(t, w)
-	inside := filepath.Join(root, "custom")
+	custom := w.Path("custom")
 
 	for _, c := range []struct {
 		key, value, effective string
@@ -203,7 +203,7 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 		{"notebook.root", "relative/path", "", false},
 		{"notebook.root", fsDir(t, "outside"), "", false},
 		{"notebook.root", filepath.Join(root, "line\nbreak"), "", false},
-		{"notebook.root", inside, inside, true},
+		{"notebook.root", custom, custom, true},
 		{"notebook.root", "", root, true},
 		{"notebook.root.effective", "/tmp/whatever", "", false},
 	} {
@@ -217,4 +217,46 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 			})
 		}
 	}
+}
+
+func TestANotebookFolderInsideOrAroundAnotherIsRefusedWithNoOutpostPaired(t *testing.T) {
+	w, beside := newFsWorldWithAFolderBesideIt(t)
+	setup := w.App()
+	defaultFolder := fsNotebookRoot(t, w)
+	sideID, otherID := createProfile(setup, "Side").ID, createProfile(setup, "Other").ID
+	sideApp, otherApp := w.AppOn(sideID), w.AppOn(otherID)
+	outer, sideFolder := filepath.Join(beside, "work"), filepath.Join(beside, "work", "side")
+	setSetting(t, sideApp, "notebook.root", sideFolder)
+
+	otherFolder := defaultFolder
+	refused := func(value string, names ...string) {
+		t.Helper()
+		result := notebookSetting(otherApp, "notebook.root", value)
+		if protocol.Deref(result.Success) {
+			t.Fatalf("setting Other's Notebook folder to %s was accepted, want a refusal naming %v", value, names)
+		}
+		for _, name := range names {
+			if !strings.Contains(protocol.Deref(result.Error), name) {
+				t.Fatalf("the refusal of %s = %q, want it to name %q", value, protocol.Deref(result.Error), name)
+			}
+		}
+		if got := result.Settings["notebook.root.effective"]; got != otherFolder {
+			t.Fatalf("the refused %s moved Other's Notebook folder from %s to %v", value, otherFolder, got)
+		}
+	}
+
+	refused(filepath.Join(sideFolder, "inner"), "profile Other", filepath.Join(sideFolder, "inner"), "profile Side", sideFolder)
+	refused(outer, "profile Other", outer, "profile Side", sideFolder)
+	refused(filepath.Join(defaultFolder, "inner"), "profile Other", filepath.Join(defaultFolder, "inner"), "profile Default", defaultFolder)
+
+	setSetting(t, otherApp, "notebook.root", sideFolder+"/")
+	notebookEffectiveRoot(otherApp, sideFolder)
+	otherFolder = sideFolder
+	setSetting(t, setup, "notebook.root", filepath.Join(beside, "moved-default"))
+
+	refused(filepath.Join(defaultFolder, "inner"), "profile Other", "the default Notebook folder", defaultFolder)
+	refused(filepath.Dir(defaultFolder), "profile Other", filepath.Dir(defaultFolder), "the default Notebook folder", defaultFolder)
+
+	setSetting(t, otherApp, "notebook.root", "")
+	notebookEffectiveRoot(otherApp, defaultFolder)
 }

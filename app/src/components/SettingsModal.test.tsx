@@ -1,6 +1,7 @@
 import { openRoute, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { open } from '@tauri-apps/plugin-dialog';
+import { describe, expect, it, vi } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
 import type { EventMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
@@ -202,6 +203,25 @@ describe('SettingsModal notebook folder', () => {
       ['notebook.root', '/Users/me/work'],
       ['notebook.root', ''],
     ]);
+  });
+
+  const refusal = "profile Side's Notebook folder /Users/me/attn-notebook/side is inside the default Notebook folder /Users/me/attn-notebook";
+  const openRefusingFolders = () => openSection('desktop', { settings: { 'notebook.root.effective': '/Users/me/attn-notebook' } }, (scripted) => {
+    scripted.on('set_setting', () => ({ event: 'settings_updated', success: false, error: refusal }));
+  });
+
+  it('shows why a browsed folder was refused and keeps the folder the profile uses', async () => {
+    const daemon = await openRefusingFolders();
+    const input = screen.getByTestId('settings-notebook-root-input');
+    vi.mocked(open).mockResolvedValueOnce('/Users/me/attn-notebook/browsed');
+
+    await gesture(daemon, () => fireEvent.click(within(input.parentElement!).getByRole('button', { name: 'Browse' })));
+
+    expect(savedSettings(daemon)).toEqual([['notebook.root', '/Users/me/attn-notebook/browsed']]);
+    expect(input).toHaveValue('/Users/me/attn-notebook/browsed');
+    expect(within(screen.getByTestId('settings-modal')).getByRole('alert')).toHaveTextContent(refusal);
+    expect(screen.queryByTestId('settings-notebook-root-saved')).toBeNull();
+    expect(screen.getByTestId('settings-notebook-root-effective')).toHaveTextContent('This profile uses: /Users/me/attn-notebook');
   });
 });
 

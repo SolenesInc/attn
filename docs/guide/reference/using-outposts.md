@@ -239,16 +239,14 @@ the existing index.
 You can change a profile's folder while paired. The new folder syncs into its
 own copy. The old copy keeps its files and stops syncing. If you later point the
 profile back to the old folder, Attn moves the old copy aside and syncs it fresh,
-as on a first sync. While an outpost is paired, Attn refuses to set a profile's
-folder inside another profile's folder, or around it. Nesting can still arise
-another way: you pair with such folders in place, or a new profile starts on
-the default folder around another profile's folder. Then only the inner folder
-stays out of sync, the row shows its error, and agents of its profile don't
-start on the outpost. Every other folder keeps syncing, and the folder around it
-syncs without the inner folder's files in either direction. The refusal and the
-error name both profiles and both folders. Once one of the folders moves, the
-inner folder syncs again from where it stopped, so files you deleted from it at
-the home meanwhile stay deleted.
+as on a first sync.
+
+Each folder syncs on its own, so one can't hold another. Attn refuses to set a
+profile's folder inside or around another profile's folder, or inside or around
+the default folder, even when no profile uses the default folder now, because a
+new profile starts there. It refuses whether or not an outpost is paired. The
+refusal names both folders and the profile involved, and the folder stays as it
+was.
 
 **Settings → Outposts** shows one Notebook state per outpost: first sync,
 syncing with the bytes and items left, in sync, or the error and its reason. The

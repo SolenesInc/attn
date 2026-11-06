@@ -466,16 +466,22 @@ func TestChiefSetupPicksTheProfilesNotebookFolderAndMovesTheChiefsHomeThere(t *t
 func TestChiefSetupThatCannotMoveTheHomeLeavesTheNotebookFolderAndTheChiefAsTheyWere(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
+	own, defaultFolder := w.Path("own-notebook"), fsNotebookRoot(t, w)
+	setSetting(t, app, "notebook.root", own)
 	chief := turnOnCrewV2(t, w)
-	before := app.Initial.Settings["notebook.root.effective"]
-	set := chiefSetupFromApp(app, "inside", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), NotebookRoot: protocol.Ptr(filepath.Join(chief.HomeDir, "nested"))})
-	if set.Success || !strings.Contains(protocol.Deref(set.Error), "inside it") {
-		t.Fatalf("Chief setup into a folder inside its own home = %+v, want the move refused", set)
-	}
-	if got := w.App().Initial.Settings["notebook.root.effective"]; got != before {
-		t.Fatalf("a failed setup left the Notebook folder at %v, want %v", got, before)
-	}
-	if after := chiefOfRoster(t, crewRoster(t, cli)); after.Agent != nil || after.HomeDir != chief.HomeDir {
-		t.Fatalf("a failed setup changed the Chief: %+v", after)
+	for _, c := range []struct{ requestID, root, refusal string }{
+		{"inside-home", filepath.Join(chief.HomeDir, "nested"), "inside it"},
+		{"inside-default", filepath.Join(defaultFolder, "nested"), "the default Notebook folder " + defaultFolder},
+	} {
+		set := chiefSetupFromApp(app, c.requestID, protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), NotebookRoot: protocol.Ptr(c.root)})
+		if set.Success || !strings.Contains(protocol.Deref(set.Error), c.refusal) {
+			t.Fatalf("Chief setup into %s = %+v (%s), want a refusal naming %q", c.root, set, protocol.Deref(set.Error), c.refusal)
+		}
+		if got := w.App().Initial.Settings["notebook.root.effective"]; got != own {
+			t.Fatalf("a failed setup left the Notebook folder at %v, want %v", got, own)
+		}
+		if after := chiefOfRoster(t, crewRoster(t, cli)); after.Agent != nil || after.HomeDir != chief.HomeDir {
+			t.Fatalf("a failed setup changed the Chief: %+v", after)
+		}
 	}
 }

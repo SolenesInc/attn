@@ -59,7 +59,7 @@ go ./internal/daemon TestConversationKeepSurvivesAnUnavailableCrewHome
 go ./internal/daemon TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript
 go ./internal/daemon TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt
 go ./internal/daemon TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges
-go ./cmd/attn TestANestedNotebookFolderStaysOutOfSyncWhileTheOthersSync
+go ./cmd/attn TestTwoProfilesOnOneNotebookFolderSyncItOnce
 go ./cmd/attn TestOneProfilesNotebookFolderFailsAloneAndOnlyItNamesItsConflictCopies
 go ./cmd/attn TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
 go ./internal/daemon TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding

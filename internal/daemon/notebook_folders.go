@@ -22,8 +22,6 @@ type notebookFolder struct {
 	Epoch    string
 	HomePath string
 	Profiles []string
-	Nested   string
-	Excludes []string
 }
 
 type profileNotebook struct {
@@ -68,19 +66,9 @@ func notebookFoldersOf(home string, notebooks []profileNotebook) []notebookFolde
 		}
 		folder.Profiles = append(folder.Profiles, nb.profileID)
 	}
-	for _, n := range notebookNestings(notebooks) {
-		if folder := byPath[n.inner.path]; folder.Nested == "" {
-			folder.Nested = n.String() + "; it stays out of outpost sync until one of them moves"
-		}
-		rel, _ := filepath.Rel(n.outer.path, n.inner.path)
-		outer := byPath[n.outer.path]
-		outer.Excludes = append(outer.Excludes, filepath.ToSlash(rel))
-	}
 	folders := make([]notebookFolder, 0, len(byPath))
 	for _, folder := range byPath {
 		slices.Sort(folder.Profiles)
-		slices.Sort(folder.Excludes)
-		folder.Excludes = slices.Compact(folder.Excludes)
 		folders = append(folders, *folder)
 	}
 	slices.SortFunc(folders, func(a, b notebookFolder) int { return strings.Compare(a.ID, b.ID) })
@@ -92,7 +80,14 @@ type notebookNesting struct {
 }
 
 func (n notebookNesting) String() string {
-	return fmt.Sprintf("profile %s's Notebook folder %s is inside profile %s's Notebook folder %s", n.inner.profileName, n.inner.path, n.outer.profileName, n.outer.path)
+	return n.inner.String() + " is inside " + n.outer.String()
+}
+
+func (nb profileNotebook) String() string {
+	if nb.profileID == "" {
+		return "the default Notebook folder " + nb.path
+	}
+	return fmt.Sprintf("profile %s's Notebook folder %s", nb.profileName, nb.path)
 }
 
 func notebookNestings(notebooks []profileNotebook) []notebookNesting {
@@ -110,10 +105,6 @@ func notebookNestings(notebooks []profileNotebook) []notebookNesting {
 func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) error {
 	if msg.Key != string(SettingNotebookRoot) || !d.enrollmentStatus().IsHome() {
 		return nil
-	}
-	rows, err := d.store.ListOutposts()
-	if err != nil || len(rows) == 0 {
-		return err
 	}
 	target, err := d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
 	if err != nil {
@@ -133,9 +124,14 @@ func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) err
 		return err
 	}
 	notebooks = slices.DeleteFunc(notebooks, func(nb profileNotebook) bool { return nb.path == "" })
+	defaultRoot, err := defaultNotebookRoot()
+	if err != nil {
+		return err
+	}
+	notebooks = append(notebooks, profileNotebook{path: defaultRoot})
 	for _, n := range notebookNestings(notebooks) {
 		if n.inner.profileID == target.ID || n.outer.profileID == target.ID {
-			return fmt.Errorf("%s; outposts sync each Notebook folder on its own, so one cannot hold another while outposts are paired", n)
+			return fmt.Errorf("%s; a Notebook folder cannot sit inside or around another, or the default folder, where new profiles start", n)
 		}
 	}
 	return nil
