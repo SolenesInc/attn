@@ -542,7 +542,7 @@ describe('Shelf layout', () => {
         const flipSetting = async (daemon: ScriptedDaemon, value: 'true' | 'false') => {
           await gesture(daemon, () => pressShortcut('ui.openSettings'));
           await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
-          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-shelf-layout-toggle')));
+          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-feature-shelf_layout_enabled')));
           expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'shelf_layout_enabled', value });
           await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-close')));
         };

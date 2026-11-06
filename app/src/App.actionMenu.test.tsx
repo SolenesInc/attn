@@ -52,7 +52,7 @@ describe('App action menu', () => {
     const search = await openActionMenu(daemon);
 
     fireEvent.change(search, { target: { value: '>turn on' } });
-    expect(listedActions()).toEqual(['Turn on the agent queue', 'Turn on auto-settle', 'Jump to the oldest turn']);
+    expect(listedActions().slice(0, 2)).toEqual(['Turn on the agent queue', 'Turn on auto-settle']);
 
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     fireEvent.keyDown(search, { key: 'Enter' });

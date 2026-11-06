@@ -4,6 +4,7 @@ import type { CommandUsage } from '../../types/generated';
 export interface PaletteCommand {
   id: string;
   pinned?: boolean;
+  searchOnly?: boolean;
   title: string;
   description?: string;
   keywords?: string[];
@@ -14,7 +15,7 @@ export interface PaletteCommand {
 }
 
 function commandScore(command: PaletteCommand, terms: readonly string[]): number {
-  if (terms.length === 0) return 1;
+  if (terms.length === 0) return command.searchOnly ? 0 : 1;
   const title = command.title.toLowerCase();
   const searchable = [command.title, command.description ?? '', ...(command.keywords ?? [])].join(' ').toLowerCase();
   if (!terms.every((term) => searchable.includes(term))) return 0;

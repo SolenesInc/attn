@@ -578,6 +578,19 @@
   font-weight: 750;
 }
 
+.settings-feature-applies {
+  margin-left: 8px;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.settings-feature-note {
+  margin: 4px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .settings-row-copy {
   margin: 0;
   color: var(--color-text-secondary);

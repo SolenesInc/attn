@@ -16,7 +16,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const KEY = 'pty_shared_host_enabled';
-const TOGGLE = '[data-testid="settings-shared-pty-host-toggle"]';
+const TOGGLE = '[data-testid="settings-feature-pty_shared_host_enabled"]';
 
 async function main() {
   const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));

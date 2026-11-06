@@ -191,6 +191,9 @@ func writableSetting(key string) (*setting.Setting, error) {
 func validateSetting(d *Daemon, spec *setting.Setting, key, value string) error {
 	switch spec.Kind {
 	case setting.Bool:
+		if strings.TrimSpace(value) == "" {
+			return nil
+		}
 		return validateBooleanSetting(value)
 	case setting.Checked:
 		return settingValidators[spec](d, key, value)

@@ -102,7 +102,8 @@ count.
 - Do not commit spikes.
 - Land a riskier change, such as a new harness integration or PTY runtime,
   first behind an experimental setting that is off by default, as the shared
-  PTY host did.
+  PTY host did. Declare it with `feature(...)` in `internal/setting`: it then has
+  one value, decided at the home, and a row in Settings → Experimental.
 - Do not add explanatory code comments. Express intent through function and
   variable names and code structure. Rewrite code that needs a comment to be
   understood.

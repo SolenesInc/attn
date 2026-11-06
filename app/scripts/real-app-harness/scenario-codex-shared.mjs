@@ -21,7 +21,7 @@ const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const daemonBinary = appDaemonInTree(options.appPath);
 
-const SHARED_TOGGLE = '[data-testid="settings-shared-codex-toggle"]';
+const SHARED_TOGGLE = '[data-testid="settings-feature-codex_shared_enabled"]';
 const CONVERSATION = /Conversation (mock-[0-9a-f-]{36})/g;
 const lastConversation = (text) => [...text.matchAll(CONVERSATION)].at(-1)?.[1];
 const APPROVAL = 'Allow the command to run?';

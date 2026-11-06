@@ -63,7 +63,7 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if spec.Scope == setting.PerProfile {
 		return d.applyProfileSetting(spec, msg)
 	}
-	if spec.Kind == setting.Bool {
+	if spec.Kind == setting.Bool && strings.TrimSpace(msg.Value) != "" {
 		msg.Value = strconv.FormatBool(parseBooleanSetting(msg.Value))
 	}
 	if msg.Key == setting.SharedPTYHostEnabled.Key {

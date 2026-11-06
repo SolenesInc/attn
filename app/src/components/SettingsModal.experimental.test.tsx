@@ -1,4 +1,5 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { EXPERIMENTAL_FEATURES } from '../utils/settings';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSection, savedSettings } from '../test/settings';
 import { gesture } from '../test/renderApp';
@@ -117,5 +118,34 @@ describe('Experimental settings for the shelf layout', () => {
     await gesture(daemon, () => fireEvent.blur(field));
     expect(savedSettings(daemon)).toEqual([['narrowest_tile_cols', '86']]);
     expect(field).toHaveValue(86);
+  });
+});
+
+describe('Experimental settings come from the declarations', () => {
+  it('offers a switch for every feature and says when a change applies', async () => {
+    await openSection('experimental');
+    for (const feature of EXPERIMENTAL_FEATURES) {
+      const toggle = screen.getByRole('switch', { name: feature.name });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+      expect(screen.getByTestId(`settings-feature-${feature.key}`)).toBe(toggle);
+    }
+    expect(within(screen.getByTestId('settings-feature-group-Agents')).getByText('Asks').textContent).toContain('New agents');
+    expect(screen.getByText('Usage analytics').textContent).toContain('This machine');
+  });
+
+  it('says what a change does once the user makes it', async () => {
+    const daemon = await openSection('experimental');
+    const note = 'Applies to new agents. Running agents keep what they launched with.';
+    expect(screen.queryByText(note)).toBeNull();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Asks' })));
+    expect(screen.getByText(note)).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Agent callouts' })));
+    expect(screen.getAllByText(note)).toHaveLength(1);
+  });
+
+  it('keeps the shelf layout widths under its switch while it is on', async () => {
+    await openSection('experimental', { settings: { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' } });
+    expect(screen.getByTestId('settings-narrowest-tile-cols')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-sidebar-width')).toBeInTheDocument();
   });
 });

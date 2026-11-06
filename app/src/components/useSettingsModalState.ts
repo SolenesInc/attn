@@ -1,5 +1,4 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { recordAppAction } from '../analytics/appActions';
@@ -39,7 +38,7 @@ import {
 } from './settingsModalShared';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
-import { BoolSetting, isOn } from '../utils/settings';
+import { BoolSetting, EXPERIMENTAL_FEATURES, isOn } from '../utils/settings';
 
 export function useSettingsModalState({
   closeRef,
@@ -146,11 +145,7 @@ export function useSettingsModalState({
   const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
-  const calloutsEnabled = isOn(settings, BoolSetting.calloutsEnabled);
-  const phoneAccessEnabled = isOn(settings, BoolSetting.phoneAccessEnabled);
-  const crewV2Enabled = isOn(settings, BoolSetting.crewV2Enabled);
   const analyticsEnabled = isOn(settings, BoolSetting.analyticsEnabled);
-  const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
   const resolvedDefaultAgent = resolvePreferredAgent(actualDefaultAgent, agentAvailability, 'codex');
@@ -254,15 +249,9 @@ export function useSettingsModalState({
   }, [actualAgentCapabilities, agentAvailability, orderedAgentList, settings]);
   const agentCapabilityOrder = useMemo(() => AGENT_CAPABILITY_ORDER.map((cap) => cap as string), []);
   const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
-  const newSessionLauncherEnabled = isOn(settings, BoolSetting.newSessionLauncherEnabled);
-  const codexSharedEnabled = isOn(settings, BoolSetting.codexSharedEnabled);
-  const claudeModEnabled = isOn(settings, BoolSetting.claudeModEnabled);
-  const nisseEnabled = isOn(settings, BoolSetting.nisseEnabled);
   const queueShowHiddenSessions = isOn(settings, BoolSetting.queueShowHiddenSessions);
-  const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
   const directAgentLaunchEnabled = isOn(settings, BoolSetting.directAgentLaunchEnabled);
-  const quickCaptureEnabled = isOn(settings, BoolSetting.quickCaptureEnabled);
-  const sharedPtyHostEnabled = isOn(settings, BoolSetting.ptySharedHostEnabled);
+  const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
   const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
@@ -599,7 +588,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental quick capture global shortcut outposts remote computers nisse harness claude mod crew v2 chief launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
+            keywords: `experimental ${EXPERIMENTAL_FEATURES.map(feature => `${feature.name} ${feature.search}`).join(' ')}`,
           },
           {
             id: 'backgroundTasks',
@@ -651,10 +640,6 @@ export function useSettingsModalState({
     activePluginCount,
     plugins,
     autoSettleEnabled,
-    asksEnabled,
-    calloutsEnabled,
-    phoneAccessEnabled,
-    crewV2Enabled,
     analyticsEnabled,
     mutedRepos,
     mutedAuthors,
@@ -691,18 +676,12 @@ export function useSettingsModalState({
     handleRemovePlugin,
     commitPluginPriority,
     ptyBackendMode,
-    sharedPtyHostEnabled,
     shelfLayoutEnabled,
     narrowestTileColsDraft,
     sidebarWidthDraft,
-    newSessionLauncherEnabled,
-    codexSharedEnabled,
-    claudeModEnabled,
-    nisseEnabled,
     queueShowHiddenSessions,
-    queueQuietNotifications,
     directAgentLaunchEnabled,
-    quickCaptureEnabled,
+    queueQuietNotifications,
     onSetSetting,
     settings,
     activityAgents,

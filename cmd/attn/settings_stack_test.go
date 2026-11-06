@@ -47,7 +47,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		t.Fatalf("usage: %+v", r)
 	}
 	plain := s.Attn("settings", "list")
-	requireStdout(t, plain, "all profiles", "theme", "App color theme", "quick_capture_enabled")
+	requireStdout(t, plain, "home", "theme", "App color theme", "quick_capture_enabled")
 	if strings.Contains(plain.Stdout, "pty_backend_mode") {
 		t.Fatal("list includes read-only values")
 	}
@@ -75,6 +75,11 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Start()
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
 	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
+	requireStdout(t, s.Attn("settings", "list", "--features"), "quick_capture_enabled", "experimental", "the home", "Now", "Quick Capture")
+	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", "false"), "false")
+	requireStdout(t, s.Attn("settings", "list"), "this machine")
+	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", ""))
+	requireStdout(t, s.Attn("settings", "get", "worktree_sweep_enabled"), "true")
 	requireStdout(t, s.Attn("settings", "set", "new_session_launcher_enabled", "TRUE"), "new_session_launcher_enabled = true")
 	if got := s.App().Initial.Settings["new_session_launcher_enabled"]; got != "true" {
 		t.Fatalf("the app reads a boolean written as TRUE as %v, want true: the daemon reads it as on", got)

@@ -46,7 +46,7 @@ describe('SettingsModal sections', () => {
   it('keeps Quick Capture off until enabled in Experimental and can turn it off again', async () => {
     const daemon = await openSection('experimental');
     const toggle = () => screen.getByRole('switch', { name: 'Quick Capture' });
-    expect(toggle()).toHaveAccessibleDescription('Send messages and files to Chief or a crew member from any app with a global shortcut (default to ⌃⌥⌘Space).');
+    expect(toggle()).toHaveAccessibleDescription('Send messages and files to Chief or a crew member from any app with a global shortcut. Default shortcut: ⌃⌥⌘Space.');
     expect(toggle()).toHaveAttribute('aria-checked', 'false');
     await gesture(daemon, () => fireEvent.click(toggle()));
     expect(savedSettings(daemon)).toEqual([['quick_capture_enabled', 'true']]);

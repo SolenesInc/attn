@@ -1,3 +1,5 @@
+import { useState, type ReactNode } from 'react';
+import { SIDEBAR_WIDTH } from './sidebarWidth';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
@@ -8,7 +10,6 @@ import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { HarnessCheckingStatus } from './HarnessCheckingStatus';
 import { agentCapabilityLabel, agentLabel, checkingForHarnessLabel, harnessAvailability, type HarnessAvailability } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
-import { ASKS_SETTING } from '../utils/asks';
 import { BackgroundTasksSettings } from './BackgroundTasksSettings';
 import { DelegationSwitch } from './DelegationSettings';
 import { EventBusSettings } from './EventBusSettings';
@@ -21,7 +22,7 @@ import {
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
-import { SIDEBAR_WIDTH } from './sidebarWidth';
+import { BoolSetting, EXPERIMENTAL_FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
 
 const AVAILABILITY_SUMMARY: Record<HarnessAvailability, string> = {
   available: 'Available',
@@ -579,149 +580,119 @@ export function PluginSettings({
   );
 }
 
+const WHEN_A_CHANGE_APPLIES: Record<string, string> = {
+  'New agents': 'Applies to new agents. Running agents keep what they launched with.',
+  'On: new agents. Off: now': 'Turning it on applies to new agents. Turning it off applies to running agents at once.',
+  'New terminals': 'Applies to new terminals. Running terminals stay where they are.',
+  'Next daemon start': 'Takes effect the next time the daemon starts.',
+};
+
+function featureDetail(key: BoolSettingKey): ReactNode {
+  if (key === BoolSetting.quickCaptureEnabled) {
+    const modifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
+    return <> Default shortcut: {keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => modifiers[part] ?? part))}.</>;
+  }
+  if (key === BoolSetting.asksEnabled) {
+    return <> Open it with {formatShortcut('dock.asks')}.</>;
+  }
+  return null;
+}
+
+function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children }: {
+  feature: Feature;
+  settings: Record<string, string>;
+  ptyBackendMode: string;
+  onSetSetting: SettingsModalState['onSetSetting'];
+  children?: ReactNode;
+}) {
+  const on = isOn(settings, feature.key);
+  const [changed, setChanged] = useState(false);
+  const descriptionID = `settings-feature-${feature.key}-description`;
+  const note = changed ? WHEN_A_CHANGE_APPLIES[feature.applies] : undefined;
+  return (
+    <>
+      <div className="settings-row-card">
+        <div>
+          <p className="settings-row-title">
+            {feature.name}
+            <span className="settings-feature-applies">
+              {feature.thisMachine ? `This machine · ${feature.applies}` : feature.applies}
+            </span>
+          </p>
+          <p className="settings-row-copy" id={descriptionID}>{feature.summary}{featureDetail(feature.key)}</p>
+          {note && <p className="settings-feature-note" role="status">{note}</p>}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-label={feature.name}
+          aria-checked={on}
+          aria-describedby={descriptionID}
+          className="settings-action"
+          data-testid={`settings-feature-${feature.key}`}
+          disabled={feature.key === BoolSetting.ptySharedHostEnabled && ptyBackendMode !== 'migrating'}
+          onClick={() => {
+            setChanged(true);
+            onSetSetting(feature.key, on ? 'false' : 'true');
+          }}
+        >
+          {on ? 'Disable' : 'Enable'}
+        </button>
+      </div>
+      {on && children}
+    </>
+  );
+}
+
 export function ExperimentalSettings({
-  quickCaptureEnabled,
-  outpostsEnabled,
-  newSessionLauncherEnabled,
-  codexSharedEnabled,
-  claudeModEnabled,
-  nisseEnabled,
-  asksEnabled,
-  calloutsEnabled,
-  phoneAccessEnabled,
-  crewV2Enabled,
-  analyticsEnabled,
+  settings,
   ptyBackendMode,
-  sharedPtyHostEnabled,
-  shelfLayoutEnabled,
   narrowestTileColsDraft,
   sidebarWidthDraft,
   savedFlash,
   onSetSetting,
 }: Pick<
   SettingsModalState,
-  | 'quickCaptureEnabled'
-  | 'outpostsEnabled'
-  | 'newSessionLauncherEnabled'
-  | 'codexSharedEnabled'
-  | 'claudeModEnabled'
-  | 'nisseEnabled'
-  | 'asksEnabled'
-  | 'calloutsEnabled'
-  | 'phoneAccessEnabled'
-  | 'crewV2Enabled'
-  | 'analyticsEnabled'
+  | 'settings'
   | 'ptyBackendMode'
-  | 'sharedPtyHostEnabled'
-  | 'shelfLayoutEnabled'
   | 'narrowestTileColsDraft'
   | 'sidebarWidthDraft'
   | 'savedFlash'
   | 'onSetSetting'
 >) {
-  const shortcutModifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
-  const defaultShortcutLabel = keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => shortcutModifiers[part] ?? part));
+  const groups = [...new Set(EXPERIMENTAL_FEATURES.map(feature => feature.group))];
   return (
     <section className="settings-block">
-      <div className="settings-block-body">
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Quick Capture</p>
-            <p className="settings-row-copy" id="quick-capture-description">
-              Send messages and files to Chief or a crew member from any app with a global shortcut (default to {defaultShortcutLabel}).
-            </p>
-          </div>
-          <button type="button" role="switch" aria-label="Quick Capture"
-            aria-checked={quickCaptureEnabled} aria-describedby="quick-capture-description"
-            className="settings-action" onClick={() => onSetSetting('quick_capture_enabled', quickCaptureEnabled ? 'false' : 'true')}>
-            {quickCaptureEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Launcher 2.0</p>
-            <p className="settings-row-copy" id="new-session-launcher-description">New dialog for launching agents and terminals. Allows you to select a path, then repository, and worktree, in a single dialog.</p>
-          </div>
-          <button type="button" role="switch" aria-label="Launcher 2.0"
-            aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
-            className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
-            {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Outposts</p>
-            <p className="settings-row-copy" id="settings-outposts-description">Connect this home to attn on other computers. Add them in Settings → Outposts.</p>
-          </div>
-          <button type="button" role="switch" aria-label="Outposts" aria-checked={outpostsEnabled}
-            aria-describedby="settings-outposts-description" className="settings-action"
-            onClick={() => onSetSetting('outposts_enabled', outpostsEnabled ? 'false' : 'true')}>
-            {outpostsEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Shared terminal host</p>
-            <p className="settings-row-copy" id="shared-pty-host-description">
-              Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Shared terminal host"
-            aria-checked={sharedPtyHostEnabled}
-            aria-describedby="shared-pty-host-description"
-            className="settings-action"
-            data-testid="settings-shared-pty-host-toggle"
-            disabled={ptyBackendMode !== 'migrating'}
-            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
-          >
-            {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Shelf layout</p>
-            <p className="settings-row-copy" id="shelf-layout-description">
-              Lay out each desktop as one row of tiles that slides sideways, with the rest waiting on a shelf, instead of splits.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Shelf layout"
-            aria-checked={shelfLayoutEnabled}
-            aria-describedby="shelf-layout-description"
-            className="settings-action"
-            data-testid="settings-shelf-layout-toggle"
-            onClick={() => onSetSetting('shelf_layout_enabled', shelfLayoutEnabled ? 'false' : 'true')}
-          >
-            {shelfLayoutEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        {shelfLayoutEnabled && (
-          <>
-            <div className="settings-row-card">
-              <div>
-                <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
-                <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
-              </div>
-              <div>
-                <input
-                  id="settings-narrowest-tile-cols"
-                  data-testid="settings-narrowest-tile-cols"
-                  type="number"
-                  min={1}
-                  value={narrowestTileColsDraft.value}
-                  onChange={narrowestTileColsDraft.onChange}
-                  onBlur={narrowestTileColsDraft.commit}
-                  onKeyDown={narrowestTileColsDraft.onKeyDown}
-                  className="settings-input"
-                />
-                <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
-              </div>
-            </div>
+      <div className="settings-block-intro">
+        <p className="settings-row-copy">Each one applies to this home and all its outposts, unless it says this machine.</p>
+      </div>
+      {groups.map(group => (
+        <div className="settings-block-body" key={group} data-testid={`settings-feature-group-${group}`}>
+          <p className="settings-label">{group}</p>
+          {EXPERIMENTAL_FEATURES.filter(feature => feature.group === group).map(feature => (
+            <FeatureRow key={feature.key} feature={feature} settings={settings} ptyBackendMode={ptyBackendMode} onSetSetting={onSetSetting}>
+              {feature.key === BoolSetting.shelfLayoutEnabled && (
+                <>
+                <div className="settings-row-card">
+                  <div>
+                    <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
+                    <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
+                  </div>
+                  <div>
+                    <input
+                      id="settings-narrowest-tile-cols"
+                      data-testid="settings-narrowest-tile-cols"
+                      type="number"
+                      min={1}
+                      value={narrowestTileColsDraft.value}
+                      onChange={narrowestTileColsDraft.onChange}
+                      onBlur={narrowestTileColsDraft.commit}
+                      onKeyDown={narrowestTileColsDraft.onKeyDown}
+                      className="settings-input"
+                    />
+                    <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+                  </div>
+                </div>
             <div className="settings-row-card">
               <div>
                 <label className="settings-row-title" htmlFor="settings-sidebar-width">Sidebar width (pixels)</label>
@@ -754,145 +725,12 @@ export function ExperimentalSettings({
                 <SavedMark shown={savedFlash.saved('sidebar_width')} testID="settings-sidebar-width-saved" />
               </div>
             </div>
-          </>
-        )}
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Shared Codex</p>
-            <p className="settings-row-copy" id="shared-codex-description">
-              Use a shared Codex server for cross-session interaction, tighter integration with attn, and lower memory use.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Shared Codex"
-            aria-checked={codexSharedEnabled}
-            aria-describedby="shared-codex-description"
-            className="settings-action"
-            data-testid="settings-shared-codex-toggle"
-            onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
-          >
-            {codexSharedEnabled ? 'Disable' : 'Enable'}
-          </button>
+                </>
+              )}
+            </FeatureRow>
+          ))}
         </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Claude mod</p>
-            <p className="settings-row-copy" id="claude-mod-description">
-              Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal. A session loads the mod when it next launches.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Claude mod"
-            aria-checked={claudeModEnabled}
-            aria-describedby="claude-mod-description"
-            className="settings-action"
-            data-testid="settings-claude-mod-toggle"
-            onClick={() => onSetSetting('claude_mod_enabled', claudeModEnabled ? 'false' : 'true')}
-          >
-            {claudeModEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Nisse</p>
-            <p className="settings-row-copy" id="nisse-description">
-              Offer Nisse as a harness. attn runs the Nisse server and follows each session's state from it.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Nisse"
-            aria-checked={nisseEnabled}
-            aria-describedby="nisse-description"
-            className="settings-action"
-            onClick={() => onSetSetting('nisse_enabled', nisseEnabled ? 'false' : 'true')}
-          >
-            {nisseEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Asks</p>
-            <p className="settings-row-copy" id="settings-asks-description">
-              Answer agents' questions from one drawer without opening their terminals. Open it with{' '}
-              {formatShortcut('dock.asks')}. Applies to newly launched agents.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Asks"
-            aria-checked={asksEnabled}
-            aria-describedby="settings-asks-description"
-            className="settings-action"
-            data-testid="settings-asks-toggle"
-            onClick={() => onSetSetting(ASKS_SETTING, asksEnabled ? 'false' : 'true')}
-          >
-            {asksEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Agent callouts</p>
-            <p className="settings-row-copy" id="settings-callouts-description">
-              Let agents point at parts of the app with short, guided steps.
-            </p>
-          </div>
-          <button type="button" role="switch" aria-label="Agent callouts"
-            aria-checked={calloutsEnabled} aria-describedby="settings-callouts-description"
-            className="settings-action" data-testid="settings-callouts-toggle"
-            onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
-            {calloutsEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Phone access</p>
-            <p className="settings-row-copy" id="settings-phone-access-description">
-              Let phones you pair see this home's agents. Turning it off disconnects every phone.
-            </p>
-          </div>
-          <button type="button" role="switch" aria-label="Phone access"
-            aria-checked={phoneAccessEnabled} aria-describedby="settings-phone-access-description"
-            className="settings-action" data-testid="settings-phone-access-toggle"
-            onClick={() => onSetSetting('phone_access_enabled', phoneAccessEnabled ? 'false' : 'true')}>
-            {phoneAccessEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Crew v2</p>
-            <p className="settings-row-copy" id="settings-crew-v2-description">
-              Crew members use the v2 operating model with harness memory off, starting at their next launch. Letters filed while it's on record their session so attn can keep its transcript.
-            </p>
-          </div>
-          <button type="button" role="switch" aria-label="Crew v2"
-            aria-checked={crewV2Enabled} aria-describedby="settings-crew-v2-description"
-            className="settings-action"
-            onClick={() => onSetSetting('crew_v2_enabled', crewV2Enabled ? 'false' : 'true')}>
-            {crewV2Enabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Usage analytics</p>
-            <p className="settings-row-copy" id="settings-analytics-description">
-              Keep a redacted record of how attn is used on this machine. Nothing is sent.
-            </p>
-          </div>
-          <button type="button" role="switch" aria-label="Usage analytics"
-            aria-checked={analyticsEnabled} aria-describedby="settings-analytics-description"
-            className="settings-action" data-testid="settings-analytics-toggle"
-            onClick={() => onSetSetting('analytics.enabled', analyticsEnabled ? 'false' : 'true')}>
-            {analyticsEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-      </div>
+      ))}
     </section>
   );
 }

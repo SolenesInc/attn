@@ -237,20 +237,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'experimental':
       return (
         <ExperimentalSettings
-          outpostsEnabled={state.outpostsEnabled}
-          newSessionLauncherEnabled={state.newSessionLauncherEnabled}
-          codexSharedEnabled={state.codexSharedEnabled}
-          claudeModEnabled={state.claudeModEnabled}
-          nisseEnabled={state.nisseEnabled}
-          quickCaptureEnabled={state.quickCaptureEnabled}
-          asksEnabled={state.asksEnabled}
-          calloutsEnabled={state.calloutsEnabled}
-          phoneAccessEnabled={state.phoneAccessEnabled}
-          crewV2Enabled={state.crewV2Enabled}
-          analyticsEnabled={state.analyticsEnabled}
+          settings={state.settings}
           ptyBackendMode={state.ptyBackendMode}
-          sharedPtyHostEnabled={state.sharedPtyHostEnabled}
-          shelfLayoutEnabled={state.shelfLayoutEnabled}
           narrowestTileColsDraft={state.narrowestTileColsDraft}
           sidebarWidthDraft={state.sidebarWidthDraft}
           savedFlash={state.savedFlash}

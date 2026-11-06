@@ -24,7 +24,14 @@ func main() {
 			fmt.Fprintf(&out, "  %q,\n", s.Key)
 		}
 	}
-	out.WriteString("]);\n")
+	out.WriteString("]);\n\n")
+	out.WriteString("export interface Feature {\n  key: BoolSettingKey;\n  name: string;\n  summary: string;\n  group: string;\n  applies: string;\n  thisMachine: boolean;\n  stage: string;\n  since: string;\n  search: string;\n}\n\n")
+	out.WriteString("export const FEATURES: readonly Feature[] = [\n")
+	for _, s := range setting.Features() {
+		fmt.Fprintf(&out, "  { key: %q, name: %q, summary: %q, group: %q, applies: %q, thisMachine: %t, stage: %q, since: %q, search: %q },\n",
+			s.Key, s.Name, s.Summary, s.Group, s.Applies, s.Class == setting.Machine, s.Stage, s.Since, s.Search)
+	}
+	out.WriteString("];\n")
 	if err := os.WriteFile(os.Args[1], []byte(out.String()), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

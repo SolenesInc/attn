@@ -1,29 +1,155 @@
 package setting
 
 var (
+	AsksEnabled = feature("asks_enabled", "Enable agent asks: true or false.", Info{
+		Name:    "Asks",
+		Summary: "Answer agents' questions from one drawer without opening their terminals.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-10-18",
+		Search:  "questions answer decisions drawer",
+	})
+	QuickCaptureEnabled = feature("quick_capture_enabled", "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", Info{
+		Name:    "Quick Capture",
+		Summary: "Send messages and files to Chief or a crew member from any app with a global shortcut.",
+		Group:   Agents,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-10-19",
+		Search:  "global shortcut panel",
+	})
+	CrewV2Enabled = feature("crew_v2_enabled", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", Info{
+		Name:    "Crew v2",
+		Summary: "Crew members use the v2 operating model with harness memory off, starting at their next launch. Letters filed while it's on record their session so attn can keep its transcript.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-10-27",
+		Search:  "chief crew memory letters",
+	})
+	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
+		Name:    "Nisse",
+		Summary: "Offer Nisse as a harness. attn runs the Nisse server and follows each session's state from it.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-10-29",
+		Search:  "harness server",
+	})
+	ClaudeModEnabled = feature("claude_mod_enabled", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.", Info{
+		Name:    "Claude mod",
+		Summary: "Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal. A session loads the mod when it next launches.",
+		Group:   Agents,
+		Applies: NewAgentsOnOnly,
+		Stage:   Experimental,
+		Since:   "2026-11-04",
+		Search:  "delivery typing standby compact",
+	})
+	CodexSharedEnabled = feature("codex_shared_enabled", "Use the shared Codex app server: true or false.", Info{
+		Name:    "Shared Codex",
+		Summary: "Use a shared Codex server for cross-session interaction, tighter integration with attn, and lower memory use.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-10-16",
+		Search:  "app server memory",
+	})
+	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
+		Name:    "Launcher 2.0",
+		Summary: "New dialog for launching agents and terminals. Allows you to select a path, then repository, and worktree, in a single dialog.",
+		Group:   Interface,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-10-16",
+		Search:  "one-screen one screen new-session new session project path",
+	})
+	ShelfLayoutEnabled = feature("shelf_layout_enabled", "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.", Info{
+		Name:    "Shelf layout",
+		Summary: "Lay out each desktop as one row of tiles that slides sideways, with the rest waiting on a shelf, instead of splits.",
+		Group:   Interface,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-05",
+		Search:  "narrowest tile width row columns",
+	})
+	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false.", Info{
+		Name:    "Agent callouts",
+		Summary: "Let agents point at parts of the app with short, guided steps.",
+		Group:   Interface,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-10-18",
+		Search:  "point guided steps tour",
+	})
+	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
+		Name:    "Outposts",
+		Summary: "Connect this home to attn on other computers. Add them in Settings → Outposts.",
+		Group:   Connections,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-10-27",
+		Search:  "remote computers bridge ssh",
+	})
+	PhoneAccessEnabled = feature("phone_access_enabled", "Let paired phones reach this home's sessions: true or false. Off by default.", Info{
+		Name:    "Phone access",
+		Summary: "Let phones you pair see this home's agents. Turning it off disconnects every phone.",
+		Group:   Connections,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-02",
+		Search:  "mobile iphone pair",
+	})
+	AnalyticsEnabled = machineFeature("analytics.enabled", "Record usage analytics on this machine: true or false. Experimental; off by default.", Info{
+		Name:    "Usage analytics",
+		Summary: "Keep a redacted record of how attn is used on this machine. Nothing is sent.",
+		Group:   Data,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-10-24",
+		Search:  "telemetry vents record",
+	})
+	DirectAgentLaunchEnabled = feature("direct_agent_launch_enabled", "Launch agents directly, without an attn process beside each one: true or false. On by default; applies to new and reloaded agents.", Info{
+		Name:    "Direct agent launches",
+		Summary: "Launch agents using less memory.",
+		Group:   UnderTheHood,
+		Applies: NewAgents,
+		Stage:   OnByDefault,
+		Since:   "2026-10-15",
+		Search:  "memory launcher",
+	})
+	SharedPTYHostEnabled = machineFeature("pty_shared_host_enabled", "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.", Info{
+		Name:    "Shared terminal host",
+		Summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.",
+		Group:   UnderTheHood,
+		Applies: NewTerminals,
+		Stage:   Experimental,
+		Since:   "2026-09-04",
+		Search:  "terminal hosting pty backend rust workers memory",
+	})
+	BackgroundLoginEnvEnabled = feature("background_login_env_enabled", "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", Info{
+		Name:    "Background login environment",
+		Summary: "Answer clients while the login shell runs, instead of waiting for it before listening.",
+		Group:   UnderTheHood,
+		Applies: NextDaemonStart,
+		Stage:   Experimental,
+		Since:   "2026-11-04",
+		Search:  "startup shell environment",
+	})
+)
+
+var (
 	NotebookSyncState            = add(&Setting{Key: "notebook_sync_state", Class: Machine, Kind: Computed, Description: "Current Notebook sync state on this machine."})
 	NotebookSyncLastError        = add(&Setting{Key: "notebook_sync_last_error", Class: Machine, Kind: Computed, Description: "Current Notebook sync error and its reason."})
-	OutpostsEnabled              = feature("outposts_enabled", "Outposts", Experimental, "2026-10-27", "Connect to outposts from this home: true or false. Experimental; off by default.")
 	OutpostState                 = add(&Setting{Key: "outpost_state", Class: Machine, Kind: Computed, Description: "Whether a home bridge is connected: bridged or off."})
 	OutpostHome                  = add(&Setting{Key: "outpost_home", Class: Machine, Kind: Computed, Description: "Recorded home daemon id. Release it with attn enrollment leave."})
 	OutpostLastError             = add(&Setting{Key: "outpost_last_error", Class: Machine, Kind: Computed, Description: "Last outpost bridge error, kept until the next successful connection."})
 	CaptureShortcut              = add(&Setting{Key: "capture.shortcut", Class: Home, Kind: Free, Description: "Global shortcut for Quick Capture. Empty turns the shortcut off."})
-	QuickCaptureEnabled          = feature("quick_capture_enabled", "Quick Capture", Experimental, "2026-10-19", "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.")
-	CrewV2Enabled                = feature("crew_v2_enabled", "Crew v2", Experimental, "2026-10-27", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.")
-	NewSessionLauncherEnabled    = feature("new_session_launcher_enabled", "Launcher 2.0", Experimental, "2026-10-16", "Show the new session launcher: true or false.")
-	DirectAgentLaunchEnabled     = feature("direct_agent_launch_enabled", "Direct agent launches", OnByDefault, "2026-10-15", "Launch agents directly, without an attn process beside each one: true or false. On by default; applies to new and reloaded agents.")
-	CodexSharedEnabled           = feature("codex_shared_enabled", "Shared Codex", Experimental, "2026-10-16", "Use the shared Codex app server: true or false.")
-	ClaudeModEnabled             = feature("claude_mod_enabled", "Claude mod", Experimental, "2026-11-04", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.")
-	NisseEnabled                 = feature("nisse_enabled", "Nisse", Experimental, "2026-10-29", "Offer Nisse as a harness: true or false.")
 	QueueShowHiddenSessions      = add(&Setting{Key: "queue_show_hidden_sessions", Class: Home, Kind: Bool, Default: On, Description: "Include hidden sessions in the queue: true or false. On by default."})
 	QueueQuietNotifications      = add(&Setting{Key: "queue_quiet_notifications", Class: Home, Kind: Bool, Default: On, Description: "Keep agents a notification woke out of the queue unless they open their turn: true or false. On by default; needs queue flow."})
-	AsksEnabled                  = feature("asks_enabled", "Asks", Experimental, "2026-10-18", "Enable agent asks: true or false.")
-	AnalyticsEnabled             = machineFeature("analytics.enabled", "Usage analytics", Experimental, "2026-10-24", "Record usage analytics on this machine: true or false. Experimental; off by default.")
 	AnalyticsSharingEnabled      = add(&Setting{Key: "analytics.sharing_enabled", Class: Home, Kind: Bool, Description: "Upload the recorded usage analytics to attn's maintainers: true or false. Needs analytics.enabled; off by default."})
 	AnalyticsShareVents          = add(&Setting{Key: "analytics.share_vents", Class: Home, Kind: Bool, Description: "Send each new attn vent, with its text, in the next upload: true or false. Off by default."})
 	AnalyticsToolVents           = add(&Setting{Key: "analytics.tool_vents", Class: Home, Kind: Bool, Description: "Let new sessions also vent about their other tools, such as skills, other CLIs and harness permissions; tool vents never leave the machine: true or false. Off by default."})
-	CalloutsEnabled              = feature("callouts_enabled", "Agent callouts", Experimental, "2026-10-18", "Let agents point at the app interface: true or false.")
-	PhoneAccessEnabled           = feature("phone_access_enabled", "Phone access", Experimental, "2026-11-02", "Let paired phones reach this home's sessions: true or false. Off by default.")
 	ChiefContextWindowCap        = add(&Setting{Key: "chief_context_window_cap", Class: Home, Kind: Checked, Description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget."})
 	ChiefModel                   = add(&Setting{Key: "chief_model_<harness>", Class: Home, Kind: Free, Description: "Model for chief sessions. Empty uses the deep intelligence tier."})
 	ChiefEffort                  = add(&Setting{Key: "chief_effort_<harness>", Class: Home, Kind: Free, Description: "Reasoning effort for chief sessions. Empty uses the default effort."})
@@ -36,11 +162,8 @@ var (
 	EditorExecutable             = add(&Setting{Key: "editor_executable", Class: Home, Kind: Checked, Description: "Command to open files in your editor. Empty uses the default editor."})
 	NewSessionAgent              = add(&Setting{Key: "new_session_agent", Class: Home, Kind: Checked, Description: "Harness selected for new sessions. Empty uses the default harness."})
 	Theme                        = add(&Setting{Key: "theme", Class: Home, Kind: Checked, Description: "App color theme: dark, light or system."})
-	SharedPTYHostEnabled         = machineFeature("pty_shared_host_enabled", "Shared terminal host", Experimental, "2026-09-04", "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.")
-	ShelfLayoutEnabled           = feature("shelf_layout_enabled", "Shelf layout", Experimental, "2026-11-05", "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.")
 	NarrowestTileCols            = add(&Setting{Key: "narrowest_tile_cols", Class: Home, Kind: Checked, Description: "Narrowest width of a tile in the shelf layout, in terminal columns: a positive whole number. Empty uses the default of 66."})
 	SidebarWidth                 = add(&Setting{Key: "sidebar_width", Class: Home, Kind: Checked, Description: "Width of the open sidebar in pixels, from 200 to 600, with the shelf layout on. Empty uses the default of 240."})
-	BackgroundLoginEnvEnabled    = feature("background_login_env_enabled", "Background login environment", Experimental, "2026-11-04", "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.")
 	AutoApproveEnabled           = add(&Setting{Key: "auto_approve_enabled", Class: Home, Kind: Bool, Default: On, Description: "Auto-approve supported agent requests: true or false."})
 	QueueModeEnabled             = add(&Setting{Key: "queue_mode_enabled", Class: Home, Kind: Bool, Description: "Use queue flow across all profiles: true or false."})
 	QueueCrewEnabled             = add(&Setting{Key: "queue_crew_enabled", Class: Home, Kind: Bool, Description: "Include crew sessions in the queue: true or false."})

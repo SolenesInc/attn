@@ -47,7 +47,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 import { useSharedCodexCommands } from './useSharedCodex';
-import { BoolSetting, isOn } from '../utils/settings';
+import { BoolSetting, FEATURES, isOn } from '../utils/settings';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -555,6 +555,17 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
             isAutoSettleEnabled(settings) ? 'false' : 'true',
           ),
       },
+      ...FEATURES.map((feature) => {
+        const on = isOn(settings, feature.key);
+        return {
+          id: `feature-${feature.key}`,
+          title: `${on ? 'Turn off' : 'Turn on'} ${feature.name}`,
+          searchOnly: true,
+          keywords: ['experimental', 'feature', ...feature.search.split(' ')],
+          icon: <AttentionActionIcon />,
+          run: () => sendSetSetting(feature.key, on ? 'false' : 'true'),
+        };
+      }),
       {
         id: 'customize-shortcuts',
         title: 'Customize keyboard shortcuts',

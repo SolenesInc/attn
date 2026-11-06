@@ -32,7 +32,7 @@ the seed. Asks are an experimental setting, off by default.
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). A narrow tile cuts the subject, then shows only the `?` mark; the chip never leaves the header. The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
-- **Settings → Experimental**: the "Asks" switch (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`).
+- **Settings → Experimental**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 
@@ -81,8 +81,8 @@ Preconditions:
 
 - **Turn asks on.**
   - Press ⌘, (`ui.openSettings`) and click `[data-testid="settings-nav-experimental"]` natively.
-  - At the baseline window size the Asks switch is below the viewport. Click `[aria-label="Search settings"]` natively to anchor keyboard focus, then repeat `bridge native_key '{"key":"Tab"}'` until `bridge dom_focus_state` names `activeElement.testId: "settings-asks-toggle"`. Tab scrolls the switch into view.
-  - Click `[data-testid="settings-asks-toggle"]` natively, resolving its point after the scroll. Its `aria-checked` turns `true`, and `./attn settings get asks_enabled` prints `true`. Close Settings with Escape.
+  - At the baseline window size the Asks switch is below the viewport. Click `[aria-label="Search settings"]` natively to anchor keyboard focus, then repeat `bridge native_key '{"key":"Tab"}'` until `bridge dom_focus_state` names `activeElement.testId: "settings-feature-asks_enabled"`. Tab scrolls the switch into view.
+  - Click `[data-testid="settings-feature-asks_enabled"]` natively, resolving its point after the scroll. Its `aria-checked` turns `true`, and `./attn settings get asks_enabled` prints `true`. Close Settings with Escape.
   - From a shell, `./attn settings set asks_enabled true` does the same and prints `asks_enabled = true`.
 - **An agent launched before is refused.** Run `wsctl input --id <early> --text "open an ask" --enter`. `./attn agent peek ask-early` shows `mock agent error:` with `asks are off for this session because it launched without them; ask in the conversation instead`.
 - **An agent asks.** Run `wsctl add-session --cwd $A --agent claude --label ask-agent --id ask-agent --place`, then `wsctl input --id <terminal> --text "open an ask" --enter`. Peek shows `Asked <ask>: "Cache store". attn types the answer into this conversation as the user's message.` The sidebar icon's label starts with `1 open ask`: `bridge dom_wait '{"selector":"[aria-label^=\"1 open ask\"]","timeoutMs":5000}'` matches.

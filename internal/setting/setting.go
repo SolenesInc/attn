@@ -43,7 +43,49 @@ const (
 	OnByDefault
 )
 
+func (s Stage) String() string {
+	switch s {
+	case Experimental:
+		return "experimental"
+	case OnByDefault:
+		return "on by default"
+	default:
+		return ""
+	}
+}
+
+type Group string
+
+const (
+	Agents       Group = "Agents"
+	Interface    Group = "Interface"
+	Connections  Group = "Connections"
+	Data         Group = "Data"
+	UnderTheHood Group = "Under the hood"
+)
+
+type Applies string
+
+const (
+	Now             Applies = "Now"
+	NewAgents       Applies = "New agents"
+	NewAgentsOnOnly Applies = "On: new agents. Off: now"
+	NewTerminals    Applies = "New terminals"
+	NextDaemonStart Applies = "Next daemon start"
+)
+
+type Info struct {
+	Name    string
+	Summary string
+	Group   Group
+	Applies Applies
+	Stage   Stage
+	Since   string
+	Search  string
+}
+
 type Setting struct {
+	Info
 	Key         string
 	Class       Class
 	Kind        Kind
@@ -51,9 +93,6 @@ type Setting struct {
 	Default     Default
 	Internal    bool
 	Description string
-	Name        string
-	Stage       Stage
-	Since       string
 }
 
 var (
@@ -78,17 +117,17 @@ func add(s *Setting) *Setting {
 	return s
 }
 
-func feature(key, name string, stage Stage, since, description string) *Setting {
-	return add(newFeature(key, Home, name, stage, since, description))
+func feature(key, description string, info Info) *Setting {
+	return add(newFeature(key, Home, description, info))
 }
 
-func machineFeature(key, name string, stage Stage, since, description string) *Setting {
-	return add(newFeature(key, Machine, name, stage, since, description))
+func machineFeature(key, description string, info Info) *Setting {
+	return add(newFeature(key, Machine, description, info))
 }
 
-func newFeature(key string, class Class, name string, stage Stage, since, description string) *Setting {
-	s := &Setting{Key: key, Class: class, Kind: Bool, Name: name, Stage: stage, Since: since, Description: description}
-	if stage == OnByDefault {
+func newFeature(key string, class Class, description string, info Info) *Setting {
+	s := &Setting{Info: info, Key: key, Class: class, Kind: Bool, Description: description}
+	if info.Stage == OnByDefault {
 		s.Default = On
 	}
 	return s
