@@ -51,7 +51,9 @@ identity, and the outpost accepts only that home until you release it.
 Home settings, such as model defaults and automatic settlement, apply on every
 outpost. Each outpost keeps a read-only copy and reads it locally, including
 while the home is unreachable. `attn settings set` on an outpost changes a home
-setting at the home. The copy updates when the bridge delivers the change.
+setting at the home, except `outposts_enabled`, which you change at the home
+because the outpost reaches the home over that bridge. The copy updates when the
+bridge delivers the change.
 `attn settings list` marks the outpost's home settings `set at the home`.
 Profile settings, such as a profile's Notebook folder `notebook.root`, live
 only at the home. On an outpost, `attn settings get notebook.root` refuses and

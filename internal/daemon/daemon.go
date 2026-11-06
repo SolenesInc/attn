@@ -2736,7 +2736,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 				d.sendError(conn, "setting locator requires a setting key")
 				return
 			}
-			spec, err := writableSetting(set.Key)
+			spec, err := d.writableSettingHere(set.Key)
 			if err != nil {
 				d.sendError(conn, err.Error())
 				return

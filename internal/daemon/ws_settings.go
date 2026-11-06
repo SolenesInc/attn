@@ -63,6 +63,10 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if spec.Scope == setting.PerProfile {
 		return d.applyProfileSetting(spec, msg)
 	}
+	if spec == setting.OutpostsEnabled && d.on(spec) == parseBooleanSetting(msg.Value) {
+		entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, ""))
+		return &entry, nil
+	}
 	if spec.Kind == setting.Bool && strings.TrimSpace(msg.Value) != "" {
 		msg.Value = strconv.FormatBool(parseBooleanSetting(msg.Value))
 	}

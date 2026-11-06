@@ -109,7 +109,7 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 	case protocol.LocatorHome:
 		home = true
 	case protocol.LocatorSetting:
-		spec, err := writableSetting(msg.Locate())
+		spec, err := d.writableSettingHere(msg.Locate())
 		if err != nil {
 			return nil, err
 		}

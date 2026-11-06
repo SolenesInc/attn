@@ -188,6 +188,17 @@ func writableSetting(key string) (*setting.Setting, error) {
 	return spec, nil
 }
 
+func (d *Daemon) writableSettingHere(key string) (*setting.Setting, error) {
+	spec, err := writableSetting(key)
+	if err != nil {
+		return nil, err
+	}
+	if spec == setting.OutpostsEnabled && !d.enrollmentStatus().IsHome() {
+		return nil, fmt.Errorf("%s can only change at the home, because turning it off from here would cut this outpost's own connection to the home: run attn settings set %s there", key, key)
+	}
+	return spec, nil
+}
+
 func validateSetting(d *Daemon, spec *setting.Setting, key, value string) error {
 	switch spec.Kind {
 	case setting.Bool:

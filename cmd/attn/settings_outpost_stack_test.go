@@ -117,6 +117,27 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	t.Log("every feature except the named exceptions reads the home's value on an outpost")
 }
 
+func TestAnOutpostCannotCutItsOwnBridgeAndAnUnchangedHomeValueKeepsItUp(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t, testworld.WithoutAgentKit())
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	requireStdout(t, home.Attn("doc", "define", "tests/outpost-settings", "items"), "items")
+	watch := outpost.Launch(testworld.Invocation{Args: []string{"doc", "watch", "tests/outpost-settings", "items", "--json"}})
+	watch.AwaitStdout(`"documents": []`)
+	for _, value := range []string{"true", "false"} {
+		got := outpost.Attn("settings", "set", "outposts_enabled", value)
+		if got.Code != 1 || !strings.Contains(got.Stderr, "can only change at the home") {
+			t.Fatalf("set %s on the outpost = %+v, want a refusal naming the home", value, got)
+		}
+		requireStdout(t, home.Attn("settings", "get", "outposts_enabled"), "true")
+	}
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	requireStdout(t, home.Attn("doc", "put", "tests/outpost-settings", "items", "first", `{"title":"still connected"}`))
+	watch.AwaitStdout("still connected")
+	requireStdout(t, outpost.Attn("settings", "get", "theme"))
+	t.Log("the watch across the bridge survived the refusals and the unchanged home value")
+}
+
 func TestOutpostEnrollmentAppliesUnsetHomeDefaultsToRunningServices(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	for _, stack := range []*testworld.Stack{home, outpost} {
