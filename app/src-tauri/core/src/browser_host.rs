@@ -321,10 +321,22 @@ fn parent_box(widget: &webkit2gtk::WebView) -> Option<gtk::Box> {
 }
 
 #[cfg(target_os = "linux")]
+fn requested_page_rect(page: &gtk::Widget) -> gtk::gdk::Rectangle {
+    use gtk::prelude::WidgetExt;
+
+    gtk::gdk::Rectangle::new(
+        0,
+        0,
+        page.margin_start() + page.width_request(),
+        page.margin_top() + page.height_request(),
+    )
+}
+
+#[cfg(target_os = "linux")]
 pub fn wrap_main_webview_in_browser_layer(window: &tauri::WebviewWindow) -> Result<(), String> {
     window
         .with_webview(|platform| {
-            use gtk::prelude::{BoxExt, ContainerExt, WidgetExt};
+            use gtk::prelude::{BoxExt, ContainerExt, OverlaySignals, WidgetExt};
 
             let main = platform.inner();
             let Some(window_box) = parent_box(&main) else {
@@ -333,6 +345,7 @@ pub fn wrap_main_webview_in_browser_layer(window: &tauri::WebviewWindow) -> Resu
             };
             let position = window_box.child_position(&main);
             let layer = gtk::Overlay::new();
+            layer.connect_get_child_position(|_, page| Some(requested_page_rect(page)));
             window_box.remove(&main);
             layer.add(&main);
             window_box.pack_start(&layer, true, true, 0);

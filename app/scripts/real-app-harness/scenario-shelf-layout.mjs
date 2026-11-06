@@ -282,6 +282,8 @@ try {
       });
       const { x, y, w, h } = await Promise.race([pageClick, noClick]);
       runner.log(when, { x, y, w, h });
+      const { bounds: host } = await request('dom_bounds', { selector: hostSelector });
+      runner.assert(Math.abs(w - host.width) <= 1 && Math.abs(h - host.height) <= 1, `${when}: the webview has its tile's size`, { w, h, host });
       runner.assert(Math.abs(x - w / 2) <= 2 && Math.abs(y - h / 2) <= 2, `${when}: the webview sits on its tile`, { x, y, w, h });
     };
 

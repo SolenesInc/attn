@@ -270,6 +270,7 @@ try {
     await waitForStored(320);
     const hostAfter = await waitUntil(async () => boxOf(browserHost()), ({ x, width }) => x >= 325 && width < hostPxBefore, 'the tile takes its new place and width on release');
     const moved = await pageSeesClick({ selector: browserHost(), at: { x: 0.5, y: 0.5 } }, 'the page centre after the drag');
+    runner.assert(Math.abs(moved.w - hostAfter.width) <= 1, 'the webview shrinks with its tile after the drag', { moved, hostAfter });
     runner.assert(Math.abs(moved.x - hostAfter.width / 2) <= 2, 'the webview follows its tile after the drag', { moved, hostAfter });
     await shot('browser-after-drag');
 
