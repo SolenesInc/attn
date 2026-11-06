@@ -443,6 +443,7 @@
   color: #ff746c;
 }
 
-.analytics-refusal {
+.analytics-refusal,
+.analytics-outposts {
   margin: -4px 0 0;
 }

@@ -4865,10 +4865,10 @@ export enum ForgetAnalyticsInstallResultMessageEvent {
 }
 
 export interface ForwardAnalyticsMessage {
-    build:        Build;
-    cmd:          ForwardAnalyticsMessageCmd;
-    records:      string[];
-    secret_check: string;
+    build:      Build;
+    cmd:        ForwardAnalyticsMessageCmd;
+    generation: string;
+    records:    string[];
     [property: string]: any;
 }
 
@@ -23016,8 +23016,8 @@ const typeMap: any = {
     "ForwardAnalyticsMessage": o([
         { json: "build", js: "build", typ: r("Build") },
         { json: "cmd", js: "cmd", typ: r("ForwardAnalyticsMessageCmd") },
+        { json: "generation", js: "generation", typ: "" },
         { json: "records", js: "records", typ: a("") },
-        { json: "secret_check", js: "secret_check", typ: "" },
     ], "any"),
     "Build": o([
         { json: "app_channel", js: "app_channel", typ: "" },

@@ -15,9 +15,9 @@ guide:
 
 ## What it does for you
 
-With recording on, **Settings → Analytics** shows every record, exactly as it is stored and sent. New sessions also get `attn vent`, so your agents can file a short report when Attn gets in their way.
+With recording on, **Settings → Analytics** shows every record the home holds, exactly as it is stored and sent, and names any outpost it can't reach. New sessions also get `attn vent`, so your agents can file a short report when Attn gets in their way.
 
-With `analytics.enabled` off, nothing is recorded and nothing is sent, regardless of the other settings.
+With `analytics.enabled` off, the home and every connected outpost record nothing and send nothing, regardless of the other settings. An outpost that can't reach the home keeps recording to its own disk until it reconnects, then deletes what it holds without sending it.
 
 ## What stays on your machine
 
@@ -50,4 +50,4 @@ attn settings set analytics.enabled true
 attn settings set analytics.sharing_enabled true
 ```
 
-After Attn has sent something, **Settings → Analytics** offers **Forget this install** when you turn sharing off. **Forget this install** deletes what the server holds, then starts a new install. **Clear the local record** deletes the local outbox and dismissed vents.
+After Attn has sent something, **Settings → Analytics** offers **Forget this install** when you turn sharing off. **Forget this install** deletes what the server holds, then starts a new install. **Clear the local record** deletes the outbox on the home and each outpost, and dismissed vents. An unreachable outpost clears when it reconnects.

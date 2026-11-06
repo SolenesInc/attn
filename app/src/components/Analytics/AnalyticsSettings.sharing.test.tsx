@@ -58,6 +58,18 @@ const click = (daemon: ScriptedDaemon, name: string) => gesture(daemon, () => fi
 const inspector = () => within(screen.getByTestId('analytics-inspector'));
 
 describe('Settings › Analytics sharing', () => {
+  it('names the outposts it cannot show records from, and stops once they reconnect', async () => {
+    const daemon = await openAnalytics({});
+    expect(page()).not.toHaveTextContent('Outposts');
+    const outpost = { id: 'o1', name: 'ai-sandbox', destination: 'ai-sandbox', state: 'lost', reach: 'unreachable', state_since: '2026-10-24T14:00:00Z' };
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] } as never));
+    expect(page()).toHaveTextContent('Outposts1 of 1 unreachable');
+    expect(screen.getByTestId('analytics-outposts')).toHaveTextContent("ai-sandbox: unreachable, so what it holds isn't shown here.");
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'connected', reach: 'reachable' }] } as never));
+    expect(page()).toHaveTextContent('OutpostsUp to 5 min behind');
+    expect(screen.queryByTestId('analytics-outposts')).toBeNull();
+  });
+
   it('keeps every vent here while sharing is off, and x does nothing', async () => {
     const daemon = await openAnalytics({});
     expect(page()).toHaveTextContent('SharingOff');

@@ -164,10 +164,11 @@ func (d *Daemon) analyticsForwardHandler(ctx context.Context, _ *jobs.Job) (any,
 }
 
 func (d *Daemon) forwardAnalyticsBatch(ctx context.Context) (int, error) {
-	unsent, err := d.store.UnsentAnalyticsRecords(analyticsForwardBatchRecords, d.analyticsBuild())
+	unsent, err := d.store.UnsentAnalyticsRecords(analyticsForwardBatchRecords, d.analyticsBuild(), d.analyticsCopySource())
 	if err != nil || len(unsent.Rows) == 0 {
 		return 0, err
 	}
+	pausepoint.At(pausepoint.AnalyticsForwardRead)
 	secret, err := d.analyticsSecret()
 	if err != nil {
 		return 0, err
@@ -187,7 +188,7 @@ func (d *Daemon) forwardAnalyticsBatch(ctx context.Context) (int, error) {
 		}
 		forwarded[i] = string(encoded)
 	}
-	if _, err := Call[struct{}](ctx, d.router(), protocol.ForwardAnalyticsMessage{Cmd: protocol.CmdForwardAnalytics, Build: unsent.Build, Records: forwarded, SecretCheck: analyticsSecretCheck(secret)}); err != nil {
+	if _, err := Call[struct{}](ctx, d.router(), protocol.ForwardAnalyticsMessage{Cmd: protocol.CmdForwardAnalytics, Build: unsent.Build, Records: forwarded, Generation: unsent.Generation}); err != nil {
 		return 0, err
 	}
 	if _, err := d.store.MarkAnalyticsSent(records, time.Now()); err != nil {
@@ -200,22 +201,12 @@ func (d *Daemon) receiveForwardedAnalytics(_ context.Context, msg protocol.Forwa
 	if !d.analyticsEnabled() {
 		return struct{}{}, errors.New("usage analytics is off at this home")
 	}
-	secret, err := d.analyticsSecret()
-	if err != nil {
-		return struct{}{}, err
-	}
-	if msg.SecretCheck != analyticsSecretCheck(secret) {
-		return struct{}{}, errors.New("these analytics records use an older secret, from before this install was forgotten; the outpost drops them when the new secret reaches it")
-	}
-	return struct{}{}, d.store.ImportAnalyticsRecords(msg.Build, msg.Records)
-}
-
-func analyticsSecretCheck(secret []byte) string {
-	return analytics.HashSubject(secret, "analytics-forward")
+	pausepoint.At(pausepoint.AnalyticsForwardImporting)
+	return struct{}{}, d.store.ImportAnalyticsRecords(msg.Build, msg.Records, msg.Generation)
 }
 
 func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
-	unsent, err := d.store.UnsentAnalyticsRecords(analyticsShipBatchRecords, d.analyticsBuild())
+	unsent, err := d.store.UnsentAnalyticsRecords(analyticsShipBatchRecords, d.analyticsBuild(), "")
 	if err != nil || len(unsent.Rows) == 0 {
 		return 0, err
 	}
@@ -320,6 +311,9 @@ func (d *Daemon) forgetAnalyticsInstall(ctx context.Context) error {
 		}
 	}
 	if err := d.stopAnalyticsMirror(); err != nil {
+		return fmt.Errorf("the server copy is deleted, but starting a new install failed: %w", err)
+	}
+	if _, err := d.analyticsSecret(); err != nil {
 		return fmt.Errorf("the server copy is deleted, but starting a new install failed: %w", err)
 	}
 	if err := d.store.DeleteUnsentAnalyticsRecords(); err != nil {

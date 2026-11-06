@@ -34,7 +34,7 @@ func (d *Daemon) startAnalyticsMirror(secret []byte) error {
 			At:      ev.CreatedAt,
 			Bytes:   len(ev.Payload),
 			Props:   analytics.Props(ev.Payload, analytics.BusFields[ev.Name], secret, d.derivedFactTraits(ev)),
-		}, d.analyticsBuild())
+		}, d.analyticsBuild(), secret, d.analyticsCopySource())
 	})
 }
 

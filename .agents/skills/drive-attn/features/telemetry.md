@@ -5,7 +5,7 @@ the user turns it on. With usage analytics on, attn writes redacted records of
 its event bus, app actions, `attn` command outcomes, agent runs and resource samples to an
 outbox on each machine, and an outpost forwards its outbox to the home. It keeps the records 7 days, or 30 days for records not
 yet sent while sharing is on. **Settings → Analytics** shows every
-record exactly as it is stored. Sharing uploads the outbox to attn's
+record the home holds exactly as it is stored, and names each outpost it can't reach. Sharing uploads the outbox to attn's
 maintainers. Usage analytics and sharing are both off by default.
 `docs/guide/reference/telemetry.md` says what each record holds and what leaves
 the machine. Vents live in the same section. See
@@ -26,7 +26,7 @@ the machine. Vents live in the same section. See
 ### People
 
 - **Settings → Experimental**, the "Usage analytics" switch (`[data-testid="settings-feature-analytics.enabled"]`, `app/src/components/SettingsModalSections.tsx`). Turning it on adds **Settings → Analytics** (`[data-testid="settings-nav-analytics"]`). Opening the settings dialog is in [settings.md](settings.md).
-- **Settings → Analytics** (`app/src/components/Analytics/AnalyticsSettings.tsx`): the strip (Recording, Sharing, Vents, Kept here), the lists Vents, All records, `bus`, `app`, `cli`, `sample` and `run`, and the inspector, which shows a record's JSON under "Exactly as stored". Keys: `[` and `]` switch lists, `j` and `k` or the arrows move, Enter expands a burst of records from the same second, `c` copies a record's JSON, `r` refreshes, `m` opens Machine settings.
+- **Settings → Analytics** (`app/src/components/Analytics/AnalyticsSettings.tsx`): the strip (Recording, Sharing, Vents, Kept here, and Outposts when there are any, with `[data-testid="analytics-outposts"]` naming the unreachable ones), the lists Vents, All records, `bus`, `app`, `cli`, `sample` and `run`, and the inspector, which shows a record's JSON under "Exactly as stored". Keys: `[` and `]` switch lists, `j` and `k` or the arrows move, Enter expands a burst of records from the same second, `c` copies a record's JSON, `r` refreshes, `m` opens Machine settings.
 - Machine settings (`app/src/components/Analytics/AnalyticsMachine.tsx`): "Record on this home and its outposts" (Disable), "Share with attn's maintainers" (Enable or Disable, then "Delete from server" after sharing ran), "Send vents", "Tool vents", "Forget this install…" and "Clear the local record…".
 - Their own shell: `attn settings set analytics.enabled|analytics.sharing_enabled|analytics.share_vents|analytics.tool_vents true|false` and `attn settings get` (`cmd/attn/settings.go`).
 
@@ -65,7 +65,7 @@ Preconditions:
 
 - **Durability across restarts**: each daemon start classifies how the previous run ended from the run file, the stop note and the machine's boot time, so restarts, crashes, upgrades and reboots read apart on the server. The outbox, the install token (`<data-dir>/analytics-token`) and the subject secret (`<data-dir>/analytics-secret`) live in the data folder and survive restarts. A fact delivered again after a crash is stored once.
 - **Linux**: the daemon records and uploads the same where it runs on Linux. **Settings → Analytics** is in the app, and `ui.openSettings` is Ctrl+Shift+, there.
-- **Outposts**: `analytics.enabled` and the other analytics settings are home settings. Each outpost records to its own outbox with the home's subject secret, and forwards it to the home every 5 minutes under a stream that names the outpost, such as `bus_m9c1e04b7aa21`. Only the home uploads. Clear reaches an outpost when it next connects.
+- **Outposts**: `analytics.enabled` and the other analytics settings are home settings. Each outpost records to its own outbox with the home's subject secret, and forwards it to the home every 5 minutes under a stream that names the outpost, such as `bus_m9c1e04b7aa21`. Only the home uploads. Turning analytics off, Clear and Forget end what an outpost holds: the home refuses its records at once, and it deletes them when it next hears from the home. An outpost that can't reach the home keeps recording locally until then.
 - **Profiles**: records are the daemon's, across every profile. A vent record is listed only in the profile its vent belongs to.
 - **Performance and idle cost**: one resource sample every 5 minutes, and an upload carries at most 5,000 records. The open Analytics page does not animate or change while idle (scenario `analytics-settings`). The outbox mirror is an event bus consumer, so a stalled mirror pins the log. `attn bus status` shows the mirror ([diagnostics.md](diagnostics.md)).
 - **Harnesses**: each `cli` record carries the harness of the agent that ran the command, and session facts and `run` records carry the harness, the reported model and the requested model. A harness with no watched transcript writes `run` records with `"usage":"unavailable"`.
@@ -75,7 +75,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/analytics_wire_test.go`, `internal/daemon/analytics_enrich_wire_test.go`, `internal/daemon/analytics_mirror_wire_test.go`, `internal/daemon/analytics_ship_wire_test.go`, `internal/daemon/analytics_streams_wire_test.go`, `internal/daemon/analytics_runs_wire_test.go`.
-- Stack: `cmd/attn/analytics_stack_test.go`, `cmd/attn/daemon_runs_stack_test.go`, `internal/daemon/analytics_mirror_stack_test.go`, `cmd/attn-ingest/ingest_stack_test.go`.
+- Stack: `cmd/attn/analytics_stack_test.go`, `cmd/attn/analytics_outpost_stack_test.go`, `cmd/attn/daemon_runs_stack_test.go`, `internal/daemon/analytics_mirror_stack_test.go`, `cmd/attn-ingest/ingest_stack_test.go`.
 - Scenario: `analytics-settings`, `daemon-fallback-recovery`.
 - Kernel: `internal/analytics/redact_test.go`, `internal/daemon/daemon_run_test.go`.
 - App: `app/src/App.analytics.test.tsx`, `app/src/components/Analytics/AnalyticsSettings.records.test.tsx`, `app/src/components/Analytics/AnalyticsSettings.sharing.test.tsx`.
@@ -83,7 +83,7 @@ Preconditions:
 ## Gotchas
 
 - An instance on a copy of production data keeps production's `analytics.sharing_enabled`. It still uploads nowhere, because the instance, not the data, picks the URL. Exporting `ATTN_ANALYTICS_INGEST_URL` to the real service in the instance shell would send it there.
-- With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and **Settings → Analytics** is absent.
+- With `analytics.enabled` off the home and connected outposts record and send nothing, whatever the other settings say, and **Settings → Analytics** is absent.
 - The "Usage analytics" switch sits low in **Settings → Experimental**. `dom_native_point` scrolls it into view before returning its point.
 - A click that removes the focused control, such as a "Clear…" or "Forget…" confirm, or `m` pressed on a Machine settings button, leaves the page without focus. The page's keys do nothing until you click a row or button inside the page.
 - The record lists load when a list opens. A record made while the list is open shows only after `r` or the Refresh button.

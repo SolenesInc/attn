@@ -4654,11 +4654,11 @@ type ForwardAnalyticsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Generation corresponds to the JSON schema field "generation".
+	Generation string `json:"generation"`
+
 	// Records corresponds to the JSON schema field "records".
 	Records []string `json:"records"`
-
-	// SecretCheck corresponds to the JSON schema field "secret_check".
-	SecretCheck string `json:"secret_check"`
 }
 
 type FsChangedMessage struct {

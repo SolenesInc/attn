@@ -2,12 +2,14 @@ package store
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const analyticsTimeLayout = "2006-01-02T15:04:05.000000000Z"
@@ -23,11 +25,33 @@ type AnalyticsPage struct {
 }
 
 type UnsentAnalytics struct {
-	Build analytics.Build
-	Rows  []AnalyticsRow
+	Build      analytics.Build
+	Rows       []AnalyticsRow
+	Generation string
 }
 
-func (s *Store) AppendAnalyticsRecord(record analytics.Record, build analytics.Build) error {
+var ErrStaleAnalyticsGeneration = errors.New("these analytics records come from before this home last turned analytics off, cleared its record or forgot its install; the outpost drops them when it next hears from the home")
+
+func (s *Store) homeSettingLocked(key, home string) string {
+	if home == "" {
+		return s.settings[key]
+	}
+	return s.settingCopies[home][key]
+}
+
+func (s *Store) analyticsGenerationLocked(home string) string {
+	secret := s.homeSettingLocked(setting.AnalyticsSubjectSecret.Key, home)
+	if secret == "" {
+		return ""
+	}
+	return analytics.HashSubject([]byte(secret), "generation/"+s.homeSettingLocked(setting.AnalyticsClearedAt.Key, home))
+}
+
+func (s *Store) hashedWithCurrentSecretLocked(secret []byte, home string) bool {
+	return s.homeSettingLocked(setting.AnalyticsSubjectSecret.Key, home) == hex.EncodeToString(secret)
+}
+
+func (s *Store) AppendAnalyticsRecord(record analytics.Record, build analytics.Build, secret []byte, home string) error {
 	encoded, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -36,6 +60,9 @@ func (s *Store) AppendAnalyticsRecord(record analytics.Record, build analytics.B
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	if !s.hashedWithCurrentSecretLocked(secret, home) {
+		return nil
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -53,11 +80,14 @@ func (s *Store) AppendAnalyticsRecord(record analytics.Record, build analytics.B
 	return tx.Commit()
 }
 
-func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record, build analytics.Build) error {
+func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record, build analytics.Build, secret []byte, home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	if !s.hashedWithCurrentSecretLocked(secret, home) {
+		return nil
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -103,13 +133,14 @@ func analyticsBuildID(tx *sql.Tx, build analytics.Build) (int64, error) {
 	return id, err
 }
 
-func (s *Store) UnsentAnalyticsRecords(limit int, unrecorded analytics.Build) (UnsentAnalytics, error) {
+func (s *Store) UnsentAnalyticsRecords(limit int, unrecorded analytics.Build, home string) (UnsentAnalytics, error) {
 	unsent := UnsentAnalytics{Build: unrecorded}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return unsent, nil
 	}
+	unsent.Generation = s.analyticsGenerationLocked(home)
 	var buildID sql.NullInt64
 	var build sql.NullString
 	switch err := s.db.QueryRow(`SELECT o.build_id, b.build FROM analytics_outbox o LEFT JOIN analytics_builds b ON b.id = o.build_id
@@ -187,11 +218,14 @@ func (s *Store) DeleteUnsentAnalyticsRecords() error {
 	return err
 }
 
-func (s *Store) ImportAnalyticsRecords(build analytics.Build, records []string) error {
+func (s *Store) ImportAnalyticsRecords(build analytics.Build, records []string, generation string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	if generation != s.analyticsGenerationLocked("") {
+		return ErrStaleAnalyticsGeneration
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -297,11 +331,17 @@ func (s *Store) ClearAnalyticsOutbox() (int64, error) {
 	if s.db == nil {
 		return 0, nil
 	}
-	result, err := s.db.Exec("DELETE FROM analytics_outbox")
+	return clearAnalyticsOutbox(s.db)
+}
+
+func clearAnalyticsOutbox(db interface {
+	Exec(string, ...any) (sql.Result, error)
+}) (int64, error) {
+	result, err := db.Exec("DELETE FROM analytics_outbox")
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.db.Exec("DELETE FROM analytics_builds"); err != nil {
+	if _, err := db.Exec("DELETE FROM analytics_builds"); err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()

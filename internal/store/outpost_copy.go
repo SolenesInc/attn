@@ -215,6 +215,11 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 				return err
 			}
 		}
+		if s.copyEndsAnalyticsGenerationLocked(settings, home) {
+			if _, err := clearAnalyticsOutbox(tx); err != nil {
+				return err
+			}
+		}
 		for _, row := range append(append(sessions, bindings...), settings...) {
 			if row.Columns == nil {
 				if row.Table == protocol.CopyTableSettings {
@@ -270,6 +275,16 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 	}
 	s.announceTerminalBindingsLocked()
 	return nil
+}
+
+func (s *Store) copyEndsAnalyticsGenerationLocked(settings []protocol.CopyRow, home string) bool {
+	return slices.ContainsFunc(settings, func(row protocol.CopyRow) bool {
+		if row.Key != setting.AnalyticsSubjectSecret.Key && row.Key != setting.AnalyticsClearedAt.Key {
+			return false
+		}
+		value, _ := row.Columns["value"].(string)
+		return value != s.homeSettingLocked(row.Key, home)
+	})
 }
 
 // StartCopyOrder begins a new bridge from home. Its rows are compared only with each other, because restoring

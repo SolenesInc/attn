@@ -113,14 +113,14 @@ func (d *Daemon) settingChanged(key, value string) {
 	}
 	if key == setting.AnalyticsEnabled.Key {
 		d.configureAnalytics()
+		if d.enrollmentStatus().IsHome() && !d.analyticsEnabled() {
+			if err := d.endOutpostAnalyticsGeneration(); err != nil {
+				d.logf("analytics: tell outposts to drop what they recorded: %v", err)
+			}
+		}
 	}
 	if key == setting.AnalyticsSubjectSecret.Key {
 		d.analyticsSecretChanged()
-	}
-	if key == setting.AnalyticsClearedAt.Key {
-		if _, err := d.store.ClearAnalyticsOutbox(); err != nil {
-			d.logf("analytics: clear as the home asked: %v", err)
-		}
 	}
 	if key == setting.PhoneAccessEnabled.Key {
 		d.configurePhoneAccess()

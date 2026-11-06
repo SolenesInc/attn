@@ -36,6 +36,14 @@ func (d *Daemon) analyticsEnabled() bool {
 	return d.enrollmentStatus().IsHome() || d.setting(setting.AnalyticsSubjectSecret) != ""
 }
 
+func (d *Daemon) analyticsCopySource() string {
+	status := d.enrollmentStatus()
+	if status.IsHome() {
+		return ""
+	}
+	return status.HomeDaemonID
+}
+
 func (d *Daemon) analyticsSecret() ([]byte, error) {
 	if !d.enrollmentStatus().IsHome() {
 		return hex.DecodeString(d.setting(setting.AnalyticsSubjectSecret))
@@ -60,6 +68,10 @@ func (d *Daemon) analyticsSecretChanged() {
 		d.logf("analytics: clear records hashed with the old secret: %v", err)
 	}
 	d.configureAnalytics()
+}
+
+func (d *Daemon) endOutpostAnalyticsGeneration() error {
+	return d.store.SetSettingChecked(setting.AnalyticsClearedAt.Key, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func (d *Daemon) analyticsCapturedSince(at time.Time) bool {
@@ -183,6 +195,11 @@ func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.Get
 
 func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protocol.ClearAnalyticsRecordsMessage) {
 	result := protocol.ClearAnalyticsRecordsResultMessage{Event: protocol.EventClearAnalyticsRecordsResult, RequestID: msg.RequestID}
+	if err := d.endOutpostAnalyticsGeneration(); err != nil {
+		result.Error = protocol.Ptr(fmt.Sprintf("nothing was cleared: telling outposts to clear failed: %v", err))
+		d.sendToClient(client, result)
+		return
+	}
 	cleared, err := d.store.ClearAnalyticsOutbox()
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
@@ -190,9 +207,6 @@ func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protoc
 		return
 	}
 	result.Records = int(cleared)
-	if err := d.store.SetSettingChecked(setting.AnalyticsClearedAt.Key, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-		d.logf("analytics: tell outposts to clear their records: %v", err)
-	}
 	vents, err := d.store.DeleteDismissedVents(client.selectedProfile())
 	if err != nil {
 		result.Error = protocol.Ptr(fmt.Sprintf("cleared %d records but not the dismissed vents: %v", cleared, err))

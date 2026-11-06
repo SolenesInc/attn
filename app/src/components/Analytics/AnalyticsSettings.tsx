@@ -30,7 +30,7 @@ function isTyping(target: EventTarget): boolean {
 }
 
 export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting, onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
-  const { sendClearAnalyticsRecords, sendForgetAnalyticsInstall } = useDaemonApi();
+  const { outposts, sendClearAnalyticsRecords, sendForgetAnalyticsInstall } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const seeds = useDaemonStore((state) => state.seeds);
   const [view, setView] = useState<View>('vents');
@@ -54,6 +54,7 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
   const vent = current?.kind === 'vent' ? current.vent : undefined;
   const newCount = useMemo(() => vents.filter((v) => !isDone(v)).length, [vents]);
   const sentVents = useMemo(() => vents.filter((v) => v.send === VentSend.Sent).length, [vents]);
+  const unreachable = outposts.filter((row) => row.reach === 'unreachable');
   const triage = useVentTriage({ items, index, sharing, select: setSelected, feedback, onOpenSession, onOpenSeed });
 
   useEffect(() => {
@@ -132,6 +133,7 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
         <Stat label="Sharing" value={sharingStat(sharing, status.status)} dim={!sharing} bad={sharing && Boolean(status.status?.lastRefusal)} />
         <Stat label="Vents" value={sharing ? `${sentVents} sent · ${vents.length - sentVents} kept here` : `${vents.length} kept here`} dim={vents.length === 0} />
         <Stat label="Kept here" value={status.status ? `7 days · ${formatBytes(status.status.bytes)}` : '7 days'} />
+        {outposts.length > 0 && <Stat label="Outposts" value={outpostsStat(outposts.length, unreachable.length)} bad={unreachable.length > 0} />}
         <button type="button" className="settings-action" aria-expanded={machineOpen} onClick={() => setMachineOpen((open) => !open)}>
           {machineOpen ? 'Done' : 'Machine settings'} <kbd>m</kbd>
         </button>
@@ -139,6 +141,12 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
 
       {sharing && (status.status?.ingestOffReason ?? status.status?.lastRefusal) && (
         <p className="settings-warning analytics-refusal">{status.status.ingestOffReason ?? status.status.lastRefusal}</p>
+      )}
+
+      {unreachable.length > 0 && (
+        <p className="settings-row-copy analytics-outposts" data-testid="analytics-outposts">
+          {unreachable.map((row) => row.name).join(', ')}: unreachable, so what {unreachable.length === 1 ? 'it holds' : 'they hold'} isn't shown here.
+        </p>
       )}
 
       {machineOpen && (
@@ -212,6 +220,10 @@ function sharingStat(sharing: boolean, status: AnalyticsStatus | null): string {
   if (!status) return 'On';
   if (status.lastRefusal) return `Refused · ${status.waiting.toLocaleString()} waiting`;
   return `On · ${sharingLine(status).replace('Last sent', 'sent')}`;
+}
+
+function outpostsStat(total: number, unreachable: number): string {
+  return unreachable > 0 ? `${unreachable} of ${total} unreachable` : 'Up to 5 min behind';
 }
 
 function Stat({ label, value, dim = false, bad = false }: { label: string; value: string; dim?: boolean; bad?: boolean }) {

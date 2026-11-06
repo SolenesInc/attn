@@ -2,7 +2,10 @@
 
 Attn can record how it is used on your home and its outposts and, if you choose,
 share that record with Attn's maintainers. Both are off by default. **Settings → Analytics**
-shows every record, exactly as it is stored and sent.
+shows every record the home holds, exactly as it is stored and sent. A record
+made on an outpost shows there once it reaches the home: within 5 minutes while
+the outpost is connected, and after it reconnects otherwise. The page names each
+outpost it can't reach.
 
 ## Settings
 
@@ -13,7 +16,11 @@ shows every record, exactly as it is stored and sent.
 | `analytics.share_vents` | off | While sharing is on, queues each new Attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
 | `analytics.tool_vents` | off | Lets new sessions also file tool vents, about the agent's other tools. Tool vents never leave the machine. |
 
-With `analytics.enabled` off, nothing is recorded and nothing is sent, regardless of the other settings.
+With `analytics.enabled` off, the home and every connected outpost record nothing
+and send nothing, regardless of the other settings. An outpost that can't reach
+the home can't learn that you turned it off, so it keeps recording to its own
+disk until it reconnects. It then deletes what it holds, and none of that reaches
+the home or the server.
 
 ## What is recorded
 
@@ -38,7 +45,10 @@ Every record is one line of JSON:
 
 An outpost records its own usage and sends it to the home, and only the home
 uploads. A record from an outpost names that outpost in its stream, as a hash:
-`bus_m9c1e04b7aa21`. Records wait on the outpost while the home is unreachable.
+`bus_m9c1e04b7aa21`. Records wait on the outpost while the home is unreachable,
+and reach the home when it reconnects, unless you turned analytics off, cleared
+the record or forgot the install in the meantime. Turning analytics off also
+deletes what a connected outpost has not sent yet.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:
@@ -150,5 +160,8 @@ After Attn has sent something, **Settings → Analytics** offers **Forget this
 install** when you turn sharing off. **Forget this install** deletes what the
 server holds, then starts a new install with a new install id, token and subject
 secret. When Attn cannot reach the service, nothing changes and **Settings →
-Analytics** reports the failure. **Clear the local record** deletes the outbox on the home and each outpost, and
-dismissed vents. An outpost that is unreachable clears when it reconnects.
+Analytics** reports the failure. An outpost drops what it holds when it hears of
+the forget, and the home refuses those records until then. **Clear the local
+record** deletes the outbox on the home and each outpost, and dismissed vents. An
+outpost that is unreachable clears when it reconnects, and the home refuses what
+it held.

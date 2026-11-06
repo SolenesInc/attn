@@ -380,13 +380,14 @@ model OutpostNotebook {
 
 // An outpost sends the home its recorded analytics. Each record is the JSON the
 // outpost stored, with a stream that names the outpost, so a retried batch stores
-// each record once. secret_check names the secret the records were hashed with.
+// each record once. generation names what the outpost last heard from the home:
+// its subject secret and its last off, clear or forget. The home refuses any other.
 @extension("x-on", #{ home: true })
 model ForwardAnalyticsMessage {
   cmd: "forward_analytics";
   build: AnalyticsBuild;
   records: string[];
-  secret_check: string;
+  generation: string;
 }
 
 @extension("x-on", #{ home: true })

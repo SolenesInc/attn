@@ -94,7 +94,7 @@ export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetS
           <button type="button" className="settings-action danger" onClick={() => setConfirm('forget')}>Forget…</button>
         </Confirmable>
       </Row>
-      <Row title="Clear the local record" copy={status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}) and dismissed vents.` : 'Deletes every record and dismissed vents.'}>
+      <Row title="Clear the local record" copy={`${status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)})` : 'Deletes every record'} and dismissed vents, and what each outpost holds. An unreachable outpost clears when it reconnects.`}>
         <Confirmable asking={confirm === 'clear'} label="Clear" onYes={onClear} onDone={done}>
           <button type="button" className="settings-action danger" onClick={() => setConfirm('clear')}>Clear…</button>
         </Confirmable>
