@@ -2100,6 +2100,7 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 			close(done)
 		}()
 		crashpoint.At(crashBeforeTeardownKill)
+		pausepoint.At(pausepoint.SessionTeardownKilling)
 		if teardown == nil {
 			d.terminateSession(sessionID, sig)
 			return

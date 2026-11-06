@@ -56,6 +56,7 @@ const (
 	SessionSnoozeArrived       = "session-snooze-arrived"
 	SessionSnoozeDecided       = "session-snooze-decided"
 	SessionTeardownPrepared    = "session-teardown-prepared"
+	SessionTeardownKilling     = "session-teardown-killing"
 	AgentCloseDrained          = "agent-close-drained"
 	SessionExitObserved        = "session-process-exit-observed"
 	AgentTerminalStarted       = "agent-terminal-started"

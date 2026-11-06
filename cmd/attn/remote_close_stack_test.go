@@ -47,6 +47,32 @@ func TestAnExitedOutpostAgentClosesWithItsFinalUsage(t *testing.T) {
 	}
 }
 
+func TestAnOutpostCodexServerStopsWhenItsLastTerminalIsRemovedBeforeItsKillArrives(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	killing := home.PauseAt(pausepoint.SessionTeardownKilling)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	shareOutpostCodex(t, pair)
+	id := home.Spawn(pair.App, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	agent := outpost.LaunchedCarrying(pair.App.Terminal(id))
+	pair.App.TypeLine(id, "before closing")
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	server := outpost.CodexServer()
+	closing := make(chan error, 1)
+	go func() { closing <- home.Client().Unregister(protocol.SessionID(id)) }()
+	killing.Await()
+	server.AwaitStopped()
+	killing.Release()
+	if err := <-closing; err != nil {
+		t.Fatal(err)
+	}
+	t.Log("the outpost removed the closed session's terminal before home's kill, and its Codex app-server stopped")
+}
+
 func TestAnInterruptedOutpostCodexCloseReleasesItsServerAfterReconnect(t *testing.T) {
 	home := testworld.NewStack(t)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
