@@ -12,7 +12,7 @@
   --ledger-no: var(--color-danger, #e5484d);
   --ledger-accent: var(--accent);
   position: fixed;
-  inset: 0;
+  inset: var(--title-bar-height, 0px) 0 0;
   z-index: 400;
   padding: 10px;
   background: var(--color-bg-app);

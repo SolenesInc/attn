@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Sidebar } from '../../src/components/Sidebar';
+import { Sidebar, SidebarProvider } from '../../src/components/Sidebar';
+import { TitleBar } from '../../src/components/TitleBar';
 import { useDesktopShelfStore, type ShelfColumn } from '../../src/store/desktopShelf';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
 import { buildQueueBands } from '../../src/utils/queueBands';
@@ -109,8 +110,8 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
   }, [onReady, setTriggerRerender]);
   return (
     <div className="app" style={{ height: '100vh' }}>
-      <div className="app-frame">
-        <Sidebar
+        <SidebarProvider
+          oneToolbar={params.has('shelf')}
           collapsed
           surface="queue-collapsed"
           selectedId={null}
@@ -132,8 +133,14 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           onGoToDashboard={noop}
           onToggleCollapse={noop}
           onWalkRuns={noop}
-        />
-      </div>
+        >
+          <div className="app-main">
+            <TitleBar />
+            <div className="app-frame">
+              <Sidebar />
+            </div>
+          </div>
+        </SidebarProvider>
     </div>
   );
 }

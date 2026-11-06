@@ -27,7 +27,7 @@ function placeCard(step: CalloutStep, card: HTMLElement): Placement {
   const clampY = (y: number) => Math.max(MARGIN, Math.min(y, window.innerHeight - height - MARGIN));
   if (!target) return { left: clampX((window.innerWidth - width) / 2), top: clampY((window.innerHeight - height) / 2), side: 'none', arrow: 0, rect: null };
   const rect = target.rect;
-  const bar = target.elements[0].closest('.queue-bar');
+  const bar = target.elements[0].closest('.queue-bar, .title-bar');
   const side = !bar && rect.right + GAP + width <= window.innerWidth - MARGIN ? 'right'
     : bar || rect.bottom + GAP + height <= window.innerHeight - MARGIN ? 'below' : 'left';
   const left = clampX(side === 'right' ? rect.right + GAP : side === 'left' ? rect.left - width - GAP : rect.left + Math.min(rect.width / 2, 120) - 40);

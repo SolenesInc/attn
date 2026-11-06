@@ -23,8 +23,9 @@ export function SidebarProvider({ children, ...props }: SidebarProps & { childre
 }
 
 export function Sidebar() {
-  const { queue, collapsed } = useSidebarContext();
-  if (queue) return collapsed ? <QueueBar /> : <QueueSidebar />;
+  const { queue, collapsed, oneToolbar } = useSidebarContext();
+  if (queue && collapsed) return oneToolbar ? null : <QueueBar />;
+  if (queue) return <QueueSidebar />;
   return collapsed ? <SidebarCollapsed /> : <SidebarExpanded />;
 }
 
@@ -37,7 +38,6 @@ function SidebarExpanded() {
     criticalNotifications,
     onOpenNotifications,
     harnessLogosEnabled,
-    edgeClassName,
     leafDrag,
     onNewDesktopDrop,
     onGoToDashboard,
@@ -50,7 +50,7 @@ function SidebarExpanded() {
   return (
     <div
       data-callout-anchor="sidebar"
-      className={`sidebar ${edgeClassName} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
       <SidebarHeader />
       {/* Above Home, because it outranks it: this only exists when something is owed. */}

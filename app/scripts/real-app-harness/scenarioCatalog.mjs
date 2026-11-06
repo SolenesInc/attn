@@ -149,6 +149,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-layout'],
   },
   {
+    id: 'title-bar',
+    runnerId: 'TITLE-BAR',
+    label: 'Native clicks reach every toolbar control in the band, a chip opens its peek, a tile drops on the shelf, and tiles start below the band',
+    command: ['pnpm', 'run', 'real-app:scenario-title-bar'],
+  },
+  {
     id: 'shelf-peek',
     runnerId: 'SHELF-PEEK',
     label: 'Hovering a chip shows a terminal, a reply reaches it, and a browser tile hides and returns',

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -35,21 +36,20 @@ vi.mock('./components/GhosttyTerminal', async () => {
   return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
 });
 
-vi.mock('./components/Sidebar', () => ({
+vi.mock('./components/Sidebar', async () => {
+  const { SidebarContext } = await import('./components/SidebarContext');
+  return {
   EditorIcon: () => null,
   DiffIcon: () => null,
   PRsIcon: () => null,
   NotebookIcon: () => null,
   MarkdownIcon: () => null,
-  Sidebar: ({
-    desktops,
-    crew,
-    selectedDesktopId,
-    selectedTile,
-    onSelectDesktop,
-    onSelectTile,
-    headerActions,
+  Sidebar: () => null,
+  SidebarProvider: ({
+    children,
+    ...context
   }: {
+    children: ReactNode;
     headerActions: Array<{ id: string; disabled?: boolean }>;
     desktops: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
     crew?: Array<{ id: string }>;
@@ -57,7 +57,10 @@ vi.mock('./components/Sidebar', () => ({
     selectedTile?: { desktopId: string; tileId: string } | null;
     onSelectDesktop: (id: string) => void;
     onSelectTile: (desktopId: string, tileId: string) => void;
-  }) => (
+  }) => {
+    const { desktops, crew, selectedDesktopId, selectedTile, onSelectDesktop, onSelectTile, headerActions } = context;
+    return (
+    <SidebarContext.Provider value={context as never}>
     <div
       data-testid="sidebar"
       data-editor-enabled={String(headerActions.some((action) => action.id === 'editor' && !action.disabled))}
@@ -78,8 +81,12 @@ vi.mock('./components/Sidebar', () => ({
         notes
       </button>
     </div>
-  ),
-}));
+      {children}
+    </SidebarContext.Provider>
+    );
+  },
+};
+});
 
 vi.mock('./components/SessionTerminalDesktop', async () => {
   const React = await import('react');

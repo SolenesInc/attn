@@ -5,6 +5,7 @@ import { ChordLeaderHud } from '../components/ChordLeaderHud';
 import { DelegationChainProvider } from '../components/DelegationChain';
 import { DiagnosticReportPrompt } from '../components/DiagnosticReportPrompt';
 import { SenderPairingPrompt } from '../components/SenderPairingPrompt';
+import { TitleBar } from '../components/TitleBar';
 import { OpenPRLauncherProgress } from '../components/OpenPRLauncherProgress';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
@@ -98,6 +99,7 @@ export function AppSurface() {
               )}
               <AppSidebarProvider>
                 <div className="app-main">
+                  <TitleBar />
                   <BannerStack
                     connectionError={connectionError}
                     warnings={warnings}

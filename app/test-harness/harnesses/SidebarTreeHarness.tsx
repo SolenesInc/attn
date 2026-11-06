@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Sidebar } from '../../src/components/Sidebar';
+import { StandaloneSidebar } from '../../src/test/standaloneSidebar';
 import type { SidebarDesktop, SelectedTile } from '../../src/components/sidebarTypes';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
@@ -32,7 +32,7 @@ export function SidebarTreeHarness({ onReady, setTriggerRerender }: HarnessProps
   }, [onReady, setTriggerRerender]);
   return (
     <div className="app" style={{ height: '100vh' }}>
-      <Sidebar
+      <StandaloneSidebar
         collapsed={collapsed} surface={collapsed ? "tree-collapsed" : "tree-open"} selectedId={selection.session}
         selectedDesktopId={selection.desktop} selectedTile={selection.tile} homeActive={selection.home}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}

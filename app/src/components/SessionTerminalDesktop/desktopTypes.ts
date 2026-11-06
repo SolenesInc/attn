@@ -118,7 +118,6 @@ export interface SessionTerminalDesktopProps {
   onOpenMarkdown?: (path: string, sessionId: string) => void;
   onTerminalPathRefused?: (message: string) => void;
   shelfNarrowestCols?: number;
-  shelfInQueueBar?: boolean;
   onSetNarrowestCols?: (cols: number) => void;
   onShelfLimit?: (message: string) => void;
   onMoveRowLeaf?: (move: { leafId: string; anchorId: string; edge: 'left' | 'right'; wholeColumn: boolean; activate: boolean }) => Promise<unknown>;

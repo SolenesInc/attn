@@ -83,7 +83,7 @@ Preconditions:
 ## Gotchas
 
 - A new profile's empty desktop shows the new agent picker with its path field focused, and Escape does not close it. An Enter sent there, such as one left over from a failed step, launches the highlighted Recent folder as an agent in that profile, and the profile then refuses to delete.
-- The collapsed desktop-flow sidebar has no profile pill. Only the expanded sidebar and the queue bar have one.
+- With the shelf layout off, the collapsed desktop-flow sidebar has no profile pill. Only the expanded sidebar and the queue bar have one. With it on, the pill is always in the title bar, and the profile list opens under it at the right end.
 - A row's "Rename <name>" and "Delete <name>" buttons have an empty box on rows other than the selected one. Move the pointer over the row first, or use the keys.
 - A second profile changes every shell recipe: outside a session, `attn seed` and the other profile-scoped verbs refuse without `--profile` once two profiles exist. Delete the profiles a run creates, or later recipes fail for a reason that is not theirs.
 - The switcher orders profiles by most recent use and starts on the current one, so the arrow presses to reach a profile depend on what was used last.

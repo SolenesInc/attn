@@ -57,8 +57,7 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { seedPopoverRequest, usagePopoverRequest, openAsk, sidebarCollapsed } = useAppPanelsContext();
-  const { queueModeEnabled } = useAttentionQueueContext();
+  const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions, settings } = useAppInputs();
@@ -188,7 +187,6 @@ export function AppDesktops() {
           terminalsLive
           attachOnlyDrawn={isOn(settings, BoolSetting.ptySharedHostEnabled)}
           shelfNarrowestCols={isOn(settings, BoolSetting.shelfLayoutEnabled) ? Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS : undefined}
-          shelfInQueueBar={queueModeEnabled && sidebarCollapsed}
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}
           onMoveRowLeaf={(move) => sendDesktopMoveLeaf({ sourceDesktopId: desktop.id, targetDesktopId: desktop.id, ...move })}

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Sidebar } from '../../src/components/Sidebar';
+import { StandaloneSidebar } from '../../src/test/standaloneSidebar';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
 import { buildQueueBands } from '../../src/utils/queueBands';
@@ -63,7 +63,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
   return (
     <div className="app" style={{ height: '100vh' }}>
       <div className="app-frame">
-        <Sidebar
+        <StandaloneSidebar
           collapsed={false}
           surface={desktopFlow ? 'tree-open' : 'queue-open'}
           selectedId={null}

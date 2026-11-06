@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Sidebar } from '../../src/components/Sidebar';
+import { StandaloneSidebar } from '../../src/test/standaloneSidebar';
 import { HomeIcon } from '../../src/components/SidebarIcons';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
@@ -37,7 +37,7 @@ export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps
   }, [onReady, setTriggerRerender, triggerRerender]);
   return (
     <div className="app" style={{ height: '100vh' }}>
-      <Sidebar
+      <StandaloneSidebar
         collapsed surface="tree-collapsed" selectedId={null} selectedDesktopId={selected}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
         headerActions={['Garden', 'Notebook', 'Ledger', 'Automations', 'Notifications'].map((title) => ({

@@ -44,6 +44,7 @@
     "real-app:scenario-empty-desktop-keys": "node scripts/real-app-harness/scenario-empty-desktop-keys.mjs",
     "real-app:scenario-desktop-splits": "node scripts/real-app-harness/scenario-desktop-splits.mjs",
     "real-app:scenario-shelf-layout": "node scripts/real-app-harness/scenario-shelf-layout.mjs",
+    "real-app:scenario-title-bar": "node scripts/real-app-harness/scenario-title-bar.mjs",
     "real-app:scenario-shelf-peek": "node scripts/real-app-harness/scenario-shelf-peek.mjs",
     "real-app:scenario-shelf-moves": "node scripts/real-app-harness/scenario-shelf-moves.mjs",
     "real-app:scenario-shelf-drags": "node scripts/real-app-harness/scenario-shelf-drags.mjs",

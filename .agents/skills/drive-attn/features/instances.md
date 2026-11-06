@@ -19,7 +19,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 - `daemon-lifecycle`: `attn daemon ensure` starts the instance's daemon, or replaces one whose health reply identifies a different build or instance. If health is unavailable, `attn daemon ensure` leaves the daemon running and reports the daemon's PID, health timeout and restart commands. `attn daemon stop` stops it.
 - `instance-clean`: `attn instance clean <name>` stops the app, daemon and workers and removes the app, its local data and the data folder. `attn instance stop-app` only quits the app.
 - `build-identity`: `attn version` names the build and its source fingerprint. The app refuses a daemon of another instance.
-- `instance-marker`: a non-production app names its instance in the sidebar: `instance <name>` while expanded, `<name>` while collapsed or on the queue bar.
+- `instance-marker`: a non-production app names its instance in the sidebar: `instance <name>` while expanded, `<name>` while collapsed or on the queue bar. With the shelf layout on, the marker is `<name>` beside the profile pill in the title bar.
 - `instance-origin`: `attn instance set-origin` records the worktree an install came from, and `list` shows it.
 - `linux-scheme`: `attn instance register-scheme` claims the instance's deep-link scheme on Linux.
 

@@ -1,6 +1,6 @@
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { SessionPriority } from './SessionPriority';
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
@@ -19,16 +19,13 @@ import { useSidebarContext } from './SidebarContext';
 import { ExpandIcon } from './SidebarIcons';
 import { FlowToggleButton } from './SidebarHeader';
 import type { LocalSession } from './sidebarTypes';
-import { DesktopShelf, useDesktopHasShelf } from './SessionTerminalDesktop/DesktopShelf';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 
 const LEAD_TURNS = 3;
 const PEEK_ROWS = 16;
 
 export function QueueBar() {
-  const { instance, criticalNotifications, onOpenNotifications, profileName, onSwitchProfile, onToggleCollapse, selectedDesktopId } =
-    useSidebarContext();
-  const hasShelf = useDesktopHasShelf(selectedDesktopId);
+  const { instance, profileName, onSwitchProfile, onToggleCollapse } = useSidebarContext();
 
   return (
     <div className="queue-bar" data-testid="queue-bar" data-callout-anchor="sidebar">
@@ -59,21 +56,50 @@ export function QueueBar() {
         <strong>{profileName ?? 'Profile'}</strong>
         <span className="queue-bar-chevron" aria-hidden="true">▾</span>
       </button>
-      <PeekAnchor className="queue-bar-waiting-anchor" testId="queue-bar-waiting" peek={<WaitingPeek />}>
-        <WaitingPill />
-      </PeekAnchor>
+      <WaitingAnchor />
       <AsksChip />
-      {onOpenNotifications && (
-        <CriticalNotificationStrip
-          count={criticalNotifications?.count ?? 0}
-          title={criticalNotifications?.title ?? ''}
-          onOpen={onOpenNotifications}
-        />
-      )}
-      {hasShelf && selectedDesktopId ? <DesktopShelf desktopId={selectedDesktopId} /> : <span className="queue-bar-spacer" />}
+      <BarCriticalStrip />
+      <span className="queue-bar-spacer" />
       <RunsChip />
       <DesktopChips />
     </div>
+  );
+}
+
+export function QueueBarInTitleBar({ shelf }: { shelf: ReactNode }) {
+  const { desktops, selectedDesktopId, automationGroups, criticalNotifications } = useSidebarContext();
+  const barRef = useRef<HTMLDivElement>(null);
+  const hasRuns = runCount(automationGroups) > 0 || runsNeedingYouCount(automationGroups) > 0;
+  const contents = `${selectedDesktopId}/${desktops.length}/${hasRuns}/${(criticalNotifications?.count ?? 0) > 0}`;
+  const crowded = useBarCrowded(barRef, contents);
+  return (
+    <div ref={barRef} className="queue-bar" data-testid="queue-bar" data-callout-anchor="sidebar">
+      <WaitingAnchor />
+      <BarCriticalStrip />
+      {shelf}
+      {!crowded && <RunsChip />}
+      <DesktopChips crowded={crowded} />
+    </div>
+  );
+}
+
+function WaitingAnchor() {
+  return (
+    <PeekAnchor className="queue-bar-waiting-anchor" testId="queue-bar-waiting" peek={<WaitingPeek />}>
+      <WaitingPill />
+    </PeekAnchor>
+  );
+}
+
+function BarCriticalStrip() {
+  const { criticalNotifications, onOpenNotifications } = useSidebarContext();
+  if (!onOpenNotifications) return null;
+  return (
+    <CriticalNotificationStrip
+      count={criticalNotifications?.count ?? 0}
+      title={criticalNotifications?.title ?? ''}
+      onOpen={onOpenNotifications}
+    />
   );
 }
 
@@ -208,7 +234,7 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
     return () => barLayout.disconnect();
   }, []);
   return (
-    <div className={`queue-bar-peek${alignRight ? ' is-right' : ''}`} data-testid={testId}>
+    <div className={`queue-bar-peek${alignRight ? ' is-right' : ''}`} data-testid={testId} data-tauri-drag-region="false">
       <div ref={panelRef} className="queue-bar-peek-panel">
         {children}
       </div>
@@ -373,14 +399,37 @@ function RunsPeek() {
   );
 }
 
-function DesktopChips() {
+function useBarCrowded(bar: RefObject<HTMLDivElement | null>, contents: string) {
+  const [crowding, setCrowding] = useState<{ fitsFrom: number; contents: string } | null>(null);
+  const measure = useCallback(() => {
+    const element = bar.current;
+    const chips = element?.lastElementChild;
+    if (!element || !chips) return;
+    const { width, right } = element.getBoundingClientRect();
+    setCrowding((current) => {
+      if (current) return current.contents === contents && width < current.fitsFrom ? current : null;
+      const overflow = chips.getBoundingClientRect().right - right;
+      return overflow > 0.5 ? { fitsFrom: width + overflow, contents } : null;
+    });
+  }, [bar, contents]);
+  useLayoutEffect(measure);
+  useLayoutEffect(() => {
+    if (!bar.current) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar.current);
+    return () => observer.disconnect();
+  }, [bar, measure]);
+  return crowding !== null;
+}
+
+function DesktopChips({ crowded = false }: { crowded?: boolean }) {
   const { desktops, queue, selectedDesktopId, visualIndexOfDesktop, onSelectDesktop, onOpenOverview } =
     useSidebarContext();
   const chipDrop = useDesktopChipDrop();
   const slotted = desktops
-    .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
+    .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0 && (!crowded || desktop.id === selectedDesktopId))
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
-  const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
+  const extras = desktops.filter((desktop) => !slotted.includes(desktop));
   const waitingOn = new Map<string, number>();
   for (const row of queue?.turns ?? []) {
     if (!row.session.offline) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
@@ -417,7 +466,7 @@ function DesktopChips() {
           className={`queue-bar-desktop is-extra${extras.some((desktop) => desktop.id === selectedDesktopId) ? ' is-current' : ''}`}
           data-testid="queue-bar-desktop-extras"
           data-callout-anchor="desktops"
-          title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'} without a shortcut (${formatShortcut('desktop.overview')})`}
+          title={`${extras.length} more desktop${extras.length === 1 ? '' : 's'}${crowded ? '' : ' without a shortcut'} (${formatShortcut('desktop.overview')})`}
           onClick={onOpenOverview}
         >
           +{extras.length}

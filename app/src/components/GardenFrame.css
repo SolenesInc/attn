@@ -86,7 +86,7 @@
    instead of on top of it. */
 .garden-frame-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--title-bar-height, 0px) 0 0;
   z-index: 399;
   background: var(--color-bg-app);
   opacity: 0;

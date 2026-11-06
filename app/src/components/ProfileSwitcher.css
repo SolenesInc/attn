@@ -28,6 +28,12 @@
   top: 44px;
 }
 
+.profile-switcher.is-under-title-bar-selector {
+  left: auto;
+  right: 8px;
+  top: calc(var(--title-bar-height) + 4px);
+}
+
 .profile-switcher-item {
   align-items: center;
   background: none;

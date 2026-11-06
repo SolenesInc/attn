@@ -1,0 +1,129 @@
+.title-bar {
+  position: relative;
+  z-index: 35;
+  display: flex;
+  flex: none;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--title-bar-height);
+  padding: 0 8px 0 var(--title-bar-lights);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.title-bar-left,
+.title-bar-right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+}
+
+.title-bar-left--beside-sidebar {
+  min-width: calc(var(--sidebar-width, 240px) - var(--title-bar-lights));
+}
+
+.title-bar-middle {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0 6px;
+}
+
+.title-bar .sidebar-header-tool,
+.title-bar .sidebar-panel-button {
+  height: 24px;
+  min-width: 24px;
+  padding: 0 5px;
+}
+
+.title-bar-right .sidebar-panel-button {
+  padding: 0;
+  border: 0;
+}
+
+.title-bar-left .sidebar-panel-button {
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+}
+
+.title-bar .sidebar-header-tool svg,
+.title-bar .sidebar-panel-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.title-bar .sidebar-notification-dot {
+  top: 2px;
+  right: 2px;
+}
+
+.title-bar .sidebar-count-badge {
+  top: -3px;
+  right: -3px;
+}
+
+.title-bar .sidebar-profile-pill {
+  flex: 0 1 auto;
+  max-width: 140px;
+  height: 24px;
+}
+
+.title-bar-instance {
+  flex: 0 1 auto;
+  max-width: 96px;
+  overflow: hidden;
+  color: var(--color-warning);
+  font: 10px 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-bar .queue-bar {
+  z-index: auto;
+  flex: 1 1 0;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 6px;
+  border-bottom: 0;
+  background: none;
+}
+
+.title-bar .queue-bar > .desktop-shelf {
+  flex: 1 1 0;
+}
+
+.title-bar .queue-bar > .queue-bar-waiting-anchor {
+  min-width: 124px;
+}
+
+.title-bar .queue-bar-pill,
+.title-bar .queue-bar-runs,
+.title-bar .queue-bar-desktop {
+  height: 24px;
+}
+
+.title-bar .queue-bar-desktop {
+  width: 24px;
+}
+
+.title-bar .queue-bar-divider {
+  margin: 0;
+}
+
+.title-bar--covered > * {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.app.is-agent-focused .title-bar-left,
+.app.is-agent-focused .title-bar-middle,
+.app.is-agent-focused .title-bar-right {
+  display: none;
+}

@@ -21,7 +21,6 @@ const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
 export function QueueSidebar() {
   const {
     harnessLogosEnabled,
-    edgeClassName,
     criticalNotifications,
     onOpenNotifications,
     agentListOpen,
@@ -77,7 +76,7 @@ export function QueueSidebar() {
   return (
     <div
       ref={rootRef}
-      className={`sidebar queue-sidebar ${edgeClassName} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      className={`sidebar queue-sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
       data-testid="queue-sidebar"
       data-callout-anchor="sidebar"
       onKeyDown={onKeyDown}

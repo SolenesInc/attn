@@ -1,5 +1,6 @@
 import { Fragment, useMemo } from 'react';
 import { GardenFrame } from '../components/GardenFrame';
+import { TITLE_BAR_HEIGHT_PX } from '../components/TitleBar';
 import { NotebookBrowser } from '../components/NotebookBrowser';
 import { NotificationsPanel } from '../components/NotificationsPanel';
 import { LedgerSurface } from '../components/ledger/LedgerSurface';
@@ -7,6 +8,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSharedCodexStore } from '../store/sharedCodex';
+import { BoolSetting, isOn } from '../utils/settings';
 import { useSharedCodexActions } from './useSharedCodex';
 import {
   useAppGardenActionsContext,
@@ -97,7 +99,7 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { notificationsChangeSignal } = useAppInputs();
+  const { notificationsChangeSignal, settings } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -163,6 +165,7 @@ export function AppLibrarySurfaces() {
         <GardenFrame
           mode={gardenMode}
           dockRect={gardenDockRect}
+          titleBarHeight={isOn(settings, BoolSetting.shelfLayoutEnabled) ? TITLE_BAR_HEIGHT_PX : 0}
           onToggleFrame={toggleGardenFrame}
           onClose={closeGarden}
           seeds={seeds}

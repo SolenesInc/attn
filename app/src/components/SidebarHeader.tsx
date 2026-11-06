@@ -1,16 +1,17 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { useSidebarContext } from './SidebarContext';
-import { CollapseIcon } from './SidebarIcons';
+import { CollapseIcon, ExpandIcon } from './SidebarIcons';
+import type { SidebarHeaderAction } from './sidebarTypes';
 import './SidebarHeader.css';
 
 export function FlowToggleButton() {
-  const { queue, collapsed, onToggleFlow, flowButtonRef } = useSidebarContext();
+  const { queue, collapsed, oneToolbar, onToggleFlow, flowButtonRef } = useSidebarContext();
   const title = queue ? 'Switch to desktop flow' : 'Switch to queue flow';
   return (
     <button
       type="button"
       ref={flowButtonRef}
-      className={collapsed ? (queue ? 'queue-bar-tool' : 'icon-btn') : 'sidebar-header-tool'}
+      className={collapsed && !oneToolbar ? (queue ? 'queue-bar-tool' : 'icon-btn') : 'sidebar-header-tool'}
       title={title}
       aria-label={title}
       onClick={onToggleFlow}
@@ -53,12 +54,10 @@ export function CommandsButton({ collapsed = false }: { collapsed?: boolean }) {
   );
 }
 
-export function SidebarPanelButtons({ collapsed = false }: { collapsed?: boolean }) {
-  const { headerActions } = useSidebarContext();
-  return headerActions.map((action) => (
+export function SidebarPanelButton({ action, collapsed = false }: { action: SidebarHeaderAction; collapsed?: boolean }) {
+  return (
     <button
       type="button"
-      key={action.id}
       data-callout-anchor={action.id === 'garden' ? 'garden' : undefined}
       className={`${collapsed ? 'icon-btn' : 'sidebar-panel-button'} ${action.active ? 'active' : ''} ${action.toneClassName ?? ''}`.trim()}
       onClick={action.onClick}
@@ -71,11 +70,70 @@ export function SidebarPanelButtons({ collapsed = false }: { collapsed?: boolean
       {action.unread && <span className="sidebar-notification-dot" aria-label="Unread notifications" />}
       {Boolean(action.count) && <span className="sidebar-count-badge" aria-hidden="true">{action.count}</span>}
     </button>
-  ));
+  );
+}
+
+export function SidebarPanelButtons({ collapsed = false }: { collapsed?: boolean }) {
+  const { headerActions } = useSidebarContext();
+  return headerActions.map((action) => <SidebarPanelButton key={action.id} action={action} collapsed={collapsed} />);
+}
+
+export function ProfilePill() {
+  const { profileName, onSwitchProfile } = useSidebarContext();
+  return (
+    <button
+      type="button"
+      className="sidebar-profile-pill"
+      title={`Switch profile (${formatShortcut('profile.switch')})`}
+      onClick={onSwitchProfile}
+      disabled={!onSwitchProfile}
+    >
+      <strong>{profileName ?? 'Profile'}</strong>
+      <span aria-hidden="true">▾</span>
+    </button>
+  );
+}
+
+export function NewAgentButton() {
+  const { onNewSession } = useSidebarContext();
+  return (
+    <button
+      type="button"
+      className="sidebar-header-tool sidebar-header-new"
+      title={`New agent (${formatShortcut('session.new')})`}
+      aria-label="New agent"
+      onClick={onNewSession}
+    >New</button>
+  );
+}
+
+export function SidebarToggleButton() {
+  const { collapsed, onToggleCollapse } = useSidebarContext();
+  const label = collapsed ? 'Show sidebar' : 'Collapse sidebar';
+  return (
+    <button
+      type="button"
+      className="sidebar-header-tool"
+      title={`${label} (${formatShortcut('session.toggleSidebar')})`}
+      aria-label={label}
+      onClick={onToggleCollapse}
+    >{collapsed ? <ExpandIcon /> : <CollapseIcon />}</button>
+  );
+}
+
+export function InstanceMarker() {
+  const { instance } = useSidebarContext();
+  if (!instance) return null;
+  return (
+    <span className="title-bar-instance" data-testid="sidebar-instance-marker" title={`Instance: ${instance}`}>
+      {instance}
+    </span>
+  );
 }
 
 export function SidebarHeader() {
-  const { instance, profileName, onSwitchProfile, onNewSession, onToggleCollapse } = useSidebarContext();
+  const { instance, oneToolbar } = useSidebarContext();
+  if (oneToolbar) return null;
   return (
     <div className="sidebar-header">
       {instance && (
@@ -84,32 +142,11 @@ export function SidebarHeader() {
         </div>
       )}
       <div className="sidebar-header-main">
-        <button
-          type="button"
-          className="sidebar-profile-pill"
-          title={`Switch profile (${formatShortcut('profile.switch')})`}
-          onClick={onSwitchProfile}
-          disabled={!onSwitchProfile}
-        >
-          <strong>{profileName ?? 'Profile'}</strong>
-          <span aria-hidden="true">▾</span>
-        </button>
-        <button
-          type="button"
-          className="sidebar-header-tool sidebar-header-new"
-          title={`New agent (${formatShortcut('session.new')})`}
-          aria-label="New agent"
-          onClick={onNewSession}
-        >New</button>
+        <ProfilePill />
+        <NewAgentButton />
         <CommandsButton />
         <FlowToggleButton />
-        <button
-          type="button"
-          className="sidebar-header-tool"
-          title={`Collapse sidebar (${formatShortcut('session.toggleSidebar')})`}
-          aria-label="Collapse sidebar"
-          onClick={onToggleCollapse}
-        ><CollapseIcon /></button>
+        <SidebarToggleButton />
       </div>
       <div className="sidebar-header-panels"><SidebarPanelButtons /></div>
     </div>

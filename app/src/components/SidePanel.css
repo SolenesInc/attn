@@ -10,6 +10,7 @@
 
 .side-panel-shell--fixed {
   position: fixed;
+  top: var(--title-bar-height, 0px);
 }
 
 .side-panel {

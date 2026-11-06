@@ -229,13 +229,13 @@ fn report_location(app: &AppHandle, label: &str, url: &tauri::Url) {
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn content_layout_inset(
-    full_size_content: bool,
+    title_bar_over_content: bool,
     window_height: f64,
     layout_x: f64,
     layout_y: f64,
     layout_height: f64,
 ) -> (f64, f64) {
-    if full_size_content {
+    if title_bar_over_content {
         return (0.0, 0.0);
     }
     let left = layout_x.max(0.0);
@@ -255,9 +255,7 @@ fn native_content_inset(window: &tauri::Window) -> (f64, f64) {
         let frame = window.frame();
         let layout = window.contentLayoutRect();
         content_layout_inset(
-            window
-                .styleMask()
-                .contains(objc2_app_kit::NSWindowStyleMask::FullSizeContentView),
+            window.titlebarAppearsTransparent(),
             frame.size.height,
             layout.origin.x,
             layout.origin.y,

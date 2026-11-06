@@ -8,6 +8,7 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { BUILD_DEMO, BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
+import { BoolSetting, isOn } from '../utils/settings';
 import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
@@ -122,6 +123,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   const { desktopNavigation } = useDesktopNavigationContext();
   return (
     <SidebarProvider
+      oneToolbar={isOn(settings, BoolSetting.shelfLayoutEnabled)}
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
       selectedId={shownAgentId}
@@ -181,6 +183,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
       onOpenCommands={() => handleOpenPalette('commands')}
       onToggleFlow={handleToggleQueueMode}
       onOpenAgents={() => handleOpenPalette('agents')}
+      windowCovered={windowCovered}
       peeksSilenced={windowCovered || agentFocused}
       agentListOpen={agentListOpen}
       onToggleAgentList={toggleAgentList}

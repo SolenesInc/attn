@@ -21,11 +21,11 @@ export function SidebarCollapsed() {
     onGoToDashboard,
     homeActive,
     onToggleCollapse,
-    edgeClassName,
+    oneToolbar,
   } = useSidebarContext();
   return (
-    <div className={`sidebar collapsed ${edgeClassName}`.trim()} data-callout-anchor="sidebar">
-      {instance && (
+    <div className="sidebar collapsed" data-callout-anchor="sidebar">
+      {instance && !oneToolbar && (
         <div
           className="sidebar-instance-marker sidebar-instance-marker--collapsed"
           title={`Instance: ${instance}`}
@@ -44,22 +44,30 @@ export function SidebarCollapsed() {
         >
           <HomeIcon />
         </button>
-        <CommandsButton collapsed />
-        <FlowToggleButton />
-        <div className="icon-divider" />
-        <SidebarPanelButtons collapsed />
+        {!oneToolbar && (
+          <>
+            <CommandsButton collapsed />
+            <FlowToggleButton />
+            <div className="icon-divider" />
+            <SidebarPanelButtons collapsed />
+          </>
+        )}
         <div className="icon-divider" />
         <RailDesktops />
-        <button
-          className="icon-btn"
-          onClick={onNewSession}
-          title={`New Session (${formatShortcut('session.new')})`}
-        >
-          <PlusIcon />
-        </button>
-        <button className="icon-btn expand-btn" onClick={onToggleCollapse} title="Expand sidebar">
-          <ExpandIcon />
-        </button>
+        {!oneToolbar && (
+          <>
+            <button
+              className="icon-btn"
+              onClick={onNewSession}
+              title={`New Session (${formatShortcut('session.new')})`}
+            >
+              <PlusIcon />
+            </button>
+            <button className="icon-btn expand-btn" onClick={onToggleCollapse} title="Expand sidebar">
+              <ExpandIcon />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

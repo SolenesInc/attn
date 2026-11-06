@@ -112,32 +112,33 @@ test('an open peek shifts back on screen when the UI scale grows under it', asyn
   }).toBeLessThanOrEqual(800);
 });
 
-test('the shelf leaves every desktop button clickable in a crowded bar at the smallest window', async ({ page }) => {
+test('a crowded bar in the title bar keeps its controls reachable and off the toolbar at the smallest window', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar&popupNames&desktops=8&shelf=1,1,1');
   await page.evaluate(() => window.__HARNESS_READY__);
   await expect(page.getByTestId('shelf-cap-before')).toBeVisible();
   await expect(page.getByTestId('shelf-cap-after')).toBeVisible();
+  await expect(page.getByTestId('queue-bar-desktop-1')).toHaveClass(/is-current/);
+  await expect(page.getByTestId('queue-bar-desktop-2')).toBeHidden();
 
-  const clickCentre = async (slot: number) => {
-    const button = page.getByTestId(`queue-bar-desktop-${slot}`);
-    const box = (await button.boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(button).toHaveClass(/is-current/);
+  const reachable = async (testId: string) => {
+    const box = (await page.getByTestId(testId).boundingBox())!;
+    const onTop = await page.evaluate(
+      ([id, x, y]) => document.querySelector(`[data-testid="${id}"]`)?.contains(document.elementFromPoint(Number(x), Number(y))),
+      [testId, box.x + box.width / 2, box.y + box.height / 2] as const,
+    );
+    expect(onTop, testId).toBe(true);
+    return box;
   };
-  for (const slot of [2, 3, 4, 5, 6, 7, 8, 1]) {
-    await clickCentre(slot);
-    await expect(page.getByTestId('shelf-menu-after')).toBeHidden();
-    await expect(page.getByTestId('shelf-menu-before')).toBeHidden();
-    if (slot !== 1) await clickCentre(1);
-  }
-
+  const toolbar = (await page.getByTestId('title-bar-right').boundingBox())!;
   const shelf = (await page.getByTestId('desktop-shelf').boundingBox())!;
-  const firstDesktop = (await page.getByTestId('queue-bar-desktop-1').boundingBox())!;
+  const current = await reachable('queue-bar-desktop-1');
+  const extras = await reachable('queue-bar-desktop-extras');
+  expect(extras.x + extras.width).toBeLessThanOrEqual(toolbar.x);
   for (const control of ['shelf-cap-before', 'shelf-live-dots', 'shelf-cap-after']) {
-    const box = (await page.getByTestId(control).boundingBox())!;
+    const box = await reachable(control);
     expect(box.x, control).toBeGreaterThanOrEqual(shelf.x);
-    expect(box.x + box.width, control).toBeLessThanOrEqual(Math.min(shelf.x + shelf.width, firstDesktop.x));
+    expect(box.x + box.width, control).toBeLessThanOrEqual(Math.min(shelf.x + shelf.width, current.x));
   }
   expect((await page.getByTestId('queue-bar-pill').boundingBox())!.width).toBeGreaterThan(0);
 

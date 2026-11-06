@@ -61,6 +61,7 @@ export function useDockSlotRect(dockLayout: unknown) {
 export interface GardenFrameProps {
   mode: GardenMode;
   dockRect: FrameRect | null;
+  titleBarHeight: number;
   onToggleFrame: () => void;
   onEscapeFloor?: () => void;
   onClose: () => void;
@@ -96,6 +97,7 @@ export interface GardenFrameProps {
 export function GardenFrame({
   mode,
   dockRect,
+  titleBarHeight,
   onToggleFrame,
   onEscapeFloor,
   onClose,
@@ -191,10 +193,10 @@ export function GardenFrame({
   }, [mode]);
 
   const full: FrameRect = {
-    top: FULL_INSET,
+    top: titleBarHeight + FULL_INSET,
     left: FULL_INSET,
     width: Math.max(0, viewport.w - FULL_INSET * 2),
-    height: Math.max(0, viewport.h - FULL_INSET * 2),
+    height: Math.max(0, viewport.h - titleBarHeight - FULL_INSET * 2),
   };
   const dismissingFullscreen = mode === 'closed' && lastOpenMode.current === 'full';
   const rect = mode === 'full' || dismissingFullscreen ? full : dockRect;

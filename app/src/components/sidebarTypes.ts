@@ -53,6 +53,8 @@ export interface SelectedTile {
 export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
 
 export interface SidebarProps {
+  oneToolbar?: boolean;
+  windowCovered?: boolean;
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;

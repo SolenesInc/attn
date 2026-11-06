@@ -1,5 +1,5 @@
 import { DesktopRenamePopover } from './DesktopRenamePopover';
-import { DesktopShelf, ShelfWidthLabel } from './DesktopShelf';
+import { ShelfWidthLabel } from './DesktopShelf';
 import { ShelfPeekPanel } from './ShelfPeekPanel';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDragOverlays } from './DesktopDragOverlays';
@@ -31,7 +31,6 @@ export function DesktopSurface() {
     handleRenderedDividerPointerDown,
     handleColumnDividerDoubleClick,
     shelfOn,
-    shelfInQueueBar,
     shelfWidthLabelShown,
   } = useDesktopContext();
   if (!renderedLayoutTree) {
@@ -63,7 +62,6 @@ export function DesktopSurface() {
       data-zoomed-pane-id={effectiveZoomedPaneId || ''}
     >
       <DesktopFocusBar />
-      {shelfOn && !shelfInQueueBar && <DesktopShelf desktopId={desktopId} />}
       {shelfWidthLabelShown && <ShelfWidthLabel desktopId={desktopId} />}
       {shelfOn && <ShelfPeekPanel />}
       <DesktopLayoutRenderer

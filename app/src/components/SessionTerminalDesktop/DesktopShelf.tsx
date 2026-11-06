@@ -123,7 +123,7 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
         {side === 'before' ? `‹ ${columns.length}` : `${columns.length} ›`}
       </button>
       {open && (
-        <div className={`desktop-shelf-menu desktop-shelf-menu--${side}`} role="menu" data-testid={`shelf-menu-${side}`}>
+        <div className={`desktop-shelf-menu desktop-shelf-menu--${side}`} role="menu" data-testid={`shelf-menu-${side}`} data-tauri-drag-region="false">
           {columns.map((column) => (
             <ColumnChip key={column.key} column={column} desktopId={desktopId} inMenu onGo={() => setOpen(false)} />
           ))}
@@ -135,7 +135,7 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
 
 function WidthControl({ shown, narrowestCols }: { shown: number; narrowestCols: number }) {
   return (
-    <span className="desktop-shelf-stepper" data-testid="shelf-width-control">
+    <span className="desktop-shelf-stepper" data-testid="shelf-width-control" data-tauri-drag-region="false">
       <span><b>{shown}</b> · ≥{narrowestCols} cols</span>
       <button
         type="button"
