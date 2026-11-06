@@ -289,11 +289,16 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 	return t
 }
 
+func (m *claudeMod) addTerminalLocked(terminal harness.TerminalID) *claudeModTerminal {
+	t := &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld), compacting: make(map[string]protocol.SessionID)}
+	m.terminals[terminal] = t
+	return t
+}
+
 func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) *claudeModTerminal {
 	t := m.terminals[terminal]
 	if t == nil {
-		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld), compacting: make(map[string]protocol.SessionID)}
-		m.terminals[terminal] = t
+		t = m.addTerminalLocked(terminal)
 		m.d.life.Go("claudeModReachable", func() {
 			if session, ok := m.d.shownIn(terminal); ok {
 				m.reportReachChanged(session)
@@ -319,6 +324,28 @@ func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) 
 		}
 	}
 	return t
+}
+
+func (m *claudeMod) expectModsToReconnect() {
+	if !m.d.claudeModEnabled() {
+		return
+	}
+	live := m.d.localLiveTerminals(context.Background())
+	for _, monitor := range m.d.monitors().each() {
+		session, _ := monitor.TitleTarget()
+		terminal := monitor.LinkTarget().Terminal
+		if _, running := live[terminal]; running && session.Agent == protocol.SessionAgentClaude {
+			m.expectModToReconnect(terminal)
+		}
+	}
+}
+
+func (m *claudeMod) expectModToReconnect(terminal harness.TerminalID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.terminals[terminal] == nil {
+		m.armReachLocked(m.addTerminalLocked(terminal))
+	}
 }
 
 func (m *claudeMod) closePoll(t *claudeModTerminal, poll *claudeModPoll, clientGone bool) *claudeModDelivery {
@@ -433,7 +460,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t := m.terminals[ack.Terminal]
-	if t != nil && t.instance != ack.Instance {
+	if t != nil && t.instance != "" && t.instance != ack.Instance {
 		return
 	}
 	if ack.Ring != nil && (t == nil || t.held[ack.ID] == nil) {
@@ -492,7 +519,7 @@ func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
 func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.SessionID, shown bool) []string {
 	t := m.terminals[ret.Terminal]
 	switch {
-	case t == nil:
+	case t == nil || t.instance == "":
 		t = m.connectLocked(ret.Terminal, ret.Instance)
 		m.armReachLocked(t)
 	case t.instance != ret.Instance:

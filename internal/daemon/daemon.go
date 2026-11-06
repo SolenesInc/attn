@@ -809,6 +809,7 @@ func (d *Daemon) Start() error {
 			return
 		}
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.claudeMod().expectModsToReconnect()
 		d.reconcileOutpostCommandTerminals()
 		if d.stopping() {
 			return
