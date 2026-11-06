@@ -1,0 +1,4 @@
+kind: fixed
+area: terminals
+change: After a daemon restart, an agent on the shared terminal host keeps its waiting or approval state instead of coming back idle or working. A status the agent reported just before its hook no longer replaces the state that hook set.
+symptom: With the shared terminal host on, restarting the daemon turned an agent waiting for you into idle, and an agent asking for approval into working.

@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -22,7 +22,7 @@ use crate::outbox::{Line, Outbox, Refused};
 use crate::output_batch::{OUTPUT_BATCH_MAX_BYTES, OutputBatch};
 use crate::protocol::{
     PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
-    output_event, resize_event, state_event,
+    output_event, resize_event, rfc3339, state_event,
 };
 use crate::queries::{
     ColorScheme, TerminalQueryStream, color_scheme_report, theme_color_scheme,
@@ -171,6 +171,7 @@ struct Lifecycle {
     state: String,
     state_detail: String,
     state_source: &'static str,
+    state_observed_at: String,
     exit_code: Option<i32>,
     exit_signal: Option<String>,
 }
@@ -346,6 +347,7 @@ impl Session {
                     state: LAUNCH_STATE.to_owned(),
                     state_detail: String::new(),
                     state_source: signals::WORKER_INFO,
+                    state_observed_at: String::new(),
                     exit_code: None,
                     exit_signal: None,
                 },
@@ -499,6 +501,7 @@ impl Session {
             state: lifecycle.state.clone(),
             state_detail: lifecycle.state_detail.clone(),
             state_source: lifecycle.state_source.to_owned(),
+            state_observed_at: lifecycle.state_observed_at.clone(),
             exit_code: lifecycle.exit_code,
             exit_signal: lifecycle.exit_signal.clone(),
         };
@@ -565,6 +568,7 @@ impl Session {
                     } else {
                         signals::HEARTBEAT
                     },
+                    state_observed_at: handoff.state_observed_at.clone(),
                     exit_code: handoff.exit_code,
                     exit_signal: handoff.exit_signal.clone(),
                 },
@@ -644,6 +648,7 @@ impl Session {
             result["last_signal_claim"] = Value::String(lifecycle.state.clone());
             result["last_signal_source"] = Value::String(lifecycle.state_source.to_owned());
             result["last_signal_detail"] = Value::String(lifecycle.state_detail.clone());
+            result["last_signal_at"] = Value::String(lifecycle.state_observed_at.clone());
         }
         add_exit_fields(&mut result, &lifecycle);
         result
@@ -719,6 +724,7 @@ impl Session {
             &lifecycle.state,
             &lifecycle.state_detail,
             lifecycle.state_source,
+            &lifecycle.state_observed_at,
         ));
         if !lifecycle.running {
             let _ = sender.offer_value(&exit_event(
@@ -747,6 +753,7 @@ impl Session {
                 &lifecycle.state,
                 &lifecycle.state_detail,
                 lifecycle.state_source,
+                &lifecycle.state_observed_at,
             ),
         ];
         if !lifecycle.running {
@@ -1085,10 +1092,11 @@ impl Session {
                 Err(error) if error.kind() == ErrorKind::Interrupted => continue,
                 Err(_) => return,
             };
+            let read_at = SystemTime::now();
             let admission = self.delivery.admit_output();
             let mut batch = OutputBatch::start(&buffer[..first], Instant::now(), last_emit);
             let open = self.gather(reader, &mut buffer, &mut batch);
-            self.observe_output(batch.bytes(), &admission);
+            self.observe_output(batch.bytes(), read_at, &admission);
             drop(admission);
             last_emit = Some(Instant::now());
             if !open {
@@ -1124,7 +1132,7 @@ impl Session {
             .at_ground()
     }
 
-    fn observe_output(&self, data: &[u8], admission: &OutputAdmission<'_>) {
+    fn observe_output(&self, data: &[u8], read_at: SystemTime, admission: &OutputAdmission<'_>) {
         let _delivery = admission.delivery();
         let signal_order = self
             .signal_order
@@ -1170,7 +1178,12 @@ impl Session {
             )
         };
         for observation in observations {
-            self.publish_state(observation.claim, &observation.detail, observation.source);
+            self.publish_state(
+                observation.claim,
+                &observation.detail,
+                observation.source,
+                read_at,
+            );
         }
         for title in titles {
             self.publish_title(&title);
@@ -1254,7 +1267,8 @@ impl Session {
         self.publish(event);
     }
 
-    fn publish_state(&self, claim: &str, detail: &str, source: &'static str) {
+    fn publish_state(&self, claim: &str, detail: &str, source: &'static str, read_at: SystemTime) {
+        let observed_at = rfc3339(read_at);
         {
             let mut lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
             lifecycle.state.clear();
@@ -1262,8 +1276,9 @@ impl Session {
             lifecycle.state_detail.clear();
             lifecycle.state_detail.push_str(detail);
             lifecycle.state_source = source;
+            lifecycle.state_observed_at.clone_from(&observed_at);
         }
-        let event = state_event(&self.id, claim, detail, source);
+        let event = state_event(&self.id, claim, detail, source, &observed_at);
         self.broadcast_watch(event.clone());
         self.publish(event);
     }
@@ -1386,7 +1401,12 @@ impl Session {
             )
         };
         for observation in observations {
-            self.publish_state(observation.claim, &observation.detail, observation.source);
+            self.publish_state(
+                observation.claim,
+                &observation.detail,
+                observation.source,
+                SystemTime::now(),
+            );
         }
         if let Some(title) = title {
             self.publish_title(&title);

@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -190,15 +192,45 @@ pub fn resize_event(session_id: &str, cols: u16, rows: u16, xpixel: u16, ypixel:
     })
 }
 
-pub fn state_event(session_id: &str, state: &str, detail: &str, source: &str) -> Value {
-    json!({
+pub fn state_event(
+    session_id: &str,
+    state: &str,
+    detail: &str,
+    source: &str,
+    observed_at: &str,
+) -> Value {
+    let mut event = json!({
         "type": "evt",
         "event": "state_changed",
         "session_id": session_id,
         "state": state,
         "state_source": source,
         "state_detail": detail
-    })
+    });
+    if !observed_at.is_empty() {
+        event["state_observed_at"] = Value::String(observed_at.to_owned());
+    }
+    event
+}
+
+pub fn rfc3339(at: SystemTime) -> String {
+    let now = at.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let seconds = libc::time_t::try_from(now.as_secs()).unwrap_or_default();
+    let utc = unsafe {
+        let mut utc: libc::tm = std::mem::zeroed();
+        libc::gmtime_r(&raw const seconds, &raw mut utc);
+        utc
+    };
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}Z",
+        utc.tm_year + 1900,
+        utc.tm_mon + 1,
+        utc.tm_mday,
+        utc.tm_hour,
+        utc.tm_min,
+        utc.tm_sec,
+        now.subsec_nanos()
+    )
 }
 
 pub fn exit_event(session_id: &str, exit_code: i32, exit_signal: Option<&str>) -> Value {

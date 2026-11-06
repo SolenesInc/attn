@@ -71,6 +71,8 @@ pub struct SessionHandoff {
     pub state: String,
     pub state_detail: String,
     pub state_source: String,
+    #[serde(default)]
+    pub state_observed_at: String,
     pub exit_code: Option<i32>,
     pub exit_signal: Option<String>,
 }
