@@ -163,6 +163,11 @@ function cancelAll(state: MotionState): void {
   for (const held of state.held.values()) held.animation.cancel();
   state.awaitingElement.clear();
   state.lastFrames.clear();
+  state.elements.clear();
+}
+
+function emptyRowAfter(layout: RowMotionLayout): RowMotionLayout {
+  return { ...layout, bounds: new Map(), rowKey: '' };
 }
 
 function animateChange(state: MotionState, container: HTMLElement, before: RowMotionLayout, after: RowMotionLayout): void {
@@ -240,7 +245,12 @@ export function useRowMotion(input: {
   useLayoutEffect(() => {
     const state = stateRef.current;
     const container = containerRef.current;
-    if (!layout || !container) return;
+    if (!layout || !container) {
+      cancelAll(state);
+      state.last = state.last && !container ? emptyRowAfter(state.last) : null;
+      state.lastPaused = paused;
+      return;
+    }
     const before = state.last;
     const resuming = state.lastPaused;
     state.last = layout;

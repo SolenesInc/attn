@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, openHarnessDesktop, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appLocalDataDirForInstance, currentHarnessInstance } from './harnessInstance.mjs';
 import { captureWebKitPids, delay, readProcessTable, collectDescendantPids, classify } from './perfMeasure.mjs';
@@ -20,7 +20,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOTION',
   tier: 'tier1-local-shell',
   prefix: 'shelf-motion',
-  metadata: { agent: 'shell', focus: 'per-frame trace of slide, open, close and carry with streaming terminals; with --measure also idle cost and first paint beside the fold path' },
+  metadata: { agent: 'shell', focus: 'per-frame trace of slide, open, close, carry and a new tile on an emptied desktop with streaming terminals; with --measure also idle cost and first paint beside the fold path' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -56,6 +56,19 @@ async function openBeside() {
   sessions.push(...state.panes.map((pane) => pane.sessionId).filter((id) => !sessions.includes(id)));
   const opened = (await readRow()).find((id) => !before.includes(id));
   return { opened, pane: state.panes.find((pane) => pane.paneId === opened) };
+}
+
+async function launchFromEmptyDesktop(emptied, cwd) {
+  await request('dom_wait', { selector: '[data-testid="location-picker-path-input"]', focused: true, timeoutMs: 15_000 });
+  const registered = observer.waitForMessage((message) => {
+    const session = message.session;
+    return session && session.directory === cwd && !sessions.includes(session.id) ? session : null;
+  }, `session in ${cwd}`);
+  await driver.typeText(cwd);
+  await driver.pressKey('Enter');
+  const session = await registered;
+  sessions.push(session.id);
+  await request('dom_wait', { selector: `[data-session-terminal-desktop="${emptied}"] .desktop-pane[data-pane-session-id="${session.id}"]`, timeoutMs: 15_000 });
 }
 
 async function traceMove(name, act) {
@@ -267,6 +280,26 @@ try {
     });
   });
 
+  await runner.step('new_tile_on_an_emptied_desktop', async () => {
+    const launcher = '[data-testid="empty-desktop-launcher"]';
+    const cwd = path.join(runner.sessionDir, 'emptied');
+    fs.mkdirSync(cwd, { recursive: true });
+    const emptied = (await openHarnessDesktop(client, observer)).id;
+    const only = (await request('create_session', { cwd, label: `emptied-${runner.runId}`, agent: 'shell' })).sessionId;
+    sessions.push(only);
+    await request('dom_wait', { selector: `[data-session-terminal-desktop="${emptied}"] .desktop-pane[data-pane-session-id="${only}"]`, timeoutMs: 15_000 });
+    await delay(SETTLE_WINDOW_MS);
+    await press('terminal.close');
+    await request('dom_wait', { selector: launcher, timeoutMs: 15_000 });
+    await delay(SETTLE_WINDOW_MS);
+    await traceMove('emptied-by-close', () => launchFromEmptyDesktop(emptied, cwd));
+    await press('desktop.sendStay9');
+    await request('dom_wait', { selector: launcher, timeoutMs: 15_000 });
+    await delay(SETTLE_WINDOW_MS);
+    await traceMove('emptied-by-move', () => launchFromEmptyDesktop(emptied, cwd));
+    await driver.screenshot(path.join(runner.runDir, 'new-tile-on-emptied-desktop.png'), { windowId: await driver.mainWindowId() });
+  });
+
   if (measure) {
     await runner.step('mid_flight_screenshots', async () => {
       const row = await readRow();
@@ -358,6 +391,10 @@ try {
       runner.assert(Object.values(summary.resizes).every((count) => count <= 1), `${summary.name} resizes each terminal at most once`, { resizes: summary.resizes });
       runner.assert(Object.values(summary.panes).every((pane) => pane.boxChanges <= 1), `${summary.name} changes each measured box at most once`, { panes: summary.panes });
       runner.assert(summary.willChangeFrames === 0, `${summary.name} sets no will-change`, { summary });
+      if (summary.name.startsWith('emptied-')) {
+        runner.assert(summary.heldPeak === 0, `${summary.name} never shows the tile that left`, { summary });
+        runner.assert(summary.animated.includes('opacity') && summary.animated.includes('transform'), `${summary.name} grows and fades the new tile in`, { summary });
+      }
       if (summary.heldPeak > 0) runner.assert(summary.heldInkPeak > 1, `${summary.name} keeps the leaving terminal's text on screen`, { summary });
       runner.assert(summary.rest.animations === 0 && summary.rest.heldPanes === 0 && summary.rest.willChange === 0 && summary.rest.layoutTransitions === 0, `${summary.name} leaves nothing at rest`, { rest: summary.rest });
     }

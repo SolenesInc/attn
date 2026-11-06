@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-type Screen = { row: string[]; first: number; shown: number; paused?: boolean };
+type Screen = { row: string[]; first: number; shown: number; paused?: boolean; shelfOff?: boolean };
 
 async function open(page: Page) {
   await page.goto('/test-harness/?component=RowMotion');
@@ -16,6 +16,9 @@ const animations = (page: Page) => page.evaluate(() => document.getAnimations().
     .filter((key) => !['offset', 'computedOffset', 'easing', 'composite'].includes(key));
   return properties.map((property) => ({ pane: target.dataset.paneId ?? 'held', property }));
 }));
+
+const emptyDesktop: Screen = { row: [], first: 0, shown: 0 };
+const onlyTile = (id: string): Screen => ({ row: [id], first: 0, shown: 1 });
 
 const heldPanes = (page: Page) => page.evaluate(() => document.querySelectorAll('.desktop-pane:not([data-pane-id])').length);
 
@@ -82,5 +85,56 @@ test.describe('Row motion', () => {
     await show(page, { row: ['a', 'b', 'c', 'd'], first: 1, shown: 2 });
     expect(await animations(page)).toEqual([]);
     expect(await heldPanes(page)).toBe(0);
+    await show(page, emptyDesktop);
+    await show(page, onlyTile('n'));
+    expect(await animations(page)).toEqual([]);
+    expect(await heldPanes(page)).toBe(0);
+  });
+
+  test('a new tile on an emptied desktop enters alone, without the tile that left', async ({ page }) => {
+    await open(page);
+    await show(page, onlyTile('a'));
+    await atRest(page);
+    await show(page, emptyDesktop);
+    expect(await animations(page)).toEqual([]);
+    await show(page, onlyTile('n'));
+    expect(await heldPanes(page)).toBe(0);
+    const running = await animations(page);
+    expect(new Set(running.map((animation) => animation.pane))).toEqual(new Set(['n']));
+    expect(running.map((animation) => animation.property).sort()).toEqual(['opacity', 'transform']);
+    await atRest(page);
+    await expect(page.locator('.desktop-pane')).toHaveCount(1);
+  });
+
+  test('a desktop emptied during a transition ends it', async ({ page }) => {
+    await open(page);
+    await show(page, { row: ['a', 'b'], first: 0, shown: 2 });
+    await atRest(page);
+    await show(page, onlyTile('b'));
+    expect(await heldPanes(page)).toBe(1);
+    await show(page, emptyDesktop);
+    expect(await animations(page)).toEqual([]);
+    await show(page, onlyTile('n'));
+    expect(await heldPanes(page)).toBe(0);
+    await atRest(page);
+  });
+
+  test('a desktop emptied out of view still lets its next tile enter', async ({ page }) => {
+    await open(page);
+    await show(page, { ...emptyDesktop, paused: true });
+    await show(page, emptyDesktop);
+    await show(page, onlyTile('n'));
+    expect(await heldPanes(page)).toBe(0);
+    expect((await animations(page)).map((animation) => animation.property).sort()).toEqual(['opacity', 'transform']);
+    await atRest(page);
+  });
+
+  test('turning the shelf on shows the tiles without an entrance', async ({ page }) => {
+    await open(page);
+    await show(page, { row: ['a', 'b'], first: 0, shown: 2 });
+    await atRest(page);
+    await show(page, { row: ['a', 'b'], first: 0, shown: 2, shelfOff: true });
+    await show(page, { row: ['a', 'b'], first: 0, shown: 2 });
+    expect(await animations(page)).toEqual([]);
   });
 });
