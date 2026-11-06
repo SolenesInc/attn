@@ -35,6 +35,7 @@ func Main(m *testing.M, env ...string) int {
 	toolHome := filepath.Join(dir, "toolhome")
 	_ = os.Setenv(toolhome.EnvVar, toolHome)
 	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHome, ".codex"))
+	_ = os.Unsetenv("CLAUDE_CONFIG_DIR")
 	for _, pair := range env {
 		key, value, _ := strings.Cut(pair, "=")
 		_ = os.Setenv(key, value)

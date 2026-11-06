@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -49,15 +50,16 @@ func (c *Claude) DiscoverModels(ctx context.Context, executable, workDir string)
 	defer stdin.Close()
 	cmd.Cancel = func() error {
 		_ = stdout.Close()
-		return cmd.Process.Kill()
+		return cmd.Process.Signal(syscall.SIGTERM)
 	}
+	cmd.WaitDelay = claudeDiscoveryExitLimit
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start Claude model discovery: %w", err)
 	}
 	defer func() {
 		_ = stdin.Close()
 		cancel()
-		_ = cmd.Wait()
+		go func() { _ = cmd.Wait() }()
 	}()
 	const requestID = "attn-model-discovery"
 	request := map[string]any{
@@ -73,6 +75,8 @@ func (c *Claude) DiscoverModels(ctx context.Context, executable, workDir string)
 	}
 	return models, err
 }
+
+const claudeDiscoveryExitLimit = 5 * time.Second
 
 func readClaudeModels(reader io.Reader, requestID string) ([]ClaudeModelInfo, error) {
 	decoder := json.NewDecoder(reader)

@@ -123,6 +123,14 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   Claude skips onboarding and the folder-trust dialog. In a real crew launch
   with no token, Claude with that config reaches the normal prompt with “Not
   logged in · Please run /login”, without making a model call (2.1.310).
+- Read in the 2.1.319 bundle: Claude rewrites `.claude.json` under a lock directory
+  at `<file>.lock` and rereads the file inside the lock, so a writer that takes the
+  same lock loses nothing. A lock with no holder to refresh it counts as stale after
+  10 s. Sampled every 1 ms for 90 s on a Mac running many agents, Claude held the
+  lock 12 times, the longest for 407 ms; attn waits 2 s (`claudeConfigLockWait`).
+  SIGKILL during startup left the lock behind when attn's model discovery did it.
+  SIGTERM exits in about 0.8 s and closing stdin in about 1.3 s, and neither left a
+  lock in 6 runs each.
 - `--mcp-config` takes multiple values. When a wrapper puts `--mcp-config`
   before a subcommand, a following option must end the values of
   `--mcp-config`. Otherwise `--mcp-config` consumes the subcommand's words.
