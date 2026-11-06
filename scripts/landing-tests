@@ -69,6 +69,9 @@ go ./internal/stepclock TestAnAdvanceItsCallerGaveUpOnNeitherStallsItsProcessNor
 go ./internal/daemon TestASeedReminderPostsToTheSeedMailboxOnceAfterARestart
 go ./internal/daemon TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession
 go ./cmd/attn TestAnOutpostSessionClosesWhenItsCompactNeverReportsAnOutcome
+go ./cmd/attn TestARingQueuedOnAnOutpostSurvivesItsRestartWhileTheHomeIsAway
+go ./cmd/attn TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread
+go ./cmd/attn TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
