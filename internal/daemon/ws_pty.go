@@ -418,7 +418,11 @@ func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) erro
 }
 
 func (d *Daemon) reviveSession(sessionID protocol.SessionID, cols, rows int) error {
+	d.awaitSpawnInFlight(sessionID)
 	session := d.store.Get(sessionID)
+	if session != nil && session.State != protocol.SessionStateRecoverable && d.sessionLive(context.Background(), sessionID) {
+		return nil
+	}
 	if session == nil || session.State != protocol.SessionStateRecoverable {
 		return errors.New("session not recoverable")
 	}

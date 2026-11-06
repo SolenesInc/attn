@@ -17,6 +17,8 @@
 # in seconds.
 
 group go \.go$|^go\.(mod|sum)$
+go ./internal/daemon TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened
+go ./internal/daemon TestOpeningAnAgentJustAsTheDaemonRevivesItAttachesToTheRevivedAgent
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
 go ./internal/daemon TestAHomeMovedAwayIsRepointedAndWakesThere
 go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed

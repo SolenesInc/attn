@@ -11,6 +11,10 @@ type spawnLock struct {
 	refs int
 }
 
+func (d *Daemon) awaitSpawnInFlight(sessionID protocol.SessionID) {
+	d.acquireSpawnLock(sessionID)()
+}
+
 func (d *Daemon) acquireSpawnLock(sessionID protocol.SessionID) (release func()) {
 	d.spawnLocksMu.Lock()
 	lock := d.spawnLocks[sessionID]
