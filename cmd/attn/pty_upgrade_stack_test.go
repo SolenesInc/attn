@@ -341,7 +341,9 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			if len(app.Initial.Warnings) != 0 {
 				t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 			}
-			testworld.AwaitStateAfter(app, working, stopped)
+			if !stopped(initialSession(t, app, claude.session)) {
+				testworld.AwaitStateAfter(app, working, stopped)
+			}
 			app.AwaitScreen(claude.session, "turn-across-the-replace reply")
 			for _, agent := range []releaseAgent{claude, codex} {
 				u.assertNoReloadNotice(app, agent.session)
