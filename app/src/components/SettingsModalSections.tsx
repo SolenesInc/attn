@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { SIDEBAR_WIDTH } from './sidebarWidth';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
@@ -580,13 +580,6 @@ export function PluginSettings({
   );
 }
 
-const WHEN_A_CHANGE_APPLIES: Record<string, string> = {
-  'New agents': 'Applies to new agents. Running agents keep what they launched with.',
-  'On: new agents. Off: now': 'Turning it on applies to new agents. Turning it off applies to running agents at once.',
-  'New terminals': 'Applies to new terminals. Running terminals stay where they are.',
-  'Next daemon start': 'Takes effect the next time the daemon starts.',
-};
-
 function featureDetail(key: BoolSettingKey): ReactNode {
   if (key === BoolSetting.quickCaptureEnabled) {
     const modifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
@@ -606,9 +599,7 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
   children?: ReactNode;
 }) {
   const on = isOn(settings, feature.key);
-  const [changed, setChanged] = useState(false);
   const descriptionID = `settings-feature-${feature.key}-description`;
-  const note = changed ? WHEN_A_CHANGE_APPLIES[feature.applies] : undefined;
   return (
     <>
       <div className="settings-row-card">
@@ -620,7 +611,6 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
             </span>
           </p>
           <p className="settings-row-copy" id={descriptionID}>{feature.summary}{featureDetail(feature.key)}</p>
-          {note && <p className="settings-feature-note" role="status">{note}</p>}
         </div>
         <button
           type="button"
@@ -631,10 +621,7 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
           className="settings-action"
           data-testid={`settings-feature-${feature.key}`}
           disabled={feature.key === BoolSetting.ptySharedHostEnabled && ptyBackendMode !== 'migrating'}
-          onClick={() => {
-            setChanged(true);
-            onSetSetting(feature.key, on ? 'false' : 'true');
-          }}
+          onClick={() => onSetSetting(feature.key, on ? 'false' : 'true')}
         >
           {on ? 'Disable' : 'Enable'}
         </button>

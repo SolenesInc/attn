@@ -133,16 +133,6 @@ describe('Experimental settings come from the declarations', () => {
     expect(screen.getByText('Usage analytics').textContent).toContain('This machine');
   });
 
-  it('says what a change does once the user makes it', async () => {
-    const daemon = await openSection('experimental');
-    const note = 'Applies to new agents. Running agents keep what they launched with.';
-    expect(screen.queryByText(note)).toBeNull();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Asks' })));
-    expect(screen.getByText(note)).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Agent callouts' })));
-    expect(screen.getAllByText(note)).toHaveLength(1);
-  });
-
   it('keeps the shelf layout widths under its switch while it is on', async () => {
     await openSection('experimental', { settings: { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' } });
     expect(screen.getByTestId('settings-narrowest-tile-cols')).toBeInTheDocument();
