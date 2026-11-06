@@ -12,6 +12,7 @@ import {
 } from './common.mjs';
 import {
   waitForFirstDesktopPane,
+  waitForPaneAttached,
   waitForPaneShellReady,
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
@@ -57,7 +58,13 @@ async function paneText(client, pane) {
   return payload.text || '';
 }
 
+async function showPane(client, pane) {
+  await client.request('focus_pane', pane);
+  await waitForPaneAttached(client, pane.sessionId, pane.paneId);
+}
+
 async function runInShell(client, pane, command, expected, timeoutMs = 30_000) {
+  await showPane(client, pane);
   const mark = `seedreadmark${++marks}x`;
   await client.request('write_pane', { ...pane, text: `${command}; echo ${mark}` });
   const deadline = Date.now() + timeoutMs;
@@ -76,6 +83,7 @@ async function runInShell(client, pane, command, expected, timeoutMs = 30_000) {
 }
 
 async function waitForAgentReads(client, pane, count, note, timeoutMs = 60_000) {
+  await showPane(client, pane);
   const deadline = Date.now() + timeoutMs;
   let text = '';
   while (Date.now() < deadline) {
@@ -360,7 +368,6 @@ async function main() {
     });
 
     await runner.step('unwatch_drops_only_uncovered_updates', async () => {
-      await client.request('focus_pane', author);
       const output = await runInShell(client, author, `attn seed unwatch ${seed} --session ${watcher.sessionId}`, `removed watch on ${seed}`);
       const inherited = JSON.parse(cli(['seed', 'unwatch', droppedChild, '--session', watcher.sessionId, '--json']));
       runner.assert(!inherited.watching && inherited.watching_via.length === 0, 'the other child has no remaining coverage', { inherited });
@@ -385,6 +392,7 @@ async function main() {
         'rewatch delivers the next descendant update', { droppedChild });
       await runInShell(client, author, `attn seed unwatch ${keptChild} --session ${watcher.sessionId}`, `attn seed unwatch ${seed}`);
       cli(['seed', 'unwatch', seed, '--session', watcher.sessionId]);
+      await showPane(client, watcher);
       runner.writeText('subscription-transcript.txt', await paneText(client, watcher));
     });
 
