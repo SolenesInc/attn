@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnesses } from '../hooks/useHarnesses';
@@ -100,6 +101,10 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
     const pickedFolder = firstRun && folder.trim() !== currentFolder ? folder.trim() : undefined;
     void onSave(value, pickedFolder).then(saved => { if (saved && returnFocus) onReturnFocus(); });
   };
+  const chooseFolder = async () => {
+    const selected = await open({ directory: true, multiple: false, canCreateDirectories: true, defaultPath: folder, title: 'Choose the Notebook folder' });
+    if (typeof selected === 'string') setNotebookRoot(selected);
+  };
   const recheck = () => {
     focusRequested.current = 'primary';
     sendGetSettings();
@@ -164,10 +169,11 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
           {view.effortLevels.map(effort => <button ref={retainFocus} type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
         </div>
       </section>}
-      {firstRun && <label className="chief-folder">
+      {firstRun && <div className="chief-folder">
         <span className="chief-folder-key">Notebook</span>
-        <input aria-label="Notebook folder" spellCheck={false} value={folder} title={folder} disabled={busy} onChange={event => setNotebookRoot(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }} />
-      </label>}
+        <span className="chief-folder-path" data-testid="chief-notebook-folder">{folder}</span>
+        <button type="button" className="chief-folder-choose" aria-label="Choose the Notebook folder" disabled={busy} onClick={() => { void chooseFolder(); }}>Choose…</button>
+      </div>}
       {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
       <footer className="chief-pop-foot">
         <button type="button" className="chief-pop-primary" aria-disabled={!canSave} tabIndex={canSave ? 0 : -1} onClick={submit}>{primaryLabel}<kbd aria-hidden="true">⏎</kbd></button>

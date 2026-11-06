@@ -23,7 +23,7 @@ const driver = createWindowDriver({ appPath: options.appPath, client });
 const slot = '[data-testid="chief-slot"]';
 const setup = '[data-testid="chief-setup"]';
 const wake = `${setup} .chief-pop-primary[aria-disabled="false"]`;
-const folder = `${setup} input[aria-label="Notebook folder"]`;
+const folder = `${setup} [data-testid="chief-notebook-folder"]`;
 let profile;
 let previousProfile;
 let chief;
@@ -90,15 +90,12 @@ try {
   });
 
   await runner.step('keyboard_only_setup_wakes_the_chief', async () => {
-    const notebookRoot = path.join(runner.sessionDir, 'chief-notebook');
-    fs.mkdirSync(notebookRoot, { recursive: true });
-    const { value: prefilled } = await client.request('dom_value', { selector: folder });
-    runner.assert(prefilled === setting('notebook.root.effective'), "the folder is prefilled with the profile's Notebook", { prefilled });
+    const notebookRoot = setting('notebook.root.effective');
+    const { text: shownFolder } = await client.request('dom_text', { selector: folder });
+    runner.assert(shownFolder === notebookRoot, "the folder shows the profile's Notebook", { shownFolder, notebookRoot });
     await driver.pressKey('Tab', { shift: true });
-    await waitDom(folder, { focused: true });
-    await driver.pressKey('a', { command: true });
-    await driver.typeText(notebookRoot);
-    await screenshot('02-chief-folder-picked');
+    await waitDom(`${setup} button[aria-label="Choose the Notebook folder"]`, { focused: true });
+    await screenshot('02-chief-folder-shown');
     await driver.pressKey('Tab');
     await waitDom(wake, { focused: true });
     await driver.pressEnter();
@@ -109,9 +106,8 @@ try {
     runner.writeJson('first-wake.json', { configured, shown });
     runner.assert(configured?.agent === 'claude' && configured?.model === MOCK_AGENT_MODEL, 'setup saved the preselected harness and model', { configured });
     runner.assert(Boolean(configured?.binding_session) && shown?.sessionId === configured.binding_session, 'the Chief woke and is shown', { configured, shown });
-    runner.assert(configured.home_dir === path.join(notebookRoot, 'crew', 'chief'), "the Chief's home moved into the picked Notebook", { home: configured.home_dir });
-    runner.assert(fs.existsSync(path.join(notebookRoot, 'crew', 'chief', 'CHARTER.md')), "the Chief's charter is in the picked Notebook");
-    runner.assert(setting('notebook.root.effective') === notebookRoot, "setup set the profile's Notebook folder");
+    runner.assert(path.dirname(configured.home_dir) === path.join(notebookRoot, 'crew'), "the Chief's home is in the Notebook", { home: configured.home_dir });
+    runner.assert(fs.existsSync(path.join(configured.home_dir, 'CHARTER.md')), "the Chief's charter is in the Notebook");
     await screenshot('03-chief-awake');
   });
 
