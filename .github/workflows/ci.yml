@@ -172,6 +172,8 @@ jobs:
               - 'ghostty-vt-native.lock'
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
+              - 'scripts/check-pty-host-glibc.sh'
+              - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
   release-candidate:
     name: Release candidate

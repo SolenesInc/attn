@@ -1,6 +1,6 @@
 name: Set up toolchains
 description: >-
-  Install Go from go.mod and Node.js from .tool-versions. setup-go and
+  Install Go from go.mod, and Node.js and Zig from .tool-versions. setup-go and
   setup-node spend the repository's hourly API quota on their version
   manifests whenever the runner lacks the version, so the installed toolchains
   are restored from the Actions cache first and both actions find them locally.
@@ -17,6 +17,10 @@ inputs:
     description: Install Node.js.
     required: false
     default: 'false'
+  zig:
+    description: Install Zig.
+    required: false
+    default: 'false'
 runs:
   using: composite
   steps:
@@ -27,6 +31,7 @@ runs:
       run: |
         echo "go=$(awk '/^go / { print $2 }' go.mod)" >> "$GITHUB_OUTPUT"
         echo "node=$(awk '/^nodejs / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+        echo "zig=$(awk '/^zig / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
 
     - name: Restore Go toolchain
       id: go
@@ -87,3 +92,10 @@ runs:
       with:
         path: ${{ runner.tool_cache }}/node/${{ steps.pins.outputs.node }}
         key: ${{ steps.node.outputs.cache-primary-key }}
+
+    - name: Set up Zig
+      if: inputs.zig == 'true'
+      uses: mlugg/setup-zig@v2
+      with:
+        version: ${{ steps.pins.outputs.zig }}
+        use-cache: false

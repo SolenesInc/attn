@@ -13,6 +13,11 @@ its last frame and attaches with the daemon's screen when it is drawn again.
 
 ## Host builds
 
+The released Linux hosts come from `make build-pty-host-linux-amd64` and
+`make build-pty-host-linux-arm64`, which link with zig against an older glibc,
+so the host runs wherever the released `attn` runs. Release preflight and the
+release fail when the host needs a newer glibc than `attn`.
+
 A daemon pins the host build it found when it started. Replacing the app bundle
 changes nothing until the next daemon start. A build becomes last-known-good
 after one throwaway terminal round trip passes in the current environment. The

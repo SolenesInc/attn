@@ -302,6 +302,11 @@ jobs:
         with:
           toolchain: '1.95.0'
 
+      - name: Set up Zig
+        uses: ./.github/actions/setup-toolchains
+        with:
+          zig: 'true'
+
       - name: Build Linux amd64 daemon
         run: |
           GOOS=linux GOARCH=amd64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-amd64
@@ -319,9 +324,12 @@ jobs:
 
       - name: Build Linux amd64 shared PTY host
         run: |
-          make build-pty-host
-          cp pty-host/target/release/attn-pty-host /tmp/attn-pty-host-linux-amd64
+          make build-pty-host-linux-amd64
+          cp dist/pty-host/linux_amd64/attn-pty-host /tmp/attn-pty-host-linux-amd64
           file /tmp/attn-pty-host-linux-amd64
+
+      - name: Check the Linux amd64 shared PTY host runs where the daemon runs
+        run: scripts/check-pty-host-glibc.sh /tmp/attn-linux-amd64 /tmp/attn-pty-host-linux-amd64
 
       - name: Upload Linux amd64 shared PTY host
         env:
@@ -376,6 +384,11 @@ jobs:
         with:
           toolchain: '1.95.0'
 
+      - name: Set up Zig
+        uses: ./.github/actions/setup-toolchains
+        with:
+          zig: 'true'
+
       - name: Build Linux arm64 daemon
         run: |
           GOOS=linux GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-arm64
@@ -393,9 +406,12 @@ jobs:
 
       - name: Build Linux arm64 shared PTY host
         run: |
-          make build-pty-host
-          cp pty-host/target/release/attn-pty-host /tmp/attn-pty-host-linux-arm64
+          make build-pty-host-linux-arm64
+          cp dist/pty-host/linux_arm64/attn-pty-host /tmp/attn-pty-host-linux-arm64
           file /tmp/attn-pty-host-linux-arm64
+
+      - name: Check the Linux arm64 shared PTY host runs where the daemon runs
+        run: scripts/check-pty-host-glibc.sh /tmp/attn-linux-arm64 /tmp/attn-pty-host-linux-arm64
 
       - name: Upload Linux arm64 shared PTY host
         env:

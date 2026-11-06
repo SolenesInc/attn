@@ -33,10 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Set up Go and Zig
         uses: ./.github/actions/setup-toolchains
         with:
           go: 'true'
+          zig: 'true'
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
@@ -62,9 +63,12 @@ jobs:
 
       - name: Build shared PTY host
         run: |
-          make build-pty-host
-          cp pty-host/target/release/attn-pty-host ${{ matrix.pty_output }}
+          make build-pty-host-linux-${{ matrix.goarch }}
+          cp dist/pty-host/linux_${{ matrix.goarch }}/attn-pty-host ${{ matrix.pty_output }}
           file ${{ matrix.pty_output }}
+
+      - name: Check the shared PTY host runs where the daemon runs
+        run: scripts/check-pty-host-glibc.sh ${{ matrix.output }} ${{ matrix.pty_output }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
