@@ -3,21 +3,26 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { PNG } from 'pngjs';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
+import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
-import { sleep, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
+import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
+import { sleep, waitForFirstDesktopPane, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
+const WARNING_RGB = [245, 158, 11];
+const PIXEL_NOISE = 2;
 const execFileAsync = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
 const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOVES',
   tier: 'tier1-local-shell',
   prefix: 'shelf-moves',
-  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, with the setting off and on, and while its desktop is unmounted, and bringing it with the jump key, through AppKit keys with real terminals' },
+  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, with the setting off and on, and while its desktop is unmounted, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -316,10 +321,89 @@ try {
     await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
   });
 
+  await runner.step('needing_the_user_shows_in_color_with_no_highlighted_border', async () => {
+    const { logicalBounds } = await request('get_window_bounds');
+    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1100 } });
+    await slideTo((await readRow()).at(-1));
+    const waitingAgent = await startAgentWaitingForTheUser();
+    const row = await readRow();
+    const beforeAgent = row[row.indexOf(waitingAgent) - 1];
+    await slideTo(beforeAgent);
+    await waitForChip(waitingAgent, '.is-needs');
+    const secondFromTheScreen = row[row.indexOf(beforeAgent) - 2];
+    for (const name of ['unseen-1.md', 'unseen-2.md', 'unseen-3.md', 'unseen-4.md']) await agentOpensDocument(secondFromTheScreen, name);
+    const waitingChip = `[data-testid="shelf-chip-${waitingAgent}"]`;
+    const unseenChip = '[data-testid="desktop-shelf"] > .desktop-shelf-chip.is-needs:has(.desktop-shelf-mark)';
+    const needingCap = '.desktop-shelf-cap.is-needs';
+    const plainChip = '[data-testid="desktop-shelf"] > .desktop-shelf-chip:not(.is-needs):not(.desktop-shelf-cap)';
+    for (const selector of [unseenChip, needingCap, plainChip]) await waitDom(selector);
+    await waitDom('[data-testid="desktop-shelf"] .is-arrival', { absent: true });
+    runner.log('attention row', { row: await readRow(), shown: await shownLeaves(), waitingAgent });
+    await shot('attention-on-the-shelf');
+
+    const looks = await readShelfPixels();
+    const plain = await looks.borderOf(plainChip);
+    for (const [label, selector] of [['a waiting agent', waitingChip], ['an unseen document', unseenChip], ['a cap holding one', needingCap]]) {
+      const border = await looks.borderOf(selector);
+      runner.assert(sameColor(border, plain, PIXEL_NOISE), `${label} has the border of a plain chip`, { border, plain });
+    }
+    const agentDot = await looks.centerOf(`${waitingChip} .state-indicator`);
+    runner.assert(sameColor(agentDot, WARNING_RGB), 'a waiting agent shows through its state dot', { agentDot });
+    const documentMark = await looks.centerOf(`${unseenChip} .desktop-shelf-mark`);
+    runner.assert(sameColor(documentMark, WARNING_RGB), 'an unseen document shows through its mark', { documentMark });
+    runner.assert(await looks.hasColorIn(needingCap, WARNING_RGB), 'a cap holding one shows through its text', {});
+  });
+
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
   process.exitCode = 1;
+}
+
+async function startAgentWaitingForTheUser() {
+  const cwd = path.join(runner.sessionDir, 'waiting-agent');
+  fs.mkdirSync(cwd, { recursive: true });
+  writeMockAgentFixture(cwd, { name: 'waiting agent', turns: [{ includes: 'HAND_IT_BACK', actions: [{ type: 'reply', text: 'Your call', state: 'waiting_input' }] }] });
+  const sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd, label: 'Waiting agent', agent: 'claude', ownDesktop: false, promptReadyFn: ensureClaudePromptReadyViaPty });
+  sessions.push(sessionId);
+  const { paneId } = await waitForFirstDesktopPane(client, sessionId, 'waiting agent tile');
+  await request('write_pane', { sessionId, paneId, text: 'HAND_IT_BACK', submit: true });
+  await observer.waitFor(() => observer.getSession(sessionId)?.state === 'waiting_input', 'the agent waits for the user');
+  return paneId;
+}
+
+function sameColor(actual, expected, tolerance = 40) {
+  return actual.every((value, index) => Math.abs(value - expected[index]) <= tolerance);
+}
+
+async function readShelfPixels() {
+  const capture = await request('capture_screenshot_data', { selector: '[data-testid="desktop-shelf"]' });
+  const image = PNG.sync.read(Buffer.from(capture.pngBase64, 'base64'));
+  const scale = image.width / capture.bounds.width;
+  const pixel = (x, y) => {
+    const at = (Math.floor((y - capture.bounds.y) * scale) * image.width + Math.floor((x - capture.bounds.x) * scale)) * 4;
+    return [...image.data.subarray(at, at + 3)];
+  };
+  const boundsOf = async (selector) => (await request('dom_bounds', { selector })).bounds;
+  return {
+    borderOf: async (selector) => {
+      const box = await boundsOf(selector);
+      return pixel(box.x + 0.5, box.y + box.height / 2);
+    },
+    centerOf: async (selector) => {
+      const box = await boundsOf(selector);
+      return pixel(box.x + box.width / 2, box.y + box.height / 2);
+    },
+    hasColorIn: async (selector, color) => {
+      const box = await boundsOf(selector);
+      for (let y = box.y + 2; y < box.y + box.height - 2; y += 1 / scale) {
+        for (let x = box.x + 2; x < box.x + box.width - 2; x += 1 / scale) {
+          if (sameColor(pixel(x, y), color)) return true;
+        }
+      }
+      return false;
+    },
+  };
 }
 
 async function waitForShownCount(predicate) {

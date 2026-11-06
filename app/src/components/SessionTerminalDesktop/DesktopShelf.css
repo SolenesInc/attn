@@ -31,9 +31,12 @@
   color: var(--color-text-primary);
 }
 
-.desktop-shelf-chip.is-needs {
-  border-color: var(--color-accent, #ff6b35);
-  color: var(--color-text-primary);
+.desktop-shelf-chip.is-needs .desktop-shelf-mark {
+  background: var(--color-warning);
+}
+
+.desktop-shelf-cap.is-needs {
+  color: var(--color-warning);
 }
 
 .desktop-shelf-chip.is-arrival {
