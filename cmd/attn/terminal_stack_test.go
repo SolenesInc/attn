@@ -3,6 +3,7 @@ package main_test
 import (
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -256,13 +257,22 @@ func TestTerminalCLIWithoutShellIntegration(t *testing.T) {
 	run := func(args ...string) testworld.Result {
 		return s.Run(testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)})
 	}
-	before := run("ls", "--json")
+	terminalIDs := func() []protocol.TerminalID {
+		var entries []protocol.TerminalEntry
+		run("ls", "--json").JSON(t, &entries)
+		ids := make([]protocol.TerminalID, 0, len(entries))
+		for _, entry := range entries {
+			ids = append(ids, entry.TerminalID)
+		}
+		return ids
+	}
+	before := terminalIDs()
 	refused := run("open", "--", "echo never-typed")
 	if refused.Code != 1 || !strings.Contains(refused.Stderr, "No terminal was opened") {
 		t.Fatalf("unsupported open: %+v", refused)
 	}
-	if after := run("ls", "--json"); after.Stdout != before.Stdout {
-		t.Fatalf("refused open left a terminal: before %s after %s", before.Stdout, after.Stdout)
+	if after := terminalIDs(); !slices.Equal(after, before) {
+		t.Fatalf("refused open left a terminal: before %v after %v", before, after)
 	}
 	var opened protocol.TerminalOpenResult
 	got := run("open", "--json")

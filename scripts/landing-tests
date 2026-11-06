@@ -56,6 +56,7 @@ go ./cmd/attn TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket
 go ./cmd/attn TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears
 go ./cmd/attn TestLauncherReadsRunOnTheNamedOutpost
 go ./cmd/attn TestEveryCommandStartsWithoutPayingForInitItNeverUses
+go ./cmd/attn TestTerminalCLIWithoutShellIntegration
 go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 go ./scripts/test-history TestATerminationSentToCaptureReachesTheCommand
 go ./internal/daemon TestStartingTheReviewAgainWhileAnItemIsAdvisedKeepsItsReadyAdvice
