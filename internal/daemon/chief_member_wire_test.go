@@ -236,8 +236,8 @@ func TestTheChiefKeepsItsRoleAndAuthorityAcrossClear(t *testing.T) {
 	working := testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	run.Reply("Ready again. <!-- attn:state=idle -->")
 	settled := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if protocol.Deref(settled.TurnOwed) {
-		t.Fatal("the Chief owes a turn after /clear")
+	if !protocol.Deref(settled.TurnOwed) {
+		t.Fatal("the Chief owes no turn for a prompt the user typed after /clear")
 	}
 	closed, err := cli.AgentClose(worker, next.ID, "the worker is finished")
 	if err != nil || closed.Rule != protocol.AgentCloseRuleChiefOfStaff {

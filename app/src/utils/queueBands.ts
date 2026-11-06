@@ -82,6 +82,12 @@ export function sessionParticipatesInQueue(
   return !session.commandTerminal && !session.automation && (!session.crewMember || crewInQueue);
 }
 
+/** The chief with crew v2 off: it has no crew member, so the crew setting cannot
+ * bring it into the queue. A chief that is a crew member follows the crew's rule. */
+function isLegacyChief(session: Pick<QueueBandSession, 'chiefOfStaff' | 'crewMember'>): boolean {
+  return Boolean(session.chiefOfStaff) && !session.crewMember;
+}
+
 export interface QueueActions {
   settle: boolean;
   snooze: boolean;
@@ -91,7 +97,7 @@ export function queueActions(
   session: Pick<QueueBandSession, 'offline' | 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
   { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
 ): QueueActions {
-  if (session.offline || session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  if (session.offline || isLegacyChief(session) || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
   const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
   return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
 }
@@ -145,7 +151,8 @@ export function oldestWantedTurn<TSession extends QueueBandSession>(
 }
 
 export interface QueueBands<TSession extends QueueBandSession> {
-  /** The chief's anchored slot. It never queues, so it is always its own row. */
+  /** The chief's anchored slot. A chief that is a crew member can also be owed a
+   * turn in the bands below; this row stays where it is. */
   chief: QueueRow<TSession> | null;
   turns: QueueRow<TSession>[];
   settled: QueueRow<TSession>[];
@@ -190,6 +197,8 @@ export function buildQueueBands<TSession extends QueueBandSession>(
         if (!chief) {
           chief = row;
         }
+      }
+      if (isLegacyChief(session)) {
         continue;
       }
       if (session.automation) {

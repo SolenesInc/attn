@@ -11,6 +11,7 @@ import (
 
 type monitorPolicySources struct {
 	chiefs     map[string]protocol.SessionID
+	crewV2     bool
 	crewBound  map[protocol.SessionID]bool
 	autoSettle sessionmonitor.AutoSettleSettings
 	headless   bool
@@ -21,6 +22,7 @@ type monitorPolicySources struct {
 func (d *Daemon) monitorPolicySources() monitorPolicySources {
 	sources := monitorPolicySources{
 		chiefs:     d.profileChiefs(),
+		crewV2:     d.crewV2Enabled(),
 		crewBound:  map[protocol.SessionID]bool{},
 		autoSettle: d.autoSettleSettings(),
 		headless:   headless.Enabled(),
@@ -45,6 +47,7 @@ func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID proto
 	}
 	policy.DriverReportsState = d.pluginDriverReportsState(session.Agent)
 	policy.ChiefOfStaff = session.ProfileID != "" && sources.chiefs[session.ProfileID] == sessionID
+	policy.LegacyChief = policy.ChiefOfStaff && !sources.crewV2
 	policy.TitlesAllowed = sources.titles && !sources.crewBound[sessionID] &&
 		d.store.SessionLabels(sessionID).UserLabel == "" &&
 		store.SessionLabelIsPlaceholder(session.Label, session.Directory, sessionID)

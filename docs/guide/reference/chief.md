@@ -97,6 +97,12 @@ one, named Chief:
   harness is installed, the setup says so. Install one and choose "Check again".
   From a shell, `attn crew set chief --agent <harness> --model <model>` sets up
   the Chief, and `attn crew wake chief` wakes the Chief.
+- The Chief follows the crew's queue rule. With "Put the crew in the queue" on in
+  Settings → Attention queue, a Chief that is owed a turn waits in the queue and
+  keeps its row, and you settle or snooze it like any agent. When a delegate
+  reports, the Chief asks you for a decision only you can make, opens its turn for
+  a result you should read, and otherwise only records the report. Answering its
+  ask takes it out of the queue.
 - The Chief's menus offer "Harness and model…" to change what it runs on for
   its next wake, "Edit charter", and Sleep in place of Close. The Chief wakes
   with one click. The command palette has the same actions.

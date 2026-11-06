@@ -512,8 +512,8 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       {
         id: 'toggle-crew-queue',
         title: isCrewQueueEnabled(settings) ? 'Take the crew out of the queue' : 'Put the crew in the queue',
-        description: 'Whether a crew member owing a turn also waits in the queue',
-        keywords: ['crew', 'queue', 'turn', 'member', 'sidebar'],
+        description: 'Whether a crew member or the Chief owing a turn also waits in the queue',
+        keywords: ['crew', 'chief', 'queue', 'turn', 'member', 'sidebar'],
         icon: <AttentionActionIcon />,
         run: handleToggleCrewQueue,
       },

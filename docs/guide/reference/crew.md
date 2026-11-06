@@ -186,7 +186,7 @@ running harness again, or ask the member to sleep, Attn cancels the switch.
 <details>
 <summary>Do crew members wait in my queue?</summary>
 
-Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. The Chief never waits in the queue. With Crew v2 on, the Chief is a crew member (see [the Chief](chief.md)).
+Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. With Crew v2 on, the Chief is a crew member (see [the Chief](chief.md)), so the same switch puts it in the queue, and it keeps that row. With Crew v2 off, the Chief never waits in the queue.
 </details>
 
 <details>

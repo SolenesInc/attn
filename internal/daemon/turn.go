@@ -44,11 +44,10 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 }
 
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
-	in := attention.Input{
-		IsShell:      session.Agent == protocol.AgentShellValue,
-		ChiefOfStaff: protocol.Deref(session.ChiefOfStaff),
+	return attention.Input{
+		IsShell:     session.Agent == protocol.AgentShellValue,
+		LegacyChief: protocol.Deref(session.ChiefOfStaff) && protocol.Deref(session.CrewMember) == "",
 	}
-	return in
 }
 
 func (d *Daemon) setSessionPriority(msg *protocol.SetSessionPriorityMessage) error {

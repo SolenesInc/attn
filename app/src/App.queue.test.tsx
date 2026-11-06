@@ -27,14 +27,15 @@ interface Launch {
   sessions?: DaemonSession[];
   queue?: boolean;
   crewInQueue?: boolean;
+  crewV2?: boolean;
   desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
   crew?: ReturnType<typeof crewMember>[];
 }
 
-function launch({ sessions = team(), queue = true, crewInQueue = false, desktop = () => ({}), crew = [] }: Launch = {}) {
+function launch({ sessions = team(), queue = true, crewInQueue = false, crewV2 = false, desktop = () => ({}), crew = [] }: Launch = {}) {
   return renderApp({
     initialState: {
-      settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}) } : {},
+      settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}), ...(crewV2 ? { crew_v2_enabled: 'true' } : {}) } : {},
       sessions,
       crew,
       desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
@@ -66,6 +67,83 @@ function shownDesktops() {
 async function press(daemon: ScriptedDaemon, name: string) {
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name })));
 }
+
+const CHIEF_MEMBER = 'chief-key';
+
+function chiefMember(overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER, ...overrides });
+}
+
+function launchChiefMember(chief: DaemonSession, crewInQueue: boolean) {
+  return launch({
+    sessions: [chief, agent('working')],
+    crewInQueue,
+    crewV2: true,
+    crew: [crewMember(CHIEF_MEMBER, { chief: true, name: 'Captain', agent: 'claude', binding_session: 'chief' })],
+  });
+}
+
+const OWED = { state: 'waiting_input', turn_owed: true, turn_opened_at: ago(HOUR) } as const;
+
+describe('the Chief member in the queue', () => {
+  it('waits in the list once, keeps its Crew row, and is first on the jump to the oldest turn', async () => {
+    const { daemon } = await launchChiefMember(chiefMember(OWED), true);
+
+    expect(screen.getAllByTestId('queue-turn-chief')).toHaveLength(1);
+    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
+    expect(screen.getByTestId('queue-waiting-card')).toHaveAttribute('data-waiting', '1');
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent(/1 more agent(?!s)/);
+    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('1 working');
+
+    await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+    expect(daemon.sentOf('desktop_show_session').slice(-1)[0]).toMatchObject({ session_id: 'chief' });
+  });
+
+  it('settles and snoozes like any agent', async () => {
+    const { daemon } = await launchChiefMember(chiefMember(OWED), true);
+
+    await press(daemon, 'Settle chief');
+    expect(daemon.sentOf('settle_turn')).toEqual([{ cmd: 'settle_turn', session_id: 'chief' }]);
+
+    await press(daemon, 'Snooze chief');
+    expect(screen.getByRole('menu', { name: 'Snooze chief' })).toBeInTheDocument();
+  });
+
+  it('shows once on the queue bar and in its agent palette', async () => {
+    const { daemon } = await launchChiefMember(chiefMember(OWED), true);
+
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+    expect(screen.getByTestId('queue-bar-pill')).toHaveAttribute('data-waiting', '1');
+    expect(within(screen.getByTestId('queue-bar-pill')).getAllByText('chief')).toHaveLength(1);
+    await gesture(daemon, () => pressShortcut('sidebar.agentList'));
+
+    expect(screen.getAllByTestId('palette-agent-chief')).toHaveLength(1);
+  });
+
+  it('stays out of the waiting list with no settle or snooze when the setting is off', async () => {
+    const { daemon } = await launchChiefMember(chiefMember(OWED), false);
+
+    expect(screen.queryByTestId('queue-turn-chief')).toBeNull();
+    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
+    expect(queue().getByText('Nothing owed')).toBeInTheDocument();
+    expect(queue().queryByRole('button', { name: 'Settle chief' })).toBeNull();
+    expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
+
+    await openAgentList(daemon);
+    expect(queue().queryByRole('button', { name: 'Settle chief' })).toBeNull();
+    expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
+  });
+
+  it('leaves the waiting list as soon as the setting goes off', async () => {
+    const { daemon } = await launchChiefMember(chiefMember(OWED), true);
+    expect(screen.getByTestId('queue-turn-chief')).toBeInTheDocument();
+
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...QUEUE, crew_v2_enabled: 'true', queue_crew_enabled: 'false' } }));
+
+    expect(screen.queryByTestId('queue-turn-chief')).toBeNull();
+    expect(queue().getByText('Nothing owed')).toBeInTheDocument();
+  });
+});
 
 describe('App queue', () => {
   it('keeps pinned crew out of the hidden count when crew also joins the queue', async () => {

@@ -133,11 +133,13 @@ export function Dashboard({
   const chiefSession = sessions.find((session) => session.chiefOfStaff);
   const queueModeEnabled = queue !== null;
 
-  const snoozedSessions = useMemo(() => (
-    (queue ? [...queue.snoozed.map((row) => row.session), ...(chiefSession ? [chiefSession] : [])] : sessions)
+  const snoozedSessions = useMemo(() => {
+    const queued = queue?.snoozed.map((row) => row.session);
+    const chiefOutsideQueue = chiefSession && !queued?.some((session) => session.id === chiefSession.id) ? [chiefSession] : [];
+    return (queued ? [...queued, ...chiefOutsideQueue] : sessions)
       .filter((session) => isSnoozed(session.turnSnoozedUntil, now))
-      .sort(compareWakeOrder)
-  ), [queue, chiefSession, sessions, now]);
+      .sort(compareWakeOrder);
+  }, [queue, chiefSession, sessions, now]);
 
   const awakeSessions = useMemo(() => {
     const deferred = new Set(snoozedSessions.map((s) => s.id));

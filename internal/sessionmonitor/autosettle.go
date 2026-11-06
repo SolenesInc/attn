@@ -120,7 +120,7 @@ func (m *Monitor) armAutoSettleLocked() {
 
 func (m *Monitor) owesUserLocked() bool {
 	return m.turnOwedLocked() &&
-		!attention.Excluded(attention.Input{IsShell: m.agent == protocol.SessionAgentShell, ChiefOfStaff: m.policy.ChiefOfStaff})
+		!attention.Excluded(attention.Input{IsShell: m.agent == protocol.SessionAgentShell, LegacyChief: m.policy.LegacyChief})
 }
 
 func (m *Monitor) HoldAutoSettle() {

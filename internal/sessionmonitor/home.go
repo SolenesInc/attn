@@ -33,6 +33,7 @@ type ConversationOutcome struct {
 
 type Policy struct {
 	ChiefOfStaff       bool
+	LegacyChief        bool
 	AutoSettle         AutoSettleSettings
 	Headless           bool
 	TitlesAllowed      bool

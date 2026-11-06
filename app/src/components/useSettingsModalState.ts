@@ -507,9 +507,9 @@ export function useSettingsModalState({
           {
             id: 'hygiene',
             label: 'Attention queue',
-            description: 'When a turn settles itself, which notifications stay out of the queue, whether hidden sessions or crew members join it, and which repositories and authors never reach it.',
+            description: 'When a turn settles itself, which notifications stay out of the queue, whether hidden sessions, crew members and the Chief join it, and which repositories and authors never reach it.',
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications show hidden sessions shared codex crew member put the crew in the queue',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications show hidden sessions shared codex crew member chief put the crew in the queue',
           },
         ],
       },

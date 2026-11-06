@@ -1,0 +1,8 @@
+kind: changed
+area: queue
+change: >
+  With Crew v2 on, "Put the crew in the queue" now brings the Chief too: a Chief
+  that is owed a turn waits in the queue and keeps its row in the Crew section,
+  and you settle or snooze it like any agent. When a delegate reports, the Chief
+  asks you for a decision only you can make and opens its turn for a result you
+  should read. A running Chief picks up its new instructions at its next launch.

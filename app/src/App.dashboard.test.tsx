@@ -305,6 +305,17 @@ describe('App dashboard', () => {
       expect(rowsIn('snoozed')).toEqual(['chief']);
     });
 
+    it.each([['in the queue', 'true'], ['out of the queue', 'false']])('lists a snoozed Chief member once while the crew is %s', async (_, crewInQueue) => {
+      await renderHome(
+        [agent('chief', { state: 'idle', chief_of_staff: true, crew_member: 'chief-key', turn_snoozed_until: fromNow(HOUR) })],
+        { settings: { ...QUEUE, queue_crew_enabled: crewInQueue } },
+      );
+
+      fireEvent.click(within(group('snoozed')!).getByRole('button', { name: /Snoozed/ }));
+
+      expect(rowsIn('snoozed')).toEqual(['chief']);
+    });
+
     it('leaves a lapsed deadline alone', async () => {
       await renderHome([agent('awake', { state: 'working', turn_snoozed_until: fromNow(-60 * 1000) })], { settings: QUEUE });
 

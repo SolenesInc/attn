@@ -1280,7 +1280,7 @@ export function HygieneSettings({
         <div className="settings-block-intro">
           <h3>Crew</h3>
           <p className="settings-description">
-            Crew members that are owed a turn. They stay in the Crew section either way. Off by default.
+            Crew members and the Chief that are owed a turn. They stay in the Crew section either way. Off by default.
           </p>
         </div>
         <div className="settings-block-body">
@@ -1288,7 +1288,7 @@ export function HygieneSettings({
             <div>
               <p className="settings-row-title">Put the crew in the queue</p>
               <p className="settings-row-copy" id="queue-crew-description">
-                A crew member that is owed a turn also waits in the queue. Its row stays in the Crew section.
+                A crew member or the Chief that is owed a turn also waits in the queue. Its row stays in the Crew section.
               </p>
             </div>
             <button
