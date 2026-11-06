@@ -54,15 +54,18 @@ node mobile/scripts/testflight-paths.mjs
 
 A stale list only delays a change until the next build, so nothing checks it.
 
-The workflow selects its Xcode with `DEVELOPER_DIR`, because the runner's
-default Xcode is too old for Capacitor 8. When GitHub removes that version from
+A build takes about 4 minutes on the runner: 3m38s to 4m11s for the job, on the
+first three builds. The workflow selects Xcode 26.3 with `DEVELOPER_DIR`, because
+the runner's default is 16.4. When GitHub removes that version from
 [the runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md),
 the build fails and the path needs updating.
 
 A failed build posts to Discord with the reason and the run's link, because the
 sheriff watches only the CI workflow. A failed run keeps its `archive.log` and
 `upload.log` as the `testflight-logs` artifact for 14 days. The repository is
-public, so the script replaces the key id and issuer id in those logs.
+public, so those logs must not hold the key or its ids. Only the export step
+takes the key, and xcodebuild does not print the flags of an export. Pass the
+key's flags to no step whose command line reaches a log.
 
 Apple publishes no upload limit. When App Store Connect answers an upload with a
 409, the alert quotes its answer. `Upload limit reached` means wait a day, then

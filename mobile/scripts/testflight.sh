@@ -64,7 +64,7 @@ mkdir -p "${OUT_DIR}"
 run_logged() {
   local name="$1" log="${OUT_DIR}/$1.log" refusal
   shift
-  if ! "$@" 2>&1 | sed -e "s/${KEY_ID}/<key id>/g" -e "s/${ISSUER_ID}/<issuer id>/g" >"${log}"; then
+  if ! "$@" >"${log}" 2>&1; then
     printf '\n%s failed. Its errors:\n' "${name}" >&2
     grep -E '(^|: )error:|^error|\*\* .* FAILED \*\*' "${log}" | sort -u >&2 || tail -n 30 "${log}" >&2
     if grep -q 'Error Downloading App Information' "${log}"; then

@@ -31,10 +31,6 @@ on:
       - 'app/src/utils/supportInputTrace.ts'
       - 'app/src/utils/terminalSizing.ts'
   workflow_dispatch:
-    inputs:
-      probe_failing_key:
-        type: boolean
-        default: false
   schedule:
     - cron: '17 6 * * 1'
 
@@ -92,7 +88,7 @@ jobs:
 
       - name: Build, sign and upload
         env:
-          ASC_API_KEY: ${{ inputs.probe_failing_key && '-----BEGIN PRIVATE KEY----- not a key' || secrets.ASC_API_KEY }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           GH_TOKEN: ${{ github.token }}
@@ -107,29 +103,6 @@ jobs:
           path: mobile/ios/App/build/testflight-*/*.log
           retention-days: 14
           if-no-files-found: ignore
-
-      - name: Download the logs as uploaded
-        if: always() && inputs.probe_failing_key
-        uses: actions/download-artifact@v4
-        with:
-          name: testflight-logs
-          path: ${{ runner.temp }}/uploaded-logs
-
-      - name: Count the ids in the uploaded logs
-        if: always() && inputs.probe_failing_key
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          UPLOADED_LOGS: ${{ runner.temp }}/uploaded-logs
-        run: |
-          find "$UPLOADED_LOGS" -type f -name '*.log' | while read -r log; do
-            echo "$(basename "$log"): $(wc -l <"$log") lines"
-            echo "  key id value: $(grep -cF "$ASC_KEY_ID" "$log" || true)"
-            echo "  issuer id value: $(grep -cF "$ASC_ISSUER_ID" "$log" || true)"
-            echo "  key id placeholder: $(grep -cF '<key id>' "$log" || true)"
-            echo "  issuer id placeholder: $(grep -cF '<issuer id>' "$log" || true)"
-            echo "  PEM header: $(grep -cF 'PRIVATE KEY' "$log" || true)"
-          done
 
       - name: Alert Discord
         if: failure()
