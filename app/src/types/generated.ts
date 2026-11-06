@@ -5274,6 +5274,7 @@ export interface ItemElement {
     evidence_version:      string;
     explanation?:          string;
     id:                    string;
+    outpost?:              string;
     recommendation?:       string;
     resolution:            string;
     resolved_action?:      string;
@@ -5333,6 +5334,7 @@ export interface GardenReviewItem {
     evidence_version:      string;
     explanation?:          string;
     id:                    string;
+    outpost?:              string;
     recommendation?:       string;
     resolution:            string;
     resolved_action?:      string;
@@ -23255,6 +23257,7 @@ const typeMap: any = {
         { json: "evidence_version", js: "evidence_version", typ: "" },
         { json: "explanation", js: "explanation", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
+        { json: "outpost", js: "outpost", typ: u(undefined, "") },
         { json: "recommendation", js: "recommendation", typ: u(undefined, "") },
         { json: "resolution", js: "resolution", typ: "" },
         { json: "resolved_action", js: "resolved_action", typ: u(undefined, "") },
@@ -23304,6 +23307,7 @@ const typeMap: any = {
         { json: "evidence_version", js: "evidence_version", typ: "" },
         { json: "explanation", js: "explanation", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
+        { json: "outpost", js: "outpost", typ: u(undefined, "") },
         { json: "recommendation", js: "recommendation", typ: u(undefined, "") },
         { json: "resolution", js: "resolution", typ: "" },
         { json: "resolved_action", js: "resolved_action", typ: u(undefined, "") },

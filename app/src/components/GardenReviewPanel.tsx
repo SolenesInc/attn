@@ -13,6 +13,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { gardenPathToSeed } from '../store/gardenWalk';
 import { SeedDocumentView } from './SeedDocumentView';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
+import { ResumeOnOutpostButton } from './ResumeOnOutpostButton';
 import './GardenReviewPanel.css';
 
 type LifecycleAction = 'wither' | 'park';
@@ -499,7 +500,9 @@ function ReviewActionPanel({ selected, visibleActions, composer, actions, onSend
         else void actions.submitLifecycle(selected, composer);
       }}
     /> : <div className="garden-review__action-row" aria-label="Choose what happens to this seed">
-      {visibleActions.map((action) => <button type="button" key={action} className={action === selected.recommendation ? 'is-recommended' : ''} onClick={() => choose(action)}>{actionLabels[action] ?? action}</button>)}
+      {visibleActions.map((action) => action === 'resume' && selected.outpost
+        ? <ResumeOnOutpostButton key={action} outpost={selected.outpost} recommended={action === selected.recommendation} onResume={() => choose(action)} />
+        : <button type="button" key={action} className={action === selected.recommendation ? 'is-recommended' : ''} onClick={() => choose(action)}>{actionLabels[action] ?? action}</button>)}
     </div>}
   </section>;
 }

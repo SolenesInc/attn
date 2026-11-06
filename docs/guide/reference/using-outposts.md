@@ -177,7 +177,7 @@ the branch first when needed. Attn refuses to resume a session whose outpost is
 unreachable or removed, and names the host.
 
 A seed whose closed session ran on an outpost offers **Resume** on the seed's
-page, where the button names the outpost, and in Garden review.
+page and in Garden review, and the button names the outpost.
 `attn seed show` prints a `resume` line that names the outpost. If the session's
 directory or conversation is gone, Resume says which and where, and leaves the
 seed as it was. While the outpost is unreachable, the seed page dims the button

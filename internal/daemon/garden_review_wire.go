@@ -67,6 +67,9 @@ func gardenReviewItemToProtocol(item garden.ReviewItem) protocol.GardenReviewIte
 	if item.ReviewAgainAt != "" {
 		wire.ReviewAgainAt = protocol.Ptr(item.ReviewAgainAt)
 	}
+	if item.Outpost != "" {
+		wire.Outpost = protocol.Ptr(item.Outpost)
+	}
 	if item.AdvisorState != "" {
 		wire.AdvisorState = protocol.Ptr(item.AdvisorState)
 	}

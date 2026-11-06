@@ -5130,6 +5130,9 @@ type GardenReviewItem struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Outpost corresponds to the JSON schema field "outpost".
+	Outpost *string `json:"outpost,omitempty,omitzero"`
+
 	// Recommendation corresponds to the JSON schema field "recommendation".
 	Recommendation *string `json:"recommendation,omitempty,omitzero"`
 

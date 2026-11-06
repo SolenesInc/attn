@@ -128,8 +128,8 @@ func TestGardenOffersResumeOfAClosedOutpostSessionAndReopensItOnItsOutpost(t *te
 
 			w.ageIntoReview()
 			item := w.reviewItem(t)
-			if !slices.Contains(item.Actions, "resume") || !strings.Contains(reviewEvidenceText(item), `on outpost "outpost"`) {
-				t.Fatalf("review actions=%v evidence:\n%s", item.Actions, reviewEvidenceText(item))
+			if !slices.Contains(item.Actions, "resume") || protocol.Deref(item.Outpost) != "outpost" || !strings.Contains(reviewEvidenceText(item), `on outpost "outpost"`) {
+				t.Fatalf("review actions=%v outpost=%q evidence:\n%s", item.Actions, protocol.Deref(item.Outpost), reviewEvidenceText(item))
 			}
 
 			resumed := w.pressResume(&protocol.SeedReviewActionContext{ReviewID: item.RunID, EvidenceVersion: item.EvidenceVersion})
@@ -239,7 +239,7 @@ func (w gardenOutpostSeed) reviewUpdateSince(mark int, runID string, matches fun
 }
 
 func reviewItemOffersResumeOnline(item protocol.GardenReviewItem) bool {
-	return item.Status == "ready" && slices.Contains(item.Actions, "resume") && strings.Contains(reviewEvidenceText(item), `on outpost "outpost".`)
+	return item.Status == "ready" && slices.Contains(item.Actions, "resume") && protocol.Deref(item.Outpost) == "outpost" && strings.Contains(reviewEvidenceText(item), `on outpost "outpost".`)
 }
 
 func reviewItemShowsOutpostUnreachable(item protocol.GardenReviewItem) bool {

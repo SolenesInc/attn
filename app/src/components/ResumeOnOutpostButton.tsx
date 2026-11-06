@@ -1,6 +1,9 @@
-export function ResumeOnOutpostButton({ outpost, testId, unreachableReason, onResume }: {
+import './ResumeOnOutpostButton.css';
+
+export function ResumeOnOutpostButton({ outpost, testId, recommended, unreachableReason, onResume }: {
   outpost: string;
-  testId: string;
+  testId?: string;
+  recommended?: boolean;
   unreachableReason?: string;
   onResume: () => void;
 }) {
@@ -8,7 +11,7 @@ export function ResumeOnOutpostButton({ outpost, testId, unreachableReason, onRe
   return (
     <button
       type="button"
-      className="garden-resume-split"
+      className={recommended ? 'garden-resume-split is-recommended' : 'garden-resume-split'}
       data-testid={unreachable ? undefined : testId}
       aria-label={`Resume on ${outpost}`}
       disabled={unreachable}

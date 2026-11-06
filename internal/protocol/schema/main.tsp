@@ -6734,8 +6734,10 @@ model GardenReviewItem {
   "error"?: string;
   "started_at"?: string;
   "completed_at"?: string;
-  // Live job progress projected onto a read. These fields are not part of the
+  // Live state projected onto a read. These fields are not part of the
   // captured evidence and do not change the review receipt.
+  // The outpost's name when the seed's session ran on an outpost.
+  "outpost"?: string;
   "advisor_state"?: string;
   "advisor_attempt"?: int32;
   "advisor_max_attempts"?: int32;

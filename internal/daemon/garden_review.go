@@ -1163,7 +1163,11 @@ func (d *Daemon) overlayGardenReviewReach(items []garden.ReviewItem) []garden.Re
 			continue
 		}
 		continuation := d.continuationWithChecks(seed, d.uncheckedOutpost(host))
-		if continuation == nil || continuation.Outpost == "" || continuation.DirectoryState != directoryUnreachable {
+		if continuation == nil {
+			continue
+		}
+		items[i].Outpost = continuation.Outpost
+		if continuation.Outpost == "" || continuation.DirectoryState != directoryUnreachable {
 			continue
 		}
 		if !continuation.ResumeAvailable {

@@ -68,6 +68,7 @@ type ReviewItem struct {
 	JobID              string           `json:"job_id,omitempty"`
 	StartedAt          string           `json:"started_at,omitempty"`
 	CompletedAt        string           `json:"completed_at,omitempty"`
+	Outpost            string           `json:"-"`
 	AdvisorState       string           `json:"-"`
 	AdvisorAttempt     int              `json:"-"`
 	AdvisorMaxAttempts int              `json:"-"`

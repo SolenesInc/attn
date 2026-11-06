@@ -205,13 +205,23 @@ describe('App garden review', () => {
       event: 'garden_review_updated',
       review: review([reviewItem({
         actions: ['resume', 'send_to_chief', 'keep_growing', 'park', 'harvest', 'wither'],
+        outpost: 'box',
         evidence: [{ label: 'Working directory', text: 'The saved working directory is on outpost "box".' }],
       })]),
     });
 
-    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume on box' })).toBeInTheDocument();
     expect(screen.queryByText(/which is unreachable/)).toBeNull();
     expect(advice()).toHaveTextContent('Park');
+  });
+
+  it('resumes on the outpost the button names', async () => {
+    const daemon = await openReview({ actions: ['resume', 'park'], outpost: 'box' }, withSavedContext());
+    daemon.on('seed_resume', () => {});
+
+    await click(daemon, 'Resume on box');
+
+    expect(daemon.sentOf('seed_resume')).toEqual([expect.objectContaining({ seed_id: 's-review1', review: receipt })]);
   });
 
   it('offers only the actions the captured item allows', async () => {

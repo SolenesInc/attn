@@ -565,6 +565,17 @@
   color: var(--accent);
 }
 
+.garden-review__action-row button.garden-resume-split {
+  align-items: stretch;
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+}
+
+.garden-review__action-row .garden-resume-split > span {
+  padding: 6px 11px;
+}
+
 .garden-review__composer {
   max-width: 100%;
 }
