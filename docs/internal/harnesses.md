@@ -120,7 +120,16 @@ Probed on 2.1.288 with a mock API.
     245k of usage, the same idle compact runs at 54 minutes with the same hooks.
     The summary prompt contains
     `create a detailed summary of the conversation so far`, and the response must
-    hold a `<summary>`.
+    hold a `<summary>`. An API-key session ignores the rate limit headers (read in
+    the bundle), so a local server cannot reach `near_limit`.
+  - `go run ./scripts/fakeclaudeapi check-idle` checks the timing, the size and
+    cache skips, and the compact and failed-compact hooks against the installed
+    Claude, with no account or tokens, in about 58 minutes. It cannot run faster,
+    because the timer is a real one and needs exactly the 1-hour cache. Run it
+    after Claude updates, and update this section, the fake API and attn together
+    when it fails. `go run ./scripts/fakeclaudeapi serve` runs the same fake on its
+    own, with a `/control` endpoint for context size and for holding or failing
+    compacts.
 - Plan mode's "clear context and proceed" is SessionEnd `clear`, SessionStart
   `clear`, then a turn and Stop on the new id with no UserPromptSubmit.
 - The transcript is `<config>/projects/<cwd-slug>/<id>.jsonl`. attn reads the

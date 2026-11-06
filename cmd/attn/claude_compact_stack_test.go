@@ -13,19 +13,20 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 const closingReviewer = "rev-1111-2222"
 
-func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *mockModel, string) {
+func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeclaudeapi.Model, string) {
 	t.Helper()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
 		t.Skip("claude is not on PATH")
 	}
-	model := startMockModel(t)
+	model := fakeclaudeapi.Start(t)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	work := s.Path("shop")
 	configDir := filepath.Join(s.Dir, "toolhome", ".claude")
@@ -37,7 +38,7 @@ func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, 
 		"ATTN_CLAUDE_EXECUTABLE="+claude,
 		"CLAUDE_CONFIG_DIR="+configDir,
 		"ANTHROPIC_BASE_URL="+model.URL,
-		"ANTHROPIC_API_KEY="+mockModelAPIKey,
+		"ANTHROPIC_API_KEY="+fakeclaudeapi.APIKey,
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 	)
@@ -64,8 +65,8 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 	const reason = "the checkout fix landed"
 	const ring = "attn agent inbox"
 	const asked = "wrap up the checkout fix"
-	model.runBashAfter(ring, ring)
-	model.runBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
+	model.RunBashAfter(ring, ring)
+	model.RunBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, asked}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
@@ -89,7 +90,7 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 		t.Fatalf("Claude's transcript has no compact boundary after the close was asked at %s; entries: %+v", entries[closing].Timestamp, entries)
 	}
 	summary := slices.IndexFunc(entries[boundary:], func(e claudeEntry) bool { return e.IsCompactSummary })
-	if summary < 0 || !strings.Contains(entries[boundary+summary].Text, mockModelCompactSummary) {
+	if summary < 0 || !strings.Contains(entries[boundary+summary].Text, fakeclaudeapi.CompactSummary) {
 		t.Fatalf("Claude's transcript has no compact summary with the model's summary after its boundary; entries: %+v", entries[boundary:])
 	}
 
@@ -97,12 +98,12 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 		t.Fatalf("session reopen exited %d: %s%s", reopened.Code, reopened.Stdout, reopened.Stderr)
 	}
 	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
-	mark := model.mark()
+	mark := model.Mark()
 	const followUp = "what landed before the close"
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, followUp}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg to the reopened session exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
-	if opening := model.awaitPromptSince(t, mark, ring); !strings.Contains(opening, mockModelCompactSummary) {
+	if opening := model.AwaitPromptSince(t, mark, ring); !strings.Contains(opening, fakeclaudeapi.CompactSummary) {
 		t.Fatalf("the reopened conversation's first request opens with %q, want Claude's compact summary", opening)
 	}
 }
@@ -113,29 +114,29 @@ func TestARealClaudeDraftTypedBeforeACompactingCloseKeepsTheSessionAndTheDraft(t
 	const ring = "attn agent inbox"
 	const asked = "wrap up the checkout fix"
 	const draft = "please keep this draft"
-	model.runBashAfter(ring, ring)
-	model.runBashAfter(asked, `attn agent close --self --compact -m "the checkout fix landed"`)
+	model.RunBashAfter(ring, ring)
+	model.RunBashAfter(asked, `attn agent close --self --compact -m "the checkout fix landed"`)
 
 	app.Type(worker, draft, "keyboard")
-	mark := model.mark()
+	mark := model.Mark()
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, asked}, Session: closingReviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
-	model.awaitPromptSince(t, mark, "once its conversation is compacted")
+	model.AwaitPromptSince(t, mark, "once its conversation is compacted")
 	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	mark = model.mark()
+	mark = model.Mark()
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, "the review is in"}, Session: closingReviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg to the session with the draft exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
-	model.awaitPromptSince(t, mark, ring)
+	model.AwaitPromptSince(t, mark, ring)
 	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	if peek := s.Attn("agent", "peek", worker).Stdout; !strings.Contains(peek, draft) {
 		t.Fatalf("the composer lost the draft; the screen shows:\n%s", peek)
 	}
-	mark = model.mark()
+	mark = model.Mark()
 	app.Type(worker, "\r", "keyboard")
-	model.awaitPromptSince(t, mark, draft)
+	model.AwaitPromptSince(t, mark, draft)
 }
 
 func TestARealClaudePromptTheUserTypedBeforeACompactingCloseDoesNotKeepTheSessionOpen(t *testing.T) {
@@ -143,7 +144,7 @@ func TestARealClaudePromptTheUserTypedBeforeACompactingCloseDoesNotKeepTheSessio
 	_, app, worker, model, _ := realModdedClaude(t)
 	const asked = "wrap up the checkout fix"
 	const reason = "the checkout fix landed"
-	model.runBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
+	model.RunBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
 
 	app.Type(worker, asked, "keyboard")
 	app.Type(worker, "\r", "keyboard")
@@ -190,7 +191,7 @@ func claudeTranscript(t *testing.T, configDir string) []claudeEntry {
 		if json.Unmarshal(lines.Bytes(), &raw) != nil {
 			continue
 		}
-		entries = append(entries, claudeEntry{raw.Type, raw.Subtype, raw.IsCompactSummary, raw.Timestamp, contentText(raw.Message.Content)})
+		entries = append(entries, claudeEntry{raw.Type, raw.Subtype, raw.IsCompactSummary, raw.Timestamp, fakeclaudeapi.ContentText(raw.Message.Content)})
 	}
 	return entries
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -19,7 +20,7 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 	if err != nil {
 		t.Skip("claude is not on PATH")
 	}
-	model := startMockModel(t)
+	model := fakeclaudeapi.Start(t)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	work := s.Path("shop")
 	configDir := filepath.Join(s.Dir, "toolhome", ".claude")
@@ -31,7 +32,7 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 		"ATTN_CLAUDE_EXECUTABLE="+claude,
 		"CLAUDE_CONFIG_DIR="+configDir,
 		"ANTHROPIC_BASE_URL="+model.URL,
-		"ANTHROPIC_API_KEY="+mockModelAPIKey,
+		"ANTHROPIC_API_KEY="+fakeclaudeapi.APIKey,
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 	)
@@ -56,7 +57,7 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 
 	const note = "On approval: merge the pull request."
 	const ring = "attn agent inbox"
-	model.runBashAfter(ring, `attn seed standby `+seed.ID+` -m "`+note+`" --close`)
+	model.RunBashAfter(ring, `attn seed standby `+seed.ID+` -m "`+note+`" --close`)
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", tender, "wait for the review"}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
@@ -68,13 +69,13 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 	}
 
 	const approved = "the pull request is approved"
-	model.runBashAfter(note, "attn agent inbox")
+	model.RunBashAfter(note, "attn agent inbox")
 	mark := len(app.Log())
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", seed.ID, approved}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg %s exited %d: %s%s", seed.ID, sent.Code, sent.Stdout, sent.Stderr)
 	}
 	testworld.AwaitSessionSince(app, mark, tender, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	model.awaitPrompt(t, approved)
+	model.AwaitPrompt(t, approved)
 
 	if transcripts, _ := filepath.Glob(filepath.Join(configDir, "projects", "*", "*.jsonl")); len(transcripts) != 1 {
 		t.Fatalf("Claude wrote transcripts %q, want the woken tender to resume its one conversation", transcripts)

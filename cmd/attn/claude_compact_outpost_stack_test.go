@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/fakeclaudeapi"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -26,7 +27,7 @@ const (
 type realOutpostClaude struct {
 	home, outpost *testworld.Stack
 	pair          *testworld.OutpostPair
-	model         *mockModel
+	model         *fakeclaudeapi.Model
 	onOutpost     *testworld.Peer
 	ptyExit       *testworld.Pause
 	configDir     string
@@ -40,7 +41,7 @@ func newRealOutpostClaude(t *testing.T, willClose bool) *realOutpostClaude {
 	if err != nil {
 		t.Skip("claude is not on PATH")
 	}
-	model := startMockModel(t)
+	model := fakeclaudeapi.Start(t)
 	var configDir, work string
 	var ptyExit *testworld.Pause
 	home, outpost, pair := newOutpostModPair(t, func(_, outpost *testworld.Stack) {
@@ -57,7 +58,7 @@ func newRealOutpostClaude(t *testing.T, willClose bool) *realOutpostClaude {
 			"ATTN_CLAUDE_EXECUTABLE="+claude,
 			"CLAUDE_CONFIG_DIR="+configDir,
 			"ANTHROPIC_BASE_URL="+model.URL,
-			"ANTHROPIC_API_KEY="+mockModelAPIKey,
+			"ANTHROPIC_API_KEY="+fakeclaudeapi.APIKey,
 			"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 			"DISABLE_AUTOUPDATER=1",
 		)
@@ -114,8 +115,8 @@ func (c *realOutpostClaude) compactedAfter(t *testing.T, resultOf string) {
 func TestARealClaudeOnAnOutpostThatClosesCompactingCompactsThroughTheModAndThenCloses(t *testing.T) {
 	t.Parallel()
 	c := newRealOutpostClaude(t, true)
-	c.model.runBashAfter(outpostCompactRing, outpostCompactRing)
-	c.model.runBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
+	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
+	c.model.RunBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
 
 	c.mail(t, c.session, outpostCompactAsked)
 
@@ -126,12 +127,12 @@ func TestARealClaudeOnAnOutpostThatClosesCompactingCompactsThroughTheModAndThenC
 func TestARealClaudeOnAnOutpostClosesAfterTheHomeLinkReturnsWhenItWasDownForTheCompactsOutcome(t *testing.T) {
 	t.Parallel()
 	c := newRealOutpostClaude(t, true)
-	release := c.model.holdCompacts()
+	release := c.model.HoldCompacts()
 	defer release()
-	c.model.runBashAfter(outpostCompactRing, outpostCompactRing)
-	c.model.runBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
+	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
+	c.model.RunBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
 	c.mail(t, c.session, outpostCompactAsked)
-	c.model.awaitPrompt(t, mockModelCompactPrompt)
+	c.model.AwaitPrompt(t, fakeclaudeapi.CompactPrompt)
 
 	c.pair.Disconnect()
 	outpostReachSince(c.pair.App, 0, "outpost", protocol.OutpostReachUnreachable)
@@ -158,8 +159,8 @@ func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndWakesOnSeedMailWithItsC
 		t.Fatalf("seed tend exited %d: %s", tend.Code, tend.Stderr)
 	}
 	const note = "On approval: merge the pull request."
-	c.model.runBashAfter(outpostCompactRing, outpostCompactRing)
-	c.model.runBashAfter(outpostCompactAsked, `attn seed standby `+seed.ID+` -m "`+note+`" --close --compact`)
+	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
+	c.model.RunBashAfter(outpostCompactAsked, `attn seed standby `+seed.ID+` -m "`+note+`" --close --compact`)
 
 	c.mail(t, c.session, outpostCompactAsked)
 	c.closesWith(t, app, "On standby for "+seed.ID+": "+note)
@@ -168,10 +169,10 @@ func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndWakesOnSeedMailWithItsC
 		t.Fatalf("%s left standby when its tender closed", seed.ID)
 	}
 
-	mark, appMark := c.model.mark(), len(app.Log())
-	c.model.runBashAfter(note, outpostCompactRing)
+	mark, appMark := c.model.Mark(), len(app.Log())
+	c.model.RunBashAfter(note, outpostCompactRing)
 	c.mail(t, seed.ID, "the pull request is approved")
-	if opening := c.model.awaitPromptSince(t, mark, note); !strings.Contains(opening, mockModelCompactSummary) {
+	if opening := c.model.AwaitPromptSince(t, mark, note); !strings.Contains(opening, fakeclaudeapi.CompactSummary) {
 		t.Fatalf("the woken conversation's first request opens with %q, want Claude's compact summary", opening)
 	}
 	testworld.AwaitSince(app, appMark, protocol.EventGardenSeedsChanged, func(changed protocol.GardenSeedsChangedMessage) bool {
@@ -184,25 +185,25 @@ func TestARealClaudeDraftOnAnOutpostKeepsTheSessionAndTheDraftThroughACompacting
 	c := newRealOutpostClaude(t, false)
 	app := c.pair.App
 	const draft = "please keep this draft"
-	c.model.runBashAfter(outpostCompactRing, outpostCompactRing)
-	c.model.runBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
+	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
+	c.model.RunBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
 
 	app.Type(c.session, draft, "keyboard")
-	mark := c.model.mark()
+	mark := c.model.Mark()
 	c.mail(t, c.session, outpostCompactAsked)
-	c.model.awaitPromptSince(t, mark, "once its conversation is compacted")
+	c.model.AwaitPromptSince(t, mark, "once its conversation is compacted")
 	testworld.AwaitSession(app, c.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	mark = c.model.mark()
+	mark = c.model.Mark()
 	c.mail(t, c.session, "the review is in")
-	c.model.awaitPromptSince(t, mark, outpostCompactRing)
+	c.model.AwaitPromptSince(t, mark, outpostCompactRing)
 	testworld.AwaitSession(app, c.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	if peek := c.home.Attn("agent", "peek", c.session).Stdout; !strings.Contains(peek, draft) {
 		t.Fatalf("the composer lost the draft; the screen shows:\n%s", peek)
 	}
-	mark = c.model.mark()
+	mark = c.model.Mark()
 	app.Type(c.session, "\r", "keyboard")
-	c.model.awaitPromptSince(t, mark, draft)
+	c.model.AwaitPromptSince(t, mark, draft)
 }
 
 func (m *outpostMod) closeCompacting(t *testing.T) {
