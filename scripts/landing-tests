@@ -101,6 +101,7 @@ vitest src/App.automationSelection.test.tsx
 vitest src/App.gardenSeeds.test.tsx
 vitest src/App.newSession.test.tsx
 vitest src/App.editorTileDrafts.test.tsx
+vitest src/App.shelfLayout.test.tsx
 vitest scripts/real-app-harness/scenarioCatalog.test.mjs
 playwright e2e/queue-sidebar-fit.spec.ts
 playwright e2e/notebook-tile.spec.ts

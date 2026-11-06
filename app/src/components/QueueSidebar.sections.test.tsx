@@ -263,9 +263,7 @@ describe('the desktop strip', () => {
     expect(target).toHaveClass('is-drop-entering');
 
     fireEvent.pointerEnter(source);
-    fireEvent.pointerUp(source);
     expect(onDesktopDragEnter).not.toHaveBeenCalled();
-    expect(onDesktopDragDrop).not.toHaveBeenCalled();
 
     fireEvent.pointerEnter(target);
     fireEvent.pointerUp(target);

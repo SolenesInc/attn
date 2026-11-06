@@ -889,6 +889,21 @@ describe('Shelf layout', () => {
       expect(moves(daemon)).toEqual([expect.objectContaining({ source_desktop_id: 'ws', target_desktop_id: 'desktop-next', leaf_id: 'pane-s4', whole_column: true })]);
     });
 
+    it('moves a chip dropped on a sidebar desktop before the app has rendered the drag', async () => {
+      const daemon = await renderRow(SHELF_ON, { others: ['next'] });
+      const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
+
+      await gesture(daemon, () => {
+        press(chip('s7'), chipCentre('s7'));
+        act(() => {
+          moveTo({ clientX: 40, clientY: 400 });
+          fireEvent.pointerUp(target, { pointerId: 1, clientX: -40, clientY: 400 });
+        });
+      });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ target_desktop_id: 'desktop-next', leaf_id: 'pane-s7' })]);
+    });
+
     it('cancels a chip or tile drag with Esc: no message, and the row stays', async () => {
       const daemon = await renderRow(SHELF_ON);
 
