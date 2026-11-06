@@ -112,7 +112,7 @@ do next. When a seed update or another agent's message woke it, its first
 message names those items instead, and its charter decides what it does next:
 act on them, record them, or go back to sleep. A member without a charter, one
 still onboarding, and the Chief greet you after naming them. A wake for an
-answer to one of its asks, a quick capture or a notice keeps the plain
+answer to one of its asks, a [Quick Capture](quick-capture.md) or a notice keeps the plain
 greeting. Waking an awake member does nothing and names its session.
 
 Only one session is the member at a time. You can also bring back one of the

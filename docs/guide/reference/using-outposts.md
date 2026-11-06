@@ -178,14 +178,11 @@ reads go to the outpost, so they need its connection.
 
 ## Start on an outpost from the launcher
 
-With **Launcher 2.0** on in **Settings → Experimental** and an outpost added,
-the new-session launcher (**⌘N**, or **⌘T** for a terminal) starts agents and
-shells on any machine.
+With [the launcher](sessions.md#the-launcher) on and an outpost added, the
+launcher starts agents and shells on any machine.
 
 Recent projects from every machine share one list. Each row shows its machine,
-This Mac included. **Enter** starts on the row's machine. For an agent, **Tab**
-on a repository opens the repository's worktree choices on the row's machine. **Tab** on any other row, and
-on every row in a terminal launcher, puts the row's address in the input.
+This Mac included. **Enter** and **Tab** on a row act on the row's machine.
 
 An address names a machine and a place on it, as ssh writes it:
 `<machine>:<rest>`. Text without a machine means This Mac, and `home:` names

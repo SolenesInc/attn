@@ -25,6 +25,8 @@ the app still shows an older word, the page tells you which label to look for.
 | [chief](reference/chief.md) | The agent that looks after your other agents, and its first day with you |
 | [automations](reference/automations.md) | Agents that start on a schedule, on an event, or when you run them |
 | [annotations](reference/annotations.md) | Comments on what an agent wrote, sent back as one message |
+| [quick-capture](reference/quick-capture.md) | Experimental: send a message and files to the Chief or a crew member from any Mac app |
+| [callouts](reference/callouts.md) | Experimental: agents pointing at parts of the app, one step at a time |
 | [phone-app](reference/phone-app.md) | Experimental: install the iPhone app from TestFlight and pair it with a profile |
 | [telemetry](reference/telemetry.md) | What analytics records and shares |
 | [using-outposts](reference/using-outposts.md) | Experimental: connect computers, run remote terminals, and sync profile Notebooks |

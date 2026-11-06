@@ -15,6 +15,27 @@ Attn runs Claude Code and Codex, and other harnesses through plugins. You get
 each harness as its makers built it, and you can still use its bare CLI whenever you want.
 Nisse is experimental and off by default. See [Using Nisse](using-nisse.md).
 
+### The launcher
+
+**Launcher 2.0** in **Settings → Experimental**, off by default, replaces the
+picker with one dialog for the path, the repository and the worktree. Cmd+N
+(Ctrl+Shift+N on Linux) opens it for a new agent, and Cmd+T (Ctrl+Shift+T on
+Linux) opens it with a shell picked.
+
+- Type a project or a path, and use ↑ and ↓ to move through the list. Enter
+  starts on the selected row.
+- For an agent, Tab on a repository opens its worktree choices. Type to name a
+  new worktree, or pick the main checkout or a worktree that already exists.
+- Tab on any other row, and on every row in a terminal launcher, puts the row's
+  address in the input.
+- Cmd+Enter (Ctrl+Enter on Linux) opens a terminal at the selected place instead
+  of starting an agent.
+- Esc goes back a step, or closes the launcher.
+
+With an outpost added, the same dialog starts agents on any machine. [Start on an
+outpost from the launcher](using-outposts.md#start-on-an-outpost-from-the-launcher)
+covers addresses and what happens when a machine is unreachable.
+
 ## Worktrees
 
 Worktrees let many agents work on the same codebase in parallel without
@@ -97,7 +118,7 @@ current session, and a sleeping member stays asleep. Attn never reloads shells. 
 A program on the computer that runs Attn can send files and a message to a
 running agent of one profile, local or on an outpost. The agent receives them
 as a message from you, so only a program you paired can send. This does not
-need the Quick Capture setting.
+need the [Quick Capture](quick-capture.md) setting.
 
 Pair a program once:
 

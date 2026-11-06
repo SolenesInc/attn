@@ -3,6 +3,8 @@ title: Quick Capture
 summary: Send a message or files to the Chief or a crew member from any app, then go back to what you were doing.
 order: 2
 guide:
+  - link: quick-capture
+    label: Quick Capture, the full guide
   - link: crew#waking-a-member
     label: Waking a member, which a quick capture does
   - link: sessions#send-files-to-an-agent-from-outside-attn

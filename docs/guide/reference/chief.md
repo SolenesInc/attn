@@ -116,7 +116,7 @@ On its first day the Chief introduces itself, agrees its name and charter with
 you, and onboards you, one question at a time. Skip anything you don't want.
 
 - If you are new to Attn, the Chief takes the full path: delegation roles, how the
-  Notebook is laid out, a tour of the app with callouts, an offer to help
+  Notebook is laid out, a tour of the app with [callouts](callouts.md), an offer to help
   Attn's maintainers, and, if you like, building something small together.
 - If you already used Attn before the Chief, the Chief takes the tour: what's
   new about Attn, the steps you haven't set up yet, and the same offer. If the
@@ -137,7 +137,7 @@ You can also let agents vent about your own tools and environment. Those vents
 never leave your machine. Nothing turns on unless you say yes.
 
 The Chief changes Attn for you with its commands, and tells you what each one
-did. During onboarding the Chief can point at the app even when Agent callouts is off.
+did. During onboarding the Chief can point at the app even when [Agent callouts](callouts.md) is off.
 Onboarding can span several sessions: the Chief keeps its progress in its
 letter and continues from there.
 

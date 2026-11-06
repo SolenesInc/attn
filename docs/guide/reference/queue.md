@@ -166,7 +166,7 @@ not need you. In queue flow:
   your queue when the agent stops. Notifications do not take the agent out. You
   settle the agent, or the agent runs `attn turn settle`.
 
-A message you send through Quick Capture or `attn send` is not a notification.
+A message you send through [Quick Capture](quick-capture.md) or `attn send` is not a notification.
 Its run is yours, and the agent goes into your queue when it stops, so you see
 the reply. The same happens if you type into an agent or send it such a message
 while it works on a notification.

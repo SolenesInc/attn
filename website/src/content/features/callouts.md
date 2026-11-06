@@ -3,6 +3,8 @@ title: Callouts
 summary: An agent points at the part of the app it means, and you step through what it says.
 order: 6
 guide:
+  - link: callouts
+    label: Callouts, the full guide
   - link: chief#the-chiefs-first-day
     label: The Chief's first day, a tour of the app with callouts
 ---

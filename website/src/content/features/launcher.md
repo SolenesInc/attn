@@ -3,6 +3,8 @@ title: The launcher
 summary: Pick a project, a worktree and a machine in one dialog, and start an agent or a terminal.
 order: 4
 guide:
+  - link: sessions#the-launcher
+    label: The launcher, the full guide
   - link: sessions#opening-an-agent
     label: Opening an agent
   - link: sessions#worktrees
