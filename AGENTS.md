@@ -342,8 +342,9 @@ entry names:
   (.agents/skills/write-test)
 - Test runners, their receipts, or `scripts/test-history` =>
   docs/internal/test-history.md
-- How a harness behaves, before relying on it => docs/internal/harnesses.md;
-  check new claims in its source or with a probe and record them there
+- How a harness behaves, before relying on it => docs/internal/harnesses.md and
+  the file it names for that harness; check new claims in the harness's source
+  or with a probe and record them in that file
 - The inbox: addresses, rings, wakes, seed updates or notices =>
   docs/internal/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or

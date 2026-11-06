@@ -285,7 +285,7 @@ func checkIdle() {
 		fmt.Printf("ok   %s\n", s.name)
 	}
 	if failed {
-		fmt.Println("Real Claude no longer matches docs/internal/harnesses.md. Update the doc, the fake API and attn's handling together.")
+		fmt.Println("Real Claude no longer matches docs/internal/harnesses/claude.md. Update the doc, the fake API and attn's handling together.")
 		os.RemoveAll(root)
 		os.Exit(1)
 	}

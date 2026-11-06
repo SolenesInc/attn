@@ -39,7 +39,7 @@ The one way to reach inside is a pause point, below.
 - `w.Spawn` starts a session. `w.Launched` returns the `fakeagent.Run` for its
   agent, once the agent's terminal is raw and reads input. Call it before typing
   at a new agent: a line typed earlier does not submit to Claude, as
-  `docs/internal/harnesses.md` says.
+  `docs/internal/harnesses/claude.md` says.
 - `w.RequestSpawn` sends the same requests and returns the spawn result with
   the desktop and tile it added, so the test can close a refused spawn's
   tile the way the app does.
