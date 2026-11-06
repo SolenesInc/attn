@@ -108,7 +108,7 @@ export function AppSidebar() {
   const { handleRequestCloseSession, handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
   const { desktopNavigation } = useDesktopNavigationContext();
-  const width = useSidebarWidth();
+  const width = useSidebarWidth({ sidebarShown: !sidebarCollapsed && !agentFocused });
   return (
     <>
       <Sidebar

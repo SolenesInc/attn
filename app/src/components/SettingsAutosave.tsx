@@ -104,7 +104,7 @@ export function useAutosaveSetting(key: string, actual: string, save: SaveSettin
     onChange: (event: { target: { value: string } }) => store.set(key, event.target.value),
     onBlur: () => { void store.commit(key); },
     onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') void store.commit(key); },
-    dirty: field.value !== field.saved || Boolean(field.pending),
+    dirty: field.value !== field.saved || Boolean(field.pending) || Boolean(field.error),
     error: field.error,
     saving: Boolean(field.pending),
     saved: field.confirmed && field.value === field.saved,

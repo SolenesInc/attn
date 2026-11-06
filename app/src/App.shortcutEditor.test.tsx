@@ -113,6 +113,19 @@ describe('App shortcut editor', () => {
     expect(row('More, narrower tiles')).toHaveTextContent('⌘⌥=');
   });
 
+  it('lists the sidebar width keys only while the shelf layout is on', async () => {
+    const { editor } = await renderEditor({ shelfLayout: true });
+    expect(row('Widen the sidebar')).toHaveTextContent('⌘⌥]');
+    expect(row('Narrow the sidebar')).toHaveTextContent('⌘⌥[');
+    expect(within(editor).queryByText('Reset sidebar width')).toBeNull();
+  });
+
+  it('leaves out the sidebar width keys while the shelf layout is off', async () => {
+    const { editor } = await renderEditor();
+    expect(within(editor).queryByText('Widen the sidebar')).toBeNull();
+    expect(within(editor).queryByText('Narrow the sidebar')).toBeNull();
+  });
+
   it('names where new tiles open while the shelf layout is on', async () => {
     const { editor } = await renderEditor({ shelfLayout: true });
     expect(row('New session below')).toBeInTheDocument();

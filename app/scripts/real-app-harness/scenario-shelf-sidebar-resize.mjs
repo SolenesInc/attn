@@ -15,7 +15,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-SIDEBAR-RESIZE',
   tier: 'tier1-local-shell',
   prefix: 'shelf-sidebar-resize',
-  metadata: { agent: 'shell', focus: 'dragging the open sidebar by native pointer input in desktop and queue flow: the frozen tile area, the limits, Esc, double-click, collapse and relaunch' },
+  metadata: { agent: 'shell', focus: 'dragging the open sidebar by native pointer input in desktop and queue flow: the frozen tile area, the limits, Esc, the width keys, double-click, collapse and relaunch' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -170,6 +170,18 @@ try {
     await waitDom(HANDLE, { absent: true });
     await press('session.toggleSidebar');
     await waitDom(HANDLE);
+    await waitForSidebarPx(320);
+  });
+
+  await runner.step('keys_step_the_width_from_a_terminal', async () => {
+    const active = (await request('get_state')).activeLeaf;
+    runner.assert((await request('get_pane_state', { sessionId: active.sessionId, paneId: active.leafId })).inputFocused, 'the terminal holds the keyboard', { active });
+    await press('sidebar.narrower');
+    await waitForStored(280);
+    await waitForSidebarPx(280);
+    await waitForLabel('280px');
+    await press('sidebar.wider');
+    await waitForStored(320);
     await waitForSidebarPx(320);
   });
 

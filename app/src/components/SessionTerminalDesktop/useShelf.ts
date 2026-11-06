@@ -21,7 +21,7 @@ import {
   type RowLayoutPlan,
 } from './rowLayout';
 
-const WIDTH_LABEL_MS = 1500;
+export const WIDTH_LABEL_MS = 1500;
 
 type DesktopSession = NonNullable<SessionTerminalDesktopProps['desktopSessions']>[number];
 

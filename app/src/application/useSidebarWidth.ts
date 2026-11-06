@@ -1,10 +1,12 @@
-import { useCallback, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { clampSidebarPx, renderedSidebarWidth, sidebarWidthLabel, storedSidebarPx } from '../components/sidebarWidth';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { WIDTH_LABEL_MS } from '../components/SessionTerminalDesktop/useShelf';
+import { clampSidebarPx, renderedSidebarWidth, sidebarWidthLabel, stepSidebarWidth, storedSidebarPx } from '../components/sidebarWidth';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { useShortcut } from '../shortcuts/useShortcut';
 import { useSidebarDrag } from '../store/sidebarDrag';
 import { beginPointerResize } from '../utils/resizeGesture';
-import { useAppInputs } from './AppContexts';
+import { useAppErrorsContext, useAppInputs } from './AppContexts';
 
 const WIDTH_VARIABLE = '--sidebar-width';
 
@@ -12,9 +14,10 @@ function showSidebarWidth(px: number) {
   document.documentElement.style.setProperty(WIDTH_VARIABLE, renderedSidebarWidth(px));
 }
 
-export function useSidebarWidth() {
+export function useSidebarWidth({ sidebarShown }: { sidebarShown: boolean }) {
   const { settings } = useAppInputs();
   const { sendSetSetting } = useDaemonApi();
+  const { showError } = useAppErrorsContext();
   const resizable = settings.shelf_layout_enabled === 'true';
   const storedPx = storedSidebarPx(settings.sidebar_width);
   const dragging = useSidebarDrag((state) => state.dragging);
@@ -84,7 +87,32 @@ export function useSidebarWidth() {
 
   const clearWidth = useCallback(() => sendSetSetting('sidebar_width', ''), [sendSetSetting]);
 
-  return { resizable, dragging, labelRef, startDrag, cancelDrag, clearWidth };
+  const [stepLabelShown, setStepLabelShown] = useState(false);
+  const stepLabelTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (stepLabelTimer.current !== null) window.clearTimeout(stepLabelTimer.current);
+  }, []);
+
+  const step = (direction: 'wider' | 'narrower') => {
+    if (!sidebarShown) {
+      showError('The sidebar is hidden. Show it to change its width.');
+      return;
+    }
+    const result = stepSidebarWidth(storedPxRef.current, direction, window.innerWidth);
+    if (result.kind === 'limit') {
+      showError(result.message);
+      return;
+    }
+    sendSetSetting('sidebar_width', String(result.px));
+    if (labelRef.current) labelRef.current.textContent = sidebarWidthLabel(result.px, window.innerWidth);
+    setStepLabelShown(true);
+    if (stepLabelTimer.current !== null) window.clearTimeout(stepLabelTimer.current);
+    stepLabelTimer.current = window.setTimeout(() => setStepLabelShown(false), WIDTH_LABEL_MS);
+  };
+  useShortcut('sidebar.wider', () => step('wider'), resizable);
+  useShortcut('sidebar.narrower', () => step('narrower'), resizable);
+
+  return { resizable, dragging, stepLabelShown, labelRef, startDrag, cancelDrag, clearWidth };
 }
 
 export type SidebarWidth = ReturnType<typeof useSidebarWidth>;

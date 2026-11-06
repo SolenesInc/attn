@@ -1,8 +1,8 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import { pressShortcut, gesture, renderApp } from './test/renderApp';
-import { serveSettings } from './test/settings';
+import { openSection, serveSettings } from './test/settings';
 
 const SHELF_ON = { shelf_layout_enabled: 'true' };
 
@@ -138,5 +138,154 @@ describe('Dragging the sidebar', () => {
     await renderSidebar({ sidebar_width: '300' });
     expect(handle()).toBeNull();
     expect(shownWidth()).toBe('');
+  });
+});
+
+describe('Stepping the sidebar', () => {
+  const savedValues = (daemon: Awaited<ReturnType<typeof renderSidebar>>) => widthSaves(daemon).map((command) => command.value);
+  const label = () => document.querySelector<HTMLElement>('.sidebar-resize-label')!;
+  const runCommand = async (daemon: Awaited<ReturnType<typeof renderSidebar>>, title: string) => {
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: `>${title}` } }));
+    await gesture(daemon, () => fireEvent.mouseDown(screen.getByRole('option', { name: new RegExp(title) })));
+  };
+
+  it('moves 40px with each key, shows the width, and the label leaves', async () => {
+    const daemon = await renderSidebar(SHELF_ON);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    onTestFinished(() => { vi.useRealTimers(); });
+    expect(label()).not.toBeVisible();
+
+    await gesture(daemon, () => pressShortcut('sidebar.wider'));
+    expect(savedValues(daemon)).toEqual(['280']);
+    expect(shownWidth()).toBe(widthOf(280));
+    expect(label()).toBeVisible();
+    expect(label()).toHaveTextContent('280px');
+
+    await gesture(daemon, () => pressShortcut('sidebar.narrower'));
+    await gesture(daemon, () => pressShortcut('sidebar.narrower'));
+    expect(savedValues(daemon)).toEqual(['280', '240', '200']);
+    expect(label()).toHaveTextContent('200px is the narrowest');
+
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(label()).not.toBeVisible();
+  });
+
+  it('runs the same steps from the palette, and resets to the default', async () => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    await runCommand(daemon, 'Widen the sidebar');
+    expect(shownWidth()).toBe(widthOf(340));
+    await runCommand(daemon, 'Narrow the sidebar');
+    expect(shownWidth()).toBe(widthOf(300));
+    await runCommand(daemon, 'Reset sidebar width');
+    expect(savedValues(daemon)).toEqual(['340', '300', '']);
+    expect(shownWidth()).toBe(widthOf(240));
+  });
+
+  it.each([
+    ['the narrowest', 'sidebar.narrower', '200', 1600, "The sidebar can't go below 200px."],
+    ['the widest', 'sidebar.wider', '600', 1600, "The sidebar can't pass 600px."],
+    ["the window's share", 'sidebar.wider', '320', 800, "The sidebar can't pass 320px with the window at 800px: tiles keep 480px."],
+    ["the window's share from a wider stored width", 'sidebar.wider', '600', 800, "The sidebar can't pass 320px with the window at 800px: tiles keep 480px."],
+  ] as const)('names the limit past %s and saves nothing', async (_, id, width, windowPx, message) => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: width });
+    vi.stubGlobal('innerWidth', windowPx);
+    onTestFinished(() => { vi.unstubAllGlobals(); });
+    await gesture(daemon, () => pressShortcut(id));
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(widthSaves(daemon)).toEqual([]);
+  });
+
+  it('shows one message however many times a step hits the limit', async () => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '200' });
+    for (let press = 0; press < 3; press += 1) await gesture(daemon, () => pressShortcut('sidebar.narrower'));
+    expect(screen.getAllByText("The sidebar can't go below 200px.")).toHaveLength(1);
+  });
+
+  it('stops exactly on a limit, and steps down from what the window shows', async () => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '590' });
+    vi.stubGlobal('innerWidth', 1600);
+    onTestFinished(() => { vi.unstubAllGlobals(); });
+    await gesture(daemon, () => pressShortcut('sidebar.wider'));
+    expect(savedValues(daemon)).toEqual(['600']);
+    vi.stubGlobal('innerWidth', 800);
+    await gesture(daemon, () => pressShortcut('sidebar.narrower'));
+    expect(savedValues(daemon)).toEqual(['600', '280']);
+  });
+
+  it('says the sidebar is hidden instead of changing a width nobody can see', async () => {
+    const daemon = await renderSidebar(SHELF_ON);
+    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+    await gesture(daemon, () => pressShortcut('sidebar.wider'));
+    expect(screen.getByText('The sidebar is hidden. Show it to change its width.')).toBeInTheDocument();
+    expect(widthSaves(daemon)).toEqual([]);
+  });
+
+  it('has no keys or commands with the shelf off', async () => {
+    const daemon = await renderSidebar({});
+    await gesture(daemon, () => pressShortcut('sidebar.wider'));
+    await gesture(daemon, () => pressShortcut('sidebar.narrower'));
+    expect(widthSaves(daemon)).toEqual([]);
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>sidebar' } }));
+    for (const name of [/Widen the sidebar/, /Narrow the sidebar/, /Reset sidebar width/]) {
+      expect(screen.queryByRole('option', { name })).toBeNull();
+    }
+  });
+});
+
+describe('The sidebar width in Settings', () => {
+  const field = () => screen.getByTestId('settings-sidebar-width');
+
+  it('saves a typed width and goes back to the default', async () => {
+    const settings = { ...SHELF_ON, sidebar_width: '300' };
+    const daemon = await openSection('experimental', { settings });
+    expect(field()).toHaveValue(300);
+
+    fireEvent.change(field(), { target: { value: '360' } });
+    await gesture(daemon, () => fireEvent.keyDown(field(), { key: 'Enter' }));
+    expect(widthSaves(daemon).map((command) => command.value)).toEqual(['360']);
+    expect(shownWidth()).toBe(widthOf(360));
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Use default' })));
+    expect(widthSaves(daemon).map((command) => command.value)).toEqual(['360', '']);
+    expect(shownWidth()).toBe(widthOf(240));
+    expect(field()).toHaveValue(null);
+    expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
+  });
+
+  it("shows the daemon's message for a refused width and keeps the stored one", async () => {
+    const refusal = 'sidebar_width must be a whole number from 200 to 600, got "900"';
+    const daemon = await openSection('experimental', { settings: { ...SHELF_ON, sidebar_width: '300' } }, (scripted) => {
+      scripted.on('set_setting', () => ({ event: 'settings_updated', success: false, error: refusal }));
+    });
+    fireEvent.change(field(), { target: { value: '900' } });
+    await gesture(daemon, () => fireEvent.keyDown(field(), { key: 'Enter' }));
+    expect(screen.getAllByRole('alert')[0]).toHaveTextContent(refusal);
+    expect(shownWidth()).toBe(widthOf(300));
+
+    fireEvent.change(field(), { target: { value: '300' } });
+    await gesture(daemon, () => fireEvent.keyDown(field(), { key: 'Enter' }));
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('follows a width set elsewhere while Settings is open', async () => {
+    const daemon = await openSection('experimental', { settings: SHELF_ON });
+    await act(async () => {
+      daemon.emit({ event: 'settings_updated', settings: { ...SHELF_ON, sidebar_width: '420' } });
+      await daemon.idle();
+    });
+    expect(field()).toHaveValue(420);
+  });
+
+  it('offers no way back when the daemon reports the default width', async () => {
+    await openSection('experimental', { settings: { ...SHELF_ON, sidebar_width: '240' } });
+    expect(field()).toHaveValue(240);
+    expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
+  });
+
+  it('has no row with the shelf off', async () => {
+    await openSection('experimental', { settings: { sidebar_width: '300' } });
+    expect(screen.queryByTestId('settings-sidebar-width')).toBeNull();
   });
 });

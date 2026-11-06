@@ -15,7 +15,7 @@ export function SidebarResizeHandle({ width }: { width: SidebarWidth }) {
       onMouseDown={(event) => event.preventDefault()}
       onDoubleClick={width.clearWidth}
     >
-      <div ref={width.labelRef} className="sidebar-resize-label" hidden={!width.dragging} />
+      <div ref={width.labelRef} className="sidebar-resize-label" hidden={!width.dragging && !width.stepLabelShown} />
     </div>
   );
 }

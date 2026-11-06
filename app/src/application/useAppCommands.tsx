@@ -309,6 +309,29 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       ...(shelfLayoutEnabled
         ? [
             {
+              id: 'sidebar-wider',
+              title: 'Widen the sidebar',
+              keywords: ['sidebar', 'width', 'wider', 'resize'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('sidebar.wider'),
+              run: () => void triggerShortcut('sidebar.wider'),
+            },
+            {
+              id: 'sidebar-narrower',
+              title: 'Narrow the sidebar',
+              keywords: ['sidebar', 'width', 'narrower', 'resize'],
+              icon: <KeyboardActionIcon />,
+              shortcut: keys('sidebar.narrower'),
+              run: () => void triggerShortcut('sidebar.narrower'),
+            },
+            {
+              id: 'sidebar-reset-width',
+              title: 'Reset sidebar width',
+              keywords: ['sidebar', 'width', 'default', 'resize'],
+              icon: <KeyboardActionIcon />,
+              run: () => sendSetSetting('sidebar_width', ''),
+            },
+            {
               id: 'shelf-fewer-tiles',
               title: 'Fewer, wider tiles',
               keywords: ['shelf', 'narrowest', 'width', 'tiles'],
@@ -376,6 +399,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     desktopNavigation,
     desktops,
     sendDesktopSetOrder,
+    sendSetSetting,
     showAction,
     showError,
     editorUnavailableReason,

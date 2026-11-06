@@ -81,6 +81,7 @@ To turn it on, use **Settings → Experimental → Shelf layout** or run `attn s
 | Carry the active column past its neighbour | Cmd+Option+Shift+Left, Right | Ctrl+Alt+Shift+Left, Right |
 | Send the active tile to the shelf | Cmd+Option+Shift+Up | Ctrl+Alt+Shift+Up |
 | Show fewer, wider tiles or more, narrower tiles | Cmd+Option+-, Cmd+Option+= | Ctrl+Alt+-, Ctrl+Alt+= |
+| Widen or narrow the open sidebar | Cmd+Option+], Cmd+Option+[ | Ctrl+Alt+], Ctrl+Alt+[ |
 
 The command palette offers these actions too. Zoom, focus and moving a tile to another desktop keep their keys and work as above.
 
@@ -101,6 +102,12 @@ On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl
 A tile never gets narrower than the narrowest width, 66 terminal character columns by default. Set it in **Settings → Experimental**, or with `attn settings set narrowest_tile_cols <number>`. Cmd+Option+- and Cmd+Option+= (Ctrl+Alt+- and Ctrl+Alt+= on Linux) step through 57, 66, 76, 86, 100, 120 and 150 until one tile fewer or one tile more fits. Hovering the dots in the middle of the shelf shows the same control.
 
 Drag the divider between two columns to give them the widths you want, and the other columns share the rest. A drag past the narrowest width moves the far column to the shelf, and dragging back restores it. Esc cancels the drag. To clear the widths beside one divider, double-click it. To clear every dragged width on the desktop, run "Clear dragged widths" from the palette.
+
+The open sidebar has one width, in desktop flow and queue flow and on every profile. Drag its right edge to change it. The tiles hold still during the drag and fit once when you release, so running agents resize only once. Esc, leaving the window or collapsing the sidebar cancels the drag. Cmd+Option+] and Cmd+Option+[ (Ctrl+Alt+] and [ on Linux) step the width by 40 pixels, and so do "Widen the sidebar" and "Narrow the sidebar" in the palette. To type a width, use **Settings → Experimental** or `attn settings set sidebar_width <pixels>`.
+
+The width runs from 200 to 600 pixels, and tiles always keep at least 480 pixels, so an 800-pixel window shows at most 320. A wider saved width comes back when the window grows. A label shows the width during a drag and after a step, and Attn names the limit when a step can't go further. A wider sidebar leaves less room, so fewer tiles may fit.
+
+To go back to the default of 240 pixels, double-click the edge, run "Reset sidebar width", click **Use default** in Settings, or run `attn settings set sidebar_width ""`. The width survives a restart. Whether the sidebar is collapsed does not.
 
 ### Drags
 

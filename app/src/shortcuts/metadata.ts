@@ -54,6 +54,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.jumpToWaiting': { label: 'Jump to next waiting session', category: 'sessions' },
   'session.nextRun': { label: 'Next automation run needing you', category: 'sessions' },
   'sidebar.agentList': { label: 'All agents', category: 'sessions' },
+  'sidebar.wider': { label: 'Widen the sidebar', category: 'sessions', requiresShelfLayout: true },
+  'sidebar.narrower': { label: 'Narrow the sidebar', category: 'sessions', requiresShelfLayout: true },
   'session.settle': { label: 'Settle turn', category: 'sessions' },
   'dock.asks': { label: 'Asks drawer', category: 'sessions', dockLabel: 'Asks' },
   'session.priority': { label: 'Toggle session priority', category: 'sessions' },

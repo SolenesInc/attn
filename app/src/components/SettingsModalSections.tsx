@@ -21,6 +21,7 @@ import {
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
+import { SIDEBAR_WIDTH } from './sidebarWidth';
 
 const AVAILABILITY_SUMMARY: Record<HarnessAvailability, string> = {
   available: 'Available',
@@ -595,6 +596,7 @@ export function ExperimentalSettings({
   sharedPtyHostEnabled,
   shelfLayoutEnabled,
   narrowestTileColsDraft,
+  sidebarWidthDraft,
   savedFlash,
   onSetSetting,
 }: Pick<
@@ -615,6 +617,7 @@ export function ExperimentalSettings({
   | 'sharedPtyHostEnabled'
   | 'shelfLayoutEnabled'
   | 'narrowestTileColsDraft'
+  | 'sidebarWidthDraft'
   | 'savedFlash'
   | 'onSetSetting'
 >) {
@@ -720,26 +723,60 @@ export function ExperimentalSettings({
           </button>
         </div>
         {shelfLayoutEnabled && (
-          <div className="settings-row-card">
-            <div>
-              <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
-              <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
+          <>
+            <div className="settings-row-card">
+              <div>
+                <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
+                <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
+              </div>
+              <div>
+                <input
+                  id="settings-narrowest-tile-cols"
+                  data-testid="settings-narrowest-tile-cols"
+                  type="number"
+                  min={1}
+                  value={narrowestTileColsDraft.value}
+                  onChange={narrowestTileColsDraft.onChange}
+                  onBlur={narrowestTileColsDraft.commit}
+                  onKeyDown={narrowestTileColsDraft.onKeyDown}
+                  className="settings-input"
+                />
+                <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+              </div>
             </div>
-            <div>
-              <input
-                id="settings-narrowest-tile-cols"
-                data-testid="settings-narrowest-tile-cols"
-                type="number"
-                min={1}
-                value={narrowestTileColsDraft.value}
-                onChange={narrowestTileColsDraft.onChange}
-                onBlur={narrowestTileColsDraft.commit}
-                onKeyDown={narrowestTileColsDraft.onKeyDown}
-                className="settings-input"
-              />
-              <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+            <div className="settings-row-card">
+              <div>
+                <label className="settings-row-title" htmlFor="settings-sidebar-width">Sidebar width (pixels)</label>
+                <p className="settings-row-copy">The open sidebar's width, from {SIDEBAR_WIDTH.min} to {SIDEBAR_WIDTH.max}. Empty uses the default of {SIDEBAR_WIDTH.default}.</p>
+              </div>
+              <div className="settings-row-inline">
+                <input
+                  id="settings-sidebar-width"
+                  data-testid="settings-sidebar-width"
+                  type="number"
+                  min={SIDEBAR_WIDTH.min}
+                  max={SIDEBAR_WIDTH.max}
+                  placeholder={String(SIDEBAR_WIDTH.default)}
+                  value={sidebarWidthDraft.value}
+                  onChange={sidebarWidthDraft.onChange}
+                  onBlur={sidebarWidthDraft.commit}
+                  onKeyDown={sidebarWidthDraft.onKeyDown}
+                  className="settings-input"
+                />
+                {sidebarWidthDraft.value !== '' && sidebarWidthDraft.value !== String(SIDEBAR_WIDTH.default) && (
+                  <button
+                    type="button"
+                    className="settings-action"
+                    data-testid="settings-sidebar-width-reset"
+                    onClick={() => void sidebarWidthDraft.apply('')}
+                  >
+                    Use default
+                  </button>
+                )}
+                <SavedMark shown={savedFlash.saved('sidebar_width')} testID="settings-sidebar-width-saved" />
+              </div>
             </div>
-          </div>
+          </>
         )}
         <div className="settings-row-card">
           <div>

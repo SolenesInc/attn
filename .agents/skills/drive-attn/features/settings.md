@@ -24,7 +24,7 @@ Appearance.
 ### People
 
 - ⌘, (`ui.openSettings`, `app/src/shortcuts/registry.ts`) opens the dialog, and closes it when open. The binding is protected: the user can rebind it but never unbind it.
-- With the shelf layout on, ⌥⌘− and ⌥⌘= and the shelf's width control set `narrowest_tile_cols`, which the Experimental section also shows ([desktops.md](desktops.md)).
+- With the shelf layout on, ⌥⌘− and ⌥⌘= and the shelf's width control set `narrowest_tile_cols`, and dragging the sidebar's edge, ⌥⌘] and ⌥⌘[ set `sidebar_width`. The Experimental section also shows both ([desktops.md](desktops.md), [sidebar.md](sidebar.md)).
 - ⌘=, ⌘- and ⌘0 (`ui.increaseFontSize`, `ui.decreaseFontSize`, `ui.resetFontSize`) change the app's text size, which Appearance also shows.
 - Palette (`app/src/application/useAppCommands.tsx`): `settings` ("Settings").
 - Home screen: the gear, `[data-testid="settings-button"]` (`app/src/components/Dashboard.tsx`).

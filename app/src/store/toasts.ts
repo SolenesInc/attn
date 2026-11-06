@@ -19,13 +19,17 @@ interface ToastState {
   clear: () => void;
 }
 
+const isNotice = (row: Omit<ToastRow, 'id'>) => !row.action && !row.sessionId;
+const repeatsNotice = (existing: ToastRow, row: Omit<ToastRow, 'id'>) =>
+  isNotice(existing) && isNotice(row) && existing.message === row.message && existing.source === row.source;
+
 export const useToastStore = create<ToastState>((set) => ({
   rows: [],
   fading: false,
   append: (row) =>
     set((state) => ({
       rows: [
-        ...(state.fading ? [] : state.rows).filter((existing) => existing.id !== row.id),
+        ...(state.fading ? [] : state.rows).filter((existing) => existing.id !== row.id && !repeatsNotice(existing, row)),
         { ...row, id: row.id || crypto.randomUUID() },
       ],
       fading: false,

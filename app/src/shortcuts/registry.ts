@@ -49,6 +49,8 @@ export const MAC_SHORTCUTS = {
   'shelf.carryLeft': { key: 'ArrowLeft', meta: true, alt: true, shift: true },
   'shelf.carryRight': { key: 'ArrowRight', meta: true, alt: true, shift: true },
   'shelf.sendToShelf': { key: 'ArrowUp', meta: true, alt: true, shift: true },
+  'sidebar.wider': { key: ']', code: 'BracketRight', meta: true, alt: true },
+  'sidebar.narrower': { key: '[', code: 'BracketLeft', meta: true, alt: true },
 
   // In editable targets ⌘F belongs to the focused editor (CodeMirror search).
   'terminal.find': { key: 'f', meta: true, editableTarget: 'native' },
@@ -165,6 +167,8 @@ export const LINUX_SHORTCUTS = {
   'shelf.carryLeft': { key: 'ArrowLeft', meta: true, alt: true, shift: true },
   'shelf.carryRight': { key: 'ArrowRight', meta: true, alt: true, shift: true },
   'shelf.sendToShelf': { key: 'ArrowUp', meta: true, alt: true, shift: true },
+  'sidebar.wider': { key: ']', code: 'BracketRight', meta: true, alt: true },
+  'sidebar.narrower': { key: '[', code: 'BracketLeft', meta: true, alt: true },
   'terminal.find': { key: 'f', meta: true, shift: true, editableTarget: 'native' },
 
   'session.new': { key: 'n', meta: true, shift: true },

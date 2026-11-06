@@ -63,6 +63,9 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
         { label: 'Snooze this agent', combos: [fromId('session.snooze')] },
         { label: 'Stop the countdown, or keep the next turn', combos: [fromId('session.cancelCountdown')] },
         { label: 'Toggle sidebar', combos: [fromId('session.toggleSidebar')] },
+        ...(shelfLayoutEnabled
+          ? [{ label: 'Widen / narrow the sidebar', combos: [fromId('sidebar.wider'), fromId('sidebar.narrower')] }]
+          : []),
         {
           label: 'Sessions list, live and closed',
           combos: [fromId('sessions.open')],

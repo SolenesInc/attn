@@ -72,6 +72,19 @@ describe('App shortcut cheatsheet', () => {
   });
 
   it.each([
+    ['lists', { shelf_layout_enabled: 'true' }, [['⌘', '⌥', ']'], ['⌘', '⌥', '[']]],
+    ['leaves out', {}, undefined],
+  ])('%s the sidebar width keys by the shelf layout setting', async (_, settings, combos) => {
+    const { daemon } = await renderApp({
+      initialState: { settings },
+      script: (scripted) => serveSettings(scripted, settings),
+    });
+    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
+
+    expect(combosOf(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' }), 'Widen / narrow the sidebar')).toEqual(combos);
+  });
+
+  it.each([
     ['on', { shelf_layout_enabled: 'true' }, ['New session below', 'New shell beside', 'New shell below'], ['New session, split sideways', 'Split pane down', 'Split pane sideways']],
     ['off', {}, ['New session, split sideways', 'Split pane down', 'Split pane sideways'], ['New session below', 'New shell beside', 'New shell below']],
   ])('names where new tiles open with the shelf layout %s', async (_, settings, shown, hidden) => {

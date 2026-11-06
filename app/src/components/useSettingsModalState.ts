@@ -292,6 +292,12 @@ export function useSettingsModalState({
     settingKey: 'narrowest_tile_cols',
     trim: true,
   });
+  const sidebarWidthDraft = useSettingDraft({
+    ...draftDeps,
+    actual: settings.sidebar_width ?? '',
+    settingKey: 'sidebar_width',
+    trim: true,
+  });
   const headlessContextCapDraft = useSettingDraft({
     ...draftDeps,
     actual: actualHeadlessContextCap,
@@ -687,6 +693,7 @@ export function useSettingsModalState({
     sharedPtyHostEnabled,
     shelfLayoutEnabled,
     narrowestTileColsDraft,
+    sidebarWidthDraft,
     newSessionLauncherEnabled,
     codexSharedEnabled,
     claudeModEnabled,
