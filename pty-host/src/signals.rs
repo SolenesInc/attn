@@ -6,6 +6,7 @@ const KEEPALIVE: Duration = Duration::from_secs(1);
 const MAX_PENDING: usize = 64 * 1024;
 
 pub const HEARTBEAT: &str = "heartbeat";
+pub const WORKER_INFO: &str = "worker_info";
 pub const PROGRAM_STATUS: &str = "program_status";
 const PROGRAM_CLEAR: &str = "clear";
 

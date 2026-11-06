@@ -164,15 +164,7 @@ struct Model {
     pixel_height: u16,
 }
 
-impl Lifecycle {
-    fn replayed_source(&self) -> &'static str {
-        if self.state_source == signals::PROGRAM_STATUS {
-            signals::PROGRAM_STATUS
-        } else {
-            "worker_info"
-        }
-    }
-}
+const LAUNCH_STATE: &str = "working";
 
 struct Lifecycle {
     running: bool,
@@ -351,9 +343,9 @@ impl Session {
                 },
                 lifecycle: Lifecycle {
                     running: true,
-                    state: "working".to_owned(),
+                    state: LAUNCH_STATE.to_owned(),
                     state_detail: String::new(),
-                    state_source: signals::HEARTBEAT,
+                    state_source: signals::WORKER_INFO,
                     exit_code: None,
                     exit_signal: None,
                 },
@@ -568,6 +560,8 @@ impl Session {
                     state_detail: handoff.state_detail.clone(),
                     state_source: if handoff.state_source == signals::PROGRAM_STATUS {
                         signals::PROGRAM_STATUS
+                    } else if handoff.state == LAUNCH_STATE {
+                        signals::WORKER_INFO
                     } else {
                         signals::HEARTBEAT
                     },
@@ -724,7 +718,7 @@ impl Session {
             &self.id,
             &lifecycle.state,
             &lifecycle.state_detail,
-            lifecycle.replayed_source(),
+            lifecycle.state_source,
         ));
         if !lifecycle.running {
             let _ = sender.offer_value(&exit_event(
@@ -752,7 +746,7 @@ impl Session {
                 &self.id,
                 &lifecycle.state,
                 &lifecycle.state_detail,
-                lifecycle.replayed_source(),
+                lifecycle.state_source,
             ),
         ];
         if !lifecycle.running {
