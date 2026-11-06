@@ -38,6 +38,7 @@ export type BoolSettingKey = (typeof BoolSetting)[keyof typeof BoolSetting];
 
 export const DEFAULT_ON_SETTINGS: ReadonlySet<string> = new Set([
   "direct_agent_launch_enabled",
+  "pty_shared_host_enabled",
   "queue_show_hidden_sessions",
   "queue_quiet_notifications",
   "auto_approve_enabled",
@@ -75,6 +76,6 @@ export const FEATURES: readonly Feature[] = [
   { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents. Turning it off disconnects every phone.", group: "Connections", applies: "Now", thisMachine: false, stage: "experimental", since: "2026-11-02", search: "mobile iphone pair" },
   { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used on this home and its outposts. Nothing is sent.", group: "Data", applies: "Now", thisMachine: false, stage: "experimental", since: "2026-10-24", search: "telemetry vents record" },
   { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", group: "Under the hood", applies: "New agents", thisMachine: false, stage: "on by default", since: "2026-10-15", search: "memory launcher" },
-  { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", group: "Under the hood", applies: "New terminals", thisMachine: true, stage: "experimental", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
+  { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", group: "Under the hood", applies: "New terminals", thisMachine: true, stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
   { key: "background_login_env_enabled", name: "Background login environment", summary: "Answer clients while the login shell runs, instead of waiting for it before listening.", group: "Under the hood", applies: "Next daemon start", thisMachine: false, stage: "experimental", since: "2026-11-04", search: "startup shell environment" },
 ];

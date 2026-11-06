@@ -13,7 +13,7 @@ import (
 
 func TestATerminalWhoseDaemonFallsBehindAFloodIsToldToResync(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	reading := s.PauseAt(pausepoint.PtyStreamRead)
 	dropped := s.PauseAt(pausepoint.PtySubscriberDrop)
 	s.Start()

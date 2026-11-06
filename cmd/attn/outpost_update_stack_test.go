@@ -183,7 +183,7 @@ func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *tes
 
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	home.RunFrom(before)
 	home.InstallsOnOutposts(before, hostBefore)
 	ssh.Use(home.World)
@@ -208,7 +208,7 @@ func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *tes
 		t.Fatal("Add did not install the home's host beside attn")
 	}
 	remote.RunFrom(ssh.InstallPath(remote))
-	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	awaitTheSharedHost(t, remote.App())
 
 	host := row.ID
 	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
@@ -265,7 +265,7 @@ func outpostWithMatchingBuild(t *testing.T) (*testworld.SSH, *testworld.Stack, *
 	build := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "matching", format)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	remote.RunFrom(build)
 	home.RunFrom(build)
 	home.InstallsOnOutposts(build, ptyhosttest.BuildWithSnapshotFormat(t, format))
@@ -295,7 +295,7 @@ func TestAddInstallsTheMissingHostOnAnOutpostAtTheHomeBuild(t *testing.T) {
 	if _, err := os.Stat(ssh.HostPath(remote)); err != nil {
 		t.Fatalf("Add left the outpost without a host: %v", err)
 	}
-	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	awaitTheSharedHost(t, remote.App())
 	host := row.ID
 	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	awaitTerminalOwner(app, shell, "owner", ptyhost.BinaryName)
@@ -346,7 +346,7 @@ func TestAPairedOutpostWithoutTheHostKeepsWorkersAndUpdateInstallsIt(t *testing.
 	if err != nil || string(before) != string(after) {
 		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
 	}
-	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	awaitTheSharedHost(t, remote.App())
 	fresh := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("fresh"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	awaitTerminalOwner(app, fresh, "fresh", ptyhost.BinaryName)
 	t.Logf("shell PID %s stayed on its worker; a new terminal started in the installed host", strings.TrimSpace(string(after)))

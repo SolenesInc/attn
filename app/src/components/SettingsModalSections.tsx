@@ -591,10 +591,9 @@ function featureDetail(key: BoolSettingKey): ReactNode {
   return null;
 }
 
-function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children }: {
+function FeatureRow({ feature, settings, onSetSetting, children }: {
   feature: Feature;
   settings: Record<string, string>;
-  ptyBackendMode: string;
   onSetSetting: SettingsModalState['onSetSetting'];
   children?: ReactNode;
 }) {
@@ -607,7 +606,7 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
           <p className="settings-row-title">
             {feature.name}
             <span className="settings-feature-applies">
-              {feature.thisMachine ? `This machine · ${feature.applies}` : feature.applies}
+              {feature.applies}
             </span>
           </p>
           <p className="settings-row-copy" id={descriptionID}>{feature.summary}{featureDetail(feature.key)}</p>
@@ -620,7 +619,6 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
           aria-describedby={descriptionID}
           className="settings-action"
           data-testid={`settings-feature-${feature.key}`}
-          disabled={feature.key === BoolSetting.ptySharedHostEnabled && ptyBackendMode !== 'migrating'}
           onClick={() => onSetSetting(feature.key, on ? 'false' : 'true')}
         >
           {on ? 'Disable' : 'Enable'}
@@ -633,7 +631,6 @@ function FeatureRow({ feature, settings, ptyBackendMode, onSetSetting, children 
 
 export function ExperimentalSettings({
   settings,
-  ptyBackendMode,
   narrowestTileColsDraft,
   sidebarWidthDraft,
   savedFlash,
@@ -641,7 +638,6 @@ export function ExperimentalSettings({
 }: Pick<
   SettingsModalState,
   | 'settings'
-  | 'ptyBackendMode'
   | 'narrowestTileColsDraft'
   | 'sidebarWidthDraft'
   | 'savedFlash'
@@ -651,13 +647,13 @@ export function ExperimentalSettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <p className="settings-row-copy">Each one applies to this home and all its outposts, unless it says this machine.</p>
+        <p className="settings-row-copy">Each one applies to this home and all its outposts.</p>
       </div>
       {groups.map(group => (
         <div className="settings-block-body" key={group} data-testid={`settings-feature-group-${group}`}>
           <p className="settings-label">{group}</p>
           {EXPERIMENTAL_FEATURES.filter(feature => feature.group === group).map(feature => (
-            <FeatureRow key={feature.key} feature={feature} settings={settings} ptyBackendMode={ptyBackendMode} onSetSetting={onSetSetting}>
+            <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting}>
               {feature.key === BoolSetting.shelfLayoutEnabled && (
                 <>
                 <div className="settings-row-card">
@@ -849,6 +845,8 @@ export function AgentSettings({
   autoApproveEnabled,
   handleToggleAutoApprove,
   directAgentLaunchEnabled,
+  sharedPTYHostEnabled,
+  ptyBackendMode,
   defaultOverrideAgentList,
   actualAgentCapabilities,
   agentCapabilityOrder,
@@ -870,6 +868,8 @@ export function AgentSettings({
   | 'autoApproveEnabled'
   | 'handleToggleAutoApprove'
   | 'directAgentLaunchEnabled'
+  | 'sharedPTYHostEnabled'
+  | 'ptyBackendMode'
   | 'defaultOverrideAgentList'
   | 'actualAgentCapabilities'
   | 'agentCapabilityOrder'
@@ -963,6 +963,28 @@ export function AgentSettings({
             onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
           >
             {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-default-row">
+          <div>
+            <p className="settings-row-title">Shared terminal host</p>
+            <p className="settings-row-copy" id="shared-terminal-host-description">
+              Run terminals in one shared process, which uses less memory, and stream output only to the terminals the
+              window shows. On by default on this machine; applies to new and reloaded terminals.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared terminal host"
+            aria-checked={sharedPTYHostEnabled}
+            aria-describedby="shared-terminal-host-description"
+            className="settings-action"
+            data-testid="settings-feature-pty_shared_host_enabled"
+            disabled={ptyBackendMode !== 'migrating'}
+            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPTYHostEnabled ? 'false' : 'true')}
+          >
+            {sharedPTYHostEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </section>

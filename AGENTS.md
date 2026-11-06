@@ -250,7 +250,8 @@ Follow [Testing](docs/internal/testing.md). In short:
 
 ## Ownership
 
-- Production PTYs run in `internal/ptyworker`, using `internal/pty`.
+- Production PTYs run in the shared host (`pty-host`). On a machine with no host
+  they run in `internal/ptyworker`, using `internal/pty`.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and periodic ticks;

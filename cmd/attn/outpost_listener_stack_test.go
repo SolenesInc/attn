@@ -22,7 +22,7 @@ func bridgeAddress(t *testing.T) string {
 
 func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	a := testworld.NewSSH(t)
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	a.Use(s.World)
 	removeReplied := s.PauseAt(pausepoint.PtyRemoveReplied)
 	s.Start()

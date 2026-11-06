@@ -163,7 +163,8 @@ async function main() {
     let closeElapsedMs;
     const processes = registeredTerminalProcesses(dataDir, pane.runtimeId, runner.sessionDir);
     runner.assert(processes?.workerPid > 1, 'the terminal registry names the worker and child before close', { processes });
-    const exited = await observeProcessExits([processes.workerPid, processes.childPid], {
+    const endsWithTheTerminal = processes.sharedHost ? [processes.childPid] : [processes.workerPid, processes.childPid];
+    const exited = await observeProcessExits(endsWithTheTerminal, {
       env: instanceCliEnv(instance), timeoutMs: 8_000,
     });
     await runner.step('close_before_teardown', async () => {

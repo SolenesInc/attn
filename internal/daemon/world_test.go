@@ -121,7 +121,7 @@ func (w *world) start() {
 	if w.pauses != nil {
 		w.pauses.Reopen()
 	}
-	if os.Getenv("ATTN_TEST_PTY_HOST") != "" && !w.bubbled && w.terms == nil {
+	if os.Getenv("ATTN_TEST_WIRE_ON_PTY_HOST") != "" && !w.bubbled && w.terms == nil {
 		w.T.Cleanup(func() { ptyhost.ReapDataDir(filepath.Dir(w.Socket)) })
 	}
 	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.clock, w.gardenClock)

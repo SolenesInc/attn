@@ -26,8 +26,8 @@ func TestTheSharedPTYHostSettingRefusesWhatItCannotHonour(t *testing.T) {
 			if protocol.Deref(answer.Success) || protocol.Deref(answer.Error) == "" {
 				t.Errorf("set %s=%s answered success=%t, want a refusal with its reason", tc.key, tc.value, protocol.Deref(answer.Success))
 			}
-			if enabled, active := answer.Settings["pty_shared_host_enabled"], answer.Settings["pty_shared_host_active"]; enabled != "false" || active != "false" {
-				t.Errorf("after the refusal the shared host reads enabled=%s active=%s, want both false", enabled, active)
+			if enabled, active := answer.Settings["pty_shared_host_enabled"], answer.Settings["pty_shared_host_active"]; enabled != "true" || active != "false" {
+				t.Errorf("after the refusal the shared host reads enabled=%s active=%s, want the unchanged default on and inactive", enabled, active)
 			}
 		})
 	}

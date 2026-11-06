@@ -13,7 +13,7 @@ import (
 
 func TestARestartKeepsALiveShellFinishesAnInterruptedCloseAndRevivesAShellWhoseWorkerDied(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.Start()
 	app := s.App()
 	live := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("live"))

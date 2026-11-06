@@ -785,7 +785,14 @@ describe('App terminal runtime', () => {
 
   it('only reconciles, without refitting, a snapshot restored after the user moved to another session', async () => {
     layOutTerminals(800, 600);
-    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' }));
+    const sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })];
+    const { daemon } = await renderApp({
+      initialState: {
+        settings: { pty_shared_host_enabled: 'false' },
+        sessions,
+        desktops: sessions.map((session) => soloDesktop(session.id)),
+      },
+    });
     open('s1');
     await daemon.idle();
     open('s2');

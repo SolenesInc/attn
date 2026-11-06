@@ -62,9 +62,9 @@ func newOutpostMod(t *testing.T) *outpostMod {
 	return newOutpostModPrepared(t, func(_, _ *testworld.Stack) {})
 }
 
-func newOutpostModPair(t *testing.T, prepare func(home, outpost *testworld.Stack)) (home, outpost *testworld.Stack, pair *testworld.OutpostPair) {
+func newOutpostModPair(t *testing.T, prepare func(home, outpost *testworld.Stack), outpostOptions ...testworld.StackOption) (home, outpost *testworld.Stack, pair *testworld.OutpostPair) {
 	t.Helper()
-	home, outpost = testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	home, outpost = testworld.NewStack(t), testworld.NewStack(t, append([]testworld.StackOption{testworld.WithAgents(fakeagent.Claude)}, outpostOptions...)...)
 	prepare(home, outpost)
 	pair = testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()

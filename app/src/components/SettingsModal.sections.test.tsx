@@ -72,31 +72,36 @@ describe('SettingsModal sections', () => {
     expect(screen.queryByTestId('settings-modal')).toBeNull();
   });
 
-  it('keeps the shared PTY experiment off until the daemon confirms opt-in', async () => {
-    const daemon = await openSection('experimental', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
+  it('shows the shared host on when nothing is stored, and off only once the daemon confirms a stored false', async () => {
+    const daemon = await openSection('agents', { settings: { pty_backend_mode: 'migrating' } }, (scripted) => {
       scripted.on('set_setting', () => {});
     });
-    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
-
-    await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
-    expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'true']]);
-    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
-
-    daemon.emit({ event: 'settings_updated', settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true' } });
     expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
-  });
 
-  it('can turn the shared host off', async () => {
-    const daemon = await openSection('experimental', { settings: {
-      pty_backend_mode: 'migrating', pty_shared_host_enabled: 'true', pty_shared_host_active: 'true',
-    } });
-    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'false']]);
+    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'true');
+
+    daemon.emit({ event: 'settings_updated', settings: { pty_backend_mode: 'migrating', pty_shared_host_enabled: 'false' } });
+    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
   });
 
-  it.each(['worker', 'shared', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
-    const daemon = await openSection('experimental', { settings: { pty_backend_mode: mode } });
+  it('can turn the shared host back on from a stored false', async () => {
+    const daemon = await openSection('agents', { settings: {
+      pty_backend_mode: 'migrating', pty_shared_host_enabled: 'false', pty_shared_host_active: 'false',
+    } });
+    expect(sharedHostSwitch()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
+    expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'true']]);
+  });
+
+  it('leaves the shared host out of Experimental', async () => {
+    await openSection('experimental');
+    expect(screen.queryByRole('switch', { name: 'Shared terminal host' })).toBeNull();
+  });
+
+  it.each(['worker', 'shared', 'unknown'])('disables the shared host control on the %s backend', async (mode) => {
+    const daemon = await openSection('agents', { settings: { pty_backend_mode: mode } });
     expect(sharedHostSwitch()).toBeDisabled();
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));
     expect(savedSettings(daemon)).toEqual([]);
@@ -136,11 +141,13 @@ describe('SettingsModal sections', () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['terminal', 'pty', 'Launcher 2.0', 'Shared terminal host']) {
+    await gesture(daemon, () => fireEvent.change(search, { target: { value: 'Launcher 2.0' } }));
+    expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
+    for (const query of ['terminal', 'pty', 'Shared terminal host']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
-      expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
+      expect(navigation.getByRole('button', { name: 'Agents and models' })).toBeInTheDocument();
     }
-    await gesture(daemon, () => fireEvent.click(navigation.getByRole('button', { name: 'Experimental' })));
+    await gesture(daemon, () => fireEvent.click(navigation.getByRole('button', { name: 'Agents and models' })));
     expect(sharedHostSwitch()).toBeInTheDocument();
     expect(screen.queryByText('Runtime mode')).toBeNull();
   });

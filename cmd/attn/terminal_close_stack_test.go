@@ -23,10 +23,10 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				if err != nil {
 					t.Skipf("%s unavailable: %v", name, err)
 				}
-				home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+				home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 				machine := home
 				if placement == "outpost" {
-					machine = testworld.NewStack(t)
+					machine = testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 				}
 				shell, fifo := machine.Path("bin", name), machine.Path("shell-held")
 				if err := os.MkdirAll(filepath.Dir(shell), 0o700); err != nil {

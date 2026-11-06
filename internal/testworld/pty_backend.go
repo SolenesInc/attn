@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 )
 
 type PTYBackend string
@@ -23,13 +24,12 @@ func OnPTYBackend(backend PTYBackend) StackOption {
 	return func(s *stackSetup) { s.backend = backend }
 }
 
-func RequireSharedHost(t testing.TB) string {
+func SharedHostBinary(t testing.TB) string {
 	t.Helper()
-	host := os.Getenv("ATTN_TEST_PTY_HOST")
-	if host == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to run on the shared PTY host")
+	if host := os.Getenv("ATTN_TEST_PTY_HOST"); host != "" {
+		return host
 	}
-	return host
+	return ptyhosttest.BuildWithSnapshotFormat(t, ptyhosttest.DefaultSnapshotFormat)
 }
 
 func (s *Stack) UseSharedHostBinary(host string) {
@@ -53,10 +53,9 @@ func (s *Stack) usePTYBackend(backend PTYBackend) {
 	s.T.Helper()
 	switch backend {
 	case SharedHostPTY:
-		s.UseSharedHostBinary(RequireSharedHost(s.T))
-		s.enableSharedHostOnStart = true
+		s.UseSharedHostBinary(SharedHostBinary(s.T))
 	case SharedHostOnlyPTY:
-		s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared", "ATTN_PTY_HOST_BINARY="+RequireSharedHost(s.T))
+		s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=shared", "ATTN_PTY_HOST_BINARY="+SharedHostBinary(s.T))
 	default:
 		s.Vars = append(s.Vars, "ATTN_PTY_BACKEND="+string(backend))
 	}

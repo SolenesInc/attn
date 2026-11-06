@@ -59,7 +59,7 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 	app.TypeLine(split, "printf 'split-host=%s\\n' \"$ATTN_HOST\"; pwd")
 	app.AwaitScreen(split, "split-host=outpost")
 	app.AwaitScreen(split, session.Directory)
-	got = run("run", string(opened.TerminalID), "printf 'blocked-ready\\n'; sleep 600")
+	got = run("run", string(opened.TerminalID), "printf 'blocked-%s\\n' ready; sleep 600")
 	if got.Code != 0 {
 		t.Fatalf("start blocking shell command: %+v", got)
 	}
@@ -112,6 +112,9 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 	app.AwaitScreen(string(opened.SessionID), "paste-ready")
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: opened.TerminalID, Data: strings.Repeat("x", 300000)})
 	app.AwaitScreen(string(opened.SessionID), "paste-bytes=300000")
+	if got = run("wait", string(opened.TerminalID), "--until", "prompt"); got.Code != 0 {
+		t.Fatalf("prompt after the paste: %+v", got)
+	}
 	mark := len(app.Log())
 	got = run("run", string(opened.TerminalID), "exit 1")
 	if got.Code != 0 {
@@ -130,7 +133,7 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 
 func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -258,7 +261,7 @@ func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testi
 	old := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-old")
 	current := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-current")
 	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -391,7 +394,7 @@ func outpostStateSince(p *testworld.Peer, name string, state protocol.OutpostSta
 
 func TestRemoteWaitLetsInputFinishTheShell(t *testing.T) {
 	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 	waiting := remote.PauseAt(pausepoint.PtyWaitBlock)
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)

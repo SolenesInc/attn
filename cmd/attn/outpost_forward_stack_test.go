@@ -124,7 +124,7 @@ func TestOutpostForwardPreservesHalfCloseAndReportsBridgeLoss(t *testing.T) {
 }
 
 func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
-	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	home, outpost := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	waiting := outpost.PauseAt(pausepoint.PtyWaitBlock)
 	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")

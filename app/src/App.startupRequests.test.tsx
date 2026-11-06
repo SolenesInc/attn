@@ -24,7 +24,7 @@ describe('App startup requests', () => {
   });
 
   it('attaches only the agent on the desktop it starts on', async () => {
-    const { daemon } = await renderApp({ initialState: { sessions, desktops, profiles: [defaultProfile('desktop-s1')] } });
+    const { daemon } = await renderApp({ initialState: { settings: { pty_shared_host_enabled: 'false' }, sessions, desktops, profiles: [defaultProfile('desktop-s1')] } });
     await daemon.idle();
 
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['s1']);

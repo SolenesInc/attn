@@ -23,7 +23,7 @@ import (
 )
 
 func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
-	binary := testworld.RequireSharedHost(t)
+	binary := testworld.SharedHostBinary(t)
 	root, err := os.MkdirTemp("/tmp", "pty-clean-")
 	if err != nil {
 		t.Fatal(err)

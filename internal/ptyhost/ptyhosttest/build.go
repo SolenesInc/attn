@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+const DefaultSnapshotFormat = "test-default"
+
 var (
 	builds  sync.Map
 	buildMu sync.Mutex

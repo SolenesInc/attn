@@ -35,15 +35,15 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	if gardenClock != nil {
 		d.gardenNow = gardenClock
 	}
-	switch host := os.Getenv("ATTN_TEST_PTY_HOST"); {
+	switch onHost := os.Getenv("ATTN_TEST_WIRE_ON_PTY_HOST") != ""; {
 	case terminals != nil:
 		d.ptyBackend = terminals
 	case os.Getenv("ATTN_PTY_BACKEND") != "":
-	case host != "" && nativeWatch:
+	case onHost && nativeWatch:
 		shared, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
 			DataRoot:         filepath.Dir(socketPath),
 			DaemonInstanceID: "wire-shared-host",
-			BinaryPath:       host,
+			BinaryPath:       os.Getenv("ATTN_TEST_PTY_HOST"),
 			Logf:             d.logf,
 		})
 		if err != nil {

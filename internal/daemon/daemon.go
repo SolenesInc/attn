@@ -585,7 +585,9 @@ func (d *Daemon) startMigratingPTYBackend() error {
 	}
 	if candidateErr := shared.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
 		d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
-		d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
+		if storedOnThisMachine := parseBooleanSetting(d.store.GetSetting(setting.SharedPTYHostEnabled.Key)); storedOnThisMachine {
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
+		}
 	}
 	migrating, err := ptybackend.NewMigrating(legacy, shared, useSharedForNew)
 	if err != nil {

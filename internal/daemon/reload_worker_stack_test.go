@@ -11,7 +11,7 @@ import (
 
 func TestAReloadedSessionSurvivesItsReplacedWorkerStoppingLate(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 	removeReplied := s.PauseAt(pausepoint.PtyRemoveReplied)
 	stopped := s.PauseAt(pausepoint.PtyWorkerStopped)
 	s.Start()

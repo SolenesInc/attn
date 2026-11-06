@@ -73,7 +73,7 @@ async function main() {
 
   async function openSettings() {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
-    await client.request('settings_select_section', { sectionId: 'experimental' });
+    await client.request('settings_select_section', { sectionId: 'agents' });
     await client.request('dom_scroll_into_view', { selector: TOGGLE });
   }
 
@@ -109,7 +109,7 @@ async function main() {
   }
 
   try {
-    await runner.step('launch_and_default_off', async () => {
+    await runner.step('launch_and_default_on', async () => {
       runner.assert(fs.existsSync(ptyHostBinary), 'packaged app contains the shared PTY host sidecar', {
         ptyHostBinary,
       });
@@ -119,24 +119,24 @@ async function main() {
       await client.request('dismiss_whats_new');
       originalSetting = observer.getSetting(KEY);
       await openSettings();
-      if (originalSetting === 'true') await client.request('dom_click', { selector: TOGGLE });
-      await checkSetting(false, 'default-off');
+      if (originalSetting === 'false') await client.request('dom_click', { selector: TOGGLE });
+      await checkSetting(true, 'default-on');
       await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
-      await createShell('dedicated-before', false);
-    });
-    await runner.step('enable_and_launch_shared', async () => {
-      await openSettings();
-      await client.request('dom_click', { selector: TOGGLE });
-      await checkSetting(true, 'enabled');
-      await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
-      await createShell('shared-during', true);
+      await createShell('shared-before', true);
     });
     await runner.step('disable_and_launch_dedicated', async () => {
       await openSettings();
       await client.request('dom_click', { selector: TOGGLE });
       await checkSetting(false, 'disabled');
       await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
-      await createShell('dedicated-after', false);
+      await createShell('dedicated-during', false);
+    });
+    await runner.step('enable_and_launch_shared', async () => {
+      await openSettings();
+      await client.request('dom_click', { selector: TOGGLE });
+      await checkSetting(true, 'enabled');
+      await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+      await createShell('shared-after', true);
     });
     await runner.step('all_existing_terminals_still_work', async () => {
       for (const shell of shells) {

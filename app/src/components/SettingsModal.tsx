@@ -198,6 +198,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           autoApproveEnabled={state.autoApproveEnabled}
           handleToggleAutoApprove={state.handleToggleAutoApprove}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
+          sharedPTYHostEnabled={state.sharedPTYHostEnabled}
+          ptyBackendMode={state.ptyBackendMode}
           defaultOverrideAgentList={state.defaultOverrideAgentList}
           actualAgentCapabilities={state.actualAgentCapabilities}
           agentCapabilityOrder={state.agentCapabilityOrder}
@@ -238,7 +240,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       return (
         <ExperimentalSettings
           settings={state.settings}
-          ptyBackendMode={state.ptyBackendMode}
           narrowestTileColsDraft={state.narrowestTileColsDraft}
           sidebarWidthDraft={state.sidebarWidthDraft}
           savedFlash={state.savedFlash}

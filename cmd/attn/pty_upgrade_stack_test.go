@@ -168,14 +168,15 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	old.stop()
 
 	current := start(newBinary, hostBinary)
-	current.assertSharedSetting(false, false)
+	current.waitForSharedHostActive()
 	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent"} {
 		current.assertIdentity(id, false, identities[id])
 		current.probe(id, identities[id].ChildPID, "new-daemon")
 	}
-	current.spawn("default-agent", "codex", fixture)
-	identities["default-agent"] = current.identity("default-agent", false)
-	current.probe("default-agent", identities["default-agent"].ChildPID, "default-off")
+	current.setSharedSetting(false)
+	current.spawn("stored-off-agent", "codex", fixture)
+	identities["stored-off-agent"] = current.identity("stored-off-agent", false)
+	current.probe("stored-off-agent", identities["stored-off-agent"].ChildPID, "stored-off")
 	current.setSharedSetting(true)
 	current.spawn("new-agent", "codex", fixture)
 	identities["new-agent"] = current.identity("new-agent", true)
@@ -354,7 +355,7 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			u.assertNoReloadNotice(app, shell.session)
 			shell.assertSameProcess(app)
 
-			u.storeTheNewDefaults(app)
+			awaitTheSharedHost(t, app)
 			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				agent := u.spawnAgent(app, h)
 				u.assertParent(agent.run, "attn-pty-host")
@@ -410,7 +411,7 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 		u.assertNoReloadNotice(settled, session)
 	}
 
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	for _, agent := range []releaseAgent{onWorker, onHost} {
 		u.reloadOntoTheHost(app, agent)
 	}
@@ -470,6 +471,11 @@ func TestAnUpdateFromTheReleaseWithTheSettingOnAndNoHostLeavesTerminalsOnWorkers
 	if active := app.Initial.Settings[upgradeSharedHostActive]; active != "false" {
 		t.Errorf("%s = %q, want false on a machine with no host", upgradeSharedHostActive, active)
 	}
+	if warned := slices.ContainsFunc(app.Initial.Warnings, func(w protocol.DaemonWarning) bool {
+		return strings.Contains(w.Message, "Shared PTY host is unavailable")
+	}); !warned {
+		t.Errorf("a stored true with no host warned %+v, want the warning that names the host", app.Initial.Warnings)
+	}
 	u.turn(app, live, "after-update")
 	fresh := u.spawnAgent(app, fakeagent.Claude)
 	u.assertNoSharedHost(app.Terminal(fresh.session))
@@ -480,7 +486,7 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWor
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	u.storeTheNewDefaults(app)
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
 	shell := u.spawnShell(app)
 	sharedHostOf(t, u.Dir, app.Terminal(shell.session))
 
@@ -519,7 +525,7 @@ func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("a fresh install warns: %+v", app.Initial.Warnings)
 	}
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		agent := u.spawnAgent(app, h)
 		u.assertParent(agent.run, "attn-pty-host")
@@ -535,7 +541,7 @@ func TestAFreshInstallFindsItsHostAndAnAgentTitledBeforeTheDaemonWatchesLeavesLa
 	s.Start()
 	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	agent := u.spawnAgent(app, fakeagent.Codex)
 	watching.Await()
 	agent.run.Stream("printed after its title")
@@ -553,7 +559,7 @@ func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRu
 		t.Fatalf("attn daemon ensure: %+v", got)
 	}
 	u := &releaseUpdate{Stack: s, t: t}
-	u.storeTheNewDefaults(s.App())
+	awaitTheSharedHost(t, s.App())
 	if got := s.Attn("daemon", "stop"); got.Code != 0 {
 		t.Fatalf("attn daemon stop: %+v", got)
 	}
@@ -570,11 +576,7 @@ func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRu
 		t.Errorf("the first start warns: %+v", app.Initial.Warnings)
 	}
 	early := u.spawnAgent(app, fakeagent.Claude)
-	if app.Initial.Settings[upgradeSharedHostActive] != "true" {
-		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-			return m.Settings[upgradeSharedHostActive] == "true"
-		})
-	}
+	awaitTheSharedHost(t, app)
 	t.Logf("host-ready window: the host was active %s after the daemon start began", time.Since(started).Round(time.Millisecond))
 	u.turn(app, early, "opened-during-the-window")
 	late := u.spawnAgent(app, fakeagent.Claude)
@@ -618,7 +620,7 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 	u.turn(app, onWorker, "before-update")
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	onHost := u.spawnAgent(app, fakeagent.Codex)
 	u.turn(app, onHost, "on-the-host")
 
@@ -641,7 +643,7 @@ func TestAHostThatCannotRunLeavesNewTerminalsOnWorkersWithOneNotification(t *tes
 	u := startTheRelease(t)
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app := u.ensureCurrent()
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	if got := u.Attn("daemon", "stop"); got.Code != 0 {
 		t.Fatalf("attn daemon stop: %+v", got)
 	}
@@ -705,7 +707,7 @@ func TestTurningTheSettingsOffAndOnMovesNewTerminalsAndLeavesLiveOnes(t *testing
 	u := startTheRelease(t)
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app := u.ensureCurrent()
-	u.storeTheNewDefaults(app)
+	awaitTheSharedHost(t, app)
 	first := u.spawnAgent(app, fakeagent.Claude)
 	u.assertParent(first.run, "attn-pty-host")
 
@@ -716,7 +718,7 @@ func TestTurningTheSettingsOffAndOnMovesNewTerminalsAndLeavesLiveOnes(t *testing
 	u.assertNoSharedHost(app.Terminal(second.session))
 	u.turn(app, first, "with-the-settings-off")
 
-	u.storeTheNewDefaults(app)
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
 	setSetting(t, app, upgradeDirectLaunchEnabled, "true")
 	third := u.spawnAgent(app, fakeagent.Claude)
 	u.assertParent(third.run, "attn-pty-host")
@@ -740,7 +742,7 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 		t.Parallel()
 		u := startDirectLaunch(t, func(s *testworld.Stack) string { return loginShell(t, s, "printf 'welcome from the rc file\\n'") })
 		app := u.App()
-		u.storeTheNewDefaults(app)
+		awaitTheSharedHost(t, app)
 		agent := u.spawnAgent(app, fakeagent.Claude)
 		u.assertParent(agent.run, "attn-pty-host")
 		u.turn(app, agent, "after-a-chatty-rc")
@@ -756,7 +758,7 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			return loginShell(t, s, `case "$*" in *attn-agent*) read _ < `+held+`;; esac`)
 		})
 		app := u.App()
-		u.storeTheNewDefaults(app)
+		awaitTheSharedHost(t, app)
 		session := u.Spawn(app, fakeagent.Claude, u.Path("claude"))
 		release, err := os.OpenFile(held, os.O_WRONLY, 0)
 		if err != nil {
@@ -781,7 +783,7 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			return fish
 		})
 		app := u.App()
-		u.storeTheNewDefaults(app)
+		awaitTheSharedHost(t, app)
 		for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 			agent := u.spawnAgent(app, h)
 			u.assertParent(agent.run, "attn-pty-host")
@@ -831,16 +833,12 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 
 func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 	t.Parallel()
-	if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
-	}
 	cloud := testworld.StartCloud(t)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL, "ATTN_PTY_BACKEND=migrating")
 	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "phone-current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "phone-current"))
 	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
-	u.storeTheNewDefaults(app)
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "pair").Qr)
@@ -894,9 +892,6 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 	for _, point := range []string{"shared-handover-before-request", "shared-handover-after-request"} {
 		t.Run(point, func(t *testing.T) {
 			t.Parallel()
-			if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
-				t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
-			}
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			current := testworld.AttnBinaryWithSnapshotFormat(t, "move-current")
 			next := testworld.AttnBinaryWithSnapshotFormat(t, "move-next")
@@ -905,7 +900,6 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 			s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "move-current"))
 			u := &releaseUpdate{Stack: s, t: t}
 			app := s.App()
-			u.storeTheNewDefaults(app)
 			agent := u.spawnAgent(app, fakeagent.Claude)
 			u.turn(app, agent, "before-update")
 			shell := u.spawnShell(app)
@@ -954,7 +948,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	current := testworld.AttnBinary(t)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	ssh.Use(home.World)
 	ssh.Route("release-outpost", remote)
 	ssh.InstallBinary(remote, releaseAttn)
@@ -1006,7 +1000,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	if prompt := run.Prompted(); prompt != "on-the-updated-outpost" {
 		t.Errorf("the new agent on the outpost took %q", prompt)
 	}
-	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	awaitTheSharedHost(t, remote.App())
 	inHost := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("in-host"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	app.TypeLine(inHost, `echo "owner=$(`+terminalOwner+`)"`)
 	app.AwaitScreen(inHost, "owner="+ptyhost.BinaryName)
@@ -1112,7 +1106,7 @@ func newInstalledStack(t *testing.T) (*testworld.Stack, string) {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade tests")
 	}
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	t.Cleanup(func() {
 		if t.Failed() {
 			s.LogDaemonTail()
@@ -1173,10 +1167,14 @@ func (u *releaseUpdate) ensureCurrent() *testworld.Peer {
 	return u.App()
 }
 
-// storeTheNewDefaults stands in for the flip of the shared host until it lands.
-func (u *releaseUpdate) storeTheNewDefaults(app *testworld.Peer) {
-	u.T.Helper()
-	setSetting(u.t, app, upgradeSharedHostEnabled, "true")
+func awaitTheSharedHost(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	if app.Initial.Settings[upgradeSharedHostActive] == "true" {
+		return
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings[upgradeSharedHostActive] == "true"
+	})
 }
 
 func (u *releaseUpdate) spawnAgent(app *testworld.Peer, h fakeagent.Harness) releaseAgent {

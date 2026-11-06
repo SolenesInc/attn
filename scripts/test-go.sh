@@ -94,16 +94,32 @@ fi
 # binary built from source outside the test's own package. Without a VCS stamp
 # the executable, and so the path, stays the same across commits that leave its
 # source unchanged.
+snapshot_format="$(bash "$root/scripts/snapshot-format.sh")"
+
 start_test_binary_build() {
   local env_var="$1" name="$2" package="$3" source_bin="${!1:-}"
   case "$source_bin" in "$e2e_store"/*) return 0 ;; esac
   if [ -z "$source_bin" ]; then
-    "$go_bin" -C "$root" build -buildvcs=false -o "$test_root/$name" "$package" &
+    "$go_bin" -C "$root" build -buildvcs=false -ldflags "-w -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$snapshot_format" -o "$test_root/$name" "$package" &
     test_binary_builds+=("$!")
   elif [ ! -x "$source_bin" ]; then
     echo "$env_var is not executable: $source_bin" >&2
     exit 2
   fi
+}
+
+start_pty_host_build() {
+  case "${ATTN_TEST_PTY_HOST:-}" in "$e2e_store"/*) return 0 ;; esac
+  if [ -n "${ATTN_TEST_PTY_HOST:-}" ]; then
+    if [ ! -x "$ATTN_TEST_PTY_HOST" ]; then
+      echo "ATTN_TEST_PTY_HOST is not executable: $ATTN_TEST_PTY_HOST" >&2
+      exit 2
+    fi
+    return 0
+  fi
+  make -C "$root" --no-print-directory build-pty-host >"$test_root/pty-host-build.log" 2>&1 &
+  test_binary_builds+=("$!")
+  ATTN_TEST_PTY_HOST="$root/pty-host/target/release/attn-pty-host"
 }
 
 store_test_binary() {
@@ -141,14 +157,19 @@ provide_test_binaries() {
   done
   start_test_binary_build ATTN_E2E_BIN attn ./cmd/attn
   start_test_binary_build ATTN_FAKEAGENT_BIN fakeagent ./scripts/fakeagent
+  start_pty_host_build
   if [ "${#test_binary_builds[@]}" -gt 0 ] && [ "${#compile_ahead[@]}" -gt 0 ]; then
     "$go_bin" list -test -deps -export "${compile_ahead[@]}" >/dev/null 2>&1 || true
   fi
   for build_pid in ${test_binary_builds[@]+"${test_binary_builds[@]}"}; do
-    wait "$build_pid"
+    wait "$build_pid" || {
+      [ ! -f "$test_root/pty-host-build.log" ] || cat "$test_root/pty-host-build.log" >&2
+      exit 1
+    }
   done
   store_test_binary ATTN_E2E_BIN attn
   store_test_binary ATTN_FAKEAGENT_BIN fakeagent
+  store_test_binary ATTN_TEST_PTY_HOST attn-pty-host
 }
 
 if [ "${1:-}" = "--provide-test-binaries" ]; then
@@ -156,7 +177,7 @@ if [ "${1:-}" = "--provide-test-binaries" ]; then
   shift 2
   unset GOMAXPROCS
   provide_test_binaries "$@" --
-  printf '%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" >"$test_binaries_out"
+  printf '%s\n%s\n%s\n' "$ATTN_E2E_BIN" "$ATTN_FAKEAGENT_BIN" "$ATTN_TEST_PTY_HOST" >"$test_binaries_out"
   exit 0
 fi
 

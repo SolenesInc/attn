@@ -31,6 +31,7 @@ func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemonO
 	s.UseSharedHostBinary(host)
 	s.Start()
 	app := s.App()
+	setSetting(t, app, "pty_shared_host_enabled", "false")
 	running := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	agent := s.Launched(running)
 

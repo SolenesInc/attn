@@ -656,8 +656,8 @@ func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *
 		t.Run(scenario, func(t *testing.T) {
 			offline := scenario != "online"
 			reload := scenario == "reload-during-recovery"
-			home := testworld.NewStack(t)
-			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex), testworld.OnPTYBackend(testworld.WorkerPTY))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			var exitHandled *testworld.Pause
 			if offline {

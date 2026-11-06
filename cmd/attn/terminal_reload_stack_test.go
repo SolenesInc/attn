@@ -17,10 +17,10 @@ import (
 func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 	for _, placement := range []string{"local", "outpost"} {
 		t.Run(placement, func(t *testing.T) {
-			home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
 			machine := home
 			if placement == "outpost" {
-				machine = testworld.NewStack(t)
+				machine = testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 			}
 			waiting := machine.PauseEvery(pausepoint.PtyWaitBlock)
 			gate, release, ready := machine.Path("hold"), machine.Path("release"), machine.Path("ready")

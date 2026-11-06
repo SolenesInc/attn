@@ -34,7 +34,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	for _, tc := range []struct{ key, value, reason string }{
 		{"theme", "purple", "invalid theme"},
 		{"unknown.key", "value", "unknown.key"},
-		{"pty_backend_mode", "worker", "read-only"},
+		{"pty_backend_mode", "migrating", "read-only"},
 		{"default_model_<harness>", "some-model", "concrete key"},
 	} {
 		r := s.Attn("settings", "set", tc.key, tc.value)
@@ -130,8 +130,10 @@ func TestResettingTheSharedHostClearsTheStoredChoice(t *testing.T) {
 	s.Start()
 	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", "false"), "false")
 	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", ""))
-	if got := s.Attn("settings", "get", "pty_shared_host_enabled"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "" {
-		t.Fatalf("after a reset get = %+v, want the value cleared", got)
+	requireStdout(t, s.Attn("settings", "get", "pty_shared_host_enabled"), "true")
+	requireStdout(t, s.Attn("settings", "get", "pty_shared_host_active"), "false")
+	if warnings := s.App().Initial.Warnings; len(warnings) != 0 {
+		t.Errorf("a reset on a machine with no usable host warns: %+v", warnings)
 	}
 }
 

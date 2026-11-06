@@ -70,21 +70,24 @@ async function waitFor(description, predicate, timeoutMs) {
 // path, or the kill lands on another session.
 function killInstanceRuntimeLikeACrash(dataDir, log) {
   const killed = { workers: [], daemon: null };
-  const workersRoot = path.join(dataDir, 'workers');
-  const daemonInstances = fs.existsSync(workersRoot) ? fs.readdirSync(workersRoot) : [];
-  for (const daemonInstance of daemonInstances) {
-    const registryDir = path.join(workersRoot, daemonInstance, 'registry');
-    if (!fs.existsSync(registryDir)) continue;
-    for (const entry of fs.readdirSync(registryDir)) {
-      const raw = fs.readFileSync(path.join(registryDir, entry), 'utf8');
-      const record = JSON.parse(raw);
-      const pid = Number(record.pid ?? record.Pid ?? record.worker_pid);
-      if (!Number.isInteger(pid) || pid <= 1) continue;
-      try {
-        process.kill(pid, 'SIGKILL');
-        killed.workers.push({ session: entry, pid });
-      } catch (error) {
-        log(`worker ${entry} pid ${pid} already gone: ${error.message}`);
+  const seen = new Set();
+  for (const owner of ['pty-hosts', 'workers']) {
+    const ownerRoot = path.join(dataDir, owner);
+    for (const daemonInstance of fs.existsSync(ownerRoot) ? fs.readdirSync(ownerRoot) : []) {
+      const registryDir = path.join(ownerRoot, daemonInstance, 'registry');
+      if (!fs.existsSync(registryDir)) continue;
+      for (const entry of fs.readdirSync(registryDir)) {
+        const raw = fs.readFileSync(path.join(registryDir, entry), 'utf8');
+        const record = JSON.parse(raw);
+        const pid = Number(record.pid ?? record.Pid ?? record.worker_pid);
+        if (!Number.isInteger(pid) || pid <= 1 || seen.has(pid)) continue;
+        seen.add(pid);
+        try {
+          process.kill(pid, 'SIGKILL');
+          killed.workers.push({ session: entry, pid });
+        } catch (error) {
+          log(`PTY owner ${entry} pid ${pid} already gone: ${error.message}`);
+        }
       }
     }
   }

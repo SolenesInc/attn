@@ -24,7 +24,11 @@ func (d *Daemon) setSharedPTYHostEnabled(value string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
 		defer cancel()
 		if err := backend.ProbeShared(ctx); err != nil {
-			return fmt.Errorf("cannot enable shared PTY host: %w", err)
+			if value != "" {
+				return fmt.Errorf("cannot enable shared PTY host: %w", err)
+			}
+			d.logf("shared PTY host unavailable after a reset: %v; new sessions remain on legacy workers", err)
+			enabled = false
 		}
 	}
 	d.ptySettingsMu.Lock()

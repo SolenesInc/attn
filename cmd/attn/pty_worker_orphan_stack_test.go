@@ -16,7 +16,7 @@ import (
 
 func TestAWorkerWhoseDaemonNeverReturnsEndsItsProgramAfterTheOrphanTTL(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	s.Start()
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))

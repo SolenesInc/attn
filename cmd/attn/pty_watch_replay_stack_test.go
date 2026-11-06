@@ -43,7 +43,7 @@ func TestAnApprovalAskedWhileTheDaemonWasDownStillWaitsAfterTheRestart(t *testin
 
 func TestAnApprovalAskedWhileTheRestartedDaemonStartsWatchingIsNeverLost(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex), testworld.OnPTYBackend(testworld.WorkerPTY))
 	replay := s.PauseAt(pausepoint.PtyWatchReplay)
 	boot := s.HoldNextBoot()
 	s.Start()

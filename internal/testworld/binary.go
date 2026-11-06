@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 )
 
 var (
@@ -51,7 +53,7 @@ func provideBinary(envVar, name, pkg string) (string, error) {
 		return "", fmt.Errorf("testworld builds %s into the process directory that testworld.Main creates; call it from TestMain", name)
 	}
 	binary := filepath.Join(processDir, "bin", name)
-	build := exec.Command("go", "build", "-o", binary, pkg)
+	build := exec.Command("go", "build", "-ldflags", "-X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat="+ptyhosttest.DefaultSnapshotFormat, "-o", binary, pkg)
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build %s: %w\n%s", name, err, output)
 	}

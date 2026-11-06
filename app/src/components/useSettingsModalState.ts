@@ -252,6 +252,7 @@ export function useSettingsModalState({
   const queueShowHiddenSessions = isOn(settings, BoolSetting.queueShowHiddenSessions);
   const queueCrewEnabled = isOn(settings, BoolSetting.queueCrewEnabled);
   const directAgentLaunchEnabled = isOn(settings, BoolSetting.directAgentLaunchEnabled);
+  const sharedPTYHostEnabled = isOn(settings, BoolSetting.ptySharedHostEnabled);
   const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
   const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
 
@@ -520,7 +521,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory seeds standby pull request pr comments ring quiet',
+              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory shared terminal host pty backend rust workers seeds standby pull request pr comments ring quiet',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -683,6 +684,7 @@ export function useSettingsModalState({
     queueShowHiddenSessions,
     queueCrewEnabled,
     directAgentLaunchEnabled,
+    sharedPTYHostEnabled,
     queueQuietNotifications,
     onSetSetting,
     settings,

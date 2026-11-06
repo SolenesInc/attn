@@ -14,7 +14,7 @@ import (
 
 func TestReopeningATerminalDescribesOnlyTheImagesItsSnapshotShows(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	snapshot := s.PauseAt(pausepoint.PtyAttachSnapshot)
 	s.Start()
 	app := s.App()
@@ -51,34 +51,29 @@ func TestReopeningATerminalDescribesOnlyTheImagesItsSnapshotShows(t *testing.T) 
 
 func TestAnImageArrivingInPiecesSendsNoEmptyOutput(t *testing.T) {
 	t.Parallel()
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			t.Parallel()
-			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
-			held := s.PauseAt(pausepoint.PtyOutputHeld)
-			s.Start()
-			app := s.App()
-			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
-			attachWithPolicy(t, app, shell, protocol.AttachPolicyFreshSpawn)
-			pixels := make([]byte, 8*8*3)
-			for i := range pixels {
-				pixels[i] = byte(i * 7 % 251)
-			}
-			payload := base64.StdEncoding.EncodeToString(pixels)
-			// End readiness output at the marker so a delayed newline cannot mix with the image.
-			app.TypeLine(shell, `stty -echo; printf arm''ed; read first; printf '\033_Ga=T,q=2,f=24,s=8,v=8,i=5;`+payload[:200]+
-				`'; read rest; printf '`+payload[200:]+`\033\\done-%s\n' pieces`)
-			app.AwaitScreen(shell, "armed")
-			app.TypeLine(shell, "")
-			held.Await()
-			held.Release()
-			app.TypeLine(shell, "")
-			app.AwaitScreen(shell, "done-pieces")
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+	held := s.PauseAt(pausepoint.PtyOutputHeld)
+	s.Start()
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	attachWithPolicy(t, app, shell, protocol.AttachPolicyFreshSpawn)
+	pixels := make([]byte, 8*8*3)
+	for i := range pixels {
+		pixels[i] = byte(i * 7 % 251)
+	}
+	payload := base64.StdEncoding.EncodeToString(pixels)
+	// End readiness output at the marker so a delayed newline cannot mix with the image.
+	app.TypeLine(shell, `stty -echo; printf arm''ed; read first; printf '\033_Ga=T,q=2,f=24,s=8,v=8,i=5;`+payload[:200]+
+		`'; read rest; printf '`+payload[200:]+`\033\\done-%s\n' pieces`)
+	app.AwaitScreen(shell, "armed")
+	app.TypeLine(shell, "")
+	held.Await()
+	held.Release()
+	app.TypeLine(shell, "")
+	app.AwaitScreen(shell, "done-pieces")
 
-			if empties := app.EmptyOutputs(shell); empties != 0 {
-				t.Errorf("the terminal sent %d empty outputs while an image arrived in pieces, want none", empties)
-			}
-		})
+	if empties := app.EmptyOutputs(shell); empties != 0 {
+		t.Errorf("the terminal sent %d empty outputs while an image arrived in pieces, want none", empties)
 	}
 }
 

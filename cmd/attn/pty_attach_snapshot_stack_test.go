@@ -14,7 +14,7 @@ import (
 
 func TestReopeningATerminalWhileItPrintsShowsEveryLineExactlyOnce(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	snapshot := s.PauseAt(pausepoint.PtyAttachSnapshot)
 	s.Start()
 	app := s.App()
@@ -63,7 +63,7 @@ func attachWithPolicy(t *testing.T, p *testworld.Peer, session string, policy pr
 
 func TestAnObserverSeededFromAScreenSnapshotMissesNoOutput(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	pending := s.PauseAt(pausepoint.PtyOutputPending)
 	s.Start()
 	app := s.App()

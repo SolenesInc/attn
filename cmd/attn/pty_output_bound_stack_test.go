@@ -15,7 +15,6 @@ import (
 )
 
 func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *testing.T) {
-	testworld.RequireSharedHost(t)
 	for _, sequence := range []struct {
 		name, prefix, suffix string
 		bytes                int

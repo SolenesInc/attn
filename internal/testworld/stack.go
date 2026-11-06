@@ -27,13 +27,12 @@ import (
 
 type Stack struct {
 	*World
-	binary                  string
-	daemon                  *os.Process
-	exited                  chan error
-	pauses                  *pauseSocket
-	clock                   *stepclock.Hub
-	wsListener              *net.TCPListener
-	enableSharedHostOnStart bool
+	binary     string
+	daemon     *os.Process
+	exited     chan error
+	pauses     *pauseSocket
+	clock      *stepclock.Hub
+	wsListener *net.TCPListener
 }
 
 type stackSetup struct {
@@ -57,7 +56,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	if testing.Short() {
 		t.Skip("a stack test runs the built attn binary, which -short does not build")
 	}
-	setup := stackSetup{backend: WorkerPTY}
+	setup := stackSetup{backend: SharedHostPTY}
 	for _, opt := range opts {
 		opt(&setup)
 	}
@@ -164,10 +163,6 @@ func (s *Stack) checkStarted() {
 		if strings.HasPrefix(warning.Code, "pty_backend_") {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}
-	}
-	if s.enableSharedHostOnStart {
-		s.EnableSharedHost(probe)
-		s.enableSharedHostOnStart = false
 	}
 	probe.Close()
 }

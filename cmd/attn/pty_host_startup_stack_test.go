@@ -12,9 +12,10 @@ import (
 func TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	s.UseSharedHostBinary(testworld.RequireSharedHost(t))
+	s.UseSharedHostBinary(testworld.SharedHostBinary(t))
 	s.Start()
 	git, settings := s.App(), s.App()
+	setSetting(t, settings, "pty_shared_host_enabled", "false")
 	cwd := s.Path("shop")
 	if output, err := exec.Command("git", "init", "--initial-branch=main", cwd).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, output)

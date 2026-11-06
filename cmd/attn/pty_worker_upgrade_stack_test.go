@@ -17,7 +17,7 @@ import (
 
 func TestAWorkerUpgradedInPlaceKeepsItsProgramBlocksAndTerminalSettings(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
 	s.StartWith("ATTN_KITTY_STORAGE_LIMIT=0")
 	app := s.App()
@@ -247,7 +247,7 @@ func initialSession(t *testing.T, app *testworld.Peer, id string) protocol.Sessi
 
 func TestAnAppReconnectingAfterAnUpdateAttachesToTheUpgradedWorker(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
 	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
 	upgrade := s.PauseAt(pausepoint.PtyWorkerUpgrade)
 	s.Start()
