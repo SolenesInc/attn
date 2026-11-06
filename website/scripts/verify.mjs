@@ -329,16 +329,93 @@ async function checkQueueStopsWhenUnseen(browser, base) {
   await context.close();
 }
 
-async function checkThemeToggle(browser, base) {
-  const context = await browser.newContext({ colorScheme: 'light' });
+function opposite(scheme) {
+  return scheme === 'dark' ? 'light' : 'dark';
+}
+
+function denyStorage() {
+  Object.defineProperty(window, 'localStorage', {
+    get() {
+      throw new DOMException('storage is denied', 'SecurityError');
+    },
+  });
+}
+
+function changeSystemTheme(page, scheme) {
+  const changed = page.evaluate(
+    () =>
+      new Promise((done) => {
+        matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => done(), { once: true });
+      }),
+  );
+  return Promise.all([changed, page.emulateMedia({ colorScheme: scheme })]);
+}
+
+async function themePage(browser, base, system, label, initScript) {
+  const context = await browser.newContext({ colorScheme: system });
   const page = await context.newPage();
+  if (initScript) await page.addInitScript(initScript);
+  watchPage(page, base, `/guide/queue [theme: ${label}]`);
   await page.goto(`${base}/guide/queue`, { waitUntil: 'load' });
-  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
-  if ((await theme()) !== 'light') problems.push('theme: a light system preference did not give the light theme');
+  return { context, page };
+}
+
+async function expectTheme(page, expected, label) {
+  const seen = await page.evaluate(() => {
+    const button = document.querySelector('[data-theme-toggle]');
+    return {
+      theme: document.documentElement.dataset.theme,
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+      background: getComputedStyle(document.body).backgroundColor,
+      text: button.textContent,
+      ariaLabel: button.getAttribute('aria-label'),
+    };
+  });
+  const other = opposite(expected);
+  const right =
+    seen.theme === expected &&
+    seen.colorScheme === expected &&
+    seen.text === other &&
+    seen.ariaLabel === `Switch to ${other} theme`;
+  if (!right) problems.push(`theme ${label}: expected the ${expected} theme with a toggle to ${other}, saw ${JSON.stringify(seen)}`);
+  return seen.background;
+}
+
+async function checkThemeFollowsSystem(browser, base, label, initScript) {
+  for (const system of ['light', 'dark']) {
+    const other = opposite(system);
+    const name = `${label}, ${system} to ${other}`;
+    const { context, page } = await themePage(browser, base, system, name, initScript);
+    const before = await expectTheme(page, system, `${name}, at load`);
+    await changeSystemTheme(page, other);
+    const after = await expectTheme(page, other, `${name}, after the change`);
+    if (after === before) problems.push(`theme ${name}: the background stayed ${before}`);
+    await changeSystemTheme(page, system);
+    await expectTheme(page, system, `${name}, after changing back`);
+    await context.close();
+  }
+}
+
+async function checkThemeChoiceStays(browser, base) {
+  for (const system of ['light', 'dark']) {
+    const chosen = opposite(system);
+    const name = `saved ${chosen} on a ${system} system`;
+    const { context, page } = await themePage(browser, base, system, name);
+    await page.click('[data-theme-toggle]');
+    await expectTheme(page, chosen, `${name}, after the click`);
+    await changeSystemTheme(page, chosen);
+    await changeSystemTheme(page, system);
+    await expectTheme(page, chosen, `${name}, after system changes both ways`);
+    await page.reload({ waitUntil: 'load' });
+    await expectTheme(page, chosen, `${name}, after a reload`);
+    await context.close();
+  }
+}
+
+async function checkThemeToggleWithoutStorage(browser, base) {
+  const { context, page } = await themePage(browser, base, 'light', 'toggle without storage', denyStorage);
   await page.click('[data-theme-toggle]');
-  if ((await theme()) !== 'dark') problems.push('theme: the toggle did not switch to dark');
-  await page.reload({ waitUntil: 'load' });
-  if ((await theme()) !== 'dark') problems.push('theme: the dark choice did not survive a reload');
+  await expectTheme(page, 'dark', 'toggle without storage');
   await context.close();
 }
 
@@ -417,7 +494,10 @@ try {
   await checkQueueKeyboardRun(browser, base);
   await checkQueueReducedMotion(browser, base);
   await checkQueueStopsWhenUnseen(browser, base);
-  await checkThemeToggle(browser, base);
+  await checkThemeFollowsSystem(browser, base, 'no saved choice');
+  await checkThemeFollowsSystem(browser, base, 'storage denied', denyStorage);
+  await checkThemeChoiceStays(browser, base);
+  await checkThemeToggleWithoutStorage(browser, base);
 } finally {
   await browser.close();
   preview?.stop();

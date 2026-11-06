@@ -3,11 +3,20 @@
 <script>
   const root = document.documentElement;
   const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]')!;
+  const systemDark = matchMedia('(prefers-color-scheme: dark)');
 
   function show() {
     const other = root.dataset.theme === 'dark' ? 'light' : 'dark';
     button.textContent = other;
     button.setAttribute('aria-label', `Switch to ${other} theme`);
+  }
+
+  function savedTheme() {
+    try {
+      return localStorage.getItem('theme');
+    } catch {
+      return null;
+    }
   }
 
   button.addEventListener('click', () => {
@@ -16,6 +25,12 @@
     try {
       localStorage.setItem('theme', next);
     } catch {}
+    show();
+  });
+
+  systemDark.addEventListener('change', () => {
+    if (savedTheme()) return;
+    root.dataset.theme = systemDark.matches ? 'dark' : 'light';
     show();
   });
 
