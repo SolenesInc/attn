@@ -30,6 +30,7 @@ go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestSendingASeedToASleepingChiefMemberWakesIt
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
 go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins
+go ./internal/daemon TestAChiefCannotCloseAnAgentOfAnotherProfile
 go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
 go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne

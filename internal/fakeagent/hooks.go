@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/BurntSushi/toml"
 )
@@ -60,10 +61,27 @@ func (s hookSet) exec(command string, input []byte) error {
 	cmd.Dir = s.cwd
 	cmd.Env = s.env
 	cmd.Stdin = bytes.NewReader(input)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if diedBySIGKILL(err) {
+		dieWithTheSessionBeingKilled()
+	}
+	if err != nil {
 		return fmt.Errorf("%v: %s", err, bytes.TrimSpace(out))
 	}
 	return nil
+}
+
+func diedBySIGKILL(err error) bool {
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		return false
+	}
+	status, ok := exit.Sys().(syscall.WaitStatus)
+	return ok && status.Signaled() && status.Signal() == syscall.SIGKILL
+}
+
+func dieWithTheSessionBeingKilled() {
+	os.Exit(signalExitBase + int(syscall.SIGKILL))
 }
 
 func matcherMatches(matcher, target string) bool {
