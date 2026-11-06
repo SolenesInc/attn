@@ -10,7 +10,9 @@ eval "$(attn instance-env --unset)"  # fish: attn instance-env --fish --unset | 
 ```
 
 Tooling reads paths from `attn instance resolve --field <field>` and does not
-derive them. Tests scope their paths with `ATTN_DATA_DIR` alone.
+derive them. Tests scope their paths with `ATTN_DATA_DIR` alone: a daemon whose
+`ATTN_DATA_DIR` is not its instance's own folder keeps its default Notebook in
+`<data folder>/notebook`, away from the user's real one.
 
 ## Build and install
 

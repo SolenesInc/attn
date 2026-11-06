@@ -18,7 +18,7 @@ writers never collide. The chief treats the notebook as its home.
 - `note-finder`: ⌘P inside the notebook or an editor tile finds a note by name.
 - `notebook-links`: root-absolute links between notes, followed in place, and the backlinks that point at a note.
 - `editor-undo`: native ⌘Z and ⇧⌘Z undo and redo in the editor.
-- `profile-notebook`: a profile's Notebook folder, the profile setting `notebook.root`. An empty setting uses the default folder, `~/attn-notebook` (with the instance name on a non-default instance).
+- `profile-notebook`: a profile's Notebook folder, the profile setting `notebook.root`. An empty setting uses the default folder, `~/attn-notebook` (with the instance name on a non-default instance), or `<data folder>/notebook` on a daemon whose `ATTN_DATA_DIR` is not its instance's own folder.
 - `notebook-sync`: an outpost keeps a synced copy of every Notebook folder the home's profiles use.
 
 ## How to get to it

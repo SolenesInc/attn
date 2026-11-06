@@ -49,6 +49,24 @@ func notebookSetting(app *testworld.Peer, key, value string) protocol.SettingsUp
 		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }
 
+func TestADaemonOnATemporaryDataFolderKeepsItsDefaultNotebookInside(t *testing.T) {
+	w := &world{World: prepareWorld(t)}
+	t.Setenv("ATTN_HARNESS_DATA_DIR", "")
+	t.Setenv("ATTN_HARNESS_NOTEBOOK_ROOT", "")
+	w.start()
+	app := w.App()
+	root := filepath.Join(w.Dir, "notebook")
+	if got := app.Initial.Settings["notebook.root.effective"]; got != root {
+		t.Fatalf("notebook.root.effective = %v, want %s", got, root)
+	}
+	if saved := fsAskWrite(app, "", "note.md", "hello", ""); !saved.Success {
+		t.Fatalf("writing to the default Notebook: %s", protocol.Deref(saved.Error))
+	}
+	if _, err := os.Stat(filepath.Join(root, "note.md")); err != nil {
+		t.Fatalf("the write did not land in the data folder's Notebook: %v", err)
+	}
+}
+
 func TestNotebookBacklinksNameTheNotesThatLinkToANote(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()

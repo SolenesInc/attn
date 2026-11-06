@@ -149,6 +149,15 @@ func validateHarnessRouting() error {
 	return nil
 }
 
+func DataDirIsForeign() (bool, error) {
+	override := strings.TrimSpace(os.Getenv("ATTN_DATA_DIR"))
+	if override == "" {
+		return false, nil
+	}
+	own, err := routingValuesAgree(override, DataDirForInstance(Instance()), true)
+	return !own, err
+}
+
 func HarnessNotebookRoot() string {
 	if strings.TrimSpace(os.Getenv("ATTN_HARNESS_DATA_DIR")) == "" {
 		return ""

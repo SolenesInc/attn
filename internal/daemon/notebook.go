@@ -85,6 +85,13 @@ func defaultNotebookRoot() (string, error) {
 	if root := config.HarnessNotebookRoot(); root != "" {
 		return root, nil
 	}
+	foreign, err := config.DataDirIsForeign()
+	if err != nil {
+		return "", fmt.Errorf("compare the data folder with the instance's own: %w", err)
+	}
+	if foreign {
+		return filepath.Join(config.DataDir(), "notebook"), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
