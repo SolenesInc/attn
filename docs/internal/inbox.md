@@ -262,9 +262,10 @@ connected:
   or its link is down waits on that daemon and reaches the home when the link comes
   back. A report the home refuses, such as for a store error, is logged and dropped.
 - The mod keeps each ring it holds with the ring's record, and each message it gives
-  back until attn has settled the give-back at the home. So a restart of the daemon
-  that runs the session loses no ring while Claude and its mod keep running, and no
-  user's words the mod still holds. attn loses a held ring, or a give-back still
+  back until attn has settled the give-back at the home. A give-back counts as the
+  mod connecting, so attn never types the ring it brings back, even before the mod's
+  next poll. So a restart of the daemon that runs the session loses no ring while
+  Claude and its mod keep running, and no user's words the mod still holds. attn loses a held ring, or a give-back still
   waiting, only when the daemon and the mod die together: the daemon restarts and
   Claude exits or the mod reloads before the mod has handed it back, as an upgrade
   that changes the mod does. The ring's user input is then lost and its attempt

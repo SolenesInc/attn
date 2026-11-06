@@ -273,6 +273,23 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 		timer.Stop()
 		delete(m.firstPoll, terminal)
 	}
+	t := m.connectLocked(terminal, instance)
+	if t == nil {
+		return nil
+	}
+	if t.poll != nil {
+		close(t.poll.replaced)
+	}
+	t.poll = poll
+	if t.reach != nil {
+		t.reach.Stop()
+		t.reach = nil
+	}
+	m.giveLocked(t)
+	return t
+}
+
+func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) *claudeModTerminal {
 	t := m.terminals[terminal]
 	if t == nil {
 		t = &claudeModTerminal{id: terminal, replacedInstances: make(map[string]bool), handed: make(map[string]*claudeModDelivery), held: make(map[string]*claudeModHeld), compacting: make(map[string]protocol.SessionID)}
@@ -301,15 +318,6 @@ func (m *claudeMod) openPoll(terminal harness.TerminalID, instance string, poll 
 			m.d.life.Go("claudeModPlaceReturned", func() { m.placeReturnedNow(session) })
 		}
 	}
-	if t.poll != nil {
-		close(t.poll.replaced)
-	}
-	t.poll = poll
-	if t.reach != nil {
-		t.reach.Stop()
-		t.reach = nil
-	}
-	m.giveLocked(t)
 	return t
 }
 
@@ -483,14 +491,18 @@ func (m *claudeMod) serveReturn(w http.ResponseWriter, r *http.Request) {
 
 func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.SessionID, shown bool) []string {
 	t := m.terminals[ret.Terminal]
-	if t != nil && t.instance != ret.Instance {
+	switch {
+	case t == nil:
+		t = m.connectLocked(ret.Terminal, ret.Instance)
+		m.armReachLocked(t)
+	case t.instance != ret.Instance:
 		return nil
 	}
 	settled := []string{}
 	var known []string
 	placeUserWords := false
 	for _, back := range ret.Returns {
-		held := t != nil && t.held[back.ID] != nil
+		held := t.held[back.ID] != nil
 		switch {
 		case back.Ring != nil:
 			done, settling := m.settling[back.ID]
@@ -517,9 +529,7 @@ func (m *claudeMod) takeReturnsLocked(ret claudeModReturn, session protocol.Sess
 			settled = append(settled, back.ID)
 		}
 	}
-	if t != nil {
-		m.returnHeldLocked(t, known)
-	}
+	m.returnHeldLocked(t, known)
 	if placeUserWords {
 		m.d.life.Go("claudeModReturn", func() { m.placeReturnedNow(session) })
 	}
