@@ -1,9 +1,11 @@
 package ptybackend
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procwait"
 	"os"
 	"os/exec"
@@ -30,6 +32,13 @@ func waitForPIDsGone(timeout time.Duration, pids ...int) bool {
 		}
 	}
 	return true
+}
+
+func awaitSharedHostRemoval(t *testing.T, backend *WorkerBackend, id harness.TerminalID, cwd string) {
+	t.Helper()
+	if err := backend.Spawn(context.Background(), SpawnOptions{ID: id, CWD: cwd, Agent: "removal-probe", Cols: 80, Rows: 24, AgentArgv: []string{"/bin/cat"}}); err != nil {
+		t.Fatalf("spawn that waits for the removal to finish: %v", err)
+	}
 }
 
 func buildAttnBinary(t *testing.T) string {

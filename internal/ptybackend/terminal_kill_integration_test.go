@@ -101,6 +101,9 @@ func TestTerminalKillReachesEveryProcessGroup(t *testing.T) {
 				if err := backend.Remove(ctx, id); err != nil {
 					t.Fatal(err)
 				}
+				if kind == "shared host" {
+					awaitSharedHostRemoval(t, backend, id, root)
+				}
 				if err := syscall.Kill(info.PID, 0); err != syscall.ESRCH {
 					t.Errorf("leader %d remains (including zombie): %v", info.PID, err)
 				}

@@ -1,0 +1,8 @@
+kind: fixed
+area: terminals
+change: >
+  On the shared PTY host, removing or reloading a terminal whose shell exited while
+  a detached process still held the terminal can no longer kill an unrelated process
+  that later received the shell's old process number. The host now keeps that number
+  reserved until the terminal is removed, so an exited terminal shows as a defunct
+  process until then.

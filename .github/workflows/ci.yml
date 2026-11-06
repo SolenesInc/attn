@@ -465,6 +465,9 @@ jobs:
           else
             brew install fish
           fi
+      - name: Allow the private PID namespace that shared host tests create
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Verify old daemon and mixed host generations
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle

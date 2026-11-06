@@ -44,6 +44,7 @@ const EXIT_DRAIN_GRACE: Duration = Duration::from_millis(500);
 
 pub type Cleanup = Arc<dyn Fn(String) + Send + Sync>;
 pub type Broadcast = Arc<dyn Fn(Value) + Send + Sync>;
+type ChildExit = (i32, Option<String>);
 
 pub struct SessionRuntime {
     cleanup: Cleanup,
@@ -99,6 +100,11 @@ impl ChildReaper {
             .reaping
             .lock()
             .expect("child reaper gate poisoned")
+    }
+
+    fn collect(&self) {
+        let _reaping = self.pause();
+        reap_registered_children(&self.shared);
     }
 
     fn register(&self, session: &Arc<Session>) {
@@ -244,6 +250,7 @@ pub struct Session {
     reader_finished: AtomicBool,
     exit_seen: AtomicBool,
     exit_grace_over: AtomicBool,
+    reaper: ChildReaper,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, Outbox>>,
@@ -358,6 +365,7 @@ impl Session {
             },
             cleanup,
             broadcast,
+            reaper.clone(),
             quiesce,
         ));
 
@@ -398,6 +406,7 @@ impl Session {
         parts: Parts,
         cleanup: Cleanup,
         broadcast: Broadcast,
+        reaper: ChildReaper,
         quiesce: Arc<Quiesce>,
     ) -> Self {
         Self {
@@ -416,6 +425,7 @@ impl Session {
             reader_finished: AtomicBool::new(false),
             exit_seen: AtomicBool::new(false),
             exit_grace_over: AtomicBool::new(false),
+            reaper,
             signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
@@ -533,7 +543,7 @@ impl Session {
         let SessionRuntime {
             cleanup,
             broadcast,
-            reaper: _,
+            reaper,
             quiesce,
         } = runtime;
         let session = Arc::new(Self::assemble(
@@ -581,6 +591,7 @@ impl Session {
             },
             cleanup,
             broadcast,
+            reaper.clone(),
             quiesce,
         ));
         Ok(session)
@@ -593,6 +604,7 @@ impl Session {
     ) -> Result<(), String> {
         let Some(fd) = master_fd else {
             self.reader_finished.store(true, Ordering::Release);
+            reaper.register(self);
             self.schedule_cleanup();
             return Ok(());
         };
@@ -1299,8 +1311,26 @@ impl Session {
         self.publish(event);
     }
 
-    fn mark_exited(self: &Arc<Self>, status: i32) {
-        let (exit_code, signal) = decode_wait_status(status);
+    fn start_exit_drain(self: &Arc<Self>) {
+        if self.exit_seen.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let drained = Arc::clone(self);
+        let spawned = thread::Builder::new()
+            .name("pty-exit-drain".to_owned())
+            .stack_size(128 * 1024)
+            .spawn(move || {
+                thread::sleep(EXIT_DRAIN_GRACE);
+                drained.exit_grace_over.store(true, Ordering::Release);
+                wake_child_reaper();
+            });
+        if spawned.is_err() {
+            self.exit_grace_over.store(true, Ordering::Release);
+            wake_child_reaper();
+        }
+    }
+
+    fn mark_exited(self: &Arc<Self>, (exit_code, signal): ChildExit) {
         {
             let mut lifecycle = self.lifecycle.lock().expect("lifecycle mutex poisoned");
             if !lifecycle.running {
@@ -1368,6 +1398,7 @@ impl Session {
         if !self.cleanup_dir.is_empty() {
             let _ = fs::remove_dir_all(&self.cleanup_dir);
         }
+        self.reaper.collect();
         (self.cleanup)(self.id.clone());
     }
 
@@ -1485,54 +1516,46 @@ fn reap_registered_children(shared: &ChildReaperShared) {
         .map(|(pid, session)| (*pid, session.upgrade()))
         .collect::<Vec<_>>();
     for (pid, session) in sessions {
-        if let Some(session) = session.as_ref()
-            && !session.reader_finished.load(Ordering::Acquire)
-            && !session.exit_grace_over.load(Ordering::Acquire)
-        {
-            if !session.exit_seen.load(Ordering::Acquire) && child_has_exited(pid) {
-                session.exit_seen.store(true, Ordering::Release);
-                let drained = Arc::clone(session);
-                let spawned = thread::Builder::new()
-                    .name("pty-exit-drain".to_owned())
-                    .stack_size(128 * 1024)
-                    .spawn(move || {
-                        thread::sleep(EXIT_DRAIN_GRACE);
-                        drained.exit_grace_over.store(true, Ordering::Release);
-                        wake_child_reaper();
-                    });
-                if spawned.is_err() {
-                    session.exit_grace_over.store(true, Ordering::Release);
-                    wake_child_reaper();
+        let exit = match exited_child(pid) {
+            Ok(Some(exit)) => exit,
+            Ok(None) => continue,
+            Err(error) if error.raw_os_error() == Some(libc::ECHILD) => {
+                forget_child(shared, pid);
+                if let Some(session) = session
+                    && session.is_running()
+                {
+                    eprintln!("PTY host child {pid} was reaped outside the host reaper");
+                    session.mark_exited((1, None));
                 }
-            }
-            continue;
-        }
-        let mut status = 0;
-        loop {
-            let result = unsafe { libc::waitpid(pid, &raw mut status, libc::WNOHANG) };
-            if result == pid {
-                mark_reaped(shared, pid, status);
-                break;
-            }
-            if result == 0 {
-                break;
-            }
-            let error = std::io::Error::last_os_error();
-            if error.kind() == ErrorKind::Interrupted {
                 continue;
             }
-            if error.raw_os_error() == Some(libc::ECHILD) {
-                eprintln!("PTY host child {pid} was reaped outside the host reaper");
-                mark_reaped(shared, pid, 1 << 8);
-            } else {
-                eprintln!("PTY host child {pid} reap failed: {error}");
+            Err(error) => {
+                eprintln!("PTY host child {pid} exit check failed: {error}");
+                continue;
             }
-            break;
+        };
+        let Some(session) = session else {
+            release_child(shared, pid);
+            continue;
+        };
+        let released = session.cleaned.load(Ordering::Acquire);
+        if released
+            || session.reader_finished.load(Ordering::Acquire)
+            || session.exit_grace_over.load(Ordering::Acquire)
+        {
+            session.mark_exited(exit);
+        } else {
+            session.start_exit_drain();
+        }
+        if released {
+            release_child(shared, pid);
         }
     }
 }
 
-fn child_has_exited(pid: i32) -> bool {
+const CLD_EXITED: i32 = 1;
+
+fn exited_child(pid: i32) -> std::io::Result<Option<ChildExit>> {
     let mut info = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
     let result = unsafe {
         libc::waitid(
@@ -1542,23 +1565,40 @@ fn child_has_exited(pid: i32) -> bool {
             libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
         )
     };
+    if result != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
     #[cfg(target_os = "linux")]
-    let reported_pid = unsafe { info.si_pid() };
+    let (reported_pid, status) = unsafe { (info.si_pid(), info.si_status()) };
     #[cfg(not(target_os = "linux"))]
-    let reported_pid = info.si_pid;
-    result == 0 && reported_pid == pid
+    let (reported_pid, status) = (info.si_pid, info.si_status);
+    if reported_pid != pid {
+        return Ok(None);
+    }
+    Ok(Some(if info.si_code == CLD_EXITED {
+        (status, None)
+    } else {
+        (128 + status, Some(signal_name(status).to_owned()))
+    }))
 }
 
-fn mark_reaped(shared: &ChildReaperShared, pid: i32, status: i32) {
-    let session = shared
+fn release_child(shared: &ChildReaperShared, pid: i32) {
+    let mut status = 0;
+    if unsafe { libc::waitpid(pid, &raw mut status, libc::WNOHANG) } != pid {
+        eprintln!(
+            "PTY host child {pid} reap failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
+    forget_child(shared, pid);
+}
+
+fn forget_child(shared: &ChildReaperShared, pid: i32) {
+    shared
         .sessions
         .lock()
         .expect("child reaper mutex poisoned")
-        .remove(&pid)
-        .and_then(|session| session.upgrade());
-    if let Some(session) = session {
-        session.mark_exited(status);
-    }
+        .remove(&pid);
 }
 
 fn sigchld_set() -> libc::sigset_t {
@@ -1768,17 +1808,6 @@ fn add_exit_fields(result: &mut Value, lifecycle: &Lifecycle) {
     if let Some(signal) = lifecycle.exit_signal.as_ref() {
         result["exit_signal"] = Value::String(signal.clone());
     }
-}
-
-fn decode_wait_status(status: i32) -> (i32, Option<String>) {
-    if libc::WIFEXITED(status) {
-        return (libc::WEXITSTATUS(status), None);
-    }
-    if libc::WIFSIGNALED(status) {
-        let signal = libc::WTERMSIG(status);
-        return (128 + signal, Some(signal_name(signal).to_owned()));
-    }
-    (0, None)
 }
 
 pub fn parse_signal(value: &str) -> i32 {

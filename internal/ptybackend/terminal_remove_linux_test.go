@@ -186,6 +186,9 @@ func TestTerminalRemovalStopsJobsAfterTheLeaderExits(t *testing.T) {
 			if _, err := io.ReadAll(held); err != nil {
 				t.Fatalf("job %d still holds its descriptor after the leader exited and Remove completed: %v", job, err)
 			}
+			if kind == "shared host" {
+				awaitSharedHostRemoval(t, backend, id, root)
+			}
 			if err := syscall.Kill(info.PID, 0); err != syscall.ESRCH {
 				t.Fatalf("leader %d was not reaped: %v", info.PID, err)
 			}
