@@ -275,7 +275,11 @@ run_landing_tests() {
     return
   fi
   while IFS= read -r unit || [ -n "$unit" ]; do
-    if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
+    case "$unit" in
+      "") ;;
+      "red "*) units+=(--red "${unit#red }") ;;
+      *) units+=(--unit "$unit") ;;
+    esac
   done <"$units_file"
   if [ "${#units[@]}" -eq 0 ]; then
     echo "land: choosing landing tests failed; running the baseline groups $*" >&2

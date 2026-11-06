@@ -13,6 +13,8 @@ import (
 // landing tests from 20.6s to 38.3s.
 const ClearedAfter = 30
 
+const VitestSuiteUnit = "vitest ."
+
 func AppTestUnit(repoPath string) (string, bool) {
 	file, ok := strings.CutPrefix(repoPath, "app/")
 	if !ok {

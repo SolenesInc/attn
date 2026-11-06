@@ -5,7 +5,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 list=scripts/landing-tests
 groups="$(awk '$1 == "group" { print $2 }' "$list")"
-usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'...; groups: $(paste -sd' ' - <<<"$groups")"
+usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'... [--red 'vitest <file>']...; groups: $(paste -sd' ' - <<<"$groups")"
 go_vet_options=()
 if [ "${1:-}" = --no-go-vet ]; then
   go_vet_options=(-vet=off)
@@ -14,9 +14,15 @@ fi
 [ "$#" -gt 0 ] || { echo "$usage" >&2; exit 2; }
 requested="$*"
 
+red_vitest_files=()
 if [ "$1" = --unit ]; then
   entries=""
   while [ "$#" -gt 0 ]; do
+    if [ "$1" = --red ] && [ "$#" -ge 2 ]; then
+      red_vitest_files+=("${2#vitest }")
+      shift 2
+      continue
+    fi
     [ "$1" = --unit ] && [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
     read -r -a fields <<<"$2"
     case "${fields[0]}:${#fields[@]}" in
@@ -37,6 +43,11 @@ else
   ' "$list")"
 fi
 
+vitest_suite="vitest ."
+if grep -qxF -- "$vitest_suite" <<<"$entries"; then
+  entries="$(awk -v suite="$vitest_suite" '$1 != "vitest" || $0 == suite' <<<"$entries")"
+fi
+
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-landing-tests.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 summary="$work/summary"
@@ -53,8 +64,18 @@ summarize() {
     for unit in "$@"; do echo "MISSING $unit - the run sealed no receipt"; done >"$lines"
     status=1
   fi
-  cat "$lines" >>"$summary"
   awk '$1 != "PASS" && $1 != "SKIP"' "$lines" >"$work/unsettled"
+  if [ "$*" = "$vitest_suite" ]; then
+    cat "$work/unsettled" >>"$summary"
+    passed_files="$(awk '$1 == "PASS"' "$lines" | wc -l | tr -d ' ')"
+    if [ "$passed_files" -eq 0 ]; then
+      echo "MISSING $vitest_suite - the run reported no passing file" | tee -a "$summary" >>"$work/unsettled"
+    else
+      echo "PASS $vitest_suite: $passed_files files" >>"$summary"
+    fi
+  else
+    cat "$lines" >>"$summary"
+  fi
   [ "$status" -eq 0 ] && [ ! -s "$work/unsettled" ]
 }
 
@@ -149,15 +170,19 @@ else
     const listen = () => new Promise(done => { const s = net.createServer().listen(0, "127.0.0.1", () => done(s)); });
     Promise.all([listen(), listen()]).then(servers => { console.log(servers.map(s => s.address().port).join(" ")); servers.forEach(s => s.close()); });')
   run_app_unit() {
-    local run="$1" runner="$2" file="$3" status=0 command
+    local run="$1" runner="$2" file="$3" status=0 command unit_options=(--unit "$runner $file")
     case "$runner" in
       vitest) command=(pnpm --dir app exec vitest run "$file") ;;
       playwright) command=(pnpm --dir app exec playwright test "$file") ;;
     esac
+    if [ "$runner $file" = "$vitest_suite" ]; then
+      unit_options=()
+      command+=(--silent=passed-only)
+    fi
     echo "landing tests: ${command[*]}"
     env -u ATTN_DB_PATH -u ATTN_SOCKET_PATH -u ATTN_CONFIG_PATH -u ATTN_PLUGIN_DIR \
-      ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" ATTN_E2E_DAEMON_PORT="$daemon_port" ATTN_E2E_VITE_PORT="$vite_port" \
-      go tool test-history capture "$runner" --unit "$runner $file" --receipt-out "$work/app-$run.json" -- "${command[@]}" || status=$?
+      ATTN_VITEST_FILES_RED_ON_MAIN="${red_vitest_files[*]-}" ATTN_INSTANCE= ATTN_DATA_DIR="$work/data" ATTN_E2E_DAEMON_PORT="$daemon_port" ATTN_E2E_VITE_PORT="$vite_port" \
+      go tool test-history capture "$runner" ${unit_options[@]+"${unit_options[@]}"} --receipt-out "$work/app-$run.json" -- "${command[@]}" || status=$?
     echo "$status" >"$work/app-$run.status"
   }
   run_app_units() {
@@ -174,18 +199,22 @@ else
   run_app_units playwright
   wait "$vitest_job"
   wait "$go_job"
-  cat "$work/vitest.log"
   settle_all_go_units
+  vitest_failed=0
   while read -r run runner file; do
     status="$(cat "$work/app-$run.status")"
     if ! summarize "$work/app-$run.json" "$status" "$runner $file"; then
       failed=1
       case "$runner" in
-        vitest) echo "rerun: pnpm --dir app exec vitest run $file" >>"$work/reruns" ;;
+        vitest)
+          vitest_failed=1
+          awk '$1 != "PASS" && $1 != "SKIP" { print "rerun: pnpm --dir app exec vitest run " $3 }' "$work/lines" >>"$work/reruns"
+          ;;
         playwright) echo "rerun: pnpm --dir app exec playwright test $file" >>"$work/reruns" ;;
       esac
     fi
   done <"$work/app-units"
+  if [ "$vitest_failed" -eq 1 ]; then cat "$work/vitest.log" >&2; fi
 fi
 
 echo

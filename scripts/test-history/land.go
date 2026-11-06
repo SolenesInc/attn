@@ -59,9 +59,19 @@ func landCommand(args []string) int {
 
 func landingUnits(selection testhistory.Selection) []string {
 	var units []string
+	runsVitestSuite := false
 	for _, choice := range selection.Choices {
 		if choice.Status == testhistory.Selected || choice.Baseline && choice.Status == testhistory.Missing {
 			units = append(units, choice.Unit)
+			runsVitestSuite = runsVitestSuite || choice.Unit == testhistory.VitestSuiteUnit
+		}
+	}
+	if !runsVitestSuite {
+		return units
+	}
+	for _, choice := range selection.Choices {
+		if choice.Status == testhistory.Red && testhistory.UnitRunner(choice.Unit) == testhistory.RunnerVitest {
+			units = append(units, "red "+choice.Unit)
 		}
 	}
 	return units

@@ -176,8 +176,9 @@ system.
 
 Before landing or reporting done, run targeted tests for what you changed and
 check the affected surface. Do not run `make test`, `make lint`,
-`make test-frontend`, or another full suite locally: CI on `main` runs the full
-suites after landing.
+`make test-frontend`, or another full suite locally: `scripts/land.sh` runs the
+Vitest suite for a change under `app/`, and CI on `main` runs the full suites
+after landing.
 
 `make test` skips the Go suite when only `docs/` (except `docs/guide`'s Go code
 and the pages it embeds), root Markdown and `app/src` changed since

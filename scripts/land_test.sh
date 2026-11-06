@@ -172,6 +172,10 @@ printf 'export {};\n' >app/src/example.ts
 land 'App change'
 expect_checks 'check-frontend check-mobile' 'land --group app' "landing-tests $selected_units" sync
 
+printf '\n' >>app/src/example.ts
+land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
+expect_checks 'check-frontend check-mobile' 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
+
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
 land 'Mobile change'

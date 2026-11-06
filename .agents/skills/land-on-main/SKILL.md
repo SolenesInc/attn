@@ -150,7 +150,8 @@ and prints how to read the failure. Fix it and land again: a product failure on
 Linux is a finding, as `app/scripts/real-app-harness/AGENTS.md` says.
 
 The landing tests of the gate come from the shared test history. They are the
-groups of `scripts/landing-tests` that the changed paths match, the tests you
+groups of `scripts/landing-tests` that the changed paths match, which include
+the whole Vitest suite for a change under `app/`, the tests you
 changed, and every test that failed on `main` and has since passed there. A
 test stays in the gate until it has passed on 30 later `main` commits. The
 gate prints each test it added, and why. It lists the tests that are still red

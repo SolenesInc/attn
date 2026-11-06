@@ -68,6 +68,7 @@ Correction seed you plant moves the class to a stronger fix.
 |---|---|---|
 | A package host that a job is not testing turns App acceptance red | Run 41902160029, shard 2/10: `apt download exceeded 300s`, no test failed | `setup-linux-app-deps`: shards restore a frozen apt layer and install with every network source removed. Only the build job can reach the mirror, on a cache miss |
 | A landing adds or changes a scenario that passed only on the author's Mac, and it fails on Linux in CI | 729fdd236, SHELF-MOVES: `the active tile sits at the end of the screen` | `scripts/land-scenarios.sh`: `land.sh` runs each changed catalog scenario on CI's Linux before the push |
+| A source change breaks a Vitest file the landing did not touch or list | c9f676997, `App.editorTileDrafts.test.tsx`: six tests failed in Frontend | The `app` landing group runs the whole Vitest suite (`vitest .`) |
 
 ## Find the failure
 
@@ -192,7 +193,8 @@ to:
   seed instead of guessing at a fix.
 - When the test that caught the failure runs in seconds, add the test to
   `scripts/landing-tests` in the same landing, in the group whose paths can
-  break it, so `scripts/land.sh` always runs it.
+  break it, so `scripts/land.sh` always runs it. The `app` group already runs
+  every Vitest file.
 - Land with the `land-on-main` skill. Stop when `scripts/land.sh` pushes. Do
   not watch or re-run CI: the automation checks `main` again.
 - For a revert: revert only the culprit, name the run and the failure in the

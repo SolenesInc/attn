@@ -56,8 +56,10 @@ fast gate:
 - The landing tests. `land.sh` chooses a few tests for the commit it is about to
   push, not a suite: the groups of `scripts/landing-tests` that match the
   changed paths, the tests the landing changes, and every test that failed on
-  `main` and has since passed there, until it clears. A test that is still red
-  on `main` is listed, not run. `land.sh` prints each test it added and why.
+  `main` and has since passed there, until it clears. A change under `app/`
+  runs the whole Vitest suite: for such landings, Vitest's import graph selected
+  164 to 191 of 270 files and took as long. A test that is still red on `main` is
+  listed, not run. `land.sh` prints each test it added and why.
   [Test history](test-history.md#selection) specifies the choice, and
   `scripts/land.sh --baseline` lands with the baseline groups alone.
 
@@ -89,9 +91,10 @@ new commits do not reach.
 ## Verifying before landing
 
 Checks before landing are fast and local: targeted tests, the change on the
-surface it touches, and a review scaled to the change's risk. The full Go and
-frontend suites and the scenario matrix, macOS included, run in CI on `main`
-after landing, and so do the combinations of changes that landed together.
+surface it touches, and a review scaled to the change's risk. The full Go
+suite, the Playwright specs and the scenario matrix, macOS included, run in CI
+on `main` after landing, and so do the combinations of changes that landed
+together.
 
 Reviewers catch a defect before landing, while the author still remembers the
 work and before other slices build on the defect. The review automation on `main` still reads every commit afterwards, with the

@@ -182,7 +182,8 @@ is about to push, with
 arguments name the groups whose path pattern matched the change. `land.sh`
 runs:
 
-- the baseline: every unit of those groups in `scripts/landing-tests`
+- the baseline: every unit of those groups in `scripts/landing-tests`, including
+  `vitest .`, the whole Vitest suite in one run
 - the tests the change touches:
   - top-level Go tests whose function overlaps a changed line in a `_test.go`
     file outside `testdata`
@@ -193,10 +194,15 @@ runs:
   its runner. A test still red on `main`, with no pass since its last failure,
   is listed as `RED` and not run. The sheriff owns it. A red test blocks no
   landing, unless the test is in the baseline or the landing changes the test.
+  `land` writes a red Vitest file as `red vitest <file>`, and `landing-tests.sh`
+  leaves it out of the whole suite through `ATTN_VITEST_FILES_RED_ON_MAIN`, which
+  `app/vite.config.ts` reads.
 
 `land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
 failure stops the push. `land.sh` prints each test's result, skipped tests
-included, and the command that reruns a failed test. `landing-tests.sh` runs its
+included, and the command that reruns a failed test. The whole Vitest suite
+prints its failures and a count of the files that passed, and its log only when
+a file failed. `landing-tests.sh` runs its
 Go, Vitest and Playwright tests at once, and splits `./cmd/attn`'s tests across
 five `go test` runs, each with its own receipt. When a landing runs the Go
 checks, `land.sh` passes `--no-go-vet`, which leaves out `go test`'s own vet,

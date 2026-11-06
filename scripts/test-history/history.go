@@ -220,6 +220,7 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 			inventory[unit] = true
 		}
 	}
+	inventory[testhistory.VitestSuiteUnit] = true
 	return inventory, nil
 }
 

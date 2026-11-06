@@ -10,6 +10,7 @@
 #
 #   go <package> <TestName>   a top-level Go test and its subtests
 #   vitest <file>             a Vitest file, relative to app/
+#   vitest .                  the whole Vitest suite, in one run
 #   playwright <file>         a Playwright spec, relative to app/
 #
 # The list grows from red main. When the sheriff's repair for a red cause lands,
@@ -96,12 +97,6 @@ go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
 
 group app ^app/
-vitest src/App.desktops.test.tsx
-vitest src/App.automationSelection.test.tsx
-vitest src/App.gardenSeeds.test.tsx
-vitest src/App.newSession.test.tsx
-vitest src/App.editorTileDrafts.test.tsx
-vitest src/App.shelfLayout.test.tsx
-vitest scripts/real-app-harness/scenarioCatalog.test.mjs
+vitest .
 playwright e2e/queue-sidebar-fit.spec.ts
 playwright e2e/notebook-tile.spec.ts

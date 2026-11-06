@@ -47,6 +47,8 @@ const testFilePatterns = [
 ];
 
 const replacesModules = /vi\.(mock|doMock|hoisted|resetModules)\(/;
+const filesRedOnMain = (process.env.ATTN_VITEST_FILES_RED_ON_MAIN ?? "").split(" ").filter(Boolean);
+
 const filesNeedingOwnModules = globSync(testFilePatterns, { cwd: __dirname }).filter((file) =>
   replacesModules.test(readFileSync(resolve(__dirname, file), "utf8")),
 );
@@ -115,7 +117,7 @@ export default defineConfig(async ({ command }) => ({
           sequence: { groupOrder: 1 },
           isolate: false,
           include: testFilePatterns,
-          exclude: filesNeedingOwnModules,
+          exclude: [...filesNeedingOwnModules, ...filesRedOnMain],
         },
       },
       {
@@ -124,6 +126,7 @@ export default defineConfig(async ({ command }) => ({
           name: "isolated",
           sequence: { groupOrder: 0 },
           include: filesNeedingOwnModules,
+          exclude: filesRedOnMain,
         },
       },
     ],

@@ -121,3 +121,42 @@ func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 		t.Fatal("land with a group the list lacks must fail, so land.sh runs its groups itself")
 	}
 }
+
+func TestLandLeavesFilesStillRedOnMainOutOfTheVitestSuite(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", checkoutRepository)
+	repo := newCheckout(t)
+	service := newFakeHistoryService(t)
+	config := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(config, "attn-test-history"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "attn-test-history", "token"), []byte(serviceToken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(-time.Hour).Truncate(time.Second)
+	repo.write("scripts/landing-tests", "group app ^app/\nvitest .\n")
+	repo.write("app/src/red.test.ts", "test\n")
+	failedAt := repo.commit("tests", start)
+	body, err := json.Marshal(otherLaneRun("red-fails", failedAt, "vitest src/red.test.ts", testhistory.Fail, start.Add(time.Minute)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.add("github.com/"+checkoutRepository, "red-fails", body)
+	repo.git("checkout", "-q", "-b", "change")
+	repo.write("app/src/example.ts", "export {};\n")
+	repo.commit("change the app", start.Add(time.Hour))
+
+	unitsFile := filepath.Join(t.TempDir(), "units")
+	cmd := historyCommand(t, repo.spool, repo.dir, "land", "--main", "main", "--units-out", unitsFile, "--group", "app")
+	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=", "ATTN_TEST_HISTORY_URL="+service.server.URL, "XDG_CONFIG_HOME="+config)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("land: %v\n%s", err, out)
+	}
+	units, err := os.ReadFile(unitsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "vitest .\nred vitest src/red.test.ts\n"; string(units) != want {
+		t.Fatalf("units = %q, want %q", units, want)
+	}
+}
