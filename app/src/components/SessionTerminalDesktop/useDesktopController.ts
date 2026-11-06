@@ -24,7 +24,7 @@ import {
   type TerminalNavigationDirection,
   type TerminalSplitDirection,
 } from '../../types/desktop';
-import { lockTextSelection } from '../../utils/dragLock';
+import { beginPointerResize, suppressTerminalMouseDuringResize } from '../../utils/resizeGesture';
 import { isSuspiciousTerminalSize } from '../../utils/terminalDebug';
 import { type GhosttyTerminalHandle } from '../GhosttyTerminal';
 import { type DesktopTileSessionOption } from './DesktopDockTile';
@@ -73,17 +73,7 @@ import { useSessionStore } from '../../store/sessions';
 import { FONT_FAMILY, measureCellWidth } from '../../utils/terminalSizing';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 
-const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
-
-const RESIZE_MOUSE_RELEASE_GUARD_MS = 150;
-
 const COLUMN_DRAG_ACTIVATION_PX = 4;
-
-function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION_MS): void {
-  document.documentElement.dataset.attnDesktopMouseSuppressUntil = String(
-    Date.now() + durationMs,
-  );
-}
 
 const EMPTY_SUSPENDED_LEAF_IDS: ReadonlySet<string> = new Set();
 
@@ -98,44 +88,22 @@ function beginResizeGesture(
   splitId: string,
   direction: TerminalSplitDirection,
 ): () => void {
-  if (typeof dividerElement.setPointerCapture === 'function') {
-    try {
-      dividerElement.setPointerCapture(pointerId);
-    } catch {}
-  }
+  const endPointerResize = beginPointerResize(
+    dividerElement,
+    pointerId,
+    direction === 'vertical' ? 'col-resize' : 'row-resize',
+  );
   const resizeToken = `${splitId}:${pointerId}`;
-  suppressTerminalMouseDuringResize();
   container.dataset.resizingSplitId = splitId;
   container.dataset.resizingSplitDirection = direction;
   container.dataset.resizingSplitToken = resizeToken;
-  document.documentElement.dataset.attnDesktopResizing = '1';
-  document.documentElement.dataset.attnDesktopResizeToken = resizeToken;
-  const releaseSelectionLock = lockTextSelection(
-    direction === 'vertical' ? 'col-resize' : 'row-resize',
-  );
   return () => {
-    if (
-      typeof dividerElement.hasPointerCapture === 'function' &&
-      typeof dividerElement.releasePointerCapture === 'function' &&
-      dividerElement.hasPointerCapture(pointerId)
-    ) {
-      try {
-        dividerElement.releasePointerCapture(pointerId);
-      } catch {}
-    }
     if (container.dataset.resizingSplitToken === resizeToken) {
       delete container.dataset.resizingSplitId;
       delete container.dataset.resizingSplitDirection;
       delete container.dataset.resizingSplitToken;
     }
-    if (document.documentElement.dataset.attnDesktopResizeToken === resizeToken) {
-      delete document.documentElement.dataset.attnDesktopResizing;
-      delete document.documentElement.dataset.attnDesktopResizeToken;
-    }
-    // The long during-drag window would outlive the drag and swallow normal
-    // interaction.
-    suppressTerminalMouseDuringResize(RESIZE_MOUSE_RELEASE_GUARD_MS);
-    releaseSelectionLock();
+    endPointerResize();
   };
 }
 
