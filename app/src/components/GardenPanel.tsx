@@ -1213,8 +1213,14 @@ export function GardenPanel({
               <button type="button" onClick={() => onOpenAsTile(here.id)}>Open as tile</button>
             )}
             {canResume && (
-              <button type="button" data-testid={`seed-resume-${here.id}`} onClick={() => onResumeSeed?.(here.id)}>
+              <button
+                type="button"
+                data-testid={`seed-resume-${here.id}`}
+                aria-label={continuation?.outpost ? `Resume on ${continuation.outpost}` : undefined}
+                onClick={() => onResumeSeed?.(here.id)}
+              >
                 Resume
+                {continuation?.outpost && <span className="garden-head__host">{continuation.outpost}</span>}
               </button>
             )}
             {canHandover && !composingContinuation && (

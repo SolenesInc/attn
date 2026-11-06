@@ -599,7 +599,7 @@ func (d *Daemon) outpostUnreachableReason(host string) string {
 	if _, err := d.resolveOutpost(host); err != nil {
 		return err.Error()
 	}
-	return fmt.Sprintf("outpost %q is unreachable, so attn cannot check its directory and conversation; Resume returns when the outpost is back", d.outpostName(host))
+	return fmt.Sprintf("outpost %q is unreachable; Resume returns when it is back", d.outpostName(host))
 }
 
 type continuationMachine struct {

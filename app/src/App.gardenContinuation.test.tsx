@@ -156,21 +156,20 @@ describe('App garden continuation', () => {
   it('offers Resume of an outpost session, naming the outpost, and re-reads the seed when the outpost’s reach changes', async () => {
     const unreachable = continued({
       outpost: 'studio', directory_state: 'unreachable', resume_available: false, handover_placement: 'placement_required',
-      resume_reason: 'outpost "studio" is unreachable, so attn cannot check its directory and conversation; Resume returns when the outpost is back',
+      resume_reason: 'outpost "studio" is unreachable; Resume returns when it is back',
     });
     const garden = await renderGarden([unreachable], { sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('tender', { state: 'idle' })] });
     const { daemon } = garden;
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await gesture(daemon, () => pressShortcut('board.open'));
     await openRow(daemon, unreachable.title);
-    expect(screen.queryByRole('button', { name: 'Resume' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Resume/ })).not.toBeInTheDocument();
     expect(screen.getByText(/outpost "studio" is unreachable/)).toBeInTheDocument();
 
     garden.documents[unreachable.id] = { seed: continued({ outpost: 'studio', directory_state: 'unchecked', resume_available: true, handover_placement: 'placement_required' }) };
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [STUDIO] }));
 
-    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
-    expect(screen.getByText(/on outpost studio; attn checks its folder and conversation there/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume on studio' })).toHaveTextContent('studio');
     expect(screen.queryByText(/is unreachable/)).not.toBeInTheDocument();
   });
 

@@ -391,7 +391,7 @@ func outpostDirectoryEvidence(continuation *seedContinuation) string {
 	case continuation.DirectoryState == directoryUnreachable:
 		return fmt.Sprintf("The saved working directory is on outpost %q, which is unreachable. Resume returns when the outpost is back.", continuation.Outpost)
 	}
-	return fmt.Sprintf("The saved working directory is on outpost %q. Attn checks it there when the agent resumes.", continuation.Outpost)
+	return fmt.Sprintf("The saved working directory is on outpost %q.", continuation.Outpost)
 }
 
 func reviewDirectoryEvidence(observation garden.ReviewObservation) string {

@@ -1759,7 +1759,7 @@ func fprintSeedResume(w io.Writer, seed protocol.Seed) {
 			fmt.Fprintf(w, "resume  unavailable: %s\n", reason)
 		}
 	case outpost != "":
-		fmt.Fprintf(w, "resume  on outpost %s; attn checks its directory and conversation there when you resume\n", outpost)
+		fmt.Fprintf(w, "resume  on outpost %s\n", outpost)
 	default:
 		fmt.Fprintln(w, "resume  available")
 	}

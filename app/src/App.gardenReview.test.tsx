@@ -205,7 +205,7 @@ describe('App garden review', () => {
       event: 'garden_review_updated',
       review: review([reviewItem({
         actions: ['resume', 'send_to_chief', 'keep_growing', 'park', 'harvest', 'wither'],
-        evidence: [{ label: 'Working directory', text: 'The saved working directory is on outpost "box". Attn checks it there when the agent resumes.' }],
+        evidence: [{ label: 'Working directory', text: 'The saved working directory is on outpost "box".' }],
       })]),
     });
 

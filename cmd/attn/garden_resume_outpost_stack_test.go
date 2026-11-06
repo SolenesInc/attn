@@ -239,7 +239,7 @@ func (w gardenOutpostSeed) reviewUpdateSince(mark int, runID string, matches fun
 }
 
 func reviewItemOffersResumeOnline(item protocol.GardenReviewItem) bool {
-	return item.Status == "ready" && slices.Contains(item.Actions, "resume") && strings.Contains(reviewEvidenceText(item), "Attn checks it there")
+	return item.Status == "ready" && slices.Contains(item.Actions, "resume") && strings.Contains(reviewEvidenceText(item), `on outpost "outpost".`)
 }
 
 func reviewItemShowsOutpostUnreachable(item protocol.GardenReviewItem) bool {
