@@ -1024,13 +1024,6 @@ export function useDesktopController(
   );
 
   const workspaceShortcutsActive = sessionVisible && shortcutsEnabled;
-  const shelfWidthLabelShown = useShelfControls({
-    active: desktopDrawn && shortcutsEnabled && shelfOn,
-    rowInput,
-    narrowestCols: shelfNarrowestCols,
-    onSetNarrowestCols,
-    onShelfLimit,
-  });
   useShortcut('terminal.open', focusActivePane, workspaceShortcutsActive);
   useShortcut(
     'terminal.find',
@@ -1380,7 +1373,7 @@ export function useDesktopController(
       const dividerElement = event.currentTarget;
       const { pointerId, clientX: startX } = event;
       const start = { screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn };
-      const measures = { activeLeafId: input.activeLeafId, narrowestPx: input.narrowestPx, pxPerCol: input.pxPerCol };
+      const measures = { activeLeafId: input.activeLeafId, areaPx: input.areaPx, narrowestPx: input.narrowestPx, pxPerCol: input.pxPerCol };
       const pendingAtStart = input.pendingWantedCols ?? NO_PENDING_WIDTHS;
       let endResizeGesture: (() => void) | null = null;
 
@@ -1459,6 +1452,15 @@ export function useDesktopController(
     sendWantedCols(wanted);
     return true;
   }, [sendWantedCols]);
+
+  const shelfWidthLabel = useShelfControls({
+    active: desktopDrawn && shortcutsEnabled && shelfOn,
+    rowInput,
+    narrowestCols: shelfNarrowestCols,
+    onSetNarrowestCols,
+    onClearWantedCols: clearWantedCols,
+    onShelfLimit,
+  });
 
   const handleColumnDividerDoubleClick = useCallback((divider: SplitDivider) => {
     const screen = rowPlanRef.current?.screen;
@@ -1551,7 +1553,7 @@ export function useDesktopController(
     onRequestTileContent,
     paneGeometry,
     shelfOn,
-    shelfWidthLabelShown,
+    shelfWidthLabel,
     keepLeavingFrame,
     staleBuildDismissed,
     setStaleBuildDismissed,

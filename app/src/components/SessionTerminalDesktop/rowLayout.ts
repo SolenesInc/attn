@@ -84,12 +84,17 @@ export function shownRow(row: readonly RowColumn[], heldLeafIds: readonly string
 
 type RowMeasures = Pick<RowLayoutInput, 'areaPx' | 'narrowestPx' | 'pxPerCol'>;
 
-function columnNeedPx(column: RowColumn, measures: Pick<RowMeasures, 'narrowestPx' | 'pxPerCol'>): number {
-  return Math.max(measures.narrowestPx, (column.wantedCols ?? 0) * measures.pxPerCol);
+function fitsArea(px: number, measures: Pick<RowMeasures, 'areaPx'>): boolean {
+  return px <= measures.areaPx + FIT_TOLERANCE_PX;
 }
 
-function fitsArea(px: number, measures: RowMeasures): boolean {
-  return px <= measures.areaPx + FIT_TOLERANCE_PX;
+function wantedPxWithRoom(column: RowColumn, measures: Pick<RowMeasures, 'areaPx' | 'pxPerCol'>): number | null {
+  const px = (column.wantedCols ?? 0) * measures.pxPerCol;
+  return px > 0 && fitsArea(px, measures) ? px : null;
+}
+
+function columnNeedPx(column: RowColumn, measures: RowMeasures): number {
+  return Math.max(measures.narrowestPx, wantedPxWithRoom(column, measures) ?? 0);
 }
 
 function fillFrom(row: readonly RowColumn[], start: number, measures: RowMeasures): { end: number; sum: number } {
@@ -123,10 +128,9 @@ function placeScreen(
 }
 
 function columnWidths(screen: readonly RowColumn[], input: RowLayoutInput): number[] {
-  const wantedPx = (column: RowColumn) =>
-    column.wantedCols ? Math.max(input.narrowestPx, column.wantedCols * input.pxPerCol) : null;
+  const wantedPx = (column: RowColumn) => (wantedPxWithRoom(column, input) === null ? null : columnNeedPx(column, input));
   const wantedSum = screen.reduce((sum, column) => sum + (wantedPx(column) ?? 0), 0);
-  const shared = screen.filter((column) => !column.wantedCols).length;
+  const shared = screen.filter((column) => wantedPx(column) === null).length;
   if (shared === 0) {
     return screen.map((column) => (wantedPx(column)! * input.areaPx) / wantedSum);
   }
@@ -193,6 +197,7 @@ export interface ColumnDragStart {
 
 export interface ColumnDragMeasures {
   activeLeafId: string;
+  areaPx: number;
   narrowestPx: number;
   pxPerCol: number;
 }
@@ -207,7 +212,7 @@ export function applyColumnDrag(
   start: ColumnDragStart,
   dividerIndex: number,
   distancePx: number,
-  { activeLeafId, narrowestPx, pxPerCol }: ColumnDragMeasures,
+  { activeLeafId, areaPx, narrowestPx, pxPerCol }: ColumnDragMeasures,
 ): ColumnDrag {
   const widths = [...start.widths];
   const growsLeft = distancePx > 0;
@@ -250,8 +255,8 @@ export function applyColumnDrag(
   const stays = new Set([grower, ...givers, ...(growsLeft ? left : right)]);
   const moved = (index: number) => Math.abs(widths[index] - start.widths[index]) > COLUMN_WIDTH_UNCHANGED_PX;
   const shownAtOtherWidth = (column: RowColumn, index: number) =>
-    Boolean(column.wantedCols)
-    && Math.abs(start.widths[index] - columnNeedPx(column, { narrowestPx, pxPerCol })) > COLUMN_WIDTH_UNCHANGED_PX;
+    wantedPxWithRoom(column, { areaPx, pxPerCol }) !== null
+    && Math.abs(start.widths[index] - columnNeedPx(column, { areaPx, narrowestPx, pxPerCol })) > COLUMN_WIDTH_UNCHANGED_PX;
   const wantedCols = new Map<string, number>();
   if (start.screen.some((_, index) => moved(index))) {
     let savedPx = 0;
@@ -288,6 +293,7 @@ export function planSlotSwap(tree: TerminalLayoutNode, chipLeafId: string, slotL
 
 export type NarrowestStep =
   | { kind: 'step'; cols: number }
+  | { kind: 'clear-then-step'; cols: number; columns: RowColumn[] }
   | { kind: 'limit'; message: string };
 
 export function stepNarrowestCols(
@@ -305,6 +311,21 @@ export function stepNarrowestCols(
     : NARROWEST_STEPS.filter((cols) => cols < currentCols).reverse();
   const cols = candidates.find((step) => (direction === 'fewer' ? shownAt(step) < shown : shownAt(step) > shown));
   if (cols !== undefined) return { kind: 'step', cols };
+  if (direction === 'more') {
+    const row = withPendingWantedCols(readRow(input.tree), input.pendingWantedCols);
+    const noWantedWidths = new Map(row.map((column) => [column.leafIds[0], 0]));
+    const screenWithout = (step: number) =>
+      resolveRowLayout({ ...input, pendingWantedCols: noWantedWidths, narrowestPx: narrowestWidthPx(step, input.pxPerCol) }).screen;
+    const unblocked = [currentCols, ...candidates].find((step) => screenWithout(step).length > shown);
+    if (unblocked !== undefined) {
+      const screenLeaves = new Set(screenWithout(unblocked).map((column) => column.leafIds[0]));
+      return {
+        kind: 'clear-then-step',
+        cols: unblocked,
+        columns: row.filter((column) => wantedPxWithRoom(column, input) !== null && screenLeaves.has(column.leafIds[0])),
+      };
+    }
+  }
   const extreme = direction === 'fewer' ? NARROWEST_STEPS[NARROWEST_STEPS.length - 1] : NARROWEST_STEPS[0];
   const extremePx = narrowestWidthPx(extreme, input.pxPerCol);
   if (direction === 'fewer') {

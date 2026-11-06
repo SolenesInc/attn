@@ -31,7 +31,7 @@ export function DesktopSurface() {
     handleRenderedDividerPointerDown,
     handleColumnDividerDoubleClick,
     shelfOn,
-    shelfWidthLabelShown,
+    shelfWidthLabel,
   } = useDesktopContext();
   if (!renderedLayoutTree) {
     return (
@@ -62,7 +62,7 @@ export function DesktopSurface() {
       data-zoomed-pane-id={effectiveZoomedPaneId || ''}
     >
       <DesktopFocusBar />
-      {shelfWidthLabelShown && <ShelfWidthLabel desktopId={desktopId} />}
+      {shelfWidthLabel && <ShelfWidthLabel desktopId={desktopId} clearedWidths={shelfWidthLabel.clearedWidths} />}
       {shelfOn && <ShelfPeekPanel />}
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}

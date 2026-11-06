@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { agentPane, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { laidOutDesktop, pane, relayOut, split } from './test/desktopLayouts';
-import { fakeRects, sizeTerminals } from './test/layout';
+import { fakeRects, observedResizes, sizeTerminals } from './test/layout';
 import { serveSettings } from './test/settings';
 import type { CommandMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -64,6 +64,10 @@ async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES
   await daemon.idle();
   return daemon;
 }
+
+const FILLS_THE_AREA = 240;
+const WIDER_THAN_THE_AREA = 300;
+const ROOM_FOR_THAT_WIDTH = 2500;
 
 const SHELF_ON = { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' };
 
@@ -181,6 +185,72 @@ describe('Shelf layout', () => {
 
     expect(screen.getByText('5 tiles at the narrowest step (57 cols, 480px) need 2400px. Tiles have 2000px here.')).toBeInTheDocument();
     expect(daemon.sentOf('set_setting')).toEqual([]);
+  });
+
+  const wanted = (id: string, cols: number) => ({ ...(pane(id) as object), wanted_cols: cols });
+
+  it('lets a dragged width wider than the tile area give way, and returns it when the room does', async () => {
+    const resize = observedResizes();
+    const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', WIDER_THAN_THE_AREA), pane('s2'), pane('s3')]) });
+    const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
+
+    await resizeTiles(ROOM_FOR_THAT_WIDTH);
+    expect(paneIds()).toEqual(onScreen('s1'));
+
+    await resizeTiles(PANES_WIDTH);
+    expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+    expect(daemon.sentOf('desktop_set_wanted_cols')).toEqual([]);
+
+    await resizeTiles(ROOM_FOR_THAT_WIDTH);
+    expect(paneIds()).toEqual(onScreen('s1'));
+  });
+
+  describe('when a dragged width blocks more tiles', () => {
+    const clearedLeaves = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_set_wanted_cols').map((command) => [command.leaf_id, command.cols]);
+
+    it('clears the width and brings the next tile back without changing the narrowest width', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2')]) });
+      expect(paneIds()).toEqual(onScreen('s1'));
+
+      await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+      expect(clearedLeaves(daemon)).toEqual([['pane-s1', 0]]);
+      expect(daemon.sentOf('set_setting')).toEqual([]);
+      expect(screen.getByTestId('shelf-width-label')).toHaveTextContent('2 tiles');
+      expect(screen.getByTestId('shelf-width-label')).toHaveTextContent('Cleared the dragged width');
+    });
+
+    it('clears the width of the tile coming back too', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FILLS_THE_AREA), wanted('s2', FILLS_THE_AREA), pane('s3')]) });
+
+      await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(clearedLeaves(daemon)).toEqual([['pane-s1', 0], ['pane-s2', 0]]);
+      expect(screen.getByTestId('shelf-width-label')).toHaveTextContent('Cleared 2 dragged widths');
+    });
+
+    it('steps narrower as well when clearing alone is not enough', async () => {
+      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '150' }, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2'), pane('s3')]) });
+      expect(paneIds()).toEqual(onScreen('s1'));
+
+      await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+
+      expect(clearedLeaves(daemon)).toEqual([['pane-s1', 0]]);
+      expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'narrowest_tile_cols', value: '120' });
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+    });
+
+    it('keeps a dragged width when a narrower step alone brings the tile back', async () => {
+      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: rightChain([wanted('s1', 90), pane('s2'), pane('s3')]) });
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+
+      await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(clearedLeaves(daemon)).toEqual([]);
+    });
   });
 
   it('offers the width steps in the palette while the setting is on', async () => {

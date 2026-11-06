@@ -226,7 +226,7 @@ export function DesktopShelf({ desktopId }: { desktopId: string }) {
   );
 }
 
-export function ShelfWidthLabel({ desktopId }: { desktopId: string }) {
+export function ShelfWidthLabel({ desktopId, clearedWidths }: { desktopId: string; clearedWidths: number }) {
   const shelf = useDesktopShelfStore((state) => state.shelfByDesktop[desktopId]);
   if (!shelf) return null;
   const shown = shelf.screen.length;
@@ -234,6 +234,7 @@ export function ShelfWidthLabel({ desktopId }: { desktopId: string }) {
     <div className="desktop-shelf-width-label" role="status" data-testid="shelf-width-label">
       <b>{shown} tile{shown === 1 ? '' : 's'}</b>
       <span>at least {shelf.narrowestCols} cols each</span>
+      {clearedWidths > 0 && <span>{clearedWidths === 1 ? 'Cleared the dragged width' : `Cleared ${clearedWidths} dragged widths`}</span>}
       <span className="desktop-shelf-width-steps">
         {NARROWEST_STEPS.map((cols) => (
           <i key={cols} className={cols === shelf.narrowestCols ? 'is-on' : undefined}>{cols}</i>

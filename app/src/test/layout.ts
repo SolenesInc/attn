@@ -75,6 +75,30 @@ export function layOutBlocksAcrossSizedAncestors(windowWidth: number) {
   });
 }
 
+export function observedResizes() {
+  const watched = new Map<Element, { callback: ResizeObserverCallback; observer: ResizeObserver }>();
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      watched.set(target, { callback: this.callback, observer: this });
+    }
+    unobserve(target: Element) {
+      watched.delete(target);
+    }
+    disconnect() {
+      for (const [target, watch] of watched) if (watch.observer === this) watched.delete(target);
+    }
+  });
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
+  return (selector: string, contentRect: { width: number; height: number }) => {
+    for (const [target, { callback, observer }] of watched) {
+      if (target.matches(selector)) callback([{ target, contentRect } as ResizeObserverEntry], observer);
+    }
+  };
+}
+
 export function fakeRects(rect: (element: HTMLElement) => DOMRect | null) {
   const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     return rect(this) ?? new DOMRect(0, 0, 0, 0);

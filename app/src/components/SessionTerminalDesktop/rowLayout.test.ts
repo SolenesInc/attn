@@ -104,7 +104,8 @@ describe('resolveRowLayout', () => {
     ['keeps wanted cols and shares the rest', [{ id: 'a', wanted: 80 }, 'b', 'c'], 1800, [800, 500, 500]],
     ['scales when every column is wanted', [{ id: 'a', wanted: 100 }, { id: 'b', wanted: 50 }], 1800, [1200, 600]],
     ['treats a wanted width under the narrowest as the narrowest', [{ id: 'a', wanted: 10 }, 'b'], 1000, [500, 500]],
-    ['scales a single wanted column wider than the area', [{ id: 'a', wanted: 300 }], 900, [900]],
+    ['gives the area to a single wanted column wider than it', [{ id: 'a', wanted: 300 }], 900, [900]],
+    ['shares the area when a wanted width is wider than it', [{ id: 'a', wanted: 300 }, 'b'], 1200, [600, 600]],
   ])('%s', (_name, specs, areaPx, widths) => {
     const plan = resolve(specs, { activeLeafId: 'a', areaPx });
     expect(widthsPx(plan, areaPx)).toEqual(widths);
@@ -162,7 +163,9 @@ describe('resolveRowLayout', () => {
       expect(back).toEqual(down);
 
       const rowIds = readRow(tree).map((column) => column.leafIds[0]);
-      const need = (column: { wantedCols?: number }) => Math.max(narrowestPx, (column.wantedCols ?? 0) * PX_PER_COL);
+      const inEffect = (column: { wantedCols?: number }, area: number) => (column.wantedCols ?? 0) * PX_PER_COL <= area;
+      const need = (column: { wantedCols?: number }, area: number) =>
+        Math.max(narrowestPx, inEffect(column, area) ? (column.wantedCols ?? 0) * PX_PER_COL : 0);
       const broken: string[] = [];
       for (const area of sweep) {
         const plan = at(area);
@@ -173,19 +176,19 @@ describe('resolveRowLayout', () => {
         const partition = [...plan.before, ...plan.screen, ...plan.after].map((column) => column.leafIds[0]);
         promise(partition.join() === rowIds.join(), 'before, screen and after are the row in order');
 
-        const used = plan.screen.reduce((sum, column) => sum + need(column), 0);
+        const used = plan.screen.reduce((sum, column) => sum + need(column, area), 0);
         promise(plan.screen.length === 1 || used <= area + 0.5, 'several columns fit the area');
         const previous = plan.before[plan.before.length - 1];
-        promise(!previous || used + need(previous) > area + 0.5, 'no earlier column would still fit');
+        promise(!previous || used + need(previous, area) > area + 0.5, 'no earlier column would still fit');
 
         const bounds = getNormalizedPaneBounds(plan.renderedTree);
         const widths = plan.screen.map((column) => bounds.get(column.leafIds[0])!.width * area);
         promise(closeTo(widths.reduce((sum, width) => sum + width, 0), area), 'widths fill the area');
-        const everyColumnWanted = plan.screen.every((column) => column.wantedCols);
+        const everyColumnWanted = plan.screen.every((column) => column.wantedCols && inEffect(column, area));
         plan.screen.forEach((column, index) => {
           const name = `width of ${column.leafIds[0]}`;
-          if (everyColumnWanted) promise(closeTo(widths[index] / need(column), area / used), `${name} scales with the others`);
-          else if (column.wantedCols) promise(closeTo(widths[index], need(column)), `${name} is its wanted width`);
+          if (everyColumnWanted) promise(closeTo(widths[index] / need(column, area), area / used), `${name} scales with the others`);
+          else if (column.wantedCols && inEffect(column, area)) promise(closeTo(widths[index], need(column, area)), `${name} is its wanted width`);
           else promise(widths[index] >= Math.min(narrowestPx, area) - 0.001, `${name} is at least the narrowest`);
         });
       }
@@ -201,7 +204,7 @@ describe('applyColumnDrag', () => {
   };
   const drag = (specs: readonly Spec[], activeLeafId: string, divider: number, distance: number) => {
     const from = start(specs, activeLeafId);
-    return applyColumnDrag(from.start, divider, distance, { activeLeafId, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL });
+    return applyColumnDrag(from.start, divider, distance, { activeLeafId, areaPx: 1800, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL });
   };
   const wanted = (result: { wantedCols: ReadonlyMap<string, number> }) => Object.fromEntries(result.wantedCols);
 
@@ -225,7 +228,7 @@ describe('applyColumnDrag', () => {
   it('dragging back to the start restores everything, whatever the path', () => {
     const specs: Spec[] = ['a', { id: 'b', wanted: 70 }, 'c'];
     const from = start(specs, 'b');
-    const measures = { activeLeafId: 'b', narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+    const measures = { activeLeafId: 'b', areaPx: 1800, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
     for (const distance of [40, 400, -400, 5000]) applyColumnDrag(from.start, 0, distance, measures);
     const back = applyColumnDrag(from.start, 0, 0, measures);
     expect(back.wantedCols.size).toBe(0);
@@ -242,7 +245,7 @@ describe('applyColumnDrag', () => {
       const plan = resolveRowLayout(input);
       const divider = random(plan.screen.length - 1);
       const distance = random(41) - 20;
-      const measures = { activeLeafId: 't0', narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+      const measures = { activeLeafId: 't0', areaPx: input.areaPx, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
       const result = applyColumnDrag({ screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn }, divider, distance, measures);
       const dragged = resolveRowLayout({ ...input, firstColumn: result.firstColumn, pendingWantedCols: result.wantedCols });
 
@@ -271,13 +274,16 @@ describe('applyColumnDrag', () => {
         { screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn },
         divider,
         distance,
-        { activeLeafId, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL },
+        { activeLeafId, areaPx: input.areaPx, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL },
       );
       const dragged = resolveRowLayout({ ...input, firstColumn: result.firstColumn, pendingWantedCols: result.wantedCols });
       expect(dragged.screen.flatMap((column) => column.leafIds)).toContain(activeLeafId);
       for (const width of dragged.widths) expect(width).toBeGreaterThanOrEqual(NARROWEST - 0.001);
       expect(dragged.widths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(input.areaPx);
-      for (const cols of result.wantedCols.values()) expect(cols * PX_PER_COL).toBeGreaterThanOrEqual(NARROWEST - PX_PER_COL);
+      for (const cols of result.wantedCols.values()) {
+        expect(cols * PX_PER_COL).toBeGreaterThanOrEqual(NARROWEST - PX_PER_COL);
+        expect(cols * PX_PER_COL).toBeLessThanOrEqual(input.areaPx);
+      }
     }
   });
 });
@@ -295,6 +301,28 @@ describe('planSlotSwap', () => {
 
 describe('stepNarrowestCols', () => {
   const base = { tree: rightChain(ROW), activeLeafId: 'a', firstColumn: null, pxPerCol: PX_PER_COL };
+  const cleared = (result: ReturnType<typeof stepNarrowestCols>) =>
+    result.kind === 'clear-then-step' ? { cols: result.cols, leaves: result.columns.map((column) => column.leafIds[0]) } : result;
+
+  it('clears only the dragged widths of the columns that end up on screen', () => {
+    const incoming = rightChain(['a', { id: 'b', wanted: 140 }, 'c']);
+    expect(cleared(stepNarrowestCols({ ...base, tree: incoming, areaPx: 1500 }, 66, 'more', 1500))).toEqual({ cols: 66, leaves: ['b'] });
+    const farColumn = rightChain([{ id: 'a', wanted: 150 }, 'b', { id: 'c', wanted: 150 }]);
+    expect(cleared(stepNarrowestCols({ ...base, tree: farColumn, areaPx: 1500 }, 66, 'more', 1500))).toEqual({ cols: 66, leaves: ['a'] });
+  });
+
+  it('keeps a saved width that has given way when clearing the one that blocks', () => {
+    const tree = rightChain([{ id: 'a', wanted: 150 }, { id: 'b', wanted: 300 }, 'c']);
+    expect(cleared(stepNarrowestCols({ ...base, tree, areaPx: 1500 }, 66, 'more', 1500))).toEqual({ cols: 66, leaves: ['a'] });
+  });
+
+  it('never reports a limit whose numbers fit the area', () => {
+    const tree = rightChain([{ id: 'a', wanted: 100 }, 'b']);
+    expect(stepNarrowestCols({ ...base, tree, areaPx: 1000 }, 66, 'more', 1000)).toEqual({
+      kind: 'limit',
+      message: '2 tiles at the narrowest step (57 cols, 570px) need 1140px. Tiles have 1000px here.',
+    });
+  });
 
   it('steps until one fewer or one more tile fits', () => {
     expect(stepNarrowestCols({ ...base, areaPx: 2100 }, 66, 'fewer', 2100)).toEqual({ kind: 'step', cols: 76 });
