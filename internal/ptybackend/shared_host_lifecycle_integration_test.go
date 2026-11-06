@@ -838,3 +838,41 @@ func TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal(t *testin
 }
 
 const attemptsThatHoldASpawnOpen = 1000
+
+func TestSharedHost_ATerminalSpawnedWhileItsIDIsBeingRemovedStarts(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "pty-respawn-")
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-respawn", BinaryPath: binary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	ctx := context.Background()
+	const id = harness.TerminalID("respawned")
+	spawnAndAwait := func(marker, command string) {
+		t.Helper()
+		if err := backend.Spawn(ctx, SpawnOptions{ID: id, CWD: root, Agent: "lifecycle-probe", AgentArgv: []string{"/bin/sh", "-c", command}, Cols: 80, Rows: 24}); err != nil {
+			t.Fatalf("Spawn(%s): %v", id, err)
+		}
+		_, stream, err := backend.Attach(ctx, id, marker)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stream.Close()
+		if err := backend.Input(ctx, id, []byte("go\n")); err != nil {
+			t.Fatal(err)
+		}
+		waitForStreamText(t, stream, marker)
+	}
+	spawnAndAwait("__IGNORES_TERM__", `trap "" TERM; read line; printf "__IGNORES_%s__" TERM; while :; do read line; done`)
+	if err := backend.Remove(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	spawnAndAwait("__SECOND__", `read line; printf "__SEC%s__" OND; exec cat`)
+	info, err := backend.SessionInfo(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Running {
+		t.Fatalf("second terminal info = %+v, want it running", info)
+	}
+}

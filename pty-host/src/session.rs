@@ -1039,6 +1039,10 @@ impl Session {
         self.removing.store(true, Ordering::Release);
     }
 
+    pub fn is_removing(&self) -> bool {
+        self.removing.load(Ordering::Acquire)
+    }
+
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
         self.mark_removing();
         let result = if self.is_running() {

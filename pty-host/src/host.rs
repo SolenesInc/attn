@@ -99,6 +99,12 @@ impl HostState {
         Ok(())
     }
 
+    fn is_removing(&self, id: &str) -> bool {
+        self.sessions
+            .get(id)
+            .is_some_and(|session| session.is_removing())
+    }
+
     fn idle(&self) -> bool {
         !self.shutting_down
             && !self.handing_over
@@ -379,8 +385,11 @@ impl Host {
 
     fn spawn(self: &Arc<Self>, params: SpawnParams) -> Result<Arc<Session>, String> {
         let id = params.session_id.clone();
-        self.state
-            .lock()
+        self.idle_changed
+            .wait_while(
+                self.state.lock().expect("host state mutex poisoned"),
+                |state| state.is_removing(&id),
+            )
             .expect("host state mutex poisoned")
             .begin_spawn(&id)?;
 
