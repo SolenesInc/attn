@@ -1090,6 +1090,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 	if err := r.d.removePTYSession(t); err != nil {
 		r.d.logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
+	pausepoint.At(pausepoint.CodexServerExitHandled)
 }
 
 func (r *codexShared) recoverProcesses(ctx context.Context) {

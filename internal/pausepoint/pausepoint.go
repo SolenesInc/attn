@@ -78,6 +78,7 @@ const (
 	OutpostConversationApplied = "outpost-conversation-applied"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
+	CodexServerExitHandled     = "codex-server-exit-handled"
 	TerminalExitReconciled     = "terminal-exit-reconciled"
 	CopyBatchStaged            = "copy-batch-staged"
 	CopyBatchApplied           = "copy-batch-applied"

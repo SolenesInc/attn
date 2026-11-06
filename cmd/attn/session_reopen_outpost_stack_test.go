@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -340,5 +342,43 @@ func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPat
 	second := outpost.LaunchedCarrying(pair.App.Terminal(id))
 	if !second.Resumed || second.ConversationID != first.ConversationID || reopened.Directory != folder {
 		t.Fatalf("resume=%t conversation=%s want=%s directory=%s want=%s", second.Resumed, second.ConversationID, first.ConversationID, reopened.Directory, folder)
+	}
+}
+
+func TestClosingAnOutpostsSharedCodexLeavesTheHomesRunning(t *testing.T) {
+	home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	serverGone := outpost.PauseAt(pausepoint.CodexServerExitHandled)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	shareCodex(t, pair.App)
+	outpostApp := outpost.App()
+	if outpostApp.Initial.Settings["codex_shared_enabled"] != "true" {
+		testworld.Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["codex_shared_enabled"] == "true" })
+	}
+	homeDir := home.Path("agent")
+	home.SetCodexFolderTrust(homeDir, "trusted")
+	outpostDir := outpost.Path("agent")
+	outpost.SetCodexFolderTrust(outpostDir, "trusted")
+
+	atHome := home.Spawn(pair.App, fakeagent.Codex, homeDir)
+	homeRun := home.LaunchedCarrying(pair.App.Terminal(atHome))
+	homeServer := home.CodexServers()[0]
+	away := home.Spawn(pair.App, fakeagent.Codex, outpostDir, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	outpost.LaunchedCarrying(pair.App.Terminal(away))
+
+	if err := home.Client().Unregister(protocol.SessionID(away)); err != nil {
+		t.Fatal(err)
+	}
+	serverGone.Await()
+	serverGone.Release()
+
+	pair.App.TypeLine(atHome, "still here")
+	homeRun.Prompted()
+	homeRun.Reply("Still here. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, atHome, func(s protocol.Session) bool { return s.Usage != nil })
+	if servers := home.CodexServers(); len(servers) != 1 || syscall.Kill(homeServer, 0) != nil {
+		t.Fatalf("the home's Codex app-server (pid %d) stopped; the home has started %v", homeServer, servers)
 	}
 }

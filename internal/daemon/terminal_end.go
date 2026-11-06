@@ -125,6 +125,14 @@ func (d *Daemon) killTerminalRuntime(t harness.TerminalID, sig syscall.Signal) e
 }
 
 func (d *Daemon) removeTerminalRuntime(ctx context.Context, t harness.TerminalID) error {
-	_, err := Call[struct{}](ctx, d.router(), protocol.TerminalRemoveMessage{Cmd: protocol.CmdTerminalRemove, TerminalID: t})
+	msg := protocol.TerminalRemoveMessage{Cmd: protocol.CmdTerminalRemove, TerminalID: t}
+	conn, err := d.router().terminalBridge(t)
+	if err != nil {
+		return err
+	}
+	if conn != nil {
+		return terminalBridgeError(conn.Call(ctx, bridgeCall, msg, nil))
+	}
+	_, err = d.removeTerminal(ctx, msg)
 	return err
 }
