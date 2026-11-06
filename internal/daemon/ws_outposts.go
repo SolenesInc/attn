@@ -169,6 +169,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 			if run.build != "" {
 				info.Build = protocol.Ptr(run.build)
 			}
+			if run.hostMissing {
+				info.HostMissing = protocol.Ptr(true)
+			}
 			if run.lastError != nil {
 				detail := run.lastError.Error()
 				var sshError *outpostssh.Error

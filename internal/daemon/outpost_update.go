@@ -159,7 +159,9 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 		return nil, &bridge.Refusal{Reason: "home", Detail: err.Error()}
 	}
 	different := probe.Build == nil || *probe.Build != d.bridgeIdentity().Build
-	if push != nil && (force || different) {
+	hostMissing := !different && probe.HostMissing
+	d.noteOutpostHostMissing(row.ID, hostMissing)
+	if push != nil && (force || different || hostMissing) {
 		if err := d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, "") }); err != nil {
 			d.outposts.mu.Lock()
 			push.installFailed = true
@@ -172,6 +174,7 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 			}
 			return nil, &bridge.Refusal{Peer: peer, Reason: "install", Detail: fmt.Sprintf("%s; install failed: %v", found, err)}
 		}
+		d.noteOutpostHostMissing(row.ID, false)
 		d.setOutpostUpdate(row.ID, push, "restarting", "")
 	} else if different {
 		if probe.Build == nil {
@@ -180,6 +183,20 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Outposts at the home", *probe.Build, d.bridgeIdentity().Build)}
 	}
 	return remote, nil
+}
+
+func (d *Daemon) noteOutpostHostMissing(id string, missing bool) {
+	r := &d.outposts
+	r.mu.Lock()
+	run := r.dialers[id]
+	changed := run != nil && run.hostMissing != missing
+	if changed {
+		run.hostMissing = missing
+	}
+	r.mu.Unlock()
+	if changed {
+		d.publishFact(FactOutpostChanged, id, nil)
+	}
 }
 
 func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush) error {
@@ -230,7 +247,15 @@ func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe
 			return err
 		}
 	}
-	return remote.Install(ctx, binaries, d.bridgeIdentity().Build, phase)
+	self := d.bridgeIdentity().Build
+	if err := remote.Install(ctx, binaries, self, phase); err != nil {
+		return err
+	}
+	ensureWontRestartTheDaemon := probe.Build != nil && *probe.Build == self
+	if ensureWontRestartTheDaemon {
+		return remote.StopDaemon(ctx)
+	}
+	return nil
 }
 
 func (d *Daemon) cancelOutpostUpdate(id string) {

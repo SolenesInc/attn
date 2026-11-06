@@ -420,6 +420,7 @@ model OutpostInfo {
   daemon_id?: string;
   host_key_fingerprint?: string;
   build?: string;
+  host_missing?: boolean; // The outpost runs the home's build without attn-pty-host; update_outpost installs it
   home?: string; // The outpost's home directory, which ~ stands for there; absent until it has connected once
   update?: OutpostUpdate;
   notebook?: OutpostNotebook;

@@ -24,7 +24,9 @@ beside `attn` in the install folder. A home on the release channel downloads
 `make build-pty-host-linux-<arch>`. When the home can't get the host, the update
 fails with the reason and installs nothing. An update replaces the file while a
 host runs, because a host runs from the daemon's copy of its build, and the
-daemon's next start moves running terminals as described below.
+daemon's next start moves running terminals as described below. An install at
+the build the outpost already runs stops the outpost's daemon, because the
+bridge's `daemon ensure` restarts it only for a different build.
 
 To see where a terminal runs, type this in it, in any shell:
 

@@ -106,6 +106,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
                     </div>
                     <div className="settings-meta-row"><span>Since</span><Timestamp value={row.state_since} /></div>
                     <div className="settings-meta-row"><span>Build</span><code>{row.build || 'Not yet known'}</code></div>
+                    {row.host_missing && <div className="settings-meta-row"><span>Shared terminal host</span><code>Not installed</code></div>}
                     {row.daemon_id && <div className="settings-meta-row"><span>Daemon</span><code>{row.daemon_id}</code></div>}
                     {row.host_key_fingerprint && <div className="settings-meta-row"><span>Host key</span><code>{row.host_key_fingerprint}</code></div>}
                     {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
@@ -113,7 +114,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
                       {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => void connectInTerminal(row.id)}>Connect in a terminal</button>}
-                      {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
+                      {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : row.host_missing ? 'Install shared terminal host' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button
                         ref={removing === row.id ? removeButton : undefined}

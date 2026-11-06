@@ -103,6 +103,14 @@ the host.
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row shows why and offers Update.
 
+An outpost can run the home's build without `attn-pty-host`, for example when
+you installed `attn` there yourself. Add installs both binaries on such a machine.
+If an outpost is already paired, its row says the shared terminal host is not
+installed and offers **Install shared terminal host**, and the banner offers
+**Update outposts**. Until then, its terminals run on dedicated workers.
+Installing the host restarts the outpost's daemon so the daemon finds it.
+Running shells keep their processes.
+
 Keep the data folders, because they hold the pairing identities and work. To return to an older build after a build migrated the database, you may need to restore a backup with `attn db restore`.
 
 ## Open a shell on an outpost

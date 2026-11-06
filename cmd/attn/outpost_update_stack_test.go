@@ -259,6 +259,99 @@ func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *tes
 	t.Logf("shell PID %s kept its host across %s -> %s, and a new terminal started in the host", strings.TrimSpace(string(shellAfter)), beforeFormat, afterFormat)
 }
 
+func outpostWithMatchingBuild(t *testing.T) (*testworld.SSH, *testworld.Stack, *testworld.Stack) {
+	t.Helper()
+	const format = "outpost-matching"
+	build := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "matching", format)
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.RunFrom(build)
+	home.RunFrom(build)
+	home.InstallsOnOutposts(build, ptyhosttest.BuildWithSnapshotFormat(t, format))
+	ssh.Use(home.World)
+	ssh.Route("matching-outpost", remote)
+	remote.RunFrom(ssh.InstallPath(remote))
+	return ssh, remote, home
+}
+
+func awaitTerminalOwner(app *testworld.Peer, shell, label, owner string) {
+	app.TypeLine(shell, `echo "`+label+`=$(`+terminalOwner+`)"`)
+	app.AwaitScreen(shell, label+"="+owner)
+}
+
+func TestAddInstallsTheMissingHostOnAnOutpostAtTheHomeBuild(t *testing.T) {
+	ssh, remote, home := outpostWithMatchingBuild(t)
+	if err := os.Remove(ssh.HostPath(remote)); err != nil {
+		t.Fatal(err)
+	}
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "matching-outpost"})
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected || protocol.Deref(row.HostMissing) {
+		t.Fatalf("Add: %+v %+v", row, row.Update)
+	}
+	if _, err := os.Stat(ssh.HostPath(remote)); err != nil {
+		t.Fatalf("Add left the outpost without a host: %v", err)
+	}
+	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	host := row.ID
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	awaitTerminalOwner(app, shell, "owner", ptyhost.BinaryName)
+}
+
+func TestAPairedOutpostWithoutTheHostKeepsWorkersAndUpdateInstallsIt(t *testing.T) {
+	ssh, remote, home := outpostWithMatchingBuild(t)
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "matching-outpost"})
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || protocol.Deref(row.HostMissing) {
+		t.Fatalf("Add with a host beside attn: %+v %+v", row, row.Update)
+	}
+	home.Stop()
+	remote.Attn("daemon", "stop")
+	if err := os.Remove(ssh.HostPath(remote)); err != nil {
+		t.Fatal(err)
+	}
+	home.Start()
+	app = home.App()
+	row = testworld.AwaitSince(app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected && protocol.Deref(m.Outposts[0].HostMissing)
+	}).Outposts[0]
+	if _, err := os.Stat(ssh.HostPath(remote)); !os.IsNotExist(err) {
+		t.Fatalf("a reconnect installed the host: %v", err)
+	}
+
+	host := row.ID
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	pidPath := filepath.Join(remote.Dir, "shell.pid")
+	app.TypeLine(shell, `echo $$ > `+pidPath+`; echo "owner=$(`+terminalOwner+`)"`)
+	app.AwaitScreen(shell, "owner=attn")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
+	row = awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected || protocol.Deref(row.HostMissing) {
+		t.Fatalf("Update: %+v %+v", row, row.Update)
+	}
+	app = home.App()
+	app.TypeLine(shell, `echo $$ > `+pidPath+`; echo "still=$(`+terminalOwner+`)"`)
+	app.AwaitScreen(shell, "still=attn")
+	after, err := os.ReadFile(pidPath)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
+	}
+	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	fresh := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("fresh"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	awaitTerminalOwner(app, fresh, "fresh", ptyhost.BinaryName)
+	t.Logf("shell PID %s stayed on its worker; a new terminal started in the installed host", strings.TrimSpace(string(after)))
+}
+
 func TestAReleaseHomeDownloadsTheHostWithAttnAndInstallsNothingWithoutIt(t *testing.T) {
 	var hostBytes []byte
 	assets := http.NewServeMux()

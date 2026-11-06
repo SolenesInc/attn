@@ -17,7 +17,7 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 - `outpost-connect-terminal`: answer ssh prompts in a focused home terminal. After ssh succeeds, the home reconnects automatically, and the user closes the tile.
 - `outpost-repair`: Re-pair makes the home forget the pins and connect again.
 - `outpost-remove`: Remove makes the home close the outpost's terminals in every profile, release the enrollment, stop the outpost's daemon over ssh, and then forget the outpost. The outpost's files stay. An outpost enrolled to another home keeps that enrollment and its daemon.
-- `outpost-update`: use the banner or the row to install the home's Linux build, `attn` and `attn-pty-host`, over ssh. Updating works even when a failed first Add left no build.
+- `outpost-update`: use the banner or the row to install the home's Linux build, `attn` and `attn-pty-host`, over ssh. Updating works even when a failed first Add left no build. On an outpost at the home's build without `attn-pty-host`, Add installs the host. A paired row carries `host_missing`, reads "Shared terminal host: Not installed" and offers "Install shared terminal host".
 - `enrollment`: an outpost's data folder belongs to the home it first accepted, until `attn enrollment leave`.
 - `remote-terminals`: shells and agents on an outpost in tiles beside local ones. Their attn commands reach the home.
 - `offline`: a terminal whose outpost is unreachable stays in place, marked, and sends no typing.

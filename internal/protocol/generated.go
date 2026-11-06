@@ -7443,6 +7443,9 @@ type OutpostInfo struct {
 	// HostKeyFingerprint corresponds to the JSON schema field "host_key_fingerprint".
 	HostKeyFingerprint *string `json:"host_key_fingerprint,omitempty,omitzero"`
 
+	// HostMissing corresponds to the JSON schema field "host_missing".
+	HostMissing *bool `json:"host_missing,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 

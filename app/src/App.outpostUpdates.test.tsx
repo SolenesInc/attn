@@ -16,6 +16,19 @@ const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 describe('outpost build updates', () => {
   afterEach(() => { vi.useRealTimers(); });
 
+  it('offers the host to an outpost on the home build that lacks it, until it is installed', async () => {
+    const lacking: Outpost = { ...old, build: homeBuild, state: 'connected', reach: 'reachable', host_missing: true };
+    const view = await renderApp({ initialState: { ...initial, outposts: [lacking] } });
+    const { daemon } = view;
+    daemon.on('update_outpost', () => {});
+    expect(banner()).toHaveTextContent('Studio is missing the shared terminal host.');
+    await gesture(daemon, () => fireEvent.click(within(banner()!).getByRole('button', { name: 'Update outposts' })));
+    expect(daemon.sentOf('update_outpost')).toEqual([{ cmd: 'update_outpost', id: 'studio' }]);
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...lacking, host_missing: undefined, update: { phase: 'done' } }] }));
+    expect(banner()).toHaveTextContent('Updated Studio.');
+    expect(within(banner()!).queryByRole('button', { name: 'Update outposts' })).toBeNull();
+  });
+
   it('updates every differing outpost once and shows phases and outcome', async () => {
     const view = await renderApp({ initialState: { ...initial, outposts: [old, { ...old, id: 'current', name: 'Current', build: homeBuild }] } });
     const daemon = view.daemon;

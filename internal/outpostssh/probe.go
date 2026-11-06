@@ -13,6 +13,7 @@ import (
 type Probe struct {
 	Platform          string
 	Build             *bridge.Build
+	HostMissing       bool
 	Enrollment        enrollment.Status
 	KillUserProcesses bool
 }
@@ -36,12 +37,12 @@ func parseKillUserProcesses(value string) (bool, error) {
 }
 func (c *Client) Probe(ctx context.Context) (Probe, error) {
 	binary := c.binaryPath()
-	out, err := c.Run(ctx, `uname -sm; if [ -x `+binary+` ]; then `+binary+` --build-info-json | tr -d "\n"; echo; `+binary+` enrollment status --json 2>/dev/null | tr -d "\n"; echo; else echo missing; echo; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
+	out, err := c.Run(ctx, `target=`+binary+`; uname -sm; if [ -x `+binary+` ]; then `+binary+` --build-info-json | tr -d "\n"; echo; `+binary+` enrollment status --json 2>/dev/null | tr -d "\n"; echo; else echo missing; echo; fi; if [ -x "${target%/*}/attn-pty-host" ]; then echo present; else echo missing; fi; busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses`)
 	if err != nil {
 		return Probe{}, err
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) != 4 {
+	if len(lines) != 5 {
 		return Probe{}, fmt.Errorf("unexpected outpost probe: %s", out)
 	}
 	p := Probe{}
@@ -60,6 +61,7 @@ func (c *Client) Probe(ctx context.Context) (Probe, error) {
 	if p.KillUserProcesses {
 		return p, fmt.Errorf("logind KillUserProcesses is on; outpost agents would die when ssh disconnects; turn KillUserProcesses off before adding this outpost")
 	}
+	p.HostMissing = lines[3] == "missing"
 	if buildJSON := lines[1]; buildJSON != "missing" {
 		var b struct {
 			Version           string `json:"version"`

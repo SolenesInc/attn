@@ -28,6 +28,7 @@ type outpostDial struct {
 	state          bridge.State
 	since          string
 	build          string
+	hostMissing    bool
 	lastError      error
 	lastErrorAt    string
 	connectable    bool
@@ -42,6 +43,7 @@ type outpostRemote interface {
 	Probe(context.Context) (outpostssh.Probe, error)
 	Bridge(context.Context) (net.Conn, error)
 	Install(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error
+	StopDaemon(context.Context) error
 	Remove(context.Context, string) error
 	InstallPath() string
 	MasterCommand() []string

@@ -121,6 +121,7 @@ func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
 func (s *wireOutpostSSH) Install(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error {
 	return nil
 }
+func (s *wireOutpostSSH) StopDaemon(context.Context) error     { return nil }
 func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }
 
 func UseShippedPasteGap(t testing.TB) {

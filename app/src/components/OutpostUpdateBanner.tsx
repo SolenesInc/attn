@@ -7,7 +7,7 @@ import { BoolSetting, isOn } from '../utils/settings';
 const OUTPOST_DONE_CLOSE_SECONDS = 5;
 
 export function outpostNeedsUpdate(row: OutpostInfo, homeBuild: string): boolean {
-  return !!homeBuild && (row.build ? row.build !== homeBuild : row.state === 'refused');
+  return !!homeBuild && (!!row.host_missing || (row.build ? row.build !== homeBuild : row.state === 'refused'));
 }
 
 export function outpostIsUpdating(row: OutpostInfo): boolean {
@@ -37,7 +37,14 @@ function outpostBannerHeadline(different: OutpostInfo[], updated: OutpostInfo[])
   if (updated.some(outpostIsUpdating)) return 'Updating outposts.';
   const failed = updated.filter(row => row.update?.phase === 'failed');
   if (failed.length) return `Couldn’t update ${names(failed)}.`;
-  if (different.length) return `${names(different)} ${different.length === 1 ? 'runs' : 'run'} a different build than home.`;
+  if (different.length) {
+    const hostMissing = different.filter(row => row.host_missing);
+    const otherBuild = different.filter(row => !row.host_missing);
+    return [
+      otherBuild.length ? `${names(otherBuild)} ${otherBuild.length === 1 ? 'runs' : 'run'} a different build than home.` : '',
+      hostMissing.length ? `${names(hostMissing)} ${hostMissing.length === 1 ? 'is' : 'are'} missing the shared terminal host.` : '',
+    ].filter(Boolean).join(' ');
+  }
   return `Updated ${names(updated)}.`;
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/ptyhost"
 )
 
 type SSH struct {
@@ -182,6 +183,9 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		s.t.Fatal(err)
 	}
 	s.InstallBinary(remote, remote.binary)
+	if err := os.WriteFile(s.HostPath(remote), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		s.t.Fatal(err)
+	}
 	bin := filepath.Join(remote.Dir, "machine-bin")
 	if err := os.MkdirAll(bin, 0700); err != nil {
 		s.t.Fatal(err)
@@ -394,6 +398,9 @@ func (s *SSH) ExitMaster(home *Stack, host string) {
 
 func (s *SSH) InstallPath(remote *Stack) string {
 	return filepath.Join(remote.Dir, "install", ".local", "bin", "attn")
+}
+func (s *SSH) HostPath(remote *Stack) string {
+	return filepath.Join(filepath.Dir(s.InstallPath(remote)), ptyhost.BinaryName)
 }
 func (s *SSH) InstallBinary(remote *Stack, binary string) {
 	s.t.Helper()

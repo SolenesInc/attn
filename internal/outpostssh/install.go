@@ -83,6 +83,10 @@ func (c *Client) Remove(ctx context.Context, home string) error {
 	if left.Status == "kept" {
 		return nil
 	}
-	_, err = c.Run(ctx, c.binaryPath()+` daemon stop`)
+	return c.StopDaemon(ctx)
+}
+
+func (c *Client) StopDaemon(ctx context.Context) error {
+	_, err := c.Run(ctx, c.binaryPath()+` daemon stop`)
 	return err
 }

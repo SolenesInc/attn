@@ -6085,6 +6085,7 @@ export interface OutpostElement {
     destination:           string;
     home?:                 string;
     host_key_fingerprint?: string;
+    host_missing?:         boolean;
     id:                    string;
     last_error?:           string;
     last_error_at?:        string;
@@ -7679,6 +7680,7 @@ export interface OutpostInfo {
     destination:           string;
     home?:                 string;
     host_key_fingerprint?: string;
+    host_missing?:         boolean;
     id:                    string;
     last_error?:           string;
     last_error_at?:        string;
@@ -23802,6 +23804,7 @@ const typeMap: any = {
         { json: "destination", js: "destination", typ: "" },
         { json: "home", js: "home", typ: u(undefined, "") },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
+        { json: "host_missing", js: "host_missing", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "last_error_at", js: "last_error_at", typ: u(undefined, "") },
@@ -24755,6 +24758,7 @@ const typeMap: any = {
         { json: "destination", js: "destination", typ: "" },
         { json: "home", js: "home", typ: u(undefined, "") },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
+        { json: "host_missing", js: "host_missing", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "last_error_at", js: "last_error_at", typ: u(undefined, "") },
