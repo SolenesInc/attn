@@ -28,8 +28,9 @@ missing.
 
 The workflow builds:
 
-- on every push to `main` that changes `mobile/**` or
-  `internal/protocol/schema/gateway.tsp`
+- on every push to `main` that changes the phone: `mobile/**`,
+  `internal/protocol/schema/gateway.tsp`, `ghostty-vt.pin`, or a file in `app/src`
+  that the phone's bundle includes
 - when you start it: **Actions → TestFlight → Run workflow**, or
   `gh workflow run testflight.yml`
 - on its weekly schedule, only when the newest upload is over 60 days old, so a
@@ -38,10 +39,20 @@ The workflow builds:
 One build runs at a time, and at most one waits. A push during a build replaces
 the build that waits, so merges that land together become one follow-up build
 of the newest commit. Changes to the daemon's gateway code build nothing,
-because they do not change the app. Changes to the `app/src` code the phone
-imports and to `ghostty-vt.pin` do change the app, yet build nothing on their
-own: the next build carries them, so start one by hand when testers need them
-sooner.
+because they do not change the app.
+
+The workflow lists the `app/src` files by name, taken from the bundle's module
+graph, because the rest of `app/src` changes far more often and would spend
+builds on code the phone does not run. To refresh the list, for example after
+the phone starts importing something new, run this and replace the `app/src`
+lines under `paths` in the workflow with its output:
+
+```sh
+pnpm --dir mobile install --frozen-lockfile
+node mobile/scripts/testflight-paths.mjs
+```
+
+A stale list only delays a change until the next build, so nothing checks it.
 
 The workflow selects its Xcode with `DEVELOPER_DIR`, because the runner's
 default Xcode is too old for Capacitor 8. When GitHub removes that version from
