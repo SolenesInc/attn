@@ -13,7 +13,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-DRAGS',
   tier: 'tier1-local-shell',
   prefix: 'shelf-drags',
-  metadata: { agent: 'shell', focus: 'chips onto tiles, between chips and onto sidebar desktops, tiles onto the shelf, column dividers past the narrowest and back, and Esc, with real terminals and native pointer input' },
+  metadata: { agent: 'shell', focus: 'chips onto tiles, between chips and onto sidebar desktops, tiles onto the shelf, column dividers past the narrowest and back and after a window resize, a stack chip onto the top edge of a tile, and Esc, with real terminals and native pointer input' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -63,6 +63,9 @@ const moveOffTheShelf = async () => {
   await driver.hover(headerGrip((await shownLeaves())[0]));
   await waitDom('[data-testid="shelf-peek"]', { absent: true });
 };
+const paneBox = async (leafId) => (await request('dom_bounds', { selector: paneSelector(leafId) })).bounds;
+const paneWidth = async (leafId) => (await paneBox(leafId)).width;
+const paneHeight = async (leafId) => (await paneBox(leafId)).height;
 const DIVIDER_DRAG = { steps: 24, withoutReceipt: 'the drag\'s shield leaves the page under the pointer before the mouse-up' };
 const sameList = (left, right) => left.join() === right.join();
 
@@ -78,14 +81,9 @@ async function growRowPastTheScreen() {
 }
 
 async function focusShownLeaf(leafId) {
-  const row = (await shownLeaves());
-  for (;;) {
-    const active = await activeLeaf();
-    if (active === leafId) return;
-    const forward = row.indexOf(active) < row.indexOf(leafId);
-    await press(forward ? 'terminal.focusRight' : 'terminal.focusLeft');
-    await waitForActive(row[row.indexOf(active) + (forward ? 1 : -1)]);
-  }
+  if ((await activeLeaf()) === leafId) return;
+  await driver.click(centreOf(leafId));
+  await waitForActive(leafId);
 }
 
 runner.registerCleanup('close_observer', () => observer.close());
@@ -234,6 +232,47 @@ try {
     runner.assert(!(await wantedOf(first)), 'Esc asks for no width', { first });
   });
 
+  await runner.step('divider_follows_the_pointer_after_a_window_resize', async () => {
+    const twoColumns = await shownLeaves();
+    const row = await readRow();
+    const third = row[row.indexOf(twoColumns.at(-1)) + 1] ?? row[row.indexOf(twoColumns[0]) - 1];
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '57' });
+    await waitDom(paneSelector(third));
+    const shown = await shownLeaves();
+    runner.assert(shown.length >= 3, 'three columns on screen', { shown });
+    await focusShownLeaf(shown[0]);
+    for (const leafId of shown.slice(0, -1)) {
+      await driver.drag(columnDivider(leafId), { by: { x: 40, y: 0 } }, DIVIDER_DRAG);
+      await waitForWanted(leafId, (cols) => cols > 0);
+    }
+    const last = shown.at(-1);
+    const wantedLast = await waitForWanted(last, (cols) => cols > 0);
+
+    const { logicalBounds } = await request('get_window_bounds');
+    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: logicalBounds.width + 300 } });
+    runner.assert(sameList(await shownLeaves(), shown), 'the wider window shows the same columns', { shown });
+    const before = await Promise.all(shown.map(paneWidth));
+
+    await driver.drag(columnDivider(shown[0]), { by: { x: 50, y: 0 } }, DIVIDER_DRAG);
+    await waitForWanted(last, (cols) => cols !== wantedLast);
+    const after = await Promise.all(shown.map(paneWidth));
+    runner.log('divider after resize', { before, after });
+    const oneColumnPx = before[0] / wantedLast;
+    runner.assert(Math.abs(after[0] - before[0] - 50) <= 2 * oneColumnPx, 'the divider follows the pointer', { before, after, oneColumnPx });
+    runner.assert(Math.abs(after.at(-1) - before.at(-1)) <= 2 * oneColumnPx, 'the far column keeps its width', { before, after, oneColumnPx });
+    await hold();
+    await shot('divider-after-window-resize');
+
+    await request('set_window_bounds', { logicalBounds });
+    for (const leafId of shown.slice(0, -1)) {
+      await driver.click(columnDivider(leafId));
+      await driver.click(columnDivider(leafId), { clickCount: 2 });
+    }
+    for (const leafId of shown) await waitForWanted(leafId, (cols) => !cols);
+    await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await waitDom(paneSelector(last), { absent: true });
+  });
+
   await runner.step('active_column_never_leaves', async () => {
     const shown = await shownLeaves();
     const far = shown.at(-1);
@@ -280,6 +319,62 @@ try {
     runner.assert(landedColumns.some((candidate) => leavesOf(candidate).length === 2), 'the stack lands as one column', { columns: landedColumns.map(leavesOf) });
     await hold();
     await shot('stack-on-the-sidebar-desktop');
+    firstSession = sessions.find((sessionId) => !stackSessions.includes(sessionId));
+    await request('select_session', { sessionId: firstSession });
+    await waitDom(`${surface()}[data-session-visible="1"]`);
+  });
+
+  await runner.step('stack_chip_on_a_tile_edge_keeps_every_tile_usable', async () => {
+    const stackOnTheShelf = async () => {
+      const before = await readRow();
+      await press('terminal.splitHorizontal');
+      const state = await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.length === before.length + 1 && current.panes.every((pane) => pane.runtimeId), 'a stacked shell', 30_000);
+      sessions.push(...state.panes.map((pane) => pane.sessionId).filter((id) => !sessions.includes(id)));
+      const stacked = await activeLeaf();
+      const stackLeaves = leavesOf(columnsOf(await treeOf()).find((candidate) => leavesOf(candidate).includes(stacked)));
+      await sendStackOffScreen(stackLeaves);
+      return stackLeaves;
+    };
+    const dropOnTopEdge = async (stackLeaves) => {
+      const anchor = (await shownLeaves()).find((id) => !stackLeaves.includes(id));
+      const anchorHeight = await paneHeight(anchor);
+      await hold();
+      await driver.drag(chipSelector(stackLeaves[0]), { selector: paneSelector(anchor), at: { x: 0.5, y: 0.02 } }, { steps: 24 });
+      return { anchor, anchorHeight };
+    };
+    const assertUsable = async (stackLeaves, { anchor, anchorHeight }) => {
+      if (anchorHeight >= 960) {
+        await waitForSessionDesktop(client, firstSession, (current) => columnsOf(current.desktop.layoutTree).some((column) => leavesOf(column).includes(anchor) && stackLeaves.every((id) => leavesOf(column).includes(id))), 'the stack on the tile');
+        const heights = await Promise.all([...stackLeaves, anchor].map(paneHeight));
+        runner.log('stack on the tile', { anchorHeight, heights });
+        runner.assert(heights.every((height) => height >= 310), 'every tile keeps the minimum height', { heights });
+        return 'stack-on-a-tall-tile';
+      }
+      await waitDom('.toast', { textIncludes: 'so it moved beside instead' });
+      const besideAnchor = (tree) => {
+        const columns = columnsOf(tree).map(leavesOf);
+        return sameList(columns[columns.findIndex((column) => column.includes(anchor)) + 1] ?? [], stackLeaves);
+      };
+      await waitForSessionDesktop(client, firstSession, (current) => besideAnchor(current.desktop.layoutTree), 'the stack beside the tile');
+      runner.log('stack beside the tile', { anchorHeight });
+      return 'stack-beside-a-short-tile';
+    };
+    const dropAndCheck = async () => {
+      const stackLeaves = await stackOnTheShelf();
+      const name = await assertUsable(stackLeaves, await dropOnTopEdge(stackLeaves));
+      await hold();
+      await shot(name);
+      return stackLeaves;
+    };
+    const { logicalBounds } = await request('get_window_bounds');
+
+    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, height: 1300 } });
+    await dropAndCheck();
+    await request('set_window_bounds', { logicalBounds });
+    const columns = columnsOf(await treeOf()).map(leavesOf);
+    const single = (await shownLeaves()).find((id) => columns.some((column) => column.length === 1 && column[0] === id));
+    await focusShownLeaf(single);
+    await dropAndCheck();
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

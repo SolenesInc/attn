@@ -38,11 +38,12 @@ import {
   type AttentionViewport,
   type DesktopLayoutView,
 } from './attentionLayout';
-import type { DockTarget } from './dockTarget';
+import { fitColumnOnEdgeDrop, type DockTarget } from './dockTarget';
 import type { ShelfDropTarget } from './leafDrag';
 import {
   applyColumnDrag,
   columnDividerIndex,
+  columnStackNeedPx,
   columnIndexOf,
   lastUsedLeaf,
   narrowestWidthPx,
@@ -1165,6 +1166,7 @@ export function useDesktopController(
       void swapChipIntoSlot(leafId, target.anchorId);
       return;
     }
+    if (target.limitMessage) onShelfLimit?.(target.limitMessage);
     onMoveLeaf?.(leafId, target.anchorId, target.edge, target.ratio, true);
   };
 
@@ -1180,6 +1182,10 @@ export function useDesktopController(
         onTileToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.moveTileToShelf(leafId, target),
         onChipToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.reorderChip(leafId, target),
         onChipToTile: (leafId: string, target: DockTarget) => rowDropsRef.current.dropChipOnTile(leafId, target),
+        fitChipOnEdge: (leafId: string, target: DockTarget, anchorBounds: NormalizedPaneBounds, containerHeightPx: number) => {
+          const tree = layoutTreeRef.current;
+          return tree ? fitColumnOnEdgeDrop(target, anchorBounds, containerHeightPx, columnStackNeedPx(tree, leafId)) : target;
+        },
       }
     : undefined), [desktopId, shelfOn]);
 

@@ -1,5 +1,6 @@
 import type { TerminalDockEdge } from '../../types/desktop';
 import type { NormalizedPaneBounds } from '../../types/desktop';
+import { ATTENTION_MIN_HEIGHT } from './attentionLayout';
 
 const DOCK_F_MIN = 0.15;
 const DOCK_F_MAX = 0.5;
@@ -26,6 +27,7 @@ export interface DockTarget {
   ratio: number;
   rect: DockNormalizedRect;
   replacesAnchor?: boolean;
+  limitMessage?: string;
 }
 
 export const NO_CONTAINER_SIDES: DockEdgeFlags = { left: false, right: false, top: false, bottom: false };
@@ -65,6 +67,28 @@ function containerBandRect(edge: TerminalDockEdge, fraction: number): DockNormal
     default:
       return { left: 0, top: 1 - fraction, width: 1, height: fraction };
   }
+}
+
+export function fitColumnOnEdgeDrop(
+  target: DockTarget,
+  anchorBounds: NormalizedPaneBounds,
+  containerHeightPx: number,
+  columnNeedPx: number,
+): DockTarget {
+  if (target.replacesAnchor || (target.edge !== 'top' && target.edge !== 'bottom')) return target;
+  const anchorPx = anchorBounds.height * containerHeightPx;
+  const neededPx = columnNeedPx + ATTENTION_MIN_HEIGHT;
+  if (neededPx > anchorPx) {
+    return {
+      ...target,
+      edge: 'right',
+      ratio: DOCK_F_MAX,
+      rect: leafBandRect(anchorBounds, 'right', DOCK_F_MAX),
+      limitMessage: `Stacking here needs ${Math.ceil(neededPx)}px to keep every tile at the ${ATTENTION_MIN_HEIGHT}px minimum. This tile has ${Math.floor(anchorPx)}px, so it moved beside instead.`,
+    };
+  }
+  const ratio = Math.max(target.ratio, columnNeedPx / anchorPx);
+  return { ...target, ratio, rect: leafBandRect(anchorBounds, target.edge, ratio) };
 }
 
 export function computeContainerSides(boundsList: NormalizedPaneBounds[]): DockEdgeFlags {

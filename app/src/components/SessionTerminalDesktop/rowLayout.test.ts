@@ -233,6 +233,28 @@ describe('applyColumnDrag', () => {
     expect(back.stopped).toBe(false);
   });
 
+  it('follows the pointer and leaves other columns alone when every wanted width is scaled', () => {
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const random = seeded(seed);
+      const specs: Spec[] = Array.from({ length: 2 + random(3) }, (_, index) => ({ id: `t${index}`, wanted: 50 + random(40) }));
+      const needed = specs.reduce((sum, spec) => sum + (spec as { wanted: number }).wanted * PX_PER_COL, 0);
+      const input = { tree: rightChain(specs), activeLeafId: 't0', firstColumn: null, areaPx: needed + random(800), narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+      const plan = resolveRowLayout(input);
+      const divider = random(plan.screen.length - 1);
+      const distance = random(41) - 20;
+      const measures = { activeLeafId: 't0', narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+      const result = applyColumnDrag({ screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn }, divider, distance, measures);
+      const dragged = resolveRowLayout({ ...input, firstColumn: result.firstColumn, pendingWantedCols: result.wantedCols });
+
+      expect(dragged.screen.length).toBe(plan.screen.length);
+      const edge = (widths: readonly number[]) => widths.slice(0, divider + 1).reduce((sum, width) => sum + width, 0);
+      if (result.wantedCols.size > 0) expect(Math.abs(edge(dragged.widths) - edge(plan.widths) - distance)).toBeLessThanOrEqual(2 * PX_PER_COL);
+      dragged.widths.forEach((width, index) => {
+        if (index !== divider && index !== divider + 1 && result.wantedCols.size > 0) expect(Math.abs(width - plan.widths[index])).toBeLessThanOrEqual(2 * PX_PER_COL);
+      });
+    }
+  });
+
   it('holds its promises over generated rows through the real layout', () => {
     for (let seed = 1; seed <= 300; seed += 1) {
       const random = seeded(seed);

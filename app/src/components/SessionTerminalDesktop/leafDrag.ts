@@ -23,6 +23,7 @@ export interface RowDrops {
   shelfTargetAt: (clientX: number, clientY: number) => ShelfDropTarget | null;
   onShelfPreview: (target: ShelfDropTarget | null) => void;
   onShelfDrop: (leafId: string, target: ShelfDropTarget) => void;
+  fitDockTarget?: (target: DockTarget, anchorBounds: NormalizedPaneBounds, containerHeightPx: number) => DockTarget;
 }
 
 export interface LeafDropSnapshot {
@@ -54,7 +55,9 @@ export function startLeafDrag(
       }
     }
     const containerSides = rowDrops ? NO_CONTAINER_SIDES : computeContainerSides(allBounds);
-    return computeDockTarget(x, y, containerRect, leafRects, containerSides, rowDrops?.centreReplaces());
+    const target = computeDockTarget(x, y, containerRect, leafRects, containerSides, rowDrops?.centreReplaces());
+    const anchorBounds = target && snapshot.paneBounds.get(target.anchorId);
+    return anchorBounds && rowDrops?.fitDockTarget ? rowDrops.fitDockTarget(target, anchorBounds, containerRect.height) : target;
   };
 
   const pastThreshold = (x: number, y: number): boolean =>

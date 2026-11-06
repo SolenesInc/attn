@@ -21,13 +21,13 @@ function rightChain(nodes: unknown[], depth = 0): unknown {
 
 const ELEVEN_TILES = rightChain(IDS.map(pane));
 
-async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES, others = [] as string[], shelfWidth = PANES_WIDTH, startOn = 's1' } = {}) {
+async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES, others = [] as string[], shelfWidth = PANES_WIDTH, startOn = 's1', panesHeight = PANES_HEIGHT } = {}) {
   sizeTerminals((terminal) => ({
     clientWidth: (PANES_WIDTH * parseFloat(terminal.closest<HTMLElement>('[data-pane-id]')?.style.width || '100')) / 100,
-    clientHeight: PANES_HEIGHT,
+    clientHeight: panesHeight,
   }));
   fakeRects((element) => {
-    if (element.classList.contains('session-terminal-panes')) return new DOMRect(0, 30, PANES_WIDTH, PANES_HEIGHT);
+    if (element.classList.contains('session-terminal-panes')) return new DOMRect(0, 30, PANES_WIDTH, panesHeight);
     if (element.classList.contains('desktop-shelf')) return new DOMRect(0, 0, shelfWidth, 30);
     if (element.dataset.shelfAnchor) {
       const at = Array.from(document.querySelectorAll('[data-shelf-anchor]')).indexOf(element);
@@ -758,6 +758,45 @@ describe('Shelf layout', () => {
       expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s7', anchor_id: 'pane-s2', edge: 'bottom', whole_column: true })]);
     });
 
+    describe('a stack chip on a tile’s top edge', () => {
+      const stackOnTheShelf = (lowerShare: number) => rightChain([
+        ...IDS.slice(0, 9).map(pane),
+        { ...split('stack-s10', 'horizontal', [pane('s10'), pane('s11')]), ratio: lowerShare },
+      ]);
+      const nearTop = (panesHeight: number, y = 0.02) => ({ clientX: 1.5 * SLOT_WIDTH, clientY: 30 + panesHeight * y });
+
+      it.each([
+        ['an even stack', 0.5, 1200, 0.02, 640 / 1200],
+        ['a stack with a short tile', 0.8, 2000, 0.02, 1600 / 2000],
+        ['the band the pointer chose when it already fits', 0.5, 4000, 0.2, 0.2],
+      ])('keeps every tile at the minimum height: %s', async (_name, lowerShare, panesHeight, y, share) => {
+        const daemon = await renderRow(SHELF_ON, { root: stackOnTheShelf(lowerShare), panesHeight });
+
+        await drag(daemon, chip('s10'), chipCentre('s10'), nearTop(panesHeight, y));
+
+        const [move] = moves(daemon);
+        expect(move).toMatchObject({ leaf_id: 'pane-s10', anchor_id: 'pane-s2', edge: 'top', whole_column: true });
+        expect(move.leaf_share).toBeCloseTo(share, 5);
+      });
+
+      it('moves the stack beside the tile and says why when the tile cannot hold it', async () => {
+        const daemon = await renderRow(SHELF_ON, { root: stackOnTheShelf(0.5) });
+
+        await gesture(daemon, () => {
+          press(chip('s10'), chipCentre('s10'));
+          moveTo(nearTop(PANES_HEIGHT));
+        });
+        const preview = document.querySelector<HTMLElement>('.desktop-dock-target')!;
+        expect(parseFloat(preview.style.height)).toBeCloseTo(100);
+        expect(parseFloat(preview.style.left)).toBeCloseTo((1.5 * 100) / 3);
+        await gesture(daemon, () => release(nearTop(PANES_HEIGHT)));
+
+        expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s10', anchor_id: 'pane-s2', edge: 'right', whole_column: true })]);
+        expect(rowOf(daemon).slice(0, 4)).toEqual(['s1', 's2', 's10', 's11']);
+        expect(screen.getByText('Stacking here needs 960px to keep every tile at the 320px minimum. This tile has 900px, so it moved beside instead.')).toBeInTheDocument();
+      });
+    });
+
     it('reorders chips without changing focus or the screen', async () => {
       const daemon = await renderRow(SHELF_ON);
       const focused = daemon.sentOf('desktop_set_active_pane').length;
@@ -900,6 +939,22 @@ describe('Shelf layout', () => {
       const dragged = paneWidth('s1');
       expect(dragged).toBeGreaterThan(before);
       expect(paneWidth('s3')).toBeCloseTo(before, 0);
+    });
+
+    it('moves only the dragged divider when every wanted width is scaled to fit', async () => {
+      const root = rightChain([{ ...pane('s1'), wanted_cols: 80 }, { ...pane('s2'), wanted_cols: 75 }, { ...pane('s3'), wanted_cols: 70 }]);
+      const daemon = await renderRow(SHELF_ON, { root });
+      const [s1, s2, s3] = ['s1', 's2', 's3'].map(paneWidth);
+      expect(s1 + s2 + s3).toBeCloseTo(100);
+      expect(s1 / s3).toBeCloseTo(80 / 70);
+
+      await dragDivider(daemon, 's1', 100);
+
+      const pointerPercent = (100 / PANES_WIDTH) * 100;
+      const oneColumnPercent = 0.6;
+      expect(Math.abs(paneWidth('s1') - s1 - pointerPercent)).toBeLessThan(oneColumnPercent);
+      expect(Math.abs(paneWidth('s3') - s3)).toBeLessThan(oneColumnPercent);
+      expect(widths(daemon).map((command) => command.leaf_id)).toEqual(['pane-s1', 'pane-s2', 'pane-s3']);
     });
 
     it('saves a dragged width and keeps it after the echo', async () => {

@@ -1,5 +1,6 @@
 import {
   collectLayoutLeaves,
+  getNormalizedPaneBounds,
   leafSlotId,
   type TerminalLayoutNode,
   type TerminalSplitDirection,
@@ -83,7 +84,7 @@ export function shownRow(row: readonly RowColumn[], heldLeafIds: readonly string
 
 type RowMeasures = Pick<RowLayoutInput, 'areaPx' | 'narrowestPx' | 'pxPerCol'>;
 
-function columnNeedPx(column: RowColumn, measures: RowMeasures): number {
+function columnNeedPx(column: RowColumn, measures: Pick<RowMeasures, 'narrowestPx' | 'pxPerCol'>): number {
   return Math.max(measures.narrowestPx, (column.wantedCols ?? 0) * measures.pxPerCol);
 }
 
@@ -247,15 +248,21 @@ export function applyColumnDrag(
   widths[grower] += amount;
 
   const stays = new Set([grower, ...givers, ...(growsLeft ? left : right)]);
+  const moved = (index: number) => Math.abs(widths[index] - start.widths[index]) > COLUMN_WIDTH_UNCHANGED_PX;
+  const shownAtOtherWidth = (column: RowColumn, index: number) =>
+    Boolean(column.wantedCols)
+    && Math.abs(start.widths[index] - columnNeedPx(column, { narrowestPx, pxPerCol })) > COLUMN_WIDTH_UNCHANGED_PX;
   const wantedCols = new Map<string, number>();
-  let changedPx = 0;
-  start.screen.forEach((column, index) => {
-    if (stays.has(index) && Math.abs(widths[index] - start.widths[index]) > COLUMN_WIDTH_UNCHANGED_PX) {
-      const colsBefore = Math.floor(changedPx / pxPerCol);
-      changedPx += widths[index];
-      wantedCols.set(column.leafIds[0], Math.floor(changedPx / pxPerCol) - colsBefore);
-    }
-  });
+  if (start.screen.some((_, index) => moved(index))) {
+    let savedPx = 0;
+    start.screen.forEach((column, index) => {
+      if (stays.has(index) && (moved(index) || shownAtOtherWidth(column, index))) {
+        const colsBefore = Math.floor(savedPx / pxPerCol);
+        savedPx += widths[index];
+        wantedCols.set(column.leafIds[0], Math.floor(savedPx / pxPerCol) - colsBefore);
+      }
+    });
+  }
   const firstColumn = growsLeft || leftCount === 0
     ? start.firstColumn
     : { leafId: start.screen[leftCount].leafIds[0], index: start.firstColumn.index + leftCount };
@@ -391,6 +398,14 @@ export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, first
   const start = columnIndexOf(shown, firstColumn.leafId);
   const activeAt = columnIndexOf(shown, input.activeLeafId);
   return start >= 0 && activeAt >= start && activeAt < fillFrom(shown, start, input).end;
+}
+
+export function columnStackNeedPx(tree: TerminalLayoutNode, leafId: string): number {
+  const row = readRow(tree);
+  const column = row[columnIndexOf(row, leafId)];
+  if (!column) return ATTENTION_MIN_HEIGHT;
+  const heights = [...getNormalizedPaneBounds(column.node).values()].map((bounds) => bounds.height);
+  return ATTENTION_MIN_HEIGHT / Math.min(...heights);
 }
 
 export function stackLimitMessage(tree: TerminalLayoutNode, anchorLeafId: string, tileHeightPx: number): string | null {

@@ -28,6 +28,7 @@ interface RowDragOptions {
   onTileToShelf: (leafId: string, target: ShelfDropTarget) => void;
   onChipToShelf: (leafId: string, target: ShelfDropTarget) => void;
   onChipToTile: (leafId: string, target: DockTarget) => void;
+  fitChipOnEdge: (leafId: string, target: DockTarget, anchorBounds: NormalizedPaneBounds, containerHeightPx: number) => DockTarget;
 }
 
 export interface ChipDragSource {
@@ -157,7 +158,10 @@ export function useDesktopLeafDrag({
       if (event.button !== 0 || !row || !container) {
         return;
       }
-      startDrag(source.leafId, event, container, row.onChipToTile, true, shelfDrops(row, source.key, row.showing, row.onChipToShelf));
+      startDrag(source.leafId, event, container, row.onChipToTile, true, {
+        ...shelfDrops(row, source.key, row.showing, row.onChipToShelf),
+        fitDockTarget: (target, anchorBounds, containerHeightPx) => row.fitChipOnEdge(source.leafId, target, anchorBounds, containerHeightPx),
+      });
     },
     [row, startDrag],
   );
