@@ -161,6 +161,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-moves'],
   },
   {
+    id: 'shelf-drags',
+    runnerId: 'SHELF-DRAGS',
+    label: 'Dragging chips, tiles and column dividers on the row with native pointer input',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-drags'],
+  },
+  {
     id: 'desktop-close-one-session-keeps-selection',
     runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Closing one session on a desktop keeps the selection',

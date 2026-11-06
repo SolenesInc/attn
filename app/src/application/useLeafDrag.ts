@@ -57,10 +57,10 @@ export function useLeafDrag({
   }, []);
 
   const beginDrag = useCallback(
-    (sourceDesktopId: string | null, leafId: string) => {
+    (sourceDesktopId: string | null, leafId: string, wholeColumn = false) => {
       clearHoverTimer();
       clearDragEndTimer();
-      const drag = sourceDesktopId ? { sourceDesktopId, leafId } : null;
+      const drag = sourceDesktopId ? { sourceDesktopId, leafId, ...(wholeColumn ? { wholeColumn } : {}) } : null;
       leafDesktopDragRef.current = drag;
       setLeafDesktopDrag(drag);
       setDragHoverDesktopId(null);
@@ -70,7 +70,7 @@ export function useLeafDrag({
   );
 
   const handleLeafDragStart = useCallback(
-    (leafId: string) => beginDrag(currentDesktopIdRef.current, leafId),
+    (leafId: string, wholeColumn = false) => beginDrag(currentDesktopIdRef.current, leafId, wholeColumn),
     [beginDrag, currentDesktopIdRef],
   );
 
@@ -144,6 +144,7 @@ export function useLeafDrag({
         targetDesktopId,
         leafId: drag.leafId,
         ...(withDelegates ? { withDelegates: true } : {}),
+        ...(drag.wholeColumn ? { wholeColumn: true } : {}),
         edge: SIDEBAR_LEAF_DROP_PLACEMENT.edge,
         leafShare: SIDEBAR_LEAF_DROP_PLACEMENT.leafShare,
       }),
@@ -157,6 +158,7 @@ export function useLeafDrag({
       anchorId: string | undefined,
       edge: 'left' | 'right' | 'top' | 'bottom',
       leafShare: number | undefined,
+      wholeColumn?: boolean,
     ) => {
       const targetDesktopId = currentDesktopIdRef.current ?? sourceDesktopId;
       void sendDesktopMoveLeaf({
@@ -166,6 +168,7 @@ export function useLeafDrag({
         anchorId,
         edge,
         leafShare,
+        ...(wholeColumn ? { wholeColumn: true } : {}),
       }).catch((error) => {
         showError(`Could not move that pane: ${failureMessage(error)}`);
       });

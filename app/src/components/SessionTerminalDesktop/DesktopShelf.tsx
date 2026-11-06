@@ -7,6 +7,7 @@ import { useDesktopShelfStore, type ShelfColumn, type ShelfTile } from '../../st
 import { useSessionStore } from '../../store/sessions';
 import type { AskHolderSession } from '../../utils/asks';
 import { StateIndicator } from '../StateIndicator';
+import { DRAG_ACTIVATION_PX } from './leafDrag';
 import { NARROWEST_STEPS } from './rowLayout';
 import { closeShelfPeek, useShelfPeekHover } from './useShelfPeekHover';
 import './DesktopShelf.css';
@@ -35,6 +36,14 @@ function useChipMarks(desktopId: string) {
   };
 }
 
+function useDropMark(desktopId: string, anchorId: string): string {
+  const edge = useDesktopShelfStore((state) => {
+    const mark = state.shelfDrop;
+    return mark?.desktopId === desktopId && mark.anchorId === anchorId ? mark.edge : null;
+  });
+  return edge ? ` is-drop-${edge}` : '';
+}
+
 function TileMark({ tile }: { tile: ShelfTile }) {
   if (tile.state) {
     return <StateIndicator state={tile.state} offline={tile.offline} size="sm" seed={tile.askHolder?.id} />;
@@ -46,19 +55,29 @@ function AskMark({ session }: { session: AskHolderSession }) {
   return useAsksOf(session).length > 0 ? <span className="ask-marker" aria-hidden="true">?</span> : null;
 }
 
-function ColumnChip({ column, desktopId, onGo }: { column: ShelfColumn; desktopId: string; onGo?: () => void }) {
+function ColumnChip({ column, desktopId, onGo, inMenu = false }: { column: ShelfColumn; desktopId: string; onGo?: () => void; inMenu?: boolean }) {
   const peekHover = useShelfPeekHover(desktopId, column.goLeafId);
   const marks = useChipMarks(desktopId)([column]);
+  const dropMark = useDropMark(desktopId, column.key);
+  const press = useRef<{ x: number; y: number } | null>(null);
   return (
     <button
       type="button"
-      className={`desktop-shelf-chip${marks.className}`}
+      className={`desktop-shelf-chip${marks.className}${dropMark}`}
       onAnimationEnd={marks.onAnimationEnd}
       data-testid={`shelf-chip-${column.key}`}
+      data-shelf-anchor={inMenu ? undefined : column.key}
       title={column.label}
       {...peekHover}
+      onPointerDown={(event) => {
+        press.current = { x: event.clientX, y: event.clientY };
+        useDesktopShelfStore.getState().rowActionsByDesktop[desktopId]?.beginChipDrag({ key: column.key, leafId: column.goLeafId }, event);
+      }}
       onMouseDown={(event) => event.preventDefault()}
-      onClick={() => {
+      onClick={(event) => {
+        const pressedAt = press.current;
+        press.current = null;
+        if (pressedAt && Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) >= DRAG_ACTIVATION_PX) return;
         closeShelfPeek();
         onGo?.();
         useSessionStore.getState().selectLeaf(desktopId, column.goLeafId);
@@ -75,6 +94,8 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
   const marks = useChipMarks(desktopId)(columns);
+  const anchorKey = columns.length === 0 ? '' : side === 'before' ? columns[0].key : columns[columns.length - 1].key;
+  const dropMark = useDropMark(desktopId, anchorKey);
   useEscapeStack(() => setOpen(false), open);
   useLayoutEffect(() => {
     if (!open) return;
@@ -89,9 +110,11 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
     <span className="desktop-shelf-cap-anchor" ref={root}>
       <button
         type="button"
-        className={`desktop-shelf-chip desktop-shelf-cap${marks.className}`}
+        className={`desktop-shelf-chip desktop-shelf-cap${marks.className}${dropMark}`}
         onAnimationEnd={marks.onAnimationEnd}
         data-testid={`shelf-cap-${side}`}
+        data-shelf-anchor={anchorKey}
+        data-shelf-edge={side === 'before' ? 'left' : 'right'}
         aria-expanded={open}
         title={`${columns.length} more this way`}
         onMouseDown={(event) => event.preventDefault()}
@@ -102,7 +125,7 @@ function Cap({ columns, side, desktopId }: { columns: ShelfColumn[]; side: 'befo
       {open && (
         <div className={`desktop-shelf-menu desktop-shelf-menu--${side}`} role="menu" data-testid={`shelf-menu-${side}`}>
           {columns.map((column) => (
-            <ColumnChip key={column.key} column={column} desktopId={desktopId} onGo={() => setOpen(false)} />
+            <ColumnChip key={column.key} column={column} desktopId={desktopId} inMenu onGo={() => setOpen(false)} />
           ))}
         </div>
       )}
@@ -174,7 +197,7 @@ export function DesktopShelf({ desktopId }: { desktopId: string }) {
   const { left, right } = allotChips(available, shelf.before.length, shelf.after.length, shelf.screen.length);
   const splitBefore = shelf.before.length - left;
   return (
-    <div className="desktop-shelf" ref={root} data-testid="desktop-shelf">
+    <div className="desktop-shelf" ref={root} data-testid="desktop-shelf" data-shelf-desktop={desktopId}>
       <Cap columns={shelf.before.slice(0, splitBefore)} side="before" desktopId={desktopId} />
       {shelf.before.slice(splitBefore).map((column) => (
         <ColumnChip key={column.key} column={column} desktopId={desktopId} />

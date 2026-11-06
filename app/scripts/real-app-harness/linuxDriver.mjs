@@ -247,12 +247,26 @@ export class LinuxDriver extends TargetedWindowDriver {
     if (action === 'click') return this.#click(1, point.x, point.y, opts);
     if (action === 'right_click') return this.#click(3, point.x, point.y, opts);
     if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
+    if (action === 'press') return this.#press(point.x, point.y, opts);
+    if (action === 'drag_to') return this.#move(to.x, to.y, opts);
+    if (action === 'release') return this.#release(point.x, point.y, opts);
     throw new Error(`LinuxDriver has no pointer action ${action}`);
   }
 
   async #move(relativeX, relativeY, opts) {
     const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
     await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y)]);
+  }
+
+  async #press(relativeX, relativeY, opts) {
+    const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
+    await this.activateBackground(opts);
+    await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y), 'mousedown', '1']);
+  }
+
+  async #release(relativeX, relativeY, opts) {
+    const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
+    await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y), 'mouseup', '1']);
   }
 
   async #drag(relativeX, relativeY, toRelativeX, toRelativeY, opts) {

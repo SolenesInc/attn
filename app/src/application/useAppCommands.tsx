@@ -9,6 +9,7 @@ import { SessionRoleIcon } from '../components/DelegationChain';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useDesktopShelfStore } from '../store/desktopShelf';
 import { useProfilesStore } from '../store/profiles';
 import { desktopLabel, orderedDesktops, sortedDesktopOrder } from '../utils/desktops';
 import type { ShortcutId } from '../shortcuts/registry';
@@ -346,6 +347,15 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
               icon: <KeyboardActionIcon />,
               shortcut: keys('shelf.sendToShelf'),
               run: () => void triggerShortcut('shelf.sendToShelf'),
+            },
+            {
+              id: 'shelf-clear-dragged-widths',
+              title: 'Clear dragged widths',
+              keywords: ['shelf', 'row', 'width', 'divider', 'reset'],
+              icon: <KeyboardActionIcon />,
+              run: () => {
+                if (currentDesktopId) useDesktopShelfStore.getState().rowActionsByDesktop[currentDesktopId]?.clearDraggedWidths();
+              },
             },
           ]
         : []),

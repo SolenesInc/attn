@@ -93,6 +93,31 @@ export class TargetedWindowDriver {
     return { from, to, receipt };
   }
 
+  async holdDrag(fromTarget, toTarget, opts = {}) {
+    const held = { ...opts, withoutReceipt: 'the button is still down, so no mouse-up lands yet' };
+    const from = await this.pointOf(fromTarget);
+    const pointFor = async (target, previous) => (target.by
+      ? { x: previous.x + target.by.x / previous.window.width, y: previous.y + target.by.y / previous.window.height, window: previous.window }
+      : this.pointOf(target));
+    await this.#pointer({ action: 'press', point: from, opts: held });
+    let at = from;
+    const dragTo = async (target) => {
+      const to = await pointFor(target, from);
+      await this.#pointer({ action: 'drag_to', point: at, to, opts: held });
+      at = to;
+    };
+    await dragTo(toTarget);
+    return {
+      dragTo,
+      release: () => this.#delivered({
+        webview: webviewOf(fromTarget),
+        expectation: { gesture: 'pointer', selector: null },
+        action: `release of holdDrag(${JSON.stringify(fromTarget)})`,
+        opts,
+      }, () => this.#pointer({ action: 'release', point: at, opts })),
+    };
+  }
+
   get keysReachWebview() {
     return true;
   }

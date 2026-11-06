@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { agentPane, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { laidOutDesktop, pane, relayOut, split } from './test/desktopLayouts';
@@ -11,6 +11,7 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 const PANES_WIDTH = 2000;
 const PANES_HEIGHT = 900;
+const CHIP_STEP = 112;
 const IDS = Array.from({ length: 11 }, (_, index) => `s${index + 1}`);
 
 function rightChain(nodes: unknown[], depth = 0): unknown {
@@ -26,8 +27,12 @@ async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES
     clientHeight: PANES_HEIGHT,
   }));
   fakeRects((element) => {
-    if (element.classList.contains('session-terminal-panes')) return new DOMRect(0, 0, PANES_WIDTH, PANES_HEIGHT);
+    if (element.classList.contains('session-terminal-panes')) return new DOMRect(0, 30, PANES_WIDTH, PANES_HEIGHT);
     if (element.classList.contains('desktop-shelf')) return new DOMRect(0, 0, shelfWidth, 30);
+    if (element.dataset.shelfAnchor) {
+      const at = Array.from(document.querySelectorAll('[data-shelf-anchor]')).indexOf(element);
+      return new DOMRect(at * CHIP_STEP, 4, CHIP_STEP - 4, 22);
+    }
     return null;
   });
   const { daemon } = await renderApp({
@@ -557,6 +562,343 @@ describe('Shelf layout', () => {
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
       expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
       expect(paneIds()).toHaveLength(11);
+    });
+  });
+
+  describe('drags', () => {
+    const FOUR = rightChain(IDS.slice(0, 4).map(pane));
+    const FIVE = rightChain(IDS.slice(0, 5).map(pane));
+    const moves = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_move_leaf');
+    const widths = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_set_wanted_cols');
+    const active = () => surface().getAttribute('data-active-leaf-id');
+    const rowOf = (daemon: ScriptedDaemon) => {
+      const leaves = (node: { pane_id?: string; tile_id?: string; children?: never[] }): string[] =>
+        node.children ? node.children.flatMap(leaves) : [(node.pane_id ?? node.tile_id)!.replace('pane-', '')];
+      return leaves(JSON.parse(daemon.arrangement.desktop('ws')!.tree_json));
+    };
+    const chip = (id: string) => screen.getByTestId(`shelf-chip-pane-${id}`);
+    const header = (id: string) => document.querySelector<HTMLElement>(`[data-pane-id="pane-${id}"] .desktop-pane-header`)!;
+    const divider = (id: string) => document.querySelector<HTMLElement>(`.desktop-split-divider[data-split-id="row:pane-${id}"]`)!;
+    const chipCentre = (id: string) => ({ clientX: chipKeys().indexOf(id) * CHIP_STEP + (CHIP_STEP - 4) / 2, clientY: 15 });
+    const SLOT_WIDTH = PANES_WIDTH / 3;
+    const tilePoint = (slot: number, x: number, y = 0.5) => ({ clientX: (slot + x) * SLOT_WIDTH, clientY: 40 + y * (PANES_HEIGHT - 40) });
+    const press = (element: HTMLElement, at: { clientX: number; clientY: number }) => fireEvent.pointerDown(element, { button: 0, pointerId: 1, ...at });
+    const moveTo = (at: { clientX: number; clientY: number }) => fireEvent.pointerMove(window, { pointerId: 1, ...at });
+    const release = (at: { clientX: number; clientY: number }) => fireEvent.pointerUp(window, { pointerId: 1, ...at });
+    const drag = (daemon: ScriptedDaemon, element: HTMLElement, from: { clientX: number; clientY: number }, to: { clientX: number; clientY: number }) =>
+      gesture(daemon, () => {
+        press(element, from);
+        moveTo(to);
+        release(to);
+      });
+    const dragDivider = (daemon: ScriptedDaemon, id: string, distance: number) => {
+      const from = { clientX: SLOT_WIDTH, clientY: 300 };
+      return drag(daemon, divider(id), from, { clientX: from.clientX + distance, clientY: 300 });
+    };
+    const paneWidth = (id: string) => parseFloat(document.querySelector<HTMLElement>(`[data-pane-id="pane-${id}"]`)!.style.width);
+
+    it('swaps a chip dropped on a tile’s centre into that slot, and takes focus', async () => {
+      const daemon = await renderRow(SHELF_ON);
+
+      await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(1, 0.5));
+
+      expect(moves(daemon)).toEqual([
+        expect.objectContaining({ leaf_id: 'pane-s7', anchor_id: 'pane-s2', edge: 'left', whole_column: true }),
+        expect.objectContaining({ leaf_id: 'pane-s2', anchor_id: 'pane-s6', edge: 'right', whole_column: true, activate: false }),
+      ]);
+      expect(rowOf(daemon)).toEqual(['s1', 's7', 's3', 's4', 's5', 's6', 's2', 's8', 's9', 's10', 's11']);
+      expect(paneIds()).toEqual(onScreen('s1', 's7', 's3'));
+      expect(active()).toBe('pane-s7');
+      expect(chipKeys()).toContain('s2');
+    });
+
+    it('moves a chip dropped on a tile’s side edge beside it, as a column', async () => {
+      const daemon = await renderRow(SHELF_ON);
+
+      await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(0, 0.95));
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ source_desktop_id: 'ws', target_desktop_id: 'ws', leaf_id: 'pane-s7', anchor_id: 'pane-s1', edge: 'right', whole_column: true })]);
+      expect(rowOf(daemon).slice(0, 3)).toEqual(['s1', 's7', 's2']);
+      expect(active()).toBe('pane-s7');
+    });
+
+    it('stacks a chip dropped on a tile’s top or bottom edge', async () => {
+      const daemon = await renderRow(SHELF_ON);
+
+      await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(1, 0.5, 0.97));
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s7', anchor_id: 'pane-s2', edge: 'bottom', whole_column: true })]);
+    });
+
+    it('reorders chips without changing focus or the screen', async () => {
+      const daemon = await renderRow(SHELF_ON);
+      const focused = daemon.sentOf('desktop_set_active_pane').length;
+
+      const between = { clientX: chipKeys().indexOf('s5') * CHIP_STEP + 4, clientY: 15 };
+      await drag(daemon, chip('s8'), chipCentre('s8'), between);
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s8', anchor_id: 'pane-s5', edge: 'left', whole_column: true, activate: false })]);
+      expect(chipKeys()).toEqual(['s4', 's8', 's5', 's6', 's7', 's9', 's10', 's11']);
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(active()).toBe('pane-s1');
+      expect(daemon.sentOf('desktop_set_active_pane')).toHaveLength(focused);
+    });
+
+    it('leaves the order alone when a chip is dropped on itself, and a dragged chip does not bring on release', async () => {
+      const daemon = await renderRow(SHELF_ON);
+      const from = chipCentre('s8');
+
+      await gesture(daemon, () => {
+        press(chip('s8'), from);
+        moveTo({ ...from, clientX: from.clientX + 10 });
+        release({ ...from, clientX: from.clientX + 10 });
+        fireEvent.click(chip('s8'), { clientX: from.clientX + 10, clientY: from.clientY });
+      });
+
+      expect(moves(daemon)).toEqual([]);
+      expect(active()).toBe('pane-s1');
+    });
+
+    it('still brings a chip on a plain click', async () => {
+      const daemon = await renderRow(SHELF_ON);
+      const at = chipCentre('s8');
+
+      await gesture(daemon, () => {
+        press(chip('s8'), at);
+        release(at);
+        fireEvent.click(chip('s8'), at);
+      });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s8', anchor_id: 'pane-s1', edge: 'right', whole_column: true })]);
+    });
+
+    it('moves a tile dragged onto the shelf to that place in the row, and focus stays in the slot', async () => {
+      const daemon = await renderRow(SHELF_ON);
+      await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+      expect(active()).toBe('pane-s2');
+
+      await drag(daemon, header('s2'), { clientX: 700, clientY: 60 }, { clientX: chipKeys().indexOf('s6') * CHIP_STEP + 4, clientY: 15 });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s2', anchor_id: 'pane-s6', edge: 'left', activate: false })]);
+      expect(moves(daemon)[0].whole_column).toBeUndefined();
+      expect(rowOf(daemon).slice(0, 6)).toEqual(['s1', 's3', 's4', 's5', 's2', 's6']);
+      expect(chipKeys().slice(0, 3)).toEqual(['s5', 's2', 's6']);
+      expect(paneIds()).toEqual(onScreen('s1', 's3', 's4'));
+      expect(active()).toBe('pane-s3');
+    });
+
+    it('keeps a tile on the shelf when it would have fitted', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+
+      await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
+
+      expect(rowOf(daemon)).toEqual(['s1', 's2', 's4', 's3']);
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's4'));
+      expect(chipKeys()).toEqual(['s3']);
+    });
+
+    it('gives the tile back and names the failure when the daemon refuses a shelf drop', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: false, error: 'refused' }));
+
+      await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
+
+      expect(screen.getByText(/Could not move that tile to the shelf: refused/)).toBeInTheDocument();
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+    });
+
+    it('moves a stack’s whole column when its chip is dropped on a sidebar desktop', async () => {
+      const stack = split('stack', 'horizontal', [pane('s4'), pane('s5')]);
+      const daemon = await renderRow(SHELF_ON, { root: rightChain([pane('s1'), pane('s2'), pane('s3'), stack]), others: ['next'] });
+      const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
+
+      await gesture(daemon, () => {
+        press(chip('s4'), chipCentre('s4'));
+        moveTo({ clientX: 40, clientY: 400 });
+        fireEvent.pointerEnter(target);
+        fireEvent.pointerUp(target, { pointerId: 1, clientX: -40, clientY: 400 });
+      });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ source_desktop_id: 'ws', target_desktop_id: 'desktop-next', leaf_id: 'pane-s4', whole_column: true })]);
+    });
+
+    it('cancels a chip or tile drag with Esc: no message, and the row stays', async () => {
+      const daemon = await renderRow(SHELF_ON);
+
+      await gesture(daemon, () => {
+        press(chip('s7'), chipCentre('s7'));
+        moveTo(tilePoint(1, 0.5));
+      });
+      expect(document.querySelector('.desktop-dock-target')).not.toBeNull();
+      await gesture(daemon, () => {
+        fireEvent.keyDown(window, { key: 'Escape' });
+        release(tilePoint(1, 0.5));
+      });
+      expect(document.querySelector('.desktop-dock-target')).toBeNull();
+
+      await gesture(daemon, () => {
+        press(header('s2'), { clientX: 700, clientY: 60 });
+        moveTo(chipCentre('s7'));
+      });
+      expect(chip('s7').className).toMatch(/is-drop-/);
+      await gesture(daemon, () => {
+        fireEvent.keyDown(window, { key: 'Escape' });
+        release(chipCentre('s7'));
+      });
+      expect(chip('s7').className).not.toMatch(/is-drop-/);
+
+      expect(moves(daemon)).toEqual([]);
+      expect(rowOf(daemon)).toEqual(IDS);
+    });
+
+    it('docks only against tiles while the setting is on, not the desktop’s outer frame', async () => {
+      const daemon = await renderRow(SHELF_ON);
+
+      await drag(daemon, header('s2'), { clientX: 700, clientY: 60 }, { clientX: 5, clientY: 450 });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s2', anchor_id: 'pane-s1', edge: 'left' })]);
+    });
+
+    it('resizes neighbours by dragging a column divider, and keeps the width pending until the daemon’s echo', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const held: CommandMessage<'desktop_set_wanted_cols'>[] = [];
+      daemon.on('desktop_set_wanted_cols', (command) => { held.push(command); return undefined; });
+      const before = paneWidth('s1');
+
+      await dragDivider(daemon, 's1', 45);
+
+      expect(held.map((command) => command.leaf_id)).toEqual(['pane-s1', 'pane-s2']);
+      expect(held.every((command) => command.desktop_id === 'ws' && command.cols > 0)).toBe(true);
+      const dragged = paneWidth('s1');
+      expect(dragged).toBeGreaterThan(before);
+      expect(paneWidth('s3')).toBeCloseTo(before, 0);
+    });
+
+    it('saves a dragged width and keeps it after the echo', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const before = paneWidth('s1');
+
+      await dragDivider(daemon, 's1', 45);
+      const dragged = paneWidth('s1');
+
+      expect(widths(daemon).map((command) => command.leaf_id)).toEqual(['pane-s1', 'pane-s2']);
+      expect(dragged).toBeGreaterThan(before);
+      expect(JSON.parse(daemon.arrangement.desktop('ws')!.tree_json).children[0].wanted_cols).toBe(widths(daemon)[0].cols);
+    });
+
+    it('sends the far column to the shelf past the narrowest, and brings it back when dragged back, in one drag', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      expect(screen.queryByTestId('desktop-shelf')).toBeNull();
+      const from = { clientX: SLOT_WIDTH, clientY: 300 };
+
+      await gesture(daemon, () => {
+        press(divider('s1'), from);
+        moveTo({ clientX: from.clientX + 400, clientY: 300 });
+      });
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+      expect(chipKeys()).toEqual(['s3']);
+      expect(widths(daemon)).toEqual([]);
+
+      await gesture(daemon, () => {
+        moveTo(from);
+        release(from);
+      });
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(widths(daemon)).toEqual([]);
+      expect(screen.queryByTestId('desktop-shelf')).toBeNull();
+    });
+
+    it('stops the drag rather than shelve the active column', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+      await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+      expect(active()).toBe('pane-s3');
+
+      await dragDivider(daemon, 's1', 1500);
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(active()).toBe('pane-s3');
+    });
+
+    it('cancels a divider drag with Esc and restores the screen', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const before = paneWidth('s1');
+      const from = { clientX: SLOT_WIDTH, clientY: 300 };
+
+      await gesture(daemon, () => {
+        press(divider('s1'), from);
+        moveTo({ clientX: from.clientX + 400, clientY: 300 });
+      });
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+
+      await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(paneWidth('s1')).toBeCloseTo(before);
+      expect(document.querySelector('.desktop-resize-shield')).toBeNull();
+
+      await gesture(daemon, () => release({ clientX: from.clientX + 400, clientY: 300 }));
+      expect(widths(daemon)).toEqual([]);
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+    });
+
+    it('returns the old width and names the failure when the daemon refuses', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      daemon.on('desktop_set_wanted_cols', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: false, error: 'refused' }));
+      const before = paneWidth('s1');
+
+      await dragDivider(daemon, 's1', 45);
+
+      expect(screen.getByText(/Could not save that width: refused/)).toBeInTheDocument();
+      expect(paneWidth('s1')).toBeCloseTo(before);
+    });
+
+    it('clears the wanted widths on both sides with a double-click, and on the whole desktop from the palette', async () => {
+      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const before = paneWidth('s1');
+      await dragDivider(daemon, 's1', 45);
+      const sent = widths(daemon).length;
+
+      await gesture(daemon, () => fireEvent.dblClick(divider('s1')));
+      expect(widths(daemon).slice(sent).map((command) => [command.leaf_id, command.cols])).toEqual([['pane-s1', 0], ['pane-s2', 0]]);
+      expect(paneWidth('s1')).toBeCloseTo(before);
+
+      await dragDivider(daemon, 's2', 45);
+      const again = widths(daemon).length;
+      await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+      await gesture(daemon, () => fireEvent.mouseDown(screen.getByRole('option', { name: /Clear dragged widths/ })));
+      expect(widths(daemon).slice(again).map((command) => command.cols)).toEqual([0, 0]);
+      expect(paneWidth('s1')).toBeCloseTo(before);
+
+      await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+      await gesture(daemon, () => fireEvent.mouseDown(screen.getByRole('option', { name: /Clear dragged widths/ })));
+      expect(screen.getByText('This desktop has no dragged widths.')).toBeInTheDocument();
+    });
+
+    it('moves a chip beside a tile, without replacing it, after hovering over to another desktop', async () => {
+      const daemon = await renderRow(SHELF_ON, { others: ['next'] });
+      const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
+
+      await gesture(daemon, () => {
+        press(chip('s7'), chipCentre('s7'));
+        moveTo({ clientX: -40, clientY: 400 });
+        fireEvent.pointerEnter(target);
+      });
+      await act(() => vi.advanceTimersByTimeAsync(320));
+      await daemon.idle();
+      fireEvent.pointerLeave(target);
+      const centre = { clientX: PANES_WIDTH / 2, clientY: 30 + PANES_HEIGHT / 2 };
+      await gesture(daemon, () => {
+        moveTo(centre);
+        release(centre);
+      });
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ source_desktop_id: 'ws', target_desktop_id: 'desktop-next', leaf_id: 'pane-s7', anchor_id: 'pane-next', whole_column: true })]);
+    });
+
+    it('has no column dividers or shelf with the setting off', async () => {
+      await renderRow({ shelf_layout_enabled: 'false' }, { root: FIVE });
+      expect(document.querySelector('.desktop-split-divider[data-split-id^="row:"]')).toBeNull();
+      expect(screen.queryByTestId('desktop-shelf')).toBeNull();
     });
   });
 });

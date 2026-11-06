@@ -30,8 +30,8 @@ export function leaveShelfPeek() {
 
 function enterAnchor(desktopId: string, leafId: string, element: HTMLElement) {
   clearTimers();
-  const { peek, setPeek } = useDesktopShelfStore.getState();
-  if (peek?.leafId === leafId) return;
+  const { peek, setPeek, leafDragging } = useDesktopShelfStore.getState();
+  if (leafDragging || peek?.leafId === leafId) return;
   openTimer = window.setTimeout(() => {
     const { left, right, top, bottom } = element.getBoundingClientRect();
     setPeek({ desktopId, leafId, anchor: { left, right, top, bottom } });

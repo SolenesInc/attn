@@ -220,3 +220,11 @@
   color: var(--color-text-primary);
   opacity: 1;
 }
+
+.desktop-shelf-chip.is-drop-left {
+  box-shadow: inset 2px 0 0 var(--color-accent, #ff6b35);
+}
+
+.desktop-shelf-chip.is-drop-right {
+  box-shadow: inset -2px 0 0 var(--color-accent, #ff6b35);
+}

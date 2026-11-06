@@ -47,6 +47,17 @@ function listWithout(list: readonly string[] | undefined, drop: (id: string) => 
   return kept.length ? kept : undefined;
 }
 
+export interface ShelfDropMark {
+  desktopId: string;
+  anchorId: string;
+  edge: 'left' | 'right';
+}
+
+export interface DesktopRowActions {
+  beginChipDrag: (column: { key: string; leafId: string }, event: React.PointerEvent) => void;
+  clearDraggedWidths: () => void;
+}
+
 export interface ShelfPeekAnchor {
   left: number;
   right: number;
@@ -69,6 +80,12 @@ interface DesktopShelfState {
   unseenByDesktop: Readonly<Record<string, readonly string[]>>;
   flashingByDesktop: Readonly<Record<string, readonly string[]>>;
   documentReturnsByDesktop: Readonly<Record<string, Readonly<Record<string, DocumentReturn>>>>;
+  leafDragging: boolean;
+  setLeafDragging: (dragging: boolean) => void;
+  shelfDrop: ShelfDropMark | null;
+  setShelfDrop: (mark: ShelfDropMark | null) => void;
+  rowActionsByDesktop: Readonly<Record<string, DesktopRowActions>>;
+  setRowActions: (desktopId: string, actions: DesktopRowActions | null) => void;
   setFirstColumn: (desktopId: string, firstColumn: FirstColumn) => void;
   publishShelf: (desktopId: string, shelf: PublishedShelf | null) => void;
   forgetDesktop: (desktopId: string) => void;
@@ -96,6 +113,18 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
   unseenByDesktop: {},
   flashingByDesktop: {},
   documentReturnsByDesktop: {},
+  leafDragging: false,
+  setLeafDragging: (leafDragging) => set({ leafDragging }),
+  shelfDrop: null,
+  setShelfDrop: (mark) =>
+    set((state) => {
+      const current = state.shelfDrop;
+      if (current?.desktopId === mark?.desktopId && current?.anchorId === mark?.anchorId && current?.edge === mark?.edge) return state;
+      return { shelfDrop: mark };
+    }),
+  rowActionsByDesktop: {},
+  setRowActions: (desktopId, actions) =>
+    set((state) => ({ rowActionsByDesktop: withEntry(state.rowActionsByDesktop, desktopId, actions ?? undefined) })),
   setFirstColumn: (desktopId, firstColumn) =>
     set((state) => {
       const current = state.firstColumnByDesktop[desktopId];

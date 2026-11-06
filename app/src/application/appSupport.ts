@@ -67,6 +67,7 @@ export interface LeafDragPreviewState {
 export interface LeafDesktopDragState {
   sourceDesktopId: string;
   leafId: string;
+  wholeColumn?: boolean;
 }
 
 export const SIDEBAR_LEAF_DROP_PLACEMENT = { edge: 'left' as const, leafShare: 0.32 };

@@ -8,6 +8,7 @@ const DOCK_SNAP_TOLERANCE = 0.045;
 const DOCK_CONTAINER_FRAME_PX = 28;
 const DOCK_CONTAINER_FRACTION = 0.5;
 const DOCK_EDGE_EPSILON = 0.01;
+const DOCK_CENTRE_MARGIN = 0.25;
 
 export type DockEdgeFlags = Record<TerminalDockEdge, boolean>;
 
@@ -24,7 +25,10 @@ export interface DockTarget {
   edge: TerminalDockEdge;
   ratio: number;
   rect: DockNormalizedRect;
+  replacesAnchor?: boolean;
 }
+
+export const NO_CONTAINER_SIDES: DockEdgeFlags = { left: false, right: false, top: false, bottom: false };
 
 function snapDockFraction(fraction: number): number {
   for (const point of DOCK_SNAP_POINTS) {
@@ -102,6 +106,7 @@ export function computeDockTarget(
   containerRect: { left: number; top: number; width: number; height: number },
   leafRects: Array<{ leafId: string; bounds: NormalizedPaneBounds }>,
   containerSides: DockEdgeFlags,
+  centreReplaces = false,
 ): DockTarget | null {
   if (containerRect.width <= 0 || containerRect.height <= 0) {
     return null;
@@ -136,6 +141,9 @@ export function computeDockTarget(
     ];
     distances.sort((a, b) => a.dist - b.dist);
     const { edge, dist } = distances[0];
+    if (centreReplaces && dist >= DOCK_CENTRE_MARGIN) {
+      return { anchorId: leafId, edge: 'left', ratio: DOCK_F_MAX, rect: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }, replacesAnchor: true };
+    }
     const fraction = snapDockFraction(Math.min(Math.max(dist, DOCK_F_MIN), DOCK_F_MAX));
     return { anchorId: leafId, edge, ratio: fraction, rect: leafBandRect(bounds, edge, fraction) };
   }

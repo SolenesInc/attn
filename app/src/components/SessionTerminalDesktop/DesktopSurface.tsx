@@ -28,7 +28,8 @@ export function DesktopSurface() {
     effectiveGhostPos,
     draggingLeafLabel,
     splitDividers,
-    handleDividerPointerDown,
+    handleRenderedDividerPointerDown,
+    handleColumnDividerDoubleClick,
     shelfOn,
     shelfInQueueBar,
     shelfWidthLabelShown,
@@ -71,7 +72,8 @@ export function DesktopSurface() {
         renderPane={renderPaneSurface}
         containerRef={panesContainerRef}
         dividers={splitDividers}
-        onDividerPointerDown={handleDividerPointerDown}
+        onDividerPointerDown={handleRenderedDividerPointerDown}
+        onDividerDoubleClick={shelfOn ? handleColumnDividerDoubleClick : undefined}
         overlay={
           <>
             <DesktopDragOverlays />

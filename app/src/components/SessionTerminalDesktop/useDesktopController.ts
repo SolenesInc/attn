@@ -38,15 +38,21 @@ import {
   type AttentionViewport,
   type DesktopLayoutView,
 } from './attentionLayout';
+import type { DockTarget } from './dockTarget';
+import type { ShelfDropTarget } from './leafDrag';
 import {
+  applyColumnDrag,
+  columnDividerIndex,
   columnIndexOf,
   lastUsedLeaf,
   narrowestWidthPx,
   planSendToShelf,
+  planSlotSwap,
   readRow,
   resolveRowLayout,
   rowDragRatioBounds,
   shownRow,
+  type RowColumn,
   type RowLayoutInput,
   type RowLayoutPlan,
 } from './rowLayout';
@@ -69,6 +75,8 @@ const RESIZE_MOUSE_SUPPRESSION_MS = 1_500;
 
 const RESIZE_MOUSE_RELEASE_GUARD_MS = 150;
 
+const COLUMN_DRAG_ACTIVATION_PX = 4;
+
 function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION_MS): void {
   document.documentElement.dataset.attnDesktopMouseSuppressUntil = String(
     Date.now() + durationMs,
@@ -78,6 +86,56 @@ function suppressTerminalMouseDuringResize(durationMs = RESIZE_MOUSE_SUPPRESSION
 const EMPTY_SUSPENDED_LEAF_IDS: ReadonlySet<string> = new Set();
 
 const NOTHING_HELD: readonly string[] = [];
+
+const NO_PENDING_WIDTHS: ReadonlyMap<string, number> = new Map();
+
+function beginResizeGesture(
+  container: HTMLElement,
+  dividerElement: HTMLElement,
+  pointerId: number,
+  splitId: string,
+  direction: TerminalSplitDirection,
+): () => void {
+  if (typeof dividerElement.setPointerCapture === 'function') {
+    try {
+      dividerElement.setPointerCapture(pointerId);
+    } catch {}
+  }
+  const resizeToken = `${splitId}:${pointerId}`;
+  suppressTerminalMouseDuringResize();
+  container.dataset.resizingSplitId = splitId;
+  container.dataset.resizingSplitDirection = direction;
+  container.dataset.resizingSplitToken = resizeToken;
+  document.documentElement.dataset.attnDesktopResizing = '1';
+  document.documentElement.dataset.attnDesktopResizeToken = resizeToken;
+  const releaseSelectionLock = lockTextSelection(
+    direction === 'vertical' ? 'col-resize' : 'row-resize',
+  );
+  return () => {
+    if (
+      typeof dividerElement.hasPointerCapture === 'function' &&
+      typeof dividerElement.releasePointerCapture === 'function' &&
+      dividerElement.hasPointerCapture(pointerId)
+    ) {
+      try {
+        dividerElement.releasePointerCapture(pointerId);
+      } catch {}
+    }
+    if (container.dataset.resizingSplitToken === resizeToken) {
+      delete container.dataset.resizingSplitId;
+      delete container.dataset.resizingSplitDirection;
+      delete container.dataset.resizingSplitToken;
+    }
+    if (document.documentElement.dataset.attnDesktopResizeToken === resizeToken) {
+      delete document.documentElement.dataset.attnDesktopResizing;
+      delete document.documentElement.dataset.attnDesktopResizeToken;
+    }
+    // The long during-drag window would outlive the drag and swallow normal
+    // interaction.
+    suppressTerminalMouseDuringResize(RESIZE_MOUSE_RELEASE_GUARD_MS);
+    releaseSelectionLock();
+  };
+}
 
 const EMPTY_DESKTOP_SESSIONS: NonNullable<SessionTerminalDesktopProps['desktopSessions']> =
   [];
@@ -142,6 +200,7 @@ export function useDesktopController(
     onSetNarrowestCols,
     onShelfLimit,
     onMoveRowLeaf,
+    onSetWantedCols,
     zoomActive = false,
     onSetZoomActive,
     onNavigateOutOfSession,
@@ -170,6 +229,7 @@ export function useDesktopController(
   const [pendingRatioOverrides, setPendingRatioOverrides] = useState<Map<string, number>>(
     () => new Map(),
   );
+  const [pendingWantedCols, setPendingWantedCols] = useState(NO_PENDING_WIDTHS);
   const [resizingSplit, setResizingSplit] = useState<{
     splitId: string;
     direction: TerminalSplitDirection;
@@ -196,6 +256,7 @@ export function useDesktopController(
   const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
   const panesContainerRef = useRef<HTMLDivElement | null>(null);
   const draggingSplitRef = useRef<string | null>(null);
+  const columnDragActiveRef = useRef(false);
   const activeAgentPaneIdRef = useRef('');
   const layoutTreeRef = useRef<TerminalLayoutNode | null>(null);
   const activeLeafIdRef = useRef('');
@@ -271,8 +332,9 @@ export function useDesktopController(
       areaPx: rowAreaPx,
       narrowestPx: narrowestWidthPx(shelfNarrowestCols, pxPerCol),
       pxPerCol,
+      pendingWantedCols,
     };
-  }, [attentionActiveLeafId, firstColumn, heldLeafIds, pendingRatioOverrides, pxPerCol, rowAreaPx, shelfNarrowestCols, terminalState.layoutTree]);
+  }, [attentionActiveLeafId, firstColumn, heldLeafIds, pendingRatioOverrides, pendingWantedCols, pxPerCol, rowAreaPx, shelfNarrowestCols, terminalState.layoutTree]);
   const layoutPlan = useMemo(() => {
     if (!terminalState.layoutTree) {
       return null;
@@ -321,9 +383,11 @@ export function useDesktopController(
   const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
   const rowPlan: RowLayoutPlan | null = layoutPlan && 'screen' in layoutPlan ? (layoutPlan as RowLayoutPlan) : null;
   const rowPlanRef = useRef(rowPlan);
+  const rowInputRef = useRef(rowInput);
   useLayoutEffect(() => {
     rowPlanRef.current = rowPlan;
-  }, [rowPlan]);
+    rowInputRef.current = rowInput;
+  }, [rowInput, rowPlan]);
   useRowSettling({
     desktopId,
     rowPlan,
@@ -410,6 +474,18 @@ export function useDesktopController(
         }
       }
       return changed ? next : prev;
+    });
+  }, [terminalState.layoutTree]);
+
+  useEffect(() => {
+    if (!terminalState.layoutTree || columnDragActiveRef.current) return;
+    const row = readRow(terminalState.layoutTree);
+    setPendingWantedCols((pending) => {
+      const unconfirmed = new Map([...pending].filter(([leafId, cols]) => {
+        const column = row.find((candidate) => candidate.leafIds[0] === leafId);
+        return column && (column.wantedCols ?? 0) !== cols;
+      }));
+      return unconfirmed.size === pending.size ? pending : unconfirmed;
     });
   }, [terminalState.layoutTree]);
   const panePaths = useMemo(() => {
@@ -1008,6 +1084,11 @@ export function useDesktopController(
   useShortcut('shelf.carryRight', () => carryActiveColumn(1), shelfMovesActive);
   useShortcut('shelf.sendToShelf', sendActiveToShelf, shelfMovesActive);
 
+  const onShelfLimitRef = useRef(onShelfLimit);
+  useLayoutEffect(() => {
+    onShelfLimitRef.current = onShelfLimit;
+  }, [onShelfLimit]);
+
   const paneFrameStyle = useCallback(
     (bounds: NormalizedPaneBounds) => ({
       left: `${bounds.left * 100}%`,
@@ -1018,8 +1099,77 @@ export function useDesktopController(
     [],
   );
 
-  const { beginLeafDrag, effectiveDraggingLeafId, effectiveDockTarget, effectiveGhostPos } =
+  const reportShelfMove = useCallback((what: string) => (error: unknown) => {
+    onShelfLimit?.(`Could not ${what}: ${error instanceof Error ? error.message : String(error)}`);
+  }, [onShelfLimit]);
+
+  const moveTileToShelf = (leafId: string, target: ShelfDropTarget) => {
+    const input = rowInputRef.current;
+    const plan = rowPlanRef.current;
+    if (!input || !plan) return;
+    if (leafId === activeLeafIdRef.current) {
+      const send = planSendToShelf(input, plan.screen, attentionFocusOrderRef.current);
+      if (send.kind === 'alone') return;
+      focusLeaf(send.nextLeafId);
+    }
+    const shelf = useDesktopShelfStore.getState();
+    shelf.holdLeaf(desktopId, leafId);
+    void onMoveRowLeaf?.({ leafId, anchorId: target.anchorId, edge: target.edge, wholeColumn: false, activate: false })
+      ?.catch((error: unknown) => {
+        useDesktopShelfStore.getState().releaseLeaf(desktopId, leafId);
+        reportShelfMove('move that tile to the shelf')(error);
+      });
+  };
+
+  const reorderChip = (leafId: string, target: ShelfDropTarget) => {
+    void onMoveRowLeaf?.({ leafId, anchorId: target.anchorId, edge: target.edge, wholeColumn: true, activate: false })
+      ?.catch(reportShelfMove('reorder the shelf'));
+  };
+
+  const swapChipIntoSlot = async (chipLeafId: string, slotLeafId: string) => {
+    const tree = layoutTreeRef.current;
+    if (!tree) return;
+    const shelf = useDesktopShelfStore.getState();
+    const swap = planSlotSwap(tree, chipLeafId, slotLeafId);
+    shelf.holdLeaf(desktopId, slotLeafId);
+    try {
+      await onMoveRowLeaf?.({ leafId: chipLeafId, anchorId: slotLeafId, edge: swap.chipEdge, wholeColumn: true, activate: true });
+      if (swap.slotReturn) {
+        await onMoveRowLeaf?.({ leafId: slotLeafId, ...swap.slotReturn, wholeColumn: true, activate: false });
+      }
+    } catch (error) {
+      reportShelfMove('put that tile in the slot')(error);
+    } finally {
+      useDesktopShelfStore.getState().releaseLeaf(desktopId, slotLeafId);
+    }
+  };
+
+  const dropChipOnTile = (leafId: string, target: DockTarget) => {
+    if (target.replacesAnchor) {
+      void swapChipIntoSlot(leafId, target.anchorId);
+      return;
+    }
+    onMoveLeaf?.(leafId, target.anchorId, target.edge, target.ratio, true);
+  };
+
+  const rowDropsRef = useRef({ moveTileToShelf, reorderChip, dropChipOnTile });
+  useLayoutEffect(() => {
+    rowDropsRef.current = { moveTileToShelf, reorderChip, dropChipOnTile };
+  });
+  const rowDragOptions = useMemo(() => (shelfOn
+    ? {
+        desktopId,
+        panesContainer: () => panesContainerRef.current,
+        showing: () => isActiveSessionRef.current,
+        onTileToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.moveTileToShelf(leafId, target),
+        onChipToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.reorderChip(leafId, target),
+        onChipToTile: (leafId: string, target: DockTarget) => rowDropsRef.current.dropChipOnTile(leafId, target),
+      }
+    : undefined), [desktopId, shelfOn]);
+
+  const { beginLeafDrag, beginChipDrag, effectiveDraggingLeafId, effectiveDockTarget, effectiveGhostPos } =
     useDesktopLeafDrag({
+      row: rowDragOptions,
       renderedPaneBounds,
       getActiveLeafDropSnapshot,
       onLeafDragStart,
@@ -1107,22 +1257,9 @@ export function useDesktopController(
       if (!container) {
         return;
       }
-      const dividerElement = event.currentTarget;
-      const pointerId = event.pointerId;
-      if (typeof dividerElement.setPointerCapture === 'function') {
-        try {
-          dividerElement.setPointerCapture(pointerId);
-        } catch {}
-      }
       const rect = container.getBoundingClientRect();
       const { splitId, direction, left, top, right, bottom } = divider;
-      const resizeToken = `${splitId}:${pointerId}`;
-      suppressTerminalMouseDuringResize();
-      container.dataset.resizingSplitId = splitId;
-      container.dataset.resizingSplitDirection = direction;
-      container.dataset.resizingSplitToken = resizeToken;
-      document.documentElement.dataset.attnDesktopResizing = '1';
-      document.documentElement.dataset.attnDesktopResizeToken = resizeToken;
+      const endResizeGesture = beginResizeGesture(container, event.currentTarget, event.pointerId, splitId, direction);
       const spanNorm = direction === 'vertical' ? right - left : bottom - top;
       const axisPx = direction === 'vertical' ? rect.width : rect.height;
       const spanPx = spanNorm * axisPx;
@@ -1159,9 +1296,6 @@ export function useDesktopController(
       };
       draggingSplitRef.current = splitId;
       setResizingSplit({ splitId, direction });
-      const releaseSelectionLock = lockTextSelection(
-        direction === 'vertical' ? 'col-resize' : 'row-resize',
-      );
 
       const grabOffset = divider.grabRatio != null ? divider.grabRatio - divider.ratio : 0;
       const computeRatio = (clientX: number, clientY: number): number => {
@@ -1193,32 +1327,11 @@ export function useDesktopController(
         window.removeEventListener('pointerup', onUp, true);
         window.removeEventListener('pointercancel', onCancel, true);
         window.removeEventListener('blur', onCancel);
-        if (
-          typeof dividerElement.hasPointerCapture === 'function' &&
-          typeof dividerElement.releasePointerCapture === 'function' &&
-          dividerElement.hasPointerCapture(pointerId)
-        ) {
-          try {
-            dividerElement.releasePointerCapture(pointerId);
-          } catch {}
-        }
         if (ratioRafRef.current != null) {
           window.cancelAnimationFrame(ratioRafRef.current);
           ratioRafRef.current = null;
         }
-        if (container.dataset.resizingSplitToken === resizeToken) {
-          delete container.dataset.resizingSplitId;
-          delete container.dataset.resizingSplitDirection;
-          delete container.dataset.resizingSplitToken;
-        }
-        if (document.documentElement.dataset.attnDesktopResizeToken === resizeToken) {
-          delete document.documentElement.dataset.attnDesktopResizing;
-          delete document.documentElement.dataset.attnDesktopResizeToken;
-        }
-        // The long during-drag window would outlive the drag and swallow normal
-        // interaction.
-        suppressTerminalMouseDuringResize(RESIZE_MOUSE_RELEASE_GUARD_MS);
-        releaseSelectionLock();
+        endResizeGesture();
         setResizingSplit((current) => (current?.splitId === splitId ? null : current));
         dragCleanupRef.current = null;
       };
@@ -1255,6 +1368,137 @@ export function useDesktopController(
     [clearRatioOverride, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize, shelfOn],
   );
 
+  const sendWantedCols = useCallback((wanted: ReadonlyMap<string, number>) => {
+    const dropPending = () => setPendingWantedCols((pending) => {
+      const kept = new Map([...pending].filter(([leafId, cols]) => wanted.get(leafId) !== cols));
+      return kept.size === pending.size ? pending : kept;
+    });
+    void Promise.all([...wanted].map(([leafId, cols]) => onSetWantedCols?.(leafId, cols)))
+      .catch(reportShelfMove('save that width'))
+      .finally(dropPending);
+  }, [onSetWantedCols, reportShelfMove]);
+
+  const columnDragCancelRef = useRef<(() => void) | null>(null);
+  useEscapeStack(
+    () => columnDragCancelRef.current?.(),
+    resizingSplit !== null && resizingSplit.direction === 'vertical' && shelfOn,
+  );
+
+  const handleColumnDividerPointerDown = useCallback(
+    (dividerIndex: number, splitId: string, event: React.PointerEvent<HTMLDivElement>) => {
+      const container = panesContainerRef.current;
+      const plan = rowPlanRef.current;
+      const input = rowInputRef.current;
+      if (event.button !== 0 || !container || !plan || !input) return;
+      event.stopPropagation();
+      const dividerElement = event.currentTarget;
+      const { pointerId, clientX: startX } = event;
+      const start = { screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn };
+      const measures = { activeLeafId: input.activeLeafId, narrowestPx: input.narrowestPx, pxPerCol: input.pxPerCol };
+      const pendingAtStart = input.pendingWantedCols ?? NO_PENDING_WIDTHS;
+      let endResizeGesture: (() => void) | null = null;
+
+      const applyAt = (clientX: number) => {
+        const drag = applyColumnDrag(start, dividerIndex, clientX - startX, measures);
+        setPendingWantedCols(new Map([...pendingAtStart, ...drag.wantedCols]));
+        useDesktopShelfStore.getState().setFirstColumn(desktopId, drag.firstColumn);
+        return drag;
+      };
+      const onMove = (ev: PointerEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!endResizeGesture) {
+          if (Math.abs(ev.clientX - startX) < COLUMN_DRAG_ACTIVATION_PX) return;
+          endResizeGesture = beginResizeGesture(container, dividerElement, pointerId, splitId, 'vertical');
+          columnDragActiveRef.current = true;
+          setResizingSplit({ splitId, direction: 'vertical' });
+        }
+        suppressTerminalMouseDuringResize();
+        applyAt(ev.clientX);
+      };
+      const teardown = () => {
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('pointercancel', onCancel, true);
+        window.removeEventListener('blur', onCancel);
+        endResizeGesture?.();
+        columnDragActiveRef.current = false;
+        columnDragCancelRef.current = null;
+        dragCleanupRef.current = null;
+        setResizingSplit((current) => (current?.splitId === splitId ? null : current));
+      };
+      const onCancel = () => {
+        const dragged = endResizeGesture !== null;
+        teardown();
+        if (!dragged) return;
+        setPendingWantedCols(pendingAtStart);
+        useDesktopShelfStore.getState().setFirstColumn(desktopId, start.firstColumn);
+        scheduleTerminalFitAfterResize();
+      };
+      const onUp = (ev: PointerEvent) => {
+        if (!endResizeGesture) {
+          teardown();
+          return;
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+        const drag = applyAt(ev.clientX);
+        teardown();
+        scheduleTerminalFitAfterResize();
+        if (drag.wantedCols.size > 0) sendWantedCols(drag.wantedCols);
+      };
+      columnDragCancelRef.current = onCancel;
+      dragCleanupRef.current = teardown;
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onCancel, true);
+      window.addEventListener('blur', onCancel);
+    },
+    [desktopId, scheduleTerminalFitAfterResize, sendWantedCols],
+  );
+
+  const handleRenderedDividerPointerDown = useCallback(
+    (divider: SplitDivider, event: React.PointerEvent<HTMLDivElement>) => {
+      const dividerIndex = rowPlanRef.current ? columnDividerIndex(rowPlanRef.current.screen, divider.splitId) : -1;
+      if (dividerIndex >= 0) handleColumnDividerPointerDown(dividerIndex, divider.splitId, event);
+      else handleDividerPointerDown(divider, event);
+    },
+    [handleColumnDividerPointerDown, handleDividerPointerDown],
+  );
+
+  const clearWantedCols = useCallback((columns: readonly RowColumn[]) => {
+    const wanted = new Map(columns.filter((column) => column.wantedCols).map((column) => [column.leafIds[0], 0]));
+    if (wanted.size === 0) return false;
+    setPendingWantedCols((pending) => new Map([...pending, ...wanted]));
+    sendWantedCols(wanted);
+    return true;
+  }, [sendWantedCols]);
+
+  const handleColumnDividerDoubleClick = useCallback((divider: SplitDivider) => {
+    const screen = rowPlanRef.current?.screen;
+    const dividerIndex = screen ? columnDividerIndex(screen, divider.splitId) : -1;
+    if (screen && dividerIndex >= 0) clearWantedCols(screen.slice(dividerIndex, dividerIndex + 2));
+  }, [clearWantedCols]);
+
+  const beginChipDragRef = useRef(beginChipDrag);
+  const clearWantedColsRef = useRef(clearWantedCols);
+  useLayoutEffect(() => {
+    beginChipDragRef.current = beginChipDrag;
+    clearWantedColsRef.current = clearWantedCols;
+  });
+  useLayoutEffect(() => {
+    if (!shelfOn) return;
+    const shelf = useDesktopShelfStore.getState();
+    shelf.setRowActions(desktopId, {
+      beginChipDrag: (column, event) => beginChipDragRef.current(column, event),
+      clearDraggedWidths: () => {
+        const input = rowInputRef.current;
+        if (input && !clearWantedColsRef.current(readRow(input.tree))) onShelfLimitRef.current?.('This desktop has no dragged widths.');
+      },
+    });
+    return () => useDesktopShelfStore.getState().setRowActions(desktopId, null);
+  }, [desktopId, shelfOn]);
+
   useEffect(
     () => () => {
       dragCleanupRef.current?.();
@@ -1290,7 +1534,8 @@ export function useDesktopController(
     reviewDeckTiles,
     draggingLeafLabel,
     splitDividers,
-    handleDividerPointerDown,
+    handleRenderedDividerPointerDown,
+    handleColumnDividerDoubleClick,
     desktopDirectory,
     desktopSessions,
     seedTargetSessions,

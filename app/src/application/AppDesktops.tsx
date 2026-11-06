@@ -73,6 +73,7 @@ export function AppDesktops() {
     sendRenameSession,
     sendDesktopMoveLeaf,
     sendDesktopSetSplitRatio,
+    sendDesktopSetWantedCols,
     sendDesktopUpdateTile,
     sendSetSetting,
     desktopTileContents,
@@ -190,6 +191,7 @@ export function AppDesktops() {
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}
           onMoveRowLeaf={(move) => sendDesktopMoveLeaf({ sourceDesktopId: desktop.id, targetDesktopId: desktop.id, ...move })}
+          onSetWantedCols={(leafId, cols) => sendDesktopSetWantedCols(desktop.id, leafId, cols)}
           connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {
@@ -225,7 +227,7 @@ export function AppDesktops() {
               tileSessionId,
             })
           }
-          onMoveLeaf={(leafId, anchorId, edge, ratio) => handleSurfaceLeafDrop(desktop.id, leafId, anchorId, edge, ratio)}
+          onMoveLeaf={(leafId, anchorId, edge, ratio, wholeColumn) => handleSurfaceLeafDrop(desktop.id, leafId, anchorId, edge, ratio, wholeColumn)}
           getActiveLeafDropSnapshot={getActiveLeafDropSnapshot}
           onLeafDragStart={handleLeafDragStart}
           onLeafDragGhostMove={handleLeafDragGhostMove}

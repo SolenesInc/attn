@@ -18,6 +18,7 @@ export const NARROWEST_STEPS = [57, 66, 76, 86, 100, 120, 150] as const;
 export const DEFAULT_NARROWEST_COLS = 66;
 
 const FIT_TOLERANCE_PX = 0.5;
+const COLUMN_WIDTH_UNCHANGED_PX = 0.25;
 const NOTHING_SUSPENDED: ReadonlySet<string> = new Set();
 
 export interface RowColumn {
@@ -39,6 +40,7 @@ export interface RowLayoutInput {
   areaPx: number;
   narrowestPx: number;
   pxPerCol: number;
+  pendingWantedCols?: ReadonlyMap<string, number>;
   view?: DesktopLayoutView;
 }
 
@@ -47,6 +49,7 @@ export interface RowLayoutPlan extends DesktopLayoutPlan {
   before: RowColumn[];
   after: RowColumn[];
   firstColumn: FirstColumn;
+  widths: number[];
 }
 
 export function narrowestWidthPx(cols: number, pxPerCol: number): number {
@@ -59,6 +62,14 @@ export function readRow(tree: TerminalLayoutNode): RowColumn[] {
   }
   const leaves = collectLayoutLeaves(tree);
   return [{ leafIds: leaves.map(leafSlotId), wantedCols: leaves[0]?.wantedCols, node: tree }];
+}
+
+function withPendingWantedCols(row: readonly RowColumn[], pending: ReadonlyMap<string, number> | undefined): RowColumn[] {
+  if (!pending?.size) return [...row];
+  return row.map((column) => {
+    const cols = pending.get(column.leafIds[0]);
+    return cols === undefined ? column : { ...column, wantedCols: cols || undefined };
+  });
 }
 
 export function columnIndexOf(row: readonly RowColumn[], leafId: string): number {
@@ -144,33 +155,127 @@ function screenTree(screen: readonly RowColumn[], widths: readonly number[]): Te
 }
 
 export function resolveRowLayout(input: RowLayoutInput): RowLayoutPlan {
-  const row = readRow(input.tree);
+  const row = withPendingWantedCols(readRow(input.tree), input.pendingWantedCols);
   const shown = shownRow(row, input.heldLeafIds, input.activeLeafId);
   const { start, end } = placeScreen(shown, input);
   const screen = shown.slice(start, end);
   const firstAt = row.indexOf(screen[0]);
+  const widths = columnWidths(screen, input);
   const placed = {
     screen,
     before: row.slice(0, firstAt),
     after: row.slice(firstAt).filter((column) => !screen.includes(column)),
     firstColumn: { leafId: screen[0].leafIds[0], index: start },
+    widths,
     suspendedLeafIds: NOTHING_SUSPENDED,
   };
   const view = input.view ?? { mode: 'normal' };
   if (view.mode === 'focused') {
     return { ...placed, renderedTree: findLeaf(input.tree, view.leafId) ?? input.tree, dividers: [] };
   }
-  const renderedTree = screenTree(screen, columnWidths(screen, input));
+  const renderedTree = screenTree(screen, widths);
   if (view.mode === 'zoomed') {
     return { ...placed, renderedTree: zoomLayoutTowardLeaf(renderedTree, view.leafId), dividers: [] };
   }
-  const columnBoundaries = new Set(screen.map(screenSplitId));
+  return { ...placed, renderedTree, dividers: buildDividers(renderedTree, NOTHING_SUSPENDED) };
+}
+
+export function columnDividerIndex(screen: readonly RowColumn[], splitId: string): number {
+  return screen.slice(0, -1).findIndex((column) => screenSplitId(column) === splitId);
+}
+
+export interface ColumnDragStart {
+  screen: readonly RowColumn[];
+  widths: readonly number[];
+  firstColumn: FirstColumn;
+}
+
+export interface ColumnDragMeasures {
+  activeLeafId: string;
+  narrowestPx: number;
+  pxPerCol: number;
+}
+
+export interface ColumnDrag {
+  wantedCols: ReadonlyMap<string, number>;
+  firstColumn: FirstColumn;
+  stopped: boolean;
+}
+
+export function applyColumnDrag(
+  start: ColumnDragStart,
+  dividerIndex: number,
+  distancePx: number,
+  { activeLeafId, narrowestPx, pxPerCol }: ColumnDragMeasures,
+): ColumnDrag {
+  const widths = [...start.widths];
+  const growsLeft = distancePx > 0;
+  const grower = growsLeft ? dividerIndex : dividerIndex + 1;
+  const left = start.screen.map((_, index) => index).slice(0, dividerIndex + 1).reverse();
+  const right = start.screen.map((_, index) => index).slice(dividerIndex + 1);
+  let givers = growsLeft ? right : left;
+  let amount = Math.abs(distancePx);
+  let stopped = false;
+  let leftCount = 0;
+
+  for (;;) {
+    const spare = givers.reduce((sum, index) => sum + Math.max(0, widths[index] - narrowestPx), 0);
+    if (amount <= spare) break;
+    const far = givers[givers.length - 1];
+    if (start.screen[far].leafIds.includes(activeLeafId)) {
+      amount = spare;
+      stopped = true;
+      break;
+    }
+    const farWidth = widths[far];
+    givers = givers.slice(0, -1);
+    leftCount += 1;
+    if (givers.length === 0) {
+      amount = farWidth;
+      stopped = true;
+      break;
+    }
+    widths[givers[0]] += farWidth;
+  }
+
+  let owed = amount;
+  for (const index of givers) {
+    const taken = Math.min(owed, Math.max(0, widths[index] - narrowestPx));
+    widths[index] -= taken;
+    owed -= taken;
+  }
+  widths[grower] += amount;
+
+  const stays = new Set([grower, ...givers, ...(growsLeft ? left : right)]);
+  const wantedCols = new Map<string, number>();
+  let changedPx = 0;
+  start.screen.forEach((column, index) => {
+    if (stays.has(index) && Math.abs(widths[index] - start.widths[index]) > COLUMN_WIDTH_UNCHANGED_PX) {
+      const colsBefore = Math.floor(changedPx / pxPerCol);
+      changedPx += widths[index];
+      wantedCols.set(column.leafIds[0], Math.floor(changedPx / pxPerCol) - colsBefore);
+    }
+  });
+  const firstColumn = growsLeft || leftCount === 0
+    ? start.firstColumn
+    : { leafId: start.screen[leftCount].leafIds[0], index: start.firstColumn.index + leftCount };
+  return { wantedCols, firstColumn, stopped };
+}
+
+export interface SlotSwap {
+  chipEdge: 'left' | 'right';
+  slotReturn: { anchorId: string; edge: 'left' | 'right' } | null;
+}
+
+export function planSlotSwap(tree: TerminalLayoutNode, chipLeafId: string, slotLeafId: string): SlotSwap {
+  const row = readRow(tree);
+  const chipAt = columnIndexOf(row, chipLeafId);
+  const slotAt = columnIndexOf(row, slotLeafId);
+  const fromLeft = chipAt < slotAt;
+  const neighbourAt = chipAt + (fromLeft ? 1 : -1);
   return {
-    ...placed,
-    renderedTree,
-    dividers: buildDividers(renderedTree, NOTHING_SUSPENDED).filter(
-      (divider) => !columnBoundaries.has(divider.splitId),
-    ),
+    chipEdge: fromLeft ? 'right' : 'left',
+    slotReturn: neighbourAt === slotAt ? null : { anchorId: row[neighbourAt].leafIds[0], edge: fromLeft ? 'left' : 'right' },
   };
 }
 

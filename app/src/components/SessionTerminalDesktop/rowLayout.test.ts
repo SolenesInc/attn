@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, type TerminalLayoutNode } from '../../types/desktop';
 import {
+  applyColumnDrag,
+  columnDividerIndex,
+  planSlotSwap,
   readRow,
   resolveRowLayout,
   stepNarrowestCols,
@@ -113,10 +116,12 @@ describe('resolveRowLayout', () => {
     expect(firsts(resolve([{ id: 'a', wanted: 120 }, 'b', 'c'], { activeLeafId: 'a', areaPx: 1699 }).screen)).toEqual(['a']);
   });
 
-  it('keeps a stack whole and renders its real split with a divider, but none between columns', () => {
+  it('keeps a stack whole and renders its real split with a divider, and one between columns', () => {
     const plan = resolve(['a', { id: 'b', below: 'c' }, 'd'], { activeLeafId: 'c', areaPx: 1000 });
     expect(plan.screen.map((column) => column.leafIds)).toEqual([['a'], ['b', 'c']]);
-    expect(plan.dividers.map((divider) => divider.splitId)).toEqual(['stack-b']);
+    expect(plan.dividers.map((divider) => divider.splitId)).toEqual(['row:a', 'stack-b']);
+    expect(columnDividerIndex(plan.screen, 'row:a')).toBe(0);
+    expect(columnDividerIndex(plan.screen, 'stack-b')).toBe(-1);
     expect(collectLayoutLeaves(plan.renderedTree).map(leafSlotId)).toEqual(['a', 'b', 'c']);
   });
 
@@ -186,6 +191,83 @@ describe('resolveRowLayout', () => {
       }
       expect(broken).toEqual([]);
     }
+  });
+});
+
+describe('applyColumnDrag', () => {
+  const start = (specs: readonly Spec[], activeLeafId: string, areaPx = 1800) => {
+    const plan = resolve(specs, { activeLeafId, areaPx });
+    return { start: { screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn }, activeLeafId };
+  };
+  const drag = (specs: readonly Spec[], activeLeafId: string, divider: number, distance: number) => {
+    const from = start(specs, activeLeafId);
+    return applyColumnDrag(from.start, divider, distance, { activeLeafId, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL });
+  };
+  const wanted = (result: { wantedCols: ReadonlyMap<string, number> }) => Object.fromEntries(result.wantedCols);
+
+  it.each<[string, Spec[], string, number, number, Record<string, number>, string, boolean]>([
+    ['takes room from the neighbour on a right drag', ['a', 'b', 'c'], 'a', 0, 50, { a: 65, b: 55 }, 'a', false],
+    ['takes room from the neighbour on a left drag', ['a', 'b', 'c'], 'a', 1, -50, { c: 65, b: 55 }, 'a', false],
+    ['then from the next neighbour', ['a', 'b', 'c'], 'a', 0, 150, { a: 75, b: 50, c: 55 }, 'a', false],
+    ['the far column leaves past the narrowest, and its room goes to the next one', ['a', 'b', 'c'], 'a', 0, 250, { a: 85, b: 95 }, 'a', false],
+    ['stops at the narrowest instead of shelving the active column', ['a', 'b', 'c'], 'c', 0, 1000, { a: 80, b: 50, c: 50 }, 'a', true],
+    ['stops when the active column is the neighbour', ['a', 'b', 'c'], 'b', 0, 1000, { a: 130, b: 50 }, 'a', true],
+    ['grows the active column until nothing is left to give', ['a', 'b'], 'a', 0, 5000, { a: 180 }, 'a', true],
+    ['a left drag moves the first column when the far left column leaves', ['a', 'b', 'c'], 'c', 1, -250, { b: 95, c: 85 }, 'b', false],
+    ['never shelves the active column on a left drag', ['a', 'b', 'c'], 'a', 1, -1000, { c: 80, b: 50, a: 50 }, 'a', true],
+  ])('%s', (_name, specs, activeLeafId, divider, distance, expected, first, stopped) => {
+    const result = drag(specs, activeLeafId, divider, distance);
+    expect(wanted(result)).toEqual(expected);
+    expect(result.firstColumn.leafId).toBe(first);
+    expect(result.stopped).toBe(stopped);
+  });
+
+  it('dragging back to the start restores everything, whatever the path', () => {
+    const specs: Spec[] = ['a', { id: 'b', wanted: 70 }, 'c'];
+    const from = start(specs, 'b');
+    const measures = { activeLeafId: 'b', narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+    for (const distance of [40, 400, -400, 5000]) applyColumnDrag(from.start, 0, distance, measures);
+    const back = applyColumnDrag(from.start, 0, 0, measures);
+    expect(back.wantedCols.size).toBe(0);
+    expect(back.firstColumn).toEqual(from.start.firstColumn);
+    expect(back.stopped).toBe(false);
+  });
+
+  it('holds its promises over generated rows through the real layout', () => {
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const random = seeded(seed);
+      const specs: Spec[] = Array.from({ length: 2 + random(6) }, (_, index) => ({ id: `t${index}`, wanted: random(4) === 0 ? 50 + random(40) : undefined }));
+      const tree = rightChain(specs);
+      const ids = specs.map((spec) => (spec as { id: string }).id);
+      const activeLeafId = ids[random(ids.length)];
+      const input = { tree, activeLeafId, firstColumn: null, areaPx: 1000 + random(1600), narrowestPx: NARROWEST, pxPerCol: PX_PER_COL };
+      const plan = resolveRowLayout(input);
+      if (plan.screen.length < 2) continue;
+      const divider = random(plan.screen.length - 1);
+      const distance = random(1200) - 600;
+      const result = applyColumnDrag(
+        { screen: plan.screen, widths: plan.widths, firstColumn: plan.firstColumn },
+        divider,
+        distance,
+        { activeLeafId, narrowestPx: NARROWEST, pxPerCol: PX_PER_COL },
+      );
+      const dragged = resolveRowLayout({ ...input, firstColumn: result.firstColumn, pendingWantedCols: result.wantedCols });
+      expect(dragged.screen.flatMap((column) => column.leafIds)).toContain(activeLeafId);
+      for (const width of dragged.widths) expect(width).toBeGreaterThanOrEqual(NARROWEST - 0.001);
+      expect(dragged.widths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(input.areaPx);
+      for (const cols of result.wantedCols.values()) expect(cols * PX_PER_COL).toBeGreaterThanOrEqual(NARROWEST - PX_PER_COL);
+    }
+  });
+});
+
+describe('planSlotSwap', () => {
+  it.each<[string, string, string, ReturnType<typeof planSlotSwap>]>([
+    ['chip right of the slot', 'd', 'b', { chipEdge: 'left', slotReturn: { anchorId: 'c', edge: 'right' } }],
+    ['chip left of the slot', 'a', 'c', { chipEdge: 'right', slotReturn: { anchorId: 'b', edge: 'left' } }],
+    ['chip next to the slot on the right', 'c', 'b', { chipEdge: 'left', slotReturn: null }],
+    ['chip next to the slot on the left', 'b', 'c', { chipEdge: 'right', slotReturn: null }],
+  ])('%s', (_name, chip, slot, swap) => {
+    expect(planSlotSwap(rightChain(['a', 'b', 'c', 'd']), chip, slot)).toEqual(swap);
   });
 });
 

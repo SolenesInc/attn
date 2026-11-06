@@ -75,6 +75,7 @@ interface DesktopLayoutRendererProps {
   containerRef?: RefObject<HTMLDivElement | null>;
   dividers?: SplitDivider[];
   onDividerPointerDown?: (divider: SplitDivider, event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDividerDoubleClick?: (divider: SplitDivider) => void;
   // Rendered last inside the panes container (e.g. a drag-to-dock highlight).
   overlay?: ReactNode;
 }
@@ -86,6 +87,7 @@ export function DesktopLayoutRenderer({
   containerRef,
   dividers = [],
   onDividerPointerDown,
+  onDividerDoubleClick,
   overlay,
 }: DesktopLayoutRendererProps) {
   return (
@@ -104,6 +106,7 @@ export function DesktopLayoutRenderer({
           role="separator"
           aria-orientation={divider.direction === 'vertical' ? 'vertical' : 'horizontal'}
           onPointerDown={(event) => onDividerPointerDown(divider, event)}
+          onDoubleClick={onDividerDoubleClick && (() => onDividerDoubleClick(divider))}
         />
       ))}
       {overlay}

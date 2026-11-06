@@ -58,6 +58,8 @@ repository root.
   raw coordinates, so a scenario never measures geometry or waits for an
   animation before acting. `get_pane_cell_rect` returns a terminal cell's
   `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
+  `holdDrag` presses and drags with the button still down, returns `dragTo` and
+  `release`, and lets a scenario press keys or read the screen mid-drag;
   Quick Capture targets add `webview: 'capture'`, and its driver takes
   `systemInput: true` to keep system-level input.
 - Native input waits for delivery. `click`, `rightClick`, `drag`, `hover`,

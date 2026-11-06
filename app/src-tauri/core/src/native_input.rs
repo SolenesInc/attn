@@ -55,6 +55,17 @@ pub enum MouseGesture {
         to: (f64, f64),
         steps: usize,
     },
+    Press {
+        at: (f64, f64),
+    },
+    DragTo {
+        from: (f64, f64),
+        to: (f64, f64),
+        steps: usize,
+    },
+    Release {
+        at: (f64, f64),
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -313,7 +324,10 @@ pub fn parse_mouse(payload: &Value) -> Result<MouseRequest, String> {
     let action = payload
         .get("action")
         .and_then(Value::as_str)
-        .ok_or_else(|| "action must be one of click, right_click, move, drag".to_string())?;
+        .ok_or_else(|| {
+            "action must be one of click, right_click, move, drag, press, drag_to, release"
+                .to_string()
+        })?;
     let gesture = match action {
         "move" => MouseGesture::Move {
             to: relative_point(payload, "x", "y")?,
@@ -341,9 +355,25 @@ pub fn parse_mouse(payload: &Value) -> Result<MouseRequest, String> {
                 .unwrap_or(12)
                 .max(2),
         },
+        "press" => MouseGesture::Press {
+            at: relative_point(payload, "x", "y")?,
+        },
+        "drag_to" => MouseGesture::DragTo {
+            from: relative_point(payload, "x", "y")?,
+            to: relative_point(payload, "toX", "toY")?,
+            steps: payload
+                .get("steps")
+                .and_then(Value::as_u64)
+                .map(|steps| steps as usize)
+                .unwrap_or(12)
+                .max(2),
+        },
+        "release" => MouseGesture::Release {
+            at: relative_point(payload, "x", "y")?,
+        },
         other => {
             return Err(format!(
-                "unknown mouse action {other:?}; use click, right_click, move or drag"
+                "unknown mouse action {other:?}; use click, right_click, move, drag, press, drag_to or release"
             ))
         }
     };
@@ -960,6 +990,31 @@ mod platform {
                 }
                 one(app, label, NSEventType::LeftMouseUp, to, from, modifiers, 1)?;
                 delivered += steps + 3;
+            }
+            MouseGesture::Press { at } => {
+                one(app, label, NSEventType::MouseMoved, at, at, modifiers, 0)?;
+                one(app, label, NSEventType::LeftMouseDown, at, at, modifiers, 1)?;
+                delivered += 2;
+            }
+            MouseGesture::DragTo { from, to, steps } => {
+                for step in 1..=steps {
+                    let t = step as f64 / steps as f64;
+                    let point = (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
+                    one(
+                        app,
+                        label,
+                        NSEventType::LeftMouseDragged,
+                        point,
+                        from,
+                        modifiers,
+                        1,
+                    )?;
+                }
+                delivered += steps;
+            }
+            MouseGesture::Release { at } => {
+                one(app, label, NSEventType::LeftMouseUp, at, at, modifiers, 1)?;
+                delivered += 1;
             }
         }
         Ok(serde_json::json!({ "delivered": delivered }))

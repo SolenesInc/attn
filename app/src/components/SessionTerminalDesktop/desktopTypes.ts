@@ -122,15 +122,16 @@ export interface SessionTerminalDesktopProps {
   onSetNarrowestCols?: (cols: number) => void;
   onShelfLimit?: (message: string) => void;
   onMoveRowLeaf?: (move: { leafId: string; anchorId: string; edge: 'left' | 'right'; wholeColumn: boolean; activate: boolean }) => Promise<unknown>;
+  onSetWantedCols?: (leafId: string, cols: number) => Promise<unknown>;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;
   onResizeSplit?: (splitId: string, ratio: number) => Promise<unknown> | void;
   // anchorId '' docks against the whole desktop; ratio is the moved leaf's
   // fraction of the new split.
-  onMoveLeaf?: (leafId: string, anchorId: string, edge: TerminalDockEdge, ratio: number) => void;
+  onMoveLeaf?: (leafId: string, anchorId: string, edge: TerminalDockEdge, ratio: number, wholeColumn?: boolean) => void;
   getActiveLeafDropSnapshot?: () => LeafDropSnapshot | null;
-  onLeafDragStart?: (leafId: string) => void;
+  onLeafDragStart?: (leafId: string, wholeColumn: boolean) => void;
   onLeafDragGhostMove?: (clientX: number, clientY: number) => void;
   onLeafDragPreview?: (target: DockTarget | null) => void;
   onLeafDragEnd?: () => void;

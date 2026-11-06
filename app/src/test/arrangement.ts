@@ -12,6 +12,7 @@ interface Node {
   split_id?: string;
   direction?: string;
   ratio?: number;
+  wanted_cols?: number;
   children?: Node[];
 }
 
@@ -220,6 +221,22 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     arrangement.desktops = [...arrangement.desktops, created];
     const [changed, result] = accepted(command, arrangement);
     return [changed, { ...(result as object), desktops: [created] } as Reply];
+  });
+  daemon.on('desktop_set_wanted_cols', (command) => {
+    const desktop = arrangement.desktop(command.desktop_id);
+    const tree = desktop && parse(desktop);
+    const column = tree && rowColumns(tree).find((candidate) => leafIds(candidate).includes(command.leaf_id));
+    if (!desktop || !tree || !column) return refused(command, 'not_found', `leaf ${command.leaf_id} does not belong to desktop ${command.desktop_id}`);
+    const first = leafIds(column)[0];
+    const withCols = (node: Node): Node => {
+      if (leafId(node) === first) {
+        const { wanted_cols: _previous, ...rest } = node;
+        return command.cols ? { ...rest, wanted_cols: command.cols } : rest;
+      }
+      return node.children ? { ...node, children: node.children.map(withCols) } : node;
+    };
+    arrangement.replace(arrangement.withTree(desktop, withCols(tree)));
+    return accepted(command, arrangement);
   });
   // Like the daemon, a leaf whose id the target already holds lands under a new id.
   daemon.on('desktop_move_leaf', (command) => {

@@ -206,6 +206,8 @@ export class MacOSDriver extends TargetedWindowDriver {
     if (action === 'move') return this.#move(point.x, point.y, opts);
     if (action === 'click' || action === 'right_click') return this.#click(action, point.x, point.y, opts);
     if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
+    if (action === 'press' || action === 'release') return this.#inApp('native_mouse', { action, x: point.x, y: point.y }, opts);
+    if (action === 'drag_to') return this.#inApp('native_mouse', { action, x: point.x, y: point.y, toX: to.x, toY: to.y, ...(opts.steps !== undefined ? { steps: opts.steps } : {}) }, opts);
     throw new Error(`MacOSDriver has no pointer action ${action}`);
   }
 
@@ -231,6 +233,7 @@ export class MacOSDriver extends TargetedWindowDriver {
         x: relativeX,
         y: relativeY,
         modifiers: modifierNames(opts.modifiers),
+        ...(opts.clickCount ? { clickCount: opts.clickCount } : {}),
       }, opts);
     } else {
       const args = [

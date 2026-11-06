@@ -4159,6 +4159,12 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopSetWantedCols = useCallback(
+    (desktopId: string, leafId: string, cols: number) =>
+      sendProfileCommand('desktop_set_wanted_cols', { desktop_id: desktopId, leaf_id: leafId, cols }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopSetSplitRatio = useCallback(
     (desktopId: string, splitId: string, ratio: number) =>
       sendProfileCommand('desktop_set_split_ratio', {
@@ -4260,6 +4266,7 @@ export function useDaemonSocket({
     sendDesktopRemoveLeaf,
     sendDesktopCloseTile,
     sendDesktopSetSplitRatio,
+    sendDesktopSetWantedCols,
     sendMigrationGet,
     sendLaunchDesktopGet,
     sendLaunchDesktopSet,
