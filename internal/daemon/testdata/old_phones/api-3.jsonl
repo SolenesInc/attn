@@ -1,0 +1,11 @@
+{"phone":{"cmd":"hello","api":3,"device_id":"phone"}}
+{"home":{"api":3,"event":"welcome","home_name":"text","profile":{"id":"text","name":"text"}}}
+{"home":{"event":"sessions","sessions":[{"agent":"text","id":"text","offline":false,"state":"text","terminal_id":"$terminal","title":"text"},{"agent":"text","id":"$session","offline":false,"state":"text","terminal_id":"text","title":"text"}]}}
+{"home":{"ask":{"created_at":"text","id":"$ask","parts":[{"markdown":"text"},{"question":{"choices":[{"description":"text","label":"text"}],"key":"text","kind":"text","prompt":"text","recommended":"text"}}],"session_id":"$session","subject":"text"},"event":"ask"}}
+{"home":{"event":"asks","ids":["$ask"]}}
+{"phone":{"cmd":"ping"}}
+{"home":{"event":"pong"}}
+{"phone":{"cmd":"ask_image","ask_id":"$ask","src":"missing.png","offset":0,"request_id":"image"}}
+{"home":{"event":"ask_image_error","message":"text","request_id":"image"}}
+{"phone":{"cmd":"ask_answer","ask_id":"$ask","answers":[{"key":"q1","picked":["Postgres"]}],"note":"from the phone","request_id":"answer"}}
+{"home":{"ask_id":"$ask","event":"ask_answer_result","request_id":"answer"}}

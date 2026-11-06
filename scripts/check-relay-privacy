@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# attn owns the relay contract and knows a relay only by its URL. The wire's signed strings start with attn-cloud/v1, which stays.
+refused='attn-cloud|durable object|workerd([^a-z]|$)|miniflare|cloudflare'
+found="$(git grep -nIiE "$refused" -- ':!scripts/check-relay-privacy' ':!scripts/check-relay-privacy_test.sh' \
+  | sed 's#attn-cloud/v1##g' | grep -iE "$refused" || true)"
+if [ -n "$found" ]; then
+  echo "check-relay-privacy: attn must not name a relay's repository or how a relay is built:" >&2
+  echo "$found" >&2
+  echo "Point at docs/internal/relay-contract.md, or drive a relay by its URL (ATTN_RELAY_URL, ATTN_CLOUD_URL)." >&2
+  exit 1
+fi

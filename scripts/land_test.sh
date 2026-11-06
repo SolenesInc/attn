@@ -85,6 +85,7 @@ printf 'package removed\n' >internal/removed/removed.go
 printf 'module example.invalid/landing\n' >go.mod
 printf 'baseline\n' >README.md
 cp "$root/scripts/landing-tests" scripts/landing-tests
+cp "$root/scripts/check-relay-privacy" scripts/check-relay-privacy
 cp "$root/go-cgo-cflags" go-cgo-cflags
 cat >scripts/landing-tests.sh <<'EOF'
 #!/usr/bin/env bash
@@ -196,7 +197,7 @@ expect_checks 'check-types' sync
 
 printf 'gateway\n' >internal/protocol/schema/gateway.tsp
 land 'Gateway API change'
-expect_checks 'check-types check-gateway-compat' sync
+expect_checks 'check-types check-gateway-compat' 'land --group old-phones' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh

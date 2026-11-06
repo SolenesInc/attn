@@ -121,6 +121,7 @@ func phonePushWorld(t *testing.T, queue, quiet bool) (*world, *testworld.Peer, *
 		t.Fatal(err)
 	}
 	socket.Hello()
+	socket.RegisterForPush()
 	registerSessions(t, w, cli, "reviewer")
 	return w, app, cli, &pushedPhone{t: t, cloud: cloud, phone: phone}
 }

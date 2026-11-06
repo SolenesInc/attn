@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,8 +111,8 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 	})
 
 	t.Run("refuses a second use of the pairing secret", func(t *testing.T) {
-		if _, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr); !errors.Is(err, testworld.RefusedStatus(http.StatusForbidden)) {
-			t.Fatalf("dial with the window closed = %v, want the relay's 403", err)
+		if _, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
+			t.Fatalf("dial with the window closed = %v, want the relay's 4403", err)
 		}
 		beginPairing(t, app, profile, "pair-2")
 		second, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr)

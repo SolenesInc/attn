@@ -15,7 +15,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// The Attn Cloud wire contract: docs/protocol.md in SolenesInc/attn-cloud.
+// The wire contract: docs/internal/relay-contract.md.
 
 const envelopeVersion = 1
 

@@ -365,6 +365,8 @@ entry names:
 - Terminal input that stops working =>
   docs/internal/diagnosing-terminal-input.md
 - Shared Rust PTY host => docs/internal/pty-host-verification.md
+- The Cloud Relay's wire contract or its conformance suite =>
+  docs/internal/relay-contract.md
 - The analytics ingest service (`cmd/attn-ingest`) =>
   docs/internal/attn-ingest.md
 - What analytics records and sends, or the upload =>

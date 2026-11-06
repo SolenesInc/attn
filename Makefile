@@ -476,6 +476,10 @@ check-types: generate-types
 check-gateway-compat:
 	scripts/check-gateway-compat
 
+.PHONY: check-relay-privacy
+check-relay-privacy:
+	scripts/check-relay-privacy
+
 MIGRATION_BASE ?= origin/main
 
 check-migrations:

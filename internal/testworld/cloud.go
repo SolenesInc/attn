@@ -8,8 +8,10 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -25,7 +27,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Attn Cloud, as docs/protocol.md in SolenesInc/attn-cloud specifies it.
+// A stand-in Cloud Relay, as docs/internal/relay-contract.md specifies it; internal/cloudlink/relaytest holds it to that.
 
 const (
 	frameChallenge = 1
@@ -38,6 +40,10 @@ const (
 	framePresence  = 8
 	frameError     = 9
 	framePush      = 10
+
+	notAdmittedReason = "device is not on the home's allowlist and no pairing window is open"
+	maxAllowlist      = 1000
+	maxNewHomes       = 100
 )
 
 type Cloud struct {
@@ -73,7 +79,7 @@ func StartCloud(t *testing.T) *Cloud {
 	return &Cloud{t: t, URL: relay, HomeURL: "http://" + proxy.addr, proxy: proxy, relay: fake}
 }
 
-// Pushes yields the push frames the relay accepted, in order. A real Cloud hands them to APNs instead, so a test
+// Pushes yields the push frames the relay accepted, in order. A push needs a registered token: see PhoneSocket.RegisterForPush. A real Cloud hands them to APNs instead, so a test
 // that reads them skips under ATTN_TEST_CLOUD_URL.
 func (c *Cloud) Pushes() <-chan Push {
 	if c.relay == nil {
@@ -222,12 +228,14 @@ type fakeRelay struct {
 }
 
 type fakeHome struct {
-	signPub   ed25519.PublicKey
-	home      *websocket.Conn
-	devices   map[uint32]*fakeDevice
-	allowed   []string
-	openUntil int64
-	nextConn  uint32
+	signPub     ed25519.PublicKey
+	home        *websocket.Conn
+	devices     map[uint32]*fakeDevice
+	allowed     []string
+	openUntil   int64
+	nextConn    uint32
+	tokens      map[string]bool
+	listApplied chan struct{}
 }
 
 type fakeDevice struct {
@@ -241,9 +249,14 @@ func newFakeRelay() *fakeRelay {
 
 func (r *fakeRelay) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/homes", r.register)
-	mux.HandleFunc("GET /v1/homes/{id}/home", r.serveHome)
-	mux.HandleFunc("GET /v1/homes/{id}/device", r.serveDevice)
+	mux.HandleFunc("/v1/version", r.version)
+	mux.HandleFunc("/v1/homes", r.register)
+	mux.HandleFunc("/v1/homes/{id}/home", r.serveHome)
+	mux.HandleFunc("/v1/homes/{id}/device", r.serveDevice)
+	mux.HandleFunc("/v1/homes/{id}/push-token", r.registerPushToken)
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		cloudRefusal(w, 404, "not_found", "no route for "+req.Method+" "+req.URL.Path)
+	})
 	return mux
 }
 
@@ -253,26 +266,56 @@ func cloudRefusal(w http.ResponseWriter, status int, code, message string) {
 	json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"code": code, "message": message}})
 }
 
+func decodeKey(text string) (ed25519.PublicKey, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(text)
+	return raw, err == nil && len(raw) == ed25519.PublicKeySize
+}
+
+func (r *fakeRelay) version(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		cloudRefusal(w, 405, "method_not_allowed", "use GET /v1/version")
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]any{"commit": "stand-in", "envelope_version": 1})
+}
+
 func (r *fakeRelay) register(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		cloudRefusal(w, 405, "method_not_allowed", "use POST /v1/homes")
+		return
+	}
 	var body struct {
 		HomeSignPub string `json:"home_sign_pub"`
 		Name        string `json:"name"`
 		Sig         string `json:"sig"`
 	}
 	if json.NewDecoder(req.Body).Decode(&body) != nil {
-		cloudRefusal(w, 400, "bad_request", "body")
+		cloudRefusal(w, 400, "bad_request", "body must be JSON: {home_sign_pub, name, sig}")
 		return
 	}
-	pub, err1 := base64.RawURLEncoding.DecodeString(body.HomeSignPub)
-	sig, err2 := base64.RawURLEncoding.DecodeString(body.Sig)
-	if err1 != nil || err2 != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, []byte("attn-cloud/v1 register\n"+body.HomeSignPub+"\n"+body.Name), sig) {
+	pub, ok := decodeKey(body.HomeSignPub)
+	if !ok {
+		cloudRefusal(w, 400, "bad_request", "home_sign_pub must be a 32-byte Ed25519 key, base64url")
+		return
+	}
+	if length := len([]rune(body.Name)); length < 1 || length > 100 {
+		cloudRefusal(w, 400, "bad_request", fmt.Sprintf("name must be 1 to 100 characters; got %d", length))
+		return
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(body.Sig)
+	if err != nil || !ed25519.Verify(pub, []byte("attn-cloud/v1 register\n"+body.HomeSignPub+"\n"+body.Name), sig) {
 		cloudRefusal(w, 401, "bad_signature", "registration signature does not verify")
 		return
 	}
 	id := keyID(pub)
 	r.mu.Lock()
+	if r.homes[id] == nil && len(r.homes) >= maxNewHomes {
+		r.mu.Unlock()
+		cloudRefusal(w, 429, "registration_limited", fmt.Sprintf("%d new relays today, the limit is %d; try after 00:00 UTC", len(r.homes), maxNewHomes))
+		return
+	}
 	if r.homes[id] == nil {
-		r.homes[id] = &fakeHome{signPub: pub, devices: map[uint32]*fakeDevice{}}
+		r.homes[id] = &fakeHome{signPub: pub, devices: map[uint32]*fakeDevice{}, tokens: map[string]bool{}, listApplied: make(chan struct{})}
 	}
 	r.mu.Unlock()
 	json.NewEncoder(w).Encode(map[string]string{"home_id": id})
@@ -302,24 +345,33 @@ func authenticate(ctx context.Context, conn *websocket.Conn, prefix string, pub 
 	return true
 }
 
+func isUpgrade(req *http.Request) bool {
+	return strings.EqualFold(req.Header.Get("Upgrade"), "websocket")
+}
+
 func (r *fakeRelay) serveHome(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	h := r.lookup(id)
 	if h == nil {
-		cloudRefusal(w, 404, "unknown_home", "no home is registered under "+id)
+		cloudRefusal(w, 404, "unknown_home", "home "+id+" is not registered")
+		return
+	}
+	if !isUpgrade(req) {
+		cloudRefusal(w, 426, "upgrade_required", req.URL.Path+" is a WebSocket endpoint")
 		return
 	}
 	conn, err := websocket.Accept(w, req, nil)
 	if err != nil {
 		return
 	}
+	conn.SetReadLimit(-1)
 	ctx := req.Context()
 	if !authenticate(ctx, conn, "attn-cloud/v1 auth home\n"+id+"\n", h.signPub) {
 		return
 	}
 	r.mu.Lock()
 	if h.home != nil {
-		h.home.Close(4409, "replaced")
+		closeWithoutWaiting(h.home, 4409, "replaced by a newer home connection")
 	}
 	h.home = conn
 	conn.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameReady, 0, nil))
@@ -344,18 +396,46 @@ func (r *fakeRelay) serveHome(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if kind == websocket.MessageText {
-			if string(data) == "ping" {
-				conn.Write(ctx, websocket.MessageText, []byte("pong"))
-			}
+			respondToText(ctx, conn, data)
 			continue
 		}
-		f, err := decodeEnvelope(data)
-		if err != nil {
-			conn.Close(4400, "malformed frame")
+		f, ok := readEnvelope(conn, data)
+		if !ok {
 			return
 		}
 		r.fromHome(ctx, h, f)
 	}
+}
+
+// closeWithoutWaiting closes a socket whose peer may not read for a while, because Close waits for the peer's answer and the relay's lock must not.
+func closeWithoutWaiting(conn *websocket.Conn, code websocket.StatusCode, reason string) {
+	go conn.Close(code, reason)
+}
+
+func respondToText(ctx context.Context, conn *websocket.Conn, data []byte) {
+	if string(data) == "ping" {
+		conn.Write(ctx, websocket.MessageText, []byte("pong"))
+		return
+	}
+	writeRelayError(ctx, conn, "text_frame", `text frames carry only "ping"; send binary frames`)
+}
+
+func readEnvelope(conn *websocket.Conn, data []byte) (envelope, bool) {
+	if len(data) >= 1 && data[0] != 1 {
+		conn.Close(4400, fmt.Sprintf("envelope version %d unsupported; relay speaks 1", data[0]))
+		return envelope{}, false
+	}
+	f, err := decodeEnvelope(data)
+	if err != nil {
+		conn.Close(4400, "frame shorter than the 6-byte header")
+		return envelope{}, false
+	}
+	return f, true
+}
+
+func writeRelayError(ctx context.Context, conn *websocket.Conn, code, message string) {
+	body, _ := json.Marshal(map[string]string{"code": code, "message": message})
+	conn.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, body))
 }
 
 func mustUnb64(s string) []byte {
@@ -376,36 +456,155 @@ func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 	case frameClose:
 		if dev := h.devices[f.connID]; dev != nil {
 			delete(h.devices, f.connID)
-			dev.conn.Close(4000, "the home closed this connection")
+			closeWithoutWaiting(dev.conn, 4000, "closed by home")
 		}
 	case frameAllowlist:
-		var list struct {
-			Devices          []string `json:"devices"`
-			PairingOpenUntil int64    `json:"pairing_open_until"`
-		}
-		if json.Unmarshal(f.payload, &list) != nil {
-			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, []byte(`{"code":"bad_allowlist","message":"malformed"}`)))
-			return
-		}
-		h.allowed, h.openUntil = list.Devices, list.PairingOpenUntil
-		for connID, dev := range h.devices {
-			if !h.admitsLocked(dev.signPub) {
-				delete(h.devices, connID)
-				dev.conn.Close(4403, "the device is no longer on the allowlist")
-			}
-		}
-		h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameAllowlist, 0, nil))
+		r.applyAllowlist(ctx, h, f.payload)
 	case framePush:
-		var push Push
-		if json.Unmarshal(f.payload, &push) != nil || push.Ciphertext == "" || push.CollapseID == "" {
-			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, []byte(`{"code":"bad_push","message":"malformed"}`)))
+		r.pushFromHome(ctx, h, f.payload)
+	default:
+		writeRelayError(ctx, h.home, "unsupported_type", fmt.Sprintf("the relay takes no frame type %d from a home", f.kind))
+	}
+}
+
+func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []byte) {
+	var list struct {
+		Devices          *[]string `json:"devices"`
+		PairingOpenUntil *int64    `json:"pairing_open_until"`
+	}
+	if json.Unmarshal(payload, &list) != nil || list.Devices == nil || list.PairingOpenUntil == nil {
+		writeRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairing_open_until}")
+		return
+	}
+	if count := len(*list.Devices); count > maxAllowlist {
+		writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d devices; the limit is %d", count, maxAllowlist))
+		return
+	}
+	for _, device := range *list.Devices {
+		if _, ok := decodeKey(device); !ok {
+			writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("%q is not a 32-byte key in base64url", device))
 			return
 		}
-		if !slices.Contains(h.allowed, push.Device) {
-			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, []byte(`{"code":"push_refused","message":"device is not on the allowlist"}`)))
-			return
+	}
+	h.allowed, h.openUntil = *list.Devices, *list.PairingOpenUntil
+	for device := range h.tokens {
+		if !slices.Contains(h.allowed, device) {
+			delete(h.tokens, device)
 		}
-		r.pushes <- push
+	}
+	for connID, dev := range h.devices {
+		if !h.admitsLocked(dev.signPub) {
+			delete(h.devices, connID)
+			closeWithoutWaiting(dev.conn, 4403, notAdmittedReason)
+			h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameClose, connID, nil))
+		}
+	}
+	close(h.listApplied)
+	h.listApplied = make(chan struct{})
+	h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameAllowlist, 0, nil))
+}
+
+func (r *fakeRelay) pushFromHome(ctx context.Context, h *fakeHome, payload []byte) {
+	var push Push
+	if json.Unmarshal(payload, &push) != nil {
+		writeRelayError(ctx, h.home, "bad_push", "push payload must be JSON: {device, ciphertext, collapse_id}")
+		return
+	}
+	if _, err := base64.RawURLEncoding.DecodeString(push.Ciphertext); err != nil || push.Ciphertext == "" {
+		writeRelayError(ctx, h.home, "bad_push", "ciphertext must be non-empty base64url")
+		return
+	}
+	if length := len(push.CollapseID); length < 1 || length > 64 {
+		writeRelayError(ctx, h.home, "bad_push", fmt.Sprintf("collapse_id must be 1 to 64 bytes; got %d", length))
+		return
+	}
+	if !slices.Contains(h.allowed, push.Device) {
+		writeRelayError(ctx, h.home, "push_refused", "device "+push.Device+" is not on the home's allowlist")
+		return
+	}
+	if !h.tokens[push.Device] {
+		writeRelayError(ctx, h.home, "push_no_token", "device "+push.Device+" has not registered a push token")
+		return
+	}
+	r.pushes <- push
+}
+
+func (r *fakeRelay) registerPushToken(w http.ResponseWriter, req *http.Request) {
+	id := req.PathValue("id")
+	if req.Method != http.MethodPost {
+		cloudRefusal(w, 405, "method_not_allowed", "use POST /v1/homes/"+id+"/push-token")
+		return
+	}
+	var body struct {
+		DeviceSignPub string `json:"device_sign_pub"`
+		Platform      string `json:"platform"`
+		Environment   string `json:"environment"`
+		Token         string `json:"token"`
+		Sig           string `json:"sig"`
+	}
+	if json.NewDecoder(req.Body).Decode(&body) != nil {
+		cloudRefusal(w, 400, "bad_request", "body must be JSON: {device_sign_pub, platform, environment, token, sig}")
+		return
+	}
+	pub, ok := decodeKey(body.DeviceSignPub)
+	if !ok {
+		cloudRefusal(w, 400, "bad_request", "device_sign_pub must be a 32-byte Ed25519 key, base64url")
+		return
+	}
+	if body.Platform != "apns" {
+		cloudRefusal(w, 400, "bad_request", fmt.Sprintf("platform must be \"apns\"; got %q", body.Platform))
+		return
+	}
+	if body.Environment != "sandbox" && body.Environment != "production" {
+		cloudRefusal(w, 400, "bad_request", fmt.Sprintf("environment must be sandbox or production; got %q", body.Environment))
+		return
+	}
+	token, err := hex.DecodeString(body.Token)
+	if err != nil || body.Token != strings.ToLower(body.Token) {
+		cloudRefusal(w, 400, "bad_request", "token must be lowercase hex with an even number of digits")
+		return
+	}
+	if len(token) < 16 || len(token) > 200 {
+		cloudRefusal(w, 400, "bad_request", fmt.Sprintf("token must be 16 to 200 bytes; got %d", len(token)))
+		return
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(body.Sig)
+	message := "attn-cloud/v1 push-token\n" + id + "\n" + body.DeviceSignPub + "\n" + body.Environment + "\n" + body.Token
+	if err != nil || !ed25519.Verify(pub, []byte(message), sig) {
+		cloudRefusal(w, 401, "bad_signature", "sig does not verify against device_sign_pub")
+		return
+	}
+	h := r.lookup(id)
+	if h == nil {
+		cloudRefusal(w, 404, "unknown_home", "home "+id+" is not registered")
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Contains(h.allowed, body.DeviceSignPub) {
+		cloudRefusal(w, 403, "device_not_allowed", "device "+body.DeviceSignPub+" is not on the home's allowlist")
+		return
+	}
+	h.tokens[body.DeviceSignPub] = true
+	w.Header().Set("content-type", "application/json")
+	w.Write([]byte("{}"))
+}
+
+// awaitAllowed returns once the home's allowlist holds the device, which is when a real phone's retried token registration succeeds.
+func (r *fakeRelay) awaitAllowed(ctx context.Context, homeID, signPub string) error {
+	h := r.lookup(homeID)
+	for {
+		r.mu.Lock()
+		allowed, applied := slices.Contains(h.allowed, signPub), h.listApplied
+		r.mu.Unlock()
+		if allowed {
+			return nil
+		}
+		select {
+		case <-applied:
+		case <-ctx.Done():
+			return fmt.Errorf("the home's allowlist never named device %s: %w", signPub, ctx.Err())
+		}
 	}
 }
 
@@ -417,19 +616,28 @@ func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	h := r.lookup(id)
 	if h == nil {
-		cloudRefusal(w, 404, "unknown_home", "no home is registered under "+id)
+		cloudRefusal(w, 404, "unknown_home", "home "+id+" is not registered")
+		return
+	}
+	if !isUpgrade(req) {
+		cloudRefusal(w, 426, "upgrade_required", req.URL.Path+" is a WebSocket endpoint")
 		return
 	}
 	signPub := req.URL.Query().Get("device_sign_pub")
+	if _, ok := decodeKey(signPub); !ok {
+		cloudRefusal(w, 400, "bad_request", "device_sign_pub must be a 32-byte Ed25519 key, base64url")
+		return
+	}
 	r.mu.Lock()
 	admitted := h.admitsLocked(signPub)
 	r.mu.Unlock()
-	if !admitted {
-		cloudRefusal(w, 403, "device_not_allowed", "device is not on the home's allowlist and no pairing window is open")
-		return
-	}
 	conn, err := websocket.Accept(w, req, nil)
 	if err != nil {
+		return
+	}
+	conn.SetReadLimit(-1)
+	if !admitted {
+		conn.Close(4403, notAdmittedReason)
 		return
 	}
 	ctx := req.Context()
@@ -459,13 +667,24 @@ func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
 		r.mu.Unlock()
 	}()
 	for {
-		_, data, err := conn.Read(ctx)
+		kind, data, err := conn.Read(ctx)
 		if err != nil {
 			return
 		}
-		f, err := decodeEnvelope(data)
-		if err != nil || f.kind != frameData || f.connID != connID {
-			conn.Close(4400, "malformed frame")
+		if kind == websocket.MessageText {
+			respondToText(ctx, conn, data)
+			continue
+		}
+		f, ok := readEnvelope(conn, data)
+		if !ok {
+			return
+		}
+		if f.kind != frameData {
+			writeRelayError(ctx, conn, "unsupported_type", fmt.Sprintf("devices send only data frames; got type %d", f.kind))
+			continue
+		}
+		if f.connID != connID {
+			conn.Close(4400, fmt.Sprintf("conn_id %d is not this socket's %d", f.connID, connID))
 			return
 		}
 		r.mu.Lock()

@@ -1,0 +1,5 @@
+{"phone":{"cmd":"hello","api":2,"device_id":"phone"}}
+{"home":{"api":2,"event":"welcome","home_name":"text","profile":{"id":"text","name":"text"}}}
+{"home":{"event":"sessions","sessions":[{"agent":"text","id":"text","offline":false,"state":"text","terminal_id":"$terminal","title":"text"},{"agent":"text","id":"$session","offline":false,"state":"text","terminal_id":"text","title":"text"}]}}
+{"phone":{"cmd":"ping"}}
+{"home":{"event":"pong"}}

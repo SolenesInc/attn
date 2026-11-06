@@ -1,0 +1,30 @@
+{"phone":{"cmd":"hello","api":6,"device_id":"phone"}}
+{"home":{"api":6,"event":"welcome","home_name":"text","profile":{"id":"text","name":"text"}}}
+{"home":{"event":"sessions","sessions":[{"agent":"text","id":"text","offline":false,"state":"text","terminal_id":"$terminal","title":"text"},{"agent":"text","id":"$session","offline":false,"state":"text","terminal_id":"text","title":"text"}]}}
+{"home":{"ask":{"created_at":"text","id":"$ask","parts":[{"markdown":"text"},{"question":{"choices":[{"description":"text","label":"text"}],"key":"text","kind":"text","prompt":"text","recommended":"text"}}],"session_id":"$session","subject":"text"},"event":"ask"}}
+{"home":{"event":"asks","ids":["$ask"]}}
+{"home":{"event":"garden_seeds","seeds":[{"claimed":false,"id":"$seed","ready":false,"slug":"text","state_changed_at":"text","status":"text","title":"text","waits_for":[]}]}}
+{"home":{"event":"garden","ids":["$seed"]}}
+{"phone":{"cmd":"ping"}}
+{"home":{"event":"pong"}}
+{"phone":{"cmd":"ask_image","ask_id":"$ask","src":"missing.png","offset":0,"request_id":"image"}}
+{"home":{"event":"ask_image_error","message":"text","request_id":"image"}}
+{"phone":{"cmd":"submit_prompt","session_id":"$session","text":"Yes, land it.","request_id":"submit"}}
+{"home":{"delivered":true,"event":"submit_result","request_id":"submit"}}
+{"phone":{"cmd":"terminal_attach","terminal_id":"$terminal","cols":49,"rows":35,"credit":262144}}
+{"home":{"ansi":"text","cols":0,"event":"terminal_screen","rows":0,"seq":0,"terminal_id":"$terminal"}}
+{"phone":{"cmd":"terminal_focus","terminal_id":"$terminal"}}
+{"phone":{"cmd":"terminal_input","terminal_id":"$terminal","data":"echo from-the-phone\n"}}
+{"home_output":"$terminal"}
+{"phone":{"cmd":"terminal_credit","terminal_id":"$terminal","bytes":4096}}
+{"phone":{"cmd":"terminal_resize","terminal_id":"$terminal","cols":60,"rows":30}}
+{"home":{"cols":0,"event":"terminal_resized","rows":0,"terminal_id":"$terminal"}}
+{"phone":{"cmd":"terminal_detach","terminal_id":"$terminal"}}
+{"phone":{"cmd":"ask_answer","ask_id":"$ask","answers":[{"key":"q1","picked":["Postgres"]}],"note":"from the phone","request_id":"answer"}}
+{"home":{"ask_id":"$ask","event":"ask_answer_result","request_id":"answer"}}
+{"phone":{"cmd":"seed_get","seed_id":"$seed","request_id":"read"}}
+{"home":{"body":"text","checks":[],"children":[],"event":"seed_detail","log":[],"log_total":0,"request_id":"read","seed":{"claimed":false,"id":"$seed","ready":false,"slug":"text","state_changed_at":"text","status":"text","title":"text","waits_for":[]}}}
+{"phone":{"cmd":"seed_note","seed_id":"$seed","body":"from the phone","request_id":"note"}}
+{"home":{"event":"seed_result","request_id":"note","seed_id":"$seed"}}
+{"phone":{"cmd":"seed_move","seed_id":"$seed","verb":"park","text":"later","request_id":"move"}}
+{"home":{"event":"seed_result","request_id":"move","seed_id":"$seed"}}

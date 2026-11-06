@@ -75,7 +75,7 @@ const homeAnswersPairedHandshake = (homeStatic: Uint8Array, prologue: Uint8Array
   return { msg2, recv: new Cipher(toHome), send: new Cipher(toDevice) }
 }
 
-const frame = (type: number, connId: number, payload: Uint8Array = new Uint8Array(0)) => {
+export const frame = (type: number, connId: number, payload: Uint8Array = new Uint8Array(0)) => {
   const out = new Uint8Array(6 + payload.length)
   out[0] = 1
   out[1] = type

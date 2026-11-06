@@ -1,0 +1,119 @@
+{
+  "frames": [
+    {
+      "name": "challenge",
+      "type": 1,
+      "conn_id": 0,
+      "payload": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bytes": "010100000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "auth",
+      "type": 2,
+      "conn_id": 0,
+      "payload": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "bytes": "01020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "ready_home",
+      "type": 3,
+      "conn_id": 0,
+      "payload": "",
+      "bytes": "010300000000"
+    },
+    {
+      "name": "ready_device",
+      "type": 3,
+      "conn_id": 7,
+      "payload": "",
+      "bytes": "010300000007"
+    },
+    {
+      "name": "open",
+      "type": 4,
+      "conn_id": 7,
+      "payload": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+      "bytes": "010400000007c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242"
+    },
+    {
+      "name": "data",
+      "type": 5,
+      "conn_id": 7,
+      "payload": "0001feff",
+      "bytes": "0105000000070001feff"
+    },
+    {
+      "name": "close",
+      "type": 6,
+      "conn_id": 16909060,
+      "payload": "",
+      "bytes": "010601020304"
+    },
+    {
+      "name": "allowlist",
+      "type": 7,
+      "conn_id": 0,
+      "payload": "7b2264657669636573223a5b22786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b49225d2c2270616972696e675f6f70656e5f756e74696c223a313739333630303030303030307d",
+      "bytes": "0107000000007b2264657669636573223a5b22786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b49225d2c2270616972696e675f6f70656e5f756e74696c223a313739333630303030303030307d"
+    },
+    {
+      "name": "allowlist_applied",
+      "type": 7,
+      "conn_id": 0,
+      "payload": "",
+      "bytes": "010700000000"
+    },
+    {
+      "name": "presence_online",
+      "type": 8,
+      "conn_id": 7,
+      "payload": "01",
+      "bytes": "01080000000701"
+    },
+    {
+      "name": "presence_offline",
+      "type": 8,
+      "conn_id": 7,
+      "payload": "00",
+      "bytes": "01080000000700"
+    },
+    {
+      "name": "error",
+      "type": 9,
+      "conn_id": 0,
+      "payload": "7b22636f6465223a226261645f70757368222c226d657373616765223a2263697068657274657874227d",
+      "bytes": "0109000000007b22636f6465223a226261645f70757368222c226d657373616765223a2263697068657274657874227d"
+    },
+    {
+      "name": "push",
+      "type": 10,
+      "conn_id": 0,
+      "payload": "7b22646576696365223a22786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b49222c2263697068657274657874223a2241514944222c22636f6c6c617073655f6964223a2273657373696f6e2d31227d",
+      "bytes": "010a000000007b22646576696365223a22786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b49222c2263697068657274657874223a2241514944222c22636f6c6c617073655f6964223a2273657373696f6e2d31227d"
+    }
+  ],
+  "home_id": "wta6z2ey5tre4jhgaers7fogue",
+  "home_name": "Mac",
+  "nonce": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "push_token": "00112233445566778899aabbccddeeff",
+  "sign_pub": "xoImN8fTEOxXYnvgC6JZ0lN0n0qvZERwz_vlOjX3MkI",
+  "sign_seed": "5555555555555555555555555555555555555555555555555555555555555555",
+  "signatures": {
+    "auth_device": {
+      "message": "6174746e2d636c6f75642f76312061757468206465766963650a777461367a32657935747265346a68676165727337666f6775650aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature": "9b8d62eccc07ffceb11fc9e61a9b148e7df6096a25a370b50856b271bf546010ce322015b1dfbfbeff7115367c8d0d5fe22c19ab7a9e8bc65566eaa9f5c1aa02"
+    },
+    "auth_home": {
+      "message": "6174746e2d636c6f75642f7631206175746820686f6d650a777461367a32657935747265346a68676165727337666f6775650aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "signature": "4c448b8b28f99cd9bdad62bc2cd582dbe5bf31a4abe8510058f81af56932a814e42dc845ebd7bf4feb61b3682ab0d087d111048e2da94cc37c1ee5a2ab9b7d0d"
+    },
+    "push_token": {
+      "message": "6174746e2d636c6f75642f763120707573682d746f6b656e0a777461367a32657935747265346a68676165727337666f6775650a786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b490a73616e64626f780a3030313132323333343435353636373738383939616162626363646465656666",
+      "signature": "6e92844f4a43eb3f5f4953ff59cc94dadf08182168a09598616e816979c61c6d6ffce5ee13ab1119c7321c6b73ed8f12f531e7e40b8fe898bb0ec9dc2c6dbd02"
+    },
+    "register": {
+      "message": "6174746e2d636c6f75642f76312072656769737465720a786f496d4e386654454f7858596e766743364a5a306c4e306e3071765a4552777a5f766c4f6a58334d6b490a4d6163",
+      "signature": "5370af77a54ae4c40f56d31bb90abec510d5e0f4485087dbc03431a1c6c2c1eb70db77e518e56ecfb22c5058c284d5dabc7fa1ea4eae0d6434590b81fcf1cb02"
+    }
+  }
+}

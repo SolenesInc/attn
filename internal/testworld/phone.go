@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/ed25519"
@@ -8,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -59,11 +61,8 @@ func NewPhone(t *testing.T, cloud *Cloud, name string) *Phone {
 
 func (p *Phone) DeviceID() string { return keyID(p.sign.Public().(ed25519.PublicKey)) }
 
-type RefusedStatus int
-
-func (r RefusedStatus) Error() string {
-	return fmt.Sprintf("the relay refused the device socket with %d", int(r))
-}
+// ErrNotAdmitted is the relay closing a device socket with 4403: not on the allowlist, and no pairing window open.
+var ErrNotAdmitted = errors.New("the relay closed the device socket with 4403: not on the allowlist and no pairing window is open")
 
 type PhoneSocket struct {
 	t      *testing.T
@@ -79,16 +78,22 @@ func (p *Phone) Dial(qr PhoneQR) (*PhoneSocket, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	pub := b64(p.sign.Public().(ed25519.PublicKey))
-	conn, res, err := websocket.Dial(ctx, websocketURL(p.cloud.URL)+"/v1/homes/"+qr.HomeID+"/device?device_sign_pub="+pub, nil)
+	conn, _, err := websocket.Dial(ctx, websocketURL(p.cloud.URL)+"/v1/homes/"+qr.HomeID+"/device?device_sign_pub="+pub, nil)
 	if err != nil {
-		if res != nil && res.StatusCode != http.StatusSwitchingProtocols {
-			return nil, RefusedStatus(res.StatusCode)
-		}
 		return nil, err
 	}
 	s := &PhoneSocket{t: p.t, phone: p, homeID: qr.HomeID, conn: conn}
 	p.t.Cleanup(func() { conn.CloseNow() })
-	challenge := s.next(frameChallenge)
+	challenge, err := s.read()
+	if websocket.CloseStatus(err) == 4403 {
+		return nil, ErrNotAdmitted
+	}
+	if err != nil {
+		return nil, err
+	}
+	if challenge.kind != frameChallenge {
+		p.t.Fatalf("device socket: frame %d before the challenge", challenge.kind)
+	}
 	message := append([]byte("attn-cloud/v1 auth device\n"+qr.HomeID+"\n"), challenge.payload...)
 	s.write(encodeEnvelope(frameAuth, 0, ed25519.Sign(p.sign, message)))
 	s.connID = s.next(frameReady).connID
@@ -272,6 +277,37 @@ type PushNote struct {
 }
 
 func (p *Phone) SignPub() string { return b64(p.sign.Public().(ed25519.PublicKey)) }
+
+// RegisterForPush registers an APNs token as the phone does once the home has allowed it. Pushes are visible only
+// through the stand-in relay, so a test that reads them skips under ATTN_TEST_CLOUD_URL.
+func (s *PhoneSocket) RegisterForPush() {
+	s.t.Helper()
+	cloud := s.phone.cloud
+	if cloud.relay == nil {
+		s.t.Skip("pushes are visible only through the fake relay; this run uses ATTN_TEST_CLOUD_URL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	pub := s.phone.SignPub()
+	if err := cloud.relay.awaitAllowed(ctx, s.homeID, pub); err != nil {
+		s.t.Fatal(err)
+	}
+	const environment, token = "sandbox", "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	sig := ed25519.Sign(s.phone.sign, []byte("attn-cloud/v1 push-token\n"+s.homeID+"\n"+pub+"\n"+environment+"\n"+token))
+	body, _ := json.Marshal(map[string]string{"device_sign_pub": pub, "platform": "apns", "environment": environment, "token": token, "sig": b64(sig)})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cloud.URL+"/v1/homes/"+s.homeID+"/push-token", bytes.NewReader(body))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		s.t.Fatalf("registering a push token: the relay answered %d", res.StatusCode)
+	}
+}
 
 // OpenPush decrypts a push addressed to this phone the way the phone app's extension does.
 func (p *Phone) OpenPush(push Push) (PushNote, error) {

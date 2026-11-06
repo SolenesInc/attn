@@ -24,6 +24,7 @@ func pairPhone(t *testing.T, app *testworld.Peer, cloud *testworld.Cloud, profil
 		t.Fatal(err)
 	}
 	socket.Hello()
+	socket.RegisterForPush()
 	return phone
 }
 

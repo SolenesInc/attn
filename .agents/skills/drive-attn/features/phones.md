@@ -8,7 +8,8 @@ home's gateway, an API apart from the app's `/ws` protocol that only grows, so
 a phone from the App Store keeps working across home builds. Phone access is
 experimental and off until the user turns it on.
 
-The Cloud wire contract is `docs/protocol.md` in `SolenesInc/attn-cloud`. The
+The Cloud Relay contract is `docs/internal/relay-contract.md`, and
+`internal/cloudlink/relaytest` holds any relay to it. The
 cloud link is `internal/cloudlink` (home keys in the data directory as
 `cloud_sign_key`, `cloud_noise_key` and `cloud_home_id`), pairings are the
 `phone_pairings` table, the daemon side is `internal/daemon/phones.go`, the
@@ -16,7 +17,8 @@ gateway is `internal/daemon/gateway.go`, `gateway_asks.go`, `gateway_terminal.go
 app is `mobile/`, the gateway API is
 `internal/protocol/schema/gateway.tsp`, and `scripts/check-gateway-compat`
 refuses a gateway change that is not an addition. The phone's Noise framing is
-pinned by `internal/cloudlink/testdata/noise_vectors.json`.
+pinned by `internal/cloudlink/testdata/noise_vectors.json`, and the relay frames
+and signatures of both clients by `internal/cloudlink/testdata/relay_vectors.json`.
 
 ## Sub-features
 
@@ -49,7 +51,7 @@ pinned by `internal/cloudlink/testdata/noise_vectors.json`.
 
 Preconditions:
 
-- A relay. Run the relay of a checkout of `SolenesInc/attn-cloud` under workerd, as its `test/relay.test.ts` does, and add `export ATTN_CLOUD_URL=http://127.0.0.1:<port>` to `$DRIVE_ENV` before starting the daemon. Without `ATTN_CLOUD_URL` the daemon dials `https://cloud.attn.codes`.
+- A relay of your own that passes the contract. Add `export ATTN_CLOUD_URL=http://127.0.0.1:<port>` to `$DRIVE_ENV` before starting the daemon. Without `ATTN_CLOUD_URL` the daemon dials `https://cloud.attn.codes`.
 - Use the baseline instance with its app, or the daemon alone for the link and the protocol.
 - For the phone app in a browser at a phone's size, run `pnpm --dir mobile exec vite --port 5180` with a Vite config that resolves `./appleCrypto` to `src/test/nobleCrypto.ts`, because the app encrypts only with CryptoKit and a browser has no CryptoKit. Pair it by pasting the QR code's text in Pairings. A browser reports no keyboard, so check keyboard behavior on an iPhone.
 - Make a proof folder with `P=$(mktemp -d /tmp/drive-attn-phones-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
@@ -79,8 +81,11 @@ Preconditions:
 - Stack: `cmd/attn/phone_push_stack_test.go` (pushes reach every phone of the session's profile, each approval pushes).
 - Wire: `internal/daemon/phone_push_wire_test.go` (which stops push, in each flow).
 - Kernel: `internal/cloudlink/noise_vectors_test.go`, the vectors the phone's initiator checks too.
+- Conformance: `internal/cloudlink/relaytest` drives a relay through the contract: the stand-in in `internal/testworld/standin_relay_contract_test.go`, any other with `ATTN_RELAY_URL=<url> go test ./internal/cloudlink/relaytest`.
+- Kernel: `internal/cloudlink/relay_vectors_test.go` and `mobile/src/relay.vectors.test.ts`, the home, the phone and the phone's stand-in against one set of relay frames.
+- Wire: `internal/daemon/gateway_old_phone_wire_test.go` replays the frozen conversation of a phone of every gateway api in `internal/daemon/testdata/old_phones`. A new gateway api fails it until recorded.
 - Wire: `internal/daemon/gateway_wire_test.go`, `internal/daemon/gateway_terminal_wire_test.go` (screen then output, focus ownership and hand-back, submit_prompt, output within credit during a flood).
 - Wire: `internal/daemon/gateway_garden_wire_test.go` (listing, detail, note, park and harvest, profile scope, a phone before api 6, `seed_changed` on another actor's note and body edit).
 - Phone: `mobile/src/main.scene.test.ts` (queue, session screen, composer, closing the keyboard), `mobile/src/terminal/scroll.test.ts` (what a drag and a double tap do: pan, scrollback rows, wheel lines), `mobile/src/garden/garden.scene.test.ts` (Garden sections, seed screen, note, move, unreachable and reconnecting homes, an open seed refreshed live and after a reconnect), `mobile/src/link.test.ts` (heartbeat, terminal attach and re-attach, the garden window).
 - App: `app/src/components/PhonesSettings.pairing.test.tsx`, `app/src/gateway/decode.test.ts`, and the switch in `app/src/components/SettingsModal.test.tsx`.
-- Script: `scripts/check-gateway-compat_test.sh`.
+- Script: `scripts/check-gateway-compat_test.sh`, `scripts/check-relay-privacy_test.sh`.
