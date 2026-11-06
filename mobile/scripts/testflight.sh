@@ -64,7 +64,7 @@ mkdir -p "${OUT_DIR}"
 run_logged() {
   local name="$1" log="${OUT_DIR}/$1.log" refusal
   shift
-  if ! "$@" >"${log}" 2>&1; then
+  if ! "$@" 2>&1 | sed -e "s/${KEY_ID}/<key id>/g" -e "s/${ISSUER_ID}/<issuer id>/g" >"${log}"; then
     printf '\n%s failed. Its errors:\n' "${name}" >&2
     grep -E '(^|: )error:|^error|\*\* .* FAILED \*\*' "${log}" | sort -u >&2 || tail -n 30 "${log}" >&2
     if grep -q 'Error Downloading App Information' "${log}"; then
@@ -91,9 +91,11 @@ run_logged archive xcodebuild archive \
   -destination generic/platform=iOS \
   -archivePath "${OUT_DIR}/App.xcarchive" \
   DEVELOPMENT_TEAM="${TEAM_ID}" \
-  CODE_SIGN_STYLE=Automatic \
-  CURRENT_PROJECT_VERSION="${BUILD_NUMBER}" \
-  "${AUTH_FLAGS[@]}"
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY=- \
+  AD_HOC_CODE_SIGNING_ALLOWED=YES \
+  PROVISIONING_PROFILE_SPECIFIER= \
+  CURRENT_PROJECT_VERSION="${BUILD_NUMBER}"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "${OUT_DIR}/App.xcarchive/Info.plist")"
 echo "archived attn ${VERSION} (${BUILD_NUMBER})"
 

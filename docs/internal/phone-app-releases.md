@@ -60,8 +60,9 @@ default Xcode is too old for Capacitor 8. When GitHub removes that version from
 the build fails and the path needs updating.
 
 A failed build posts to Discord with the reason and the run's link, because the
-sheriff watches only the CI workflow. Each run keeps its `archive.log` and
-`upload.log` as the `testflight-logs` artifact for 14 days.
+sheriff watches only the CI workflow. A failed run keeps its `archive.log` and
+`upload.log` as the `testflight-logs` artifact for 14 days. The repository is
+public, so the script replaces the key id and issuer id in those logs.
 
 Apple publishes no upload limit. When App Store Connect answers an upload with a
 409, the alert quotes its answer. `Upload limit reached` means wait a day, then
@@ -86,9 +87,11 @@ The script:
    `MARKETING_VERSION` in the Xcode project stays the version people see.
 4. Signs the archive for App Store distribution and uploads it.
 
-Signing is automatic. With the API key, Xcode creates the distribution
-certificate in the cloud and the App Store provisioning profiles. The machine
-needs no signing identity of its own.
+The archive is signed ad hoc, which keeps its entitlements, and only the export
+signs for the App Store. With the API key, Xcode uses a distribution certificate
+in the cloud and creates the App Store provisioning profiles, so the machine
+needs no signing identity of its own. Automatic signing at archive time would
+create a new development certificate on each fresh runner, and Apple caps those.
 
 The archive and the `archive.log` and `upload.log` files land in
 `mobile/ios/App/build/testflight-<build>/`. When a step fails, the script prints

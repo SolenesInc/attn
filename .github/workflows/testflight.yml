@@ -100,7 +100,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: testflight-logs
-          path: mobile/ios/App/build/testflight-*/*.log
+          path: |
+            mobile/ios/App/build/testflight-*/*.log
+            mobile/ios/App/build/testflight-*/export/DistributionSummary.plist
           retention-days: 14
           if-no-files-found: ignore
 
