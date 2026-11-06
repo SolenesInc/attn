@@ -107,6 +107,7 @@ type View struct {
 	Cost                KeyedSet[string, sessioncost.SourceTotals] `fact:"session.cost.changed"`
 	Run                 Value[uint64]                              `fact:"-"`
 	NotificationRun     Value[bool]                                `fact:"-"`
+	NotificationStop    Value[bool]                                `fact:"-"`
 	FirstReportAt       Value[time.Time]                           `fact:"-"`
 	Key                 Value[Key]                                 `fact:"-"`
 	Epoch               Value[string]                              `fact:"-"`
@@ -165,6 +166,7 @@ func (m *Monitor) snapshotLocked() View {
 		FirstReportAt:       Value[time.Time]{m.firstReportAt},
 		Run:                 Value[uint64]{m.input.epoch},
 		NotificationRun:     Value[bool]{m.input.inNotificationRunLocked()},
+		NotificationStop:    Value[bool]{m.input.stopFollowsNotificationLocked()},
 		Branch:              Value[attngit.BranchInfo]{m.branch},
 		PullRequests:        KeyedSet[string, PullRequest]{Entries: m.pullRequests},
 		SentFiles:           KeyedSet[string, uint64]{Entries: m.sentFiles},

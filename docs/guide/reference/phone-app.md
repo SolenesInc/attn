@@ -41,6 +41,18 @@ The app merges every pairing into one queue.
 4. Point the camera at the QR code. The app returns to **Queue** and lists the
    profile's agents.
 
+## Notifications
+
+The phone notifies you when an agent stops after your prompt or a
+[Quick Capture](quick-capture.md), when an agent needs an approval, and when an
+agent sends you an ask. In queue flow, it also notifies you when an agent that
+opened its turn with `attn turn open` stops.
+
+A stop that one of attn's own notifications started, such as a delegate's
+message or a pull request update, sends nothing to the phone. This holds in
+queue flow and desktop flow. In queue flow with quiet notifications off, the
+agent still goes into your queue, and the phone stays silent.
+
 ## Read and tend the Garden
 
 The **Garden** tab lists the open seeds of every paired profile: plots with how

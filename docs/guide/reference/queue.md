@@ -173,4 +173,5 @@ while it works on a notification.
 
 Quiet notifications are on by default. To have every notification run open a
 turn when it stops, turn off **Settings → Attention queue → Quiet notifications
-in the queue**.
+in the queue**. That setting changes only the queue: the
+[phone](phone-app.md#notifications) stays silent for those stops either way.

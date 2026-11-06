@@ -190,6 +190,9 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	var kind, text string
 	switch session.State {
 	case protocol.SessionStateWaitingInput:
+		if d.stopFollowsNotification(sessionID) && !protocol.Deref(session.TurnByAgent) {
+			return phonePushNote{}, false
+		}
 		kind = phonePushWaiting
 	case protocol.SessionStatePendingApproval:
 		kind = phonePushNeedsApproval
