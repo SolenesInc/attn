@@ -351,6 +351,9 @@ func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemove
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		err = nil
 	}
+	if err == nil {
+		d.linkTerminalDropped(msg.TerminalID)
+	}
 	return struct{}{}, err
 }
 

@@ -46,6 +46,8 @@ go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestARemoteCodexTakesItsFirstPromptWhenAnOlderCopyOfItsSessionLandsDuringLaunch
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
+go ./cmd/attn TestAnOutpostCodexServerStopsWhenItsLastTerminalIsRemovedBeforeItsKillArrives
+go ./cmd/attn TestAnInterruptedOutpostCodexCloseReleasesItsServerAfterReconnect
 go ./cmd/attn TestAnOutpostReplaysItsPendingConversationAfterRestart
 go ./cmd/attn TestAReplyDuringAnOutpostReconnectKeepsTheSessionWaitingForTheUser
 go ./cmd/attn TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket
