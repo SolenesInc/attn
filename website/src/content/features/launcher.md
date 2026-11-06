@@ -19,6 +19,8 @@ Type a project or a path, choose where the agent works, and press Enter. You pic
 
 ## How you use it
 
+The launcher is experimental. Turn it on with **Launcher 2.0** in **Settings → Experimental**.
+
 Cmd+N (Ctrl+Shift+N on Linux) opens the launcher for a new agent. Cmd+T (Ctrl+Shift+T on Linux) opens it with a shell picked.
 
 - ↑ and ↓ move through the list, and Enter starts on the selected row.

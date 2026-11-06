@@ -19,6 +19,8 @@ The message goes to the Chief unless you pick another crew member. Attn types it
 
 ## How you use it
 
+Quick Capture is experimental. Turn it on with **Quick Capture** in **Settings → Experimental**.
+
 Quick Capture runs on macOS. Ctrl+Option+Cmd+Space opens it from any app.
 
 - Enter sends the message, and Shift+Enter starts a new line.
