@@ -935,9 +935,6 @@ export function useDesktopController(
 
   const handleMovePane = useCallback(
     (direction: TerminalNavigationDirection) => {
-      if (!renderedLayoutTree) {
-        return;
-      }
       const tree = layoutTreeRef.current;
       if (shelfOn && tree && !effectivePaneId && (direction === 'left' || direction === 'right')) {
         const row = shownRow(readRow(tree), heldLeafIds, activeLeafId);
@@ -949,7 +946,7 @@ export function useDesktopController(
         else onNavigateOutOfSession(direction);
         return;
       }
-      const nextLeafId = findLeafInDirection(renderedLayoutTree, activeLeafId, direction);
+      const nextLeafId = renderedLayoutTree && findLeafInDirection(renderedLayoutTree, activeLeafId, direction);
       if (nextLeafId) {
         focusLeaf(nextLeafId);
         return;

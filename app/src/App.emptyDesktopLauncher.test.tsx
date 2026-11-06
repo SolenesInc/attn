@@ -1,15 +1,16 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
-import { daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
+import { DEFAULT_DESKTOP_ID, daemonSession, emptyDesktop, soloDesktop } from './test/daemonFixtures';
 import { inspection, launchedAt, pathInput, repoInfo, serveLaunches, serveMachine, submitPath, press } from './test/locations';
 import type { CommandMessage } from './test/protocol';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 const launcher = () => screen.queryByTestId('empty-desktop-launcher');
 
-async function onAgentBesideEmptyDesktop() {
+async function onAgentBesideEmptyDesktop(settings: Record<string, string> = {}) {
   const view = await renderApp({ initialState: {
+    settings,
     sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
     desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
   } });
@@ -29,6 +30,42 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByTestId('location-picker-title')).toHaveTextContent('New agent on Desktop 2');
     expect(pathInput()).toHaveFocus();
     expect(screen.getByRole('radiogroup', { name: /agent/i })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['off', {}],
+    ['on', { shelf_layout_enabled: 'true' }],
+  ])('walks off the launcher with the row keys, shelf layout %s', async (_layout, settings) => {
+    const { daemon } = await onAgentBesideEmptyDesktop(settings);
+    const currentDesktop = () => daemon.arrangement.profile.current_desktop_id;
+
+    await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+    expect(currentDesktop()).toBe('other');
+    expect(pathInput()).toHaveFocus();
+
+    await gesture(daemon, () => pressShortcut('terminal.focusRight', pathInput()));
+    expect(currentDesktop()).toBe(DEFAULT_DESKTOP_ID);
+    expect(pathInput()).toHaveFocus();
+
+    await gesture(daemon, () => pressShortcut('terminal.focusLeft', pathInput()));
+    expect(currentDesktop()).toBe('other');
+
+    await gesture(daemon, () => pressShortcut('terminal.focusLeft', pathInput()));
+    expect(currentDesktop()).toBe('desktop-s1');
+    expect(launcher()).toBeNull();
+  });
+
+  it('leaves the launcher with the up and down keys too', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+
+    await gesture(daemon, () => pressShortcut('terminal.focusUp', pathInput()));
+    expect(daemon.arrangement.profile.current_desktop_id).toBe('desktop-s1');
+    expect(launcher()).toBeNull();
+
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => pressShortcut('terminal.focusDown', pathInput()));
+    expect(daemon.arrangement.profile.current_desktop_id).toBe(DEFAULT_DESKTOP_ID);
   });
 
   it('creates a desktop on a slot that has none, switches to it and offers its launcher', async () => {

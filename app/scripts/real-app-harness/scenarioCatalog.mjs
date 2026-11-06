@@ -185,6 +185,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-close-desktop'],
   },
   {
+    id: 'empty-desktop-keys',
+    runnerId: 'EMPTY-DESKTOP-KEYS',
+    label: 'Row keys walk onto and off an empty desktop, shelf layout off and on',
+    command: ['pnpm', 'run', 'real-app:scenario-empty-desktop-keys'],
+  },
+  {
     id: 'close-pane-nonblocking',
     runnerId: 'CLOSE-PANE-NONBLOCKING',
     label: 'Close pane does not wait for process teardown',

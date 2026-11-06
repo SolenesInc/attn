@@ -42,6 +42,7 @@
     "real-app:scenario-session-creation-shortcuts": "node scripts/real-app-harness/scenario-session-creation-shortcuts.mjs",
     "real-app:scenario-linux-shortcuts": "node scripts/real-app-harness/scenario-linux-shortcuts.mjs",
     "real-app:scenario-close-desktop": "node scripts/real-app-harness/scenario-close-desktop.mjs",
+    "real-app:scenario-empty-desktop-keys": "node scripts/real-app-harness/scenario-empty-desktop-keys.mjs",
     "real-app:scenario-desktop-splits": "node scripts/real-app-harness/scenario-desktop-splits.mjs",
     "real-app:scenario-shelf-layout": "node scripts/real-app-harness/scenario-shelf-layout.mjs",
     "real-app:scenario-shelf-peek": "node scripts/real-app-harness/scenario-shelf-peek.mjs",

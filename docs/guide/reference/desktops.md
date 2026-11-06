@@ -41,7 +41,8 @@ Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
-a desktop, they move to the next desktop. When you close a tile, Attn takes you
+a desktop, they move to the next desktop, and on an empty desktop they move
+straight on from its launcher. When you close a tile, Attn takes you
 to the tile you used before it, unless the [shelf layout](#shelf-layout-experimental)
 is on. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) move back and forward through
 the tiles you've looked at.
