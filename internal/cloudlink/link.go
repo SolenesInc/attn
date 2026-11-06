@@ -109,10 +109,11 @@ type Link struct {
 	cfg Config
 	now func() time.Time
 
-	mu      sync.Mutex
-	status  Status
-	offers  map[string]*Offer
-	session *session
+	mu          sync.Mutex
+	status      Status
+	offers      map[string]*Offer
+	session     *session
+	nextConnect chan struct{}
 }
 
 func New(cfg Config) *Link {
@@ -121,13 +122,27 @@ func New(cfg Config) *Link {
 		transport.DisableKeepAlives = true
 		cfg.HTTP = &http.Client{Transport: transport}
 	}
-	return &Link{cfg: cfg, now: time.Now, offers: map[string]*Offer{}, status: Status{State: StateConnecting, HomeID: cfg.Identity.HomeID()}}
+	return &Link{cfg: cfg, now: time.Now, offers: map[string]*Offer{}, nextConnect: make(chan struct{}), status: Status{State: StateConnecting, HomeID: cfg.Identity.HomeID()}}
 }
 
 func (l *Link) Status() Status {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.status
+}
+
+// NextConnect closes on the link's next connect. Take it before a Push, so a connect between the two is not missed.
+func (l *Link) NextConnect() <-chan struct{} {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.nextConnect
+}
+
+func (l *Link) announceConnect() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	close(l.nextConnect)
+	l.nextConnect = make(chan struct{})
 }
 
 func (l *Link) setStatus(state State, err error) {
@@ -380,6 +395,7 @@ func (l *Link) connect(ctx context.Context) (time.Duration, error) {
 		return time.Since(began), err
 	}
 	l.setStatus(StateConnected, nil)
+	l.announceConnect()
 	go s.heartbeat()
 	err = s.read()
 	return time.Since(began), err

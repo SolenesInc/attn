@@ -78,7 +78,7 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		Subject:   ask.Subject(protocol.Deref(msg.Subject), parts),
 		Markdown:  msg.Markdown,
 		BaseDir:   msg.BaseDir,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		CreatedAt: d.clock.Now().UTC().Format(time.RFC3339Nano),
 	}
 	opened, err := d.describeAsk(stored, parts)
 	if err != nil {

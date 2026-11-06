@@ -13,9 +13,14 @@ import (
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statemarker"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
-const phonePushConsumer = "phone_push"
+const (
+	phonePushConsumer = "phone_push"
+
+	PhonePushLinkWaitTimer stepclock.Name = "phone-push-link-wait"
+)
 
 // phonePushFreshFor drops a push for a wait or ask that began longer ago, so a daemon restart or a consumer that
 // fell behind never floods the phone with old news. A push leaves 20 ms after the agent's reply, and StateSince
@@ -48,6 +53,8 @@ type phonePushNote struct {
 	AskID       string `json:"ask_id,omitempty"`
 
 	collapseID string
+	freshUntil time.Time
+	episode    string
 }
 
 type phonePushes struct {
@@ -62,8 +69,7 @@ func (d *Daemon) registerPhonePush() {
 	}
 	pushes := &phonePushes{pushedEpisode: map[protocol.SessionID]string{}}
 	if err := d.eventBus.Register(phonePushConsumer, phonePushFacts, func(ctx context.Context, ev bus.Event) error {
-		d.pushToPhones(ctx, pushes, ev)
-		return nil
+		return d.pushToPhones(ctx, pushes, ev)
 	}); err != nil {
 		d.logf("phone push: %v", err)
 	}
@@ -78,26 +84,72 @@ func (d *Daemon) unregisterPhonePush() {
 	}
 }
 
-func (d *Daemon) pushToPhones(ctx context.Context, pushes *phonePushes, ev bus.Event) {
+func (d *Daemon) pushToPhones(ctx context.Context, pushes *phonePushes, ev bus.Event) error {
 	link := d.cloudLink()
 	if link == nil {
-		return
+		return nil
 	}
-	var note phonePushNote
-	var ok bool
+	reached := map[string]bool{}
+	waited := false
+	for {
+		nextConnect := link.NextConnect()
+		note, ok := d.phoneNote(ctx, pushes, ev)
+		if !ok {
+			if waited {
+				d.logf("phone push: dropped %s %s after waiting for the link: it no longer needs a push", ev.Name, ev.Subject)
+			}
+			return nil
+		}
+		linkDown := d.sendNote(link, note, reached)
+		if linkDown == nil {
+			if note.episode != "" {
+				pushes.pushedEpisode[protocol.SessionID(note.SessionID)] = note.episode
+			}
+			return nil
+		}
+		patience := note.freshUntil.Sub(d.clock.Now())
+		d.logf("phone push: waiting up to %s for the link to send %s %s: %v", patience, note.Kind, note.SessionID, linkDown)
+		if err := d.awaitConnect(ctx, nextConnect, patience); err != nil {
+			if errors.Is(err, errPhonePushExpired) {
+				d.logf("phone push: dropped %s %s: the link stayed down past the %s freshness limit: %v", note.Kind, note.SessionID, phonePushFreshFor, linkDown)
+				return nil
+			}
+			return err
+		}
+		waited = true
+	}
+}
+
+var errPhonePushExpired = errors.New("the note outlived its freshness limit")
+
+func (d *Daemon) awaitConnect(ctx context.Context, nextConnect <-chan struct{}, patience time.Duration) error {
+	expired := d.clock.NewTimer(PhonePushLinkWaitTimer, patience)
+	defer expired.Stop()
+	select {
+	case <-nextConnect:
+		return nil
+	case <-expired.C():
+		return errPhonePushExpired
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (d *Daemon) phoneNote(ctx context.Context, pushes *phonePushes, ev bus.Event) (phonePushNote, bool) {
 	switch ev.Name {
 	case FactSessionStateChanged:
-		note, ok = d.waitingNote(ctx, pushes, protocol.SessionID(ev.Subject))
+		return d.waitingNote(ctx, pushes, protocol.SessionID(ev.Subject))
 	case FactAskOpened:
-		note, ok = d.askNote(ev.Subject)
+		return d.askNote(ev.Subject)
 	}
-	if !ok {
-		return
-	}
+	return phonePushNote{}, false
+}
+
+func (d *Daemon) sendNote(link *cloudlink.Link, note phonePushNote, reached map[string]bool) (linkDown error) {
 	pairings, err := phoneHome{d}.Pairings()
 	if err != nil {
 		d.logf("phone push: reading pairings: %v", err)
-		return
+		return nil
 	}
 	note.V, note.HomeID, note.HomeName = 1, link.Status().HomeID, link.HomeName()
 	if profile, err := d.store.GetProfile(note.ProfileID); err == nil {
@@ -106,22 +158,24 @@ func (d *Daemon) pushToPhones(ctx context.Context, pushes *phonePushes, ev bus.E
 	plaintext, err := json.Marshal(note)
 	if err != nil {
 		d.logf("phone push: encoding the note: %v", err)
-		return
+		return nil
 	}
 	for _, pairing := range pairings {
-		if pairing.ProfileID != note.ProfileID {
+		if pairing.ProfileID != note.ProfileID || reached[pairing.DeviceID] {
 			continue
 		}
 		err := link.Push(pairing, plaintext, note.collapseID)
 		switch {
 		case errors.Is(err, cloudlink.ErrLinkDown):
-			d.logf("phone push: dropped %s %s for device %s: %v", note.Kind, note.SessionID, pairing.DeviceID, err)
+			return err
 		case err != nil:
 			d.logf("phone push: %s %s for device %s: %v", note.Kind, note.SessionID, pairing.DeviceID, err)
 		default:
 			d.logf("phone push: sent %s %s to device %s", note.Kind, note.SessionID, pairing.DeviceID)
 		}
+		reached[pairing.DeviceID] = true
 	}
+	return nil
 }
 
 func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID protocol.SessionID) (phonePushNote, bool) {
@@ -143,13 +197,13 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 		return phonePushNote{}, false
 	}
 	episode := string(session.State) + "@" + session.StateSince
-	if d.clock.Now().Sub(protocol.Timestamp(session.StateSince).Time()) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
+	since := protocol.Timestamp(session.StateSince).Time()
+	if d.clock.Now().Sub(since) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
 		return phonePushNote{}, false
 	}
 	if kind == phonePushWaiting {
 		text = lastParagraphTail(d.lastAssistantMessage(ctx, sessionID), phonePushTextRunes)
 	}
-	pushes.pushedEpisode[sessionID] = episode
 	sum := sha256.Sum256([]byte(string(sessionID) + "\n" + episode))
 	return phonePushNote{
 		ProfileID:  session.ProfileID,
@@ -158,6 +212,8 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 		Kind:       kind,
 		Text:       text,
 		collapseID: hex.EncodeToString(sum[:16]),
+		freshUntil: since.Add(phonePushFreshFor),
+		episode:    episode,
 	}, true
 }
 
@@ -172,7 +228,7 @@ func (d *Daemon) askNote(askID string) (phonePushNote, bool) {
 		return phonePushNote{}, false
 	}
 	created, err := time.Parse(time.RFC3339Nano, stored.CreatedAt)
-	if err != nil || d.clock.Now().Sub(created) > phonePushFreshFor {
+	if err != nil || d.clock.Now().Sub(created) > phonePushFreshFor || stored.Reply != nil {
 		return phonePushNote{}, false
 	}
 	title := protocol.Deref(shown.wire.SeedTitle)
@@ -187,6 +243,7 @@ func (d *Daemon) askNote(askID string) (phonePushNote, bool) {
 		Text:       clipRunes(stored.Subject, phonePushTextRunes),
 		AskID:      askID,
 		collapseID: "ask-" + askID,
+		freshUntil: created.Add(phonePushFreshFor),
 	}, true
 }
 

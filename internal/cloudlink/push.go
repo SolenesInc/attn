@@ -33,8 +33,9 @@ func SealPush(deviceNoisePub, plaintext []byte) ([]byte, error) {
 	return hpke.Seal(recipient, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), []byte(PushInfo), plaintext)
 }
 
-// Push asks Attn Cloud to deliver plaintext, sealed to the paired device, as a notification. Pushes are best effort:
-// when the link is down the push is dropped with ErrLinkDown, and the relay reports its own refusals as error frames.
+// Push asks Attn Cloud to deliver plaintext, sealed to the paired device, as a notification. It returns ErrLinkDown
+// when the frame did not reach the socket; the caller decides whether to wait for NextConnect. The relay reports its
+// own refusals as error frames.
 func (l *Link) Push(p Pairing, plaintext []byte, collapseID string) error {
 	sealed, err := SealPush(p.DeviceNoisePub, plaintext)
 	if err != nil {
@@ -50,7 +51,10 @@ func (l *Link) Push(p Pairing, plaintext []byte, collapseID string) error {
 	if s == nil {
 		return ErrLinkDown
 	}
-	return s.write(framePush, 0, payload)
+	if err := s.write(framePush, 0, payload); err != nil {
+		return fmt.Errorf("%w: %w", ErrLinkDown, err)
+	}
+	return nil
 }
 
 func (l *Link) HomeName() string { return l.cfg.HomeName }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -190,5 +191,117 @@ func TestEveryApprovalAnAgentNeedsPushesOnItsOwn(t *testing.T) {
 	codex.AskApproval()
 	if note := next(); note.Kind != "needs_approval" || note.SessionID != session {
 		t.Fatalf("the second approval in the same turn pushed %+v, want its own needs_approval push", note)
+	}
+}
+
+func startPhoneHome(t *testing.T) (*testworld.Stack, *testworld.Peer, *testworld.Cloud, []*testworld.Phone, string) {
+	t.Helper()
+	cloud := testworld.StartCloud(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
+	s.Start()
+	app := s.App()
+	enableAsks(t, app)
+	setPhoneAccess(t, app, true)
+	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	phones := []*testworld.Phone{pairPhone(t, app, cloud, app.SelectedProfile(), "iPhone")}
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"), labelled("builder"))
+	s.Launched(session)
+	return s, app, cloud, phones, session
+}
+
+func openAsk(t *testing.T, s *testworld.Stack, session, question string) string {
+	t.Helper()
+	asked := s.Run(testworld.Invocation{Args: []string{"ask"}, Session: session, Stdin: ":::question\n" + question + "\n- [ ] Yes\n- [ ] No\n:::\n"})
+	askID := regexp.MustCompile(`^Asked (a-[0-9a-z]{6})`).FindStringSubmatch(asked.Stdout)
+	if asked.Code != 0 || askID == nil {
+		t.Fatalf("attn ask exited %d with stdout %q and stderr %q", asked.Code, asked.Stdout, asked.Stderr)
+	}
+	return askID[1]
+}
+
+func awaitLinkDown(t *testing.T, app *testworld.Peer, since int) {
+	t.Helper()
+	testworld.AwaitSince(app, since, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
+		return m.Link.State != protocol.PhoneLinkStateConnected
+	})
+}
+
+func TestAnAskOpenedWhileTheLinkIsDownPushesWhenItReturns(t *testing.T) {
+	t.Parallel()
+	s, app, cloud, phones, session := startPhoneHome(t)
+
+	before := len(app.Log())
+	restore := cloud.Outage()
+	awaitLinkDown(t, app, before)
+	askID := openAsk(t, s, session, "Ship during the gap?")
+	restore()
+
+	note := awaitPushesUntil(t, cloud, phones, func(openedPush) bool { return true })[0].note
+	if note.Kind != "ask" || note.AskID != askID {
+		t.Fatalf("the push after the link returned = %+v, want ask %s", note, askID)
+	}
+}
+
+func TestAnAskThatOutlivesTheFreshnessLimitDuringAnOutageNeverPushes(t *testing.T) {
+	t.Parallel()
+	s, app, cloud, phones, session := startPhoneHome(t)
+
+	before := len(app.Log())
+	restore := cloud.Outage()
+	awaitLinkDown(t, app, before)
+	openAsk(t, s, session, "Ship during the gap?")
+	s.AwaitTimer(daemon.PhonePushLinkWaitTimer)
+	s.Advance(2 * time.Minute)
+
+	back := len(app.Log())
+	restore()
+	testworld.AwaitSince(app, back, protocol.EventPhonesUpdated, linkConnected)
+	later := openAsk(t, s, session, "Ship after the gap?")
+	if note := awaitPushesUntil(t, cloud, phones, func(openedPush) bool { return true })[0].note; note.AskID != later {
+		t.Fatalf("the first push after the outage = %+v, want only the later ask %s", note, later)
+	}
+}
+
+func TestAnAskAnsweredDuringAnOutageNeverPushes(t *testing.T) {
+	t.Parallel()
+	s, app, cloud, phones, session := startPhoneHome(t)
+
+	before := len(app.Log())
+	restore := cloud.Outage()
+	awaitLinkDown(t, app, before)
+	answeredID := openAsk(t, s, session, "Ship during the gap?")
+	s.AwaitTimer(daemon.PhonePushLinkWaitTimer)
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: answeredID, Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Yes"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+	if answered.Error != nil {
+		t.Fatalf("ask_answer: %s", *answered.Error)
+	}
+
+	restore()
+	later := openAsk(t, s, session, "Ship after the gap?")
+	if note := awaitPushesUntil(t, cloud, phones, func(openedPush) bool { return true })[0].note; note.AskID != later {
+		t.Fatalf("the first push after the outage = %+v, want only the unanswered ask %s", note, later)
+	}
+}
+
+func TestADaemonKilledDuringAnOutageKeepsThePendingPush(t *testing.T) {
+	t.Parallel()
+	s, app, cloud, phones, session := startPhoneHome(t)
+
+	before := len(app.Log())
+	restore := cloud.Outage()
+	awaitLinkDown(t, app, before)
+	askID := openAsk(t, s, session, "Ship during the gap?")
+	s.AwaitTimer(daemon.PhonePushLinkWaitTimer)
+
+	s.Stop()
+	s.Start()
+	restore()
+
+	note := awaitPushesUntil(t, cloud, phones, func(openedPush) bool { return true })[0].note
+	if note.Kind != "ask" || note.AskID != askID {
+		t.Fatalf("the push after the kill and restart = %+v, want ask %s", note, askID)
 	}
 }

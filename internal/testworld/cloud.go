@@ -86,6 +86,9 @@ func (c *Cloud) Dials() <-chan struct{} { return c.proxy.dials }
 
 func (c *Cloud) Cut() int { return c.proxy.cut() }
 
+// Outage cuts the home's connections and refuses new ones until the returned function runs.
+func (c *Cloud) Outage() (restore func()) { return c.proxy.outage() }
+
 func (c *Cloud) Open() int { return c.proxy.open() }
 
 func (c *Cloud) Closed() <-chan struct{} { return c.proxy.closed }
@@ -96,6 +99,7 @@ type cutProxy struct {
 	dials  chan struct{}
 	closed chan struct{}
 	mu     sync.Mutex
+	down   bool
 	conns  map[net.Conn]net.Conn
 }
 
@@ -122,6 +126,13 @@ func startCutProxy(t *testing.T, target string) *cutProxy {
 }
 
 func (p *cutProxy) serve(home net.Conn) {
+	p.mu.Lock()
+	down := p.down
+	p.mu.Unlock()
+	if down {
+		home.Close()
+		return
+	}
 	cloud, err := net.Dial("tcp", p.target)
 	if err != nil {
 		home.Close()
@@ -156,6 +167,18 @@ func (p *cutProxy) cut() int {
 		cloud.Close()
 	}
 	return len(conns)
+}
+
+func (p *cutProxy) outage() func() {
+	p.mu.Lock()
+	p.down = true
+	p.mu.Unlock()
+	p.cut()
+	return func() {
+		p.mu.Lock()
+		p.down = false
+		p.mu.Unlock()
+	}
 }
 
 func (p *cutProxy) open() int {
