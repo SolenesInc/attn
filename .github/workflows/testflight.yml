@@ -31,6 +31,10 @@ on:
       - 'app/src/utils/supportInputTrace.ts'
       - 'app/src/utils/terminalSizing.ts'
   workflow_dispatch:
+    inputs:
+      probe_failing_key:
+        type: boolean
+        default: false
   schedule:
     - cron: '17 6 * * 1'
 
@@ -88,21 +92,36 @@ jobs:
 
       - name: Build, sign and upload
         env:
-          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_API_KEY: ${{ inputs.probe_failing_key && '-----BEGIN PRIVATE KEY----- not a key' || secrets.ASC_API_KEY }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           GH_TOKEN: ${{ github.token }}
           TESTFLIGHT_FAILURE_FILE: ${{ runner.temp }}/testflight-failure
         run: mobile/scripts/testflight.sh
 
+      - name: Count the ids in the logs a failed run keeps
+        if: always() && inputs.probe_failing_key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          for log in mobile/ios/App/build/testflight-*/*.log; do
+            echo "$(basename "$log"): $(wc -l <"$log") lines"
+            echo "  key id value: $(grep -cF "$ASC_KEY_ID" "$log" || true)"
+            echo "  issuer id value: $(grep -cF "$ASC_ISSUER_ID" "$log" || true)"
+            echo "  key id placeholder: $(grep -cF '<key id>' "$log" || true)"
+            echo "  issuer id placeholder: $(grep -cF '<issuer id>' "$log" || true)"
+            echo "  PEM header: $(grep -cF 'PRIVATE KEY' "$log" || true)"
+          done
+          echo "last lines of upload.log, ids masked by Actions:"
+          tail -n 8 mobile/ios/App/build/testflight-*/upload.log | cut -c1-200
+
       - name: Keep the build logs
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: testflight-logs
-          path: |
-            mobile/ios/App/build/testflight-*/*.log
-            mobile/ios/App/build/testflight-*/export/DistributionSummary.plist
+          path: mobile/ios/App/build/testflight-*/*.log
           retention-days: 14
           if-no-files-found: ignore
 
