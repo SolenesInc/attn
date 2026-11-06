@@ -24,6 +24,12 @@ export const usePeekReplies = create<PeekReplies>((set) => ({
   }),
 }));
 
+export function retainTypedReply(terminalId: string) {
+  const { byTerminal, put } = usePeekReplies.getState();
+  const reply = byTerminal.get(terminalId);
+  if (reply?.status === 'typed') put(terminalId, { status: 'not_sent', text: reply.text, reason: reply.reason });
+}
+
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export async function deliverPeekReply(
@@ -49,6 +55,6 @@ export async function deliverPeekReply(
     forget(terminalId);
   } catch (error) {
     put(terminalId, { status: 'typed', text, reason: reasonOf(error) });
-    useToastStore.getState().append({ message: `Your reply to ${terminalTitle} was typed but not submitted`, source: `${reasonOf(error)}. Hover its chip to send Return again.` });
+    useToastStore.getState().append({ message: `Your reply to ${terminalTitle} was typed but not submitted`, source: `${reasonOf(error)}. Hover its chip to finish it.` });
   }
 }

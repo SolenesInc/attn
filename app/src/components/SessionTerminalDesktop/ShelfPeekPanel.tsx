@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useDesktopShelfStore, type ShelfPeekAnchor, type ShelfTile } from '../../store/desktopShelf';
-import { deliverPeekReply, usePeekReplies, type PeekReply } from '../../store/peekReplies';
+import { deliverPeekReply, retainTypedReply, usePeekReplies, type PeekReply } from '../../store/peekReplies';
 import { sessionHasStopped, useSessionStore } from '../../store/sessions';
 import { tileKindLabel } from '../../utils/tilePresentation';
 import { StateIndicator } from '../StateIndicator';
@@ -16,7 +16,19 @@ const EDGE_PX = 8;
 const ANCHOR_GAP_PX = 6;
 const SIDEBAR_ROW_LIFT_PX = 60;
 
+function useStoppedAgentsRetainTypedReplies() {
+  const { agentPaneById, sessionById } = useDesktopContext();
+  const replies = usePeekReplies((state) => state.byTerminal);
+  useEffect(() => {
+    for (const pane of agentPaneById.values()) {
+      const session = sessionById.get(pane.sessionId);
+      if (session && sessionHasStopped(session)) retainTypedReply(pane.runtimeId);
+    }
+  }, [agentPaneById, sessionById, replies]);
+}
+
 export function ShelfPeekPanel() {
+  useStoppedAgentsRetainTypedReplies();
   const { desktopId } = useDesktopContext();
   const peek = useDesktopShelfStore((state) => (state.peek?.desktopId === desktopId ? state.peek : null));
   const tile = useDesktopShelfStore((state) => {
@@ -80,16 +92,16 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor |
     return () => window.removeEventListener('pointerdown', closeOutside, true);
   }, []);
 
-  const open = () => {
-    if (terminalId) keepReplyAcrossOpening(terminalId);
-    closeShelfPeek();
-    useSessionStore.getState().selectLeaf(desktopId, tile.leafId);
-  };
   const agentPane = agentPaneById.get(tile.leafId);
   const session = agentPane ? sessionById.get(agentPane.sessionId) : undefined;
   const blockedReason = session && sessionHasStopped(session)
     ? 'Agent stopped. Open its tile to resume it; your reply stays there.'
     : session && session.reach !== 'reachable' ? session.outpostNotice : undefined;
+  const open = () => {
+    if (terminalId) keepReplyAcrossOpening(terminalId, blockedReason !== undefined);
+    closeShelfPeek();
+    useSessionStore.getState().selectLeaf(desktopId, tile.leafId);
+  };
 
   return (
     <div className="shelf-peek-layer" ref={layer}>
@@ -129,10 +141,13 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor |
   );
 }
 
-function keepReplyAcrossOpening(terminalId: string) {
+function keepReplyAcrossOpening(terminalId: string, targetTakesNoInput: boolean) {
   const { byTerminal, put, forget } = usePeekReplies.getState();
   const reply = byTerminal.get(terminalId);
-  if (reply?.status === 'typed') forget(terminalId);
+  if (reply?.status === 'typed') {
+    if (targetTakesNoInput) retainTypedReply(terminalId);
+    else forget(terminalId);
+  }
   if (reply?.status === 'draft') put(terminalId, { status: 'not_sent', text: reply.text, reason: null });
 }
 

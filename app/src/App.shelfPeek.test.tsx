@@ -279,6 +279,106 @@ describe('Shelf peek', () => {
     expect(screen.getByTestId('shelf-peek-input')).toHaveValue('');
   });
 
+  describe('when Return fails and the agent stops', () => {
+    const STOPPED = { state: 'idle' as const, terminal_exit: { code: 1, at: '2026-10-07T00:20:04+02:00' } };
+    const stop = (daemon: ScriptedDaemon) => daemon.emit({ event: 'session_state_changed', session: daemonSession('s5', STOPPED) });
+    const onTile = () => within(document.querySelector<HTMLElement>('[data-pane-id="pane-s5"]')!).getByTestId('unsent-peek-reply');
+
+    async function replyWhoseReturnFails(daemon: ScriptedDaemon, onReturn: () => void = () => {}) {
+      answerInput(daemon, (data) => {
+        if (data !== '\r') return null;
+        onReturn();
+        return 'session not running';
+      });
+      await peekAt(daemon, 's5');
+      fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
+      await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('shelf-peek-input'), { key: 'Enter' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('typed but not submitted');
+    }
+
+    const screens = () => 'a screen without the reply';
+
+    it.each([
+      ['after the failure', false],
+      ['before the failure arrives', true],
+    ])('Open keeps the reply on the tile and types nothing, with the stop %s', async (_name, stopFirst) => {
+      const daemon = await renderRow(SHELF_ON, { screens });
+      await replyWhoseReturnFails(daemon, () => {
+        if (stopFirst) stop(daemon);
+      });
+      if (!stopFirst) await gesture(daemon, () => stop(daemon));
+
+      await peekAt(daemon, 's5');
+      expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('your reply stays there');
+      await gesture(daemon, () => fireEvent.click(within(screen.getByTestId('shelf-peek')).getByRole('button', { name: /Open/ })));
+
+      expect(screen.getByText('Agent stopped.')).toBeVisible();
+      expect(onTile()).toHaveTextContent('Unsent reply: ship it');
+      expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r']);
+      await gesture(daemon, () => fireEvent.click(within(onTile()).getByRole('button', { name: 'Discard' })));
+      expect(screen.queryByTestId('unsent-peek-reply')).toBeNull();
+    });
+
+    it('the tile offers the reply when reached from its chip, without the peek', async () => {
+      const daemon = await renderRow(SHELF_ON, { screens });
+      await replyWhoseReturnFails(daemon);
+      await gesture(daemon, () => stop(daemon));
+
+      await gesture(daemon, () => fireEvent.click(chip('s5')));
+
+      expect(onTile()).toHaveTextContent('Unsent reply: ship it');
+    });
+
+    it('after a resume, Enter sends the whole reply to the new process, and only then', async () => {
+      const daemon = await renderRow(SHELF_ON, { screens });
+      await replyWhoseReturnFails(daemon);
+      await gesture(daemon, () => stop(daemon));
+      await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: daemonSession('s5', { state: 'waiting_input' as const }) }));
+      answerInput(daemon);
+
+      await peekAt(daemon, 's5');
+      expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r']);
+      expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent('may not have arrived: session not running. Check the screen');
+      const input = screen.getByTestId('shelf-peek-input');
+      expect(input).toHaveValue('ship it');
+      expect(input).not.toHaveAttribute('readonly');
+
+      await gesture(daemon, () => fireEvent.keyDown(input, { key: 'Enter' }));
+      expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r', 'ship it', '\r']);
+      await peekAt(daemon, 's5');
+      expect(screen.getByTestId('shelf-peek-input')).toHaveValue('');
+    });
+  });
+
+  it('Open keeps a reply whose Return failed when the outpost cannot be reached', async () => {
+    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    answerInput(daemon, (data) => (data === '\r' ? 'the bridge ended before the answer' : null));
+    await peekAt(daemon, 's5');
+    fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('shelf-peek-input'), { key: 'Enter' }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [CONNECTING] }));
+
+    await peekAt(daemon, 's5');
+    await gesture(daemon, () => fireEvent.click(within(screen.getByTestId('shelf-peek')).getByRole('button', { name: /Open/ })));
+
+    expect(screen.getByTestId('unsent-peek-reply')).toHaveTextContent('Unsent reply: ship it');
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r']);
+  });
+
+  it('Open leaves a reply whose Return failed to the live terminal that holds its text', async () => {
+    const daemon = await renderRow(SHELF_ON);
+    answerInput(daemon, (data) => (data === '\r' ? 'the terminal did not answer' : null));
+    await peekAt(daemon, 's5');
+    fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('shelf-peek-input'), { key: 'Enter' }));
+
+    await peekAt(daemon, 's5');
+    await gesture(daemon, () => fireEvent.click(within(screen.getByTestId('shelf-peek')).getByRole('button', { name: /Open/ })));
+
+    expect(screen.queryByTestId('unsent-peek-reply')).toBeNull();
+    expect(repliesTo(daemon, 's5')).toEqual(['ship it', '\r']);
+  });
+
   it('after the text lands and Return fails, a retry sends only Return', async () => {
     const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
     answerInput(daemon, (data) => (data === '\r' ? 'the bridge ended before the answer' : null));
