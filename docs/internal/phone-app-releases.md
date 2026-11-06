@@ -54,7 +54,7 @@ node mobile/scripts/testflight-paths.mjs
 
 A stale list only delays a change until the next build, so nothing checks it.
 
-A build takes about 4 minutes on the runner: 3m38s to 4m11s for the job, on the
+A build takes about 4 minutes on the runner: 3m19s to 4m11s for the job, on the
 first three builds. The workflow selects Xcode 26.3 with `DEVELOPER_DIR`, because
 the runner's default is 16.4. When GitHub removes that version from
 [the runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md),
