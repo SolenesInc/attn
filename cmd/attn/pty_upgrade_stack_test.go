@@ -325,24 +325,22 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 				u.turn(app, agent, "before-update")
 			}
 
-			app.TypeLine(claude.session, "turn-across-the-replace")
-			if prompt := claude.run.Prompted(); prompt != "turn-across-the-replace" {
-				t.Fatalf("claude took %q", prompt)
-			}
+			working := u.startTurn(app, claude, "turn-across-the-replace")
 			if !path.appOpen {
 				app.Close()
 			}
 			u.InstallBuild(u.currentAttn, u.currentHost)
-			acrossTheReplace := u.reply(claude, "turn-across-the-replace")
+			claude.run.Reply("turn-across-the-replace reply <!-- attn:state=idle -->")
+			stopped := func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle }
 			if path.appOpen {
-				testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == acrossTheReplace })
+				testworld.AwaitStateAfter(app, working, stopped)
 			}
 
 			app = u.ensureCurrent()
 			if len(app.Initial.Warnings) != 0 {
 				t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 			}
-			testworld.AwaitSession(app, claude.session, func(x protocol.Session) bool { return x.State == acrossTheReplace })
+			testworld.AwaitStateAfter(app, working, stopped)
 			app.AwaitScreen(claude.session, "turn-across-the-replace reply")
 			for _, agent := range []releaseAgent{claude, codex} {
 				u.assertNoReloadNotice(app, agent.session)
@@ -449,6 +447,9 @@ func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRu
 		t.Fatalf("attn daemon ensure with no host build checked yet: %+v", got)
 	}
 	app := s.App()
+	if len(app.Initial.Warnings) != 0 {
+		t.Errorf("the first start warns: %+v", app.Initial.Warnings)
+	}
 	early := u.spawnAgent(app, fakeagent.Claude)
 	if app.Initial.Settings[upgradeSharedHostActive] != "true" {
 		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
@@ -846,16 +847,24 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	}
 	remote.AwaitStopped()
 	host := row.ID
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync
+	})
+	remoteApp = remote.App()
+	if came := initialSession(t, remoteApp, liveShell); protocol.Deref(came.TerminalBuildStale) {
+		t.Errorf("the outpost's shell came back with the reload notice")
+	}
+	terminal := remoteApp.Terminal(liveShell)
+	attached := testworld.Request(remoteApp, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
 	shellPID, err := strconv.Atoi(strings.TrimSpace(string(before)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Kill(shellPID, 0); err != nil {
-		t.Errorf("the outpost's shell (pid %d) did not survive the update: %v", shellPID, err)
+	if !protocol.Deref(attached.Running) || protocol.Deref(attached.Pid) != shellPID {
+		t.Errorf("the outpost's shell attached as %+v, want the same running process %d", attached, shellPID)
 	}
-	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		return len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync
-	})
+	remoteApp.AwaitScreen(liveShell, "before-2")
 	fresh := home.Spawn(app, fakeagent.Claude, remote.Path("claude"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	run := remote.LaunchedCarrying(app.Terminal(fresh))
 	app.TypeLine(fresh, "on-the-updated-outpost")
@@ -892,7 +901,6 @@ type releaseUpdate struct {
 	*testworld.Stack
 	t                        *testing.T
 	currentAttn, currentHost string
-	endedWaiting             map[string]bool
 }
 
 type releaseAgent struct {
@@ -1037,28 +1045,20 @@ func (shell *releaseShell) assertSameProcess(app *testworld.Peer) {
 // turn proves input reaches the agent's process and that its hooks still drive its state.
 func (u *releaseUpdate) turn(app *testworld.Peer, agent releaseAgent, phase string) {
 	u.T.Helper()
+	working := u.startTurn(app, agent, phase)
+	agent.run.Reply(phase + " reply <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	app.AwaitScreen(agent.session, phase+" reply")
+}
+
+func (u *releaseUpdate) startTurn(app *testworld.Peer, agent releaseAgent, phase string) protocol.Session {
+	u.T.Helper()
+	mark := len(app.Log())
 	app.TypeLine(agent.session, phase)
 	if prompt := agent.run.Prompted(); prompt != phase {
 		u.T.Fatalf("%s took %q, want %q", agent.run.Harness, prompt, phase)
 	}
-	state := u.reply(agent, phase)
-	testworld.AwaitSession(app, agent.session, func(x protocol.Session) bool { return x.State == state })
-	app.AwaitScreen(agent.session, phase+" reply")
-}
-
-// reply ends the agent's turn in the state its last turn did not end in, so seeing that state proves this turn's hooks ran.
-func (u *releaseUpdate) reply(agent releaseAgent, phase string) protocol.SessionState {
-	u.T.Helper()
-	state, marker := protocol.SessionStateWaitingInput, "waiting_input"
-	if u.endedWaiting[agent.session] {
-		state, marker = protocol.SessionStateIdle, "idle"
-	}
-	if u.endedWaiting == nil {
-		u.endedWaiting = map[string]bool{}
-	}
-	u.endedWaiting[agent.session] = marker == "waiting_input"
-	agent.run.Reply(phase + " reply <!-- attn:state=" + marker + " -->")
-	return state
+	return testworld.AwaitSessionSince(app, mark, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 }
 
 func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {
