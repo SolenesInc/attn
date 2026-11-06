@@ -2,6 +2,8 @@ package daemon_test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -110,6 +112,57 @@ location: {type: directory, path: %q}
 			}
 		}
 	})
+}
+
+func TestRetentionRemovesFinishedCleanCheckoutsAndKeepsDirtyAndLiveOnes(t *testing.T) {
+	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
+	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "0s")
+	t.Setenv("ATTN_AUTOMATION_RETENTION_SWEEP_INTERVAL", "1m")
+	r := newAutomationReviewWorld(t)
+	applyAutomation(t, r.cli, automationReviewSpec("manual-review", "manual", automationReviewOverride(r.clone)))
+	checkouts := map[string]protocol.AutomationRunSummary{}
+	for i, name := range []string{"clean", "dirty", "live"} {
+		run, err := r.cli.AutomationRun(2, name, automationReviewInput(51+i, r.head))
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkouts[name] = *run.Run
+		r.w.Launched(string(protocol.Deref(run.Run.SessionID)))
+	}
+	for _, name := range []string{"clean", "dirty"} {
+		if err := r.cli.Unregister(protocol.Deref(checkouts[name].SessionID)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	worktree := func(name string) string {
+		return filepath.Join(r.w.Dir, "automation", "worktrees", string(protocol.Deref(checkouts[name].SessionID)), "shop")
+	}
+	input := func(name string) string {
+		return filepath.Join(r.w.Dir, "automation", "occurrences", checkouts[name].ID+".json")
+	}
+	if err := os.WriteFile(filepath.Join(worktree("dirty"), "notes.txt"), []byte("unsaved review notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r.w.tickSchedulesUntil("the sweep prunes the clean run", func() bool {
+		return automationRunState(automationRuns(t, r.cli, 2), checkouts["clean"].ID) == ""
+	})
+
+	runs := automationRuns(t, r.cli, 2)
+	for name, kept := range map[string]bool{"clean": false, "dirty": true, "live": true} {
+		if got := automationRunState(runs, checkouts[name].ID) != ""; got != kept {
+			t.Errorf("after the sweep the %s run exists=%t, want %t", name, got, kept)
+		}
+		if _, err := os.Stat(worktree(name)); (err == nil) != kept {
+			t.Errorf("after the sweep the %s checkout exists=%t, want %t", name, err == nil, kept)
+		}
+		if _, err := os.Stat(input(name)); (err == nil) != kept {
+			t.Errorf("after the sweep the %s occurrence input exists=%t, want %t", name, err == nil, kept)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(worktree("dirty"), "notes.txt")); err != nil {
+		t.Errorf("the sweep lost the dirty checkout's notes: %v", err)
+	}
 }
 
 func automationRunIDs(runs []protocol.AutomationRunSummary) []string {

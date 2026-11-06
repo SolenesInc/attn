@@ -169,11 +169,3 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 		t.Fatalf("withdrawn-before-launch re-request rejected: %v", err)
 	}
 }
-
-const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
-name: Manual check
-trigger: {type: manual}
-prompt: Check locally.
-launch: {driver: codex}
-location: {type: directory, path: "%s"}
-`

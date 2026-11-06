@@ -33,7 +33,6 @@
     "real-app:scenario-tr201": "node scripts/real-app-harness/scenario-tr201-local-relaunch-existing-split.mjs",
     "real-app:scenario-tr301": "node scripts/real-app-harness/scenario-tr301-local-utility-session-switch.mjs",
     "real-app:scenario-crash-recovery": "node scripts/real-app-harness/scenario-crash-recovery-resumability.mjs",
-    "real-app:scenario-automation-pr-continuity": "node scripts/real-app-harness/scenario-automation-pr-continuity.mjs",
     "real-app:scenario-worktree-surface": "node scripts/real-app-harness/scenario-worktree-surface.mjs",
     "real-app:scenario-automation-form": "node scripts/real-app-harness/scenario-automation-form.mjs",
     "real-app:scenario-tr401": "node scripts/real-app-harness/scenario-tr401-local-window-resize.mjs",
