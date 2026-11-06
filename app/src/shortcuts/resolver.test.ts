@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SHORTCUTS } from './registry';
 import {
   DEFAULT_DOCK,
@@ -71,8 +71,6 @@ describe('parseKeybindingsConfig', () => {
 });
 
 describe('a default the user already took', () => {
-  afterEach(() => setShortcutOverrides({}));
-
   it('leaves a default unbound when the user already bound its combo to another action', () => {
     setShortcutOverrides({ 'session.new': SHORTCUTS['ui.commandPalette'] });
 

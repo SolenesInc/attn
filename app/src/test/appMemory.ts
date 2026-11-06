@@ -1,6 +1,7 @@
 import { clearHarnesses } from '../hooks/useHarnesses';
 import { clearHarnessModelCatalogs } from '../hooks/useHarnessRoute';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
+import { setShortcutOverrides } from '../shortcuts/resolver';
 import { gardenScrollMemory } from '../store/gardenWalk';
 import { storeResets } from './storeResets';
 
@@ -10,4 +11,5 @@ export function forgetAppMemory() {
   clearHarnessModelCatalogs();
   clearHarnesses();
   _resetEscapeStackForTest();
+  setShortcutOverrides({});
 }

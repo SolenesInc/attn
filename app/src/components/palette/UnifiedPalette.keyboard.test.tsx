@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { setShortcutOverrides } from '../../shortcuts/resolver';
 import { buildQueueBands } from '../../utils/queueBands';
@@ -89,8 +89,6 @@ function renderPalette({
 }
 
 describe('UnifiedPalette keyboard flow', () => {
-  afterEach(() => setShortcutOverrides({}));
-
   it('walks agents and runs while stepping over the divider and definition headers', () => {
     const palette = renderPalette();
     expect(palette.highlighted()).toContain('chief');
