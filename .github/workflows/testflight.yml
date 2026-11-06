@@ -31,11 +31,6 @@ on:
       - 'app/src/utils/supportInputTrace.ts'
       - 'app/src/utils/terminalSizing.ts'
   workflow_dispatch:
-    inputs:
-      probe:
-        type: choice
-        default: none
-        options: [none, decide-fails, real-decision, upload-fails]
   schedule:
     - cron: '17 6 * * 1'
 
@@ -58,10 +53,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PROBE: ${{ inputs.probe }}
         run: |
-          [ "$PROBE" != decide-fails ] || exit 1
-          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$PROBE" = real-decision ]; then
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
             mobile/scripts/testflight-due.sh >> "$GITHUB_OUTPUT"
           else
             echo due=true >> "$GITHUB_OUTPUT"
@@ -102,7 +95,7 @@ jobs:
 
       - name: Build, sign and upload
         env:
-          ASC_API_KEY: ${{ inputs.probe == 'upload-fails' && 'not a key' || secrets.ASC_API_KEY }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           GH_TOKEN: ${{ github.token }}

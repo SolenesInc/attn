@@ -63,9 +63,9 @@ the build fails and the path needs updating.
 
 A failed build, or a failed decision whether to build, posts to Discord with the
 reason and the run's link, because the sheriff watches only the CI workflow. A
-scheduled run that finds a recent upload posts nothing. A failed run keeps its `archive.log` and
-`upload.log` as the `testflight-logs` artifact for 14 days. The repository is
-public, so those logs must not hold the key or its ids. Only the export step
+scheduled run that finds a recent upload posts nothing. A failed run keeps its
+`archive.log` and `upload.log` as the `testflight-logs` artifact for 14 days. The
+repository is public, so those logs must not hold the key or its ids. Only the export step
 takes the key, and xcodebuild does not print the flags of an export. Pass the
 key's flags to no step whose command line reaches a log.
 
