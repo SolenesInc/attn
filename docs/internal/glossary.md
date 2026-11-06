@@ -182,7 +182,7 @@ crew member             an agent with a permanent identity
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
 chief                   the crew member that coordinates one profile
-crew v2                 experimental setting: the chief is a crew member
+crew v2                 feature: the chief is a crew member
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
 wake                    starts a session for the member
@@ -234,7 +234,9 @@ home                    the main daemon the user's app connects to
 
 setting                 a daemon option, read and set with attn settings
 ├─ home setting         the home decides it; outposts keep a read-only copy
-└─ machine setting      each machine decides its own, like its harness paths
+├─ machine setting      each machine decides its own, like its harness paths
+└─ feature (0..n)       a home setting that turns on a feature still in rollout;
+                        like a feature flag
 ```
 
 ```text
