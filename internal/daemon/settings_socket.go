@@ -17,8 +17,10 @@ func (d *Daemon) settingEntry(spec settingSpec, key, value string) protocol.Sett
 	if spec.scope == profileScope {
 		entry.Scope = protocol.SettingScopeProfile
 	}
-	if spec.readOnly || spec.class == settingkeys.Home && !d.enrollmentStatus().IsHome() {
+	if spec.readOnly {
 		entry.ReadOnly = protocol.Ptr(true)
+	} else if spec.class == settingkeys.Home && !d.enrollmentStatus().IsHome() {
+		entry.SetAtHome = protocol.Ptr(true)
 	}
 	if strings.Contains(key, "<") {
 		entry.Family = protocol.Ptr(true)

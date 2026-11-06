@@ -598,7 +598,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
+            keywords: 'experimental quick capture global shortcut outposts remote computers nisse harness claude mod crew v2 chief launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',

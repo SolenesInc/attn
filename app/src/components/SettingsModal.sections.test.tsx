@@ -122,6 +122,16 @@ describe('SettingsModal sections', () => {
     expect(screen.getByRole('heading', { name: 'Font Size' })).toBeInTheDocument();
   });
 
+  it('finds every Experimental feature by its name, including one whose own section is hidden while it is off', async () => {
+    const { daemon } = await renderSettings();
+    const search = screen.getByRole('searchbox', { name: 'Search settings' });
+    const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
+    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Crew v2', 'Outposts', 'Asks', 'Agent callouts', 'Phone access', 'Shelf layout', 'Shared Codex', 'Usage analytics']) {
+      await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
+      expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
+    }
+  });
+
   it('finds the shared host in Experimental when searching for terminal hosting', async () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });

@@ -12752,6 +12752,9 @@ type SettingEntry struct {
 	// Scope corresponds to the JSON schema field "scope".
 	Scope SettingScope `json:"scope"`
 
+	// SetAtHome corresponds to the JSON schema field "set_at_home".
+	SetAtHome *bool `json:"set_at_home,omitempty,omitzero"`
+
 	// Value corresponds to the JSON schema field "value".
 	Value *string `json:"value,omitempty,omitzero"`
 }

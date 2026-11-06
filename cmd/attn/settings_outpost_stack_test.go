@@ -43,8 +43,8 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 		for _, entry := range entries.Entries {
 			if entry.Key == key {
 				found = true
-				if !protocol.Deref(entry.ReadOnly) {
-					t.Fatalf("copy not read-only: %+v", entry)
+				if protocol.Deref(entry.ReadOnly) || !protocol.Deref(entry.SetAtHome) {
+					t.Fatalf("a home setting on an outpost must say it is set at the home, not read-only: %+v", entry)
 				}
 			}
 		}
@@ -52,7 +52,7 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 			t.Fatalf("missing %s", key)
 		}
 	}
-	requireStdout(t, outpost.Attn("settings", "list", "--all"), "read-only")
+	requireStdout(t, outpost.Attn("settings", "list", "--all"), "theme", "set at the home")
 	requireStdout(t, outpost.Attn("settings", "set", "theme", "system"), "theme = system")
 	await("theme", "system")
 	requireStdout(t, home.Attn("settings", "get", "theme"), "system")

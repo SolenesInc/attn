@@ -1907,6 +1907,7 @@ model SettingEntry {
   description: string;
   value?: string;
   read_only?: boolean;
+  set_at_home?: boolean; // a home setting on an outpost: reads return the home's copy, and a set goes to the home
   family?: boolean;
 }
 model SettingsListResult {

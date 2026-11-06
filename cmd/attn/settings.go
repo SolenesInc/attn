@@ -134,6 +134,9 @@ func runSettings() {
 		if protocol.Deref(entry.ReadOnly) {
 			scope += ", read-only"
 		}
+		if protocol.Deref(entry.SetAtHome) {
+			scope += ", set at the home"
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", entry.Key, scope, value, entry.Description)
 	}
 	_ = w.Flush()

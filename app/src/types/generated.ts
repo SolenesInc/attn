@@ -9776,12 +9776,13 @@ export interface EventElement {
 }
 
 export interface Setting {
-    description: string;
-    family?:     boolean;
-    key:         string;
-    read_only?:  boolean;
-    scope:       SettingScope;
-    value?:      string;
+    description:  string;
+    family?:      boolean;
+    key:          string;
+    read_only?:   boolean;
+    scope:        SettingScope;
+    set_at_home?: boolean;
+    value?:       string;
     [property: string]: any;
 }
 
@@ -12102,12 +12103,13 @@ export enum SetVentSendResultMessageEvent {
 }
 
 export interface SettingEntry {
-    description: string;
-    family?:     boolean;
-    key:         string;
-    read_only?:  boolean;
-    scope:       SettingScope;
-    value?:      string;
+    description:  string;
+    family?:      boolean;
+    key:          string;
+    read_only?:   boolean;
+    scope:        SettingScope;
+    set_at_home?: boolean;
+    value?:       string;
     [property: string]: any;
 }
 
@@ -26133,6 +26135,7 @@ const typeMap: any = {
         { json: "key", js: "key", typ: "" },
         { json: "read_only", js: "read_only", typ: u(undefined, true) },
         { json: "scope", js: "scope", typ: r("SettingScope") },
+        { json: "set_at_home", js: "set_at_home", typ: u(undefined, true) },
         { json: "value", js: "value", typ: u(undefined, "") },
     ], "any"),
     "SettingsList": o([
@@ -27634,6 +27637,7 @@ const typeMap: any = {
         { json: "key", js: "key", typ: "" },
         { json: "read_only", js: "read_only", typ: u(undefined, true) },
         { json: "scope", js: "scope", typ: r("SettingScope") },
+        { json: "set_at_home", js: "set_at_home", typ: u(undefined, true) },
         { json: "value", js: "value", typ: u(undefined, "") },
     ], "any"),
     "SettingsListResult": o([
