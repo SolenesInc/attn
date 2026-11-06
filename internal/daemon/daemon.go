@@ -672,6 +672,9 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
 	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
+	if err := d.dropStaleCopy(); err != nil {
+		d.logf("drop the copy of terminals run for another home: %v", err)
+	}
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
 	if !d.backgroundLoginEnv {

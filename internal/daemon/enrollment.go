@@ -13,9 +13,6 @@ func (d *Daemon) ensureEnrollment() error {
 	d.outpost.enrollment = status
 	d.outpost.mu.Unlock()
 	d.logf("enrollment: %s (daemon %s)", status.Describe(), status.DaemonID)
-	if err := d.dropStaleCopy(); err != nil {
-		d.logf("drop the copy of terminals run for another home: %v", err)
-	}
 	return nil
 }
 

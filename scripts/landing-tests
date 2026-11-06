@@ -79,6 +79,10 @@ go ./cmd/attn TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHolds
 go ./cmd/attn TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod
 go ./cmd/attn TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto
 go ./cmd/attn TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns
+go ./internal/daemon TestTheDaemonAnswersWhileTheLoginShellRuns
+go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer
+go ./internal/daemon TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture
+go ./internal/daemon TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
