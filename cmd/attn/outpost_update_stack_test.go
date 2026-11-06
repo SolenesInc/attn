@@ -163,7 +163,7 @@ func TestSSHUpdateKeepsShellAndReconnectNeverInstalls(t *testing.T) {
 	t.Log("Remove stopped the remote instance and retained both binaries and its data")
 }
 
-const terminalOwner = `sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'`
+const terminalOwner = `sh -c 'basename "$(ps -o comm= -p $(ps -o ppid= -p $PPID))"'`
 
 func sha256OfFile(t *testing.T, path string) [32]byte {
 	t.Helper()
