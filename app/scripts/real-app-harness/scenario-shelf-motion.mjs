@@ -96,11 +96,12 @@ function summarizeMove(move, events) {
   const inMove = events.filter((event) => event.at >= move.pressedAt && event.at <= move.stoppedAt);
   const frames = inMove.filter((event) => event.kind === 'motion_frame' && event.trace === move.name);
   const animated = [...new Set(frames.flatMap((frame) => frame.animated))].sort();
-  const resizes = {};
+  const sizesAskedFor = {};
   for (const event of inMove) {
     if (event.kind !== 'resize' || event.source !== 'fit' || event.bail || event.toCols == null) continue;
-    resizes[event.pane] = (resizes[event.pane] ?? 0) + 1;
+    (sizesAskedFor[event.pane] ??= new Set()).add(`${event.toCols}x${event.toRows}`);
   }
+  const resizes = Object.fromEntries(Object.entries(sizesAskedFor).map(([pane, sizes]) => [pane, sizes.size]));
   const mounts = Object.fromEntries(inMove.filter((event) => event.kind === 'pane_mount').map((event) => [event.pane, event.at]));
   const panes = {};
   const last = frames.at(-1);
@@ -284,7 +285,8 @@ try {
     const launcher = '[data-testid="empty-desktop-launcher"]';
     const cwd = path.join(runner.sessionDir, 'emptied');
     fs.mkdirSync(cwd, { recursive: true });
-    const emptied = (await openHarnessDesktop(client, observer)).id;
+    const { id: emptied, shortcut_slot: ownSlot } = await openHarnessDesktop(client, observer);
+    runner.log('emptied desktop', { emptied, ownSlot });
     const only = (await request('create_session', { cwd, label: `emptied-${runner.runId}`, agent: 'shell' })).sessionId;
     sessions.push(only);
     await request('dom_wait', { selector: `[data-session-terminal-desktop="${emptied}"] .desktop-pane[data-pane-session-id="${only}"]`, timeoutMs: 15_000 });
@@ -293,7 +295,7 @@ try {
     await request('dom_wait', { selector: launcher, timeoutMs: 15_000 });
     await delay(SETTLE_WINDOW_MS);
     await traceMove('emptied-by-close', () => launchFromEmptyDesktop(emptied, cwd));
-    await press('desktop.sendStay9');
+    await press(`desktop.sendStay${ownSlot === 9 ? 8 : 9}`);
     await request('dom_wait', { selector: launcher, timeoutMs: 15_000 });
     await delay(SETTLE_WINDOW_MS);
     await traceMove('emptied-by-move', () => launchFromEmptyDesktop(emptied, cwd));

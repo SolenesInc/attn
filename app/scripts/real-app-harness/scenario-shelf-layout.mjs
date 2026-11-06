@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
@@ -135,7 +135,6 @@ runner.registerCleanup('close_server', () => new Promise((resolve) => {
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
   await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
 });
 runner.registerCleanup('close_sessions', async () => {
@@ -148,6 +147,8 @@ try {
 
   await runner.step('launch_with_the_setting_on', async () => {
     await launchFreshAppAndConnect(client, observer);
+    queueDaemonSettingRestore(observer, 'queue_mode_enabled');
+    await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
   });
