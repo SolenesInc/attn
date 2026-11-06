@@ -83,6 +83,16 @@ if (typeof navigator !== 'undefined') {
   Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
 }
 
+if (typeof Element !== 'undefined') {
+  const realAnimate = Element.prototype.animate;
+  Element.prototype.animate = function animationThatFinishesAtOnce(...args) {
+    const animation = realAnimate.apply(this, args);
+    animation.finished.catch(() => {});
+    queueMicrotask(() => animation.finish());
+    return animation;
+  };
+}
+
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,

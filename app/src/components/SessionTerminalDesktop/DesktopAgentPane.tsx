@@ -1,7 +1,7 @@
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import { leafShowsAsStrip } from './attentionLayout';
-import type { CSSProperties } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import type { NormalizedPaneBounds, TerminalDesktopState } from '../../types/desktop';
 import { StateIndicator } from '../StateIndicator';
 import { DesktopAgentBody } from './DesktopAgentBody';
@@ -27,11 +27,14 @@ export function DesktopAgentPane({
     suspendedLeafIds,
     focusLeaf,
     effectiveDraggingLeafId,
+    shelfOn,
   } = useDesktopContext();
   const refusal = useTerminalRefusals((state) => state.byTerminal.get(agentPane.runtimeId));
 
   const paneSession = sessionById.get(agentPane.sessionId);
-  const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
+  const lastSessionName = useRef<string | null>(null);
+  if (paneSession) lastSessionName.current = sessionDisplayName(paneSession);
+  const paneTitle = (shelfOn ? lastSessionName.current : paneSession && sessionDisplayName(paneSession)) ?? (agentPane.title || 'Session');
   if (leafShowsAsStrip(agentPane.id, suspendedLeafIds, effectivePaneId)) {
     return (
       <SuspendedDesktopPane

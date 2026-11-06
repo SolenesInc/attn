@@ -241,6 +241,7 @@ export interface GhosttyTerminalHandle {
   seedPlacements: (sessionId: string, placements: PlacementElement[]) => Promise<void>;
   reset: () => void;
   setSurfaceReleased: (released: boolean) => void;
+  captureStillFrame: () => HTMLCanvasElement | null;
   scrollToTop: () => boolean;
   getText: () => string;
   getSize: () => { cols: number; rows: number } | null;
@@ -981,6 +982,18 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       }
       renderer.restoreDrawingBuffer();
       renderSurface(true);
+    }, [renderSurface]);
+
+    const captureStillFrame = useCallback(() => {
+      const canvas = canvasRef.current;
+      if (!canvas || !rendererRef.current || surfaceReleasedRef.current) return null;
+      renderSurface(true);
+      const still = document.createElement('canvas');
+      still.width = canvas.width;
+      still.height = canvas.height;
+      still.style.cssText = canvas.style.cssText;
+      still.getContext('2d')?.drawImage(canvas, 0, 0);
+      return still;
     }, [renderSurface]);
 
     useEffect(() => {
@@ -2044,6 +2057,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       seedPlacements,
       reset: () => { recordDiag({ kind: 'reset', pane: diagKeyRef.current, session: runtimeMetaRef.current?.sessionId ?? undefined, model: modelInstanceRef.current }); modelOpRingRef.current.noteReset(); blockStoreRef.current.clear(); placementStoreRef.current.clear(); annotationsRef.current?.reset(); selectedBlockIdRef.current = null; void write('\x1bc'); },
       setSurfaceReleased,
+      captureStillFrame,
       scrollToTop: () => {
         const terminal = terminalRef.current;
         if (!terminal) return false;
@@ -2318,6 +2332,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           seedPlacements,
           reset: () => { recordDiag({ kind: 'reset', pane: diagKeyRef.current, session: runtimeMetaRef.current?.sessionId ?? undefined, model: modelInstanceRef.current }); modelOpRingRef.current.noteReset(); blockStoreRef.current.clear(); placementStoreRef.current.clear(); annotationsRef.current?.reset(); selectedBlockIdRef.current = null; void write('\x1bc'); },
           setSurfaceReleased,
+          captureStillFrame,
           scrollToTop: () => { viewportOffsetRef.current = terminal.getScrollbackLength(); wheelRemainderRowsRef.current = 0; hoverGenerationRef.current += 1; renderSurface(true); return true; },
           getText,
           getSize: () => ({ cols: terminal.cols, rows: terminal.rows }),
@@ -2461,7 +2476,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       };
     // Ghostty cells hold resolved default RGB, so a theme change needs a fresh model.
     // fontSize is not a dep: rebuilding every pane exhausts WKWebView's context pool.
-    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, scheduleCoalescedRefit, setSurfaceReleased, write]);
+    }, [cancelScheduledOutputRender, clearSynchronizedOutputRenderTimer, fit, getText, captureStillFrame, getVisibleContent, getVisibleStyleSummary, openFind, renderSurface, rendererEpoch, resizeLocal, resolvedTheme, restoreSnapshot, scheduleCoalescedRefit, setSurfaceReleased, write]);
 
     useEffect(() => {
       const renderer = rendererRef.current;

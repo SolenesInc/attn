@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
 import { SharedConversationNotice } from '../SharedConversationNotice';
@@ -7,6 +7,19 @@ import { paneNotice } from './paneNotice';
 import { DesktopOfflineNotice } from './DesktopOfflineNotice';
 import type { DesktopAgentProps } from './desktopTypes';
 import { sessionHasStopped, useSessionStore } from '../../store/sessions';
+
+function KeepsLastFrameForRowMotion({ paneId, children }: { paneId: string; children: ReactNode }) {
+  const { shelfOn, runtime, keepLeavingFrame } = useDesktopContext();
+  const keepFrame = useRef(() => {});
+  keepFrame.current = () => {
+    if (shelfOn) keepLeavingFrame(paneId, runtime.capturePaneStillFrame(paneId));
+  };
+  useLayoutEffect(() => {
+    keepLeavingFrame(paneId, null);
+    return () => keepFrame.current();
+  }, [keepLeavingFrame, paneId]);
+  return children;
+}
 
 export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSent }: DesktopAgentProps & { keysNotSent: number }) {
   const [resuming, setResuming] = useState(false);
@@ -87,38 +100,40 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
           data-testid={`pane-virtualized-${agentPane.id}`}
         />
       ) : (
-        <AnnotatedTerminal
-          ref={terminalRefForPane(agentPane.id)}
-          desktopId={desktopId}
-          sessionId={agentPane.sessionId}
-          annotationApi={annotationApi}
-          unavailableReason={paneSession?.offline ? `${paneSession.hostName} is unreachable` : undefined}
-          // At most one pane owns ⌘Enter for the annotation send shortcut.
-          paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}
-          fontSize={fontSize}
-          resolvedTheme={resolvedTheme}
-          cwd={paneSession?.cwd}
-          outpostName={paneSession?.host ? paneSession.hostName ?? paneSession.host : undefined}
-          debugName={`agent:${paneTitle}:${paneSession?.agent ?? 'shell'}:${agentPane.sessionId}`}
-          runtimeLogMeta={{
-            sessionId: agentPane.sessionId,
-            paneId: agentPane.id,
-            runtimeId: agentPane.runtimeId,
-            paneKind: 'agent',
-            isActivePane: activeAgentPaneId === agentPane.id,
-            isActiveSession,
-            paneCount: paneIds.length,
-          }}
-          onInput={runtime.handleTerminalInput(agentPane.id)}
-          onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
-          onFocus={() => onTerminalFocus?.(agentPane.runtimeId)}
-          onOpenMarkdown={onOpenMarkdown}
-          onPathRefused={onTerminalPathRefused}
-          gardenSeeds={gardenSeeds}
-          onOpenSeed={onOpenSeed}
-          onReady={handleGhosttyTerminalReady(agentPane.id)}
-          onResize={runtime.handleTerminalResize(agentPane.id)}
-        />
+        <KeepsLastFrameForRowMotion paneId={agentPane.id}>
+          <AnnotatedTerminal
+            ref={terminalRefForPane(agentPane.id)}
+            desktopId={desktopId}
+            sessionId={agentPane.sessionId}
+            annotationApi={annotationApi}
+            unavailableReason={paneSession?.offline ? `${paneSession.hostName} is unreachable` : undefined}
+            // At most one pane owns ⌘Enter for the annotation send shortcut.
+            paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}
+            fontSize={fontSize}
+            resolvedTheme={resolvedTheme}
+            cwd={paneSession?.cwd}
+            outpostName={paneSession?.host ? paneSession.hostName ?? paneSession.host : undefined}
+            debugName={`agent:${paneTitle}:${paneSession?.agent ?? 'shell'}:${agentPane.sessionId}`}
+            runtimeLogMeta={{
+              sessionId: agentPane.sessionId,
+              paneId: agentPane.id,
+              runtimeId: agentPane.runtimeId,
+              paneKind: 'agent',
+              isActivePane: activeAgentPaneId === agentPane.id,
+              isActiveSession,
+              paneCount: paneIds.length,
+            }}
+            onInput={runtime.handleTerminalInput(agentPane.id)}
+            onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
+            onFocus={() => onTerminalFocus?.(agentPane.runtimeId)}
+            onOpenMarkdown={onOpenMarkdown}
+            onPathRefused={onTerminalPathRefused}
+            gardenSeeds={gardenSeeds}
+            onOpenSeed={onOpenSeed}
+            onReady={handleGhosttyTerminalReady(agentPane.id)}
+            onResize={runtime.handleTerminalResize(agentPane.id)}
+          />
+        </KeepsLastFrameForRowMotion>
       )}
     </div>
   );

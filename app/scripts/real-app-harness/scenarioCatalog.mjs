@@ -167,6 +167,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-drags'],
   },
   {
+    id: 'shelf-motion',
+    runnerId: 'SHELF-MOTION',
+    label: 'Row moves animate only transform and opacity, resize each terminal at most once and leave nothing behind',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-motion'],
+  },
+  {
     id: 'desktop-close-one-session-keeps-selection',
     runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
     label: 'Closing one session on a desktop keeps the selection',

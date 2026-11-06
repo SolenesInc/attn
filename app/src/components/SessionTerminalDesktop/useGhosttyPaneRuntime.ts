@@ -45,6 +45,7 @@ function decodePtyBytes(payload: string | Uint8Array): Uint8Array {
 
 export interface GhosttyPaneRuntime {
   setTerminalHandle: (paneId: string, handle: GhosttyTerminalHandle | null) => void;
+  capturePaneStillFrame: (paneId: string) => HTMLCanvasElement | null;
   handleTerminalReady: (paneId: string) => (terminal: GhosttyTerminalHandle) => Promise<void>;
   handleTerminalInput: (paneId: string) => (data: string, source?: string, traceId?: string) => void;
   handleTerminalResize: (paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => void;
@@ -489,6 +490,7 @@ export function useGhosttyPaneRuntime(
     fitPane: (paneId: string) => get(paneId)?.fit(),
     fitActivePane: () => get(activePaneId)?.fit(),
     setPaneSurfaceReleased: (paneId: string, released: boolean) => get(paneId)?.setSurfaceReleased(released),
+    capturePaneStillFrame: (paneId: string) => get(paneId)?.captureStillFrame() ?? null,
     openFindInActivePane: () => get(activePaneId)?.openFind(),
     typeTextViaPaneInput: (paneId: string, text: string) => get(paneId)?.typeTextViaInput(text) ?? false,
     isPaneInputFocused: (paneId: string) => get(paneId)?.isInputFocused() ?? false,

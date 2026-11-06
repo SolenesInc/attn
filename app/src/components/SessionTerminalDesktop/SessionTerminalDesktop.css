@@ -105,6 +105,10 @@
   position: relative;
 }
 
+.session-terminal-desktop.shelf-layout .session-terminal-panes {
+  overflow: clip;
+}
+
 .desktop-layout-metadata {
   display: none;
 }

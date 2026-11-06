@@ -51,7 +51,7 @@ export function DesktopSurface() {
 
   return (
     <div
-      className={`session-terminal-desktop desktop-selection--${desktopSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`
+      className={`session-terminal-desktop desktop-selection--${desktopSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''} ${shelfOn ? 'shelf-layout' : ''}`
         .trim()
         .replace(/\s+/g, ' ')}
       data-session-terminal-desktop={desktopId}

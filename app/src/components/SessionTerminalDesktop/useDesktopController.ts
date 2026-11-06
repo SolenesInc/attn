@@ -56,6 +56,7 @@ import {
   type RowLayoutInput,
   type RowLayoutPlan,
 } from './rowLayout';
+import { useRowMotion, type RowMotionLayout } from './useRowMotion';
 import { useRowSettling, useShelfControls, useShelfPublisher } from './useShelf';
 import { useFocusedLeaf } from './useFocusedLeaf';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
@@ -511,6 +512,21 @@ export function useDesktopController(
         : new Map<string, NormalizedPaneBounds>(),
     [renderedLayoutTree],
   );
+  const rowMotionLayout = useMemo<RowMotionLayout | null>(() => (rowPlan
+    ? {
+      bounds: renderedPaneBounds,
+      rowKey: [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|'),
+      firstColumnIndex: rowPlan.firstColumn.index,
+      widthPx: rowAreaPx,
+      heightPx: attentionViewport.height,
+    }
+    : null), [attentionViewport.height, renderedPaneBounds, rowAreaPx, rowPlan]);
+  const { keepLeavingFrame } = useRowMotion({
+    containerRef: panesContainerRef,
+    layout: rowMotionLayout,
+    paused: !isActiveSession || !isSessionViewVisible || !enabled || resizingSplit !== null || effectivePaneId !== null,
+    mountedLeavesKey: leafIds.join('|'),
+  });
   const paneGeometry = useMemo(() => {
     const geometry = new Map<string, string>();
     for (const [paneId, path] of panePaths) {
@@ -1567,6 +1583,7 @@ export function useDesktopController(
     shelfOn,
     shelfInQueueBar,
     shelfWidthLabelShown,
+    keepLeavingFrame,
     staleBuildDismissed,
     setStaleBuildDismissed,
     pinnedSeedPopover,

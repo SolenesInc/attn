@@ -19,6 +19,7 @@ import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { useProfilesStore } from '../store/profiles';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
+import { resumeMotion, startMotionTrace, stopMotionTrace } from '../utils/motionTrace';
 import { clearPtyPerfSnapshot, getPtyPerfSnapshot, recordPtyDecode, recordWsJsonParse } from '../utils/ptyPerf';
 import { buildSessionRenderHealth } from '../utils/renderHealth';
 import { collectDesktopLayoutDiagnostics, projectDesktopBounds } from '../utils/desktopDiagnostics';
@@ -2395,6 +2396,28 @@ export function useUiAutomationBridge({
       case 'dump_terminal_geometry': {
         const snapshots = dumpTerminalGeometry();
         return { snapshots };
+      }
+      case 'motion_trace_start':
+        startMotionTrace(String(payload.trace ?? 'trace'), typeof payload.pauseMotionAfterMs === 'number' ? payload.pauseMotionAfterMs : undefined);
+        return { started: true };
+      case 'motion_resume':
+        resumeMotion();
+        return { resumed: true };
+      case 'motion_trace_stop':
+        return stopMotionTrace();
+      case 'motion_at_rest': {
+        const panes = Array.from(document.querySelectorAll<HTMLElement>('.session-terminal-panes > .desktop-pane'));
+        return {
+          animations: document.getAnimations().filter((animation) => {
+            const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+            return Boolean(target?.closest('.session-terminal-panes')) && animation.playState === 'running';
+          }).length,
+          heldPanes: panes.filter((pane) => !pane.dataset.paneId).length,
+          suspendedLeafIds: panes.filter((pane) => pane.hasAttribute('data-pane-suspended')).map((pane) => pane.dataset.paneId),
+          willChange: panes.filter((pane) => getComputedStyle(pane).willChange !== 'auto').length,
+          layoutTransitions: panes.filter((pane) => getComputedStyle(pane).transitionProperty.split(',').some((part) => !['opacity', 'none'].includes(part.trim()))).length,
+          reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        };
       }
       case 'lose_webgl_context': {
         const canvas = findActivePaneCanvas();

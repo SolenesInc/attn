@@ -40,7 +40,8 @@ export type DiagKind =
   | 'recovery'
   | 'wake'
   | 'model_fault'
-  | 'surface';
+  | 'surface'
+  | 'motion_frame';
 
 export interface DiagEvent {
   at: number;
@@ -68,6 +69,7 @@ const LIFECYCLE_KINDS = new Set<DiagKind>([
   'wake',
   'model_fault',
   'surface',
+  'motion_frame',
 ]);
 
 interface RenderProbe {
