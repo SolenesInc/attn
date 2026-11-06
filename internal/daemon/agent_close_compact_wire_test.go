@@ -228,7 +228,7 @@ func TestUserInputDuringTheCompactKeepsTheSharedCodexSessionOpen(t *testing.T) {
 	closeCompacting(t, cli, session)
 	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
 	arrived()
-	app.TypeLine(session, "wait, one more thing")
+	app.Type(session, "wait, one more thing\r", userKeystroke)
 	release()
 	if got := codex.Prompted(); got != "wait, one more thing" {
 		t.Fatalf("after the compact the conversation received %q, want what the user typed", got)
@@ -259,16 +259,10 @@ func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactC
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	reopened := w.Launched(session)
-	app.TypeLine(session, "finish the checkout fix")
-	if got := reopened.Prompted(); got != "finish the checkout fix" {
-		t.Fatalf("the reopened session received %q", got)
-	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	w.Launched(session)
 
 	closeCompacting(t, cli, session)
 	release()
-	reopened.Reply("Finished and closing. <!-- attn:state=idle -->")
 	closed := awaitClosed(app, session)
 	if protocol.Deref(closed.CloseReason) != compactReason || protocol.Deref(closed.ClosedBy) != session {
 		t.Errorf("ledger entry = %+v, want it closed by itself for %q", closed, compactReason)

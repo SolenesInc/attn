@@ -595,6 +595,16 @@ Read in the source at openai/codex rust-v0.162.1:
   `thread-store/src/local/update_thread_metadata.rs`). Every app-server on one
   `CODEX_HOME` sees a rename made through any of them.
 
+Read in the source at openai/codex rust-v0.167.0:
+
+- `thread/compact/start` runs the compact as a turn. `turn/steer` refuses it
+  with `cannot steer a compact turn` and the `activeTurnNotSteerable` error
+  (`core/src/session/turn_input.rs`,
+  `app-server/src/request_processors/turn_processor.rs`). A TUI whose user
+  submits a prompt during that turn keeps the prompt in its queue
+  (`tui/src/chatwidget/input_restore.rs`, `turn_runtime.rs`), so the
+  conversation takes it after the compact, as a new turn.
+
 Probed on 0.163.0 with a real model:
 
 - A `--remote` TUI refuses `--add-dir` and exits at once. Extra writable

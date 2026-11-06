@@ -91,6 +91,7 @@ type codexServerThread struct {
 	sessionSource  string
 	sessionStarted bool
 	active         bool
+	compactEnded   chan struct{}
 	subscribers    map[*codexServerConn]bool
 	approval       json.RawMessage
 	approvalID     string
@@ -727,6 +728,7 @@ func (s *codexAppServer) turn(conn *codexServerConn, p codexServerParams) (any, 
 		texts = append(texts, input.Text)
 	}
 	text := strings.Join(texts, "\n")
+	s.awaitCompactEndForTypedTurn(conn, t)
 	s.mu.Lock()
 	if t.active {
 		s.mu.Unlock()

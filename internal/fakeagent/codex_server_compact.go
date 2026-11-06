@@ -54,19 +54,37 @@ func (s *codexAppServer) compact(t *codexServerThread) {
 			after()
 		}
 	}
-	s.awaitHeldReply(heldCompaction)
+	ended := make(chan struct{})
 	s.mu.Lock()
 	t.active = true
-	s.compactions[t.c.conversation]++
+	t.compactEnded = ended
 	t.c.turnID = uuid.NewString()
 	turnID := t.c.turnID
 	s.mu.Unlock()
 	s.status(t)
+	s.awaitHeldReply(heldCompaction)
+	s.mu.Lock()
+	s.compactions[t.c.conversation]++
+	s.mu.Unlock()
 	s.tell(t, notification("item/completed", map[string]any{"threadId": t.c.conversation, "turnId": turnID, "item": map[string]any{"type": "contextCompaction", "id": uuid.NewString()}}))
 	s.mu.Lock()
 	t.active = false
 	s.mu.Unlock()
 	s.status(t)
 	s.tell(t, notification("turn/completed", map[string]any{"threadId": t.c.conversation, "turn": map[string]any{"id": turnID, "status": "completed"}}))
+	s.mu.Lock()
+	t.compactEnded = nil
+	s.mu.Unlock()
+	close(ended)
 	s.stopWhenDrained()
+}
+
+func (s *codexAppServer) awaitCompactEndForTypedTurn(conn *codexServerConn, t *codexServerThread) {
+	s.mu.Lock()
+	ended := t.compactEnded
+	typed := conn.terminal
+	s.mu.Unlock()
+	if typed && ended != nil {
+		<-ended
+	}
 }
