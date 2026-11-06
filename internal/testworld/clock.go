@@ -59,6 +59,16 @@ func (s *Stack) AwaitTimer(name stepclock.Name) {
 	awaitHubTimer(s.T, s.clock, name)
 }
 
+// FirePending fires the timers named name that are armed now, without moving the clock.
+func (s *Stack) FirePending(name stepclock.Name) {
+	s.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if err := s.clock.Fire(ctx, name); err != nil {
+		s.T.Fatalf("fire %s: %v within %s", name, err, fakeagent.HangGuard)
+	}
+}
+
 func (s *Stack) FireTimers(name stepclock.Name) (stop func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

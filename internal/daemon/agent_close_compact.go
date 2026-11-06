@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -10,11 +11,15 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
-var compactOutcomeTripwire = 10 * time.Minute
+const (
+	CompactOutcomeTripwireTimer stepclock.Name = "compact-outcome-tripwire"
+	compactOutcomeTripwire                     = 10 * time.Minute
+)
 
 type compactOutcome struct {
 	failed string
@@ -38,7 +43,7 @@ type pendingCompactClose struct {
 	placed     bool
 	busy       bool
 	outcome    *compactOutcome
-	tripwire   *time.Timer
+	tripwire   stepclock.Timer
 }
 
 func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal {
@@ -51,10 +56,7 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 			"this Codex session does not run on the shared Codex app server, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Codex sessions launched after that can close with --compact. Close without --compact instead",
 			SettingCodexSharedEnabled, SettingCodexSharedEnabled)}
 	case string(protocol.SessionAgentClaude):
-		if d.sessionHost(target.ID) != "" {
-			return &agentCloseRefusal{"compact_unavailable", "attn cannot compact a Claude session on an outpost yet, even with its mod connected. Close without --compact instead"}
-		}
-		if d.claudeMod().reachable(d.sessionMonitor(target.ID).LinkTarget().Terminal) {
+		if d.claudeModReaches(target.ID) {
 			return nil
 		}
 		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
@@ -65,31 +67,36 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 		"attn has no way to compact a %s session; close without --compact", target.Agent)}
 }
 
-func (d *Daemon) registerCompactingClose(target *protocol.Session, reason string, onStandby []string) {
-	monitor := d.sessionMonitor(target.ID)
+func (d *Daemon) beginCompactingClose(_ context.Context, msg protocol.CompactingCloseBeginMessage) (struct{}, error) {
+	session := msg.SessionID
+	monitor := d.sessionMonitor(session)
+	if monitor == nil {
+		return struct{}{}, fmt.Errorf("session %s: no monitor runs it", session)
+	}
 	p := &pendingCompactClose{
-		session:    target.ID,
+		session:    session,
 		monitor:    monitor,
-		reason:     reason,
+		reason:     msg.Reason,
 		userInputs: monitor.UserInputs(),
-		onStandby:  onStandby,
-		key:        fmt.Sprintf("%s-%d", target.ID, d.clock.Now().UnixNano()),
+		onStandby:  msg.OnStandby,
+		key:        fmt.Sprintf("%s-%d", session, d.clock.Now().UnixNano()),
 	}
 	l := &d.compactions
 	l.mu.Lock()
 	if l.pending == nil {
 		l.pending = make(map[protocol.SessionID]*pendingCompactClose)
 	}
-	if current := l.pending[target.ID]; current != nil && current.monitor == monitor {
+	if current := l.pending[session]; current != nil && current.monitor == monitor {
 		l.mu.Unlock()
-		d.logf("compacting close: session %s already closes after its compact", target.ID)
-		return
+		d.logf("compacting close: session %s already closes after its compact", session)
+		return struct{}{}, nil
 	}
-	l.pending[target.ID] = p
+	l.pending[session] = p
 	p.placing = true
 	l.mu.Unlock()
-	d.logf("compacting close: session %s closes after this turn, once its conversation is compacted: %s", target.ID, reason)
+	d.logf("compacting close: session %s closes after this turn, once its conversation is compacted: %s", session, msg.Reason)
 	d.placeCompactingClose(p)
+	return struct{}{}, nil
 }
 
 func (l *compactionLedger) forget(session protocol.SessionID) {
@@ -160,13 +167,14 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 				p.busy, p.again, p.placing = false, false, false
 				p.busyTimes++
 				l.mu.Unlock()
-				p.monitor.ReopenInput()
-				d.kickSessionInboxAddresses(p.session)
+				d.reopenCompactingCloseInput(p)
 				return
 			}
 			p.placed = true
 			if p.outcome == nil {
-				p.tripwire = d.life.AfterFunc("compactOutcomeTripwire", compactOutcomeTripwire, func() { d.compactOutcomeMissing(p) })
+				p.tripwire = d.clock.AfterFunc(CompactOutcomeTripwireTimer, compactOutcomeTripwire, func() {
+					d.life.Go("compactOutcomeTripwire", func() { d.compactOutcomeMissing(p) })
+				})
 			}
 		}
 		ready := p.outcome != nil && l.takeLocked(p)
@@ -217,8 +225,7 @@ func (l *compactionLedger) retryAfterBusy(d *Daemon, session protocol.SessionID,
 		p.tripwire = nil
 	}
 	l.mu.Unlock()
-	p.monitor.ReopenInput()
-	d.kickSessionInboxAddresses(session)
+	d.reopenCompactingCloseInput(p)
 }
 
 func (d *Daemon) compactOutcomeMissing(p *pendingCompactClose) {
@@ -244,44 +251,102 @@ func (l *compactionLedger) takeLocked(p *pendingCompactClose) bool {
 	return true
 }
 
+func (d *Daemon) reopenCompactingCloseInput(p *pendingCompactClose) {
+	p.monitor.ReopenInput()
+	d.claudeMod().report(protocol.SessionInputReopenedMessage{Cmd: protocol.CmdSessionInputReopened, SessionID: p.session})
+}
+
 func (d *Daemon) compactingCloseCanceled(p *pendingCompactClose) string {
-	target := d.store.Get(p.session)
+	if why := d.compactingCloseCanceledHere(p); why != "" {
+		return why
+	}
+	verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseCheckMessage{Cmd: protocol.CmdCompactingCloseCheck, SessionID: p.session, OnStandby: p.onStandby})
+	if err != nil {
+		return err.Error()
+	}
+	return protocol.Deref(verdict.StaysOpen)
+}
+
+func (d *Daemon) compactingCloseCanceledHere(p *pendingCompactClose) string {
 	switch {
-	case target == nil || d.sessionMonitor(p.session) != p.monitor:
+	case d.sessionMonitor(p.session) != p.monitor:
 		return "the session it was asked in is gone"
 	case p.monitor.UserInputs() != p.userInputs:
 		return "the user gave it input after the close was asked"
 	case p.monitor.HasUserDraft():
 		return "the user has an unsent draft in its terminal"
 	}
-	for _, seedID := range p.onStandby {
-		if standby, err := d.store.SeedStandby(seedID); err != nil || standby == nil || standby.Tender != who.Session(p.session) {
+	return ""
+}
+
+func (d *Daemon) compactingCloseCanceledAtHome(session protocol.SessionID, onStandby []string) string {
+	if d.store.Get(session) == nil {
+		return "the session it was asked in is gone"
+	}
+	for _, seedID := range onStandby {
+		if standby, err := d.store.SeedStandby(seedID); err != nil || standby == nil || standby.Tender != who.Session(session) {
 			return fmt.Sprintf("%s left standby after the close was asked", seedID)
 		}
 	}
 	return ""
 }
 
+func (d *Daemon) checkCompactingClose(ctx context.Context, msg protocol.CompactingCloseCheckMessage) (protocol.CompactingCloseVerdict, error) {
+	if origin, remote := OriginOf(ctx); remote && d.sessionHost(msg.SessionID) != origin.Host {
+		return protocol.CompactingCloseVerdict{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
+	}
+	return compactingCloseVerdict(d.compactingCloseCanceledAtHome(msg.SessionID, msg.OnStandby)), nil
+}
+
+func compactingCloseVerdict(staysOpen string) protocol.CompactingCloseVerdict {
+	if staysOpen == "" {
+		return protocol.CompactingCloseVerdict{}
+	}
+	return protocol.CompactingCloseVerdict{StaysOpen: &staysOpen}
+}
+
 func (d *Daemon) closeAfterCompact(p *pendingCompactClose) {
-	if why := d.compactingCloseCanceled(p); why != "" {
+	why := d.compactingCloseCanceledHere(p)
+	if why == "" {
+		reason := p.reason
+		if p.outcome.failed != "" {
+			reason = garden.TrimReason(fmt.Sprintf("%s (the compact did not run: %s)", reason, p.outcome.failed))
+		}
+		verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseFinishMessage{Cmd: protocol.CmdCompactingCloseFinish, SessionID: p.session, Reason: reason, OnStandby: p.onStandby})
+		switch {
+		case errors.Is(err, errDaemonStopping):
+			return
+		case err != nil:
+			why = err.Error()
+		default:
+			why = protocol.Deref(verdict.StaysOpen)
+		}
+	}
+	if why != "" {
 		d.logf("compacting close: session %s stays open after its compact: %s", p.session, why)
-		p.monitor.ReopenInput()
-		d.kickSessionInboxAddresses(p.session)
-		return
+		d.reopenCompactingCloseInput(p)
 	}
-	reason := p.reason
-	if p.outcome.failed != "" {
-		reason = garden.TrimReason(fmt.Sprintf("%s (the compact did not run: %s)", reason, p.outcome.failed))
+}
+
+func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.CompactingCloseFinishMessage) (protocol.CompactingCloseVerdict, error) {
+	if origin, remote := OriginOf(ctx); remote && d.sessionHost(msg.SessionID) != origin.Host {
+		return protocol.CompactingCloseVerdict{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
 	}
-	target := d.store.Get(p.session)
-	d.logf("agent close: session %s closes itself after its compact: %s", target.ID, reason)
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(target.ID).Actor(), Reason: reason}, nil)
+	if why := d.compactingCloseCanceledAtHome(msg.SessionID, msg.OnStandby); why != "" {
+		return compactingCloseVerdict(why), nil
+	}
+	target := d.store.Get(msg.SessionID)
+	d.logf("agent close: session %s closes itself after its compact: %s", target.ID, msg.Reason)
+	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(target.ID).Actor(), Reason: msg.Reason}, nil)
 	if err != nil {
-		d.logf("compacting close: session %s is still running: %v", target.ID, err)
-		p.monitor.ReopenInput()
-		d.kickSessionInboxAddresses(p.session)
-		return
+		return compactingCloseVerdict(fmt.Sprintf("it is still running: %v", err)), nil
 	}
-	d.noteCloseOnTendedSeeds(target, target, protocol.AgentCloseRuleSelf, reason)
+	d.noteCloseOnTendedSeeds(target, target, protocol.AgentCloseRuleSelf, msg.Reason)
 	d.finishSessionClose(target.ID, closing)
+	return protocol.CompactingCloseVerdict{}, nil
+}
+
+func (d *Daemon) receiveSessionInputReopened(_ context.Context, msg protocol.SessionInputReopenedMessage) (struct{}, error) {
+	d.kickSessionInboxAddresses(msg.SessionID)
+	return struct{}{}, nil
 }

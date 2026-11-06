@@ -142,11 +142,10 @@ before you close cancels the close, and you stay open. If the compact
 fails, you still close, and the reason says the compact did not run. The harness
 decides what the compact keeps, so put what your next turn needs in a seed note
 or the standby note. `--compact` goes only with `--self`. Only a Claude Code
-session on the home machine with the Claude mod and a Codex session on the shared
-Codex app server compact. attn refuses any other session. The refusal names the
-setting the user turns on, `claude_mod_enabled` for Claude and
-`codex_shared_enabled` for Codex, except for a Claude session on an outpost, which
-attn cannot compact: close without `--compact`. Compact when you will resume as yourself, as a
+session with the Claude mod and a Codex session on the shared Codex app server
+compact, on the home machine or an outpost. attn refuses any other session. The
+refusal names the setting the user turns on, `claude_mod_enabled` for Claude and
+`codex_shared_enabled` for Codex. Compact when you will resume as yourself, as a
 seed's tender does when its standby wakes it ([Standby](garden.md#standby)). A
 crew member cannot close itself, and its next wake starts a fresh session from
 its letter, so a compact before a crew sleep carries nothing over.

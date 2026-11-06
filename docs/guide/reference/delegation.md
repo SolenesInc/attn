@@ -333,18 +333,20 @@ and the session stays open with what you typed.
 Notes you send from the app or a phone while the compact runs are not delivered:
 Attn cancels the close and asks you to send them again. If the compact fails,
 the session still closes, and its reason says the compact did not run.
-Restarting the daemon drops a close that still waits for its compact, and the
-session stays open.
+Restarting the daemon on the machine that runs the session drops a close that
+still waits for its compact, and the session stays open. If the home is asleep or
+unreachable when the compact ends on an outpost, the session closes when the link
+returns.
 
-Only a Claude Code session on your home machine with the
+Only a Claude Code session with the
 [Claude mod](using-claude-mod.md) and a Codex session on
 [shared Codex](using-shared-codex.md) compact. **Claude mod**
 or **Shared Codex** in **Settings → Experimental**, or
 `attn settings set claude_mod_enabled true` and
 `attn settings set codex_shared_enabled true`, turn them on for the sessions you
-launch or resume afterwards. Attn refuses `--compact` for any other session. The
-refusal names the setting to turn on, except for a Claude Code session on an
-outpost, where it says Attn cannot compact there. Compacting does not help a crew member: its wake
+launch or resume afterwards. They compact on your home machine and on an outpost.
+Attn refuses `--compact` for any other session, and the refusal names the setting
+to turn on. Compacting does not help a crew member: its wake
 starts a new session from its latest letter, and Attn refuses to close a crew
 member's session.
 

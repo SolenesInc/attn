@@ -409,11 +409,26 @@ the session tends is on standby and has unread seed mail. The refusal names
 
 With `--compact`, the close waits for the turn to end and then places the
 compact in the session's input lane, through the Claude mod or the shared Codex
-app server. attn refuses `--compact` for a Claude session on an outpost. A ring placed before the compact makes the compact wait for the next
+app server. A ring placed before the compact makes the compact wait for the next
 idle. Once the compact is placed, the lane holds every later item until the
 session has closed, and seed mail that arrives then wakes the closed tender as
 above. A compact that meets a running turn opens the lane again and retries at
 the next idle. User input before the close cancels it and opens the lane again.
+If no outcome arrives within `compact_outcome_tripwire`, the session closes with
+a reason that says so.
+
+The machine that runs the session keeps the waiting close beside the lane, and
+asks the home to close the session once the compact has an outcome. On an outpost
+this means:
+
+- A home that is unreachable or restarting loses nothing. The outpost asks again
+  until the home answers, and the session stays open until then. A compact whose
+  turn ended while the home was away waits for the home, which decides whether
+  the close still stands.
+- A restart of the machine that runs the session drops the close, as a home
+  restart does for a session on the home. The session stays open with its lane
+  open and takes later items, and a compact already running still finishes. The
+  agent asks to close again, or the user closes it.
 
 Every tender wake for seed mail, of a session or of a crew member, counts
 against one limit for the seed: 48 wakes per 24 hours, held in memory. The count

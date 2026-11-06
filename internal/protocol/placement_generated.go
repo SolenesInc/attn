@@ -61,6 +61,9 @@ var Placements = map[string][]Placement{
 	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
+	"compacting_close_begin":           {Placement{LocatorSession, "session_id"}},
+	"compacting_close_check":           {Placement{LocatorHome, ""}},
+	"compacting_close_finish":          {Placement{LocatorHome, ""}},
 	"connect_outpost_in_terminal":      {Placement{LocatorHome, ""}},
 	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
 	"create_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -188,6 +191,7 @@ var Placements = map[string][]Placement{
 	"sender_pair":                      {Placement{LocatorHome, ""}},
 	"sender_sessions":                  {Placement{LocatorHome, ""}},
 	"sender_unpair":                    {Placement{LocatorHome, ""}},
+	"session_input_reopened":           {Placement{LocatorHome, ""}},
 	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
 	"session_place":                    {Placement{LocatorSession, "session_id"}},
@@ -667,6 +671,42 @@ func (m CollapseRepoMessage) Placement() Placement {
 }
 
 func (m CollapseRepoMessage) Locate() string {
+	return ""
+}
+
+func (CompactingCloseBeginMessage) CommandName() string {
+	return "compacting_close_begin"
+}
+
+func (m CompactingCloseBeginMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m CompactingCloseBeginMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (CompactingCloseCheckMessage) CommandName() string {
+	return "compacting_close_check"
+}
+
+func (m CompactingCloseCheckMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CompactingCloseCheckMessage) Locate() string {
+	return ""
+}
+
+func (CompactingCloseFinishMessage) CommandName() string {
+	return "compacting_close_finish"
+}
+
+func (m CompactingCloseFinishMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CompactingCloseFinishMessage) Locate() string {
 	return ""
 }
 
@@ -2233,6 +2273,18 @@ func (m SenderUnpairMessage) Placement() Placement {
 }
 
 func (m SenderUnpairMessage) Locate() string {
+	return ""
+}
+
+func (SessionInputReopenedMessage) CommandName() string {
+	return "session_input_reopened"
+}
+
+func (m SessionInputReopenedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionInputReopenedMessage) Locate() string {
 	return ""
 }
 

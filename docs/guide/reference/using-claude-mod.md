@@ -66,14 +66,13 @@ standby. Attn waits for the mod's first connection and delivers through it, as
 An agent can compact its conversation through the mod just before it closes
 itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. Claude
 compacts in its own way, as `/compact` does. A Claude session without the mod
-can't, and neither can a Claude session on an outpost. If you type into the session
-while it compacts, Attn cancels the close and Claude runs your prompt after the
-compact.
+can't. If you type into the session while it compacts, Attn cancels the close and
+Claude runs your prompt after the compact.
 
 ## Sessions on an outpost
 
-A Claude session on an outpost takes messages through its mod, the same as a
-session on your home machine. The outpost reads **Claude mod** from the home, so
+A Claude session on an outpost takes messages and compacts through its mod, the
+same as a session on your home machine. The outpost reads **Claude mod** from the home, so
 you turn it on in one place. If the mod gives a message back while the home is
 asleep or unreachable, the outpost keeps it and hands it to the home when the
 link returns.

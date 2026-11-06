@@ -582,7 +582,6 @@ func (m *claudeMod) reportLocked(msg protocol.Placed) {
 }
 
 func (m *claudeMod) sendReports() {
-	unreachable := false
 	for {
 		m.mu.Lock()
 		if len(m.reports) == 0 {
@@ -592,25 +591,13 @@ func (m *claudeMod) sendReports() {
 		}
 		next := m.reports[0]
 		m.mu.Unlock()
-		_, err := Call[struct{}](m.d.life.Context(), m.d.router(), next)
-		if err != nil && !m.d.homeAnswered(err) {
-			if !unreachable {
-				m.d.logf("claude mod: %s waits for the home, trying every %s: %v", next.CommandName(), bridge.ReconnectInterval, err)
-			}
-			unreachable = true
-			retry := m.d.clock.NewTimer(ClaudeModReportRetryTimer, bridge.ReconnectInterval)
-			select {
-			case <-retry.C():
-			case <-m.d.life.Done():
-				retry.Stop()
-				return
-			}
-			continue
+		_, err := callHome[struct{}](m.d, next)
+		if errors.Is(err, errDaemonStopping) {
+			return
 		}
 		if err != nil {
 			m.d.logf("claude mod: the home refused %s; dropped it: %v", next.CommandName(), err)
 		}
-		unreachable = false
 		m.mu.Lock()
 		m.reports = m.reports[1:]
 		if settle, ok := next.(protocol.InboxRingSettleMessage); ok {
@@ -619,6 +606,27 @@ func (m *claudeMod) sendReports() {
 			}
 		}
 		m.mu.Unlock()
+	}
+}
+
+func callHome[R any](d *Daemon, msg protocol.Placed) (R, error) {
+	unreachable := false
+	for {
+		answer, err := Call[R](d.life.Context(), d.router(), msg)
+		if err == nil || d.homeAnswered(err) {
+			return answer, err
+		}
+		if !unreachable {
+			d.logf("%s waits for the home, trying every %s: %v", msg.CommandName(), bridge.ReconnectInterval, err)
+		}
+		unreachable = true
+		retry := d.clock.NewTimer(ClaudeModReportRetryTimer, bridge.ReconnectInterval)
+		select {
+		case <-retry.C():
+		case <-d.life.Done():
+			retry.Stop()
+			return answer, errDaemonStopping
+		}
 	}
 }
 

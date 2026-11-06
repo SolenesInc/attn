@@ -2128,6 +2128,50 @@ type CommandUsage struct {
 	Score float64 `json:"score"`
 }
 
+type CompactingCloseBeginMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// OnStandby corresponds to the JSON schema field "on_standby".
+	OnStandby []string `json:"on_standby,omitempty,omitzero"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type CompactingCloseCheckMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// OnStandby corresponds to the JSON schema field "on_standby".
+	OnStandby []string `json:"on_standby,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type CompactingCloseFinishMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// OnStandby corresponds to the JSON schema field "on_standby".
+	OnStandby []string `json:"on_standby,omitempty,omitzero"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type CompactingCloseVerdict struct {
+	// StaysOpen corresponds to the JSON schema field "stays_open".
+	StaysOpen *string `json:"stays_open,omitempty,omitzero"`
+}
+
 type ConnectOutpostInTerminalMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -11865,6 +11909,14 @@ type SessionExitedMessage struct {
 }
 
 type SessionID string
+
+type SessionInputReopenedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
 
 type SessionInstructionsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".

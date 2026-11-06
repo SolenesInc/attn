@@ -8977,6 +8977,41 @@ model ClaudeModReachReportMessage {
   change: ClaudeModReachChange;
 }
 
+// The machine running a session keeps its compacting close beside the session's input lane.
+@extension("x-on", #{ session: "session_id" })
+model CompactingCloseBeginMessage {
+  cmd: "compacting_close_begin";
+  session_id: SessionID;
+  reason: string;
+  on_standby?: string[];
+}
+
+// That machine asks the home whether the close still stands before it places the compact.
+@extension("x-on", #{ home: true })
+model CompactingCloseCheckMessage {
+  cmd: "compacting_close_check";
+  session_id: SessionID;
+  on_standby?: string[];
+}
+
+// That machine asks the home to close the session once the compact has an outcome.
+@extension("x-on", #{ home: true })
+model CompactingCloseFinishMessage {
+  cmd: "compacting_close_finish";
+  session_id: SessionID;
+  reason: string;
+  on_standby?: string[];
+}
+
+model CompactingCloseVerdict { stays_open?: string; }
+
+// A compacting close let go of a session's input lane, so the home's inbox can try again.
+@extension("x-on", #{ home: true })
+model SessionInputReopenedMessage {
+  cmd: "session_input_reopened";
+  session_id: SessionID;
+}
+
 @extension("x-on", #{ session: "session_id" })
 model PullRequestLinkMessage {
   cmd: "pull_request_link";

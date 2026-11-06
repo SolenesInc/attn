@@ -55,11 +55,11 @@ func newOutpostMod(t *testing.T) *outpostMod {
 	return newOutpostModPrepared(t, func(_, _ *testworld.Stack) {})
 }
 
-func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.Stack)) *outpostMod {
+func newOutpostModPair(t *testing.T, prepare func(home, outpost *testworld.Stack)) (home, outpost *testworld.Stack, pair *testworld.OutpostPair) {
 	t.Helper()
-	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	home, outpost = testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	prepare(home, outpost)
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair = testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
 	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
@@ -69,6 +69,12 @@ func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.S
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "true" })
 	register(t, home, outpostModSender, "reviewer")
+	return home, outpost, pair
+}
+
+func newOutpostModPrepared(t *testing.T, prepare func(home, outpost *testworld.Stack)) *outpostMod {
+	t.Helper()
+	home, outpost, pair := newOutpostModPair(t, prepare)
 	m := &outpostMod{home: home, outpost: outpost, pair: pair, app: pair.App}
 	m.session = home.Spawn(pair.App, fakeagent.Claude, outpost.Path("shop"), func(msg *protocol.SpawnSessionMessage) {
 		msg.Host = &pair.Host
@@ -435,14 +441,6 @@ func TestAHeldAnswerKeepsAnOutpostTendersSeedOnStandbyUntilClaudeTakesIt(t *test
 		}
 		return false
 	})
-}
-
-func TestAnOutpostClaudeCannotCloseWithCompactAndIsToldWhy(t *testing.T) {
-	m := newOutpostMod(t)
-	closed := m.outpost.Run(testworld.Invocation{Args: []string{"agent", "close", "--self", "--compact", "-m", "done with the work"}, Terminal: string(m.terminal)})
-	if closed.Code == 0 || !strings.Contains(closed.Stderr+closed.Stdout, "on an outpost") {
-		t.Fatalf("agent close --self --compact exited %d with %q%q, want a refusal that names the outpost", closed.Code, closed.Stdout, closed.Stderr)
-	}
 }
 
 func TestWithTheSettingOffAnOutpostClaudeIsTypedInto(t *testing.T) {

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -92,7 +93,9 @@ func (d *Daemon) beginAgentClose(msg *protocol.AgentCloseMessage) (*protocol.Age
 		if err != nil {
 			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_failed", err.Error()}
 		}
-		d.registerCompactingClose(target, reason, onStandby)
+		if _, err := Call[struct{}](context.Background(), d.router(), protocol.CompactingCloseBeginMessage{Cmd: protocol.CmdCompactingCloseBegin, SessionID: target.ID, Reason: reason, OnStandby: onStandby}); err != nil {
+			return nil, sessionCloseInFlight{}, &agentCloseRefusal{"close_failed", err.Error()}
+		}
 		return &protocol.AgentCloseResult{
 			TargetSessionID: target.ID,
 			Label:           sessionDisplayName(target),

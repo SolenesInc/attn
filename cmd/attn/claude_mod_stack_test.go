@@ -242,6 +242,7 @@ type mockModel struct {
 	opening []string
 	changed chan struct{}
 	bash    []mockBashStep
+	compact chan struct{}
 }
 
 type mockBashStep struct{ after, command string }
@@ -262,6 +263,13 @@ func startMockModel(t *testing.T) *mockModel {
 	m.Server = httptest.NewServer(http.HandlerFunc(m.serve))
 	t.Cleanup(m.Close)
 	return m
+}
+
+func (m *mockModel) holdCompacts() (release func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.compact = make(chan struct{})
+	return sync.OnceFunc(func() { close(m.compact) })
 }
 
 func (m *mockModel) awaitPrompt(t *testing.T, contains string) {
@@ -353,6 +361,12 @@ func (m *mockModel) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	say := "Noted."
 	if compacts {
+		m.mu.Lock()
+		hold := m.compact
+		m.mu.Unlock()
+		if hold != nil {
+			<-hold
+		}
 		say = "<analysis>The user asked for the checkout fix.</analysis>\n<summary>" + mockModelCompactSummary + "</summary>"
 	}
 	usage := map[string]int{"input_tokens": 1200, "output_tokens": 2, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
