@@ -39,6 +39,8 @@ func main() {
 		err = rmSession(args)
 	case "kill-session":
 		err = killSession(args)
+	case "set-chief":
+		err = setChief(args)
 	case "screen":
 		err = screen(args)
 	case "input":
@@ -80,6 +82,7 @@ Commands:
   add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
+  set-chief --id I   (gives a session the Chief of Staff role crew v2 replaces)
   screen --id I
   input --id I --text T [--enter]
   attach --id I --cols C --rows R [--text T] [--enter]   (a second client, such as a phone: asks for that size, types, and stays attached until interrupted)
@@ -215,6 +218,24 @@ func killSession(args []string) error {
 		return err
 	}
 	fmt.Printf("session killed: id=%s reload=%t\n", *id, *reload)
+	return nil
+}
+
+func setChief(args []string) error {
+	fs := flag.NewFlagSet("set-chief", flag.ExitOnError)
+	id := fs.String("id", "", "session id (required)")
+	fs.Parse(args)
+	if *id == "" {
+		return errors.New("--id is required")
+	}
+	reply, err := sendAndWaitMatch(map[string]any{"cmd": "set_chief_of_staff", "session_id": *id, "chief_of_staff": true}, "chief_of_staff_result", func(ev map[string]any) bool { return ev["session_id"] == *id }, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if reply["success"] != true {
+		return fmt.Errorf("set_chief_of_staff refused: %v", reply["error"])
+	}
+	fmt.Printf("session is the Chief of Staff: id=%s\n", *id)
 	return nil
 }
 
