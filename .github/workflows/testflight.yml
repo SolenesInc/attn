@@ -1,0 +1,93 @@
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'internal/protocol/schema/gateway.tsp'
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions: {}
+
+jobs:
+  decide:
+    name: Decide whether to upload
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      due: ${{ steps.due.outputs.due }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload every push and dispatch, and a schedule only when the newest upload is old
+        id: due
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            mobile/scripts/testflight-due.sh >> "$GITHUB_OUTPUT"
+          else
+            echo due=true >> "$GITHUB_OUTPUT"
+          fi
+
+  upload:
+    name: Upload to TestFlight
+    needs: decide
+    if: needs.decide.outputs.due == 'true'
+    runs-on: macos-15
+    environment: testflight
+    concurrency:
+      group: testflight
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-toolchains
+        with:
+          node: 'true'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Build, sign and upload
+        env:
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          GH_TOKEN: ${{ github.token }}
+          TESTFLIGHT_FAILURE_FILE: ${{ runner.temp }}/testflight-failure
+        run: mobile/scripts/testflight.sh
+
+      - name: Keep the build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-logs
+          path: mobile/ios/App/build/testflight-*/*.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Alert Discord
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          FAILURE_FILE: ${{ runner.temp }}/testflight-failure
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          reason="$(cat "$FAILURE_FILE" 2>/dev/null || echo 'The build stopped before the upload.')"
+          jq -n --arg reason "${reason:0:1700}" --arg sha "${GITHUB_SHA:0:9}" --arg url "$RUN_URL" \
+            '{content: "TestFlight build of \($sha) failed: \($reason)\n\($url)"}' \
+            | curl -sS --fail-with-body -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK"

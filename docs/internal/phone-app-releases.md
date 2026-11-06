@@ -2,7 +2,8 @@
 
 attn's phone app (`mobile/`) reaches testers through TestFlight.
 `mobile/scripts/testflight.sh` builds it, signs it for team `VMGP8G85TK` and
-uploads it to App Store Connect. Testers install it as the guide's
+uploads it to App Store Connect. The `.github/workflows/testflight.yml` workflow
+runs that script on GitHub's Mac runners. Testers install the app as the guide's
 [phone app](../guide/reference/phone-app.md) page says.
 
 ## One-time setup
@@ -23,9 +24,42 @@ missing.
    `attn-mobile`, full access. The bundle id of an app record cannot change.
 3. Run the script again.
 
-## Upload a build
+## When a build runs
 
-Run the script on the Mac, from a checkout of the commit you want to ship:
+The workflow builds:
+
+- on every push to `main` that changes `mobile/**` or
+  `internal/protocol/schema/gateway.tsp`
+- when you start it: **Actions → TestFlight → Run workflow**, or
+  `gh workflow run testflight.yml`
+- on its weekly schedule, only when the newest upload is over 60 days old, so a
+  quiet phone never meets TestFlight's 90-day expiry
+
+One build runs at a time, and at most one waits. A push during a build replaces
+the build that waits, so merges that land together become one follow-up build
+of the newest commit. Changes to the daemon's gateway code build nothing,
+because they do not change the app. Changes to the `app/src` code the phone
+imports and to `ghostty-vt.pin` do change the app, yet build nothing on their
+own: the next build carries them, so start one by hand when testers need them
+sooner.
+
+The workflow selects its Xcode with `DEVELOPER_DIR`, because the runner's
+default Xcode is too old for Capacitor 8. When GitHub removes that version from
+[the runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md),
+the build fails and the path needs updating.
+
+A failed build posts to Discord with the reason and the run's link, because the
+sheriff watches only the CI workflow. Each run keeps its `archive.log` and
+`upload.log` as the `testflight-logs` artifact for 14 days.
+
+Apple publishes no upload limit. When App Store Connect answers an upload with a
+409, the alert quotes its answer. `Upload limit reached` means wait a day, then
+start the workflow by hand. Any other 409 names what App Store Connect rejected.
+
+## Upload a build from the Mac
+
+The Mac takes no part in the normal flow, but the script still runs there. From
+a checkout of the commit you want to ship:
 
 ```sh
 mobile/scripts/testflight.sh
@@ -33,7 +67,7 @@ mobile/scripts/testflight.sh
 
 The script:
 
-1. Reads the App Store Connect API key from the secrets below.
+1. Reads the App Store Connect API key as [Secrets](#secrets) says.
 2. Fetches the pinned `ghostty-vt.wasm` the terminal view needs, builds the
    web app, and copies it into the iOS project with `cap sync ios`.
 3. Archives the Release build with the build number set to the UTC time, as
@@ -42,8 +76,8 @@ The script:
 4. Signs the archive for App Store distribution and uploads it.
 
 Signing is automatic. With the API key, Xcode creates the distribution
-certificate in the cloud and the App Store provisioning profiles. The Mac needs no signing
-identity of its own.
+certificate in the cloud and the App Store provisioning profiles. The machine
+needs no signing identity of its own.
 
 The archive and the `archive.log` and `upload.log` files land in
 `mobile/ios/App/build/testflight-<build>/`. When a step fails, the script prints
@@ -65,13 +99,18 @@ cryptography, that answer changes: remove the key and answer the questions in
 
 ## Secrets
 
-The script reads three secrets with `secret get`:
+The script reads three values. In the workflow, they come from the `testflight`
+GitHub Environment, which only `main` can use. On the Mac, they come from
+`secret get`. The script takes a value from its environment variable when that
+is set, and removes the variable before it runs a build tool.
 
-| Secret | Value |
-|---|---|
-| `apple/asc-api-key` | The whole `AuthKey_<key id>.p8` file |
-| `apple/asc-key-id` | The key id, such as `2X9R4HXF34` |
-| `apple/asc-issuer-id` | The issuer id, a UUID shown above the key list |
+| Environment secret | `secret` name | Value |
+|---|---|---|
+| `ASC_API_KEY` | `apple/asc-api-key` | The whole `AuthKey_<key id>.p8` file |
+| `ASC_KEY_ID` | `apple/asc-key-id` | The key id, such as `2X9R4HXF34` |
+| `ASC_ISSUER_ID` | `apple/asc-issuer-id` | The issuer id, a UUID shown above the key list |
+
+The Environment also holds `DISCORD_WEBHOOK`, where failed builds post.
 
 The key is a team key with the **Admin** role, made in
 [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api)
@@ -85,6 +124,14 @@ secret put apple/asc-api-key < ~/Downloads/AuthKey_<key id>.p8
 printf %s '<key id>' | secret put apple/asc-key-id
 printf %s '<issuer id>' | secret put apple/asc-issuer-id
 rm ~/Downloads/AuthKey_<key id>.p8
+```
+
+To put a new key in the Environment, from the Mac:
+
+```sh
+secret get apple/asc-api-key | gh secret set ASC_API_KEY --env testflight --repo SolenesInc/attn
+secret get apple/asc-key-id | gh secret set ASC_KEY_ID --env testflight --repo SolenesInc/attn
+secret get apple/asc-issuer-id | gh secret set ASC_ISSUER_ID --env testflight --repo SolenesInc/attn
 ```
 
 This key is not the APNs key that Attn Cloud uses to send push notifications.
