@@ -53,13 +53,13 @@ func writeTurnHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn turn open
        attn turn settle
 
-Ask for the user when you cannot continue without them, and take it back
-again. Your turn shows in the user's queue and notifies their phone, if they
-use them. When a
-notification from attn woke you (a message, a seed update, a pull request
-update, an ask's answer), your stop does not notify their phone and may not put
-you in the queue, so the user may not read what you write. Open your turn when
-you need them.
+Ask for the user when you cannot continue without them, or when they should
+read what you finished, and take it back again. Your turn shows in the user's
+queue and notifies their phone, if they use them. When a notification from attn
+woke you (a message, a seed update, a pull request update, an ask's answer),
+your stop does not notify their phone and may not put you in the queue, so the
+user may not read what you write. Open your turn when you need them or have
+finished work for them to read.
 
 commands:
   open      ask for the user. Run while you work, it opens your turn when you

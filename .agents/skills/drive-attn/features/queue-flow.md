@@ -6,7 +6,8 @@ with priority first, then oldest first. The user settles a turn when they are
 done with it, snoozes an agent until later, or marks an agent as priority.
 Auto-settle can close a turn once the user has steered the agent and the agent
 went back to work. Agents put themselves in the queue with
-`attn turn open` when they cannot go on without the user. Automation runs never
+`attn turn open` when they cannot go on without the user, or when they finished
+work the user should read. Automation runs never
 queue, but the user settles a run's turn the same way in either flow.
 
 ## Sub-features

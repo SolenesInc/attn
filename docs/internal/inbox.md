@@ -305,8 +305,9 @@ queue flow on, attn does not bring the agent to the user for a notification run:
 - During the run, `attn agent inbox` ends with a note that says the run is
   quiet and points to `attn turn open`.
 
-An agent that needs the user opens its own turn with `attn turn open`. If the
-agent runs the command while it works, the turn opens when the agent stops. If
+An agent that needs the user, or that finished work the user should read, opens
+its own turn with `attn turn open`. If the agent runs the command while it
+works, the turn opens when the agent stops. If
 the user has snoozed the agent, the turn opens once the snooze ends and the
 agent has stopped. The request survives a daemon restart. Notification runs do
 not settle that turn. The user settles the turn, or the agent runs
