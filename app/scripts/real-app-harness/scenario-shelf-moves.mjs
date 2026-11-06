@@ -241,8 +241,11 @@ try {
   });
 
   await runner.step('more_tiles_reveal_an_agent_whose_document_then_shows', async () => {
-    await slideTo((await readRow())[1]);
-    await slideTo((await readRow())[2]);
+    const before = (await shownLeaves()).length;
+    await press('shelf.fewerTiles');
+    await waitForShownCount((count) => count === before - 1);
+    await slideTo((await readRow())[0]);
+    await slideTo((await shownLeaves()).at(-1));
     const active = await activeLeaf();
     const narrow = await shownLeaves();
     runner.assert(narrow.at(-1) === active, 'the active tile sits at the end of the screen', { narrow, active });
@@ -260,8 +263,6 @@ try {
     await closeLeafThroughTheChipOrTile(documentLeaf);
     await waitForRow((current) => current.length === row.length);
     await waitForActive(active);
-    await press('shelf.fewerTiles');
-    await waitForShownCount((count) => count === narrow.length);
     await hold();
   });
 

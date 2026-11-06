@@ -235,11 +235,11 @@ export class LinuxDriver extends TargetedWindowDriver {
   async #keyboard({ kind, key, keyCode, modifiers, text }) {
     await this.activateBackground();
     if (kind === 'text') {
-      await this.runXdotool(['type', '--clearmodifiers', '--', text]);
+      await this.runXdotool(['type', '--', text]);
       return;
     }
     const name = kind === 'keycode' ? linuxKeyCodeName(keyCode) : key;
-    await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(name, modifiers)]);
+    await this.runXdotool(['key', linuxKeyName(name, modifiers)]);
   }
 
   async #pointer({ action, point, to, opts }) {

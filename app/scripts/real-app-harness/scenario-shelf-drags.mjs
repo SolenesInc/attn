@@ -102,7 +102,7 @@ try {
     await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
-    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
+    await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1600, height: 900 } });
   });
 
   await runner.step('build_a_row_past_the_screen', async () => {
