@@ -575,7 +575,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if b.kind == workerRuntimeSharedHost {
 		return b.spawnShared(ctx, opts)
 	}
-	if err := validateSpawnOptions(opts); err != nil {
+	if err := opts.Validate(); err != nil {
 		return err
 	}
 	if err := validateSessionID(string(opts.ID)); err != nil {

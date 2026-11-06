@@ -24,7 +24,7 @@ func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *test
 		{"kitty-overflow", "\x1b_G", "\x1b\\", (72 << 20) + 2*pty.OutputEventMaxBytes},
 	} {
 		t.Run(sequence.name, func(t *testing.T) {
-			for _, backend := range []testworld.PTYBackend{testworld.EmbeddedPTY, testworld.WorkerPTY, testworld.SharedHostOnlyPTY} {
+			for _, backend := range []testworld.PTYBackend{testworld.WorkerPTY, testworld.SharedHostOnlyPTY} {
 				t.Run(string(backend), func(t *testing.T) {
 					s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
 					s.Vars = append(s.Vars, "SHELL=/bin/bash")

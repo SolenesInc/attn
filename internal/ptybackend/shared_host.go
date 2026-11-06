@@ -560,7 +560,7 @@ func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 }
 
 func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) error {
-	if err := validateSpawnOptions(opts); err != nil {
+	if err := opts.Validate(); err != nil {
 		return err
 	}
 	if err := validateSessionID(string(opts.ID)); err != nil {
@@ -578,7 +578,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		}
 	}
 
-	prepared, err := pty.PrepareLaunch(toPTYSpawnOptions(opts), b.cfg.Logf)
+	prepared, err := pty.PrepareLaunch(opts.PTY(), b.cfg.Logf)
 	if err != nil {
 		return err
 	}

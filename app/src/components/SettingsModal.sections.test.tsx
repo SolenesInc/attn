@@ -95,7 +95,7 @@ describe('SettingsModal sections', () => {
     expect(savedSettings(daemon)).toEqual([['pty_shared_host_enabled', 'false']]);
   });
 
-  it.each(['worker', 'shared', 'embedded', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
+  it.each(['worker', 'shared', 'unknown'])('disables the experiment control on the %s backend', async (mode) => {
     const daemon = await openSection('experimental', { settings: { pty_backend_mode: mode } });
     expect(sharedHostSwitch()).toBeDisabled();
     await gesture(daemon, () => fireEvent.click(sharedHostSwitch()));

@@ -114,7 +114,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: agents and their tiles come back after an app or daemon restart. A stopped tile keeps its screen across restarts until someone resumes or closes it. After a machine restart, attn brings back the sessions it can resume and reaps the rest. An agent on the embedded backend stops when the daemon restarts. "Direct agent launches" applies to new and reloaded agents and survives a restart.
+- **Durability across restarts**: agents and their tiles come back after an app or daemon restart. A stopped tile keeps its screen across restarts until someone resumes or closes it. After a machine restart, attn brings back the sessions it can resume and reaps the rest. "Direct agent launches" applies to new and reloaded agents and survives a restart.
 - **Linux**: ⌘N is Ctrl+Shift+N, ⌘⇧N is Ctrl+Alt+N and ⌘W is Ctrl+Shift+W (`LINUX_SHORTCUTS`). `attn` with no verb starts the instance's app executable with the link instead of `open`. `attn instance register-scheme` claims the scheme for links from elsewhere.
 - **Outposts**: an agent can start on an outpost (`wsctl add-session --host <outpost>`). While its host is offline, attn refuses Reload, Resume and Close with `<host> is unreachable; this needs it now`, unless the agent is already recoverable.
 - **Profiles**: a new agent belongs, for life, to the profile of the desktop it starts on. The spawn link reuses only a session of the selected profile. The chief closes and reloads agents of its own profile only.

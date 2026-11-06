@@ -161,7 +161,7 @@ EOF
 
 ## Contexts
 
-- **Durability across restarts**: turns, settles, snoozes and priority are the daemon's records. A settle and a snooze survive a daemon restart, a snooze still ends at its deadline afterwards, and an agent's request for its turn outlives a restart. An agent on the embedded backend stops when the daemon restarts.
+- **Durability across restarts**: turns, settles, snoozes and priority are the daemon's records. A settle and a snooze survive a daemon restart, a snooze still ends at its deadline afterwards, and an agent's request for its turn outlives a restart.
 - **Linux**: `session.jumpToWaiting` is Ctrl+Shift+J, `session.prev` and `session.next` Ctrl+Shift+PageUp and Ctrl+Shift+PageDown, `session.settle` Ctrl+Alt+E, `session.snooze` Ctrl+Alt+S, `session.priority` Ctrl+Alt+I and `session.cancelCountdown` Ctrl+Shift+. there (`LINUX_SHORTCUTS`). There is no native menu in the way of the cancel key. `attn turn` and `attn session` work the same.
 - **Outposts**: an agent whose outpost is offline is left out of the waiting count, has no settle or snooze in the app, and is skipped when the queue moves the user on. Its countdown shows "Settling paused while the host is unreachable".
 - **Profiles**: each profile's queue lists only its own agents, and only that profile's chief may snooze any of them. Queue flow itself is one setting for all profiles.

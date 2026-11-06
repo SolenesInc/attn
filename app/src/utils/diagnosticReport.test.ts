@@ -18,7 +18,7 @@ function daemon(inputTraces: DaemonSupportSnapshot['input_traces']): DaemonSuppo
   return {
     event: 'support_snapshot_result', request_id: 'request-1', protocol_version: '301',
     daemon_instance_id: 'daemon-1', daemon_started_at_unix_ms: 1,
-    captured_at_unix_ms: 2_000, backend: 'embedded', warning_codes: [], trace_capacity: 512,
+    captured_at_unix_ms: 2_000, backend: 'worker', warning_codes: [], trace_capacity: 512,
     trace_total: inputTraces.length, input_traces: inputTraces, runtimes: [],
   } as DaemonSupportSnapshot;
 }

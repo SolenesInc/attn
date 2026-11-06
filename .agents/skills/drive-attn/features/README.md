@@ -295,7 +295,7 @@ HEAD.
 ## Contexts
 
 - **Durability across restarts**: what the feature keeps across app, daemon
-  and machine restarts, and what an agent on the embedded backend loses.
+  and machine restarts.
 - **Linux**: how the feature works where the daemon and CLI run on Linux,
   and its Linux key bindings, which add Ctrl, Shift or Alt where macOS uses
   ⌘. Each file writes its bindings out in full.

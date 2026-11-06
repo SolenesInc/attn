@@ -591,9 +591,6 @@ func (r *codexShared) close() {
 		if client := s.client(); client != nil {
 			client.Close()
 		}
-		if r.d.ptyBackendMode() == "embedded" {
-			r.kill(context.Background(), s)
-		}
 	}
 }
 

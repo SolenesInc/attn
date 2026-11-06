@@ -17,7 +17,6 @@ import (
 func inBubbleWithAgents(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
 	prepared := prepareWorld(t)
-	t.Setenv("ATTN_PTY_BACKEND", "embedded")
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
 		bubbled.T = t

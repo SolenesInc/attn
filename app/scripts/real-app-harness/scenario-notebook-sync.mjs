@@ -86,7 +86,7 @@ try {
     ATTN_DATA_DIR: data, ATTN_HARNESS_DATA_DIR: data, ATTN_HARNESS_NOTEBOOK_ROOT: outpostRoot,
     ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
     ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off',
-    ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]', ATTN_CODEX_SHARED_PROFILE: '', CODEX_THREAD_ID: '',
+    ATTN_PTY_BACKEND: 'worker', ATTN_CACHED_SHELL_ENV: '[]', ATTN_CODEX_SHARED_PROFILE: '', CODEX_THREAD_ID: '',
   });
   const log = fs.openSync(path.join(runner.runDir, 'outpost.log'), 'w');
   const outpost = start(binary, ['daemon'], remoteEnv, ['ignore', log, log, 'pipe']); fs.closeSync(log);

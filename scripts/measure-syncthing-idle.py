@@ -29,7 +29,7 @@ for repeat in range(3):
         shutil.copytree(args.fixture, root / 'notebook')
         env = base | {'ATTN_DATA_DIR': str(root), 'ATTN_HARNESS_DATA_DIR': str(root), 'ATTN_HARNESS_NOTEBOOK_ROOT': str(root / 'notebook'),
                       'ATTN_WS_PORT': '19429', 'ATTN_PPROF': '19430', 'ATTN_HEADLESS_TASKS': 'off', 'ATTN_GITHUB_POLLING': 'off',
-                      'ATTN_HARNESS_SKILL_SYNC': 'off', 'ATTN_PTY_BACKEND': 'embedded', 'ATTN_CACHED_SHELL_ENV': '[]'}
+                      'ATTN_HARNESS_SKILL_SYNC': 'off', 'ATTN_PTY_BACKEND': 'worker', 'ATTN_CACHED_SHELL_ENV': '[]'}
         read, write = os.pipe()
         lifeline, holder = os.pipe()
         log = (root / 'stderr.log').open('w')

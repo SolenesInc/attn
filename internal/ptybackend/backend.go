@@ -95,14 +95,14 @@ func validateUnattendedSpawnOptions(opts SpawnOptions) error {
 	return nil
 }
 
-func validateSpawnOptions(opts SpawnOptions) error {
+func (opts SpawnOptions) Validate() error {
 	if strings.TrimSpace(opts.CWD) == "" {
 		return errors.New("missing cwd")
 	}
 	if err := validateUnattendedSpawnOptions(opts); err != nil {
 		return err
 	}
-	directory := toPTYSpawnOptions(opts).WorkingDirectory()
+	directory := opts.PTY().WorkingDirectory()
 	info, err := os.Stat(directory)
 	if err != nil {
 		return fmt.Errorf("working directory %q: %w", directory, err)
@@ -268,14 +268,6 @@ type RecoverableRuntime interface {
 
 type ModeProvider interface {
 	PTYBackendMode() string
-}
-
-func terminalIDs(ids []string) []harness.TerminalID {
-	terminals := make([]harness.TerminalID, len(ids))
-	for i, id := range ids {
-		terminals[i] = harness.TerminalID(id)
-	}
-	return terminals
 }
 
 type TerminalTextProvider interface {

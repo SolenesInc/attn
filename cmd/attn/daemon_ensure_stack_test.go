@@ -21,7 +21,7 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Vars = append(s.Vars, "ATTN_INSTANCE=ensure-paused", "SHELL=/bin/bash")
-	s.StartWith("ATTN_PTY_BACKEND=embedded")
+	s.StartWith("ATTN_PTY_BACKEND=worker")
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shell"))
 	app.TypeLine(shell, "kept=before; printf '__ready_%s\\n' \"$kept\"")
@@ -54,7 +54,7 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	}
 	app.TypeLine(shell, "printf '__survived_%s\\n' \"$kept\"")
 	app.AwaitScreen(shell, "__survived_before")
-	t.Logf("daemon pid %s and its embedded shell survived both Ensure callers", strings.TrimSpace(string(pid)))
+	t.Logf("daemon pid %s and its shell survived both Ensure callers", strings.TrimSpace(string(pid)))
 }
 
 func TestADaemonThatStartsWhileEnsureLooksKeepsItsSocket(t *testing.T) {

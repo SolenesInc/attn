@@ -615,7 +615,7 @@ async function main() {
     const pids = await runner.step('launch_app_with_the_shared_host', async () => {
       if (extras.pprofPort) {
         await client.quitApp();
-        await stopDaemonKeepingTerminals(instance, { appPath: options.appPath });
+        await stopDaemonKeepingTerminals(instance);
       }
       const webkitBaseline = await captureWebKitPids();
       await launchFreshAppAndConnect(client, observer);

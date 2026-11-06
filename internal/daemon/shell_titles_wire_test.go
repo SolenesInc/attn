@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestEmbeddedShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
+func TestAShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	caller := w.Spawn(app, fakeagent.Claude, w.Path("caller"))
@@ -35,10 +35,10 @@ func TestEmbeddedShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 	}
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "shop" })
 	listedName("shop")
-	app.TypeLine(shell, `printf '\033]0;embedded prompt\007'; printf 'title output %s\n' delivered`)
-	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "embedded prompt" })
+	app.TypeLine(shell, `printf '\033]0;shell prompt\007'; printf 'title output %s\n' delivered`)
+	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return protocol.Deref(s.Title) == "shell prompt" })
 	app.AwaitScreen(shell, "title output delivered")
-	listedName("embedded prompt")
+	listedName("shell prompt")
 	if err := cli.RenameSession(protocol.SessionID(shell), "my server"); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestEmbeddedShellPublishesItsTitleAndKeepsDeliveringOutput(t *testing.T) {
 	if err := cli.RenameSession(protocol.SessionID(shell), ""); err != nil {
 		t.Fatal(err)
 	}
-	listedName("embedded prompt")
+	listedName("shell prompt")
 }
 
 func TestClosedShellsKeepTheirLastDisplayNameInHistory(t *testing.T) {

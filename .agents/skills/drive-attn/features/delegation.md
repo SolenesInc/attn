@@ -123,7 +123,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: a delegation operation, its request id and its seed are the daemon's records. `attn delegate status` reads them after a restart, and a retry with the same `--request-id` returns the accepted operation instead of starting another operation. A delegation that a restart interrupts finishes on the same session once the daemon is back. Delegates come back like any session. An embedded-backend delegate stops with the daemon.
+- **Durability across restarts**: a delegation operation, its request id and its seed are the daemon's records. `attn delegate status` reads them after a restart, and a retry with the same `--request-id` returns the accepted operation instead of starting another operation. A delegation that a restart interrupts finishes on the same session once the daemon is back. Delegates come back like any session.
 - **Linux**: `attn delegate` works the same where the daemon and CLI run on Linux. `session.orchestrator` is Ctrl+Alt+O there (`LINUX_SHORTCUTS`).
 - **Outposts**: a delegation starts on the dispatcher's machine unless `--host` names an outpost, or `home`. attn checks paths on the target machine. attn refuses a delegation to an unknown or unreachable host before it accepts the delegation. After a home restart, an accepted operation waits for its outpost, and its status names the host. attn judges checkout sharing per machine.
 - **Profiles**: the delegate, its seed and its desktop belong to the dispatcher's profile. `--desktop` takes only desktops of that profile. Outside attn, `--profile` picks the profile when there are several.

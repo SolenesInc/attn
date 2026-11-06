@@ -13,7 +13,6 @@ type PTYBackend string
 
 const (
 	WorkerPTY         PTYBackend = "worker"
-	EmbeddedPTY       PTYBackend = "embedded"
 	SharedHostPTY     PTYBackend = "shared host"
 	SharedHostOnlyPTY PTYBackend = "shared"
 )

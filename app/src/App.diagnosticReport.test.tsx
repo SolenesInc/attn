@@ -21,7 +21,7 @@ function answerSnapshots(daemon: ScriptedDaemon) {
     daemon_instance_id: 'daemon-home',
     daemon_started_at_unix_ms: 1,
     captured_at_unix_ms: 2,
-    backend: 'embedded',
+    backend: 'worker',
     warning_codes: [],
     trace_capacity: 512,
     trace_total: 0,

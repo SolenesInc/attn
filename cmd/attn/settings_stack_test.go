@@ -32,7 +32,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	for _, tc := range []struct{ key, value, reason string }{
 		{"theme", "purple", "invalid theme"},
 		{"unknown.key", "value", "unknown.key"},
-		{"pty_backend_mode", "embedded", "read-only"},
+		{"pty_backend_mode", "worker", "read-only"},
 		{"default_model_<harness>", "some-model", "concrete key"},
 	} {
 		r := s.Attn("settings", "set", tc.key, tc.value)

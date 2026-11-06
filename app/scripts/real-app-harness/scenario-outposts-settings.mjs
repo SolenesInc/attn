@@ -124,7 +124,7 @@ try {
     ATTN_HARNESS_DATA_DIR: outpostData,
     ATTN_HARNESS_NOTEBOOK_ROOT: path.join(outpostData, 'notebook'), ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
     ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
-    ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]',
+    ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'worker', ATTN_CACHED_SHELL_ENV: '[]',
     ATTN_TOOL_HOME: path.join(root, 'outpost-tools'),
   });
   const log = fs.openSync(path.join(runner.runDir, 'outpost.log'), 'w');

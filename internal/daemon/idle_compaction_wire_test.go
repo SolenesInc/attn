@@ -15,7 +15,6 @@ import (
 func inBubbleWithAgentsAndVerdicts(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
 	prepared := prepareWorld(t, fakeagent.Claude)
-	t.Setenv("ATTN_PTY_BACKEND", "embedded")
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared

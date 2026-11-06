@@ -51,7 +51,7 @@ func TestReopeningATerminalDescribesOnlyTheImagesItsSnapshotShows(t *testing.T) 
 
 func TestAnImageArrivingInPiecesSendsNoEmptyOutput(t *testing.T) {
 	t.Parallel()
-	for _, backend := range []testworld.PTYBackend{testworld.WorkerPTY, testworld.EmbeddedPTY} {
+	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
 			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))

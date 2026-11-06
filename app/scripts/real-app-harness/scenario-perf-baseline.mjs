@@ -230,7 +230,7 @@ async function main() {
   try {
     if (port && options.restartDaemon) {
       const instance = instanceForAppPath(options.appPath);
-      const killed = await stopDaemonKeepingTerminals(instance, { appPath: options.appPath });
+      const killed = await stopDaemonKeepingTerminals(instance);
       console.log(`[perf] stopped ${instance || 'production'} daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
     }
 

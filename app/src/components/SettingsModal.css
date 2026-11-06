@@ -796,10 +796,6 @@
   color: #f59b4a;
 }
 
-.settings-status.mode-embedded {
-  color: #77a7ff;
-}
-
 .agent-capabilities-item {
   display: grid;
   gap: 7px;

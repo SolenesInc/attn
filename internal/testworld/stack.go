@@ -30,7 +30,6 @@ type Stack struct {
 	binary                  string
 	daemon                  *os.Process
 	exited                  chan error
-	allowFallback           bool
 	pauses                  *pauseSocket
 	clock                   *stepclock.Hub
 	wsListener              *net.TCPListener
@@ -162,7 +161,7 @@ func (s *Stack) checkStarted() {
 	s.T.Helper()
 	probe := s.App()
 	for _, warning := range probe.Initial.Warnings {
-		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
+		if strings.HasPrefix(warning.Code, "pty_backend_") {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}
 	}

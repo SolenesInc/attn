@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -65,11 +64,6 @@ func (d *Daemon) nisse() *nisseLink {
 			<-d.life.Done()
 			if c := l.client(); c != nil {
 				c.Close()
-			}
-			if d.ptyBackendMode() == "embedded" {
-				if err := d.ptyBackend.Kill(context.Background(), nisseServerTerminal, syscall.SIGKILL); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-					d.logf("nisse: killing the Nisse server: %v", err)
-				}
 			}
 		})
 	})

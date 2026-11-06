@@ -77,9 +77,7 @@ ATTN_HARNESS_INSTANCE=<name> pnpm --dir app run real-app:scenario-perf-pty-strea
 on the previous desktop, and `unmounted` on a desktop that is neither current
 nor previous. `--profile-dir <dir>` adds `sample` profiles of the PTY host and
 WebContent for each window, and `--pprof-port <port>` restarts the daemon with
-`ATTN_PPROF` to add its CPU profile. The restart refuses a daemon on the
-embedded terminal backend, because stopping it ends every terminal it hosts.
-Profiling costs CPU, so profiled runs are not baselines.
+`ATTN_PPROF` to add its CPU profile. Profiling costs CPU, so profiled runs are not baselines.
 
 ## A copy of production
 

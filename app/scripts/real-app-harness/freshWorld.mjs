@@ -36,34 +36,6 @@ export function assertFreshWorldTargetSafe({ instance, appPath } = {}) {
   }
 }
 
-const BACKENDS_WHOSE_TERMINALS_OUTLIVE_THE_DAEMON = new Set(['worker', 'shared', 'migrating']);
-
-export function assertDaemonStopKeepsTerminals({ instance, appPath, run = execFileSync }) {
-  const label = JSON.stringify(instance || 'production');
-  let backend;
-  try {
-    const answer = run(attnBinaryPath(appPath), ['settings', 'get', 'pty_backend_mode', '--json'], {
-      encoding: 'utf8',
-      env: instanceCliEnv(instance),
-      stdio: 'pipe',
-    });
-    backend = String(JSON.parse(answer).value ?? '');
-  } catch (error) {
-    throw new Error(
-      `refusing to stop the ${label} daemon: could not read its pty_backend_mode `
-      + `(${error?.message || error}), so it cannot be proved that its terminals survive the stop.`,
-    );
-  }
-  if (!BACKENDS_WHOSE_TERMINALS_OUTLIVE_THE_DAEMON.has(backend)) {
-    throw new Error(
-      `refusing to stop the ${label} daemon: its pty_backend_mode is ${JSON.stringify(backend)}, `
-      + `so stopping it ends every terminal it hosts. Save their work and stop it yourself `
-      + `(ATTN_INSTANCE=${instance} attn daemon stop), or run against an instance whose terminals `
-      + `outlive the daemon (${[...BACKENDS_WHOSE_TERMINALS_OUTLIVE_THE_DAEMON].join(', ')}).`,
-    );
-  }
-}
-
 function attnBinaryPath(appPath) {
   return appDaemonInTree(appPath);
 }

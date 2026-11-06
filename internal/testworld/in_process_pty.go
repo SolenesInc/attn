@@ -1,4 +1,4 @@
-package ptybackend
+package testworld
 
 import (
 	"context"
@@ -8,34 +8,35 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-type EmbeddedBackend struct {
+type InProcessPTY struct {
 	manager *pty.Manager
 }
 
-func (b *EmbeddedBackend) SessionTerminalBuild(harness.TerminalID) (string, bool) {
+func (b *InProcessPTY) SessionTerminalBuild(harness.TerminalID) (string, bool) {
 	return buildinfo.SnapshotFormat, true
 }
 
-func NewEmbedded(manager *pty.Manager) *EmbeddedBackend {
+func NewInProcessPTY(manager *pty.Manager) *InProcessPTY {
 	if manager == nil {
 		manager = pty.NewManager(nil)
 	}
-	return &EmbeddedBackend{manager: manager}
+	return &InProcessPTY{manager: manager}
 }
 
-func (b *EmbeddedBackend) SetExitHandler(handler func(ExitInfo)) {
+func (b *InProcessPTY) SetExitHandler(handler func(ptybackend.ExitInfo)) {
 	if handler == nil {
 		b.manager.SetExitHandler(nil)
 		return
 	}
 	b.manager.SetExitHandler(func(info pty.ExitInfo) {
-		handler(ExitInfo{ID: harness.TerminalID(info.ID), ExitCode: info.ExitCode, Signal: info.Signal, LifecycleID: info.LifecycleID})
+		handler(ptybackend.ExitInfo{ID: harness.TerminalID(info.ID), ExitCode: info.ExitCode, Signal: info.Signal, LifecycleID: info.LifecycleID})
 	})
 }
 
-func (b *EmbeddedBackend) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
+func (b *InProcessPTY) SetStateHandler(handler func(id harness.TerminalID, obs pty.Observation)) {
 	if handler == nil {
 		b.manager.SetStateHandler(nil)
 		return
@@ -43,7 +44,7 @@ func (b *EmbeddedBackend) SetStateHandler(handler func(id harness.TerminalID, ob
 	b.manager.SetStateHandler(func(id string, obs pty.Observation) { handler(harness.TerminalID(id), obs) })
 }
 
-func (b *EmbeddedBackend) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
+func (b *InProcessPTY) SetTitleHandler(handler func(id harness.TerminalID, title string)) {
 	if handler == nil {
 		b.manager.SetTitleHandler(nil)
 		return
@@ -51,17 +52,17 @@ func (b *EmbeddedBackend) SetTitleHandler(handler func(id harness.TerminalID, ti
 	b.manager.SetTitleHandler(func(id, title string) { handler(harness.TerminalID(id), title) })
 }
 
-func (b *EmbeddedBackend) Spawn(_ context.Context, opts SpawnOptions) error {
-	if err := validateSpawnOptions(opts); err != nil {
+func (b *InProcessPTY) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
+	if err := opts.Validate(); err != nil {
 		return err
 	}
-	return b.manager.Spawn(toPTYSpawnOptions(opts))
+	return b.manager.Spawn(opts.PTY())
 }
 
-func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+func (b *InProcessPTY) Attach(_ context.Context, id harness.TerminalID, subscriberID string, opts ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	sessionID := string(id)
-	events := make(chan OutputEvent, 128)
-	stream := &embeddedStream{
+	events := make(chan ptybackend.OutputEvent, 128)
+	stream := &inProcessStream{
 		events: events,
 		closeFn: func() {
 			b.manager.Detach(sessionID, subscriberID)
@@ -70,15 +71,15 @@ func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subsc
 
 	send := func(data []byte, seq uint32) bool {
 		payload := append([]byte(nil), data...)
-		return stream.publish(OutputEvent{Kind: OutputEventKindOutput, Data: payload, Seq: seq})
+		return stream.publish(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Data: payload, Seq: seq})
 	}
 	onDrop := func(reason string) {
-		_ = stream.publish(OutputEvent{Kind: OutputEventKindDesync, Reason: reason})
+		_ = stream.publish(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindDesync, Reason: reason})
 		stream.Close()
 	}
 	onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
-		if !stream.publish(OutputEvent{
-			Kind:       OutputEventKindPlacements,
+		if !stream.publish(ptybackend.OutputEvent{
+			Kind:       ptybackend.OutputEventKindPlacements,
 			Seq:        update.Seq,
 			Placements: update.Placements,
 		}) {
@@ -86,8 +87,8 @@ func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subsc
 		}
 	})
 	onResize := pty.OnResize(func(update pty.ResizeUpdate) {
-		if !stream.publish(OutputEvent{
-			Kind: OutputEventKindResize,
+		if !stream.publish(ptybackend.OutputEvent{
+			Kind: ptybackend.OutputEventKindResize,
 			Cols: update.Cols, Rows: update.Rows,
 			XPixel: update.XPixel, YPixel: update.YPixel,
 		}) {
@@ -112,10 +113,10 @@ func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subsc
 	}
 	if err != nil {
 		stream.Close()
-		return AttachInfo{}, nil, err
+		return ptybackend.AttachInfo{}, nil, err
 	}
 
-	return AttachInfo{
+	return ptybackend.AttachInfo{
 		LastSeq:                    info.LastSeq,
 		Cols:                       info.Cols,
 		Rows:                       info.Rows,
@@ -131,60 +132,68 @@ func (b *EmbeddedBackend) Attach(_ context.Context, id harness.TerminalID, subsc
 	}, stream, nil
 }
 
-func (b *EmbeddedBackend) KittyImage(_ context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error) {
+func (b *InProcessPTY) KittyImage(_ context.Context, id harness.TerminalID, imageID uint32) (pty.KittyImage, error) {
 	return b.manager.KittyImage(string(id), imageID)
 }
 
-func (b *EmbeddedBackend) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
+func (b *InProcessPTY) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	return b.manager.ScreenSnapshot(string(id))
 }
 
-func (b *EmbeddedBackend) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
+func (b *InProcessPTY) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
 	return b.manager.Input(ctx, string(id), data)
 }
 
-func (b *EmbeddedBackend) Resize(_ context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
+func (b *InProcessPTY) Resize(_ context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ptybackend.ResizeResult, error) {
 	changed, err := b.manager.Resize(string(id), cols, rows, xpixel, ypixel)
-	return ResizeResult{Changed: changed, StreamOrdered: true}, err
+	return ptybackend.ResizeResult{Changed: changed, StreamOrdered: true}, err
 }
 
-func (b *EmbeddedBackend) SetTheme(_ context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
+func (b *InProcessPTY) SetTheme(_ context.Context, id harness.TerminalID, theme pty.TerminalTheme) error {
 	return b.manager.SetTheme(string(id), theme)
 }
 
-func (b *EmbeddedBackend) Kill(_ context.Context, id harness.TerminalID, sig syscall.Signal) error {
+func (b *InProcessPTY) Kill(_ context.Context, id harness.TerminalID, sig syscall.Signal) error {
 	return b.manager.Kill(string(id), sig)
 }
 
-func (b *EmbeddedBackend) Remove(_ context.Context, id harness.TerminalID) error {
+func (b *InProcessPTY) Remove(_ context.Context, id harness.TerminalID) error {
 	b.manager.Remove(string(id))
 	return nil
 }
 
-func (b *EmbeddedBackend) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
+func (b *InProcessPTY) RuntimeLifecycle(id harness.TerminalID) (string, bool) {
 	return b.manager.LifecycleID(string(id))
 }
 
-func (b *EmbeddedBackend) TerminalIDs(_ context.Context) []harness.TerminalID {
-	return terminalIDs(b.manager.SessionIDs())
+func (b *InProcessPTY) TerminalIDs(_ context.Context) []harness.TerminalID {
+	sessions := b.manager.SessionIDs()
+	ids := make([]harness.TerminalID, len(sessions))
+	for i, session := range sessions {
+		ids[i] = harness.TerminalID(session)
+	}
+	return ids
 }
 
-func (b *EmbeddedBackend) Recover(_ context.Context) (RecoveryReport, error) {
-	return RecoveryReport{Recovered: len(b.manager.SessionIDs())}, nil
+func (b *InProcessPTY) Recover(_ context.Context) (ptybackend.RecoveryReport, error) {
+	return ptybackend.RecoveryReport{Recovered: len(b.manager.SessionIDs())}, nil
 }
 
-func (b *EmbeddedBackend) Shutdown(_ context.Context) error {
+func (b *InProcessPTY) Shutdown(_ context.Context) error {
+	for _, id := range b.manager.SessionIDs() {
+		_ = b.manager.Kill(id, syscall.SIGKILL)
+	}
 	b.manager.Shutdown()
 	return nil
 }
 
-func (b *EmbeddedBackend) SessionInfo(_ context.Context, id harness.TerminalID) (SessionInfo, error) {
+func (b *InProcessPTY) SessionInfo(_ context.Context, id harness.TerminalID) (ptybackend.SessionInfo, error) {
 	sessionID := string(id)
 	info, err := b.manager.SessionInfo(sessionID)
 	if err != nil {
-		return SessionInfo{}, err
+		return ptybackend.SessionInfo{}, err
 	}
-	result := SessionInfo{
+	result := ptybackend.SessionInfo{
 		SessionID:  info.SessionID,
 		Agent:      info.Agent,
 		CWD:        info.CWD,
@@ -201,19 +210,19 @@ func (b *EmbeddedBackend) SessionInfo(_ context.Context, id harness.TerminalID) 
 	return result, nil
 }
 
-type embeddedStream struct {
-	events    chan OutputEvent
+type inProcessStream struct {
+	events    chan ptybackend.OutputEvent
 	closeFn   func()
 	closeOnce sync.Once
 	mu        sync.Mutex
 	closed    bool
 }
 
-func (s *embeddedStream) Events() <-chan OutputEvent {
+func (s *inProcessStream) Events() <-chan ptybackend.OutputEvent {
 	return s.events
 }
 
-func (s *embeddedStream) Close() error {
+func (s *inProcessStream) Close() error {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()
 		s.closed = true
@@ -228,14 +237,14 @@ func (s *embeddedStream) Close() error {
 	return nil
 }
 
-func (s *embeddedStream) publish(evt OutputEvent) (ok bool) {
+func (s *inProcessStream) publish(evt ptybackend.OutputEvent) (ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return false
 	}
 	// The last slot is reserved for the overflow desync; without it the client never reattaches.
-	if evt.Kind != OutputEventKindDesync && len(s.events) >= cap(s.events)-1 {
+	if evt.Kind != ptybackend.OutputEventKindDesync && len(s.events) >= cap(s.events)-1 {
 		return false
 	}
 	select {
@@ -246,9 +255,9 @@ func (s *embeddedStream) publish(evt OutputEvent) (ok bool) {
 	}
 }
 
-func (b *EmbeddedBackend) ReadText(_ context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
+func (b *InProcessPTY) ReadText(_ context.Context, id harness.TerminalID, mode string, lines int) (pty.ReadTextInfo, error) {
 	return b.manager.ReadText(string(id), mode, lines)
 }
-func (b *EmbeddedBackend) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+func (b *InProcessPTY) WaitBlock(ctx context.Context, id harness.TerminalID, params pty.WaitBlockParams) (pty.WaitBlockResult, error) {
 	return b.manager.WaitBlock(ctx, string(id), params)
 }

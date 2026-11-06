@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { assertDaemonStopKeepsTerminals } from './freshWorld.mjs';
 import {
   daemonPidFilePathForInstance,
   dataDirForInstance,
@@ -308,9 +307,8 @@ export async function stopDaemon(instance) {
   return pid;
 }
 
-export async function stopDaemonKeepingTerminals(instance, { appPath }) {
+export async function stopDaemonKeepingTerminals(instance) {
   if (readLiveDaemonPid(instance) == null) return null;
-  assertDaemonStopKeepsTerminals({ instance, appPath });
   return stopDaemon(instance);
 }
 

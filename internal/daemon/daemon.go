@@ -92,7 +92,6 @@ const (
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
 	warnPTYBackendFallback        = "pty_backend_fallback"
-	warnPTYBackendUnsupported     = "pty_backend_unsupported"
 	warnGHNotInstalled            = "gh_not_installed"
 	warnGHVersionTooOld           = "gh_version_too_old"
 )
@@ -487,7 +486,6 @@ func New(socketPath string) *Daemon {
 
 	dataRoot := filepath.Dir(socketPath)
 	pidPath := filepath.Join(dataRoot, "attn.pid")
-	manager := pty.NewManager(logger.Infof)
 
 	d := &Daemon{
 		recentFileStat:      os.Stat,
@@ -505,7 +503,6 @@ func New(socketPath string) *Daemon {
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
-		ptyBackend:          ptybackend.NewEmbedded(manager),
 
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
@@ -524,42 +521,90 @@ func New(socketPath string) *Daemon {
 	return d
 }
 
-func NewForTesting(socketPath string) *Daemon {
-	dataRoot := filepath.Dir(socketPath)
-	pidPath := filepath.Join(dataRoot, "attn.pid")
-	manager := pty.NewManager(nil)
-	d := &Daemon{
-		recentFileStat:      os.Stat,
-		notebookSyncWatch:   true,
-		rootWatch:           openRootWatch,
-		clock:               stepclock.Process(),
-		recentFilePruneGate: make(chan struct{}, 1),
-		ptyRecovered:        make(chan struct{}),
-		socketPath:          socketPath,
-		pidPath:             pidPath,
-		dataRoot:            dataRoot,
-		store:               store.New(),
-		wsHub:               newWSHub(),
-		startedAt:           time.Now(),
-		desktopTiles:        newDesktopTileDelivery(),
-		logger:              nil,
-		ghRegistry:          github.NewClientRegistry(),
-		ptyBackend:          ptybackend.NewEmbedded(manager),
-
-		pendingInitialWS: make(map[*wsClient]struct{}),
-		startedCh:        make(chan struct{}),
-
-		plugins:             newPluginRegistry(),
-		pluginDir:           pluginDirForSocket(socketPath),
-		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
-		jobQueue:            jobs.New(jobs.Options{}),
-		jobQueueRoleChanged: make(chan struct{}, 1),
+func (d *Daemon) startPTYBackend() error {
+	selected := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
+	switch selected {
+	case "worker":
+		return d.startDedicatedWorkers()
+	case "shared":
+		shared, err := d.newSharedPTYHost()
+		if err != nil {
+			return fmt.Errorf("start the shared PTY host: %w", err)
+		}
+		d.ptyBackend = shared
+		d.sharedPTYHost = shared
+		d.logf("using PTY backend: shared")
+		return nil
+	case "", "migrating":
+		return d.startMigratingPTYBackend()
+	default:
+		return fmt.Errorf("ATTN_PTY_BACKEND=%s is not supported: use worker, shared or migrating, or leave it unset", selected)
 	}
-	d.wireGitExecution(productionGitExecutorConfig)
-	d.ensureEventBus()
-	d.loginEnv = newLoginEnv(&d.life, d.logf)
-	d.pluginStartEnded = make(chan struct{})
-	return d
+}
+
+func (d *Daemon) newDedicatedWorkers() (*ptybackend.WorkerBackend, error) {
+	return ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
+		DataRoot:         d.dataRoot,
+		DaemonInstanceID: d.daemonInstanceID,
+		BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
+		Logf:             d.logf,
+		OnTerminalBuild:  d.handleTerminalBuildChanged,
+	})
+}
+
+func (d *Daemon) startDedicatedWorkers() error {
+	workers, err := d.newDedicatedWorkers()
+	if err != nil {
+		return fmt.Errorf("start the PTY workers: %w", err)
+	}
+	if shouldRunWorkerStartupProbe() {
+		ctx, cancel := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
+		defer cancel()
+		if err := workers.Probe(ctx); err != nil {
+			return fmt.Errorf("start the PTY workers: startup probe failed: %w", err)
+		}
+	}
+	d.ptyBackend = workers
+	d.logf("using PTY backend: worker")
+	return nil
+}
+
+func (d *Daemon) startMigratingPTYBackend() error {
+	legacy, err := d.newDedicatedWorkers()
+	if err != nil {
+		return fmt.Errorf("start the PTY workers: %w", err)
+	}
+	shared, err := d.newSharedPTYHost()
+	if err != nil {
+		d.ptyBackend = legacy
+		d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", err)
+		d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", err))
+		return nil
+	}
+
+	sharedEnabled := parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
+	useSharedForNew := sharedEnabled && shared.SharedArtifactReady()
+	if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
+		useSharedForNew = true
+	}
+	if candidateErr := shared.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
+		d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
+		d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
+	}
+	migrating, err := ptybackend.NewMigrating(legacy, shared, useSharedForNew)
+	if err != nil {
+		d.logf("failed to initialize PTY migration router: %v; using legacy workers", err)
+		d.ptyBackend = legacy
+		return nil
+	}
+	d.ptyBackend = migrating
+	d.sharedPTYHost = shared
+	if useSharedForNew {
+		d.logf("using PTY backend: migrating (existing=owner, new=shared)")
+	} else {
+		d.logf("using PTY backend: migrating (existing=owner, new=legacy)")
+	}
+	return nil
 }
 
 func (d *Daemon) removeLegacyStateFile() {
@@ -581,9 +626,6 @@ func (d *Daemon) Start() error {
 	}
 	if d.startedCh == nil {
 		d.startedCh = make(chan struct{})
-	}
-	if d.ptyBackend == nil {
-		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
 	}
 	if d.plugins == nil {
 		d.plugins = newPluginRegistry()
@@ -616,6 +658,11 @@ func (d *Daemon) Start() error {
 	d.ensurePluginSupervisor()
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
+	}
+	if d.ptyBackend == nil {
+		if err := d.startPTYBackend(); err != nil {
+			return err
+		}
 	}
 	d.loadTerminals()
 	if d.clientToken == "" {
@@ -658,107 +705,6 @@ func (d *Daemon) Start() error {
 	d.importCrewHomes()
 	d.ensureChiefs()
 	d.removeEmptyDesktops()
-	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
-	if selectedBackend == "" {
-		selectedBackend = "migrating"
-	}
-	switch selectedBackend {
-	case "embedded":
-	case "worker":
-		workerBackend, err := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
-		if err != nil {
-			d.logf("failed to initialize worker PTY backend: %v; falling back to embedded", err)
-			d.addWarning(
-				warnPTYBackendFallback,
-				fmt.Sprintf("Failed to initialize worker PTY backend (%v). Falling back to embedded.", err),
-			)
-		} else {
-			if shouldRunWorkerStartupProbe() {
-				probeCtx, cancelProbe := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
-				probeErr := workerBackend.Probe(probeCtx)
-				cancelProbe()
-				if probeErr != nil {
-					d.logf("worker PTY backend startup probe failed: %v; falling back to embedded", probeErr)
-					d.addWarning(
-						warnPTYBackendFallback,
-						fmt.Sprintf("Worker PTY backend probe failed (%v). Falling back to embedded.", probeErr),
-					)
-				} else {
-					d.ptyBackend = workerBackend
-					d.logf("using PTY backend: worker")
-				}
-			} else {
-				d.ptyBackend = workerBackend
-				d.logf("using PTY backend: worker (startup probe disabled)")
-			}
-		}
-	case "shared":
-		sharedBackend, err := d.newSharedPTYHost()
-		if err != nil {
-			d.logf("failed to initialize shared PTY host: %v; falling back to embedded", err)
-			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize shared PTY host (%v). Falling back to embedded.", err))
-		} else {
-			d.ptyBackend = sharedBackend
-			d.sharedPTYHost = sharedBackend
-			d.logf("using PTY backend: shared")
-		}
-	case "migrating":
-		legacyBackend, legacyErr := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
-		if legacyErr != nil {
-			d.logf("failed to initialize legacy PTY workers: %v; falling back to embedded", legacyErr)
-			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize legacy PTY workers (%v). Falling back to embedded.", legacyErr))
-			break
-		}
-		sharedBackend, sharedErr := d.newSharedPTYHost()
-		if sharedErr != nil {
-			d.ptyBackend = legacyBackend
-			d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", sharedErr)
-			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", sharedErr))
-			break
-		}
-
-		sharedEnabled := parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
-		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
-		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
-			useSharedForNew = true
-		}
-		if candidateErr := sharedBackend.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
-			d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
-			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
-		}
-		migratingBackend, err := ptybackend.NewMigrating(legacyBackend, sharedBackend, useSharedForNew)
-		if err != nil {
-			d.logf("failed to initialize PTY migration router: %v; using legacy workers", err)
-			d.ptyBackend = legacyBackend
-			break
-		}
-		d.ptyBackend = migratingBackend
-		d.sharedPTYHost = sharedBackend
-		if useSharedForNew {
-			d.logf("using PTY backend: migrating (existing=owner, new=shared)")
-		} else {
-			d.logf("using PTY backend: migrating (existing=owner, new=legacy)")
-		}
-	default:
-		d.logf("unsupported PTY backend %q, falling back to embedded", selectedBackend)
-		d.addWarning(
-			warnPTYBackendUnsupported,
-			fmt.Sprintf("PTY backend %q is not available in this build. Falling back to embedded.", selectedBackend),
-		)
-	}
-
 	d.setRecovering(true)
 	defer func() {
 		if !startSucceeded {
@@ -2419,10 +2365,6 @@ func (d *Daemon) maybeStartDiagServer() {
 
 func (d *Daemon) diagStats() diag.Stats {
 	stats := diag.Stats{WSAddr: d.httpListener.Addr().String(), PtyBackend: d.ptyBackendMode(), DocSubscriptions: d.documentSubscriptionCount()}
-	if d.ptyBackend == nil {
-		stats.PtyBackend = "embedded"
-		return stats
-	}
 	ctx := context.Background()
 	stats.Sessions = len(d.ptyBackend.TerminalIDs(ctx))
 	if wp, ok := d.ptyBackend.(ptybackend.WorkerProcessProvider); ok {

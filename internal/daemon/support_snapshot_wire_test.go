@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -26,8 +27,7 @@ func TestPresenceReportsAndReadsKeepTheSupportSnapshotsDaemonStartFixed(t *testi
 	})
 }
 
-func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "not-a-backend")
+func TestASupportSnapshotCarriesBoundedEvidenceWithoutInput(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	shellSession := w.Spawn(app, shellHarness, w.Path("shop"))
@@ -88,13 +88,10 @@ func TestASupportSnapshotCarriesBoundedEvidenceWithoutInputOrWarningText(t *test
 			t.Errorf("newest trace %d = %+v, want kept-%d accepted by %s with its byte count", i, trace, i+1, shell)
 		}
 	}
-	if !slices.Contains(snapshot.WarningCodes, "pty_backend_unsupported") {
-		t.Errorf("the snapshot's warning codes = %v, want the daemon's pty_backend_unsupported", snapshot.WarningCodes)
-	}
 	if len(snapshot.Runtimes) != 1 || string(snapshot.Runtimes[0].RuntimeID) != shell || !protocol.Deref(snapshot.Runtimes[0].Running) {
 		t.Errorf("the snapshot's runtimes = %+v, want only the running %s", snapshot.Runtimes, shell)
 	}
-	for _, leaked := range []string{"do not retain me", "lost secret", "not found", "not available in this build"} {
+	for _, leaked := range []string{"do not retain me", "lost secret", "not found"} {
 		if strings.Contains(string(raw), leaked) {
 			t.Errorf("the snapshot carries %q", leaked)
 		}
@@ -124,4 +121,22 @@ func terminalIDs(ids []string) []protocol.TerminalID {
 		result[i] = protocol.TerminalID(id)
 	}
 	return result
+}
+
+func TestASupportSnapshotNamesWarningCodesWithoutTheirText(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	w.Launched(w.Spawn(w.App(), fakeagent.Claude, w.Path("blog")))
+	w.restartHoldingRevives()
+	app := w.App()
+	i := slices.IndexFunc(app.Initial.Warnings, func(warning protocol.DaemonWarning) bool { return warning.Code == "stale_sessions_pruned" })
+	if i < 0 {
+		t.Fatalf("warnings = %+v, want stale_sessions_pruned", app.Initial.Warnings)
+	}
+	snapshot, raw := supportSnapshotRequest(app, "warnings", nil)
+	if !slices.Contains(snapshot.WarningCodes, "stale_sessions_pruned") {
+		t.Errorf("the snapshot's warning codes = %v, want stale_sessions_pruned", snapshot.WarningCodes)
+	}
+	if text := app.Initial.Warnings[i].Message; strings.Contains(string(raw), text) {
+		t.Errorf("the snapshot carries the warning text %q", text)
+	}
 }

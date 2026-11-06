@@ -114,7 +114,7 @@ try {
     ATTN_HEADLESS_TASKS: 'off',
     ATTN_GITHUB_POLLING: 'off',
     ATTN_HARNESS_SKILL_SYNC: 'off',
-    ATTN_PTY_BACKEND: 'embedded',
+    ATTN_PTY_BACKEND: 'worker',
     ATTN_CACHED_SHELL_ENV: '[]',
     ATTN_CODEX_SHARED_PROFILE: '',
     CODEX_THREAD_ID: '',

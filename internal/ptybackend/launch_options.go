@@ -2,7 +2,7 @@ package ptybackend
 
 import "github.com/victorarias/attn/internal/pty"
 
-func toPTYSpawnOptions(opts SpawnOptions) pty.SpawnOptions {
+func (opts SpawnOptions) PTY() pty.SpawnOptions {
 	return pty.SpawnOptions{
 		ID:              string(opts.ID),
 		HostName:        opts.HostName,

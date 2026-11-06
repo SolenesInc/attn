@@ -22,7 +22,7 @@ const (
 var kittyImagePixels = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
-	onEachPtyBackend(t, testKittyPlacementsReachOnlyClientsThatAskedForThem)
+	onPtyWorkers(t, testKittyPlacementsReachOnlyClientsThatAskedForThem)
 }
 
 func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world) {
@@ -71,7 +71,7 @@ func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world)
 }
 
 func TestKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T) {
-	onEachPtyBackend(t, testKittyImagesOnScreenAreServedInTheFormEachClientReads)
+	onPtyWorkers(t, testKittyImagesOnScreenAreServedInTheFormEachClientReads)
 }
 
 func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *world) {
@@ -120,7 +120,7 @@ func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *w
 }
 
 func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
-	onEachPtyBackend(t, func(t *testing.T, w *world) {
+	onPtyWorkers(t, func(t *testing.T, w *world) {
 		app := w.App()
 		describer := transportPeer(w, protocol.CapabilityKittyImages)
 		generations := map[string]int{}
@@ -195,7 +195,7 @@ func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 }
 
 func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried(t *testing.T) {
-	onEachPtyBackend(t, func(t *testing.T, w *world) {
+	onPtyWorkers(t, func(t *testing.T, w *world) {
 		session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 		terminal := w.Terminal(session)
 		describer := transportPeer(w, protocol.CapabilityKittyImages)
@@ -228,20 +228,12 @@ func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried
 	})
 }
 
-func onEachPtyBackend(t *testing.T, script func(t *testing.T, w *world)) {
-	for _, backend := range []string{"embedded", "worker"} {
-		t.Run(backend, func(t *testing.T) {
-			if backend == "worker" {
-				t.Setenv("ATTN_PTY_BACKEND", "worker")
-				t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-			}
-			w := newWorld(t)
-			if backend == "worker" {
-				t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
-			}
-			script(t, w)
-		})
-	}
+func onPtyWorkers(t *testing.T, script func(t *testing.T, w *world)) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	script(t, w)
 }
 
 func kittyAttach(p *testworld.Peer, terminal string) protocol.AttachResultMessage {

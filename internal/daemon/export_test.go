@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 type WireDaemon struct {
@@ -36,6 +37,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	switch host := os.Getenv("ATTN_TEST_PTY_HOST"); {
 	case terminals != nil:
 		d.ptyBackend = terminals
+	case os.Getenv("ATTN_PTY_BACKEND") != "":
 	case host != "" && nativeWatch:
 		shared, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
 			DataRoot:         filepath.Dir(socketPath),
@@ -48,7 +50,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 		}
 		d.ptyBackend = shared
 	default:
-		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManagerWithClock(d.logf, clock))
+		d.ptyBackend = testworld.NewInProcessPTY(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {
 		d.rootWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }

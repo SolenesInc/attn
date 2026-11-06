@@ -105,7 +105,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: an app or daemon restart leaves every terminal running in its worker, and the tile comes back with its screen and scrollback. After a machine restart, attn brings back the sessions it can resume and reaps the rest (`crash-recovery`). A terminal on the embedded backend stops when the daemon restarts.
+- **Durability across restarts**: an app or daemon restart leaves every terminal running in its worker, and the tile comes back with its screen and scrollback. After a machine restart, attn brings back the sessions it can resume and reaps the rest (`crash-recovery`).
 - **Linux**: the PTY workers and `attn terminal` run the same where the daemon and CLI run on Linux. Plain Ctrl+letter belongs to the shell there, so app keys add Shift or Alt (`LINUX_SHORTCUTS`): Ctrl+Shift+T new shell, Ctrl+Shift+` focus the terminal, Ctrl+Shift+F find, Ctrl+Shift+V paste.
 - **Outposts**: `attn terminal open --host <outpost>` starts a shell on an outpost, and an agent's terminals default to its own machine. The home decides who owns an outpost terminal's size, and the size travels to the outpost as any resize does. While the host is offline, the tile stays, attn sends no typing, and attn refuses ⌘-click on a path, because the path lives on the other machine.
 - **Profiles**: every `attn terminal` target belongs to the caller's profile. `attn terminal` does not find a terminal in another profile.

@@ -387,5 +387,4 @@ entry names:
   lost.
 - To debug an isolated daemon, quit its app, then
   `DEBUG=debug attn daemon ensure`.
-- Restarting the app or daemon has no impact on the underlying agents, unless
-  they use the embedded backend, where a daemon restart stops them.
+- Restarting the app or daemon has no impact on the underlying agents.

@@ -338,12 +338,7 @@ func (d *Daemon) ptyBackendMode() string {
 	if provider, ok := d.ptyBackend.(ptybackend.ModeProvider); ok {
 		return provider.PTYBackendMode()
 	}
-	switch d.ptyBackend.(type) {
-	case *ptybackend.EmbeddedBackend:
-		return "embedded"
-	default:
-		return "unknown"
-	}
+	return "unknown"
 }
 
 type harnessAvailability string

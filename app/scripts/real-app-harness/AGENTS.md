@@ -21,9 +21,6 @@ repository root.
 - The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
   An `--app-path` that names another instance is refused. Production needs an
   empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and explicit approval.
-- The runner's tripwire preflight and the perf scenarios' profiling restarts
-  stop a daemon that predates the run only when its terminals outlive it, so
-  never one on the embedded backend.
 - Install the current checkout first; a stale build fails its fingerprint check.
 - `scripts/land.sh` runs each scenario a landing adds or changes on CI's Linux
   before the push, through the Acceptance soak workflow.
