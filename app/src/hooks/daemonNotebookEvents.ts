@@ -1,4 +1,4 @@
-/** Notebook daemon events: the `notebook_*_result` answers. Kept out
+/** Notebook daemon events: the `notebook_backlinks_result` answer. Kept out
  * of `useDaemonSocket.ts` so grepping a `notebook_` wire name lands in a notebook file. */
 
 import type { PendingRequests } from './daemonPendingRequests';
@@ -11,41 +11,17 @@ type NotebookEvent = {
   success?: boolean;
   error?: string;
   entries?: unknown;
-  result?: Record<string, unknown>;
 };
 
 export function handleNotebookDaemonEvent(event: NotebookEvent, pending: PendingRequests): boolean {
   switch (event.event) {
-    case 'notebook_list_result':
     case 'notebook_backlinks_result':
       settlePendingRequest(
         pending,
-        event.event === 'notebook_list_result' ? 'notebook_list' : 'notebook_backlinks',
+        'notebook_backlinks',
         event,
         (e) => e.entries || [],
         'Notebook request failed',
-      );
-      return true;
-
-    case 'notebook_read_result':
-      settlePendingRequest(pending, 'notebook_read', event, (e) => e.result, 'Notebook read failed');
-      return true;
-
-    case 'notebook_write_result':
-      settlePendingRequest(
-        pending,
-        'notebook_write',
-        event,
-        // A conflict is a SUCCESSFUL result the editor reconciles, not a
-        // rejection — only a transport/daemon error rejects.
-        (e) =>
-          e.result && {
-            path: e.result.path,
-            hash: e.result.hash,
-            conflict: !!e.result.conflict,
-            currentHash: e.result.current_hash,
-          },
-        'Notebook write failed',
       );
       return true;
 

@@ -319,13 +319,13 @@ func TestANotebookViewHearsItsProfilesNewFolderAndNotTheOldOne(t *testing.T) {
 	w, folder := newFsWorldWithAFolderBesideIt(t)
 	app := w.App()
 	previous := fsNotebookRoot(t, w)
-	notebookAskList(app, "")
+	fsAskList(app, "", "")
 	if saved := notebookSetting(app, "notebook.root", folder); !protocol.Deref(saved.Success) {
 		t.Fatalf("repointing the Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(app, folder)
-	if listed := notebookAskList(app, ""); len(listed.Entries) != 0 {
-		t.Fatalf("after repointing to an empty folder the Notebook lists %v", notebookEntryPaths(listed.Entries))
+	if listed := fsAskList(app, "", ""); len(listed.Entries) != 0 {
+		t.Fatalf("after repointing to an empty folder the Notebook lists %v", fsEntryPaths(listed.Entries))
 	}
 
 	fsWriteFile(t, filepath.Join(previous, "old.md"), []byte("# old\n"))

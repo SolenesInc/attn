@@ -167,7 +167,7 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
     throw new Error(`asset not found: ${path}`);
   }, []);
   // The whole vault (recursive, .md only) for the Cmd+P finder — the same shape
-  // notebook_list returns. Titles let the finder rank/label by heading.
+  // fsIndexToNotebookEntries gives. Titles let the finder rank/label by heading.
   const listFiles = useCallback(async (): Promise<NotebookEntry[]> => [
     { path: 'knowledge/index.md', type: 'note', title: 'Knowledge index', size: 128 },
     { path: 'journal/2026-06-20.md', type: 'journal', title: '2026-06-20', size: 20 },

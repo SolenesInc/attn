@@ -1329,31 +1329,11 @@ model DelegateStatusMessage {
   wait_past?: string; // The updated_at the caller last saw; the reply waits until the operation changes from it or settles
 }
 
-model NotebookListMessage {
-  cmd: "notebook_list";
-  prefix?: string;
-  request_id?: string; // set by the WS frontend to correlate the result event
-}
-
-model NotebookReadMessage {
-  cmd: "notebook_read";
-  path: string;
-  request_id?: string; // set by the WS frontend to correlate the result event
-}
-
 // List the notes whose body links to `path` (root-absolute markdown links).
 model NotebookBacklinksMessage {
   cmd: "notebook_backlinks";
   path: string;
   request_id?: string; // set by the WS frontend for result correlation
-}
-
-model NotebookWriteMessage {
-  cmd: "notebook_write";
-  path: string;
-  content: string;
-  base_hash?: string; // omitted = create-only; present = hash-CAS edit
-  request_id?: string; // set by the WS frontend to correlate the result event
 }
 
 // Resolve a session's notebook role and root for the agent-launch wrapper. The
@@ -1506,11 +1486,10 @@ model NotificationMarkReadMessage {
 // ============================================================================
 // Generic filesystem surface (fs_*). A plain view over the configurable root
 // (the notebook.root setting): list a directory, read a file, write a file with
-// the same hash-CAS contract as notebook_write. Unlike the notebook_* commands
-// this is NOT .md-aware or PARA-aware — it surfaces every file and directory as
-// it is on disk, so the UI can render a real folder tree over arbitrary content.
-// The notebook_* surface remains the curated, markdown-only view of the same
-// root; fs_* is the raw filesystem underneath it.
+// a hash-CAS contract. It is NOT .md-aware or PARA-aware: it surfaces every file
+// and directory as it is on disk, so the UI can render a real folder tree over
+// arbitrary content. This is how the app reads and writes the Notebook;
+// notebook_backlinks answers the one question that needs the notes' links.
 // ============================================================================
 
 // List the immediate children (files and subdirectories) of one directory under
@@ -6949,9 +6928,6 @@ model Response {
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
-  notebook_entries?: NotebookEntry[];
-  notebook_read?: NotebookReadResult;
-  notebook_write?: NotebookWriteResult;
   notebook_guide?: NotebookGuideResult;
   journal_append_result?: JournalAppendResult;
   activity_status_result?: ActivityStatusResult;
@@ -7975,7 +7951,7 @@ model DelegationOperationMessage {
   operation?: DelegationOperation;
 }
 
-// One notebook note as surfaced by notebook_list (metadata only, no body).
+// One notebook note as surfaced by notebook_backlinks (metadata only, no body).
 model NotebookEntry {
   path: string;
   type?: string;
@@ -7983,21 +7959,6 @@ model NotebookEntry {
   summary?: string;
   updated?: string;
   size: int32;
-}
-
-model NotebookReadResult {
-  path: string;
-  content: string;
-  hash: string;
-}
-
-// Result of notebook_write. When conflict is true the write did not apply;
-// current_hash is the hash now on disk (empty if gone).
-model NotebookWriteResult {
-  path: string;
-  hash?: string;
-  conflict: boolean;
-  current_hash?: string;
 }
 
 // Result of notebook_guide. guidance is the operating rules text; root is the
@@ -8027,42 +7988,12 @@ model Task {
   updated_at: string;
 }
 
-// WS result events for the frontend's notebook reads (request/result pattern).
-// The unix CLI uses the synchronous Response fields above; these carry the same
-// payloads back to a websocket client correlated by request_id.
-model NotebookListResultMessage {
-  event: "notebook_list_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  entries?: NotebookEntry[];
-}
-
-model NotebookReadResultMessage {
-  event: "notebook_read_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: NotebookReadResult;
-}
-
 model NotebookBacklinksResultMessage {
   event: "notebook_backlinks_result";
   request_id: string;
   success: boolean;
   error?: string;
   entries?: NotebookEntry[];
-}
-
-// Result of a WS notebook_write (the in-app editor's hash-CAS save). A conflict
-// (the file changed on disk since the editor loaded it) is a successful response
-// the UI reconciles, carried in result.conflict — not a transport error.
-model NotebookWriteResultMessage {
-  event: "notebook_write_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  result?: NotebookWriteResult;
 }
 
 // Result of task_list: the durable runner's records, newest-updated
@@ -8254,8 +8185,7 @@ model FsReadAssetResult {
 }
 
 // Result of fs_write. When conflict is true the write did not apply; current_hash
-// is the hash now on disk (empty if the target is gone). Same contract as
-// NotebookWriteResult.
+// is the hash now on disk (empty if the target is gone).
 model FsWriteResult {
   path: string;
   hash?: string;
@@ -8787,10 +8717,7 @@ alias DaemonEvent =
   | AutomationDeleteResultMessage
   | AutomationCleanupResultMessage
   | AutomationsChangedMessage
-  | NotebookListResultMessage
-  | NotebookReadResultMessage
   | NotebookBacklinksResultMessage
-  | NotebookWriteResultMessage
   | FsListResultMessage
   | FsReadResultMessage
   | FsReadAssetResultMessage

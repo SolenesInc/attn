@@ -7099,73 +7099,6 @@ type NotebookGuideResult struct {
 	SessionIsChief bool `json:"session_is_chief"`
 }
 
-type NotebookListMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Prefix corresponds to the JSON schema field "prefix".
-	Prefix *string `json:"prefix,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type NotebookListResultMessage struct {
-	// Entries corresponds to the JSON schema field "entries".
-	Entries []NotebookEntry `json:"entries,omitempty,omitzero"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type NotebookReadMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type NotebookReadResult struct {
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// Hash corresponds to the JSON schema field "hash".
-	Hash string `json:"hash"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-}
-
-type NotebookReadResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *NotebookReadResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type NotebookSyncFolder struct {
 	// Epoch corresponds to the JSON schema field "epoch".
 	Epoch string `json:"epoch"`
@@ -7189,54 +7122,6 @@ type NotebookSyncReportMessage struct {
 
 	// Report corresponds to the JSON schema field "report".
 	Report string `json:"report"`
-}
-
-type NotebookWriteMessage struct {
-	// BaseHash corresponds to the JSON schema field "base_hash".
-	BaseHash *string `json:"base_hash,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Content corresponds to the JSON schema field "content".
-	Content string `json:"content"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
-}
-
-type NotebookWriteResult struct {
-	// Conflict corresponds to the JSON schema field "conflict".
-	Conflict bool `json:"conflict"`
-
-	// CurrentHash corresponds to the JSON schema field "current_hash".
-	CurrentHash *string `json:"current_hash,omitempty,omitzero"`
-
-	// Hash corresponds to the JSON schema field "hash".
-	Hash *string `json:"hash,omitempty,omitzero"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path string `json:"path"`
-}
-
-type NotebookWriteResultMessage struct {
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Result corresponds to the JSON schema field "result".
-	Result *NotebookWriteResult `json:"result,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
 }
 
 type Notification struct {
@@ -9303,17 +9188,8 @@ type Response struct {
 	// "kept_conversation_list_result".
 	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
 
-	// NotebookEntries corresponds to the JSON schema field "notebook_entries".
-	NotebookEntries []NotebookEntry `json:"notebook_entries,omitempty,omitzero"`
-
 	// NotebookGuide corresponds to the JSON schema field "notebook_guide".
 	NotebookGuide *NotebookGuideResult `json:"notebook_guide,omitempty,omitzero"`
-
-	// NotebookRead corresponds to the JSON schema field "notebook_read".
-	NotebookRead *NotebookReadResult `json:"notebook_read,omitempty,omitzero"`
-
-	// NotebookWrite corresponds to the JSON schema field "notebook_write".
-	NotebookWrite *NotebookWriteResult `json:"notebook_write,omitempty,omitzero"`
 
 	// Ok corresponds to the JSON schema field "ok".
 	Ok bool `json:"ok"`

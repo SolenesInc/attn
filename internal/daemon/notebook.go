@@ -210,49 +210,6 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 	})
 }
 
-func (d *Daemon) sendNotebookListWSResult(client *wsClient, requestID, prefix string) {
-	var entries []protocol.NotebookEntry
-	store, err := d.notebookStoreFor(d.profileForClient(client))
-	if err == nil {
-		var list []notebook.Entry
-		if list, err = store.List(prefix); err == nil {
-			entries = notebookEntriesToProtocol(list)
-		}
-	}
-	msg := protocol.NotebookListResultMessage{
-		Event:     protocol.EventNotebookListResult,
-		RequestID: requestID,
-		Success:   err == nil,
-		Entries:   entries,
-	}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
-func (d *Daemon) sendNotebookReadWSResult(client *wsClient, requestID, path string) {
-	var result *protocol.NotebookReadResult
-	store, err := d.notebookStoreFor(d.profileForClient(client))
-	if err == nil {
-		var content []byte
-		var hash string
-		if content, hash, err = store.Read(path); err == nil {
-			result = &protocol.NotebookReadResult{Path: path, Content: string(content), Hash: hash}
-		}
-	}
-	msg := protocol.NotebookReadResultMessage{
-		Event:     protocol.EventNotebookReadResult,
-		RequestID: requestID,
-		Success:   err == nil,
-		Result:    result,
-	}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
 func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path string) {
 	var entries []protocol.NotebookEntry
 	store, err := d.notebookStoreFor(d.profileForClient(client))
@@ -267,48 +224,6 @@ func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path
 		RequestID: requestID,
 		Success:   err == nil,
 		Entries:   entries,
-	}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
-func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, content, baseHash string) {
-	var result *protocol.NotebookWriteResult
-	store, err := d.notebookStoreFor(d.profileForClient(client))
-	if err == nil {
-		changed := path
-		if rel, cerr := notebook.CleanPath(path); cerr == nil {
-			changed = rel
-		}
-		var hash string
-		var conflict *notebook.Conflict
-		d.mutateRoot(store.Root(), func() []notebook.SelfWrite {
-			hash, conflict, err = store.Write(path, []byte(content), baseHash)
-			if err != nil || conflict != nil {
-				return nil
-			}
-			return []notebook.SelfWrite{{Rel: changed, Hash: hash}}
-		})
-		if err == nil {
-			result = &protocol.NotebookWriteResult{Path: changed}
-			if conflict != nil {
-				result.Conflict = true
-				if conflict.CurrentHash != "" {
-					result.CurrentHash = protocol.Ptr(conflict.CurrentHash)
-				}
-			} else {
-				result.Hash = protocol.Ptr(hash)
-				d.broadcastFsChanged(store.Root(), originUI, changed)
-			}
-		}
-	}
-	msg := protocol.NotebookWriteResultMessage{
-		Event:     protocol.EventNotebookWriteResult,
-		RequestID: requestID,
-		Success:   err == nil,
-		Result:    result,
 	}
 	if err != nil {
 		msg.Error = protocol.Ptr(err.Error())

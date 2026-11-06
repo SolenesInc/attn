@@ -52,7 +52,7 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 		app  *testworld.Peer
 		path string
 	}{{workApp, "work.md"}, {homeApp, "home.md"}, {plainApp, "plain.md"}} {
-		if saved := notebookAskWrite(write.app, write.path, notebookNote(write.path), ""); !saved.Success {
+		if saved := fsAskWrite(write.app, "", write.path, notebookNote(write.path), ""); !saved.Success {
 			t.Fatalf("writing %s: %s", write.path, protocol.Deref(saved.Error))
 		}
 	}
@@ -69,8 +69,8 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 		app  *testworld.Peer
 		want []string
 	}{{workApp, []string{"work.md"}}, {homeApp, []string{"home.md"}}, {plainApp, []string{"plain.md"}}} {
-		if got := notebookAskList(listed.app, ""); !slices.Equal(notebookEntryPaths(got.Entries), listed.want) {
-			t.Fatalf("a profile lists %v, want only its own %v", notebookEntryPaths(got.Entries), listed.want)
+		if got := fsAskList(listed.app, "", ""); !slices.Equal(fsEntryPaths(got.Entries), listed.want) {
+			t.Fatalf("a profile lists %v, want only its own %v", fsEntryPaths(got.Entries), listed.want)
 		}
 	}
 
@@ -118,15 +118,15 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 		t.Fatalf("repointing Work's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(workApp, movedRoot)
-	if got := notebookAskList(workApp, ""); len(got.Entries) != 0 {
-		t.Fatalf("after repointing, Work lists %v, want the new empty folder", notebookEntryPaths(got.Entries))
+	if got := fsAskList(workApp, "", ""); len(got.Entries) != 0 {
+		t.Fatalf("after repointing, Work lists %v, want the new empty folder", fsEntryPaths(got.Entries))
 	}
 	notebookFileHolds(t, filepath.Join(workRoot, "work.md"), notebookNote("work.md"))
 	notebookFileHolds(t, filepath.Join(workRoot, "seeds", seed, "evidence.txt"), "proof")
 	if entries, err := os.ReadDir(movedRoot); err != nil || len(entries) != 0 {
 		t.Fatalf("repointing put %v (%v) in the new folder, want nothing moved", entries, err)
 	}
-	if got := notebookAskRead(homeApp, "home.md"); !got.Success {
+	if got := fsAskRead(homeApp, "", "home.md"); !got.Success {
 		t.Fatalf("Home lost its note when Work repointed: %s", protocol.Deref(got.Error))
 	}
 
@@ -134,7 +134,7 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 		t.Fatalf("clearing Work's Notebook folder: %s", protocol.Deref(saved.Error))
 	}
 	notebookEffectiveRoot(workApp, defaultFolder)
-	if got := notebookAskRead(workApp, "plain.md"); !got.Success {
+	if got := fsAskRead(workApp, "", "plain.md"); !got.Success {
 		t.Fatalf("after clearing its folder, Work cannot read the default folder: %s", protocol.Deref(got.Error))
 	}
 }

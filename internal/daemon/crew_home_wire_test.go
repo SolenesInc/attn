@@ -58,7 +58,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	_, err = cli.CrewMoveHome("Keel")
 	crewErrorContains(t, err, "already in its profile's Notebook", moved.Member.HomeDir)
 	app := w.App()
-	read := notebookAskRead(app, "crew/keel/CHARTER.md")
+	read := fsAskRead(app, "", "crew/keel/CHARTER.md")
 	if !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
 		t.Fatalf("the moved charter in the Notebook: %+v", read)
 	}
@@ -82,7 +82,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if raw, err := os.ReadFile(filepath.Join(notebookCrewHome(w, "keeper"), crew.CharterFileName)); err != nil || !strings.HasPrefix(string(raw), edit) {
 		t.Fatalf("the move lost an edit through an open file: %q %v", raw, err)
 	}
-	stale := notebookAskWrite(app, "crew/keel/CHARTER.md", "An edit from a tab opened before the rename.\n", read.Result.Hash)
+	stale := fsAskWrite(app, "", "crew/keel/CHARTER.md", "An edit from a tab opened before the rename.\n", read.Result.Hash)
 	if !stale.Success || stale.Result == nil || !stale.Result.Conflict {
 		t.Fatalf("a save to the old folder should conflict: %+v", stale)
 	}
@@ -153,7 +153,7 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	if followed.Member.HomeDir != filepath.Join(next, crew.HomesDirName, "keel") || followed.PreviousHome != home {
 		t.Fatalf("move-home into the new Notebook: %+v", followed)
 	}
-	if read := notebookAskRead(app, "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
+	if read := fsAskRead(app, "", "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
 		t.Fatalf("the charter in the new Notebook: %+v", read)
 	}
 	if _, err := os.Stat(home); !os.IsNotExist(err) {
@@ -257,7 +257,7 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 	if keel.HomeDir != notebookCrewHome(w, "keel") || keel.CharterPath != filepath.Join(keel.HomeDir, crew.CharterFileName) {
 		t.Fatalf("created home: %+v", keel)
 	}
-	if read := notebookAskRead(app, "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || read.Result.Content != "" {
+	if read := fsAskRead(app, "", "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || read.Result.Content != "" {
 		t.Fatalf("the new charter in the Notebook: %+v", read)
 	}
 	wake := wakeCrew(t, cli, "Keel", "")

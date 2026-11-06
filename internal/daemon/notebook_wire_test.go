@@ -15,31 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func notebookAskWrite(p *testworld.Peer, path, content, baseHash string) protocol.NotebookWriteResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.NotebookWriteResultMessage](p, protocol.EventNotebookWriteResult, func(id *string) any {
-		msg := protocol.NotebookWriteMessage{Cmd: protocol.CmdNotebookWrite, RequestID: id, Path: path, Content: content}
-		if baseHash != "" {
-			msg.BaseHash = protocol.Ptr(baseHash)
-		}
-		return msg
-	})
-}
-
-func notebookAskRead(p *testworld.Peer, path string) protocol.NotebookReadResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.NotebookReadResultMessage](p, protocol.EventNotebookReadResult, func(id *string) any {
-		return protocol.NotebookReadMessage{Cmd: protocol.CmdNotebookRead, RequestID: id, Path: path}
-	})
-}
-
-func notebookAskList(p *testworld.Peer, prefix string) protocol.NotebookListResultMessage {
-	p.T.Helper()
-	return fsRequest[protocol.NotebookListResultMessage](p, protocol.EventNotebookListResult, func(id *string) any {
-		return protocol.NotebookListMessage{Cmd: protocol.CmdNotebookList, RequestID: id, Prefix: protocol.Ptr(prefix)}
-	})
-}
-
 func notebookAskBacklinks(p *testworld.Peer, path string) protocol.NotebookBacklinksResultMessage {
 	p.T.Helper()
 	return fsRequest[protocol.NotebookBacklinksResultMessage](p, protocol.EventNotebookBacklinksResult, func(id *string) any {
@@ -48,6 +23,14 @@ func notebookAskBacklinks(p *testworld.Peer, path string) protocol.NotebookBackl
 }
 
 func notebookEntryPaths(entries []protocol.NotebookEntry) []string {
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.Path)
+	}
+	return paths
+}
+
+func fsEntryPaths(entries []protocol.FsEntry) []string {
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		paths = append(paths, entry.Path)
@@ -66,54 +49,15 @@ func notebookSetting(app *testworld.Peer, key, value string) protocol.SettingsUp
 		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }
 
-func TestNotebookReadsListsAndBacklinks(t *testing.T) {
+func TestNotebookBacklinksNameTheNotesThatLinkToANote(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	written := notebookAskWrite(app, "knowledge/areas/a.md", notebookNote("body"), "")
-	notebookAskWrite(app, "knowledge/areas/b.md", notebookNote("see [a](/knowledge/areas/a.md)"), "")
-	notebookAskWrite(app, "journal/2026-06-13.md", "---\ntype: journal\n---\nentry\n", "")
+	fsAskWrite(app, "", "knowledge/areas/a.md", notebookNote("body"), "")
+	fsAskWrite(app, "", "knowledge/areas/b.md", notebookNote("see [a](/knowledge/areas/a.md)"), "")
+	fsAskWrite(app, "", "journal/2026-06-13.md", "---\ntype: journal\n---\nentry\n", "")
 
-	read := notebookAskRead(app, "/knowledge/areas/a.md")
-	if !read.Success || read.Result == nil || read.Result.Path != "/knowledge/areas/a.md" || read.Result.Content != notebookNote("body") || read.Result.Hash != protocol.Deref(written.Result.Hash) {
-		t.Fatalf("reading a.md = %+v (%s), want its content and the hash its write returned", read.Result, protocol.Deref(read.Error))
-	}
-	if missing := notebookAskRead(app, "/does/not/exist.md"); missing.Success || missing.Error == nil {
-		t.Fatalf("reading a missing note = %+v, want a failure", missing)
-	}
-	if all := notebookAskList(app, ""); !all.Success || !slices.Equal(notebookEntryPaths(all.Entries), []string{"journal/2026-06-13.md", "knowledge/areas/a.md", "knowledge/areas/b.md"}) {
-		t.Fatalf("listing the notebook = %v (%s)", notebookEntryPaths(all.Entries), protocol.Deref(all.Error))
-	}
-	if knowledge := notebookAskList(app, "/knowledge"); !knowledge.Success || !slices.Equal(notebookEntryPaths(knowledge.Entries), []string{"knowledge/areas/a.md", "knowledge/areas/b.md"}) {
-		t.Fatalf("listing /knowledge = %v, want only the notes under it", notebookEntryPaths(knowledge.Entries))
-	}
 	if back := notebookAskBacklinks(app, "/knowledge/areas/a.md"); !back.Success || !slices.Equal(notebookEntryPaths(back.Entries), []string{"knowledge/areas/b.md"}) {
 		t.Fatalf("backlinks of a.md = %v, want b.md", notebookEntryPaths(back.Entries))
-	}
-}
-
-func TestNotebookWritesAreCompareAndSwapWithNormalizedPaths(t *testing.T) {
-	w := newWorld(t)
-	writer, other := w.App(), w.App()
-	root := fsNotebookRoot(t, w)
-
-	created := notebookAskWrite(writer, "/knowledge/areas/foo.md", notebookNote("v1"), "")
-	if !created.Success || created.Result == nil || created.Result.Conflict || created.Result.Hash == nil || created.Result.Path != "knowledge/areas/foo.md" {
-		t.Fatalf("creating /knowledge/areas/foo.md = %+v (%s), want it saved at the normalized path", created.Result, protocol.Deref(created.Error))
-	}
-	if changed := fsAwaitChanged(other, func(m protocol.FsChangedMessage) bool { return m.Root == root }); !slices.Equal(changed.Paths, []string{"knowledge/areas/foo.md"}) || changed.Origin != "ui" {
-		t.Fatalf("the other app heard %+v, want the normalized path from the ui", changed)
-	}
-	hash := *created.Result.Hash
-
-	if stale := notebookAskWrite(writer, "/knowledge/areas/foo.md", "x", "deadbeef"); !stale.Success || stale.Result == nil || !stale.Result.Conflict || protocol.Deref(stale.Result.CurrentHash) != hash {
-		t.Fatalf("a write against a stale hash = %+v, want a conflict naming the current hash", stale.Result)
-	}
-	edited := notebookAskWrite(writer, "/knowledge/areas/foo.md", notebookNote("v2"), hash)
-	if !edited.Success || edited.Result == nil || edited.Result.Conflict || edited.Result.Hash == nil {
-		t.Fatalf("a write against the current hash = %+v", edited.Result)
-	}
-	if read := notebookAskRead(writer, "/knowledge/areas/foo.md"); read.Result == nil || read.Result.Hash != *edited.Result.Hash || read.Result.Content != notebookNote("v2") {
-		t.Fatalf("reading after the edit = %+v, want v2 at the edit's hash", read.Result)
 	}
 }
 
@@ -123,15 +67,15 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	app := w.App()
 	root := fsNotebookRoot(t, w)
 	fsWriteFile(t, filepath.Join(root, "gone.md"), []byte(notebookNote("about to go")))
-	notebookAskList(app, "")
+	fsAskList(app, "", "")
 
-	notebookAskWrite(app, "own.md", notebookNote("attn wrote this"), "")
+	fsAskWrite(app, "", "own.md", notebookNote("attn wrote this"), "")
 	fsWriteFile(t, filepath.Join(root, "ext.md"), []byte(notebookNote("edited externally")))
-	if refused := notebookAskWrite(app, "doc.md", "x", "deadbeef"); refused.Result == nil || !refused.Result.Conflict {
+	if refused := fsAskWrite(app, "", "doc.md", "x", "deadbeef"); refused.Result == nil || !refused.Result.Conflict {
 		t.Fatalf("a write against a hash doc.md never had = %+v, want a conflict", refused.Result)
 	}
 	fsWriteFile(t, filepath.Join(root, "doc.md"), []byte(notebookNote("externally created")))
-	notebookAskWrite(app, "race.md", notebookNote("attn wrote this"), "")
+	fsAskWrite(app, "", "race.md", notebookNote("attn wrote this"), "")
 	fsWriteFile(t, filepath.Join(root, "race.md"), []byte(notebookNote("external overwrote it")))
 
 	fsWriteFile(t, filepath.Join(root, "knowledge", "areas", "new.md"), []byte(notebookNote("in a new folder")))
@@ -155,10 +99,10 @@ func TestNotebookKeepsItsOwnWriteQuietWhenItsEventsSpanTwoWatchWindows(t *testin
 	w := newWorld(t)
 	app := w.App()
 	root := fsNotebookRoot(t, w)
-	notebookAskList(app, "")
+	fsAskList(app, "", "")
 
 	own := notebookNote("attn wrote this")
-	notebookAskWrite(app, "own.md", own, "")
+	fsAskWrite(app, "", "own.md", own, "")
 	w.awaitTimer(notebook.WatchDebounceTimer)
 	w.advance(notebook.WatchDebounce)
 
@@ -193,7 +137,7 @@ func TestAttnsOwnNotebookWritesReachEveryOpenView(t *testing.T) {
 	}
 	heard("agent", "journal/2026-07-05.md")
 
-	if written := notebookAskWrite(writer, "note.md", notebookNote("remember this"), ""); !written.Success {
+	if written := fsAskWrite(writer, "", "note.md", notebookNote("remember this"), ""); !written.Success {
 		t.Fatalf("writing the Notebook: %s", protocol.Deref(written.Error))
 	}
 	heard("ui", "note.md")
@@ -217,8 +161,8 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			if guide, err := cli.NotebookGuide(protocol.SessionID(worker)); err != nil || guide.SessionIsChief || guide.Guidance == "" || guide.Root != root {
 				t.Fatalf("a worker's guide = %+v, %v; want guidance under %s without the chief's role", guide, err, root)
 			}
-			if listed := notebookAskList(app, ""); len(listed.Entries) != 0 {
-				t.Fatalf("a worker's guide scaffolded %v", notebookEntryPaths(listed.Entries))
+			if listed := fsAskList(app, "", ""); len(listed.Entries) != 0 {
+				t.Fatalf("a worker's guide scaffolded %v", fsEntryPaths(listed.Entries))
 			}
 
 			chief := w.Spawn(app, c.agent, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
@@ -237,8 +181,10 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
 				return m.Root == root && m.Origin == "agent" && slices.Contains(m.Paths, "index.md")
 			})
-			if listed := notebookEntryPaths(notebookAskList(app, "").Entries); !slices.Contains(listed, "index.md") || !slices.Contains(listed, "log.md") || !slices.Contains(listed, "knowledge/index.md") {
-				t.Fatalf("the chief's guide scaffolded %v, want index.md, log.md and knowledge/index.md", listed)
+			for _, scaffolded := range []string{"index.md", "log.md", "knowledge/index.md"} {
+				if read := fsAskRead(app, "", scaffolded); !read.Success {
+					t.Fatalf("the chief's guide did not scaffold %s: %s", scaffolded, protocol.Deref(read.Error))
+				}
 			}
 		})
 	}

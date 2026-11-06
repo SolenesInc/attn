@@ -28,7 +28,7 @@ The distilled map of the notebook, with a [wiki link](/journal/2026-06-20.md).
 `,
 };
 
-// The flat vault index the in-tile finder searches (notebook_list, .md only).
+// The flat vault index the in-tile finder searches (fs_index, .md only).
 const FILES: NotebookEntry[] = [
   { path: 'knowledge/index.md', title: 'Knowledge index', type: 'note', updated: '2026-06-20', size: 128 },
   { path: 'journal/2026-06-20.md', title: 'Journal — 2026-06-20', type: 'journal', updated: '2026-06-20', size: 20 },

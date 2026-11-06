@@ -22,7 +22,3 @@ type Entry struct {
 	Updated string
 	Size    int64
 }
-
-type Conflict struct {
-	CurrentHash string
-}

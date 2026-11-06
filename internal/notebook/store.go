@@ -65,56 +65,6 @@ func (s *Store) EnsureScaffold() (created []SelfWrite, err error) {
 	return created, nil
 }
 
-func (s *Store) Read(p string) (content []byte, hash string, err error) {
-	abs, err := s.abs(p)
-	if err != nil {
-		return nil, "", err
-	}
-	content, err = os.ReadFile(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", fmt.Errorf("notebook: %s not found", p)
-		}
-		return nil, "", err
-	}
-	return content, Hash(content), nil
-}
-
-func (s *Store) Write(p string, content []byte, baseHash string) (newHash string, conflict *Conflict, err error) {
-	abs, err := s.abs(p)
-	if err != nil {
-		return "", nil, err
-	}
-	if int64(len(content)) > MaxFileSize {
-		return "", nil, fmt.Errorf("notebook: content for %q exceeds %d bytes", p, MaxFileSize)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	existing, statErr := os.ReadFile(abs)
-	exists := statErr == nil
-	if statErr != nil && !os.IsNotExist(statErr) {
-		return "", nil, statErr
-	}
-	if baseHash == "" {
-		if exists {
-			return "", &Conflict{CurrentHash: Hash(existing)}, nil
-		}
-	} else {
-		if !exists {
-			return "", &Conflict{CurrentHash: ""}, nil
-		}
-		if cur := Hash(existing); cur != baseHash {
-			return "", &Conflict{CurrentHash: cur}, nil
-		}
-	}
-	if err := writeAtomic(abs, content); err != nil {
-		return "", nil, err
-	}
-	return Hash(content), nil, nil
-}
-
 var journalDateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func (s *Store) AppendJournal(dateISO, entry string) (relPath string, hash string, err error) {
@@ -170,8 +120,7 @@ func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash st
 
 const listFrontmatterScanLimit = 64 << 10
 
-func (s *Store) List(prefix string) ([]Entry, error) {
-	want := strings.Trim(strings.TrimSpace(prefix), "/")
+func (s *Store) notes() ([]Entry, error) {
 	var entries []Entry
 	walkRoot := s.root
 	if resolved, err := filepath.EvalSymlinks(s.root); err == nil {
@@ -202,9 +151,6 @@ func (s *Store) List(prefix string) ([]Entry, error) {
 			return nil
 		}
 		rel := filepath.ToSlash(relAbs)
-		if want != "" && rel != want && !strings.HasPrefix(rel, want+"/") {
-			return nil
-		}
 		info, ierr := dirent.Info()
 		if ierr != nil {
 			return nil
@@ -243,7 +189,7 @@ func (s *Store) Backlinks(target string) ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	entries, err := s.List("")
+	entries, err := s.notes()
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +201,11 @@ func (s *Store) Backlinks(target string) ([]Entry, error) {
 		if e.Size > MaxFileSize {
 			continue
 		}
-		content, _, rerr := s.Read(e.Path)
+		abs, aerr := s.abs(e.Path)
+		if aerr != nil {
+			continue
+		}
+		content, rerr := os.ReadFile(abs)
 		if rerr != nil {
 			continue
 		}

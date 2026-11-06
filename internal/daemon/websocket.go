@@ -863,22 +863,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDelegationPreferencesSave(client, msg.(*protocol.DelegationPreferencesSaveMessage))
 	case protocol.CmdDelegateStatus:
 		d.life.Go("handleDelegateStatusWS", func() { d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage)) })
-	case protocol.CmdNotebookList:
-		nbList := msg.(*protocol.NotebookListMessage)
-		d.life.Go("sendNotebookListWSResult", func() {
-			d.sendNotebookListWSResult(client, protocol.Deref(nbList.RequestID), protocol.Deref(nbList.Prefix))
-		})
-	case protocol.CmdNotebookRead:
-		nbRead := msg.(*protocol.NotebookReadMessage)
-		d.life.Go("sendNotebookReadWSResult", func() { d.sendNotebookReadWSResult(client, protocol.Deref(nbRead.RequestID), nbRead.Path) })
 	case protocol.CmdNotebookBacklinks:
 		nbBack := msg.(*protocol.NotebookBacklinksMessage)
 		d.life.Go("sendNotebookBacklinksWSResult", func() { d.sendNotebookBacklinksWSResult(client, protocol.Deref(nbBack.RequestID), nbBack.Path) })
-	case protocol.CmdNotebookWrite:
-		nbWrite := msg.(*protocol.NotebookWriteMessage)
-		d.life.Go("sendNotebookWriteWSResult", func() {
-			d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash))
-		})
 	case protocol.CmdTaskList:
 		nbTaskList := msg.(*protocol.TaskListMessage)
 		d.life.Go("sendTaskListWSResult", func() { d.sendTaskListWSResult(client, protocol.Deref(nbTaskList.RequestID)) })

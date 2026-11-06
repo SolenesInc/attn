@@ -30,27 +30,27 @@ func TestTheNotebookStaysInsideItsRootEvenWhenTheRootIsALink(t *testing.T) {
 		}
 	}
 
-	if written := notebookAskWrite(app, "knowledge/areas/foo.md", notebookNote("inside"), ""); !written.Success || written.Result == nil || written.Result.Conflict {
+	if written := fsAskWrite(app, "", "knowledge/areas/foo.md", notebookNote("inside"), ""); !written.Success || written.Result == nil || written.Result.Conflict {
 		t.Fatalf("writing under a linked notebook root = %+v (%s), want it saved", written.Result, protocol.Deref(written.Error))
 	}
 	if _, err := os.Stat(filepath.Join(real, "knowledge", "areas", "foo.md")); err != nil {
 		t.Errorf("the write did not land in the directory the root links to: %v", err)
 	}
-	notebookAskWrite(app, "knowledge/areas-archive/bar.md", notebookNote("sibling"), "")
+	fsAskWrite(app, "", "knowledge/areas-archive/bar.md", notebookNote("sibling"), "")
 
-	if read := notebookAskRead(app, "evil/secret.md"); read.Success || (read.Result != nil && strings.Contains(read.Result.Content, "TOP SECRET")) {
+	if read := fsAskRead(app, "", "evil/secret.md"); read.Success || (read.Result != nil && strings.Contains(read.Result.Content, "TOP SECRET")) {
 		t.Errorf("reading through a link out of the notebook = %+v, want a refusal", read.Result)
 	}
-	if written := notebookAskWrite(app, "evil/planted.md", notebookNote("planted"), ""); written.Success {
+	if written := fsAskWrite(app, "", "evil/planted.md", notebookNote("planted"), ""); written.Success {
 		t.Errorf("writing through a link out of the notebook = %+v, want a refusal", written.Result)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "planted.md")); err == nil {
 		t.Error("a notebook write landed outside the notebook")
 	}
-	if listed := notebookEntryPaths(notebookAskList(app, "").Entries); !slices.Equal(listed, []string{"knowledge/areas-archive/bar.md", "knowledge/areas/foo.md"}) {
-		t.Errorf("listing the notebook = %v, want only the notes inside it", listed)
+	if listed := fsEntryPaths(fsAskList(app, "", "").Entries); !slices.Equal(listed, []string{"knowledge"}) {
+		t.Errorf("listing the notebook = %v, want only the folder inside it", listed)
 	}
-	if areas := notebookEntryPaths(notebookAskList(app, "knowledge/areas").Entries); !slices.Equal(areas, []string{"knowledge/areas/foo.md"}) {
+	if areas := fsEntryPaths(fsAskList(app, "", "knowledge/areas").Entries); !slices.Equal(areas, []string{"knowledge/areas/foo.md"}) {
 		t.Errorf("listing knowledge/areas = %v, want its own notes and not its sibling's", areas)
 	}
 }
@@ -60,11 +60,11 @@ func TestAJournalAppendKeepsTheNotesOwnFrontmatter(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	fsNotebookRoot(t, w)
 	existing := "---\ntype: journal\n# external note\nobsidian_id: 007\ntitle: jrnl\n---\n# entries\n\nfirst\n"
-	notebookAskWrite(app, "journal/2026-06-13.md", existing, "")
+	fsAskWrite(app, "", "journal/2026-06-13.md", existing, "")
 	if _, err := cli.AppendJournal("", "2026-06-13", "second"); err != nil {
 		t.Fatal(err)
 	}
-	read := notebookAskRead(app, "journal/2026-06-13.md")
+	read := fsAskRead(app, "", "journal/2026-06-13.md")
 	if read.Result == nil {
 		t.Fatalf("reading the journal: %s", protocol.Deref(read.Error))
 	}

@@ -193,8 +193,12 @@ func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 	if stale := fsAskWrite(app, "", "notes/todo.txt", "oat milk", "deadbeef"); !stale.Success || stale.Result == nil || !stale.Result.Conflict || protocol.Deref(stale.Result.CurrentHash) != hash {
 		t.Fatalf("a write against a stale hash = %+v, want a conflict naming the current hash %s", stale.Result, hash)
 	}
-	if saved := fsAskWrite(app, "", "notes/todo.txt", "oat milk", hash); !saved.Success || saved.Result == nil || saved.Result.Conflict || saved.Result.Hash == nil {
+	saved := fsAskWrite(app, "", "notes/todo.txt", "oat milk", hash)
+	if !saved.Success || saved.Result == nil || saved.Result.Conflict || saved.Result.Hash == nil {
 		t.Fatalf("a write against the current hash = %+v, want it saved", saved.Result)
+	}
+	if read := fsAskRead(app, "", "notes/todo.txt"); read.Result == nil || read.Result.Content != "oat milk" || read.Result.Hash != *saved.Result.Hash {
+		t.Fatalf("reading after the edit = %+v, want the new content at the edit's hash", read.Result)
 	}
 	if renamed := fsAskRename(app, "", "notes/todo.txt", "notes/plan.txt"); !renamed.Success || renamed.Result == nil || renamed.Result.NewPath != "notes/plan.txt" {
 		t.Fatalf("renaming = %+v (%s)", renamed.Result, protocol.Deref(renamed.Error))
