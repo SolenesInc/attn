@@ -82,3 +82,35 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		t.Fatalf("reset setting: %+v", reset)
 	}
 }
+
+func TestSettingsCLIReportsDefaultOnSettingsAsOnUntilStoredOff(t *testing.T) {
+	s := testworld.NewStack(t)
+	s.Start()
+	keys := []string{
+		"auto_approve_enabled", "crew.autosleep_enabled", "crew.heartbeat_enabled", "headless_tasks.enabled",
+		"open_sent_files_enabled", "queue_quiet_notifications", "queue_show_hidden_sessions",
+		"sidebar_harness_logos_enabled", "worktree_sweep_enabled",
+	}
+	expect := func(want string) {
+		t.Helper()
+		var listed protocol.SettingsListResult
+		s.Attn("settings", "list", "--json").JSON(t, &listed)
+		inList := map[string]string{}
+		for _, entry := range listed.Entries {
+			inList[entry.Key] = protocol.Deref(entry.Value)
+		}
+		for _, key := range keys {
+			if got := strings.TrimSpace(s.Attn("settings", "get", key).Stdout); got != want {
+				t.Errorf("attn settings get %s = %q, want %q", key, got, want)
+			}
+			if inList[key] != want {
+				t.Errorf("attn settings list shows %s = %q, want %q", key, inList[key], want)
+			}
+		}
+	}
+	expect("true")
+	for _, key := range keys {
+		requireStdout(t, s.Attn("settings", "set", key, "false"), key+" = false")
+	}
+	expect("false")
+}

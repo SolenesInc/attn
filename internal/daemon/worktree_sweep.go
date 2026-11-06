@@ -55,7 +55,7 @@ func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return defaultOnBooleanSetting(d.machineSetting(settingWorktreeSweepEnabled))
+	return parseBooleanSetting(d.machineSetting(settingWorktreeSweepEnabled))
 }
 
 func (d *Daemon) registerWorktreeSweepCron(runner *jobs.Runner) {

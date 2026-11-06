@@ -23,7 +23,8 @@ to the session's profile; outside, --profile chooses one when several exist.
 commands:
   list [--all] [--json]  show keys, scopes, values and descriptions;
                        --all adds read-only values attn computes
-  get <key> [--json]    show the saved value; empty when unset
+  get <key> [--json]    show the value in effect; empty when unset, unless
+                       the setting is on by default
   set <key> <value>     change a setting; "" restores the default
                        if the description allows it
 `)

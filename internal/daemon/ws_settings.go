@@ -276,14 +276,14 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(SettingQueueModeEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueModeEnabled)]))
 	settings[string(SettingDirectAgentLaunchEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingDirectAgentLaunchEnabled)]))
 	settings[string(SettingQueueCrewEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueCrewEnabled)]))
-	settings[string(SettingQueueShowHiddenSessions)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingQueueShowHiddenSessions)]))
-	settings[string(SettingQueueQuietNotifications)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingQueueQuietNotifications)]))
+	settings[string(SettingQueueShowHiddenSessions)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueShowHiddenSessions)]))
+	settings[string(SettingQueueQuietNotifications)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueQuietNotifications)]))
 	settings[string(SettingCodexSharedEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCodexSharedEnabled)]))
 	settings[string(SettingClaudeModEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingClaudeModEnabled)]))
 	settings[string(SettingNisseEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingNisseEnabled)]))
 	settings[string(SettingCrewV2Enabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCrewV2Enabled)]))
-	settings[string(SettingSidebarHarnessLogosEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingSidebarHarnessLogosEnabled)]))
-	settings[string(SettingAutoApproveEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingAutoApproveEnabled)]))
+	settings[string(SettingSidebarHarnessLogosEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingSidebarHarnessLogosEnabled)]))
+	settings[string(SettingAutoApproveEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAutoApproveEnabled)]))
 	settings[string(SettingAutoSettleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAutoSettleEnabled)]))
 	settings[string(SettingCalloutsEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCalloutsEnabled)]))
 	settings[string(SettingPhoneAccessEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingPhoneAccessEnabled)]))
@@ -492,10 +492,6 @@ func parseBooleanSetting(value string) bool {
 	default:
 		return false
 	}
-}
-
-func defaultOnBooleanSetting(value string) bool {
-	return strings.TrimSpace(value) == "" || parseBooleanSetting(value)
 }
 
 func validateUIScale(value string) error {

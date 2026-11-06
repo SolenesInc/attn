@@ -60,7 +60,7 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 	await("default_model_claude", "from-outpost-websocket")
 	requireStdout(t, home.Attn("settings", "get", "default_model_claude"), "from-outpost-websocket")
 	requireStdout(t, outpost.Attn("settings", "set", "worktree_sweep_enabled", "false"), "false")
-	if got := home.Attn("settings", "get", "worktree_sweep_enabled"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "" {
+	if got := home.Attn("settings", "get", "worktree_sweep_enabled"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "true" {
 		t.Fatalf("machine write reached the home: %+v", got)
 	}
 	requireStdout(t, home.Attn("settings", "set", "default_model_claude", ""))

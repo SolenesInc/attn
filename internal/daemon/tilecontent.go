@@ -207,11 +207,7 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
 	}
-	raw := strings.TrimSpace(d.homeSetting(SettingOpenSentFilesEnabled))
-	if raw == "" {
-		return true
-	}
-	return parseBooleanSetting(raw)
+	return parseBooleanSetting(d.homeSetting(SettingOpenSentFilesEnabled))
 }
 
 func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesMessage) {

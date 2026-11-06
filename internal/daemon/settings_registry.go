@@ -131,11 +131,13 @@ type settingSpec struct {
 func (d *Daemon) homeSetting(key HomeSetting) string {
 	status := d.enrollmentStatus()
 	if !status.IsHome() {
-		return d.store.CopiedSetting(string(key), status.HomeDaemonID)
+		return settingkeys.WithDefault(string(key), d.store.CopiedSetting(string(key), status.HomeDaemonID))
 	}
-	return d.store.GetSetting(string(key))
+	return settingkeys.WithDefault(string(key), d.store.GetSetting(string(key)))
 }
-func (d *Daemon) machineSetting(key MachineSetting) string { return d.store.GetSetting(string(key)) }
+func (d *Daemon) machineSetting(key MachineSetting) string {
+	return settingkeys.WithDefault(string(key), d.store.GetSetting(string(key)))
+}
 
 var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(settingNotebookSyncState), scope: daemonScope, description: "Current Notebook sync state on this machine.", readOnly: true},
@@ -474,6 +476,12 @@ func resolveSidebarWidth(value string) int {
 }
 
 func (d *Daemon) settingValues() map[string]string {
+	values := d.storedSettingValues()
+	settingkeys.FillDefaults(values)
+	return values
+}
+
+func (d *Daemon) storedSettingValues() map[string]string {
 	values := d.store.GetAllSettings()
 	status := d.enrollmentStatus()
 	if status.IsHome() {

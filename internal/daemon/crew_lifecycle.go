@@ -104,7 +104,7 @@ func (d *Daemon) crewBoolSetting(name HomeSetting) bool {
 	if d.store == nil {
 		return true
 	}
-	return !strings.EqualFold(strings.TrimSpace(d.homeSetting(name)), "false")
+	return parseBooleanSetting(d.homeSetting(name))
 }
 
 func (d *Daemon) crewSeconds(name HomeSetting, fallback, min, max int) time.Duration {

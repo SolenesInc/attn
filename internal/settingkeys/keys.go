@@ -98,6 +98,31 @@ const (
 	SettingPluginPriorities              HomeSetting    = "plugin_provider_priorities"
 )
 
+var defaultOn = map[string]bool{
+	string(SettingQueueShowHiddenSessions):    true,
+	string(SettingQueueQuietNotifications):    true,
+	string(SettingSidebarHarnessLogosEnabled): true,
+	string(SettingAutoApproveEnabled):         true,
+	string(SettingOpenSentFilesEnabled):       true,
+	string(SettingHeadlessTasksEnabled):       true,
+	string(SettingCrewHeartbeatEnabled):       true,
+	string(SettingCrewAutoSleepEnabled):       true,
+	string(SettingWorktreeSweepEnabled):       true,
+}
+
+func WithDefault(key, stored string) string {
+	if defaultOn[key] && strings.TrimSpace(stored) == "" {
+		return "true"
+	}
+	return stored
+}
+
+func FillDefaults(values map[string]string) {
+	for key := range defaultOn {
+		values[key] = WithDefault(key, values[key])
+	}
+}
+
 func ClassOf(key string) Class {
 	for _, prefix := range []string{
 		string(SettingChiefModelPrefix), string(SettingChiefEffortPrefix), string(SettingDefaultModelPrefix),

@@ -284,7 +284,7 @@ func (d *Daemon) classifyPluginStop(session *protocol.Session, text string) (str
 }
 
 func (d *Daemon) quietNotifications() bool {
-	return defaultOnBooleanSetting(d.homeSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
+	return parseBooleanSetting(d.homeSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
 }
 
 func (d *Daemon) queueFlowOn() bool {
