@@ -69,7 +69,7 @@ func (r *Router) Send(msg protocol.Placed, answered func(error)) {
 		defer release()
 		answered(err)
 	}
-	conn, err := r.bridge(msg)
+	conn, err := r.terminalBridge(protocol.TerminalID(msg.Locate()))
 	if err != nil {
 		answer(err)
 		return
@@ -118,13 +118,11 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 		host = msg.Locate()
 	case protocol.LocatorSession:
 		id := protocol.SessionID(msg.Locate())
-		_, copied := d.store.SessionHost(id)
-		home = !copied
+		home = !d.sessionKnownHere(id)
 		host = d.sessionHost(id)
 	case protocol.LocatorTerminal:
 		session := d.terminals().owner(harness.TerminalID(msg.Locate()))
-		_, copied := d.store.SessionHost(session)
-		home = !copied
+		home = !d.sessionKnownHere(session)
 		host = d.sessionHost(session)
 	}
 	if home {
@@ -150,6 +148,11 @@ func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error
 		return conn, name, nil
 	}
 	return nil, name, fmt.Errorf("%s is unreachable; this needs it now", name)
+}
+
+func (d *Daemon) sessionKnownHere(id protocol.SessionID) bool {
+	_, copied := d.store.SessionHost(id)
+	return copied || d.store.Get(id) != nil
 }
 
 func (d *Daemon) sessionHost(id protocol.SessionID) string {
@@ -215,13 +218,21 @@ func outpostReach(enabled bool, run *outpostDial) (*bridge.Conn, protocol.Outpos
 	}
 }
 
+func (r *Router) terminalBridge(t harness.TerminalID) (*bridge.Conn, error) {
+	host := r.daemon.sessionHost(r.daemon.terminals().owner(t))
+	if host == "" {
+		return nil, nil
+	}
+	conn, _, err := r.daemon.outpostConn(host)
+	return conn, err
+}
+
 func (r *Router) Attach(ctx context.Context, t harness.TerminalID, subscriber string, opts ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
-	session, _ := r.daemon.shownIn(t)
-	if host := r.daemon.sessionHost(session); host != "" {
-		conn, _, err := r.daemon.outpostConn(host)
-		if err != nil {
-			return ptybackend.AttachInfo{}, nil, err
-		}
+	conn, err := r.terminalBridge(t)
+	if err != nil {
+		return ptybackend.AttachInfo{}, nil, err
+	}
+	if conn != nil {
 		info, stream, err := conn.Attach(ctx, bridge.AttachRequest{Terminal: t, Subscriber: subscriber, Options: opts})
 		return info, stream, terminalBridgeError(err)
 	}
