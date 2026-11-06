@@ -82,6 +82,13 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   directories) and refuses later resumes. `thread/unarchive` moves the rollout
   back.
 
+Read in the source at openai/codex rust-v0.164.0:
+
+- `thread/archive` first shuts down a loaded thread, which aborts its running
+  turn, a compact included, and then moves the rollout
+  (`app-server/src/request_processors/thread_processor.rs`,
+  `core/src/session/handlers.rs`).
+
 Read in the source at openai/codex rust-v0.162.1:
 
 - Codex appends to the existing rollout when it resumes a conversation. For a

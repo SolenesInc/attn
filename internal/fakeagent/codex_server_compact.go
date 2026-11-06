@@ -64,6 +64,13 @@ func (s *codexAppServer) compact(t *codexServerThread) {
 	s.status(t)
 	s.awaitHeldReply(heldCompaction)
 	s.mu.Lock()
+	if archivedDuringCompact := s.threads[t.c.conversation] != t; archivedDuringCompact {
+		t.compactEnded = nil
+		s.mu.Unlock()
+		close(ended)
+		s.stopWhenDrained()
+		return
+	}
 	s.compactions[t.c.conversation]++
 	s.mu.Unlock()
 	s.tell(t, notification("item/completed", map[string]any{"threadId": t.c.conversation, "turnId": turnID, "item": map[string]any{"type": "contextCompaction", "id": uuid.NewString()}}))

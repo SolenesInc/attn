@@ -932,11 +932,13 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 	if err := os.MkdirAll(archived, 0o755); err != nil {
 		return nil, nil, err
 	}
+	s.mu.Lock()
+	delete(s.threads, id)
+	s.mu.Unlock()
 	if err := os.Rename(path, filepath.Join(archived, filepath.Base(path))); err != nil {
 		return nil, nil, err
 	}
 	s.mu.Lock()
-	delete(s.threads, id)
 	close(s.archived)
 	s.archived = make(chan struct{})
 	s.mu.Unlock()

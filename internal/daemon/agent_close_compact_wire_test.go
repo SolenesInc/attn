@@ -248,27 +248,32 @@ func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactC
 	conversation := codex.ConversationID
 	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("blog")))
 
-	arrived, release := w.CodexServer().HoldNextCompaction()
+	firstCompactArrived, releaseFirstCompact := w.CodexServer().HoldNextCompaction()
 	closeCompacting(t, cli, session)
 	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
-	arrived()
+	firstCompactArrived()
 	if closed := closeFromApp(app, session); !closed.Accepted {
 		t.Fatalf("the user closes the session during its compact = %+v", closed)
 	}
 	awaitClosed(app, session)
+	w.CodexServer().AwaitArchived(conversation)
+	releaseFirstCompact()
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 	w.Launched(session)
 
+	secondCompactArrived, releaseSecondCompact := w.CodexServer().HoldNextCompaction()
 	closeCompacting(t, cli, session)
-	release()
+	secondCompactArrived()
+	stillOpen(t, cli, session, "during the compact of the second close")
+	releaseSecondCompact()
 	closed := awaitClosed(app, session)
 	if protocol.Deref(closed.CloseReason) != compactReason || protocol.Deref(closed.ClosedBy) != session {
 		t.Errorf("ledger entry = %+v, want it closed by itself for %q", closed, compactReason)
 	}
-	if got := w.CodexServer().Compactions(conversation); got != 2 {
-		t.Errorf("the conversation compacted %d times by the second close, want twice", got)
+	if got := w.CodexServer().Compactions(conversation); got != 1 {
+		t.Errorf("the conversation compacted %d times by the second close, want once: closing the session archived the conversation and ended the first compact", got)
 	}
 }
 

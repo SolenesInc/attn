@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -80,7 +81,7 @@ func (d *Daemon) beginCompactingClose(_ context.Context, msg protocol.Compacting
 		reason:     msg.Reason,
 		userInputs: monitor.UserInputs(),
 		onStandby:  msg.OnStandby,
-		key:        fmt.Sprintf("%s-%d", session, d.clock.Now().UnixNano()),
+		key:        fmt.Sprintf("%s-%s", session, uuid.NewString()),
 	}
 	l := &d.compactions
 	l.mu.Lock()
