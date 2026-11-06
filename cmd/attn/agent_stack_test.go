@@ -293,3 +293,51 @@ func TestAgentSelfCloseKeepsItsReasonAndSeedNote(t *testing.T) {
 		})
 	}
 }
+
+func peekSaysSuggestion(t *testing.T, s *testworld.Stack, session string) bool {
+	t.Helper()
+	var asJSON struct {
+		Screen struct {
+			ComposerSuggestion bool `json:"composer_suggestion"`
+		} `json:"screen"`
+	}
+	s.Attn("agent", "peek", session, "--json").JSON(t, &asJSON)
+	inText := strings.Contains(s.Attn("agent", "peek", session).Stdout, "composer: the text on the ❯ line is Claude's suggestion")
+	if inText != asJSON.Screen.ComposerSuggestion {
+		t.Errorf("peek text says suggestion=%v, --json says %v", inText, asJSON.Screen.ComposerSuggestion)
+	}
+	return inText
+}
+
+func TestAgentPeekLabelsAClaudeSuggestionAndNotATypedDraft(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	const text = "keep the gate, harvest it"
+
+	suggested := s.Spawn(app, fakeagent.Claude, s.Path("suggested"))
+	app.Watch(suggested)
+	s.Launched(suggested).ClaudeSuggestion(text)
+	app.AwaitScreen(suggested, "harvest it")
+	if !peekSaysSuggestion(t, s, suggested) {
+		t.Errorf("peek does not label Claude's suggestion:\n%s", s.Attn("agent", "peek", suggested).Stdout)
+	}
+
+	drafted := s.Spawn(app, fakeagent.Claude, s.Path("drafted"))
+	app.Watch(drafted)
+	s.Launched(drafted)
+	app.Type(drafted, text, "keyboard")
+	app.AwaitScreen(drafted, "harvest it")
+	if peekSaysSuggestion(t, s, drafted) {
+		t.Errorf("peek labels a typed draft as a suggestion:\n%s", s.Attn("agent", "peek", drafted).Stdout)
+	}
+
+	codex := s.Spawn(app, fakeagent.Codex, s.Path("codex"))
+	app.Watch(codex)
+	s.Launched(codex).ClaudeSuggestion(text)
+	app.AwaitScreen(codex, "harvest it")
+	if peekSaysSuggestion(t, s, codex) {
+		t.Errorf("peek labels a Codex screen as holding Claude's suggestion:\n%s", s.Attn("agent", "peek", codex).Stdout)
+	}
+}

@@ -186,6 +186,51 @@ func claudeUserRows(t *testing.T, configDir string) []claudeUserRow {
 	return rows
 }
 
+const enablePromptSuggestions = "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=true"
+
+func TestAgentPeekLabelsARealClaudeSuggestionAndNotATypedDraft(t *testing.T) {
+	t.Parallel()
+	s, app, session, model, _ := realModdedClaude(t, enablePromptSuggestions)
+	requirePeekLabelsOnlyTheSuggestion(t, s, app, session, model)
+}
+
+func TestAgentPeekFromHomeLabelsARealClaudeSuggestionOnAnOutpostAndNotATypedDraft(t *testing.T) {
+	t.Parallel()
+	c := newRealOutpostClaude(t, false, enablePromptSuggestions)
+	requirePeekLabelsOnlyTheSuggestion(t, c.home, c.pair.App, c.session, c.model)
+}
+
+func requirePeekLabelsOnlyTheSuggestion(t *testing.T, s *testworld.Stack, app *testworld.Peer, session string, model *fakeclaudeapi.Model) {
+	t.Helper()
+	app.Watch(session)
+
+	release := model.HoldSuggestion("keep the gate, harvest-it")
+	defer release()
+	for _, prompt := range []string{"land-the-checkout-fix", "what-is-left-now"} {
+		mark := len(app.Log())
+		modelMark := model.Mark()
+		app.Type(session, prompt, "keyboard")
+		app.AwaitScreen(session, prompt)
+		app.Type(session, "\r", "keyboard")
+		model.AwaitPromptSince(t, modelMark, prompt)
+		working := testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+	}
+	model.AwaitPrompt(t, fakeclaudeapi.SuggestionPrompt)
+	release()
+	app.AwaitScreen(session, "harvest-it")
+	if !peekSaysSuggestion(t, s, session) {
+		t.Errorf("peek does not label Claude's suggestion:\n%s", s.Attn("agent", "peek", session).Stdout)
+	}
+
+	const draft = "discount-field-first"
+	app.Type(session, draft, "keyboard")
+	app.AwaitScreen(session, draft)
+	if peekSaysSuggestion(t, s, session) {
+		t.Errorf("peek labels a typed draft as a suggestion:\n%s", s.Attn("agent", "peek", session).Stdout)
+	}
+}
+
 func writeClaudeConfig(t *testing.T, claude, configDir, work string) {
 	t.Helper()
 	if err := fakeclaudeapi.WriteClaudeConfig(claude, configDir, work); err != nil {

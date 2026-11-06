@@ -33,6 +33,11 @@ The daemon already holds everything peek shows, so peeking never types into the
 session, never wakes its agent, and never consumes the agent's tokens. Peek
 leaves no trace the observed agent can see.
 
+Text on a Claude session's `❯` line can be Claude's suggestion for the next
+prompt, and nobody typed it. Peek then adds a `composer:` line that says so, and
+`--json` sets `screen.composer_suggestion`. Without that label, the text is a
+draft someone typed.
+
 Peek first. Asking an agent what it is doing costs the agent a turn, so look
 before you ask. Ask only what looking cannot answer.
 

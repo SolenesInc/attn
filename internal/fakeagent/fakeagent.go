@@ -52,6 +52,7 @@ const (
 	methodExit       = "exit"
 	methodStopRead   = "stop_reading_terminal"
 	methodStatus     = "program_status"
+	methodSuggestion = "claude_suggestion"
 	methodModNext    = "mod_next"
 	methodModTool    = "mod_tool_boundary"
 	methodModEsc     = "mod_esc"
@@ -363,6 +364,13 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 			return nil, err
 		}
 		a.term.programStatus(p.Text)
+		return struct{}{}, nil
+	case methodSuggestion:
+		var p textParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		a.term.claudeSuggestion(p.Text)
 		return struct{}{}, nil
 	case methodHoldRejoin, methodFreeRejoin:
 		remote, ok := a.conv.(*codexRemote)

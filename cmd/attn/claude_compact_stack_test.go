@@ -20,7 +20,7 @@ import (
 
 const closingReviewer = "rev-1111-2222"
 
-func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeclaudeapi.Model, string) {
+func realModdedClaude(t *testing.T, vars ...string) (*testworld.Stack, *testworld.Peer, string, *fakeclaudeapi.Model, string) {
 	t.Helper()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
@@ -42,6 +42,7 @@ func realModdedClaude(t *testing.T) (*testworld.Stack, *testworld.Peer, string, 
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 		"DISABLE_AUTOUPDATER=1",
 	)
+	s.Vars = append(s.Vars, vars...)
 	s.Start()
 	s.Attn("settings", "set", "claude_mod_enabled", "true")
 	register(t, s, closingReviewer, "reviewer")

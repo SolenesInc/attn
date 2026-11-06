@@ -21,6 +21,7 @@ const (
 	QuestionWaitingPath = "/question-waiting"
 	CompactPrompt       = "create a detailed summary of the conversation so far"
 	CompactSummary      = "The checkout fix landed and the session closed itself."
+	SuggestionPrompt    = "[SUGGESTION MODE"
 
 	cachedPrefixTokens = 40000
 )
@@ -37,6 +38,8 @@ type Model struct {
 	compact       chan struct{}
 	breakCompacts bool
 	contextTokens int
+	suggestion    string
+	suggestionAt  chan struct{}
 }
 
 type bashStep struct{ after, command string }
@@ -76,6 +79,14 @@ func (m *Model) HoldCompacts() (release func()) {
 			m.compact = nil
 		}
 	})
+}
+
+func (m *Model) HoldSuggestion(text string) (release func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	hold := make(chan struct{})
+	m.suggestion, m.suggestionAt = text, hold
+	return sync.OnceFunc(func() { close(hold) })
 }
 
 func (m *Model) BreakCompacts(broken bool) {
@@ -198,7 +209,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	m.requestTimes = append(m.requestTimes, time.Now())
 	m.mu.Unlock()
-	callsTool, compacts := false, false
+	callsTool, compacts, suggests := false, false, false
 	bash := slices.Contains(body.Tools, tool{Name: "Bash"})
 	command := ""
 	for i := len(body.Messages) - 1; i >= 0; i-- {
@@ -208,6 +219,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 		prompt := ContentText(body.Messages[i].Content)
 		callsTool = strings.Contains(prompt, ToolPrompt)
 		compacts = strings.Contains(prompt, CompactPrompt)
+		suggests = strings.Contains(prompt, SuggestionPrompt)
 		m.mu.Lock()
 		if bash && len(m.bash) > 0 && strings.Contains(prompt, m.bash[0].after) {
 			command, m.bash = m.bash[0].command, m.bash[1:]
@@ -218,6 +230,13 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	usage := m.usage()
 	say := "Noted."
+	m.mu.Lock()
+	suggestion, suggestionAt := m.suggestion, m.suggestionAt
+	m.mu.Unlock()
+	if suggests && suggestionAt != nil {
+		<-suggestionAt
+		say = suggestion
+	}
 	if compacts {
 		m.mu.Lock()
 		hold, broken := m.compact, m.breakCompacts

@@ -2,9 +2,12 @@ package daemon
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -15,6 +18,11 @@ const agentPeekMessageMaxChars = annotatableMessageMaxChars
 const agentShortIDLength = 8
 
 const agentPeekSnapshotTimeout = 3 * time.Second
+
+var claudeSuggestionCells = sync.OnceValue(func() *regexp.Regexp {
+	const sgr = `\x1b\[[0-9;]*m`
+	return regexp.MustCompile(`❯[ \x{a0}](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?7m[^\x1b](?:` + sgr + `)*\x1b\[(?:[0-9;]*;)?2m`)
+})
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
 	session, errCode := d.resolveAgentPeekTarget(askerOf(msg.SourceSessionID, msg.ProfileID), msg.TargetSessionID)
@@ -117,7 +125,7 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 		result.LastAssistantMessage = protocol.Ptr(answer.Text)
 	}
 
-	result.Screen = d.agentPeekScreen(session.ID)
+	result.Screen = d.agentPeekScreen(session)
 	if exit := d.store.GetSessionExitScreen(session.ID); exit != nil {
 		result.Exit = &protocol.AgentPeekExit{Code: exit.ExitCode, At: exit.ExitedAt}
 		if exit.ExitSignal != "" {
@@ -130,7 +138,8 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	return result
 }
 
-func (d *Daemon) agentPeekScreen(sessionID protocol.SessionID) *protocol.AgentPeekScreen {
+func (d *Daemon) agentPeekScreen(session *protocol.Session) *protocol.AgentPeekScreen {
+	sessionID := session.ID
 	ctx, cancel := context.WithTimeout(context.Background(), agentPeekSnapshotTimeout)
 	defer cancel()
 	snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](ctx, d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: protocol.TerminalID(d.primaryTerminal(sessionID))})
@@ -142,11 +151,20 @@ func (d *Daemon) agentPeekScreen(sessionID protocol.SessionID) *protocol.AgentPe
 	if err != nil || text.Text == "" {
 		return nil
 	}
-	return &protocol.AgentPeekScreen{
+	screen := &protocol.AgentPeekScreen{
 		Text: text.Text,
 		Cols: protocol.Deref(snapshot.Cols),
 		Rows: protocol.Deref(snapshot.Rows),
 	}
+	if session.Agent == protocol.SessionAgentClaude && snapshotShowsClaudeSuggestion(snapshot) {
+		screen.ComposerSuggestion = protocol.Ptr(true)
+	}
+	return screen
+}
+
+func snapshotShowsClaudeSuggestion(snapshot protocol.GetScreenSnapshotResultMessage) bool {
+	cells, err := base64.StdEncoding.DecodeString(protocol.Deref(snapshot.ScreenSnapshot))
+	return err == nil && claudeSuggestionCells().Match(cells)
 }
 
 func (d *Daemon) sendTerminalReadTextWSResult(client *wsClient, msg *protocol.TerminalReadTextMessage) {

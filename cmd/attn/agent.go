@@ -308,6 +308,9 @@ func printAgentPeek(w io.Writer, result *protocol.AgentPeekResult) {
 		for _, line := range strings.Split(strings.TrimRight(result.Screen.Text, "\n"), "\n") {
 			fmt.Fprintf(w, "  %s\n", line)
 		}
+		if protocol.Deref(result.Screen.ComposerSuggestion) {
+			fmt.Fprintln(w, "\ncomposer: the text on the ❯ line is Claude's suggestion, not typed by the user")
+		}
 	} else {
 		fmt.Fprintln(w, "\nscreen unavailable")
 	}
@@ -771,8 +774,9 @@ commands:
         name, profile, state, and whether a turn is owed. Read-only.
   peek <session-or-member> [--json]
         observe a session without interrupting it: state, last
-        assistant message, and the rendered screen. Passive — the observed
-        agent never notices. The target is a crew name, full session id, or
+        assistant message, and the rendered screen. On a Claude session, says
+        when the composer holds Claude's suggestion and not typed text. Passive — the
+        observed agent never notices. The target is a crew name, full session id, or
         unique session id prefix. A sleeping crew member stays asleep.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;

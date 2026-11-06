@@ -95,16 +95,22 @@ Probed on 2.1.288 with a mock API.
   `cost-state` lines come after it (probed on 2.1.316 in `claude -p`, with a
   Stop hook that copied the transcript; the interactive TUI was not probed).
 - A composer suggestion is Claude's guess at the user's next prompt, not input.
-  A plain-text screen read, such as `attn agent peek`, cannot tell a suggestion
-  from a typed draft: both read `❯ keep the gate, harvest it`. In cell styles, a
-  suggestion is dim with the cursor on its first letter, and a typed draft is
-  normal text with the cursor after it. An idle compact leaves both in place.
+  Plain text cannot tell a suggestion from a typed draft: both read
+  `❯ keep the gate, harvest it`. In cell styles, a suggestion is dim with the
+  cursor on its first letter, and a typed draft is normal text with the cursor
+  after it. `attn agent peek` labels a suggestion by those cells, read from the
+  screen snapshot. The `Try "…"` placeholder of an empty composer has the same
+  cells, so peek labels it too (2.1.319). An idle compact leaves both in place.
   Enter alone leaves a suggestion unsent. A paste and Enter replace a suggestion,
   so the model sees only the pasted text. With a typed draft, the model sees the
   draft and the pasted text as one prompt. Probed on 2.1.318 with a local fake
   API, under tmux, with `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=true`. Claude asks
   for a suggestion with a `[SUGGESTION MODE` request after a turn stops, and not
-  before the conversation has two assistant messages (read in the bundle).
+  before the conversation has two assistant messages (read in the bundle). With
+  attn's hooks on 2.1.319, Claude dropped a suggestion that a local API answered
+  at once, and showed it when the answer came 3 s later or after attn saw the
+  turn end. Under attn, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` leaves
+  suggestions on.
 
 Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 

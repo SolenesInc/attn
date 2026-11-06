@@ -35,7 +35,7 @@ type realOutpostClaude struct {
 	terminal      string
 }
 
-func newRealOutpostClaude(t *testing.T, willClose bool) *realOutpostClaude {
+func newRealOutpostClaude(t *testing.T, willClose bool, vars ...string) *realOutpostClaude {
 	t.Helper()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
@@ -62,6 +62,7 @@ func newRealOutpostClaude(t *testing.T, willClose bool) *realOutpostClaude {
 			"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 			"DISABLE_AUTOUPDATER=1",
 		)
+		outpost.Vars = append(outpost.Vars, vars...)
 	}, testworld.OnPTYBackend(testworld.WorkerPTY))
 	c := &realOutpostClaude{home: home, outpost: outpost, pair: pair, model: model, onOutpost: outpost.App(), ptyExit: ptyExit, configDir: configDir}
 	c.session = home.Spawn(pair.App, fakeagent.Claude, work, func(msg *protocol.SpawnSessionMessage) { msg.Host = &pair.Host })

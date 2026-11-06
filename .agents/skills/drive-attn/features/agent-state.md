@@ -13,7 +13,7 @@ Agents read the state of every session with `attn agent list` and
 
 - `state-shown`: the state beside each agent in the sidebar, the home screen's groups and the palette.
 - `agent-list`: every session on the daemon with its harness, profile, state and whether a turn is owed.
-- `agent-peek`: a session's state, last reply and screen, read without interrupting it.
+- `agent-peek`: a session's state, last reply and screen, read without interrupting it, with a label when a Claude composer holds a suggestion and not typed text.
 - `state-explain`: the claims behind a state, the source of each claim, and whether attn applied the claim.
 - `approval`: a permission prompt puts the agent in needs approval until someone answers it.
 - `stop-verdict`: when a turn ends, attn decides waiting or idle from the turn's last message.
@@ -73,6 +73,7 @@ Preconditions:
   - Answer the permission prompt by sending the agent a prompt, `wsctl input --id <terminal> --text "hello" --enter`: the state goes `working`, then `waiting_input`, and `session-group-waiting` holds the row. Open the agent palette again with ⌘K: the row's pill reads `waiting` (`.unified-palette-pill.is-waiting`).
 - **Why.** Run `./attn state explain state-agent`. It prints `state:   waiting_input`, then a table with the columns OBSERVED, SOURCE, CLAIM, OUTCOME and WHY, holding a `hook_notify` row whose claim is `permission_prompt`, a `resolver` row applying `pending_approval`, and the rows that followed. `--json` prints the same facts.
 - **Peek is passive.** Run `./attn agent peek state-agent` twice. The `since` time on the state line does not move, and the agent's screen shows no input.
+- **A Claude suggestion.** The mock agent has no suggestions, so `./scripts/test-go.sh --packages -run TestAgentPeekLabelsARealClaudeSuggestionAndNotATypedDraft ./cmd/attn` drives real `claude` against a mock API, and `TestAgentPeekFromHomeLabelsARealClaudeSuggestionOnAnOutpostAndNotATypedDraft` does it on an outpost, and `TestAgentPeekLabelsAClaudeSuggestionAndNotATypedDraft` paints the same cells from the fake. A labelled peek ends with `composer: the text on the ❯ line is Claude's suggestion, not typed by the user`, and `--json` has `screen.composer_suggestion: true`.
 - **Stopped.** Run `wsctl kill-session --id state-agent`. `./attn agent list` shows `idle`, peek shows `process exited with code`, `./attn state explain state-agent --json` holds an observation with source `resolver`, claim `idle` and detail `process_exited`, and the sidebar row's `data-state` follows. See [agent-launch.md](agent-launch.md) for resuming the agent.
 - **Activity lines.**
   - Run `./attn activity`. It prints `presence:` and a tier, then `activity: off (Settings › Background agents › Session activity)`.

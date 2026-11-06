@@ -215,6 +215,11 @@ func (r *Run) ProgramStatus(fields string) {
 	r.call(methodStatus, textParams{Text: fields}, nil)
 }
 
+func (r *Run) ClaudeSuggestion(text string) {
+	r.t.Helper()
+	r.call(methodSuggestion, textParams{Text: text}, nil)
+}
+
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

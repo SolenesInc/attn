@@ -7070,6 +7070,8 @@ model AgentPeekScreen {
   text: string;
   cols: int32;
   rows: int32;
+  // The composer holds Claude's suggestion for the next prompt, not typed text.
+  composer_suggestion?: boolean;
 }
 
 // How the session's process ended. Present only while the session has no live

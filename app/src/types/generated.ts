@@ -1233,16 +1233,18 @@ export interface AgentPeekResultExit {
 }
 
 export interface Screen {
-    cols: number;
-    rows: number;
-    text: string;
+    cols:                 number;
+    composer_suggestion?: boolean;
+    rows:                 number;
+    text:                 string;
     [property: string]: any;
 }
 
 export interface AgentPeekScreen {
-    cols: number;
-    rows: number;
-    text: string;
+    cols:                 number;
+    composer_suggestion?: boolean;
+    rows:                 number;
+    text:                 string;
     [property: string]: any;
 }
 
@@ -20817,11 +20819,13 @@ const typeMap: any = {
     ], "any"),
     "Screen": o([
         { json: "cols", js: "cols", typ: 0 },
+        { json: "composer_suggestion", js: "composer_suggestion", typ: u(undefined, true) },
         { json: "rows", js: "rows", typ: 0 },
         { json: "text", js: "text", typ: "" },
     ], "any"),
     "AgentPeekScreen": o([
         { json: "cols", js: "cols", typ: 0 },
+        { json: "composer_suggestion", js: "composer_suggestion", typ: u(undefined, true) },
         { json: "rows", js: "rows", typ: 0 },
         { json: "text", js: "text", typ: "" },
     ], "any"),

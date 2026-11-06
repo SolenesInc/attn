@@ -384,6 +384,9 @@ type AgentPeekScreen struct {
 	// Cols corresponds to the JSON schema field "cols".
 	Cols int `json:"cols"`
 
+	// ComposerSuggestion corresponds to the JSON schema field "composer_suggestion".
+	ComposerSuggestion *bool `json:"composer_suggestion,omitempty,omitzero"`
+
 	// Rows corresponds to the JSON schema field "rows".
 	Rows int `json:"rows"`
 

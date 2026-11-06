@@ -121,6 +121,13 @@ func (t *terminal) programStatus(fields string) {
 	t.write(programStatusSequence(fields))
 }
 
+func (t *terminal) claudeSuggestion(text string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	letters := []rune(text)
+	t.write("\r\x1b[K\x1b[39m❯\u00a0\x1b[7m" + string(letters[0]) + "\x1b[0;2m" + string(letters[1:]) + "\x1b[0m")
+}
+
 func (t *terminal) echo(prompt string) {
 	t.print(t.style.prompt + prompt)
 }
