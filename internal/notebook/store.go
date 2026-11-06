@@ -120,6 +120,16 @@ func (s *Store) appendToNote(rel, entry string, newDoc func() Document) (hash st
 
 const listFrontmatterScanLimit = 64 << 10
 
+func skipUnreadableBelow(root, path string, dirent fs.DirEntry, err error) error {
+	if !os.IsPermission(err) || path == root {
+		return err
+	}
+	if dirent != nil && dirent.IsDir() {
+		return fs.SkipDir
+	}
+	return nil
+}
+
 func (s *Store) notes() ([]Entry, error) {
 	var entries []Entry
 	walkRoot := s.root
@@ -134,7 +144,7 @@ func (s *Store) notes() ([]Entry, error) {
 				}
 				return nil
 			}
-			return err
+			return skipUnreadableBelow(walkRoot, p, dirent, err)
 		}
 		if dirent.IsDir() {
 			if p != walkRoot && strings.HasPrefix(dirent.Name(), ".") {

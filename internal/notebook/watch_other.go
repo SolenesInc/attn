@@ -47,7 +47,7 @@ func (b *notifyBackend) addTree(root string) error {
 			if os.IsNotExist(err) {
 				return nil
 			}
-			return err
+			return skipUnreadableBelow(root, path, entry, err)
 		}
 		if entry.IsDir() {
 			if path != root && strings.HasPrefix(entry.Name(), ".") {
@@ -71,7 +71,7 @@ func (b *notifyBackend) loop() {
 				return
 			}
 			change := treeEvent{Path: ev.Name}
-			if ev.Op&fsnotify.Create != 0 {
+			if ev.Op&(fsnotify.Create|fsnotify.Chmod) != 0 {
 				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 					if strings.HasPrefix(filepath.Base(ev.Name), ".") {
 						continue

@@ -210,7 +210,7 @@ func (w *Watcher) scanTree(dir string) ([]string, error) {
 			if os.IsNotExist(err) {
 				return nil
 			}
-			return err
+			return skipUnreadableBelow(dir, p, dirent, err)
 		}
 		if dirent.IsDir() {
 			if p != w.root && strings.HasPrefix(dirent.Name(), ".") {

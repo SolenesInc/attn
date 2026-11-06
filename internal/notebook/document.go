@@ -44,6 +44,9 @@ func decodeFrontmatter(text []byte) (map[string]any, error) {
 		}
 		content = root.Content[0]
 	}
+	if hasAliasCycle(content, map[*yaml.Node]bool{}) {
+		return nil, fmt.Errorf("frontmatter has recursive alias")
+	}
 	v := nodeToValue(content)
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -188,4 +191,24 @@ func splitFrontmatter(s string) (fm, body string, ok bool) {
 		off = next
 	}
 	return "", s, false
+}
+
+func hasAliasCycle(n *yaml.Node, active map[*yaml.Node]bool) bool {
+	if n == nil {
+		return false
+	}
+	if active[n] {
+		return true
+	}
+	active[n] = true
+	defer delete(active, n)
+	if n.Kind == yaml.AliasNode {
+		return hasAliasCycle(n.Alias, active)
+	}
+	for _, c := range n.Content {
+		if hasAliasCycle(c, active) {
+			return true
+		}
+	}
+	return false
 }

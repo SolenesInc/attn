@@ -278,3 +278,38 @@ func TestANotebookFolderInsideOrAroundAnotherIsRefusedWithNoOutpostPaired(t *tes
 	setSetting(t, otherApp, "notebook.root", "")
 	notebookEffectiveRoot(otherApp, defaultFolder)
 }
+
+func TestNotebookSurvivesAnUnparseableNoteAndAnUnreadableFolder(t *testing.T) {
+	w := newFsWorld(t)
+	app := pickerApp(w)
+	root := fsNotebookRoot(t, w)
+	fsWriteFile(t, filepath.Join(root, "target.md"), []byte(notebookNote("target")))
+	fsWriteFile(t, filepath.Join(root, "linking.md"), []byte(notebookNote("see [target](/target.md)")))
+	fsWriteFile(t, filepath.Join(root, "loop.md"), []byte("---\na: &a [*a]\n---\nsee [target](/target.md)\n"))
+	locked := filepath.Join(root, "locked")
+	fsWriteFile(t, filepath.Join(locked, "hidden.md"), []byte(notebookNote("see [target](/target.md)")))
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	want := []string{"linking.md", "loop.md"}
+	if f, err := os.Open(locked); err == nil {
+		f.Close()
+		want = []string{"linking.md", "locked/hidden.md", "loop.md"}
+	}
+
+	back := notebookAskBacklinks(app, "/target.md")
+	if !back.Success || !slices.Equal(notebookEntryPaths(back.Entries), want) {
+		t.Fatalf("backlinks = %v (%s), want %v", notebookEntryPaths(back.Entries), protocol.Deref(back.Error), want)
+	}
+	fsAskList(app, "", "")
+	fsAwaitLaterChange(t, app, root)
+
+	if err := os.Chmod(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fsWriteFile(t, filepath.Join(locked, "after.md"), []byte(notebookNote("after")))
+	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+		return m.Root == root && slices.Contains(m.Paths, "locked/after.md")
+	})
+}
