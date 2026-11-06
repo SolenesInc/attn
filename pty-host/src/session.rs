@@ -1038,7 +1038,11 @@ impl Session {
 
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
         self.mark_removing();
-        let result = self.signal(libc::SIGTERM);
+        let result = if self.is_running() {
+            self.signal(libc::SIGTERM)
+        } else {
+            self.signal_processes(libc::SIGKILL)
+        };
         self.finish_cleanup();
         result
     }
