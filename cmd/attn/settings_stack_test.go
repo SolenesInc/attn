@@ -2,11 +2,13 @@ package main_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -89,6 +91,47 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	reset := s.Attn("settings", "get", "headless_context_window_cap")
 	if reset.Code != 0 || strings.TrimSpace(reset.Stdout) != "" {
 		t.Fatalf("reset setting: %+v", reset)
+	}
+}
+
+func TestABooleanStoredByAnOlderVersionReadsTheSameEverywhere(t *testing.T) {
+	s := testworld.NewStack(t)
+	s.Start()
+	s.Stop()
+	db, err := store.OpenCurrent(filepath.Join(s.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetSettingChecked("quick_capture_enabled", "TRUE"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s.Start()
+	if got := s.App().Initial.Settings["quick_capture_enabled"]; got != "true" {
+		t.Errorf("the app reads %v, want true", got)
+	}
+	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
+	var row string
+	for _, line := range strings.Split(s.Attn("settings", "list", "--features").Stdout, "\n") {
+		if strings.HasPrefix(line, "quick_capture_enabled ") {
+			row = line
+		}
+	}
+	if fields := strings.Fields(row); len(fields) < 2 || fields[1] != "on" {
+		t.Errorf("list --features says %q, want it on", row)
+	}
+}
+
+func TestResettingTheSharedHostClearsTheStoredChoice(t *testing.T) {
+	s := testworld.NewStack(t)
+	s.UseSharedHostBinary(filepath.Join(s.Dir, "unused-host"))
+	s.Start()
+	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", "false"), "false")
+	requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", ""))
+	if got := s.Attn("settings", "get", "pty_shared_host_enabled"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "" {
+		t.Fatalf("after a reset get = %+v, want the value cleared", got)
 	}
 }
 

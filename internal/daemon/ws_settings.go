@@ -71,7 +71,7 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 		msg.Value = strconv.FormatBool(parseBooleanSetting(msg.Value))
 	}
 	if msg.Key == setting.SharedPTYHostEnabled.Key {
-		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
+		err = d.setSharedPTYHostEnabled(msg.Value)
 	} else {
 		err = d.store.SetSettingChecked(msg.Key, msg.Value)
 	}

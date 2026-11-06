@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -13,7 +12,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
+func (d *Daemon) setSharedPTYHostEnabled(value string) error {
+	enabled := parseBooleanSetting(setting.SharedPTYHostEnabled.WithDefault(value))
 	d.ptySettingsChangeMu.Lock()
 	defer d.ptySettingsChangeMu.Unlock()
 	backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend)
@@ -29,7 +29,7 @@ func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
 	}
 	d.ptySettingsMu.Lock()
 	defer d.ptySettingsMu.Unlock()
-	if err := d.store.SetSettingChecked(setting.SharedPTYHostEnabled.Key, strconv.FormatBool(enabled)); err != nil {
+	if err := d.store.SetSettingChecked(setting.SharedPTYHostEnabled.Key, value); err != nil {
 		return fmt.Errorf("save shared PTY host setting: %w", err)
 	}
 	backend.SetSharedForNewSessions(enabled)

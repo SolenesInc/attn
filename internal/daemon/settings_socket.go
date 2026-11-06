@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/profiles"
@@ -36,6 +37,14 @@ func (d *Daemon) settingValue(spec *setting.Setting, key string, computed map[st
 	}
 	if spec.Scope == setting.PerProfile {
 		return d.store.ProfileSetting(profileID, key)
+	}
+	if spec.Kind == setting.Bool {
+		concrete := *spec
+		concrete.Key = key
+		if value := d.setting(&concrete); strings.TrimSpace(value) != "" {
+			return strconv.FormatBool(parseBooleanSetting(value))
+		}
+		return ""
 	}
 	concrete := *spec
 	concrete.Key = key
