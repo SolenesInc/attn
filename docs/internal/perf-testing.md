@@ -34,10 +34,6 @@ go test -run '^$' -bench . -benchmem ./internal/daemon/ ./internal/transcript/
 ```
 
 `allocs/op` is the stable signal. Compare `ns/op` only between runs on the same machine.
-The `Bench A/B` workflow runs `origin/main` and a pushed ref on one runner and
-posts the `benchstat` delta in the workflow summary. Landings open no pull
-request to trigger it, so start it by hand with `gh workflow run bench-ab.yml
---ref <ref>`.
 
 ## Real-app memory
 
