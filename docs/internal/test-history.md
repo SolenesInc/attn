@@ -306,8 +306,9 @@ checkout is also `MISSING`, and `land` requests it anyway, as above. A test
 whose file does not build on this platform, such as a `_linux_test.go` test on
 a Mac, is `UNAVAILABLE`, with the reason. A native scenario that has not
 cleared is also `UNAVAILABLE`, because no group runs native scenarios. Broad CI
-runs them, and `scripts/land-scenarios.sh` runs the ones a landing adds or
-changes, outside this selection.
+runs them, and `scripts/land-scenarios.sh` runs the ones a landing selects
+outside this selection, as
+[Trunk-based development](trunk-based-development.md#what-landsh-does) says.
 
 ### Cost
 

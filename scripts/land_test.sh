@@ -95,7 +95,7 @@ EOF
 chmod +x scripts/landing-tests.sh
 cp "$root/scripts/land-scenarios.sh" scripts/land-scenarios.sh
 mkdir -p app/scripts/real-app-harness
-cp "$root"/app/scripts/real-app-harness/{changed-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
+cp "$root"/app/scripts/real-app-harness/{landing-scenarios,scenarioCatalog,matrixDigest}.mjs app/scripts/real-app-harness/
 cp "$root/app/package.json" app/package.json
 git add .
 git commit -qm baseline
@@ -272,6 +272,21 @@ printf '// changed\n' >app/scripts/real-app-harness/scenario-focusless-native.mj
 land 'Change a macOS-only scenario'
 if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a macOS-only scenario ran on Linux' >&2; exit 1; fi
 expect_output 'scenario focusless-native changed and does not run on Linux'
+
+mkdir -p .agents/skills/drive-attn/features
+printf '## Tests\n\n- Wire: `internal/example/example_wire_test.go`.\n- Scenario: `shelf-layout`, `focusless-native`, `shelf-peek`.\n' >.agents/skills/drive-attn/features/example.md
+land 'Reword a feature file without changing the product'
+if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a feature file alone ran its scenarios' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
+
+printf '\n' >>internal/example/example.go
+land 'Change the product without changing a feature file'
+if grep -qF 'soak' "$LAND_CHECK_LOG"; then echo 'a product change alone ran a scenario' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; fi
+
+printf '\n' >>internal/example/example.go
+printf '\n' >>.agents/skills/drive-attn/features/example.md
+land 'Change the product and the feature file that describes it'
+grep -qF -- '-f scenarios=shelf-layout,shelf-peek -f repeat=1' "$LAND_CHECK_LOG" || { echo 'the soak did not name the feature file scenarios that run on Linux' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+no_land_scenario_refs
 
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go

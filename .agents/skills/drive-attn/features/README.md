@@ -267,9 +267,11 @@ Every feature file has these sections, in this order:
      that drive a daemon.
    - Stack: real processes together: `*_stack_test.go` in any package and
      `app/e2e/*.spec.ts`.
-   - Scenario: an id in `app/scripts/real-app-harness/scenarioCatalog.mjs`.
-     List a `scenario-*.mjs` script outside the catalog by its path, after
-     "outside the catalog".
+   - Scenario: an id in `app/scripts/real-app-harness/scenarioCatalog.mjs`,
+     all on one line. A landing that changes product code and this file runs
+     these scenarios before it pushes, so list the ones that prove this
+     feature. List a `scenario-*.mjs` script outside the catalog by its path,
+     after "outside the catalog".
    - Kernel: package tests that start no daemon, such as a specified
      function's tables or properties.
    - App: frontend tests under `app/src`, the app wire tests `App.*.test.tsx`

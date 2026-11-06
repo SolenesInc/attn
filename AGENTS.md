@@ -160,8 +160,9 @@ system.
 - `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
 - `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
 - `make check-mobile`: The phone app's format, lint, type check and tests
-- `scripts/land.sh`: Run each catalog scenario the landing adds or changes on
-  CI's Linux, then fast compile, typecheck, lint, generated-file and script
+- `scripts/land.sh`: Run on CI's Linux each catalog scenario the landing adds or
+  changes and, when it changes product code, each scenario listed by a feature
+  file it changes, then fast compile, typecheck, lint, generated-file and script
   checks, and the landing tests, then push to `main`. The landing tests are the
   `scripts/landing-tests` groups the changed paths match, the tests the change
   touches, and every test that failed on `main` and has since passed there,

@@ -21,17 +21,36 @@ dispatches a fixer. The release process writes release notes from the commits.
 
 ### What land.sh does
 
-`scripts/land.sh` rebases onto `origin/main`, runs each catalog scenario the
-landing adds or changes on CI's Linux, runs a fast gate for the paths the landing
+`scripts/land.sh` rebases onto `origin/main`, runs the catalog scenarios the
+landing selects on CI's Linux, runs a fast gate for the paths the landing
 changes, and pushes.
 
-A scenario can pass on the Mac where its author ran it and fail on Linux, so
-`land.sh` starts the Acceptance soak workflow for the changed scenarios on a
-temporary `land-scenarios/` branch, waits for it, and deletes the branch. Every
-machine lands through this one path. A soak took about nine minutes on a cold
-Rust build (2026-11-06). Scenarios skipped on Linux are named and not run. An
-edit to a shared harness file or to product code selects no scenario, because
-the whole matrix does not fit in a landing. This step runs before `land.sh`
+A landing selects two kinds of scenario:
+
+- each scenario it adds or changes, because a scenario can pass on the Mac where
+  its author ran it and fail on Linux
+- when it changes product code, each scenario listed under `## Tests` by a
+  feature file it changes in `.agents/skills/drive-attn/features/`, because a
+  landing that changes a feature's behavior can leave that feature's scenarios
+  expecting the old behavior
+
+`land.sh` starts the Acceptance soak workflow for them on a temporary
+`land-scenarios/` branch, waits for it, and deletes the branch. Every machine
+lands through this one path. Scenarios skipped on Linux are not run.
+
+Over 884 `main` commits ending at 582e27999, this selection runs a scenario for
+17% of landings, up from 8% for changed scenarios alone, with a median of 3
+scenarios, 13 at the 90th percentile and 57 at most. On CI, 1 scenario took a
+median of 291s over 28 runs, 16 took 704s and 23 took 1024s, in single runs. Of
+the 8 windows where `main` broke a scenario the landing did not change in that
+period, the selection stops 3 (7f90df394, 6bd6f16f8, 94ea7af92), and the whole
+Vitest suite in the landing stops 1 (d6269a1d6). The other 4 still reach `main`,
+because the landing changed no feature file that lists the scenario, or because
+the scenario failed only after other scenarios ran in the same shard. Running
+the whole matrix for every product change would catch them, on 58% of landings,
+at 48 times this selection's scenario time.
+A landing that edits only a shared harness file selects no scenario. This step
+runs before `land.sh`
 takes the land queue, and only once, so a later rebase does not repeat it. The
 fast gate:
 

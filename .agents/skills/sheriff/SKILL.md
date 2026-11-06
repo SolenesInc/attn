@@ -68,6 +68,7 @@ Correction seed you plant moves the class to a stronger fix.
 |---|---|---|
 | A package host that a job is not testing turns App acceptance red | Run 41902160029, shard 2/10: `apt download exceeded 300s`, no test failed | `setup-linux-app-deps`: shards restore a frozen apt layer and install with every network source removed. Only the build job can reach the mirror, on a cache miss |
 | A landing adds or changes a scenario that passed only on the author's Mac, and it fails on Linux in CI | 729fdd236, SHELF-MOVES: `the active tile sits at the end of the screen` | `scripts/land-scenarios.sh`: `land.sh` runs each changed catalog scenario on CI's Linux before the push |
+| A product change alters what a scenario it does not touch expects, and the scenario fails on main | 94ea7af92, SHELF-LAYOUT and SHELF-PEEK: the shelf moved into the title bar | `scripts/land-scenarios.sh`: a landing that changes product code and a feature file runs the scenarios that file lists. A landing that changes no feature file still reaches main first, so bd28183cc's kind of break is not prevented |
 | A source change breaks a Vitest file the landing did not touch or list | c9f676997, `App.editorTileDrafts.test.tsx`: six tests failed in Frontend | The `app` landing group runs the whole Vitest suite (`vitest .`) |
 
 ## Find the failure
