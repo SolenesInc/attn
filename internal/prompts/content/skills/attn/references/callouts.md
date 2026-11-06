@@ -15,7 +15,7 @@ attn callout anchors
 attn callout show garden "Work you and your agents track"
 attn callout show sidebar "Your agents, the ones waiting on you first" \
   garden "Work you and your agents track" \
-  commands "Everything attn can do, searchable (⌘K)"
+  commands "Everything attn can do, searchable (⌘K or ⇧⌘K)"
 attn callout show agent:a1b2 "Needs your review on the migration plan"
 ```
 
@@ -41,8 +41,14 @@ showing.
 
 The user advances the callout with Enter or →. On every step except the last,
 either key moves to the next step. On a last step that names an agent or
-desktop, either key goes to it and ends the callout. Esc, a click outside the
-callout, another overlay, or a profile switch also ends the callout.
+desktop, either key goes to it and ends the callout. Esc, the card's ×, a new
+callout or a profile switch ends the callout. A callout with one step also ends on
+another overlay or a click elsewhere.
+
+A callout with several steps lets the user try what it points at. Another
+overlay, such as the command palette, hides the card, and the card comes back on
+the same step when the overlay closes. After a click elsewhere the card stays,
+and Enter, → and Esc go to what the user clicked until they click the card.
 
 The desktop app must be showing your profile. With no such app, `anchors`
 still lists the directory and says so, and `show` refuses. Every refusal exits 1.
