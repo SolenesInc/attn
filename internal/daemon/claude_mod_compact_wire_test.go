@@ -154,14 +154,14 @@ func TestAModReloadDuringTheCompactClosesTheClaudeSessionSayingTheCompactDidNotR
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	session, run := moddedClaudeInATurn(t, w, app)
-	arrived, release := run.ModHoldNextCompact()
+	arrived, _ := run.ModHoldNextCompact()
 
 	closeCompacting(t, cli, session)
 	run.Reply(compactingClaudeReply)
 	arrived()
 	run.ModReload()
 	compactDidNotRun(t, awaitClosed(app, session), "reloaded")
-	release()
+	run.AwaitGone()
 }
 
 func TestUserInputDuringTheCompactKeepsTheModdedClaudeSessionOpen(t *testing.T) {

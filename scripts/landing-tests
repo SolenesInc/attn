@@ -67,6 +67,7 @@ go ./internal/daemon TestAFailureInsideAPeerAwaitEndsTheTestAtOnceWithItsScreens
 go ./internal/stepclock TestAnAdvanceItsCallerGaveUpOnNeitherStallsItsProcessNorAnswersTheNextAdvance
 go ./internal/daemon TestASeedReminderPostsToTheSeedMailboxOnceAfterARestart
 go ./internal/daemon TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession
+go ./cmd/attn TestAnOutpostSessionClosesWhenItsCompactNeverReportsAnOutcome
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

@@ -351,8 +351,7 @@ func TestAnOutpostSessionStaysOpenAndTakesMailWhenTheOutpostRestartsDuringItsCom
 func TestAnOutpostSessionClosesWhenItsCompactNeverReportsAnOutcome(t *testing.T) {
 	m := newOutpostMod(t)
 	m.workingOn(t, m.app, "write the essay")
-	arrived, release := m.run.ModHoldNextCompact()
-	defer release()
+	arrived, _ := m.run.ModHoldNextCompact()
 	m.closeCompacting(t)
 	m.run.Reply(outpostCompactReply)
 	arrived()
@@ -362,6 +361,7 @@ func TestAnOutpostSessionClosesWhenItsCompactNeverReportsAnOutcome(t *testing.T)
 	if !strings.HasPrefix(reason, compactOutpostReason) || !strings.Contains(reason, "compact_outcome_tripwire=") {
 		t.Fatalf("the session closed for %q, want the tripwire named", reason)
 	}
+	m.run.AwaitGone()
 }
 
 func TestASharedCodexOnAnOutpostThatClosesCompactingCompactsAndThenCloses(t *testing.T) {
