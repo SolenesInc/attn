@@ -32,7 +32,7 @@ func testAutomationLaunch(agent string) automation.EffectiveLaunch {
 
 func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID int, host string, at time.Time) {
 	t.Helper()
-	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
+	if candidates, err := s.ReconcileAutomationReviewRequestHeads(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
 	}
 }
@@ -70,7 +70,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	}
 	const subject = "github.com/owner/repo#42"
 	baselineGitHubReviewAutomation(t, d.store, def.ID, "github.com", now)
-	if _, err := d.store.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
+	if _, err := d.store.ReconcileAutomationReviewRequestHeads(def.ID, "github.com", []store.AutomationReviewRequestObservation{{SubjectKey: subject}}, now); err != nil {
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
@@ -139,7 +139,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	const payload = `{"provider":"github","host":"github.com","owner":"owner","repository":"repo","number":42,"url":"https://github.com/owner/repo/pull/42","state":"open","head_sha":"0123456789abcdef0123456789abcdef01234567"}`
 	const snapshot = `{"prompt":"Review","launch":{},"location":{}}`
 	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
+	if _, err := s.ReconcileAutomationReviewRequestHeads(def.ID, "github.com", []store.AutomationReviewRequestObservation{{SubjectKey: subject}}, now); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err = s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{

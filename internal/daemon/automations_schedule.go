@@ -212,25 +212,20 @@ func (d *Daemon) dueAutomationSchedule(definition store.AutomationDefinition, sp
 }
 
 func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefinition, spec automation.DefinitionSpec, intended, observedAt time.Time, guardOutput string) error {
-	observationLock := d.automationObservationLock(definition.ID, "schedule", 0)
-	observationLock.Lock()
 	input := automation.NewScheduledInput(intended, observedAt)
 	input.GuardOutput = guardOutput
 	payload, err := json.Marshal(input)
 	if err != nil {
-		observationLock.Unlock()
 		d.logf("automation schedule observation payload %d: %v", definition.ID, err)
 		return err
 	}
 	effective, err := automation.Effective(spec, definition.Revision)
 	if err != nil {
-		observationLock.Unlock()
 		d.logf("automation schedule observation snapshot %d: %v", definition.ID, err)
 		return err
 	}
 	snapshotJSON, err := json.Marshal(effective)
 	if err != nil {
-		observationLock.Unlock()
 		d.logf("automation schedule observation snapshot marshal %d: %v", definition.ID, err)
 		return err
 	}
@@ -239,14 +234,12 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	if continuity == "singleton" {
 		continuityKey = "singleton"
 		if err := d.releaseUnresumableSingleton(definition.ID, effective.Launch.Agent); err != nil {
-			observationLock.Unlock()
 			d.logf("automation schedule observation release %d: %v", definition.ID, err)
 			return err
 		}
 	}
 	reservation, claimErr := d.newAutomationRunReservation(&definition)
 	if claimErr != nil {
-		observationLock.Unlock()
 		return claimErr
 	}
 	var guardCheck *store.AutomationGuardCheck
@@ -254,7 +247,6 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 		guardCheck = &store.AutomationGuardCheck{Guard: spec.Trigger.Guard, HandledOutput: guardOutput}
 	}
 	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation, guardCheck)
-	observationLock.Unlock()
 	if claimErr != nil {
 		d.logf("automation schedule observation claim %d: %v", definition.ID, claimErr)
 		return claimErr
@@ -264,7 +256,7 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	d.automationMu.Lock()
 	current, loadErr := d.store.GetAutomationRun(run.ID)
 	if loadErr == nil && current != nil && current.State == store.AutomationRunStatePending {
-		if deliverErr := d.deliverObservedAutomationRun(current); deliverErr != nil {
+		if deliverErr := d.deliverAutomationRun(context.Background(), current); deliverErr != nil {
 			_, deliverErr = d.handleAutomationDeliveryError(current, deliverErr)
 			loadErr = deliverErr
 		}

@@ -173,10 +173,6 @@ func (d *Daemon) deliverGitHubReviewRequests(host string, client *github.Client,
 }
 
 func (d *Daemon) claimReviewRequest(host string, client *github.Client, definition store.AutomationDefinition, spec automation.DefinitionSpec, candidate store.AutomationReviewRequestCandidate, pr *protocol.PR, observedAt time.Time) (*store.AutomationRun, error) {
-	observationLock := d.automationObservationLock(definition.ID, candidate.SubjectKey, candidate.Cycle)
-	observationLock.Lock()
-	defer observationLock.Unlock()
-
 	needsClaim, err := d.store.AutomationReviewRequestHeadNeedsClaim(definition.ID, candidate.SubjectKey, candidate.Cycle, candidate.HeadSHA)
 	if err != nil {
 		return nil, fmt.Errorf("recheck claim: %w", err)
@@ -229,7 +225,7 @@ func (d *Daemon) deliverClaimedReviewRun(run *store.AutomationRun) error {
 	if err != nil || current == nil || current.State != store.AutomationRunStatePending {
 		return err
 	}
-	if err := d.deliverObservedAutomationRun(current); err != nil {
+	if err := d.deliverAutomationRun(context.Background(), current); err != nil {
 		_, err = d.handleAutomationDeliveryError(current, err)
 		return err
 	}
@@ -273,7 +269,7 @@ func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
 		return err
 	}
 	if !continuation && run.State == store.AutomationRunStatePending && d.hasAutomationSession(run.SessionID) {
-		if deliverErr := d.deliverObservedAutomationRun(run); deliverErr != nil {
+		if deliverErr := d.deliverAutomationRun(context.Background(), run); deliverErr != nil {
 			if _, err := d.handleAutomationDeliveryError(run, deliverErr); err != nil {
 				d.logf("automation deliver started reviewer %s: %v", run.ID, err)
 			}

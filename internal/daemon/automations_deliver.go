@@ -33,12 +33,6 @@ type retryableAutomationDeliveryError struct{ cause error }
 
 func (e *retryableAutomationDeliveryError) Error() string { return e.cause.Error() }
 func (e *retryableAutomationDeliveryError) Unwrap() error { return e.cause }
-func (d *Daemon) deliverObservedAutomationRun(run *store.AutomationRun) error {
-	if d.automationDeliveryHook != nil {
-		return d.automationDeliveryHook(run)
-	}
-	return d.deliverAutomationRun(context.Background(), run)
-}
 func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliveryErr error) (*store.AutomationRun, error) {
 	if _, launched := d.automationLaunchResults.Load(run.ID); launched {
 		current, err := d.store.GetAutomationRun(run.ID)
@@ -402,7 +396,7 @@ func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkReq
 	if err := d.bindAutomationSeedLocation(req, location); err != nil {
 		return automation.DeliveryResult{}, nil, fmt.Errorf("bind seed location: %w", err)
 	}
-	launch, err := d.ensureAutomationSession(ctx, req, location.Directory)
+	launch, err := d.ensureAutomationSession(req, location.Directory)
 	if err != nil {
 		return automation.DeliveryResult{}, nil, fmt.Errorf("ensure session: %w", err)
 	}
@@ -764,7 +758,7 @@ func automationRepositoryError(host string, err error) error {
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
 	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
-func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) (*launchWatch, error) {
+func (d *Daemon) ensureAutomationSession(req automation.WorkRequest, directory string) (*launchWatch, error) {
 	if err := req.Launch.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid unattended launch contract: %w", err)
 	}
@@ -789,7 +783,7 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return nil, nil
 	}
 	if !opening {
-		return nil, d.continueAutomationSession(ctx, req, directory)
+		return nil, d.reopenAutomationSession(req, directory)
 	}
 	return nil, d.startAutomationSession(req, directory, inputPath)
 }
@@ -826,11 +820,7 @@ func (d *Daemon) launchReported(sessionID protocol.SessionID) bool {
 	return !d.sessionMonitor(sessionID).Snapshot().FirstReportAt.V.IsZero() || strings.TrimSpace(d.store.GetResumeSessionID(sessionID)) != ""
 }
 
-func (d *Daemon) continueAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
-	return d.continueAutomationSessionForeground(req, directory)
-}
-
-func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest, directory string) error {
+func (d *Daemon) reopenAutomationSession(req automation.WorkRequest, directory string) error {
 	if _, err := d.automationResumeSessionID(req); err != nil {
 		return err
 	}

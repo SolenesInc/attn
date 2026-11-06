@@ -13,10 +13,12 @@ import (
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/store"
 )
 
 const (
+	automationRetentionSweepKind            = "automation_retention_sweep"
 	defaultAutomationRetentionKeep          = 200
 	defaultAutomationRetentionMinAge        = 14 * 24 * time.Hour
 	defaultAutomationRetentionSweepInterval = time.Hour
@@ -49,17 +51,20 @@ func automationRetentionSweepInterval() time.Duration {
 	return defaultAutomationRetentionSweepInterval
 }
 
-func (d *Daemon) runAutomationRetentionSweep() {
-	ticker := time.NewTicker(automationRetentionSweepInterval())
-	defer ticker.Stop()
-	for {
-		select {
-		case <-d.life.Done():
-			return
-		case <-ticker.C:
-			d.automationRetentionSweepPass(time.Now())
-		}
+func (d *Daemon) registerAutomationRetentionCron(runner *jobs.Runner) {
+	if err := runner.RegisterCron(
+		automationRetentionSweepKind,
+		automationRetentionSweepInterval(),
+		d.automationRetentionSweepHandler,
+		jobs.HandlerConfig{},
+	); err != nil {
+		d.logf("automation retention sweep: register tick: %v", err)
 	}
+}
+
+func (d *Daemon) automationRetentionSweepHandler(context.Context, *jobs.Job) (any, error) {
+	d.automationRetentionSweepPass(d.clock.Now())
+	return nil, nil
 }
 
 func (d *Daemon) automationRetentionSweepPass(now time.Time) {

@@ -103,7 +103,5 @@ export function defaultInstanceHarnessEnv({ dataDir, toolHome, codexHome, notebo
     CODEX_HOME: codexHome,
     ATTN_CLIENT_TOKEN: clientToken,
     ATTN_AUTOMATION: '1',
-    ATTN_AUTOMATION_TICKET_RETENTION_TTL: '1s',
-    ATTN_AUTOMATION_TICKET_RETENTION_SWEEP_INTERVAL: '200ms',
   };
 }

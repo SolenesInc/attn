@@ -45,6 +45,7 @@ and jumps to the next run that stopped with a question.
 
 - A schedule comes due: the scheduler checks every minute. With `trigger.guard`, the scheduler first runs the command in the automation's folder and starts a run only for new output (`internal/daemon/automations_schedule.go`).
 - Someone requests the user's review of a pull request on GitHub. The next pull request refresh starts a run. A changed head or a withdrawn request settles the run (`internal/daemon/automations_github.go`).
+- Every hour, a background job prunes each automation's settled runs past `ATTN_AUTOMATION_RETENTION_KEEP` and `ATTN_AUTOMATION_RETENTION_MIN_AGE`, with their clean worktrees and occurrence files. It keeps dirty worktrees and the runs of live or continuing sessions (`internal/daemon/automation_retention.go`). `ATTN_AUTOMATION_RETENTION_SWEEP_INTERVAL` shortens the wait.
 - A run's outcome, and its work becoming ready, are seed updates for whoever watches the run's seed ([garden.md](garden.md), [inbox.md](inbox.md)).
 
 ## Driving it

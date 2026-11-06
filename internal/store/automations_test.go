@@ -7,7 +7,7 @@ import (
 
 func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID int, host string, at time.Time) {
 	t.Helper()
-	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
+	if candidates, err := s.ReconcileAutomationReviewRequestHeads(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
 	}
 }
@@ -26,7 +26,7 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 		payload = `{"head_sha":"0123456789abcdef0123456789abcdef01234567"}`
 	)
 	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
+	if _, err := s.ReconcileAutomationReviewRequestHeads(def.ID, "github.com", []AutomationReviewRequestObservation{{SubjectKey: subject}}, now); err != nil {
 		t.Fatal(err)
 	}
 	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
@@ -39,11 +39,11 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	if _, changed, err := s.SetAutomationEnabled(def.ID, true, now.Add(2*time.Minute)); err != nil || !changed {
 		t.Fatalf("re-enable: changed=%v err=%v", changed, err)
 	}
-	stale, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(90*time.Second))
+	stale, err := s.ReconcileAutomationReviewRequestHeads(def.ID, "github.com", []AutomationReviewRequestObservation{{SubjectKey: subject}}, now.Add(90*time.Second))
 	if err != nil || len(stale) != 0 {
 		t.Fatalf("pre-enable observation crossed enable fence: candidates=%#v err=%v", stale, err)
 	}
-	candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(3*time.Minute))
+	candidates, err := s.ReconcileAutomationReviewRequestHeads(def.ID, "github.com", []AutomationReviewRequestObservation{{SubjectKey: subject}}, now.Add(3*time.Minute))
 	if err != nil || len(candidates) != 0 {
 		t.Fatalf("re-enabled baseline candidates=%#v err=%v", candidates, err)
 	}

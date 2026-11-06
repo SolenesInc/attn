@@ -63,6 +63,7 @@ func (d *Daemon) startJobQueue(home bool) error {
 			d.logf("session title: register session_title: %v", err)
 		}
 		d.registerWorktreeSweepCron(runner)
+		d.registerAutomationRetentionCron(runner)
 	}
 	if !runner.Disabled() && home {
 

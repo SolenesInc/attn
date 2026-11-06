@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,21 +105,6 @@ func (d *Daemon) mintAutomationSeedID() (string, error) {
 	}
 	return d.mintSeedID()
 }
-func (d *Daemon) automationObservationLock(definitionID int, subjectKey string, cycle int) *sync.Mutex {
-	key := fmt.Sprintf("%d\x00%s\x00%d", definitionID, subjectKey, cycle)
-	d.automationObservationMu.Lock()
-	defer d.automationObservationMu.Unlock()
-	if d.automationObservationLocks == nil {
-		d.automationObservationLocks = make(map[string]*sync.Mutex)
-	}
-	lock := d.automationObservationLocks[key]
-	if lock == nil {
-		lock = &sync.Mutex{}
-		d.automationObservationLocks[key] = lock
-	}
-	return lock
-}
-
 func (d *Daemon) handleAutomationCommand(conn net.Conn, cmd string, msg any) {
 	ctx := context.Background()
 	scope := ""
