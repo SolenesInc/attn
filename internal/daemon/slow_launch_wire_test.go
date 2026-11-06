@@ -170,6 +170,7 @@ func TestAReviveThatWaitsForItsSharedCodexAppServerHoldsUpOnlyItsOwnTerminal(t *
 	if attached := awaitAttach(app, codexTerminal); !attached.Success {
 		t.Fatalf("revive %s after its app-server started: %s", codex, protocol.Deref(attached.Error))
 	}
+	w.Launched(codex)
 	closeSessions(t, app, codex, claude)
 }
 
@@ -190,6 +191,7 @@ func TestADetachSentDuringAWaitingReviveLeavesNoStreamAttached(t *testing.T) {
 			t.Fatalf("terminal %s detached during its revive still streams to the app", terminal)
 		}
 	}
+	w.Launched(codex)
 	closeSessions(t, app, codex, claude)
 }
 
