@@ -17,6 +17,7 @@ import { QueueSidebarFitHarness } from './QueueSidebarFitHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
 import { SeedHeaderHarness } from './SeedHeaderHarness';
 import { GardenReviewActionsHarness } from './GardenReviewActionsHarness';
+import { GardenSeedResumeHarness } from './GardenSeedResumeHarness';
 import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
 import { DelegationChainHarness } from './DelegationChainHarness';
 import { AgentHeaderHarness } from './AgentHeaderHarness';
@@ -39,6 +40,7 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   TileHeader: TileHeaderHarness,
   SeedHeader: SeedHeaderHarness,
   GardenReviewActions: GardenReviewActionsHarness,
+  GardenSeedResume: GardenSeedResumeHarness,
   TerminalAnnotations: TerminalAnnotationsHarness,
   DelegationChain: DelegationChainHarness,
   QueueBar: QueueBarHarness,

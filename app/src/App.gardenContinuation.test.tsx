@@ -163,14 +163,24 @@ describe('App garden continuation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await gesture(daemon, () => pressShortcut('board.open'));
     await openRow(daemon, unreachable.title);
-    expect(screen.getByRole('button', { name: 'Resume on studio' })).toBeDisabled();
-    expect(screen.queryByText(/outpost "studio" is unreachable/)).not.toBeInTheDocument();
+    const resume = screen.getByRole('button', { name: 'Resume on studio' });
+    act(() => resume.focus());
+    expect(resume).toHaveFocus();
+    expect(resume).toHaveAttribute('aria-disabled', 'true');
+    expect(resume).toHaveAccessibleDescription('outpost "studio" is unreachable; Resume returns when it is back');
+    await gesture(daemon, () => fireEvent.click(resume));
+    expect(daemon.sentOf('seed_resume')).toEqual([]);
 
     garden.documents[unreachable.id] = { seed: continued({ outpost: 'studio', directory_state: 'unchecked', resume_available: true, handover_placement: 'placement_required' }) };
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [STUDIO] }));
 
-    expect(screen.getByRole('button', { name: 'Resume on studio' })).toBeEnabled();
+    const returned = screen.getByRole('button', { name: 'Resume on studio' });
+    expect(returned).toHaveFocus();
+    expect(returned).not.toHaveAttribute('aria-disabled');
     expect(screen.queryByText(/is unreachable/)).not.toBeInTheDocument();
+    daemon.on('seed_resume', () => ({ event: 'seed_resume_result', success: true, session_id: 'tender' }));
+    await gesture(daemon, () => fireEvent.click(returned));
+    expect(daemon.sentOf('seed_resume')).toEqual([expect.objectContaining({ seed_id: 's-1' })]);
   });
 
   it('hands a seed over to a new agent with the user’s note and goes to it', async () => {

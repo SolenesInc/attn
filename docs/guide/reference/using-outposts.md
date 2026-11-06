@@ -188,9 +188,9 @@ A seed whose closed session ran on an outpost offers **Resume** on the seed's
 page and in Garden review, and the button names the outpost.
 `attn seed show` prints a `resume` line that names the outpost. If the session's
 directory or conversation is gone, Resume says which and where, and leaves the
-seed as it was. While the outpost is unreachable, the seed page dims the button
-and Garden review says so instead of offering Resume. Both offer it again when
-the outpost returns. A running Garden review follows the outpost the
+seed as it was. While the outpost is unreachable, the seed page dims the button,
+which says why when you hover over it or Tab to it, and Garden review says so
+instead of offering Resume. Both offer it again when the outpost returns. A running Garden review follows the outpost the
 same way and keeps its advice, and its other actions work either way. **Handover**
 asks where the new agent should work and starts it on the home.
 

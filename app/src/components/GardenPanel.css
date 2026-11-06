@@ -438,6 +438,7 @@
   align-items: baseline;
   display: flex;
   gap: 16px;
+  position: relative;
 }
 
 .garden-head__title {
@@ -466,12 +467,13 @@
   padding: 3px 8px;
 }
 
-.garden-head__actions button:hover:not(:disabled) {
+.garden-head__actions button:hover:not(:disabled, [aria-disabled='true']) {
   border-color: var(--accent);
   color: var(--color-text-primary);
 }
 
-.garden-head__actions button:disabled {
+.garden-head__actions button:disabled,
+.garden-head__actions button[aria-disabled='true'] {
   cursor: default;
   opacity: 0.45;
 }

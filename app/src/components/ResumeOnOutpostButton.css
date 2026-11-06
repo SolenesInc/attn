@@ -20,3 +20,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.garden-resume-split__reason {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 5px;
+  color: var(--color-text-primary);
+  display: none;
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: max-content;
+  z-index: 10;
+}
+
+.garden-resume-split:hover + .garden-resume-split__reason,
+.garden-resume-split:focus-visible + .garden-resume-split__reason {
+  display: block;
+}
