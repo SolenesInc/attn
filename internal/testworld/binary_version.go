@@ -17,7 +17,7 @@ var versionedBinaries sync.Map
 
 func AttnBinaryAt(t testing.TB, version string) string {
 	t.Helper()
-	once, _ := versionedBinaries.LoadOrStore(version, sync.OnceValues(func() (string, error) { return buildAttnAt(version, "unknown", "") }))
+	once, _ := versionedBinaries.LoadOrStore(version, sync.OnceValues(func() (string, error) { return buildAttnAt(version, "unknown", "", "") }))
 	binary, err := once.(func() (string, error))()
 	if err != nil {
 		t.Fatal(err)
@@ -25,20 +25,35 @@ func AttnBinaryAt(t testing.TB, version string) string {
 	return binary
 }
 
-func buildAttnAt(version, channel, releaseSource string) (string, error) {
+func buildAttnAt(version, channel, releaseSource, snapshotFormat string) (string, error) {
 	if processDir == "" {
 		return "", fmt.Errorf("testworld.AttnBinaryAt builds into the process directory that testworld.Main creates; call it from TestMain")
 	}
-	binary := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(version+channel+releaseSource))))
+	binary := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(version+channel+releaseSource+snapshotFormat))))
 	fingerprint := "unknown"
 	if channel != "unknown" {
 		fingerprint = "git:" + version
 	}
-	build := exec.Command("go", "build", "-ldflags", "-w -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint="+fingerprint+" -X github.com/victorarias/attn/internal/buildinfo.Version="+version+" -X github.com/victorarias/attn/internal/buildinfo.Channel="+channel+" -X github.com/victorarias/attn/internal/buildinfo.ReleaseSource="+releaseSource, "-o", binary, "github.com/victorarias/attn/cmd/attn")
+	ldflags := "-w -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=" + fingerprint + " -X github.com/victorarias/attn/internal/buildinfo.Version=" + version + " -X github.com/victorarias/attn/internal/buildinfo.Channel=" + channel + " -X github.com/victorarias/attn/internal/buildinfo.ReleaseSource=" + releaseSource
+	if snapshotFormat != "" {
+		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + snapshotFormat
+	}
+	build := exec.Command("go", "build", "-ldflags", ldflags, "-o", binary, "github.com/victorarias/attn/cmd/attn")
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build attn %s: %w\n%s", version, err, output)
 	}
 	return binary, nil
+}
+
+func (s *Stack) InstallsOnOutposts(attn, host string) {
+	s.T.Helper()
+	if host == "" {
+		host = filepath.Join(s.Dir, "outpost-host-that-cannot-run")
+		if err := os.WriteFile(host, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			s.T.Fatal(err)
+		}
+	}
+	s.Vars = append(s.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+attn, "ATTN_HARNESS_OUTPOST_HOST_BINARY="+host)
 }
 
 func (s *Stack) RunFrom(binary string) {
@@ -47,8 +62,20 @@ func (s *Stack) RunFrom(binary string) {
 
 func AttnUpdateBinary(t testing.TB, version, channel, releaseSource string) string {
 	t.Helper()
-	key := version + "-" + channel + "-" + releaseSource
-	once, _ := versionedBinaries.LoadOrStore(key, sync.OnceValues(func() (string, error) { return buildAttnAt(version, channel, releaseSource) }))
+	return cachedUpdateBinary(t, version, channel, releaseSource, "")
+}
+
+func AttnUpdateBinaryWithSnapshotFormat(t testing.TB, version, snapshotFormat string) string {
+	t.Helper()
+	return cachedUpdateBinary(t, version, "source", "", snapshotFormat)
+}
+
+func cachedUpdateBinary(t testing.TB, version, channel, releaseSource, snapshotFormat string) string {
+	t.Helper()
+	key := version + "-" + channel + "-" + releaseSource + "-" + snapshotFormat
+	once, _ := versionedBinaries.LoadOrStore(key, sync.OnceValues(func() (string, error) {
+		return buildAttnAt(version, channel, releaseSource, snapshotFormat)
+	}))
 	binary, err := once.(func() (string, error))()
 	if err != nil {
 		t.Fatal(err)

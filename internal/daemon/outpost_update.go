@@ -219,18 +219,18 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 }
 
 func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
-	path := ""
+	var binaries outpostbuild.Binaries
 	if config.Instance() != "" || os.Getenv("ATTN_HARNESS_DATA_DIR") != "" {
-		path = os.Getenv("ATTN_HARNESS_OUTPOST_BINARY")
+		binaries = outpostbuild.Binaries{Attn: os.Getenv("ATTN_HARNESS_OUTPOST_BINARY"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}
 	}
-	if path == "" {
+	if binaries.Attn == "" {
 		var err error
-		path, err = outpostbuild.Acquire(ctx, outpostbuild.Request{Build: d.bridgeIdentity().Build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: filepath.Join(config.DataDir(), "outpost-builds"), Platform: probe.Platform}, phase)
+		binaries, err = outpostbuild.Acquire(ctx, outpostbuild.Request{Build: d.bridgeIdentity().Build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: filepath.Join(config.DataDir(), "outpost-builds"), Platform: probe.Platform}, phase)
 		if err != nil {
 			return err
 		}
 	}
-	return remote.Install(ctx, path, d.bridgeIdentity().Build, phase)
+	return remote.Install(ctx, binaries, d.bridgeIdentity().Build, phase)
 }
 
 func (d *Daemon) cancelOutpostUpdate(id string) {

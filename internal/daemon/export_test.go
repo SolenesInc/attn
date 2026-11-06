@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -117,7 +118,7 @@ func (s *wireOutpostSSH) Probe(context.Context) (outpostssh.Probe, error) {
 func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
 	return s.dial(ctx, "ssh", s.Destination)
 }
-func (s *wireOutpostSSH) Install(context.Context, string, bridge.Build, func(string)) error {
+func (s *wireOutpostSSH) Install(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error {
 	return nil
 }
 func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }

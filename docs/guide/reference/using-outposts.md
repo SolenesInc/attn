@@ -17,10 +17,11 @@ An outpost is a Linux amd64 or arm64 machine that you can reach with your own
 `user@host`, or `ssh://host:2222`. Your OpenSSH configuration sets the route,
 keys and known hosts.
 
-Add installs your home's Linux build at the install path:
+Add installs your home's Linux build, `attn` and the shared terminal host
+`attn-pty-host`, in the install folder:
 
-- Default instance: `~/.local/bin/attn`.
-- Named instance: `~/.local/share/attn-outpost-instances/<instance>/attn`.
+- Default instance: `~/.local/bin`.
+- Named instance: `~/.local/share/attn-outpost-instances/<instance>`.
 
 The outpost needs `sh`, `uname`, `cat`, `mkdir`, `mv`, `chmod`, and `busctl`.
 
@@ -75,12 +76,27 @@ from the moment you choose Update until the outpost runs the home build or the
 update fails with its reason. While an update runs, choosing Update again joins
 it instead of starting another.
 
-The home connects over ssh, builds or downloads its matching Linux binary,
-sends it, verifies it, and reconnects. A home built from source cross-compiles the Linux
-binary, for Add as well as Update. The first build takes about a minute. Later builds reuse the build cache and take seconds. Running shells keep their
-processes. The old binary stays at `<install path>.previous`. Attn
-refuses the installation if the outpost has `pty_shared_host_enabled` on or the outpost's database needs a
-newer build.
+The home connects over ssh, builds or downloads its matching Linux `attn` and
+`attn-pty-host`, sends them, verifies them, and reconnects. A home built from
+source cross-compiles both, for Add as well as Update, so it needs Zig and Rust
+with the outpost's Linux target, such as `rustup target add x86_64-unknown-linux-gnu`.
+The first build takes about a minute. Later builds reuse Go's build cache and
+rebuild the host, which takes about 30 seconds. If either binary can't be
+downloaded or built, the update fails with the reason and installs nothing. Running shells keep their processes,
+whether they run on a worker or in the shared terminal host. Each old binary
+stays beside the new one as `attn.previous` and `attn-pty-host.previous`. Attn
+refuses the installation if the outpost's database needs a newer build.
+
+To see where a terminal runs, type this in it:
+
+```sh
+sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'
+```
+
+It prints `attn-pty-host` for the shared terminal host and `attn` for a
+dedicated worker. On the same machine,
+`attn settings get pty_shared_host_active` says whether new terminals start in
+the host.
 
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row shows why and offers Update.
@@ -373,9 +389,9 @@ reports that.
 **Remove** closes the outpost's terminals across all profiles. Over ssh, Remove
 releases the outpost's enrollment to this home, stops the outpost's daemon for
 the home's instance, then exits that outpost's ssh master and removes the row.
-An outpost enrolled to another home keeps its enrollment and its running daemon. The same holds for an outpost for which this home's Add was refused. Remove keeps the binary,
-`<install path>.previous`, the data folder, and the Notebook folder on the
-outpost.
+An outpost enrolled to another home keeps its enrollment and its running daemon. The same holds for an outpost for which this home's Add was refused. Remove keeps the
+binaries, their `.previous` copies, the data folder, and the Notebook folder on
+the outpost.
 
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
 With none, Attn removes the outpost immediately. If ssh cannot reach the

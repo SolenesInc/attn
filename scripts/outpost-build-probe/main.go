@@ -44,11 +44,15 @@ func main() {
 	}
 	build := bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: strings.TrimSpace(string(read("--protocol-version")))}
 	start := time.Now()
-	path, err := outpostbuild.Acquire(context.Background(), outpostbuild.Request{Build: build, Channel: info.Channel, Repository: *repository, ReleaseSource: *releaseSource, Cache: *cache, Platform: *platform}, func(phase string) { fmt.Fprintln(os.Stderr, phase) })
+	binaries, err := outpostbuild.Acquire(context.Background(), outpostbuild.Request{Build: build, Channel: info.Channel, Repository: *repository, ReleaseSource: *releaseSource, Cache: *cache, Platform: *platform}, func(phase string) { fmt.Fprintln(os.Stderr, phase) })
 	if err != nil {
 		fail(err)
 	}
 	duration := time.Since(start)
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"build": build, "channel": info.Channel, "platform": *platform, "seconds": duration.Seconds(), "attn": describe(binaries.Attn), "host": describe(binaries.Host)})
+}
+
+func describe(path string) map[string]any {
 	file, err := os.Open(path)
 	if err != nil {
 		fail(err)
@@ -59,7 +63,7 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"build": build, "channel": info.Channel, "platform": *platform, "path": path, "seconds": duration.Seconds(), "size": size, "sha256": hex.EncodeToString(hash.Sum(nil))})
+	return map[string]any{"path": path, "size": size, "sha256": hex.EncodeToString(hash.Sum(nil))}
 }
 
 func fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }

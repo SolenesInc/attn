@@ -18,6 +18,28 @@ The released Linux hosts come from `make build-pty-host-linux-amd64` and
 so the host runs wherever the released `attn` runs. Release preflight and the
 release fail when the host needs a newer glibc than `attn`.
 
+Outposts get the host with `attn`, at the same build. Add and Update put it
+beside `attn` in the install folder. A home on the release channel downloads
+`attn-pty-host-linux-<arch>`, and a home built from source runs
+`make build-pty-host-linux-<arch>`. When the home can't get the host, the update
+fails with the reason and installs nothing. An update replaces the file while a
+host runs, because a host runs from the daemon's copy of its build, and the
+daemon's next start moves running terminals as described below.
+
+To see where a terminal runs, type this in it, in any shell:
+
+```sh
+sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'
+```
+
+It prints a path or name ending in `attn-pty-host` for the host and in `attn`
+for a worker. From outside the terminal, a host terminal has
+`<data-dir>/pty-hosts/<daemon-instance>/registry/<terminal>.json` and a worker
+terminal has `<data-dir>/workers/<daemon-instance>/registry/<terminal>.json`.
+The terminal id is the pane's `runtime_id`, which `wsctl list` and an agent's
+`attn terminal ls` show. Live hosts are in
+`<data-dir>/pty-hosts/<daemon-instance>/hosts`.
+
 A daemon pins the host build it found when it started. Replacing the app bundle
 changes nothing until the next daemon start. A build becomes last-known-good
 after one throwaway terminal round trip passes in the current environment. The

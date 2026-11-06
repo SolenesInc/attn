@@ -947,13 +947,14 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 
 func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *testing.T) {
 	t.Parallel()
-	releaseAttn := os.Getenv("ATTN_UPGRADE_RELEASE_BIN")
-	if releaseAttn == "" || os.Getenv("ATTN_E2E_BIN") == "" {
+	releaseAttn, currentHost := os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
+	if releaseAttn == "" || currentHost == "" || os.Getenv("ATTN_E2E_BIN") == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
 	}
 	current := testworld.AttnBinary(t)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t)
+	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	ssh.Use(home.World)
 	ssh.Route("release-outpost", remote)
 	ssh.InstallBinary(remote, releaseAttn)
@@ -969,7 +970,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 		t.Fatal(err)
 	}
 
-	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+current)
+	home.InstallsOnOutposts(current, currentHost)
 	home.Start()
 	app := enableOutposts(t, home)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "release-outpost"})
@@ -1005,6 +1006,10 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	if prompt := run.Prompted(); prompt != "on-the-updated-outpost" {
 		t.Errorf("the new agent on the outpost took %q", prompt)
 	}
+	requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+	inHost := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("in-host"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	app.TypeLine(inHost, `echo "owner=$(`+terminalOwner+`)"`)
+	app.AwaitScreen(inHost, "owner="+ptyhost.BinaryName)
 }
 
 func TestAnOutpostAddedByAddressOnTheReleaseExplainsItselfAfterTheUpdate(t *testing.T) {

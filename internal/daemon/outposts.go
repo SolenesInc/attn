@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -40,7 +41,7 @@ type outpostRemote interface {
 	ExitMaster(context.Context) error
 	Probe(context.Context) (outpostssh.Probe, error)
 	Bridge(context.Context) (net.Conn, error)
-	Install(context.Context, string, bridge.Build, func(string)) error
+	Install(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error
 	Remove(context.Context, string) error
 	InstallPath() string
 	MasterCommand() []string

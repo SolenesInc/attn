@@ -62,7 +62,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	remote, home, second := testworld.NewStack(t), testworld.NewStack(t), testworld.NewStack(t)
 	other := testworld.AttnUpdateBinary(t, "second-home", "source", "")
 	second.RunFrom(other)
-	second.Vars = append(second.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+other)
+	second.InstallsOnOutposts(other, "")
 	for _, s := range []*testworld.Stack{remote, home, second} {
 		ssh.Use(s.World)
 		s.Start()
@@ -190,7 +190,7 @@ func TestOutpostsAddInstallsOverAnotherBuild(t *testing.T) {
 	next := testworld.AttnUpdateBinary(t, "after-add", "source", "")
 	remote.RunFrom(old)
 	home.RunFrom(next)
-	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
+	home.InstallsOnOutposts(next, "")
 	ssh.Use(home.World)
 	remote.Start()
 	ssh.Route("other-build", remote)

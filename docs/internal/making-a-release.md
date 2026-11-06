@@ -58,8 +58,9 @@ Fix forward: land the fix on `main`, then release a patch version.
 ## After publishing
 
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
-`attn-linux-amd64`, and `attn-linux-arm64`, then run
-`brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
+`attn-linux-amd64`, `attn-linux-arm64`, `attn-pty-host-linux-amd64`, and
+`attn-pty-host-linux-arm64`, because an outpost install needs both binaries,
+then run `brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
 version. A failed publication leaves a draft and a `Release health` issue.
 After you fix the failure, retry the tag. The retry, like every release run,
 refuses a tag that `reviewed` does not contain:

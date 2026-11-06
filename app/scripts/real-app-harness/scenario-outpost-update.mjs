@@ -36,7 +36,13 @@ const root = fs.mkdtempSync(
 const binary = appDaemonInTree(options.appPath);
 const ssh = await outpostSsh(root);
 const asset = path.join(root, 'home-build');
-const launchEnv = { ...ssh.env, ATTN_HARNESS_OUTPOST_BINARY: asset };
+const hostAsset = path.join(root, 'home-host-build');
+fs.writeFileSync(hostAsset, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+const launchEnv = {
+  ...ssh.env,
+  ATTN_HARNESS_OUTPOST_BINARY: asset,
+  ATTN_HARNESS_OUTPOST_HOST_BINARY: hostAsset,
+};
 const client = new UiAutomationClient({ ...options, launchEnv });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });

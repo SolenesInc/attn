@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -390,10 +391,10 @@ func (r *refusingInstallSSH) Probe(ctx context.Context) (outpostssh.Probe, error
 	}
 	return outpostssh.Probe{Platform: "linux/amd64", Build: &bridge.Build{Version: "earlier", SourceFingerprint: "git:earlier", ProtocolVersion: protocol.ProtocolVersion}}, nil
 }
-func (r *refusingInstallSSH) Install(_ context.Context, _ string, _ bridge.Build, phase func(string)) error {
+func (r *refusingInstallSSH) Install(_ context.Context, _ outpostbuild.Binaries, _ bridge.Build, phase func(string)) error {
 	r.installs++
 	phase("verifying")
-	return fmt.Errorf("pty_shared_host_enabled is on")
+	return fmt.Errorf("the outpost refused this install")
 }
 func (r *refusingInstallSSH) Bridge(context.Context) (net.Conn, error) {
 	return nil, fmt.Errorf("cannot bridge a refused install")
@@ -416,7 +417,7 @@ func TestAnUnpairedOutpostDoesNotRepeatARefusedInstall(t *testing.T) {
 			row = m.Outposts[0]
 			return row.State == protocol.OutpostStateRefused && row.Update != nil && row.Update.Phase == protocol.OutpostUpdatePhaseFailed
 		})
-		if !strings.Contains(protocol.Deref(row.Update.Outcome), "pty_shared_host_enabled") {
+		if !strings.Contains(protocol.Deref(row.Update.Outcome), "the outpost refused this install") {
 			t.Fatalf("refusal reason lost: %+v", row.Update)
 		}
 		for _, delay := range []time.Duration{10 * time.Second, 20 * time.Second, 40 * time.Second} {

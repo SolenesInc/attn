@@ -71,8 +71,8 @@ describe('outpost build updates', () => {
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'downloading' } }] }));
     expect(row.getByRole('status')).toHaveTextContent('Downloading');
     expect(row.getByRole('button', { name: 'Updating…' })).toBeDisabled();
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'failed', outcome: 'Outpost has pty_shared_host_enabled on.' } }] }));
-    expect(row.getByRole('status')).toHaveTextContent('pty_shared_host_enabled');
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'failed', outcome: 'Outpost database needs a newer build.' } }] }));
+    expect(row.getByRole('status')).toHaveTextContent('needs a newer build');
     expect(row.getByRole('button', { name: 'Update to home build' })).toBeEnabled();
     expect(daemon.sentOf('update_outpost')).toHaveLength(1);
   });

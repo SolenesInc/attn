@@ -2,14 +2,11 @@ package main
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 
@@ -18,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -32,6 +30,9 @@ func installOutpostBinary(args []string) error {
 	flags := flag.NewFlagSet("_outpost-install", flag.ContinueOnError)
 	size := flags.Int64("size", 0, "Expected binary size")
 	digest := flags.String("sha256", "", "Expected binary sha256")
+	host := flags.String("host", "", "Staged attn-pty-host path")
+	hostSize := flags.Int64("host-size", 0, "Expected attn-pty-host size")
+	hostDigest := flags.String("host-sha256", "", "Expected attn-pty-host sha256")
 	build := flags.String("build", "", "Expected build JSON")
 	target := flags.String("target", "", "Install path")
 	if err := flags.Parse(args); err != nil {
@@ -41,8 +42,8 @@ func installOutpostBinary(args []string) error {
 	if err := json.Unmarshal([]byte(*build), &expected); err != nil {
 		return fmt.Errorf("expected build: %w", err)
 	}
-	if *size <= 0 || *digest == "" || *target == "" || flags.NArg() != 0 {
-		return fmt.Errorf("_outpost-install requires --size, --sha256, --build and --target")
+	if *size <= 0 || *digest == "" || *host == "" || *hostSize <= 0 || *hostDigest == "" || *target == "" || flags.NArg() != 0 {
+		return fmt.Errorf("_outpost-install requires --size, --sha256, --host, --host-size, --host-sha256, --build and --target")
 	}
 	staged, err := os.Executable()
 	if err != nil {
@@ -52,25 +53,13 @@ func installOutpostBinary(args []string) error {
 		return fmt.Errorf("run _outpost-install from a staged binary, not the install path %s", *target)
 	}
 	defer os.Remove(staged)
+	defer os.Remove(*host)
 	fmt.Println("verifying")
-	file, err := os.Open(staged)
-	if err != nil {
+	if err := verifyStagedBinary(staged, *size, *digest); err != nil {
 		return err
 	}
-	hash := sha256.New()
-	actualSize, copyErr := io.Copy(hash, file)
-	closeErr := file.Close()
-	if copyErr != nil {
-		return copyErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if actualSize != *size {
-		return fmt.Errorf("install size=%d, received %d bytes", *size, actualSize)
-	}
-	if actual := hex.EncodeToString(hash.Sum(nil)); actual != *digest {
-		return fmt.Errorf("install sha256=%s, received %s", *digest, actual)
+	if err := verifyStagedBinary(*host, *hostSize, *hostDigest); err != nil {
+		return fmt.Errorf("%s: %w", ptyhost.BinaryName, err)
 	}
 	actual := bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}
 	if actual != expected {
@@ -89,38 +78,53 @@ func installOutpostBinary(args []string) error {
 	if err := store.CheckSchema(config.DBPath()); err != nil {
 		return err
 	}
-	if _, err := os.Stat(config.DBPath()); err == nil {
-		u := &url.URL{Scheme: "file", Path: config.DBPath(), RawQuery: "mode=ro"}
-		db, err := sql.Open("sqlite3", u.String())
-		if err != nil {
-			return err
-		}
-		var value string
-		err = db.QueryRow(`SELECT value FROM settings WHERE key = ?`, "pty_shared_host_enabled").Scan(&value)
-		db.Close()
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if value == "true" {
-			return fmt.Errorf("outpost has pty_shared_host_enabled on; this install carries attn only and would leave attn-pty-host on the old build")
-		}
-	} else if !os.IsNotExist(err) {
+	if err := replaceKeepingPrevious(*host, filepath.Join(filepath.Dir(*target), ptyhost.BinaryName)); err != nil {
 		return err
 	}
-	if _, err := os.Stat(*target); err == nil {
-		previous := *target + ".previous"
+	if err := replaceKeepingPrevious(staged, *target); err != nil {
+		return err
+	}
+	fmt.Println("installed")
+	return nil
+}
+
+func verifyStagedBinary(path string, size int64, digest string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	hash := sha256.New()
+	actualSize, copyErr := io.Copy(hash, file)
+	closeErr := file.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if actualSize != size {
+		return fmt.Errorf("install size=%d, received %d bytes", size, actualSize)
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); actual != digest {
+		return fmt.Errorf("install sha256=%s, received %s", digest, actual)
+	}
+	return nil
+}
+
+func replaceKeepingPrevious(staged, target string) error {
+	if _, err := os.Stat(target); err == nil {
+		previous := target + ".previous"
 		if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.Link(*target, previous); err != nil {
+		if err := os.Link(target, previous); err != nil {
 			return fmt.Errorf("keep previous binary: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.Rename(staged, *target); err != nil {
+	if err := os.Rename(staged, target); err != nil {
 		return fmt.Errorf("replace outpost binary: %w", err)
 	}
-	fmt.Println("installed")
 	return nil
 }

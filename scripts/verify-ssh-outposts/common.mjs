@@ -88,7 +88,8 @@ export async function world(o) {
       fs.writeFileSync(path.join(o.out, 'outpost-daemon.log'), await remote(`cat ${quote(W.R.data + '/daemon.log')} || true`));
       await W.rcli('enrollment', 'leave');
       await W.rcli('instance', 'clean', o.instance);
-      await remote(`rm -f ${quote(W.R.binary)} ${quote(W.R.binary + '.previous')}; rmdir ${quote(path.dirname(W.R.binary))}; rm -rf ${quote(W.R.root)} ${quote(W.R.notebook)}`);
+      const host = path.join(path.dirname(W.R.binary), 'attn-pty-host');
+      await remote(`rm -f ${quote(W.R.binary)} ${quote(W.R.binary + '.previous')} ${quote(host)} ${quote(host + '.previous')}; rmdir ${quote(path.dirname(W.R.binary))}; rm -rf ${quote(W.R.root)} ${quote(W.R.notebook)}`);
       receipt('outpost removed', { data: W.R.data, binary: W.R.binary });
     }
     if (W.home) receipt('home cleaned', { output: (await attn('instance', 'clean', o.instance)).stdout });
