@@ -23,6 +23,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -423,6 +424,23 @@ func TestAFreshInstallFindsItsHostAndStartsAgentsOnItWithDirectLaunch(t *testing
 		u.assertParent(agent.run, "attn-pty-host")
 		u.turn(app, agent, "on-a-fresh-install")
 	}
+}
+
+func TestAFreshInstallFindsItsHostAndAnAgentTitledBeforeTheDaemonWatchesLeavesLaunching(t *testing.T) {
+	t.Parallel()
+	s, currentHost := newInstalledStack(t)
+	s.InstallBuild(testworld.AttnBinary(t), currentHost)
+	watching := s.PauseAt(pausepoint.PtyHostWatchAll)
+	s.Start()
+	u := &releaseUpdate{Stack: s, t: t}
+	app := s.App()
+	u.storeTheNewDefaults(app)
+	agent := u.spawnAgent(app, fakeagent.Codex)
+	watching.Await()
+	agent.run.Stream("printed after its title")
+	app.AwaitScreen(agent.session, "printed after its title")
+	watching.Release()
+	u.turn(app, agent, "titled-before-the-watch")
 }
 
 func TestTheFirstStartWithTheHostOnActivatesItAndATerminalOpenedMeanwhileStillRuns(t *testing.T) {

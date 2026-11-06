@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -353,6 +354,7 @@ func (b *WorkerBackend) runSharedHostMonitor(monitor *sharedHostMonitor) error {
 	}()
 	defer close(stopDone)
 
+	pausepoint.At(pausepoint.PtyHostWatchAll)
 	watchReqID := b.nextReqID("watch-all")
 	if err := writeRequest(enc, watchReqID, ptyhost.MethodWatchAll, map[string]any{}); err != nil {
 		return err

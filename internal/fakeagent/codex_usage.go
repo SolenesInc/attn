@@ -121,8 +121,9 @@ func (c *codex) childRollout(subagent map[string]any, parentThread, text string)
 	return id.String(), appendLines(path, lines...)
 }
 
-func (c *codex) stream(string) error {
-	return errors.New("the codex fake does not script a streamed reply")
+func (c *codex) stream(text string) error {
+	c.term.print(text)
+	return nil
 }
 
 func (c *codex) deleteSubagentTranscripts() error {
