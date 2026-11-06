@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakessh"
 	"github.com/victorarias/attn/internal/stepclock"
@@ -38,5 +39,6 @@ func Main(m *testing.M, env ...string) int {
 		key, value, _ := strings.Cut(pair, "=")
 		_ = os.Setenv(key, value)
 	}
+	buildinfo.SnapshotFormat = attnBinarySnapshotFormat()
 	return m.Run()
 }

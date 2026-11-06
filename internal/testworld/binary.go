@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,6 +28,24 @@ func AttnBinary(t testing.TB) string {
 		t.Fatal(err)
 	}
 	return binary
+}
+
+func attnBinarySnapshotFormat() string {
+	binary := os.Getenv("ATTN_E2E_BIN")
+	if binary == "" {
+		return ptyhosttest.DefaultSnapshotFormat
+	}
+	output, err := exec.Command(binary, "version", "--json").Output()
+	if err != nil {
+		panic(fmt.Sprintf("testworld.Main: read the snapshot format of %s: %v", binary, err))
+	}
+	var build struct {
+		SnapshotFormat string `json:"snapshotFormat"`
+	}
+	if err := json.Unmarshal(output, &build); err != nil {
+		panic(fmt.Sprintf("testworld.Main: read the snapshot format of %s: %v", binary, err))
+	}
+	return build.SnapshotFormat
 }
 
 func FakeAgentBinary(t testing.TB) string {

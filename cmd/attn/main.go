@@ -363,6 +363,7 @@ func runBuildInfoJSON() {
 		"sourceFingerprint": buildinfo.SourceFingerprint,
 		"gitCommit":         buildinfo.GitCommit,
 		"dirty":             buildinfo.Dirty,
+		"snapshotFormat":    buildinfo.SnapshotFormat,
 	})
 }
 
