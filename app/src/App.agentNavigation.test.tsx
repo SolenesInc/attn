@@ -635,6 +635,194 @@ describe('queue', () => {
     expect(shows(view.daemon)).toEqual([]);
   });
 
+  describe('closing an agent', () => {
+    const FIRST_OPENED = { turn_owed: true, turn_opened_at: '2026-08-03T08:00:00Z' };
+
+    function closesSessions(daemon: ScriptedDaemon) {
+      const gone = (id: string) => daemon.arrangement.desktops.filter((desktop) => !desktop.panes.some((pane) => pane.session_id === id));
+      daemon.on('unregister', ({ id }) => {
+        daemon.arrange(() => gone(id));
+        return { event: 'session_unregistered', session: queueSession(id, 10) };
+      });
+    }
+
+    const clickRowClose = (id: string) => {
+      fireEvent.click(screen.getByRole('button', { name: `Actions for ${id}` }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Close session/ }));
+    };
+
+    it.each<[string, () => void]>([
+      ['⌘W', () => pressShortcut('session.close')],
+      ['the row action', () => clickRowClose('s2')],
+    ])('jumps to the head of the queue on %s, with the keyboard, as ⌘J does', async (_, close) => {
+      const view = await renderAgents({ s1: FIRST_OPENED, s2: OWED, s3: OWED });
+      closesSessions(view.daemon);
+      await open(view.daemon, 's2');
+
+      await gesture(view.daemon, close);
+      await settleFocus(view.daemon);
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['s2']);
+      expect(selectedAgent()).toBe('s1');
+      expect(focusedPane()).toBe('pane-s1');
+    });
+
+    it('jumps when ⌘W closes the agent’s pane in a split, past the agent beside it', async () => {
+      const sessions = [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED), queueSession('s3', 11, SETTLED)];
+      const { daemon } = await renderApp({ initialState: {
+        sessions,
+        desktops: [splitDesktop('ws', ['s1', 's3']), soloDesktop('s2')],
+        settings: { queue_mode_enabled: 'true' },
+      } });
+      await open(daemon, 's1');
+
+      await gesture(daemon, () => pressShortcut('terminal.close', document.querySelector('[data-pane-id="pane-s1"] .terminal-container')!));
+
+      expect(daemon.sentOf('desktop_close_tile').map(({ tile_id }) => tile_id)).toEqual(['pane-s1']);
+      expect(selectedAgent()).toBe('s2');
+    });
+
+    it('keeps the next agent on screen when the close arrives before its show lands', async () => {
+      const sessions = [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED), queueSession('s3', 11, SETTLED)];
+      const { daemon } = await renderApp({ initialState: {
+        sessions,
+        desktops: [splitDesktop('ws', ['s1', 's3']), soloDesktop('s2')],
+        settings: { queue_mode_enabled: 'true' },
+      } });
+      await open(daemon, 's1');
+      daemon.on('unregister', () => undefined);
+      const hold = holdShows(daemon);
+
+      await gesture(daemon, () => pressShortcut('session.close'));
+      expect(shows(daemon)).toEqual(['session:s1', 'session:s2']);
+      expect(selectedAgent()).toBe('s2');
+
+      await gesture(daemon, () => {
+        daemon.arrange((desktops) => desktops.map((desktop) => (desktop.id === 'ws' ? { ...splitDesktop('ws', ['s3']), revision: desktop.revision + 1 } : desktop)));
+        daemon.emit({ event: 'session_unregistered', session: queueSession('s1', 9) });
+      });
+      expect(selectedAgent()).toBe('s2');
+
+      await hold.release();
+      expect(selectedAgent()).toBe('s2');
+    });
+
+    it('stays where the close leaves the user when nobody is waiting, as ⌘J does', async () => {
+      const view = await renderAgents({ s1: OWED, s2: SETTLED });
+      await open(view.daemon, 's1');
+      closesSessions(view.daemon);
+      const before = shows(view.daemon);
+
+      await gesture(view.daemon, () => pressShortcut('session.close'));
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['s1']);
+      expect(shows(view.daemon)).toEqual(before);
+      expect(isHome()).toBe(false);
+    });
+
+    it('stays on the agent on screen when another agent closes from its row', async () => {
+      const view = await renderAgents({ s1: OWED, s2: OWED, s3: OWED });
+      closesSessions(view.daemon);
+      await open(view.daemon, 's2');
+      const before = shows(view.daemon);
+
+      await gesture(view.daemon, () => clickRowClose('s3'));
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['s3']);
+      expect(shows(view.daemon)).toEqual(before);
+      expect(selectedAgent()).toBe('s2');
+    });
+
+    it('stays home when a row closes from there', async () => {
+      const view = await renderAgents({ s1: OWED, s2: OWED });
+      closesSessions(view.daemon);
+
+      await gesture(view.daemon, () => clickRowClose('s2'));
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['s2']);
+      expect(shows(view.daemon)).toEqual([]);
+      expect(isHome()).toBe(true);
+    });
+
+    it('stays when the agent keeps another tile', async () => {
+      const sessions = [queueSession('s1', 9, OWED), queueSession('s2', 10, OWED)];
+      const { daemon } = await renderApp({ initialState: {
+        sessions,
+        desktops: [
+          soloDesktop('s1'),
+          daemonDesktop('other', { root: { type: 'pane', pane_id: 'pane-s1b' }, panes: [{ ...agentPane('s1', 'other', 'term-2'), pane_id: 'pane-s1b' }] }),
+          soloDesktop('s2'),
+        ],
+        settings: { queue_mode_enabled: 'true' },
+      } });
+      await open(daemon, 's1');
+      const before = shows(daemon);
+
+      await gesture(daemon, () => pressShortcut('session.close'));
+
+      expect(daemon.sentOf('desktop_close_tile').map(({ tile_id }) => tile_id)).toEqual(['pane-s1']);
+      expect(shows(daemon)).toEqual(before);
+    });
+
+    it('stays when the terminal on screen is a shell', async () => {
+      const view = await renderAgents({ s1: OWED, shell: { agent: 'shell' } });
+      closesSessions(view.daemon);
+      await open(view.daemon, 'shell');
+      const before = shows(view.daemon);
+
+      await gesture(view.daemon, () => pressShortcut('session.close'));
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['shell']);
+      expect(shows(view.daemon)).toEqual(before);
+    });
+
+    it('stays when attn refuses the close of a crew member', async () => {
+      const view = await renderAgents({ s1: OWED, crew: { crew_member: 'fern' } });
+      await open(view.daemon, 'crew');
+      const before = shows(view.daemon);
+
+      await gesture(view.daemon, () => pressShortcut('session.close'));
+
+      expect(view.daemon.sentOf('unregister')).toEqual([]);
+      expect(shows(view.daemon)).toEqual(before);
+      expect(selectedAgent()).toBe('crew');
+    });
+
+    it('stays when the daemon refuses the close of a crew member’s pane in a split', async () => {
+      const sessions = [queueSession('s1', 9, OWED), queueSession('crew', 10, { crew_member: 'fern' }), queueSession('s3', 11, SETTLED)];
+      const { daemon } = await renderApp({ initialState: {
+        sessions,
+        desktops: [soloDesktop('s1'), splitDesktop('ws', ['crew', 's3'])],
+        settings: { queue_mode_enabled: 'true' },
+      } });
+      await gesture(daemon, () => useSessionStore.getState().selectAgent('crew'));
+      daemon.on('desktop_close_tile', (command) => ({
+        event: 'profile_action_result', action: command.cmd, success: false, error_code: 'invalid',
+        error: 'crew member is protected from closing', request_id: command.request_id ?? '',
+      }));
+      const before = shows(daemon);
+
+      await gesture(daemon, () => pressShortcut('terminal.close', document.querySelector('[data-pane-id="pane-crew"] .terminal-container')!));
+
+      expect(daemon.sentOf('desktop_close_tile').map(({ tile_id }) => tile_id)).toEqual(['pane-crew']);
+      expect(shows(daemon)).toEqual(before);
+      expect(selectedAgent()).toBe('crew');
+      expect(screen.getByRole('alert')).toHaveTextContent('crew member is protected from closing');
+    });
+
+    it('does not move the user in desktop flow', async () => {
+      const view = await renderAgents({ s1: { state: 'waiting_input' }, s2: { state: 'waiting_input' } }, { settings: {} });
+      closesSessions(view.daemon);
+      await open(view.daemon, 's1');
+      const before = shows(view.daemon);
+
+      await gesture(view.daemon, () => pressShortcut('session.close'));
+
+      expect(view.daemon.sentOf('unregister').map(({ id }) => id)).toEqual(['s1']);
+      expect(shows(view.daemon)).toEqual(before);
+    });
+  });
+
   it('leaves history and keyboard focus consistent when it moves on', async () => {
     const view = await renderAgents({ s1: OWED, s2: OWED });
     await open(view.daemon, 's1');

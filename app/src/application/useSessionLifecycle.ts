@@ -6,14 +6,19 @@ import { SessionReopenRefusal } from '../hooks/daemonSessionLedgerEvents';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { AppContentProps, sessionCloseProtectionHint } from './appSupport';
+import { AppContentProps, sessionCloseProtectionHint, TERMINAL_AGENT } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import { collectLayoutLeaves, parseLayoutJSON } from '../types/desktop';
 import { desktopLabel } from '../utils/desktops';
 import type { Desktop } from '../types/generated';
 
+function tilesShowing(sessionId: string) {
+  return useProfilesStore.getState().desktops.flatMap((desktop) => desktop.panes.filter((pane) => pane.session_id === sessionId));
+}
+
 interface Options {
   shownAgentId: string | null;
+  moveOnFromClosingAgent: (sessionId: string) => void;
   handleCloseTile: (desktopId: string, tileId: string) => void;
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
@@ -25,6 +30,7 @@ interface Options {
 }
 export function useSessionLifecycle({
   shownAgentId,
+  moveOnFromClosingAgent,
   handleCloseTile,
   sessions,
   daemonSessions,
@@ -82,18 +88,21 @@ export function useSessionLifecycle({
   }, [desktopClosePrompt, closeDesktop]);
 
   const closeWith = useCallback(
-    async (id: string, close: () => Promise<unknown>) => {
+    async (id: string, close: () => Promise<unknown>, endsSession: boolean) => {
       if (refuseOffline(id)) return;
       const session = enrichedLocalSessions.find((s) => s.id === id);
 
       const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
       if (localDaemonSession && session) {
-        await close();
+        const closing = close();
+        const leavesTheScreen = endsSession && id === shownAgentId && session.agent !== TERMINAL_AGENT;
+        if (leavesTheScreen && !sessionCloseProtectionHint(daemonSessions, id)) moveOnFromClosingAgent(id);
+        await closing;
       } else {
         closeSession(id);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions, refuseOffline],
+    [closeSession, daemonSessions, enrichedLocalSessions, moveOnFromClosingAgent, refuseOffline, shownAgentId],
   );
   const handleCloseSession = useCallback(
     async (id: string) => {
@@ -102,13 +111,14 @@ export function useSessionLifecycle({
         showError(closeProtection);
         return;
       }
-      await closeWith(id, () => sendUnregisterSession(id));
+      await closeWith(id, () => sendUnregisterSession(id), true);
     },
     [closeWith, daemonSessions, sendUnregisterSession, showError],
   );
   const handleCloseTerminalTile = useCallback(
     (desktopId: string, tileId: string, sessionId: string) => {
-      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId)).catch((error) => {
+      const isLastTile = tilesShowing(sessionId).length === 1;
+      void closeWith(sessionId, () => sendDesktopCloseTile(desktopId, tileId), isLastTile).catch((error) => {
         showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
       });
     },
@@ -190,7 +200,7 @@ export function useSessionLifecycle({
       }
       return;
     }
-    const showing = desktops.flatMap((desktop) => desktop.panes.filter((pane) => pane.session_id === shownAgentId));
+    const showing = tilesShowing(shownAgentId);
     const current = desktops.find((desktop) => desktop.id === currentDesktopId);
     const here = current?.panes.filter((pane) => pane.session_id === shownAgentId) ?? [];
     const pane = here.find((candidate) => candidate.pane_id === current?.active_pane_id) ?? here[0];

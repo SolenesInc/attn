@@ -329,7 +329,11 @@ export function recordVisit(state: SessionNavigationState, arrangement: Arrangem
   return withHistory(state, arrangement.profileId, history);
 }
 
-// An arrival confirms the intent it shows; another client's change supersedes it; an own answer never does.
+function arrangementHasLeaf(arrangement: Arrangement, leaf: ActiveLeaf): boolean {
+  return arrangement.desktops.some((desktop) => desktop.id === leaf.desktopId && leafOn(arrangement.profileId, desktop, leaf.leafId) !== null);
+}
+
+// An arrival confirms the intent it shows; another client's change supersedes it, unless all it did was close the leaf the user was leaving; an own answer never does.
 export function reconcileArrangement(
   state: SessionNavigationState,
   arrangement: Arrangement,
@@ -354,7 +358,10 @@ export function reconcileArrangement(
     return next;
   }
   if (arrival.kind === 'broadcast') {
-    return sameLeaf(leaf, activeLeafOf(previous)) ? next : recordVisit({ ...next, intent: null }, arrangement);
+    const before = activeLeafOf(previous);
+    if (sameLeaf(leaf, before)) return next;
+    const itsLeafClosed = before !== null && !arrangementHasLeaf(arrangement, before);
+    return intent && itsLeafClosed ? next : recordVisit({ ...next, intent: null }, arrangement);
   }
   return intent ? next : recordVisit(next, arrangement);
 }

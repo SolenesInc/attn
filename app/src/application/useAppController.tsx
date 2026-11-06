@@ -170,6 +170,7 @@ export function useAppController({
     selectCreatedSession,
     goToDashboard,
     handleJumpToWaiting,
+    moveOnFromClosingAgent,
     handleNextRun,
     currentDesktopIdRef,
     handleSelectDesktop,
@@ -261,6 +262,7 @@ export function useAppController({
   const onReopened = useCallback(() => setSessionsOpen(false), [setSessionsOpen]);
   const sessionLifecycle = useSessionLifecycle({
     shownAgentId,
+    moveOnFromClosingAgent,
     handleCloseTile,
     sessions,
     daemonSessions,

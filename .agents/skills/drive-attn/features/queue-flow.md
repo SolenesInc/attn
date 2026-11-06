@@ -16,6 +16,7 @@ queue, but the user settles a run's turn the same way in either flow.
 - `turn-open`: a turn opens when an agent stops, or when it asks with `attn turn open`.
 - `queue-order`: priority turns first, then the oldest. Shells, a chief with crew v2 off and automation runs never queue. Crew members, and the Chief with crew v2 on, queue when `queue_crew_enabled` is on.
 - `jump-to-waiting`: open the turn at the head of the queue. With the shelf layout on, an off-screen document an agent opened comes first ([desktops.md](desktops.md)).
+- `close-jump`: closing the agent on screen does what `jump-to-waiting` does. The Triggers section says when it stays put.
 - `walk`: step through the queue's agents in order: the turns, then the working agents, then the snoozed ones.
 - `settle`: close a turn. The user moves on to the next turn, or home when none is left.
 - `run-settle`: close an automation run's turn, in either flow. The user stays on the run (see [automations.md](automations.md) for runs).
@@ -61,6 +62,7 @@ queue, but the user settles a run's turn the same way in either flow.
 - A snooze ends at its deadline and the turn opens again if the agent is stopped. An agent that exits or turns unknown ends its own snooze (`internal/sessionmonitor/turns.go`).
 - attn arms auto-settle after the arm delay once the user's prompt set the agent working, counts down, and settles the turn. Typing or moving the pointer holds the countdown until five quiet seconds pass (`internal/sessionmonitor/autosettle.go`).
 - When the turn of the agent on screen closes and no navigation of the user's own is under way, the app moves them to the head of the queue if it is a priority turn, otherwise to the next owed turn, or home with "Take me to the next agent that needs you" checked when none is owed. The app does not move them when the agent closed the turn itself (`turn_by_agent`) or the agent is offline (`app/src/navigation/sessionNavigation.ts`, `advanceAfterTurnClosed` in `app/src/utils/queueBands.ts`).
+- When the user closes the agent on screen in queue flow, the app jumps as ⌘J does, past the closing agent: with ⌘W, the pane's ⌘W in a split, or the row's "Close session". With nobody waiting, the user stays where the close leaves them. The app does not move them for a shell, one of two tiles showing the agent, an agent that is not on screen, a close refused for crew, the Chief or an offline host, or an agent closed from the CLI (`moveOnFromClosingAgent` in `app/src/application/useAppNavigation.ts`, `closeWith` in `app/src/application/useSessionLifecycle.ts`).
 
 ## Driving it
 

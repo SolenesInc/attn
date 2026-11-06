@@ -37,6 +37,11 @@ The "N waiting" line at the top of the queue counts how many agents are waiting
 for you. Click it, or press Cmd+J (Ctrl+Shift+J on Linux), to go to the agent at
 the top of the queue.
 
+Closing the agent on your screen moves you the same way, as if you had pressed
+Cmd+J. If nobody is waiting, you stay where the close leaves you. You also stay
+where you are when you close another agent from its row, a shell, or one of two
+tiles that show the same agent.
+
 ## Settle
 
 You can settle an agent:

@@ -1011,6 +1011,17 @@ async function main() {
       runner.assert(!observer.getSession(gamma.sessionId)?.priority, 'the native shortcut cleared priority');
     });
 
+    await runner.step('closing_the_agent_on_screen_jumps_to_the_head_of_the_queue', async () => {
+      const closing = shownAgentId(await client.request('get_state'));
+      await pressShortcutKeys(client, driver, 'session.close');
+      await pollFor(
+        async () => shownAgentId(await client.request('get_state')) === alpha.sessionId,
+        'the head of the queue on screen after closing the agent',
+      );
+      await pollFor(async () => !observer.getSession(closing), 'the daemon to close the agent');
+      await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId, 20_000);
+    });
+
     const result = await runner.finishSuccess({
       alphaSessionId: alpha.sessionId,
       betaSessionId: beta.sessionId,

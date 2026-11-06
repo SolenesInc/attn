@@ -67,18 +67,23 @@ export function useAppNavigation({
 
   const { wantsAttention, queueBands, queueSessions } = attentionQueue;
 
-  const handleJumpToWaiting = useCallback(() => {
+  const jumpToWaitingExcept = useCallback((leavingSessionId: string | null) => {
     const unseenDesktopId = useProfilesStore.getState().currentDesktopId;
     const unseenDocument = oldestUnseenDocument(unseenDesktopId);
     if (unseenDesktopId && unseenDocument) {
       selectLeaf(unseenDesktopId, unseenDocument);
       return;
     }
-    const waiting = oldestWantedTurn(queueSessions, wantsAttention);
+    const waiting = oldestWantedTurn(queueSessions, (session) => session.id !== leavingSessionId && wantsAttention(session));
     if (waiting) {
       handleSelectSession(waiting.id);
     }
   }, [queueSessions, handleSelectSession, selectLeaf, wantsAttention]);
+  const handleJumpToWaiting = useCallback(() => jumpToWaitingExcept(null), [jumpToWaitingExcept]);
+  const { queueModeEnabled } = attentionQueue;
+  const moveOnFromClosingAgent = useCallback((sessionId: string) => {
+    if (queueModeEnabled) jumpToWaitingExcept(sessionId);
+  }, [queueModeEnabled, jumpToWaitingExcept]);
 
   const agentOnScreenId = useAgentOnScreen();
   const handleNextRun = useCallback(() => {
@@ -204,6 +209,7 @@ export function useAppNavigation({
 
   return {
     handleJumpToWaiting,
+    moveOnFromClosingAgent,
     handleNextRun,
     view,
     setView,
