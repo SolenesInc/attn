@@ -40,6 +40,8 @@ function placeCard(step: CalloutStep, card: HTMLElement): Placement {
 
 export function CalloutOverlay() {
   const callout = useCalloutStore((state) => state.callout);
+  const hidden = useCalloutStore((state) => state.overlayOpen);
+  const keysReleased = useCalloutStore((state) => state.keysReleased);
   const { selectAgent, handleSelectDesktop, requestTerminalFocus } = useNavigationContext();
   const { agentListOpen, toggleAgentList } = useAppPanelsContext();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -65,19 +67,22 @@ export function CalloutOverlay() {
     } else useCalloutStore.getState().next();
   };
 
-  useEscapeStack(end, Boolean(callout));
+  const holdsKeys = Boolean(callout) && !hidden && !keysReleased;
+  useEscapeStack(end, holdsKeys);
 
   useEffect(() => {
-    if (!callout) return;
+    if (!callout || hidden) return;
     const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (!holdsKeys || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (event.key !== 'Enter' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       event.stopPropagation();
       advance();
     };
     const outside = (event: PointerEvent) => {
-      if (!cardRef.current?.contains(event.target as Node)) end();
+      const { clickedCard, clickedOutside } = useCalloutStore.getState();
+      if (cardRef.current?.contains(event.target as Node)) clickedCard();
+      else clickedOutside();
     };
     window.addEventListener('keydown', keydown, true);
     window.addEventListener('pointerdown', outside, true);
@@ -127,9 +132,9 @@ export function CalloutOverlay() {
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
-  }, [callout?.requestId, callout?.index, step, agentListOpen, toggleAgentList]);
+  }, [callout?.requestId, callout?.index, step, hidden, agentListOpen, toggleAgentList]);
 
-  if (!callout || !step) return null;
+  if (!callout || !step || hidden) return null;
   const last = callout.index === callout.steps.length - 1;
   const action = !last ? 'Next' : step.session_id || step.desktop_id ? 'Go there' : 'Done';
   const rect = placement?.rect;
